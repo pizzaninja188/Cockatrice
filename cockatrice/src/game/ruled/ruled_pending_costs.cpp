@@ -1,10 +1,440 @@
 #include "ruled_pending_cast.h"
 
+#include "ruled_activation.h"
+
 #include <QCoreApplication>
 #include <QRegularExpression>
 
+#include <algorithm>
+#include <limits>
+#include <map>
+#include <set>
+#include <tuple>
+#include <vector>
+
 // Headless cost reconciliation and presentation. Separate from the menu implementation so
 // menu-only consumers need not link the authoritative client-state query implementation.
+
+namespace
+{
+using CounterContributionReceipt = std::tuple<quint32, quint32, quint64, quint32, quint32>;
+using CounterContributionReceiptKey = std::tuple<quint32, quint32, quint64, quint32>;
+
+template <typename CostSelections>
+std::optional<std::vector<CounterContributionReceipt>> counterGroupReceipt(const CostSelections &selections)
+{
+    std::set<quint32> seenCostIndices;
+    std::set<CounterContributionReceiptKey> seenRows;
+    std::vector<CounterContributionReceipt> rows;
+    for (const auto &selection : selections) {
+        if (!selection.has_counter_removal_group() || !seenCostIndices.insert(selection.cost_index()).second) {
+            return std::nullopt;
+        }
+        const auto &group = selection.counter_removal_group();
+        if (group.contributions_size() == 0) {
+            return std::nullopt;
+        }
+        for (const auto &contribution : group.contributions()) {
+            if (!contribution.has_object() || contribution.object().object_id() == 0 || contribution.option_id() == 0 ||
+                contribution.count() == 0) {
+                return std::nullopt;
+            }
+            const CounterContributionReceiptKey key{selection.cost_index(), contribution.object().object_id(),
+                                                     contribution.object().zone_change_generation(),
+                                                     contribution.option_id()};
+            if (!seenRows.insert(key).second) {
+                return std::nullopt;
+            }
+            rows.emplace_back(selection.cost_index(), contribution.object().object_id(),
+                              contribution.object().zone_change_generation(), contribution.option_id(),
+                              contribution.count());
+        }
+    }
+    if (rows.empty()) {
+        return std::nullopt;
+    }
+    std::sort(rows.begin(), rows.end());
+    return rows;
+}
+
+template <typename FlexPayments>
+std::optional<std::map<quint32, bool>> flexPaymentReceipt(const FlexPayments &payments)
+{
+    std::map<quint32, bool> result;
+    for (const auto &payment : payments) {
+        if (!result.emplace(payment.pip_index(), payment.pay_life()).second) {
+            return std::nullopt;
+        }
+    }
+    return result;
+}
+
+std::optional<std::vector<CounterContributionReceipt>> counterGroupLocalReceipt(
+    const QVector<RuledPendingCounterContribution> &contributions)
+{
+    std::set<CounterContributionReceiptKey> seenRows;
+    std::vector<CounterContributionReceipt> rows;
+    for (const auto &row : contributions) {
+        if (row.costIndex < 0 || row.objectId == 0 || row.optionId == 0 || row.count == 0) {
+            return std::nullopt;
+        }
+        const auto costIndex = static_cast<quint32>(row.costIndex);
+        const CounterContributionReceiptKey key{costIndex, row.objectId, row.zoneChangeGeneration, row.optionId};
+        if (!seenRows.insert(key).second) {
+            return std::nullopt;
+        }
+        rows.emplace_back(costIndex, row.objectId, row.zoneChangeGeneration, row.optionId, row.count);
+    }
+    if (rows.empty()) {
+        return std::nullopt;
+    }
+    std::sort(rows.begin(), rows.end());
+    return rows;
+}
+
+bool hasNoTargetOrOpponentShape(const ruled::v1::PendingAbilityActivation &pending)
+{
+    return !pending.has_chosen_opponent_id() && pending.announced_targets_size() == 0 &&
+           pending.valid_opponent_ids_size() == 0 && !pending.has_target_group() && pending.target_candidates_size() == 0 &&
+           pending.return_tapped_creature_candidates_size() == 0 && !pending.has_return_tapped_creature_cost_index();
+}
+
+bool matchesAcceptedCounterGroupPayment(const RuledClientState &state,
+                                        const PendingActivatedAbility &local,
+                                        int actorPlayerId,
+                                        quint64 expectedTransactionId,
+                                        quint64 expectedRevision)
+{
+    if (actorPlayerId < 0 || expectedTransactionId == 0 || !local.valid ||
+        local.stage != PendingActivatedAbility::Stage::Paying || !local.counterGroupConfirmed ||
+        !local.enginePaymentInitialized || local.ownedCounterGroupBegin || local.permanentAction ||
+        local.waitingForCost || local.waitingForTarget || local.needsTarget || local.chosenOpponentTargets ||
+        local.selectedMode || !local.selectedTargets.isEmpty() || local.deferredReturnTappedCreature ||
+        local.waitingForReturnTappedCreatureCandidate || local.restartAfterTargetInvalidation ||
+        !local.costChoices.isEmpty() || !local.costSelections.isEmpty() || local.permanentOid == 0 ||
+        local.abilityIndex < 0 || local.engineTransactionId != expectedTransactionId ||
+        local.engineRevision != expectedRevision || !state.pendingAbilityActivation) {
+        return false;
+    }
+
+    const auto &engine = *state.pendingAbilityActivation;
+    if (engine.transaction_id() != expectedTransactionId || engine.revision() != expectedRevision ||
+        engine.stage() != ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT || engine.actor_player_id() != actorPlayerId ||
+        engine.deciding_player_id() != actorPlayerId || engine.source_object_id() != local.permanentOid ||
+        engine.source_zone_change_generation() != local.expectedZoneChangeGeneration ||
+        engine.source_zone() != local.sourceZone || engine.ability_index() != static_cast<quint32>(local.abilityIndex) ||
+        !hasNoTargetOrOpponentShape(engine)) {
+        return false;
+    }
+
+    const auto engineRows = counterGroupReceipt(engine.cost_selections());
+    const auto localRows = counterGroupLocalReceipt(local.counterGroupContributions);
+    if (!engineRows || !localRows || *engineRows != *localRows) {
+        return false;
+    }
+
+    const auto engineFlex = flexPaymentReceipt(engine.flex_payments());
+    const auto localFlex = flexPaymentReceipt(local.fixedFlexPayments);
+    return engineFlex && localFlex && *engineFlex == *localFlex;
+}
+
+bool matchesOwnedCounterGroupBeginSnapshot(const RuledOwnedCounterGroupBegin &owned,
+                                          const ruled::v1::PendingAbilityActivation &pending)
+{
+    const auto &announcement = owned.announcement;
+    if (owned.draftId == 0 || owned.actorPlayerId < 0 || announcement.source_object_id() == 0 ||
+        announcement.has_own_target() || announcement.has_opponent_player_id() || pending.transaction_id() == 0 ||
+        pending.stage() != ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT ||
+        pending.actor_player_id() != owned.actorPlayerId || pending.deciding_player_id() != owned.actorPlayerId ||
+        pending.source_object_id() != announcement.source_object_id() ||
+        pending.source_zone_change_generation() != announcement.expected_zone_change_generation() ||
+        pending.source_zone() != announcement.source_zone() || pending.ability_index() != announcement.ability_index() ||
+        !hasNoTargetOrOpponentShape(pending)) {
+        return false;
+    }
+
+    const auto expectedRows = counterGroupReceipt(announcement.cost_selections());
+    const auto actualRows = counterGroupReceipt(pending.cost_selections());
+    if (!expectedRows || !actualRows || *expectedRows != *actualRows) {
+        return false;
+    }
+
+    const auto expectedFlex = flexPaymentReceipt(announcement.flex_payments());
+    const auto actualFlex = flexPaymentReceipt(pending.flex_payments());
+    return expectedFlex && actualFlex && *expectedFlex == *actualFlex;
+}
+
+bool currentOwnedCounterGroupBeginMatches(const PendingActivatedAbility &pending)
+{
+    if (!pending.ownedCounterGroupBegin || !pending.valid || pending.draftId == 0 ||
+        pending.ownedCounterGroupBegin->draftId != pending.draftId ||
+        pending.stage != PendingActivatedAbility::Stage::BeginPending || pending.engineTransactionId != 0 ||
+        pending.enginePaymentInitialized || pending.permanentAction || pending.waitingForCost ||
+        pending.waitingForTarget || pending.waitingForMana) {
+        return false;
+    }
+
+    const auto &owned = *pending.ownedCounterGroupBegin;
+    const auto &announcement = owned.announcement;
+    return owned.actorPlayerId >= 0 && announcement.source_object_id() != 0 && !announcement.has_own_target() &&
+           !announcement.has_opponent_player_id() && pending.permanentOid == announcement.source_object_id() &&
+           pending.expectedZoneChangeGeneration == announcement.expected_zone_change_generation() &&
+           pending.sourceZone == announcement.source_zone() && pending.abilityIndex >= 0 &&
+           static_cast<quint32>(pending.abilityIndex) == announcement.ability_index() &&
+           !pending.selectedMode && pending.selectedTargets.isEmpty() && !pending.needsTarget &&
+           !pending.waitingForTarget && !pending.chosenOpponentTargets;
+}
+
+bool sameOwnedCounterGroupBeginCapture(const RuledOwnedCounterGroupBegin &current,
+                                       const RuledOwnedCounterGroupBegin &captured)
+{
+    return captured.draftId != 0 && current.draftId == captured.draftId &&
+           current.actorPlayerId == captured.actorPlayerId &&
+           current.announcement.SerializeAsString() == captured.announcement.SerializeAsString();
+}
+
+bool hasCounterGroupChoice(const QVector<RuledCostChoice> &choices)
+{
+    return std::any_of(choices.cbegin(), choices.cend(), [](const auto &choice) {
+        return choice.kind == RuledCostChoiceKind::RemoveCountersFromPermanents ||
+               choice.counterRemovalGroup.has_value();
+    });
+}
+
+bool validCounterGroupOfferSet(const QVector<RuledCostChoice> &choices)
+{
+    if (choices.isEmpty()) {
+        return false;
+    }
+    std::set<int> costIndices;
+    for (const auto &choice : choices) {
+        if (choice.costIndex < 0 || !costIndices.insert(choice.costIndex).second || !choice.counterRemovalGroup ||
+            choice.kind != RuledCostChoiceKind::RemoveCountersFromPermanents ||
+            choice.counterRemovalGroup->candidates.isEmpty() ||
+            choice.counterRemovalGroup->candidates.front().options.isEmpty()) {
+            return false;
+        }
+        PendingActivatedAbility probe;
+        probe.valid = true;
+        probe.stage = PendingActivatedAbility::Stage::Announcing;
+        probe.costChoices = choices;
+        const auto &candidate = choice.counterRemovalGroup->candidates.front();
+        const auto &option = candidate.options.front();
+        if (!ruledStageCounterContributions(
+                probe,
+                choice.costIndex,
+                candidate.objectId,
+                candidate.zoneChangeGeneration,
+                {{choice.costIndex, candidate.objectId, candidate.zoneChangeGeneration, option.optionId, 1}})) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void refreshCounterContributionLabels(PendingActivatedAbility &pending,
+                                      const QVector<RuledCostChoice> &currentChoices)
+{
+    for (auto &row : pending.counterGroupContributions) {
+        const auto choice = std::find_if(currentChoices.cbegin(), currentChoices.cend(), [&row](const auto &entry) {
+            return entry.costIndex == row.costIndex &&
+                   entry.kind == RuledCostChoiceKind::RemoveCountersFromPermanents &&
+                   entry.counterRemovalGroup.has_value();
+        });
+        if (choice == currentChoices.cend()) {
+            row.counterLabel.clear();
+            continue;
+        }
+        const auto candidate = std::find_if(choice->counterRemovalGroup->candidates.cbegin(),
+                                            choice->counterRemovalGroup->candidates.cend(),
+                                            [&row](const auto &entry) {
+                                                return entry.objectId == row.objectId &&
+                                                       entry.zoneChangeGeneration == row.zoneChangeGeneration;
+                                            });
+        if (candidate == choice->counterRemovalGroup->candidates.cend()) {
+            row.counterLabel.clear();
+            continue;
+        }
+        const auto option = std::find_if(candidate->options.cbegin(), candidate->options.cend(), [&row](const auto &entry) {
+            return entry.optionId == row.optionId;
+        });
+        row.counterLabel = option == candidate->options.cend() ? QString{} : option->label;
+    }
+}
+} // namespace
+
+bool ruledRetryCounterGroupPayment(RuledClientState &state,
+                                   PendingActivatedAbility &local,
+                                   int actorPlayerId,
+                                   quint64 expectedTransactionId,
+                                   quint64 expectedRevision)
+{
+    if (actorPlayerId < 0 || expectedTransactionId == 0 || state.isEngineCommandPending() ||
+        ruledActivationNestedChoice(state) || !state.payment.active || state.payment.pending ||
+        state.payment.submitting || !local.counterGroupPaymentFailed ||
+        !matchesAcceptedCounterGroupPayment(state, local, actorPlayerId, expectedTransactionId, expectedRevision)) {
+        return false;
+    }
+
+    local.counterGroupPaymentFailed = false;
+    state.payment.invalidate();
+    return true;
+}
+
+std::optional<ruled::v1::RuledCommand>
+ruledCancelCounterGroupPayment(RuledClientState &state, PendingActivatedAbility &local, int actorPlayerId)
+{
+    if (actorPlayerId < 0 || state.isEngineCommandPending() || ruledActivationNestedChoice(state) ||
+        !matchesAcceptedCounterGroupPayment(
+            state, local, actorPlayerId, local.engineTransactionId, local.engineRevision)) {
+        return std::nullopt;
+    }
+
+    ruled::v1::RuledCommand command;
+    auto *cancel = command.mutable_cancel_ability_activation();
+    cancel->set_transaction_id(local.engineTransactionId);
+    cancel->set_expected_revision(local.engineRevision);
+    local.stage = PendingActivatedAbility::Stage::CancelPending;
+    return command;
+}
+
+bool ruledRecordCounterGroupPreviewFailure(RuledClientState &state,
+                                           PendingActivatedAbility &local,
+                                           int actorPlayerId,
+                                           const ruled::v1::PaymentPreview *rejectedReply)
+{
+    if (!matchesAcceptedCounterGroupPayment(
+            state, local, actorPlayerId, local.engineTransactionId, local.engineRevision)) {
+        return false;
+    }
+
+    if (rejectedReply) {
+        if (rejectedReply->valid() || !state.payment.apply(*rejectedReply)) {
+            return false;
+        }
+    } else if (!state.payment.active || state.payment.pending || state.payment.submitting ||
+               state.payment.view.transaction_id() != state.payment.transaction() || state.payment.view.valid()) {
+        return false;
+    }
+
+    local.counterGroupPaymentFailed = true;
+    return true;
+}
+
+bool ruledInvalidateCounterGroupPaymentForRefresh(RuledClientState &state,
+                                                  const PendingActivatedAbility &local,
+                                                  int actorPlayerId)
+{
+    if (!matchesAcceptedCounterGroupPayment(
+            state, local, actorPlayerId, local.engineTransactionId, local.engineRevision) ||
+        !state.payment.active || state.payment.submitting || local.counterGroupPaymentFailed) {
+        return false;
+    }
+
+    state.payment.invalidate();
+    return true;
+}
+
+std::optional<RuledOwnedCounterGroupBegin> RuledPendingCast::prepareCounterGroupBegin(
+    const RuledClientState &state,
+    int actorPlayerId,
+    const QVector<ruled::v1::FlexPipPayment> &flexPayments)
+{
+    auto &pending = ability;
+    if (actorPlayerId < 0 ||
+        state.pendingAbilityActivation || pending.draftId == 0 || !pending.valid ||
+        pending.stage != PendingActivatedAbility::Stage::Announcing || pending.engineTransactionId != 0 ||
+        pending.enginePaymentInitialized || pending.permanentAction || pending.ownedCounterGroupBegin) {
+        return std::nullopt;
+    }
+
+    const auto announcement = ruledBuildCounterGroupBegin(state, pending, flexPayments);
+    if (!announcement) {
+        return std::nullopt;
+    }
+
+    RuledOwnedCounterGroupBegin owned;
+    owned.draftId = pending.draftId;
+    owned.actorPlayerId = actorPlayerId;
+    owned.announcement = *announcement;
+    pending.fixedFlexPayments.clear();
+    for (const auto &payment : announcement->flex_payments()) {
+        pending.fixedFlexPayments.append(payment);
+    }
+    pending.ownedCounterGroupBegin = owned;
+    pending.stage = PendingActivatedAbility::Stage::BeginPending;
+    pending.waitingForCost = false;
+    pending.waitingForTarget = false;
+    pending.waitingForMana = false;
+    return owned;
+}
+
+RuledOwnedCounterGroupBeginUpdate
+RuledPendingCast::reconcileCounterGroupBegin(const ruled::v1::PendingAbilityActivation *currentPending)
+{
+    if (!ability.ownedCounterGroupBegin) {
+        return RuledOwnedCounterGroupBeginUpdate::Ignored;
+    }
+    if (!currentOwnedCounterGroupBeginMatches(ability)) {
+        return RuledOwnedCounterGroupBeginUpdate::Ignored;
+    }
+    if (!currentPending) {
+        return RuledOwnedCounterGroupBeginUpdate::Waiting;
+    }
+
+    auto &owned = *ability.ownedCounterGroupBegin;
+    if (!matchesOwnedCounterGroupBeginSnapshot(owned, *currentPending)) {
+        return RuledOwnedCounterGroupBeginUpdate::Waiting;
+    }
+    if (owned.matchedTransactionId == 0) {
+        owned.matchedTransactionId = currentPending->transaction_id();
+    } else if (owned.matchedTransactionId != currentPending->transaction_id()) {
+        return RuledOwnedCounterGroupBeginUpdate::Waiting;
+    }
+    if (!owned.acknowledged) {
+        return RuledOwnedCounterGroupBeginUpdate::Waiting;
+    }
+
+    ruledApplyActivationView(ability, *currentPending);
+    ability.ownedCounterGroupBegin.reset();
+    return RuledOwnedCounterGroupBeginUpdate::Accepted;
+}
+
+RuledOwnedCounterGroupBeginUpdate RuledPendingCast::acknowledgeCounterGroupBegin(
+    const RuledOwnedCounterGroupBegin &captured,
+    bool accepted,
+    const ruled::v1::PendingAbilityActivation *currentPending)
+{
+    if (!ability.ownedCounterGroupBegin || !currentOwnedCounterGroupBeginMatches(ability) ||
+        !sameOwnedCounterGroupBeginCapture(*ability.ownedCounterGroupBegin, captured)) {
+        return RuledOwnedCounterGroupBeginUpdate::Ignored;
+    }
+    if (!accepted) {
+        if (ability.ownedCounterGroupBegin->acknowledged) {
+            return RuledOwnedCounterGroupBeginUpdate::Ignored;
+        }
+
+        PendingActivatedAbility retained = ability;
+        retained.fixedFlexPayments.clear();
+        for (const auto &payment : retained.ownedCounterGroupBegin->announcement.flex_payments()) {
+            retained.fixedFlexPayments.append(payment);
+        }
+        const auto &fresh = beginAbility();
+        const quint64 freshDraftId = fresh.draftId;
+        ability = retained;
+        ability.draftId = freshDraftId;
+        ability.ownedCounterGroupBegin.reset();
+        ability.stage = PendingActivatedAbility::Stage::Announcing;
+        ability.waitingForMana = false;
+        return RuledOwnedCounterGroupBeginUpdate::Rejected;
+    }
+
+    if (ability.ownedCounterGroupBegin->acknowledged) {
+        return RuledOwnedCounterGroupBeginUpdate::Ignored;
+    }
+    ability.ownedCounterGroupBegin->acknowledged = true;
+    return reconcileCounterGroupBegin(currentPending);
+}
 
 QMap<QChar, int> RuledPendingCast::parseSimpleManaCost(const QString &manaCost)
 {
@@ -479,12 +909,52 @@ bool RuledPendingCast::reconcileSpellCosts(const RuledClientState &state, int lo
 bool RuledPendingCast::reconcileAbilityCosts(const RuledClientState &state, int localPlayerId)
 {
     if (ability.valid) {
+        if (ability.ownedCounterGroupBegin) {
+            return true;
+        }
         if (ability.stage == PendingActivatedAbility::Stage::BeginPending || ability.engineTransactionId != 0)
             return ruledPendingAbilitySourceStillCurrent(state, ability);
         const bool sourceStillCurrent = ruledPendingAbilitySourceStillCurrent(state, ability);
         const auto latest = ability.permanentAction
                                 ? QVector<RuledCostChoice>{}
                                 : state.abilityCostChoices(ability.permanentOid, ability.abilityIndex);
+        if (hasCounterGroupChoice(ability.costChoices) || hasCounterGroupChoice(latest)) {
+            if (!sourceStillCurrent || ability.permanentAction || !ability.costSelections.isEmpty() ||
+                !validCounterGroupOfferSet(latest)) {
+                return false;
+            }
+            const std::optional<int> activeCostIndex =
+                ability.nextCostChoice >= 0 && ability.nextCostChoice < ability.costChoices.size()
+                    ? std::optional<int>(ability.costChoices.at(ability.nextCostChoice).costIndex)
+                    : std::nullopt;
+            const bool unchanged = ruledReconcileCounterContributions(ability, latest);
+            if (!unchanged) {
+                ability.counterGroupContributions.clear();
+                ability.counterGroupConfirmed = false;
+                ability.waitingForCost = true;
+            } else {
+                refreshCounterContributionLabels(ability, latest);
+            }
+            auto selectedGroup = latest.cend();
+            if (activeCostIndex) {
+                selectedGroup = std::find_if(latest.cbegin(), latest.cend(), [&](const auto &choice) {
+                    return choice.costIndex == *activeCostIndex &&
+                           choice.kind == RuledCostChoiceKind::RemoveCountersFromPermanents &&
+                           choice.counterRemovalGroup.has_value();
+                });
+            }
+            if (selectedGroup == latest.cend()) {
+                selectedGroup = std::find_if(latest.cbegin(), latest.cend(), [](const auto &choice) {
+                    return choice.kind == RuledCostChoiceKind::RemoveCountersFromPermanents &&
+                           choice.counterRemovalGroup.has_value();
+                });
+            }
+            if (selectedGroup == latest.cend()) {
+                return false;
+            }
+            ability.nextCostChoice = static_cast<int>(std::distance(latest.cbegin(), selectedGroup));
+            return true;
+        }
         if (!sourceStillCurrent || std::any_of(ability.costSelections.cbegin(), ability.costSelections.cend(),
                                                [&state, localPlayerId, &latest](const auto &selection) {
                                                    return !selectionStillLegal(state, localPlayerId, selection, latest);
@@ -624,6 +1094,47 @@ bool RuledPendingCast::isAwaitingRuledAbilityCostSelection() const
     return ability.valid && ability.waitingForCost && ability.nextCostChoice < ability.costChoices.size();
 }
 
+bool RuledPendingCast::isAwaitingRuledCounterGroupSelection() const
+{
+    return isAwaitingRuledAbilityCostSelection() &&
+           ability.stage == PendingActivatedAbility::Stage::Announcing && !ability.ownedCounterGroupBegin &&
+           hasCounterGroupChoice(ability.costChoices);
+}
+
+bool RuledPendingCast::ruledCounterGroupSelectionConfirmable() const
+{
+    if (!isAwaitingRuledCounterGroupSelection()) {
+        return false;
+    }
+    auto validated = ability;
+    return ruledConfirmCounterContributions(validated);
+}
+
+bool RuledPendingCast::getRuledCounterGroupSelectionProgress(quint64 &required, quint64 &selected) const
+{
+    if (!isAwaitingRuledCounterGroupSelection() || !validCounterGroupOfferSet(ability.costChoices)) {
+        required = 0;
+        selected = 0;
+        return false;
+    }
+    required = 0;
+    selected = 0;
+    for (const auto &choice : ability.costChoices) {
+        const quint64 amount = choice.counterRemovalGroup->requiredCount;
+        if (amount > std::numeric_limits<quint64>::max() - required) {
+            return false;
+        }
+        required += amount;
+    }
+    for (const auto &row : ability.counterGroupContributions) {
+        if (row.count > std::numeric_limits<quint64>::max() - selected) {
+            return false;
+        }
+        selected += row.count;
+    }
+    return true;
+}
+
 QString RuledPendingCast::pendingRuledAbilityCostPromptText() const
 {
     if (ability.valid && ability.deferredReturnTappedCreature && ability.waitingForReturnTappedCreatureCandidate)
@@ -634,6 +1145,38 @@ QString RuledPendingCast::pendingRuledAbilityCostPromptText() const
         return {};
     }
     const auto &choice = ability.costChoices.at(ability.nextCostChoice);
+    if (hasCounterGroupChoice(ability.costChoices)) {
+        const auto tr = [](const char *text) { return QCoreApplication::translate("PlayerActions", text); };
+        QString prompt = tr("Remove the offered counter quantities from eligible permanents. Shared availability applies across all cost components.");
+        for (int index = 0; index < ability.costChoices.size(); ++index) {
+            const auto &groupChoice = ability.costChoices.at(index);
+            if (!groupChoice.counterRemovalGroup) {
+                continue;
+            }
+            quint64 count = 0;
+            bool countValid = true;
+            for (const auto &row : ability.counterGroupContributions) {
+                if (row.costIndex != groupChoice.costIndex) {
+                    continue;
+                }
+                if (row.count > std::numeric_limits<quint64>::max() - count) {
+                    countValid = false;
+                    break;
+                }
+                count += row.count;
+            }
+            const QString selected = countValid ? QString::number(static_cast<qulonglong>(count)) : tr("unavailable");
+            const QString required =
+                QString::number(static_cast<qulonglong>(groupChoice.counterRemovalGroup->requiredCount));
+            prompt += tr("\nComponent %1: %2 / %3 counters")
+                          .arg(index + 1)
+                          .arg(selected, required);
+        }
+        prompt += ability.counterGroupConfirmed
+                      ? tr("\nAll components are confirmed. Continue to payment.")
+                      : tr("\nComplete each component, then confirm all costs.");
+        return prompt;
+    }
     const QString prompt = ruledCostSelectionPrompt(choice, ability.cardName);
     const auto progress = ruledPendingGraveyardCostSelectionProgress(ability);
     return choice.aggregateMinimum > 0 && progress ? QCoreApplication::translate("PlayerActions", "%1\nTotal: %2 / %3")

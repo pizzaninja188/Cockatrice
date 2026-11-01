@@ -2,8 +2,26 @@
 #define RULED_COST_SELECTION_H
 
 #include "ruled_client_state.h"
+#include "ruled_counter_quantity_dialog.h"
 
 #include <QCoreApplication>
+
+#include <optional>
+
+struct PendingActivatedAbility;
+struct RuledPendingCounterContribution;
+
+[[nodiscard]] std::optional<RuledCounterQuantityDialog::Context>
+ruledCounterQuantityContext(const RuledClientState &state,
+                            const PendingActivatedAbility &pending,
+                            int costIndex,
+                            quint32 objectId,
+                            quint64 zoneChangeGeneration,
+                            const QString &displayName);
+
+[[nodiscard]] std::optional<QVector<RuledPendingCounterContribution>>
+ruledCounterQuantityRows(const RuledCounterQuantityDialog::Context &context,
+                         const RuledCounterQuantityDialog::Result &result);
 
 /// Wire shape and presentation only. Rust publishes candidates and decides payment legality.
 inline bool ruledCostUsesObjectRefs(RuledCostChoiceKind kind)
@@ -52,6 +70,8 @@ inline bool ruledCastCostUsesPermanentCohort(RuledCastCostOptionKind kind)
 inline QString ruledCostSelectionPrompt(const RuledCostChoice &choice, const QString &name)
 {
     const auto tr = [](const char *text) { return QCoreApplication::translate("RuledCostSelection", text); };
+    if (choice.kind == RuledCostChoiceKind::RemoveCountersFromPermanents && choice.counterRemovalGroup)
+        return tr("Choose counter contributions from eligible permanents for %1.").arg(name);
     if (choice.zone == RuledCostChoiceZone::Hand)
         return tr("Choose a card to discard for %1.").arg(name);
     if (choice.zone == RuledCostChoiceZone::Graveyard)

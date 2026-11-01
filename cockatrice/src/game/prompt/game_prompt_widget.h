@@ -132,6 +132,8 @@ public:
         QString clickChoiceDeclineLabel;
         /// CostSelection only: an explicit caller result overrides the legacy selected-count check.
         std::optional<bool> costSelectionConfirmable = std::nullopt;
+        /// AbilityAnnouncement only: allow explicit retry of the current accepted payment preview.
+        bool activationPaymentRetryable = false;
     };
 
     /// Independent async inputs that all mean "mid-cast / mid-activation" and OR into
@@ -228,6 +230,7 @@ signals:
     void ruledCastCostOptionRequested(int optionIndex);
     void ruledCastCostConfirmRequested();
     void ruledCastCostBackRequested();
+    void ruledActivationPaymentRetryRequested(quint64 transactionId, quint64 revision);
 
 private:
     void updatePassPriorityButtonText();

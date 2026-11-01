@@ -331,6 +331,21 @@ bool PlayerActions::isAwaitingRuledAbilityCostSelection() const
     return ruledPendingCast->isAwaitingRuledAbilityCostSelection();
 }
 
+bool PlayerActions::isAwaitingRuledCounterGroupSelection() const
+{
+    return ruledPendingCast->isAwaitingRuledCounterGroupSelection();
+}
+
+bool PlayerActions::ruledCounterGroupSelectionConfirmable() const
+{
+    return ruledPendingCast->ruledCounterGroupSelectionConfirmable();
+}
+
+bool PlayerActions::getRuledCounterGroupSelectionProgress(quint64 &required, quint64 &selected) const
+{
+    return ruledPendingCast->getRuledCounterGroupSelectionProgress(required, selected);
+}
+
 QString PlayerActions::pendingRuledAbilityCostPromptText() const
 {
     return ruledPendingCast->pendingRuledAbilityCostPromptText();
@@ -359,6 +374,26 @@ void PlayerActions::confirmRuledGraveyardCostSelection()
 void PlayerActions::cancelRuledGraveyardCostSelection()
 {
     ruledPayment->cancelRuledGraveyardCostSelection();
+}
+
+void PlayerActions::confirmRuledCounterGroupSelection()
+{
+    ruledPayment->confirmRuledCounterGroupSelection();
+}
+
+void PlayerActions::cancelRuledCounterGroupSelection()
+{
+    ruledPayment->cancelRuledCounterGroupSelection();
+}
+
+bool PlayerActions::isRuledCounterGroupPaymentRetryable() const
+{
+    return ruledPayment->canRetryCounterGroupPayment();
+}
+
+bool PlayerActions::retryRuledCounterGroupPayment(quint64 transactionId, quint64 revision)
+{
+    return ruledPayment->retryCounterGroupPayment(transactionId, revision);
 }
 
 void PlayerActions::resumePendingRuledPaymentAfterEngineCommand()

@@ -330,6 +330,7 @@ enum class RuledCostChoiceKind : int
     RemoveCounters,
     ReturnUnblockedAttacker,
     ReturnTappedCreature,
+    RemoveCountersFromPermanents,
 };
 
 enum class RuledObjectContributionKind : int
@@ -378,6 +379,57 @@ struct RuledCostChoice
     QVector<RuledCounterRemovalOption> counterOptions;
     std::optional<RuledCounterRemovalGroup> counterRemovalGroup;
 };
+
+/// A usable aggregate counter-removal offer must retain its exact typed battlefield receipt.
+/// Zero generations are valid; object and option identity, quantities, and cost slots are not.
+[[nodiscard]] inline bool ruledCounterRemovalGroupChoiceWellFormed(const RuledCostChoice &choice)
+{
+    if (choice.costIndex < 0 || choice.zone != RuledCostChoiceZone::Battlefield ||
+        choice.kind != RuledCostChoiceKind::RemoveCountersFromPermanents || !choice.counterRemovalGroup ||
+        choice.counterRemovalGroup->requiredCount == 0 || choice.counterRemovalGroup->candidates.isEmpty()) {
+        return false;
+    }
+    QSet<quint32> candidateObjectIds;
+    for (const auto &candidate : choice.counterRemovalGroup->candidates) {
+        if (candidate.objectId == 0 || candidateObjectIds.contains(candidate.objectId) || candidate.options.isEmpty()) {
+            return false;
+        }
+        candidateObjectIds.insert(candidate.objectId);
+        QSet<quint32> optionIds;
+        for (const auto &option : candidate.options) {
+            if (option.optionId == 0 || option.availableCount == 0 || optionIds.contains(option.optionId)) {
+                return false;
+            }
+            optionIds.insert(option.optionId);
+        }
+    }
+    return true;
+}
+
+/// This client supports grouped counter costs only when every additional-cost component belongs
+/// to that one typed grouped-payment workflow. Mixed legacy cohorts remain fail-closed.
+[[nodiscard]] inline bool ruledCounterRemovalGroupChoicesWellFormed(const QVector<RuledCostChoice> &choices)
+{
+    const bool hasGroup = std::any_of(choices.cbegin(), choices.cend(), [](const auto &choice) {
+        return choice.kind == RuledCostChoiceKind::RemoveCountersFromPermanents ||
+               choice.counterRemovalGroup.has_value();
+    });
+    if (!hasGroup) {
+        return true;
+    }
+
+    if (choices.isEmpty()) {
+        return false;
+    }
+    QSet<int> costIndices;
+    for (const auto &choice : choices) {
+        if (!ruledCounterRemovalGroupChoiceWellFormed(choice) || costIndices.contains(choice.costIndex)) {
+            return false;
+        }
+        costIndices.insert(choice.costIndex);
+    }
+    return true;
+}
 
 enum class RuledCastCostOptionKind : int
 {
@@ -1566,7 +1618,9 @@ public:
                                        ability->hasConflictingLoyaltyXCost());
         const bool publicGate = !hasIndex || (ability && ability->activatable && !invalidXMetadata);
         const auto it = abilityCostData.constFind(abilityTargetKey(oid, abilityIndex));
-        return publicGate && (it == abilityCostData.constEnd() || it->nonManaCostsPayable);
+        return publicGate &&
+               (it == abilityCostData.constEnd() ||
+                (it->nonManaCostsPayable && ruledCounterRemovalGroupChoicesWellFormed(it->choices)));
     }
     [[nodiscard]] QVector<RuledCostChoice> abilityCostChoices(quint32 oid, int abilityIndex) const
     {

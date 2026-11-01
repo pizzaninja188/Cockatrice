@@ -195,12 +195,19 @@ public:
     /// Returns the mana-payment prompt text if an ability is pending and still needs mana, otherwise empty.
     [[nodiscard]] QString pendingRuledAbilityPromptText() const;
     [[nodiscard]] bool isAwaitingRuledAbilityCostSelection() const;
+    [[nodiscard]] bool isAwaitingRuledCounterGroupSelection() const;
+    [[nodiscard]] bool ruledCounterGroupSelectionConfirmable() const;
+    [[nodiscard]] bool getRuledCounterGroupSelectionProgress(quint64 &required, quint64 &selected) const;
     [[nodiscard]] QString pendingRuledAbilityCostPromptText() const;
     [[nodiscard]] bool isAwaitingRuledGraveyardCostSelection() const;
     [[nodiscard]] bool isRuledGraveyardCostObjectSelected(quint32 objectId) const;
     [[nodiscard]] bool getRuledGraveyardCostSelectionProgress(int &required, int &selected) const;
     void confirmRuledGraveyardCostSelection();
     void cancelRuledGraveyardCostSelection();
+    void confirmRuledCounterGroupSelection();
+    void cancelRuledCounterGroupSelection();
+    [[nodiscard]] bool isRuledCounterGroupPaymentRetryable() const;
+    bool retryRuledCounterGroupPayment(quint64 transactionId, quint64 revision);
     bool tryToggleRuledCleanupDiscard(CardItem *card);
     bool tryRuledOpeningBottomCard(CardItem *card);
     bool tryRuledResolutionHandPickCard(CardItem *card);

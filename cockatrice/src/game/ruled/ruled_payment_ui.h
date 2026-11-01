@@ -46,6 +46,7 @@ public:
     bool tryRequireSpellTargetCost(ruled::v1::TargetRefKind kind, quint32 targetOid, int activeGroupIndex);
     bool tryUndoManaAbility();
     void reconcilePendingRuledTargetSelections();
+    bool tryHandleCounterGroupCostClick(CardItem *card);
     void clearPendingRuledSpellCast();
     void cancelPendingRuledSpellCast();
     void selectPendingRuledCastCostOption(int optionIndex);
@@ -72,6 +73,10 @@ public:
     void autoApplyFloatedManaToPendingCost(const QString &counterName, int amount);
     void confirmRuledGraveyardCostSelection();
     void cancelRuledGraveyardCostSelection();
+    void confirmRuledCounterGroupSelection();
+    void cancelRuledCounterGroupSelection();
+    [[nodiscard]] bool canRetryCounterGroupPayment() const;
+    bool retryCounterGroupPayment(quint64 transactionId, quint64 revision);
     void resumePendingRuledPaymentAfterEngineCommand();
     static bool startPublicZoneCast(PlayerActions *actions, CardItem *card, bool contextMenu);
     bool tryStartRuledSpellCast(CardItem *card);
@@ -102,6 +107,7 @@ private:
     bool resolvePendingAbilityFlexiblePips();
     bool completePendingRuledSpellCast();
     bool completeActivateAbility();
+    void noteManualAcceptedCounterGroupPaymentEdit();
     bool tryReducePendingAbilityRemainingCostOnePip(bool colorlessMana, QChar coloredMana);
     void finishPendingAbilityManaPaymentStep();
     bool tryReducePendingSpellRemainingCostOnePip(bool colorlessMana, QChar coloredMana);

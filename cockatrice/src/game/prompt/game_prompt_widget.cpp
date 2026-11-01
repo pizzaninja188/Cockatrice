@@ -179,9 +179,14 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     resolutionHandPickConfirmButton->setObjectName("resolutionHandPickConfirmButton");
     resolutionHandPickConfirmButton->hide();
     connect(resolutionHandPickConfirmButton, &QPushButton::clicked, this, [this]() {
-        if (effectiveMode() == PromptMode::CostSelection) {
+        const PromptMode mode = effectiveMode();
+        if (mode == PromptMode::AbilityAnnouncement && promptState.activationPayment &&
+            promptState.activationPaymentRetryable) {
+            emit ruledActivationPaymentRetryRequested(promptState.activationTransactionId,
+                                                      promptState.activationRevision);
+        } else if (mode == PromptMode::CostSelection) {
             emit ruledCostSelectionConfirmRequested();
-        } else {
+        } else if (mode == PromptMode::ResolutionPick) {
             emit ruledResolutionHandPickConfirmRequested();
         }
     });
@@ -346,6 +351,10 @@ void GamePromptWidget::retranslateUi()
         promptLabel->setText(fallbackPromptText);
     }
     updatePassPriorityButtonText();
+    const bool activationPaymentRetryMode = effectiveMode() == PromptMode::AbilityAnnouncement &&
+                                            promptState.activationPayment &&
+                                            promptState.activationPaymentRetryable;
+    resolutionHandPickConfirmButton->setText(activationPaymentRetryMode ? tr("Retry") : tr("Confirm"));
     confirmAttackersButton->setText(tr("OK"));
     confirmBlockersButton->setText(tr("OK"));
     resetBlockersButton->setText(tr("Reset Blockers"));
@@ -359,7 +368,6 @@ void GamePromptWidget::retranslateUi()
     openingMulliganButton->setText(tr("Mulligan"));
     openingBottomCancelButton->setText(tr("Cancel"));
     openingBottomDoneButton->setText(tr("Done"));
-    resolutionHandPickConfirmButton->setText(tr("Confirm"));
     resolutionPaymentConfirmButton->setText(tr("Confirm Contribution"));
     resolutionPaymentClearButton->setText(tr("Clear Contribution"));
     resolutionPaymentDeclineButton->setText(promptState.mode == PromptMode::AttackPayment ? tr("Cancel Attack")
@@ -848,7 +856,11 @@ void GamePromptWidget::updateCombatButtonsVisibility()
                                           (mode == PromptMode::CostSelection && promptState.canCancel));
     openingBottomDoneButton->setVisible(mode == PromptMode::OpeningBottom && promptState.required > 0 &&
                                         promptState.selected == promptState.required);
-    resolutionHandPickConfirmButton->setVisible(mode == PromptMode::ResolutionPick || mode == PromptMode::CostSelection);
+    const bool activationPaymentRetryMode = mode == PromptMode::AbilityAnnouncement && promptState.activationPayment &&
+                                            promptState.activationPaymentRetryable;
+    resolutionHandPickConfirmButton->setText(activationPaymentRetryMode ? tr("Retry") : tr("Confirm"));
+    resolutionHandPickConfirmButton->setVisible(mode == PromptMode::ResolutionPick || mode == PromptMode::CostSelection ||
+                                                activationPaymentRetryMode);
     resolutionPaymentConfirmButton->setVisible(mode == PromptMode::ResolutionPayment &&
                                                 promptState.variableManaContribution);
     resolutionPaymentConfirmButton->setEnabled(promptState.variableManaContribution &&
@@ -869,12 +881,11 @@ void GamePromptWidget::updateCombatButtonsVisibility()
                                           mode == PromptMode::ResolutionPick || mode == PromptMode::CostSelection ||
                                           mode == PromptMode::ZoneSelection) &&
                                          promptState.canDecline);
-    if (mode == PromptMode::ResolutionPick || mode == PromptMode::CostSelection) {
-        resolutionHandPickConfirmButton->setEnabled(mode == PromptMode::ResolutionPick
-                                                        ? promptState.resolutionPickConfirmable
-                                                        : promptState.costSelectionConfirmable.value_or(
-                                                              promptState.selected >= promptState.required));
-    }
+    resolutionHandPickConfirmButton->setEnabled(
+        activationPaymentRetryMode ||
+        (mode == PromptMode::ResolutionPick && promptState.resolutionPickConfirmable) ||
+        (mode == PromptMode::CostSelection &&
+         promptState.costSelectionConfirmable.value_or(promptState.selected >= promptState.required)));
 
     // Every take-over mode suppresses the priority / combat / targeting controls.
     if (mode != PromptMode::Normal && mode != PromptMode::Targeting) {

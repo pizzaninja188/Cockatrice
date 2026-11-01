@@ -17,6 +17,28 @@ inline bool ruledActivationCanPay(const RuledClientState &state, int localPlayer
            state.pendingAbilityActivation->stage() == ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT;
 }
 
+/// Reopen the exact accepted aggregate-counter activation for an explicit payment retry. A retry
+/// only invalidates the local preview after the client request, local draft receipt, and current
+/// engine payment projection all describe the same accepted transaction.
+[[nodiscard]] bool ruledRetryCounterGroupPayment(RuledClientState &state,
+                                                 PendingActivatedAbility &local,
+                                                 int actorPlayerId,
+                                                 quint64 expectedTransactionId,
+                                                 quint64 expectedRevision);
+
+[[nodiscard]] std::optional<ruled::v1::RuledCommand>
+ruledCancelCounterGroupPayment(RuledClientState &state, PendingActivatedAbility &local, int actorPlayerId);
+
+[[nodiscard]] bool ruledRecordCounterGroupPreviewFailure(
+    RuledClientState &state,
+    PendingActivatedAbility &local,
+    int actorPlayerId,
+    const ruled::v1::PaymentPreview *rejectedReply = nullptr);
+
+[[nodiscard]] bool ruledInvalidateCounterGroupPaymentForRefresh(RuledClientState &state,
+                                                                 const PendingActivatedAbility &local,
+                                                                 int actorPlayerId);
+
 inline std::optional<ruled::v1::RuledCommand>
 ruledActivationChoice(const RuledClientState &state, int localPlayerId, quint64 transaction, quint64 revision,
                       std::optional<int> opponent, std::optional<quint32> target)
@@ -59,6 +81,12 @@ inline void ruledApplyActivationView(PendingActivatedAbility &local,
     const bool wasWaitingForCost = same && local.waitingForCost;
     const bool wasWaitingForReturnCandidate = same && local.waitingForReturnTappedCreatureCandidate;
     const auto previousCostSelections = same ? local.costSelections : QVector<RuledPendingCostSelection>{};
+    const auto previousCounterGroupContributions = local.counterGroupContributions;
+    const auto previousCostChoices = local.costChoices;
+    const bool previousSourceMatches = local.valid && local.permanentOid == engine.source_object_id() &&
+                                       local.expectedZoneChangeGeneration == engine.source_zone_change_generation() &&
+                                       local.sourceZone == engine.source_zone() &&
+                                       local.abilityIndex == static_cast<int>(engine.ability_index());
     local.valid = true;
     local.chosenOpponentTargets = true;
     local.engineTransactionId = engine.transaction_id();
@@ -83,10 +111,92 @@ inline void ruledApplyActivationView(PendingActivatedAbility &local,
         local.selectedTargets.append(selected);
     }
     const bool paying = engine.stage() == ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT;
+    const bool acceptedCounterGroup =
+        paying && std::any_of(engine.cost_selections().begin(), engine.cost_selections().end(), [](const auto &selection) {
+            return selection.has_counter_removal_group();
+        });
     if (!submitting)
         local.stage = paying ? PendingActivatedAbility::Stage::Paying : PendingActivatedAbility::Stage::Waiting;
     local.waitingForMana = paying;
     local.waitingForReturnTappedCreatureCandidate = wasWaitingForReturnCandidate;
+    if (acceptedCounterGroup) {
+        QVector<RuledPendingCounterContribution> acceptedRows;
+        for (const auto &selection : engine.cost_selections()) {
+            if (!selection.has_counter_removal_group())
+                continue;
+            const int costIndex = static_cast<int>(selection.cost_index());
+            for (const auto &contribution : selection.counter_removal_group().contributions()) {
+                RuledPendingCounterContribution row;
+                row.costIndex = costIndex;
+                row.objectId = contribution.object().object_id();
+                row.zoneChangeGeneration = contribution.object().zone_change_generation();
+                row.optionId = contribution.option_id();
+                row.count = contribution.count();
+
+                if (previousSourceMatches && wasPaying) {
+                    const auto previous = std::find_if(
+                        previousCounterGroupContributions.cbegin(),
+                        previousCounterGroupContributions.cend(),
+                        [&row](const auto &candidate) {
+                            return candidate.costIndex == row.costIndex && candidate.objectId == row.objectId &&
+                                   candidate.zoneChangeGeneration == row.zoneChangeGeneration &&
+                                   candidate.optionId == row.optionId;
+                        });
+                    if (previous != previousCounterGroupContributions.cend())
+                        row.counterLabel = previous->counterLabel;
+                } else if (previousSourceMatches) {
+                    const auto previousChoice = std::find_if(
+                        previousCostChoices.cbegin(), previousCostChoices.cend(), [&row](const auto &choice) {
+                            return choice.costIndex == row.costIndex &&
+                                   choice.kind == RuledCostChoiceKind::RemoveCountersFromPermanents &&
+                                   choice.counterRemovalGroup.has_value();
+                        });
+                    if (previousChoice != previousCostChoices.cend()) {
+                        const auto previousCandidate = std::find_if(
+                            previousChoice->counterRemovalGroup->candidates.cbegin(),
+                            previousChoice->counterRemovalGroup->candidates.cend(),
+                            [&row](const auto &candidate) {
+                                return candidate.objectId == row.objectId &&
+                                       candidate.zoneChangeGeneration == row.zoneChangeGeneration;
+                            });
+                        if (previousCandidate != previousChoice->counterRemovalGroup->candidates.cend()) {
+                            const auto previousOption = std::find_if(
+                                previousCandidate->options.cbegin(), previousCandidate->options.cend(),
+                                [&row](const auto &option) { return option.optionId == row.optionId; });
+                            if (previousOption != previousCandidate->options.cend())
+                                row.counterLabel = previousOption->label;
+                        }
+                    }
+                }
+                acceptedRows.append(row);
+            }
+        }
+
+        local.counterGroupContributions = acceptedRows;
+        local.counterGroupConfirmed = true;
+        local.fixedFlexPayments.clear();
+        for (const auto &payment : engine.flex_payments())
+            local.fixedFlexPayments.append(payment);
+        local.engineLockedCostLabel = QString::fromStdString(engine.locked_total_cost());
+
+        local.costChoices.clear();
+        local.nextCostChoice = 0;
+        local.costSelections.clear();
+        local.waitingForCost = false;
+        local.waitingForTarget = false;
+        local.waitingForReturnTappedCreatureCandidate = false;
+        local.chosenOpponentTargets = engine.has_chosen_opponent_id();
+        local.needsTarget = false;
+        local.deferredReturnTappedCreature = false;
+        local.flexPips.clear();
+        local.lifePipIndices.clear();
+        if (!wasPaying) {
+            local.enginePaymentInitialized = true;
+            local.remainingCost.clear();
+            local.targetingCostApplied = true;
+        }
+        return;
+    }
     if (local.deferredReturnTappedCreature) {
         RuledCostChoice choice;
         choice.costIndex = static_cast<int>(engine.return_tapped_creature_cost_index());

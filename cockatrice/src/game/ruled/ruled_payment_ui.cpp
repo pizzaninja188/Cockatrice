@@ -23,6 +23,54 @@
 #include <algorithm>
 #include <libcockatrice/utility/zone_names.h>
 
+namespace
+{
+bool hasCounterGroupOffers(const PendingActivatedAbility &ability)
+{
+    return std::any_of(ability.costChoices.cbegin(), ability.costChoices.cend(), [](const auto &choice) {
+        return choice.kind == RuledCostChoiceKind::RemoveCountersFromPermanents ||
+               choice.counterRemovalGroup.has_value();
+    });
+}
+
+bool hasCounterGroupPayment(const ruled::v1::PendingAbilityActivation &activation)
+{
+    return std::any_of(activation.cost_selections().begin(), activation.cost_selections().end(), [](const auto &choice) {
+        return choice.has_counter_removal_group();
+    });
+}
+
+bool isAcceptedCounterGroupPayment(const RuledClientState *state,
+                                   const PendingActivatedAbility &ability,
+                                   int actorPlayerId)
+{
+    if (!state || !ability.valid || ability.ownedCounterGroupBegin || !ability.counterGroupConfirmed ||
+        !ability.enginePaymentInitialized || ability.engineTransactionId == 0 || actorPlayerId < 0 ||
+        ability.stage != PendingActivatedAbility::Stage::Paying || ability.counterGroupContributions.isEmpty() ||
+        !state->pendingAbilityActivation) {
+        return false;
+    }
+    const auto &activation = *state->pendingAbilityActivation;
+    return activation.transaction_id() == ability.engineTransactionId && activation.actor_player_id() == actorPlayerId &&
+           activation.deciding_player_id() == actorPlayerId &&
+           activation.stage() == ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT && hasCounterGroupPayment(activation) &&
+           ruledActivationCanPay(*state, actorPlayerId);
+}
+
+bool isUnacceptedCounterGroupActivation(const RuledClientState *state,
+                                        const PendingActivatedAbility &ability,
+                                        int actorPlayerId)
+{
+    if (ability.ownedCounterGroupBegin) {
+        return true;
+    }
+    if (!hasCounterGroupOffers(ability) && !ability.counterGroupConfirmed) {
+        return false;
+    }
+    return !isAcceptedCounterGroupPayment(state, ability, actorPlayerId);
+}
+} // namespace
+
 RuledPaymentUi::RuledPaymentUi(PlayerActions *value) : actions(value)
 {
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
@@ -268,6 +316,15 @@ void RuledPaymentUi::reconcileEnginePendingAbilityActivation()
             return;
         }
     }
+    if (local.ownedCounterGroupBegin) {
+        const auto update = actions->ruledPendingCast->reconcileCounterGroupBegin(
+            engine ? &*engine : nullptr);
+        if (update != RuledOwnedCounterGroupBeginUpdate::Accepted) {
+            // A local Begin marker is an ownership fence. Even an ignored or stale helper result
+            // cannot fall through to generic snapshot reconstruction.
+            return;
+        }
+    }
     if (!engine || engine->actor_player_id() != actor) {
         if (local.valid && local.engineTransactionId != 0) {
             actions->ruledPendingCast->clearAbility();
@@ -294,6 +351,65 @@ void RuledPaymentUi::reconcileEnginePendingAbilityActivation()
 bool RuledPaymentUi::beginAbilityActivation()
 {
     auto &local = actions->pendingActivatedAbility;
+    if (hasCounterGroupOffers(local)) {
+        if (local.ownedCounterGroupBegin) {
+            return true;
+        }
+        if (!local.valid || !local.counterGroupConfirmed || local.waitingForCost || local.waitingForTarget ||
+            local.waitingForMana ||
+            local.stage != PendingActivatedAbility::Stage::Announcing ||
+            RuledActions::gameplayInputLocked(actions->player->getGame())) {
+            return false;
+        }
+        auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+        if (!state) {
+            return false;
+        }
+        const int actor = actions->player->getPlayerInfo()->getId();
+        const auto owned = actions->ruledPendingCast->prepareCounterGroupBegin(
+            *state, actor, local.fixedFlexPayments);
+        if (!owned) {
+            return false;
+        }
+
+        ruled::v1::RuledCommand command;
+        command.mutable_begin_ability_activation()->CopyFrom(owned->announcement);
+        const auto captured = *owned;
+        const QPointer<PlayerActions> actionsGuard(actions);
+        RuledActions::sendRuledCommandExpectingAck(
+            actions->player->getGame(), command, [this, actionsGuard, captured](bool accepted) {
+                if (!actionsGuard) {
+                    return;
+                }
+                auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+                auto *current = state && state->pendingAbilityActivation ? &*state->pendingAbilityActivation : nullptr;
+                const auto update = actions->ruledPendingCast->acknowledgeCounterGroupBegin(captured, accepted, current);
+                if (update == RuledOwnedCounterGroupBeginUpdate::Rejected) {
+                    auto &retry = actions->pendingActivatedAbility;
+                    if (retry.valid && retry.stage == PendingActivatedAbility::Stage::Announcing &&
+                        hasCounterGroupOffers(retry)) {
+                        retry.waitingForCost = true;
+                        retry.waitingForMana = false;
+                    }
+                    if (state) {
+                        state->emitLocalLog(PlayerActions::tr(
+                            "The counter cost activation could not start. Its staged choices were kept; confirm again to retry."));
+                    }
+                    emit actions->ruledAbilityCostPromptChanged();
+                    if (state) {
+                        state->emitSpellTargetSelectionChanged();
+                    }
+                    return;
+                }
+                if (update == RuledOwnedCounterGroupBeginUpdate::Accepted) {
+                    reconcileEnginePendingAbilityActivation();
+                    startOrRefresh();
+                }
+                // Waiting and Ignored retain the owned marker and fence generic reconstruction.
+                emit actions->ruledAbilityCostPromptChanged();
+            });
+        return true;
+    }
     const bool handReturn = local.deferredReturnTappedCreature &&
                             local.sourceZone == ruled::v1::ABILITY_SOURCE_ZONE_HAND;
     if (!local.valid || !local.chosenOpponentTargets || local.stage != PendingActivatedAbility::Stage::Announcing ||
@@ -317,11 +433,13 @@ bool RuledPaymentUi::beginAbilityActivation()
     const auto source = local.permanentOid;
     const auto generation = local.expectedZoneChangeGeneration;
     const auto slot = local.abilityIndex;
+    const auto draftId = local.draftId;
     RuledActions::sendRuledCommandExpectingAck(
-        actions->player->getGame(), command, [this, source, generation, slot](bool accepted) {
+        actions->player->getGame(), command, [this, source, generation, slot, draftId](bool accepted) {
             auto &current = actions->pendingActivatedAbility;
             if (!current.valid || current.permanentOid != source ||
-                current.expectedZoneChangeGeneration != generation || current.abilityIndex != slot)
+                current.expectedZoneChangeGeneration != generation || current.abilityIndex != slot ||
+                current.draftId != draftId)
                 return;
             if (accepted) {
                 reconcileEnginePendingAbilityActivation();
@@ -367,6 +485,14 @@ RuledPaymentUi::Context RuledPaymentUi::context() const
     const auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     const auto &ability = actions->pendingActivatedAbility;
     if (ability.valid) {
+        if (ability.ownedCounterGroupBegin) {
+            return Context::None;
+        }
+        if (hasCounterGroupOffers(ability) || ability.counterGroupConfirmed) {
+            return isAcceptedCounterGroupPayment(state, ability, actions->player->getPlayerInfo()->getId())
+                       ? Context::Ability
+                       : Context::None;
+        }
         if (ability.chosenOpponentTargets)
             return ability.stage == PendingActivatedAbility::Stage::Paying && state->pendingAbilityActivation &&
                            state->pendingAbilityActivation->transaction_id() == ability.engineTransactionId &&
@@ -393,6 +519,27 @@ RuledPaymentUi::Context RuledPaymentUi::context() const
 bool RuledPaymentUi::applicable() const
 {
     return context() != Context::None;
+}
+
+bool RuledPaymentUi::canRetryCounterGroupPayment() const
+{
+    const auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    const auto &ability = actions->pendingActivatedAbility;
+    if (!state || !state->pendingAbilityActivation || !ability.valid || !ability.counterGroupConfirmed ||
+        !ability.counterGroupPaymentFailed || ability.ownedCounterGroupBegin || !ability.enginePaymentInitialized ||
+        ability.stage != PendingActivatedAbility::Stage::Paying || ability.engineTransactionId == 0 ||
+        state->isEngineCommandPending() || ruledActivationNestedChoice(*state) || !state->payment.active ||
+        state->payment.pending || state->payment.submitting) {
+        return false;
+    }
+
+    const auto &activation = *state->pendingAbilityActivation;
+    const int localPlayerId = actions->player->getPlayerInfo()->getId();
+    return localPlayerId >= 0 && activation.actor_player_id() == localPlayerId &&
+           activation.deciding_player_id() == localPlayerId &&
+           activation.stage() == ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT &&
+           activation.transaction_id() == ability.engineTransactionId && activation.revision() == ability.engineRevision &&
+           hasCounterGroupPayment(activation);
 }
 
 std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildPaymentCommand() const
@@ -440,7 +587,26 @@ void RuledPaymentUi::changed()
 
 bool RuledPaymentUi::startOrRefresh()
 {
-    const auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    const int localPlayerId = actions->player->getPlayerInfo()->getId();
+    auto &ability = actions->pendingActivatedAbility;
+    auto &model = state->payment;
+    if (ability.counterGroupPaymentFailed) {
+        if (ruledInvalidateCounterGroupPaymentForRefresh(*state, ability, localPlayerId)) {
+            schedule();
+        }
+        return true;
+    }
+    const bool acceptedGroupCandidate = ability.counterGroupConfirmed && ability.enginePaymentInitialized;
+    if (acceptedGroupCandidate && model.active) {
+        if (ruledInvalidateCounterGroupPaymentForRefresh(*state, ability, localPlayerId)) {
+            schedule();
+        }
+        return true;
+    }
+    if (!acceptedGroupCandidate && isUnacceptedCounterGroupActivation(state, ability, localPlayerId)) {
+        return false;
+    }
     if (actions->player->getPlayerInfo()->getLocal() && actions->pendingRuledSpellCast.valid &&
         actions->ruledPendingCast->resolutionChoiceBlocksSpell(*state)) {
         cancelPendingRuledSpellCast();
@@ -455,7 +621,6 @@ bool RuledPaymentUi::startOrRefresh()
     }
     if (choosingLifePayment)
         return true;
-    auto &model = actions->player->getGame()->getGameEventHandler()->ruled()->payment;
     if (activeContext != nextContext) {
         // A rejected resolution command restores its parked model before emitting the prompt.
         if (!(activeContext == Context::None && nextContext == Context::Resolution && model.active))
@@ -529,7 +694,13 @@ void RuledPaymentUi::schedule()
 void RuledPaymentUi::query()
 {
     auto *game = actions->player->getGame();
-    auto &model = game->getGameEventHandler()->ruled()->payment;
+    auto *state = game->getGameEventHandler()->ruled();
+    const auto &ability = actions->pendingActivatedAbility;
+    if (!state || ability.counterGroupPaymentFailed ||
+        isUnacceptedCounterGroupActivation(state, ability, actions->player->getPlayerInfo()->getId())) {
+        return;
+    }
+    auto &model = state->payment;
     if (!applicable() || !model.active || model.submitting || RuledActions::gameplayInputLocked(game))
         return;
     const auto proposed = buildPaymentCommand();
@@ -545,29 +716,70 @@ void RuledPaymentUi::query()
     const auto transaction = queryCommand.preview_payment().transaction_id();
     const auto revision = queryCommand.preview_payment().revision();
     RuledActions::sendRuledCommandExpectingAck(game, queryCommand, [this, transaction, revision](bool accepted) {
-        if (accepted || !applicable())
+        if (accepted)
             return;
-        auto &current = actions->player->getGame()->getGameEventHandler()->ruled()->payment;
+        auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+        if (!state) {
+            return;
+        }
+        auto &ability = actions->pendingActivatedAbility;
         ruled::v1::PaymentPreview failure;
         failure.set_transaction_id(transaction);
         failure.set_revision(revision);
-        failure.set_error("Payment preview was rejected. Cancel and try again.");
-        if (current.apply(failure))
+        const bool groupedCandidate = ability.counterGroupPaymentFailed ||
+                                      (ability.counterGroupConfirmed && ability.enginePaymentInitialized);
+        failure.set_error(groupedCandidate ? "Payment preview was rejected. Retry or cancel this activation."
+                                           : "Payment preview was rejected. Cancel and try again.");
+        if (groupedCandidate) {
+            if (!ruledRecordCounterGroupPreviewFailure(*state, ability,
+                                                       actions->player->getPlayerInfo()->getId(), &failure)) {
+                return;
+            }
+            auto &current = state->payment;
+            restoreOptimisticManaCounters(current.takeRetiredOptimisticManaCounterIds());
             changed();
+            return;
+        }
+        if (!applicable())
+            return;
+        auto &current = state->payment;
+        if (current.apply(failure)) {
+            restoreOptimisticManaCounters(current.takeRetiredOptimisticManaCounterIds());
+            changed();
+        }
     });
     changed();
 }
 
 void RuledPaymentUi::received()
 {
-    if (!applicable())
+    auto *currentState = actions->player->getGame()->getGameEventHandler()->ruled();
+    if (!currentState)
+        return;
+    auto &ability = actions->pendingActivatedAbility;
+    auto &model = currentState->payment;
+    const bool groupedCandidate = ability.counterGroupPaymentFailed ||
+                                  (ability.counterGroupConfirmed && ability.enginePaymentInitialized);
+    if (groupedCandidate && !model.view.valid()) {
+        if (ruledRecordCounterGroupPreviewFailure(*currentState, ability,
+                                                  actions->player->getPlayerInfo()->getId())) {
+            restoreOptimisticManaCounters(model.takeRetiredOptimisticManaCounterIds());
+            changed();
+        }
+        return;
+    }
+    if ((!groupedCandidate && isUnacceptedCounterGroupActivation(currentState, ability,
+                                                                  actions->player->getPlayerInfo()->getId())) ||
+        !applicable())
         return;
     auto *game = actions->player->getGame();
-    auto &model = game->getGameEventHandler()->ruled()->payment;
     restoreOptimisticManaCounters(model.takeRetiredOptimisticManaCounterIds());
     changed();
     if (model.pending || model.submitting || !model.view.valid())
         return;
+    if (ability.counterGroupPaymentFailed) {
+        return;
+    }
     if (model.view.selection_changed())
         game->getGameEventHandler()->ruled()->emitLocalLog(QString::fromStdString(model.view.error()));
     const auto action = model.nextPreviewAction(
@@ -652,6 +864,18 @@ void RuledPaymentUi::received()
                         auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
                         if (!state)
                             return;
+                        if (ability.counterGroupConfirmed && ability.enginePaymentInitialized) {
+                            ability.stage = PendingActivatedAbility::Stage::Paying;
+                        }
+                        if (ability.counterGroupPaymentFailed ||
+                            (ability.counterGroupConfirmed && ability.enginePaymentInitialized)) {
+                            ability.counterGroupPaymentFailed = true;
+                            current.submitting = false;
+                            current.view.set_error(
+                                "Payment commit was rejected. Retry or cancel this activation.");
+                            changed();
+                            return;
+                        }
                         if (ability.chosenOpponentTargets) {
                             ability.stage = PendingActivatedAbility::Stage::Paying;
                             if (!ruledPendingAbilitySourceStillCurrent(*state, ability)) {
@@ -697,18 +921,43 @@ bool RuledPaymentUi::payMana(const QString &name, quint32 groupId)
     if (model.submitting)
         return true;
     const bool staged = stageMana(model, name, groupId);
-    if (staged)
+    if (staged) {
+        noteManualAcceptedCounterGroupPaymentEdit();
         schedule();
+    }
     return staged;
+}
+
+void RuledPaymentUi::noteManualAcceptedCounterGroupPaymentEdit()
+{
+    auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    auto &ability = actions->pendingActivatedAbility;
+    if (ability.counterGroupPaymentFailed &&
+        isAcceptedCounterGroupPayment(state, ability, actions->player->getPlayerInfo()->getId())) {
+        ability.counterGroupPaymentFailed = false;
+    }
 }
 
 bool RuledPaymentUi::autoPayMana(const QString &name, int amount, quint32 groupId)
 {
-    if (!applicable() && suspendedPayments.isEmpty())
+    auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    if (!state)
         return false;
-    auto &current = actions->player->getGame()->getGameEventHandler()->ruled()->payment;
+    auto &current = state->payment;
     auto *recipient =
         current.producedManaRecipient(suspendedPayments.isEmpty() ? nullptr : &suspendedPayments.last().payment);
+    const PendingActivatedAbility *recipientAbility = nullptr;
+    if (recipient == &current) {
+        recipientAbility = &actions->pendingActivatedAbility;
+    } else if (!suspendedPayments.isEmpty() && recipient == &suspendedPayments.last().payment &&
+               suspendedPayments.last().ability) {
+        recipientAbility = &*suspendedPayments.last().ability;
+    }
+    if (recipientAbility && recipientAbility->counterGroupPaymentFailed) {
+        return true;
+    }
+    if (!applicable() && suspendedPayments.isEmpty())
+        return false;
     if (recipient)
         for (int i = 0; i < amount; ++i)
             if (!stageMana(*recipient, name, groupId))
@@ -719,6 +968,7 @@ bool RuledPaymentUi::autoPayMana(const QString &name, int amount, quint32 groupI
 
 bool RuledPaymentUi::stageMana(RuledPayment &model, const QString &name, quint32 groupId)
 {
+    auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     QString symbol = name.trimmed().toUpper();
     if (symbol == QLatin1String("X"))
         symbol = QStringLiteral("C");
@@ -749,6 +999,7 @@ bool RuledPaymentUi::click(CardItem *card, bool leftClick)
 {
     if (!card || !applicable() || !card->getZone() || card->getZone()->getName() != ZoneNames::TABLE)
         return false;
+    auto *currentState = actions->player->getGame()->getGameEventHandler()->ruled();
     const auto options = contributionOptions(card);
     if (options.isEmpty())
         return false;
@@ -813,6 +1064,7 @@ bool RuledPaymentUi::contribute(CardItem *card, int kind)
     const bool changedSelection =
         kind == ruled::v1::OBJECT_PAYMENT_KIND_UNSPECIFIED ? model.remove(oid) : model.select(oid, kind);
     if (changedSelection) {
+        noteManualAcceptedCounterGroupPaymentEdit();
         schedule();
         changed();
     }
@@ -868,6 +1120,26 @@ QString RuledPaymentUi::prompt() const
         text += QObject::tr(" Checking payment…");
     if (!model.view.error().empty())
         text += QStringLiteral("\n") + QString::fromStdString(model.view.error());
+    const auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    const auto &ability = actions->pendingActivatedAbility;
+    if (context() == Context::Ability &&
+        isAcceptedCounterGroupPayment(state, ability, actions->player->getPlayerInfo()->getId())) {
+        const QString description = ability.abilityText.isEmpty() ? ability.cardName : ability.abilityText;
+        const QString lockedLabel = ability.engineLockedCostLabel.isEmpty()
+                                        ? QObject::tr("unavailable")
+                                        : ability.engineLockedCostLabel;
+        if (ability.counterGroupPaymentFailed) {
+            text = QObject::tr("%1\nLocked cost: %2\nPreview remaining: %3\nPayment did not complete. Confirm to retry or cancel this activation.")
+                       .arg(description)
+                       .arg(lockedLabel)
+                       .arg(QString::fromStdString(model.view.remaining_cost()));
+            if (!model.view.error().empty()) {
+                text += QStringLiteral("\n") + QString::fromStdString(model.view.error());
+            }
+        } else {
+            text = QObject::tr("%1\nLocked cost: %2\n%3").arg(description).arg(lockedLabel).arg(text);
+        }
+    }
     return text;
 }
 
@@ -987,7 +1259,11 @@ void RuledPaymentUi::resumeAfterManaAbility()
         actions->ruledPendingCast->ability = *frame.ability;
         emit actions->ruledAbilityActivationPendingChanged(true);
     }
-    state->payment.invalidate();
+    const auto &restoredAbility = actions->pendingActivatedAbility;
+    if (!restoredAbility.counterGroupPaymentFailed &&
+        !(restoredAbility.counterGroupConfirmed && restoredAbility.enginePaymentInitialized)) {
+        state->payment.invalidate();
+    }
     startOrRefresh();
     changed();
 }
@@ -1000,10 +1276,79 @@ void RuledPaymentUi::paint(CardItem *card, QPainter *painter)
     if (!RuledActions::isRuledGame(game))
         return;
     auto *state = game->getGameEventHandler()->ruled();
+    if (!state)
+        return;
     const auto &model = state->payment;
+    const auto oid = state->engineOidForCardId(card->getOwner()->getPlayerInfo()->getId(), card->getId());
+    const quint64 generation = oid == 0 ? 0 : state->abilitySourceGeneration(oid);
+    auto *manager = game->getPlayerManager();
+    auto *localPlayer = manager ? manager->getPlayers().value(manager->getLocalPlayerId(), nullptr) : nullptr;
+    if (!localPlayer || !localPlayer->getPlayerActions())
+        return;
+    const auto &ability = localPlayer->getPlayerActions()->pendingActivatedAbility;
+    const int localActorId = localPlayer->getPlayerInfo()->getId();
+    const bool acceptedGroup = ability.valid && ability.counterGroupConfirmed && ability.enginePaymentInitialized &&
+                              ability.engineTransactionId != 0 && state->pendingAbilityActivation &&
+                              state->pendingAbilityActivation->transaction_id() == ability.engineTransactionId &&
+                              state->pendingAbilityActivation->actor_player_id() == localActorId &&
+                              hasCounterGroupPayment(*state->pendingAbilityActivation);
+    const bool draftGroup = ability.valid && ability.stage == PendingActivatedAbility::Stage::Announcing &&
+                            hasCounterGroupOffers(ability);
+    if (oid != 0 && (acceptedGroup || draftGroup)) {
+        QStringList contributionLabels;
+        bool selected = false;
+        for (const auto &row : ability.counterGroupContributions) {
+            if (row.objectId != oid || row.zoneChangeGeneration != generation) {
+                continue;
+            }
+            selected = true;
+            const QString quantity = row.counterLabel.isEmpty()
+                                         ? QObject::tr("%1 counters — type unavailable")
+                                               .arg(static_cast<qulonglong>(row.count))
+                                         : QObject::tr("%1 × %2")
+                                               .arg(static_cast<qulonglong>(row.count))
+                                               .arg(row.counterLabel);
+            contributionLabels.append(QObject::tr("Component %1: %2").arg(row.costIndex + 1).arg(quantity));
+        }
+
+        bool candidate = false;
+        if (draftGroup) {
+            for (const auto &choice : ability.costChoices) {
+                if (!choice.counterRemovalGroup) {
+                    continue;
+                }
+                const auto offered = std::find_if(choice.counterRemovalGroup->candidates.cbegin(),
+                                                  choice.counterRemovalGroup->candidates.cend(),
+                                                  [oid, generation](const auto &entry) {
+                                                      return entry.objectId == oid &&
+                                                             entry.zoneChangeGeneration == generation;
+                                                  });
+                if (offered != choice.counterRemovalGroup->candidates.cend()) {
+                    candidate = true;
+                    break;
+                }
+            }
+        }
+        if (selected || candidate) {
+            painter->save();
+            painter->setPen(QPen(QColor(0, 190, 210), selected ? 4 : 2,
+                                 selected ? Qt::SolidLine : Qt::DashLine));
+            painter->setBrush(Qt::NoBrush);
+            const auto rect = card->boundingRect().adjusted(5, 5, -5, -5);
+            painter->drawRoundedRect(rect, 4, 4);
+            if (selected) {
+                const QString annotation = contributionLabels.join(QStringLiteral(" · "));
+                const qreal labelHeight = std::min<qreal>(rect.height(), 18.0 * contributionLabels.size());
+                const auto labelRect = QRectF(rect.left(), rect.bottom() - labelHeight, rect.width(), labelHeight);
+                painter->setPen(Qt::white);
+                painter->fillRect(labelRect, QColor(0, 80, 90, 230));
+                painter->drawText(labelRect, Qt::AlignLeft | Qt::AlignVCenter | Qt::TextWordWrap, annotation);
+            }
+            painter->restore();
+        }
+    }
     if (!model.active)
         return;
-    const auto oid = state->engineOidForCardId(card->getOwner()->getPlayerInfo()->getId(), card->getId());
     const bool selected = model.selected(oid);
     if (!selected && !model.candidate(oid))
         return;
@@ -1173,9 +1518,26 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildActivationCommand(Pl
     auto &pendingActivatedAbility = actions->pendingActivatedAbility;
     const auto &restrictedManaPaymentSelections = actions->restrictedManaPaymentSelections;
     auto *player = actions->player;
+    const auto *state = player->getGame()->getGameEventHandler()->ruled();
+    if (!state) {
+        return std::nullopt;
+    }
     ruled::v1::RuledCommand cmd;
+    if (pendingActivatedAbility.ownedCounterGroupBegin) {
+        return std::nullopt;
+    }
+    if (hasCounterGroupOffers(pendingActivatedAbility) || pendingActivatedAbility.counterGroupConfirmed) {
+        if (!isAcceptedCounterGroupPayment(state,
+                                           pendingActivatedAbility,
+                                           player->getPlayerInfo()->getId())) {
+            return std::nullopt;
+        }
+        auto *commit = cmd.mutable_commit_ability_activation();
+        commit->set_transaction_id(pendingActivatedAbility.engineTransactionId);
+        commit->set_expected_revision(pendingActivatedAbility.engineRevision);
+        return cmd; // The accepted group and original indexed Phi choices are immutable in this Commit.
+    }
     if (pendingActivatedAbility.chosenOpponentTargets) {
-        const auto *state = player->getGame()->getGameEventHandler()->ruled();
         if (pendingActivatedAbility.stage != PendingActivatedAbility::Stage::Paying ||
             !ruledActivationCanPay(*state, player->getPlayerInfo()->getId()) ||
             state->pendingAbilityActivation->transaction_id() != pendingActivatedAbility.engineTransactionId)

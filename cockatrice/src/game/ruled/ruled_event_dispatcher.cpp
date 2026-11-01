@@ -348,7 +348,9 @@ RuledClientState::SpellTargetData parseSpellTargets(const ruled::v1::SpellTarget
     return data;
 }
 
-RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src, const RuledPresentationResolver &resolver)
+RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src,
+                            const RuledPresentationResolver &resolver,
+                            bool allowActivatedAbilityCounterGroups = false)
 {
     RuledCostData data;
     data.nonManaCostsPayable = src.non_mana_costs_payable();
@@ -408,47 +410,63 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src, const RuledP
             case ruled::v1::COST_CHOICE_KIND_RETURN_TAPPED_CREATURE:
                 parsed.kind = RuledCostChoiceKind::ReturnTappedCreature;
                 break;
+            case ruled::v1::COST_CHOICE_KIND_REMOVE_COUNTERS_FROM_PERMANENTS:
+                // Kind 9 is supported only on activated-ability cost offers. Defer assigning the
+                // typed client kind until the complete battlefield receipt below has validated.
+                if (!allowActivatedAbilityCounterGroups) {
+                    data.nonManaCostsPayable = false;
+                }
+                break;
             default:
                 parsed.kind = RuledCostChoiceKind::Unspecified;
                 data.nonManaCostsPayable = false;
                 break;
         }
-        if (choice.kind() == ruled::v1::COST_CHOICE_KIND_REMOVE_COUNTERS_FROM_PERMANENTS &&
-            choice.zone() == ruled::v1::COST_CHOICE_ZONE_BATTLEFIELD && choice.has_counter_removal_group()) {
-            const auto &wireGroup = choice.counter_removal_group();
+        if (choice.kind() == ruled::v1::COST_CHOICE_KIND_REMOVE_COUNTERS_FROM_PERMANENTS) {
+            parsed.kind = RuledCostChoiceKind::Unspecified;
+            const bool typedAbilityOffer = allowActivatedAbilityCounterGroups &&
+                                            choice.zone() == ruled::v1::COST_CHOICE_ZONE_BATTLEFIELD &&
+                                            choice.has_counter_removal_group();
             RuledCounterRemovalGroup group;
-            group.requiredCount = wireGroup.required_count();
-            bool valid = group.requiredCount > 0 && wireGroup.candidates_size() > 0;
-            QSet<quint32> candidateObjectIds;
-            for (const auto &wireCandidate : wireGroup.candidates()) {
-                if (!wireCandidate.has_object() || wireCandidate.object().object_id() == 0 ||
-                    candidateObjectIds.contains(wireCandidate.object().object_id()) ||
-                    wireCandidate.options_size() == 0) {
-                    valid = false;
-                    break;
-                }
-                RuledCounterRemovalGroupCandidate candidate;
-                candidate.objectId = wireCandidate.object().object_id();
-                candidate.zoneChangeGeneration = wireCandidate.object().zone_change_generation();
-                candidateObjectIds.insert(candidate.objectId);
-                QSet<quint32> optionIds;
-                for (const auto &option : wireCandidate.options()) {
-                    if (option.option_id() == 0 || option.available_count() == 0 ||
-                        optionIds.contains(option.option_id())) {
+            bool valid = typedAbilityOffer;
+            if (valid) {
+                const auto &wireGroup = choice.counter_removal_group();
+                group.requiredCount = wireGroup.required_count();
+                valid = group.requiredCount > 0 && wireGroup.candidates_size() > 0;
+                QSet<quint32> candidateObjectIds;
+                for (const auto &wireCandidate : wireGroup.candidates()) {
+                    if (!wireCandidate.has_object() || wireCandidate.object().object_id() == 0 ||
+                        candidateObjectIds.contains(wireCandidate.object().object_id()) ||
+                        wireCandidate.options_size() == 0) {
                         valid = false;
                         break;
                     }
-                    optionIds.insert(option.option_id());
-                    candidate.options.append({option.option_id(), QString::fromStdString(option.label()),
-                                              option.available_count()});
+                    RuledCounterRemovalGroupCandidate candidate;
+                    candidate.objectId = wireCandidate.object().object_id();
+                    candidate.zoneChangeGeneration = wireCandidate.object().zone_change_generation();
+                    candidateObjectIds.insert(candidate.objectId);
+                    QSet<quint32> optionIds;
+                    for (const auto &option : wireCandidate.options()) {
+                        if (option.option_id() == 0 || option.available_count() == 0 ||
+                            optionIds.contains(option.option_id())) {
+                            valid = false;
+                            break;
+                        }
+                        optionIds.insert(option.option_id());
+                        candidate.options.append({option.option_id(), QString::fromStdString(option.label()),
+                                                  option.available_count()});
+                    }
+                    if (!valid) {
+                        break;
+                    }
+                    group.candidates.append(candidate);
                 }
-                if (!valid) {
-                    break;
-                }
-                group.candidates.append(candidate);
             }
             if (valid) {
+                parsed.kind = RuledCostChoiceKind::RemoveCountersFromPermanents;
                 parsed.counterRemovalGroup = group;
+            } else {
+                data.nonManaCostsPayable = false;
             }
         }
         for (const quint32 candidate : choice.candidate_ids()) {
@@ -571,6 +589,9 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src, const RuledP
             parsedGroup.options.append(parsedOption);
         }
         data.castCostGroups.append(parsedGroup);
+    }
+    if (allowActivatedAbilityCounterGroups && !ruledCounterRemovalGroupChoicesWellFormed(data.choices)) {
+        data.nonManaCostsPayable = false;
     }
     return data;
 }
@@ -2810,7 +2831,7 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
     state->abilityCostData.clear();
     for (const auto &entry : actions.cost_choices_by_ability()) {
         state->abilityCostData.insert(static_cast<quint64>(entry.first),
-                                      parseCostData(entry.second, presentationResolver));
+                                      parseCostData(entry.second, presentationResolver, true));
     }
     state->eligibleRestrictedManaByAbility.clear();
     state->waterbendAbilities.clear();

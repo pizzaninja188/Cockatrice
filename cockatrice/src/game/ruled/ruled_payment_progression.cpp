@@ -20,6 +20,7 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QPointer>
 #include <QVBoxLayout>
 #include <algorithm>
 #include <libcockatrice/utility/zone_names.h>
@@ -46,6 +47,55 @@ bool isCapturedSpecialCastPromptCurrent(const RuledClientState *state, quint64 p
 {
     return promptId != 0 && state && state->isCurrentResolutionPrompt(promptId) && state->pendingChoice.has_value() &&
            state->pendingChoice->resolutionPromptId == promptId && isSpecialCastCandidate(state, oid);
+}
+
+bool hasCounterGroupOffers(const PendingActivatedAbility &ability)
+{
+    return std::any_of(ability.costChoices.cbegin(), ability.costChoices.cend(), [](const auto &choice) {
+        return choice.kind == RuledCostChoiceKind::RemoveCountersFromPermanents ||
+               choice.counterRemovalGroup.has_value();
+    });
+}
+
+bool hasCounterGroupCostData(const QVector<RuledCostChoice> &choices)
+{
+    return std::any_of(choices.cbegin(), choices.cend(), [](const auto &choice) {
+        return choice.kind == RuledCostChoiceKind::RemoveCountersFromPermanents ||
+               choice.counterRemovalGroup.has_value();
+    });
+}
+
+QVector<RuledFlexPip> unresolvedPhyrexianPips(const PendingActivatedAbility &ability)
+{
+    QVector<RuledFlexPip> result;
+    for (const auto &pip : ability.flexPips) {
+        if (pip.phyrexian) {
+            result.append(pip);
+        }
+    }
+    return result;
+}
+
+bool fixedFlexPaymentsMatch(const PendingActivatedAbility &ability, const QVector<RuledFlexPip> &pips)
+{
+    if (ability.fixedFlexPayments.size() != pips.size()) {
+        return false;
+    }
+    QSet<quint32> expected;
+    for (const auto &pip : pips) {
+        if (expected.contains(pip.pipIndex)) {
+            return false;
+        }
+        expected.insert(pip.pipIndex);
+    }
+    QSet<quint32> actual;
+    for (const auto &payment : ability.fixedFlexPayments) {
+        if (actual.contains(payment.pip_index()) || !expected.contains(payment.pip_index())) {
+            return false;
+        }
+        actual.insert(payment.pip_index());
+    }
+    return actual == expected;
 }
 
 bool hasExactCastOffer(const RuledClientState *state,
@@ -242,6 +292,150 @@ bool RuledPaymentUi::tryHandlePriorityCostClick(CardItem *card)
     return false;
 }
 
+bool RuledPaymentUi::tryHandleCounterGroupCostClick(CardItem *card)
+{
+    if (!card || !card->getZone() || card->getZone()->getName() != ZoneNames::TABLE || !card->getOwner()) {
+        return true;
+    }
+    auto *handler = actions->player->getGame()->getGameEventHandler()->ruled();
+    if (!handler) {
+        return true;
+    }
+
+    PendingActivatedAbility capturedPending;
+    {
+        const auto &current = actions->pendingActivatedAbility;
+        if (!current.valid || !current.waitingForCost || current.nextCostChoice < 0 ||
+            current.nextCostChoice >= current.costChoices.size() ||
+            !current.costChoices.at(current.nextCostChoice).counterRemovalGroup) {
+            return true;
+        }
+        capturedPending = current;
+    }
+    if (!ruledPendingAbilitySourceStillCurrent(*handler, capturedPending)) {
+        cancelPendingActivatedAbility();
+        return true;
+    }
+
+    const int ownerPlayerId = card->getOwner()->getPlayerInfo()->getId();
+    const quint32 objectId = handler->engineOidForCardId(ownerPlayerId, card->getId());
+    const quint64 generation = objectId == 0 ? 0 : handler->abilitySourceGeneration(objectId);
+    const QString displayName = card->getName();
+    struct OfferedComponent
+    {
+        int costIndex = -1;
+        int menuNumber = 0;
+        quint64 required = 0;
+        quint64 selected = 0;
+    };
+    QVector<OfferedComponent> components;
+    for (int choiceIndex = 0; choiceIndex < capturedPending.costChoices.size(); ++choiceIndex) {
+        const auto &choice = capturedPending.costChoices.at(choiceIndex);
+        if (!choice.counterRemovalGroup) {
+            continue;
+        }
+        const auto candidate = std::find_if(choice.counterRemovalGroup->candidates.cbegin(),
+                                            choice.counterRemovalGroup->candidates.cend(),
+                                            [objectId, generation](const auto &entry) {
+                                                return objectId != 0 && entry.objectId == objectId &&
+                                                       entry.zoneChangeGeneration == generation;
+                                            });
+        if (candidate == choice.counterRemovalGroup->candidates.cend()) {
+            continue;
+        }
+        quint64 selected = 0;
+        bool selectedValid = true;
+        for (const auto &row : capturedPending.counterGroupContributions) {
+            if (row.costIndex != choice.costIndex) {
+                continue;
+            }
+            if (row.count > std::numeric_limits<quint64>::max() - selected) {
+                selectedValid = false;
+                break;
+            }
+            selected += row.count;
+        }
+        components.append({choice.costIndex, choiceIndex + 1, choice.counterRemovalGroup->requiredCount,
+                           selectedValid ? selected : std::numeric_limits<quint64>::max()});
+    }
+    if (components.isEmpty()) {
+        handler->emitLocalLog(PlayerActions::tr("That permanent is not offered for any counter cost component."));
+        return true;
+    }
+
+    // Only value receipts survive the modal loops. They are checked against the current owner
+    // and fresh engine offers after each loop before quantity rows can replace staged data.
+    card = nullptr;
+    handler = nullptr;
+    std::optional<int> selectedCostIndex;
+    QPointer<PlayerActions> actionsGuard(actions);
+    if (components.size() == 1) {
+        selectedCostIndex = components.constFirst().costIndex;
+    } else {
+        QMenu menu;
+        menu.setTitle(PlayerActions::tr("Choose counter cost component"));
+        for (const auto &component : components) {
+            auto *entry = menu.addAction(PlayerActions::tr("Component %1: %2 / %3 counters")
+                                             .arg(component.menuNumber)
+                                             .arg(static_cast<qulonglong>(component.selected))
+                                             .arg(static_cast<qulonglong>(component.required)));
+            entry->setData(component.costIndex);
+        }
+        components.clear();
+        QAction *chosen = menu.exec(QCursor::pos());
+        if (!actionsGuard || !chosen) {
+            return true;
+        }
+        bool validCostIndex = false;
+        const int costIndex = chosen->data().toInt(&validCostIndex);
+        if (!validCostIndex) {
+            return true;
+        }
+        selectedCostIndex = costIndex;
+    }
+    if (!selectedCostIndex || !actionsGuard) {
+        return true;
+    }
+
+    auto *currentState = actionsGuard->player->getGame()->getGameEventHandler()->ruled();
+    if (!currentState || !actionsGuard->ruledPendingCast->selectCounterGroupAfterPrompt(
+                             *currentState, capturedPending, *selectedCostIndex, objectId, generation)) {
+        return true;
+    }
+    const PendingActivatedAbility quantityPending = actionsGuard->pendingActivatedAbility;
+    const auto capturedContext = ruledCounterQuantityContext(
+        *currentState, quantityPending, *selectedCostIndex, objectId, generation, displayName);
+    if (!capturedContext) {
+        return true;
+    }
+
+    currentState = nullptr;
+    RuledCounterQuantityDialog dialog(*capturedContext);
+    dialog.exec();
+    const auto result = dialog.acceptedQuantityResult();
+    if (!actionsGuard || !result) {
+        return true;
+    }
+    auto *latestState = actionsGuard->player->getGame()->getGameEventHandler()->ruled();
+    if (!latestState) {
+        return true;
+    }
+    const auto latestContext = ruledCounterQuantityContext(
+        *latestState, actionsGuard->pendingActivatedAbility, *selectedCostIndex, objectId, generation, displayName);
+    if (!latestContext || !RuledCounterQuantityDialog::isResultCurrent(*capturedContext, *latestContext, *result)) {
+        return true;
+    }
+    const auto replacementRows = ruledCounterQuantityRows(*capturedContext, *result);
+    if (!replacementRows || !actionsGuard->ruledPendingCast->stageCounterContributionsAfterPrompt(
+                                *latestState, quantityPending, *selectedCostIndex, objectId, generation,
+                                *replacementRows)) {
+        return true;
+    }
+    emit actionsGuard->ruledAbilityCostPromptChanged();
+    latestState->emitSpellTargetSelectionChanged();
+    return true;
+}
+
 bool RuledPaymentUi::tryHandleAdditionalCostClick(CardItem *card)
 {
     auto *handler = actions->player->getGame()->getGameEventHandler()->ruled();
@@ -334,13 +528,25 @@ bool RuledPaymentUi::tryHandleAdditionalCostClick(CardItem *card)
     // Explicit nonmana activated-cost choices are engine-authored. Hand candidates are concealed
     // hand slots and battlefield candidates are ObjectIds; never infer legality from card text.
     if (actions->pendingActivatedAbility.valid && actions->pendingActivatedAbility.waitingForCost) {
+        bool counterGroupClick = false;
+        {
+            const auto &currentAbility = actions->pendingActivatedAbility;
+            counterGroupClick = currentAbility.nextCostChoice >= 0 &&
+                                currentAbility.nextCostChoice < currentAbility.costChoices.size() &&
+                                currentAbility.costChoices.at(currentAbility.nextCostChoice).counterRemovalGroup;
+        }
+        if (counterGroupClick) {
+            handler = nullptr;
+            return tryHandleCounterGroupCostClick(card);
+        }
         auto &pending = actions->pendingActivatedAbility;
         ruledDispatchPendingAbilityCostOperation(
             *handler, pending, [this]() { cancelPendingActivatedAbility(); }, [this, card, handler]() {
-                auto &pending = actions->pendingActivatedAbility;
-                if (!card || !card->getZone() || pending.nextCostChoice >= pending.costChoices.size()) {
+                if (!card || !card->getZone() ||
+                    actions->pendingActivatedAbility.nextCostChoice >= actions->pendingActivatedAbility.costChoices.size()) {
                     return;
                 }
+                auto &pending = actions->pendingActivatedAbility;
                 const auto &choice = pending.costChoices.at(pending.nextCostChoice);
                 const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
                 quint32 selectedId = 0;
@@ -479,14 +685,20 @@ void RuledPaymentUi::installProgressionConnections()
 void RuledPaymentUi::reconcilePendingRuledTargetSelections()
 {
     RuledTargetUi::reconcile(actions);
-    const auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     if (!state)
         return;
     const int localPlayerId = actions->player->getPlayerInfo()->getId();
     if (!actions->ruledPendingCast->reconcileSpellCosts(*state, localPlayerId))
         cancelPendingRuledSpellCast();
-    if (!actions->ruledPendingCast->reconcileAbilityCosts(*state, localPlayerId))
+    if (!actions->ruledPendingCast->reconcileAbilityCosts(*state, localPlayerId)) {
         cancelPendingActivatedAbility();
+        return;
+    }
+    if (actions->isAwaitingRuledCounterGroupSelection()) {
+        emit actions->ruledAbilityCostPromptChanged();
+        state->emitSpellTargetSelectionChanged();
+    }
 }
 
 bool RuledPaymentUi::promptFlexiblePipChoices(const QString &fullCost,
@@ -746,6 +958,15 @@ bool RuledPaymentUi::completePendingRuledSpellCast()
 
 bool RuledPaymentUi::completeActivateAbility()
 {
+    auto &pending = actions->pendingActivatedAbility;
+    if (hasCounterGroupOffers(pending) || pending.counterGroupConfirmed) {
+        if (pending.ownedCounterGroupBegin || pending.engineTransactionId != 0 ||
+            pending.stage != PendingActivatedAbility::Stage::Announcing || !pending.counterGroupConfirmed ||
+            RuledActions::gameplayInputLocked(actions->player->getGame())) {
+            return false;
+        }
+        return beginAbilityActivation();
+    }
     if (actions->pendingActivatedAbility.chosenOpponentTargets)
         return startOrRefresh(); // Only shared preview/payment may commit an engine announcement.
     if (RuledActions::gameplayInputLocked(actions->player->getGame())) {
@@ -1091,6 +1312,76 @@ void RuledPaymentUi::continuePendingActivatedAbilityAfterChoice()
     }
     RuledClientState *const state = actions->player->getGame()->getGameEventHandler()->ruled();
     auto &pending = actions->pendingActivatedAbility;
+    if (!state) {
+        return;
+    }
+    if (hasCounterGroupOffers(pending)) {
+        if (pending.ownedCounterGroupBegin || pending.stage != PendingActivatedAbility::Stage::Announcing ||
+            pending.engineTransactionId != 0) {
+            return;
+        }
+        if (!pending.counterGroupConfirmed) {
+            const auto activeGroup = std::find_if(pending.costChoices.cbegin(), pending.costChoices.cend(),
+                                                  [](const auto &choice) {
+                                                      return choice.kind ==
+                                                                 RuledCostChoiceKind::RemoveCountersFromPermanents &&
+                                                             choice.counterRemovalGroup.has_value();
+                                                  });
+            if (activeGroup == pending.costChoices.cend()) {
+                cancelPendingActivatedAbility();
+                return;
+            }
+            pending.nextCostChoice = static_cast<int>(std::distance(pending.costChoices.cbegin(), activeGroup));
+            pending.waitingForCost = true;
+            pending.waitingForMana = false;
+            emit actions->ruledAbilityCostPromptChanged();
+            state->emitLocalLog(actions->pendingRuledAbilityCostPromptText());
+            state->emitSpellTargetSelectionChanged();
+            return;
+        }
+
+        pending.waitingForCost = false;
+        pending.waitingForMana = false;
+        const auto phyrexianPips = unresolvedPhyrexianPips(pending);
+        if (!fixedFlexPaymentsMatch(pending, phyrexianPips)) {
+            const PendingActivatedAbility captured = pending;
+            QPointer<PlayerActions> actionsGuard(actions);
+            const QString fullCost = RuledPendingCast::formatRemainingCost(pending.remainingCost, pending.flexPips);
+            const QString cardName = pending.cardName;
+            QVector<bool> payLife;
+            const bool accepted = promptFlexiblePipChoices(fullCost, cardName, phyrexianPips, payLife);
+            if (!actionsGuard) {
+                return;
+            }
+            std::optional<QVector<ruled::v1::FlexPipPayment>> fixedPayments;
+            if (accepted) {
+                if (payLife.size() != phyrexianPips.size()) {
+                    return;
+                }
+                QVector<ruled::v1::FlexPipPayment> choices;
+                choices.reserve(phyrexianPips.size());
+                for (int index = 0; index < phyrexianPips.size(); ++index) {
+                    ruled::v1::FlexPipPayment payment;
+                    payment.set_pip_index(phyrexianPips.at(index).pipIndex);
+                    payment.set_pay_life(payLife.at(index));
+                    choices.append(std::move(payment));
+                }
+                fixedPayments = std::move(choices);
+            }
+            auto *latestState = actionsGuard->player->getGame()->getGameEventHandler()->ruled();
+            if (!latestState ||
+                !actionsGuard->ruledPendingCast->applyCounterGroupFlexibleChoiceAfterPrompt(
+                    *latestState, captured, fixedPayments)) {
+                return;
+            }
+            if (!accepted) {
+                cancelPendingActivatedAbility();
+                return;
+            }
+        }
+        beginAbilityActivation();
+        return;
+    }
     ruledDispatchPendingAbilityCostOperation(
         *state, pending, [this]() { cancelPendingActivatedAbility(); }, [this, state]() {
             auto &pending = actions->pendingActivatedAbility;
@@ -1315,7 +1606,33 @@ bool RuledPaymentUi::tryPayRuledRestrictedMana(quint32 groupId, QChar symbol)
 void RuledPaymentUi::cancelPendingActivatedAbility()
 {
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
-    if (state->pendingAbilityActivation && actions->pendingActivatedAbility.chosenOpponentTargets) {
+    auto &local = actions->pendingActivatedAbility;
+    const int actorPlayerId = actions->player->getPlayerInfo()->getId();
+    if (local.counterGroupPaymentFailed || (local.counterGroupConfirmed && local.enginePaymentInitialized)) {
+        auto command = ruledCancelCounterGroupPayment(*state, local, actorPlayerId);
+        if (!command) {
+            return;
+        }
+        const auto transaction = command->cancel_ability_activation().transaction_id();
+        RuledActions::sendRuledCommandExpectingAck(
+            actions->player->getGame(), *command, [this, transaction](bool accepted) {
+                auto &current = actions->pendingActivatedAbility;
+                if (!current.valid || current.engineTransactionId != transaction)
+                    return;
+                if (!accepted) {
+                    current.stage = PendingActivatedAbility::Stage::Waiting;
+                    reconcileEnginePendingAbilityActivation();
+                    startOrRefresh();
+                } else {
+                    actions->ruledPendingCast->clearAbility();
+                    clear();
+                    emit actions->ruledActivatedAbilityTargetPendingChanged(false, {});
+                    emit actions->ruledAbilityActivationPendingChanged(false);
+                }
+            });
+        return;
+    }
+    if (state->pendingAbilityActivation && local.chosenOpponentTargets) {
         const auto &engine = *state->pendingAbilityActivation;
         if (engine.actor_player_id() != actions->player->getPlayerInfo()->getId() ||
             ruledActivationNestedChoice(*state) || state->isEngineCommandPending())
@@ -1781,6 +2098,56 @@ void RuledPaymentUi::confirmRuledGraveyardCostSelection()
         actions->pendingActivatedAbility.waitingForCost = false;
         continuePendingActivatedAbilityAfterChoice();
     }
+}
+
+void RuledPaymentUi::confirmRuledCounterGroupSelection()
+{
+    if (!actions->isAwaitingRuledCounterGroupSelection() ||
+        RuledActions::gameplayInputLocked(actions->player->getGame())) {
+        return;
+    }
+    const quint64 capturedDraftId = actions->pendingActivatedAbility.draftId;
+    reconcilePendingRuledTargetSelections();
+    auto &pending = actions->pendingActivatedAbility;
+    if (!pending.valid || pending.draftId != capturedDraftId ||
+        !actions->isAwaitingRuledCounterGroupSelection() ||
+        !actions->ruledPendingCast->ruledCounterGroupSelectionConfirmable()) {
+        return;
+    }
+    if (!ruledConfirmCounterContributions(pending)) {
+        return;
+    }
+    pending.waitingForCost = false;
+    pending.waitingForMana = false;
+    emit actions->ruledAbilityCostPromptChanged();
+    if (auto *state = actions->player->getGame()->getGameEventHandler()->ruled()) {
+        state->emitSpellTargetSelectionChanged();
+    }
+    continuePendingActivatedAbilityAfterChoice();
+}
+
+void RuledPaymentUi::cancelRuledCounterGroupSelection()
+{
+    const auto &ability = actions->pendingActivatedAbility;
+    if (actions->isAwaitingRuledCounterGroupSelection() || hasCounterGroupOffers(ability) ||
+        ability.counterGroupConfirmed || ability.counterGroupPaymentFailed) {
+        cancelPendingActivatedAbility();
+    }
+}
+
+bool RuledPaymentUi::retryCounterGroupPayment(quint64 transactionId, quint64 revision)
+{
+    auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    if (!state || !ruledRetryCounterGroupPayment(*state,
+                                                actions->pendingActivatedAbility,
+                                                actions->player->getPlayerInfo()->getId(),
+                                                transactionId,
+                                                revision)) {
+        return false;
+    }
+    schedule();
+    changed();
+    return true;
 }
 
 void RuledPaymentUi::cancelRuledGraveyardCostSelection()
@@ -2394,12 +2761,41 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     if (menu.actions().isEmpty()) {
         return false;
     }
+
+    // A grouped-cost activation starts from the exact offer that opened this menu. Capture the
+    // engine receipt and display value before entering the nested event loop; the CardItem may be
+    // removed or replaced while QMenu::exec() is active.
+    QPointer<PlayerActions> actionsGuard(actions);
+    QPointer<CardItem> sourceCardGuard(card);
+    const quint32 originalSourceOid = oid;
+    const auto originalSourceZone = handler->abilitySourceZone(originalSourceOid);
+    const quint64 originalZoneChangeGeneration = handler->abilitySourceGeneration(originalSourceOid);
+    const QString originalDisplayValue = card->getName();
+    QSet<int> menuCounterGroupAbilityIndices;
+    QSet<int> examinedAbilityIndices;
+    for (const auto &option : cardOptions) {
+        if (option.kind != RuledCardActionMenuOption::Kind::ActivateAbility ||
+            examinedAbilityIndices.contains(option.index)) {
+            continue;
+        }
+        examinedAbilityIndices.insert(option.index);
+        if (hasCounterGroupCostData(handler->abilityCostChoices(originalSourceOid, option.index))) {
+            menuCounterGroupAbilityIndices.insert(option.index);
+        }
+    }
+
     QAction *chosen = menu.exec(QCursor::pos());
+    if (!actionsGuard) {
+        return true;
+    }
     if (!chosen) {
         return true; // menu was shown, player cancelled
     }
 
     if (permanentMenuActions.contains(chosen)) {
+        if (!sourceCardGuard) {
+            return true;
+        }
         const RuledPermanentAction permanentAction = permanentMenuActions.value(chosen);
         actions->manaPaymentCounterIds.clear();
         clearRestrictedManaPaymentSelections();
@@ -2437,12 +2833,18 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     if (menuIndex < 0 || menuIndex >= cardOptions.size()) {
         return true;
     }
-    const auto &selectedOption = cardOptions.at(menuIndex);
+    const auto selectedOption = cardOptions.at(menuIndex);
     if (selectedOption.kind == RuledCardActionMenuOption::Kind::PaymentContribution) {
+        if (!sourceCardGuard) {
+            return true;
+        }
         contribute(card, selectedOption.index);
         return true;
     }
     if (selectedOption.kind == RuledCardActionMenuOption::Kind::CastFace) {
+        if (!sourceCardGuard) {
+            return true;
+        }
         for (const auto &face : castFaces) {
             if (face.faceIndex == selectedOption.index && face.castMethod == selectedOption.castMethod &&
                 face.castingPermissionId == selectedOption.castingPermissionId &&
@@ -2456,6 +2858,40 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         return true;
     }
     const int abilityIndex = selectedOption.index;
+    if (!actionsGuard->player || !actionsGuard->player->getGame()) {
+        return true;
+    }
+    auto *liveState = actionsGuard->player->getGame()->getGameEventHandler()->ruled();
+    if (!liveState) {
+        return true;
+    }
+    const auto currentCostChoices = liveState->abilityCostChoices(originalSourceOid, abilityIndex);
+    const bool menuHadCounterGroupOffer = menuCounterGroupAbilityIndices.contains(abilityIndex);
+    const bool currentHasCounterGroupOffer = hasCounterGroupCostData(currentCostChoices);
+    if (menuHadCounterGroupOffer || currentHasCounterGroupOffer) {
+        const bool sourceReceiptCurrent =
+            liveState->abilitySourceZone(originalSourceOid) == originalSourceZone &&
+            liveState->abilitySourceGeneration(originalSourceOid) == originalZoneChangeGeneration &&
+            liveState->activatedAbilityIndicesForOid(originalSourceOid).contains(abilityIndex);
+        const bool currentTypedGroupOffer =
+            ruledCounterRemovalGroupChoicesWellFormed(currentCostChoices) &&
+            std::any_of(currentCostChoices.cbegin(), currentCostChoices.cend(), [](const auto &choice) {
+                return choice.kind == RuledCostChoiceKind::RemoveCountersFromPermanents &&
+                       choice.counterRemovalGroup.has_value();
+            });
+        if (!menuHadCounterGroupOffer || !currentHasCounterGroupOffer || !currentTypedGroupOffer ||
+            !sourceReceiptCurrent || !liveState->abilityActivatable(originalSourceOid, abilityIndex)) {
+            liveState->emitLocalLog(
+                actionsGuard->tr("The ability's counter cost changed before activation. Choose the ability again."));
+            return true;
+        }
+        // Downstream activation setup reads offers from this state. Reacquire it after the modal
+        // loop, after the full ObjectId/generation/zone receipt has been validated.
+        handler = liveState;
+    } else if (!sourceCardGuard) {
+        return true;
+    }
+
     std::optional<RuledModalSpellOption> selectedMode;
     const quint64 abilityKey = RuledClientState::abilityTargetKey(oid, abilityIndex);
     const auto offeredModePosition = handler->activatedAbilityModesByAbility.constFind(abilityKey);
@@ -2468,7 +2904,7 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
             return true;
         }
         const auto modeSelection = RuledPendingCast::chooseModes(
-            actions->player->getGame()->getTab(), card->getName(), offeredModes.modes, 1, 1,
+            actions->player->getGame()->getTab(), originalDisplayValue, offeredModes.modes, 1, 1,
             RuledPendingCast::ModeChoicePurpose::ActivatedAbility);
         if (!modeSelection) {
             return true;
@@ -2548,7 +2984,7 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     actions->pendingActivatedAbility.manaOptionIndex = selectedOption.manaOptionIndex;
     actions->pendingActivatedAbility.loyaltyXChoice = loyaltyXChoice;
     actions->pendingActivatedAbility.abilityText = chosen->text();
-    actions->pendingActivatedAbility.cardName = card->getName();
+    actions->pendingActivatedAbility.cardName = originalDisplayValue;
     actions->pendingActivatedAbility.selectedMode = selectedMode;
     actions->pendingActivatedAbility.needsTarget = needsTarget;
     actions->pendingActivatedAbility.waitingForTarget = needsTarget;

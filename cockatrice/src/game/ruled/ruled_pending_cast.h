@@ -81,6 +81,25 @@ struct RuledPendingCounterContribution
     quint64 zoneChangeGeneration = 0;
     quint32 optionId = 0;
     quint32 count = 0;
+    /// Label copied from a matching live offer for display only.
+    QString counterLabel;
+};
+
+struct RuledOwnedCounterGroupBegin
+{
+    quint64 draftId = 0;
+    int actorPlayerId = -1;
+    ruled::v1::BeginAbilityActivation announcement;
+    bool acknowledged = false;
+    quint64 matchedTransactionId = 0;
+};
+
+enum class RuledOwnedCounterGroupBeginUpdate
+{
+    Ignored,
+    Waiting,
+    Accepted,
+    Rejected,
 };
 
 inline bool ruledCounterSelectionStillLegal(const RuledPendingCostSelection &selection, const RuledCostChoice &choice)
@@ -226,6 +245,11 @@ struct PendingActivatedAbility
     bool restartAfterTargetInvalidation = false;
     QVector<RuledPendingCounterContribution> counterGroupContributions;
     bool counterGroupConfirmed = false;
+    quint64 draftId = 0;
+    QVector<ruled::v1::FlexPipPayment> fixedFlexPayments;
+    QString engineLockedCostLabel;
+    bool counterGroupPaymentFailed = false;
+    std::optional<RuledOwnedCounterGroupBegin> ownedCounterGroupBegin;
 
     /// Shared activation identity and selected target payload; payment cohorts are appended by the host.
     void writeActivationHeader(ruled::v1::ActivateAbility &command) const
@@ -468,6 +492,7 @@ template <typename PendingPayment>
         case RuledCostChoiceKind::RemoveCounters:
         case RuledCostChoiceKind::ReturnUnblockedAttacker:
         case RuledCostChoiceKind::ReturnTappedCreature:
+        case RuledCostChoiceKind::RemoveCountersFromPermanents:
             return true;
         case RuledCostChoiceKind::Unspecified:
             return false;
@@ -477,9 +502,10 @@ template <typename PendingPayment>
 
 [[nodiscard]] inline bool ruledPendingAbilityCostChoicesSupported(const QVector<RuledCostChoice> &choices)
 {
-    return std::all_of(choices.cbegin(), choices.cend(), [](const RuledCostChoice &choice) {
-        return ruledPendingAbilityCostChoiceKindSupported(choice.kind);
-    });
+    return ruledCounterRemovalGroupChoicesWellFormed(choices) &&
+           std::all_of(choices.cbegin(), choices.cend(), [](const RuledCostChoice &choice) {
+               return ruledPendingAbilityCostChoiceKindSupported(choice.kind);
+           });
 }
 
 /// Revalidate the source identity of a pending activated-ability-shaped UI transaction. Generic
@@ -1512,6 +1538,17 @@ ruledAdvancePendingActivatedTargetGroup(PendingActivatedAbility &ability,
 [[nodiscard]] inline RuledPendingPaymentAction readyRuledPendingPaymentAction(const PendingRuledSpellCast &spell,
                                                                               const PendingActivatedAbility &ability)
 {
+    if (ability.ownedCounterGroupBegin) {
+        return RuledPendingPaymentAction::None;
+    }
+    if (ability.counterGroupConfirmed || ability.counterGroupPaymentFailed ||
+        std::any_of(ability.costChoices.cbegin(), ability.costChoices.cend(), [](const auto &choice) {
+            return choice.counterRemovalGroup.has_value();
+        })) {
+        // Group costs begin through the owned counter-group transaction and pay through the
+        // authoritative shared payment model. They never use direct-activation readiness.
+        return RuledPendingPaymentAction::None;
+    }
     const auto costIsPaid = [](const QMap<QChar, int> &fixed, const QVector<RuledFlexPip> &flex) {
         for (auto it = fixed.constBegin(); it != fixed.constEnd(); ++it) {
             if (it.value() > 0) {
@@ -1562,6 +1599,9 @@ public:
     bool isAwaitingRuledSpellCostSelection() const;
     bool isAwaitingRuledCastCostObject() const;
     bool isAwaitingRuledAbilityCostSelection() const;
+    bool isAwaitingRuledCounterGroupSelection() const;
+    bool ruledCounterGroupSelectionConfirmable() const;
+    bool getRuledCounterGroupSelectionProgress(quint64 &required, quint64 &selected) const;
     QString pendingRuledAbilityCostPromptText() const;
     bool isAwaitingRuledGraveyardCostSelection() const;
     bool isRuledGraveyardCostObjectSelected(quint32 objectId) const;
@@ -1595,6 +1635,22 @@ public:
 
     /// Collect only engine-authored counter choices. Cancellation never submits payment.
     static bool chooseCounterCosts(QWidget *parent, PendingActivatedAbility &pending);
+    [[nodiscard]] bool stageCounterContributionsAfterPrompt(
+        const RuledClientState &state,
+        const PendingActivatedAbility &capturedPending,
+        int costIndex,
+        quint32 objectId,
+        quint64 zoneChangeGeneration,
+        const QVector<RuledPendingCounterContribution> &replacementRows);
+    [[nodiscard]] bool selectCounterGroupAfterPrompt(const RuledClientState &state,
+                                                     const PendingActivatedAbility &capturedPending,
+                                                     int costIndex,
+                                                     quint32 objectId,
+                                                     quint64 zoneChangeGeneration);
+    [[nodiscard]] bool applyCounterGroupFlexibleChoiceAfterPrompt(
+        const RuledClientState &state,
+        const PendingActivatedAbility &capturedPending,
+        const std::optional<QVector<ruled::v1::FlexPipPayment>> &result);
 
     /// Shared left/right-click modal picker. Choose-one spells use ordinary menu actions;
     /// choose-N spells use persistent checkboxes plus explicit confirm/cancel controls.
@@ -1632,6 +1688,16 @@ public:
     [[nodiscard]] bool resolutionChoiceBlocksSpell(const RuledClientState &state) const;
     PendingRuledSpellCast &beginSpell();
     PendingActivatedAbility &beginAbility();
+    [[nodiscard]] std::optional<RuledOwnedCounterGroupBegin> prepareCounterGroupBegin(
+        const RuledClientState &state,
+        int actorPlayerId,
+        const QVector<ruled::v1::FlexPipPayment> &flexPayments);
+    [[nodiscard]] RuledOwnedCounterGroupBeginUpdate reconcileCounterGroupBegin(
+        const ruled::v1::PendingAbilityActivation *currentPending);
+    [[nodiscard]] RuledOwnedCounterGroupBeginUpdate acknowledgeCounterGroupBegin(
+        const RuledOwnedCounterGroupBegin &captured,
+        bool accepted,
+        const ruled::v1::PendingAbilityActivation *currentPending);
     void clearSpell();
     void clearAbility();
     [[nodiscard]] InteractionKind activeInteraction() const;
@@ -1673,6 +1739,7 @@ public:
 
 private:
     quint64 nextSpellDraftId = 0;
+    quint64 nextAbilityDraftId = 0;
 };
 
 /// Fork-owned bridge between PlayerActions' pending state and concrete CardItem/Player target

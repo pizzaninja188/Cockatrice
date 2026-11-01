@@ -119,6 +119,128 @@ TEST_F(GamePromptWidgetTest, AbilityAnnouncementWaitingOpponentHasNoActorControl
     EXPECT_FALSE(btn("undoLandTapButton")->isHidden());
 }
 
+TEST_F(GamePromptWidgetTest, AbilityAnnouncementGroupedPaymentOffersExplicitRetry)
+{
+    GamePromptWidget::RuledPromptState prompt;
+    prompt.mode = GamePromptWidget::PromptMode::AbilityAnnouncement;
+    prompt.activationPayment = true;
+    prompt.activationPaymentRetryable = true;
+    prompt.activationTransactionId = 91;
+    prompt.activationRevision = 3;
+    prompt.text = "Payment did not complete. Confirm to retry or cancel this activation.";
+    widget->setRuledPromptState(prompt);
+
+    auto *retry = btn("resolutionHandPickConfirmButton");
+    ASSERT_NE(retry, nullptr);
+    EXPECT_FALSE(retry->isHidden());
+    EXPECT_EQ(retry->text(), QStringLiteral("Retry"));
+    EXPECT_TRUE(retry->isEnabled());
+    widget->retranslateUi();
+    EXPECT_EQ(retry->text(), QStringLiteral("Retry"));
+
+    QSignalSpy retrySpy(widget.get(), &GamePromptWidget::ruledActivationPaymentRetryRequested);
+    QSignalSpy handPickSpy(widget.get(), &GamePromptWidget::ruledResolutionHandPickConfirmRequested);
+    QSignalSpy costSpy(widget.get(), &GamePromptWidget::ruledCostSelectionConfirmRequested);
+    QSignalSpy opponentSpy(widget.get(), &GamePromptWidget::ruledActivationOpponentRequested);
+    retry->click();
+
+    ASSERT_EQ(retrySpy.count(), 1);
+    EXPECT_EQ(retrySpy.at(0).at(0).toULongLong(), 91u);
+    EXPECT_EQ(retrySpy.at(0).at(1).toULongLong(), 3u);
+    EXPECT_EQ(handPickSpy.count(), 0);
+    EXPECT_EQ(costSpy.count(), 0);
+    EXPECT_EQ(opponentSpy.count(), 0);
+}
+
+TEST_F(GamePromptWidgetTest, AbilityPaymentRetryRequiresExplicitRetryablePaymentState)
+{
+    QSignalSpy retrySpy(widget.get(), &GamePromptWidget::ruledActivationPaymentRetryRequested);
+    QSignalSpy handPickSpy(widget.get(), &GamePromptWidget::ruledResolutionHandPickConfirmRequested);
+    QSignalSpy costSpy(widget.get(), &GamePromptWidget::ruledCostSelectionConfirmRequested);
+
+    GamePromptWidget::RuledPromptState prompt;
+    prompt.mode = GamePromptWidget::PromptMode::AbilityAnnouncement;
+    prompt.activationPayment = true;
+    prompt.activationPaymentRetryable = false;
+    prompt.activationTransactionId = 91;
+    prompt.activationRevision = 3;
+    widget->setRuledPromptState(prompt);
+    auto *confirm = btn("resolutionHandPickConfirmButton");
+    ASSERT_NE(confirm, nullptr);
+    EXPECT_TRUE(confirm->isHidden());
+    EXPECT_FALSE(confirm->isEnabled());
+    confirm->click();
+
+    prompt.mode = GamePromptWidget::PromptMode::CommandPending;
+    prompt.activationPaymentRetryable = true;
+    widget->setRuledPromptState(prompt);
+    EXPECT_TRUE(confirm->isHidden());
+    EXPECT_FALSE(confirm->isEnabled());
+    confirm->click();
+
+    prompt.mode = GamePromptWidget::PromptMode::AbilityAnnouncement;
+    prompt.activationPayment = false;
+    widget->setRuledPromptState(prompt);
+    EXPECT_TRUE(confirm->isHidden());
+    EXPECT_FALSE(confirm->isEnabled());
+    confirm->click();
+
+    EXPECT_EQ(retrySpy.count(), 0);
+    EXPECT_EQ(handPickSpy.count(), 0);
+    EXPECT_EQ(costSpy.count(), 0);
+}
+
+TEST_F(GamePromptWidgetTest, AbilityPaymentRetryReturnsToExistingCostAndResolutionConfirmActions)
+{
+    QSignalSpy retrySpy(widget.get(), &GamePromptWidget::ruledActivationPaymentRetryRequested);
+    QSignalSpy handPickSpy(widget.get(), &GamePromptWidget::ruledResolutionHandPickConfirmRequested);
+    QSignalSpy costSpy(widget.get(), &GamePromptWidget::ruledCostSelectionConfirmRequested);
+
+    auto *confirm = btn("resolutionHandPickConfirmButton");
+    ASSERT_NE(confirm, nullptr);
+    GamePromptWidget::RuledPromptState prompt;
+    prompt.mode = GamePromptWidget::PromptMode::AbilityAnnouncement;
+    prompt.activationPayment = true;
+    prompt.activationPaymentRetryable = true;
+    prompt.activationTransactionId = 91;
+    prompt.activationRevision = 3;
+    widget->setRuledPromptState(prompt);
+    EXPECT_EQ(confirm->text(), QStringLiteral("Retry"));
+    confirm->click();
+    ASSERT_EQ(retrySpy.count(), 1);
+    EXPECT_EQ(retrySpy.at(0).at(0).toULongLong(), 91u);
+    EXPECT_EQ(retrySpy.at(0).at(1).toULongLong(), 3u);
+
+    prompt.mode = GamePromptWidget::PromptMode::CostSelection;
+    prompt.activationPaymentRetryable = false;
+    prompt.required = 1;
+    prompt.selected = 0;
+    prompt.costSelectionConfirmable = false;
+    widget->setRuledPromptState(prompt);
+    EXPECT_FALSE(confirm->isHidden());
+    EXPECT_EQ(confirm->text(), QStringLiteral("Confirm"));
+    EXPECT_FALSE(confirm->isEnabled());
+    confirm->click();
+    EXPECT_EQ(costSpy.count(), 0);
+    prompt.costSelectionConfirmable = true;
+    widget->setRuledPromptState(prompt);
+    EXPECT_TRUE(confirm->isEnabled());
+    confirm->click();
+    EXPECT_EQ(costSpy.count(), 1);
+
+    prompt.mode = GamePromptWidget::PromptMode::ResolutionPick;
+    prompt.required = 1;
+    prompt.selected = 1;
+    prompt.costSelectionConfirmable = std::nullopt;
+    prompt.resolutionPickConfirmable = true;
+    widget->setRuledPromptState(prompt);
+    EXPECT_FALSE(confirm->isHidden());
+    EXPECT_EQ(confirm->text(), QStringLiteral("Confirm"));
+    confirm->click();
+    EXPECT_EQ(handPickSpy.count(), 1);
+    EXPECT_EQ(retrySpy.count(), 1);
+}
+
 TEST_F(GamePromptWidgetTest, LargeResolutionChoiceSearchesAndSubmitsOriginalEngineIndex)
 {
     GamePromptWidget::RuledPromptState prompt;

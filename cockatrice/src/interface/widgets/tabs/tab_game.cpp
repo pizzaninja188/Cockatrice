@@ -58,6 +58,8 @@
 #include <QStackedWidget>
 #include <QTextStream>
 #include <QTimer>
+#include <algorithm>
+#include <limits>
 #include <QToolButton>
 #include <QWidget>
 #include <libcockatrice/protocol/pb/serverinfo_card.pb.h>
@@ -430,6 +432,17 @@ void TabGame::connectToGameEventHandler()
                 });
         connect(gamePromptWidget, &GamePromptWidget::ruledResolutionHandPickConfirmRequested,
                 game->getGameEventHandler()->ruled(), &RuledClientState::submitResolutionHandPick);
+        connect(gamePromptWidget, &GamePromptWidget::ruledActivationPaymentRetryRequested, this,
+                [this](quint64 transactionId, quint64 revision) {
+                    if (!game) {
+                        return;
+                    }
+                    const int localId = game->getPlayerManager()->getLocalPlayerId();
+                    Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+                    if (localPlayer && localPlayer->getPlayerActions()) {
+                        localPlayer->getPlayerActions()->retryRuledCounterGroupPayment(transactionId, revision);
+                    }
+                });
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::resolutionCostSelectionChanged,
                 this, [this]() { refreshRuledPromptState(); });
         connect(gamePromptWidget, &GamePromptWidget::ruledCostSelectionConfirmRequested, this, [this]() {
@@ -448,6 +461,10 @@ void TabGame::connectToGameEventHandler()
             }
             const int localId = game->getPlayerManager()->getLocalPlayerId();
             if (Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr)) {
+                if (local->getPlayerActions()->isAwaitingRuledCounterGroupSelection()) {
+                    local->getPlayerActions()->confirmRuledCounterGroupSelection();
+                    return;
+                }
                 local->getPlayerActions()->confirmRuledGraveyardCostSelection();
             }
         });
@@ -460,6 +477,10 @@ void TabGame::connectToGameEventHandler()
             }
             const int localId = game->getPlayerManager()->getLocalPlayerId();
             if (Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr)) {
+                if (local->getPlayerActions()->isAwaitingRuledCounterGroupSelection()) {
+                    local->getPlayerActions()->cancelRuledCounterGroupSelection();
+                    return;
+                }
                 local->getPlayerActions()->cancelRuledGraveyardCostSelection();
             }
         });
@@ -765,6 +786,46 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
     const int localPlayerId = game->getPlayerManager()->getLocalPlayerId();
     Player *localPlayer = game->getPlayerManager()->getPlayers().value(localPlayerId, nullptr);
     PlayerActions *localActions = localPlayer ? localPlayer->getPlayerActions() : nullptr;
+    const auto setCounterGroupCostSelectionPrompt = [&]() {
+        if (!localActions || !localActions->isAwaitingRuledCounterGroupSelection()) {
+            return false;
+        }
+        state.mode = PromptMode::CostSelection;
+        state.canCancel = true;
+        state.costSelectionConfirmable = localActions->ruledCounterGroupSelectionConfirmable();
+        state.text = localActions->pendingRuledAbilityCostPromptText();
+        quint64 required = 0;
+        quint64 selected = 0;
+        if (localActions->getRuledCounterGroupSelectionProgress(required, selected)) {
+            constexpr quint64 displayMaximum = static_cast<quint64>(std::numeric_limits<int>::max());
+            state.required = static_cast<int>(std::min(required, displayMaximum));
+            state.selected = static_cast<int>(std::min(selected, displayMaximum));
+        } else {
+            state.required = 1;
+            state.selected = 0;
+        }
+        return true;
+    };
+    const auto setAcceptedCounterGroupPaymentRetryPrompt = [&]() {
+        if (!localActions || !h->pendingAbilityActivation ||
+            !localActions->isRuledCounterGroupPaymentRetryable()) {
+            return false;
+        }
+        const auto &activation = *h->pendingAbilityActivation;
+        state.mode = PromptMode::AbilityAnnouncement;
+        state.required = 0;
+        state.selected = 0;
+        state.canCancel = true;
+        state.activationTransactionId = activation.transaction_id();
+        state.activationRevision = activation.revision();
+        state.activationPayment = true;
+        state.activationPaymentRetryable = true;
+        state.text = localActions->pendingRuledAbilityPromptText();
+        if (state.text.isEmpty()) {
+            state.text = tr("Payment did not complete. Retry or cancel this activation.");
+        }
+        return true;
+    };
 
     // Priority order, highest first. An in-flight command owns the prompt because all gameplay
     // input is locked immediately, even during the short interval before its status text appears.
@@ -788,6 +849,8 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.text = tr("Click the trigger to put on the stack next (%1 left) — what you pick first "
                         "resolves last.")
                          .arg(state.required);
+    } else if (h->isResolutionPaymentActive() && setCounterGroupCostSelectionPrompt()) {
+        // The mana ability's explicit group confirmation temporarily owns the prompt.
     } else if (h->isResolutionPaymentActive() && localActions && localActions->isAwaitingRuledAbilityCostSelection()) {
         // A mana ability with an interactive cost temporarily owns the prompt. Once that cost is
         // submitted or cancelled, the still-parked payment prompt resumes.
@@ -860,6 +923,10 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.selected = h->resolutionHandPickSelected();
         state.resolutionPickConfirmable = h->resolutionHandPickConfirmable();
         state.text = h->resolutionHandPickPromptText();
+    } else if (h->pendingAbilityActivation && setAcceptedCounterGroupPaymentRetryPrompt()) {
+        // The accepted payment remains engine-owned. Confirm explicitly retries its current Preview.
+    } else if (h->pendingAbilityActivation && setCounterGroupCostSelectionPrompt()) {
+        // Route counter groups through the shared CostSelection buttons before generic ability prompts.
     } else if (h->pendingAbilityActivation && localActions && localActions->isAwaitingRuledAbilityCostSelection()) {
         state.mode = PromptMode::ClickChoice;
         state.text = localActions->pendingRuledAbilityCostPromptText();
@@ -961,6 +1028,8 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         } else {
             state.mode = PromptMode::ClickChoice;
         }
+    } else if (setCounterGroupCostSelectionPrompt()) {
+        // Counter group choices are globally confirmed before the local activation can begin.
     } else if (localActions && localActions->isAwaitingRuledGraveyardCostSelection()) {
         state.mode = PromptMode::CostSelection;
         state.canCancel = true; // Cancel the unsubmitted local activation.
