@@ -113,6 +113,8 @@ mod deck_coverage_teferi_master_of_time;
 mod deck_coverage_teferi_temporal_archmage;
 #[path = "../deck_coverage_teferi_temporal_archmage_minus_one.rs"]
 mod deck_coverage_teferi_temporal_archmage_minus_one;
+#[path = "../deck_coverage_tekuthal.rs"]
+mod deck_coverage_tekuthal;
 #[path = "../deck_coverage_the_chain_veil.rs"]
 mod deck_coverage_the_chain_veil;
 #[path = "../deck_coverage_vorinclex_monstrous_raider.rs"]

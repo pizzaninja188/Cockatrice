@@ -508,8 +508,10 @@ mod tests {
         ipc_envelope::Msg,
         ruled::v1::{
             dev_command, ruled_event::Ev, AbilitySourceZone, ActivateAbility, BattlefieldObject,
-            BeginSpellCast, CastMethod, CastSource, ChoiceKind, CommitSpellCast, CostObjectRef,
-            DevAddMana, DevCommand, DevMoveCard, DevPutCardInZone, DevZone, DiscardToHandSize,
+            BeginAbilityActivation, BeginSpellCast, CastMethod, CastSource, ChoiceKind,
+            CommitAbilityActivation, CommitSpellCast, CostObjectRef, CostSelection,
+            CounterRemovalContribution, CounterRemovalGroupSelection, DevAddMana, DevCommand,
+            DevMoveCard, DevPutCardInZone, DevZone, DiscardToHandSize, FlexPipPayment,
             HandActionKind, LandSource, PassPriority, PaymentMana, PaymentSelection, PlayLand,
             PresentationPathKind, ResolutionChoiceDecision, SelectedSpellMode,
             SubmitResolutionChoice, TargetRef, TargetRefKind,
@@ -519,6 +521,2795 @@ mod tests {
         PlayerDeck, PreviewPayment, RuledCommand, SessionStart, ValidateDeck,
     };
 
+    const TEKUTHAL_NORMAL_PILOT_ID: i32 = 17;
+    const TEKUTHAL_NORMAL_OPPONENT_ID: i32 = 29;
+
+    fn tekuthal_normal_pilot_decks() -> Vec<PlayerDeck> {
+        let mut pilot = Vec::new();
+        for card_name in [
+            "Tekuthal, Inquiry Dominus",
+            "Everflowing Chalice",
+            "Replicating Ring",
+            "Karn's Bastion",
+        ] {
+            pilot.extend(vec![card_name.to_string(); 4]);
+        }
+        pilot.extend(vec!["Island".to_string(); 44]);
+
+        let mut opponent = vec!["Murder".to_string(); 4];
+        opponent.extend(vec!["Swamp".to_string(); 56]);
+
+        vec![
+            PlayerDeck {
+                player_id: TEKUTHAL_NORMAL_PILOT_ID,
+                mainboard_card_name: pilot,
+                commander_setup: Some(CommanderSetup {
+                    declaration: Some(commander_setup::Declaration::NoCommander(true)),
+                }),
+            },
+            PlayerDeck {
+                player_id: TEKUTHAL_NORMAL_OPPONENT_ID,
+                mainboard_card_name: opponent,
+                commander_setup: Some(CommanderSetup {
+                    declaration: Some(commander_setup::Declaration::NoCommander(true)),
+                }),
+            },
+        ]
+    }
+
+    fn tekuthal_normal_assert_decks(player_decks: &[PlayerDeck]) {
+        let registry = tricerules_cards::registry::global();
+        assert_eq!(player_decks.len(), 2);
+        for (deck, expected_player_id) in player_decks
+            .iter()
+            .zip([TEKUTHAL_NORMAL_PILOT_ID, TEKUTHAL_NORMAL_OPPONENT_ID])
+        {
+            assert_eq!(deck.player_id, expected_player_id);
+            assert_eq!(deck.mainboard_card_name.len(), 60);
+            assert!(matches!(
+                deck.commander_setup
+                    .as_ref()
+                    .and_then(|setup| setup.declaration.as_ref()),
+                Some(commander_setup::Declaration::NoCommander(true))
+            ));
+            for card_name in deck
+                .mainboard_card_name
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+            {
+                assert!(
+                    registry.id_for_name(card_name).is_some(),
+                    "deck card name is absent from the global registry: {card_name}"
+                );
+                let copies = deck
+                    .mainboard_card_name
+                    .iter()
+                    .filter(|candidate| *candidate == card_name)
+                    .count();
+                if matches!(card_name.as_str(), "Island" | "Swamp") {
+                    assert!(
+                        copies > 4,
+                        "basic lands are not subject to the nonbasic cap"
+                    );
+                } else {
+                    assert!(copies <= 4, "too many copies of nonbasic {card_name}");
+                }
+            }
+        }
+    }
+
+    fn tekuthal_normal_player_command(
+        session: &mut EngineSession,
+        directory: &Path,
+        rows: &mut Vec<String>,
+        accepted_commands: &mut usize,
+        player_id: i32,
+        command: RuledCommand,
+        battlefield: &mut Vec<BattlefieldObject>,
+    ) -> IpcResponse {
+        let response = record_player_command(session, directory, rows, player_id, command);
+        assert!(
+            response.ok,
+            "player {player_id} command rejected: {}",
+            response.error
+        );
+        assert!(
+            response.batch.is_some(),
+            "accepted command returns its current batch"
+        );
+        *accepted_commands += 1;
+        kaya_capture_battlefield(&response, TEKUTHAL_NORMAL_PILOT_ID, battlefield);
+        response
+    }
+
+    fn tekuthal_normal_card_records(
+        state: &tricerules_core::state::GameState,
+        object_ids: impl IntoIterator<Item = tricerules_core::state::ObjectId>,
+    ) -> Vec<(tricerules_core::state::ObjectId, String, String)> {
+        let registry = tricerules_cards::registry::global();
+        object_ids
+            .into_iter()
+            .map(|object_id| {
+                let object = state
+                    .objects
+                    .get(&object_id)
+                    .expect("starting hand or library object remains in the game state");
+                let definition = registry
+                    .get(&object.card_id)
+                    .expect("physical card id resolves through the global registry");
+                (object_id, object.card_id.clone(), definition.name.clone())
+            })
+            .collect()
+    }
+
+    fn tekuthal_normal_advance_to_main(
+        session: &mut EngineSession,
+        directory: &Path,
+        rows: &mut Vec<String>,
+        accepted_commands: &mut usize,
+        mut latest: IpcResponse,
+        battlefield: &mut Vec<BattlefieldObject>,
+        player_id: i32,
+    ) -> IpcResponse {
+        for _ in 0..128 {
+            let state = &session
+                .engine
+                .as_ref()
+                .expect("normal Tekuthal session has an engine")
+                .state;
+            if state.turn_step == tricerules_core::TurnStep::Main1
+                && state.players[state.active_player_idx].id == player_id
+                && state.priority_player_id() == player_id
+            {
+                return latest;
+            }
+            let priority_player = state.priority_player_id();
+            latest = tekuthal_normal_player_command(
+                session,
+                directory,
+                rows,
+                accepted_commands,
+                priority_player,
+                RuledCommand {
+                    cmd: Some(Cmd::PassPriority(PassPriority {})),
+                },
+                battlefield,
+            );
+        }
+        panic!("normal priority passes did not reach player {player_id}'s Main1");
+    }
+
+    struct TekuthalNormalLandPlan<'a> {
+        player_id: i32,
+        card_name: &'a str,
+    }
+
+    struct TekuthalNormalCastPlan<'a> {
+        card_name: &'a str,
+        expected_total_cost: &'a str,
+        blue_mana: u32,
+        kick_once: bool,
+    }
+
+    fn tekuthal_normal_play_land(
+        session: &mut EngineSession,
+        directory: &Path,
+        rows: &mut Vec<String>,
+        accepted_commands: &mut usize,
+        latest: &IpcResponse,
+        battlefield: &mut Vec<BattlefieldObject>,
+        plan: TekuthalNormalLandPlan<'_>,
+    ) -> IpcResponse {
+        let TekuthalNormalLandPlan {
+            player_id,
+            card_name,
+        } = plan;
+        let offer = kaya_batch(latest)
+            .legal_by_player
+            .get(&player_id)
+            .expect("active player receives current land offers")
+            .hand_actions
+            .iter()
+            .find(|offer| {
+                offer.kind == HandActionKind::HandActionPlayLand as i32
+                    && offer.card_name == card_name
+            })
+            .cloned()
+            .unwrap_or_else(|| panic!("current hand offer includes {card_name}"));
+        tekuthal_normal_player_command(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            player_id,
+            RuledCommand {
+                cmd: Some(Cmd::PlayLand(PlayLand {
+                    source: Some(LandSource {
+                        location: Some(
+                            tricerules_proto::ruled::v1::land_source::Location::HandIndex(
+                                offer.hand_index,
+                            ),
+                        ),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                })),
+            },
+            battlefield,
+        )
+    }
+
+    fn tekuthal_normal_resolve_stack(
+        session: &mut EngineSession,
+        directory: &Path,
+        rows: &mut Vec<String>,
+        accepted_commands: &mut usize,
+        mut latest: IpcResponse,
+        battlefield: &mut Vec<BattlefieldObject>,
+    ) -> IpcResponse {
+        for _ in 0..8 {
+            let state = &session
+                .engine
+                .as_ref()
+                .expect("normal Tekuthal session has an engine")
+                .state;
+            if state.stack.is_empty() {
+                return latest;
+            }
+            let priority_player = state.priority_player_id();
+            latest = tekuthal_normal_player_command(
+                session,
+                directory,
+                rows,
+                accepted_commands,
+                priority_player,
+                RuledCommand {
+                    cmd: Some(Cmd::PassPriority(PassPriority {})),
+                },
+                battlefield,
+            );
+        }
+        assert!(
+            session
+                .engine
+                .as_ref()
+                .expect("normal Tekuthal session has an engine")
+                .state
+                .stack
+                .is_empty(),
+            "ordinary recorded priority passes resolve the current spell"
+        );
+        latest
+    }
+
+    fn tekuthal_normal_cast_from_current_offer(
+        session: &mut EngineSession,
+        directory: &Path,
+        rows: &mut Vec<String>,
+        accepted_commands: &mut usize,
+        mut latest: IpcResponse,
+        battlefield: &mut Vec<BattlefieldObject>,
+        plan: TekuthalNormalCastPlan<'_>,
+    ) -> IpcResponse {
+        let TekuthalNormalCastPlan {
+            card_name,
+            expected_total_cost,
+            blue_mana,
+            kick_once,
+        } = plan;
+        let spell = kaya_batch(&latest)
+            .legal_by_player
+            .get(&TEKUTHAL_NORMAL_PILOT_ID)
+            .expect("P17 receives current legal hand actions")
+            .hand_actions
+            .iter()
+            .find(|offer| {
+                offer.kind == HandActionKind::HandActionCastSpell as i32
+                    && offer.card_name == card_name
+            })
+            .cloned()
+            .unwrap_or_else(|| panic!("current hand offer contains castable {card_name}"));
+        let cast_cost_group_selections = if kick_once {
+            let (group_index, option_index, maximum_repetitions) = spell
+                .cost_choices
+                .as_ref()
+                .expect("current Chalice offer publishes kicker choices")
+                .cast_cost_groups
+                .iter()
+                .find_map(|group| {
+                    group
+                        .options
+                        .iter()
+                        .find(|option| option.selectable && option.maximum_repetitions.is_some())
+                        .map(|option| {
+                            (
+                                group.group_index,
+                                option.option_index,
+                                option.maximum_repetitions.unwrap(),
+                            )
+                        })
+                })
+                .expect("current Chalice offer has a selectable repeated-cost option");
+            assert!(maximum_repetitions >= 1);
+            println!(
+                "Chalice current kicker offer group={group_index} option={option_index} maximum_repetitions={maximum_repetitions}; selecting one"
+            );
+            vec![tricerules_proto::ruled::v1::CastCostGroupSelection {
+                group_index,
+                option_index,
+                repetitions: Some(1),
+                ..Default::default()
+            }]
+        } else {
+            Vec::new()
+        };
+
+        latest = tekuthal_normal_player_command(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            TEKUTHAL_NORMAL_PILOT_ID,
+            RuledCommand {
+                cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
+                    announcement: Some(tricerules_proto::ruled::v1::SpellCastAnnouncement {
+                        source: Some(CastSource {
+                            location: Some(
+                                tricerules_proto::ruled::v1::cast_source::Location::HandIndex(
+                                    spell.hand_index,
+                                ),
+                            ),
+                            expected_zone_change_generation: None,
+                        }),
+                        face_index: spell.face_index,
+                        cast_cost_group_selections,
+                        cast_method: CastMethod::Normal as i32,
+                        ..Default::default()
+                    }),
+                })),
+            },
+            battlefield,
+        );
+        let pending = kaya_batch(&latest)
+            .legal_by_player
+            .get(&TEKUTHAL_NORMAL_PILOT_ID)
+            .and_then(|actions| actions.pending_spell_cast.as_ref())
+            .expect("current normal spell cast publishes a pending payment");
+        let payment = pending
+            .payment_preview
+            .as_ref()
+            .expect("pending spell publishes its current payment preview");
+        assert_eq!(
+            payment.total_cost, expected_total_cost,
+            "{card_name} current total cost"
+        );
+
+        let mut produced = PaymentMana::default();
+        let island_card_id = tricerules_cards::registry::global()
+            .id_for_name("Island")
+            .expect("Island is in the global registry");
+        for _ in 0..blue_mana {
+            let (object_id, generation, ability_index, output) = battlefield
+                .iter()
+                .filter(|permanent| permanent.card_id == island_card_id && !permanent.tapped)
+                .flat_map(|permanent| {
+                    permanent
+                        .activated_abilities
+                        .iter()
+                        .filter(|ability| ability.is_mana_ability && ability.activatable)
+                        .map(|ability| {
+                            (
+                                permanent.object_id,
+                                permanent.zone_change_generation,
+                                ability.ability_index,
+                                ability.mana_produced.clone(),
+                            )
+                        })
+                })
+                .find(|source| kaya_output_has_color(&source.3, 'U'))
+                .unwrap_or_else(|| panic!("current untapped Islands can pay {card_name}"));
+            assert!(kaya_output_has_color(&output, 'U'));
+            latest = tekuthal_normal_player_command(
+                session,
+                directory,
+                rows,
+                accepted_commands,
+                TEKUTHAL_NORMAL_PILOT_ID,
+                RuledCommand {
+                    cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                        source_object_id: object_id,
+                        ability_index,
+                        source_zone: AbilitySourceZone::Battlefield as i32,
+                        expected_zone_change_generation: generation,
+                        ..Default::default()
+                    })),
+                },
+                battlefield,
+            );
+            produced.u += 1;
+            let pool = &session
+                .engine
+                .as_ref()
+                .expect("normal session has an engine after Island mana")
+                .state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                .expect("P17 remains in the normal session")
+                .mana_pool;
+            assert_eq!(pool.blue, produced.u);
+            assert_eq!(pool.colorless, 0);
+            println!(
+                "{card_name} current Island mana source ObjectId={object_id} generation={generation} ability={ability_index} output={output}; blue pool={}",
+                pool.blue
+            );
+        }
+
+        let pending = kaya_batch(&latest)
+            .legal_by_player
+            .get(&TEKUTHAL_NORMAL_PILOT_ID)
+            .and_then(|actions| actions.pending_spell_cast.as_ref())
+            .expect("pending spell cast survives ordinary Island activations");
+        let payment = pending
+            .payment_preview
+            .as_ref()
+            .expect("current pending spell publishes the updated payment preview");
+        let transaction_id = pending.transaction_id;
+        let revision = payment.revision;
+        let payment_request = IpcEnvelope {
+            msg: Some(Msg::PaymentQuery(PaymentQuery {
+                player_id: TEKUTHAL_NORMAL_PILOT_ID,
+                preview: Some(PreviewPayment {
+                    transaction_id,
+                    revision,
+                    commit_spell_cast: Some(CommitSpellCast {
+                        transaction_id,
+                        payment: Some(PaymentSelection {
+                            expected_state_revision: revision,
+                            mana: Some(produced),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+            })),
+        };
+        let payment_response = session
+            .process(&payment_request)
+            .expect("PaymentQuery keeps the normal Tekuthal session open");
+        pair(directory, rows, &payment_request, &payment_response);
+        assert!(
+            payment_response.ok,
+            "{card_name} PaymentQuery: {}",
+            payment_response.error
+        );
+        let preview = payment_response
+            .batch
+            .as_ref()
+            .and_then(|batch| batch.payment_preview.as_ref())
+            .expect("PaymentQuery returns the current payment preview");
+        assert!(
+            preview.valid && preview.complete,
+            "{card_name} preview: {preview:?}"
+        );
+        assert_eq!(preview.total_cost, expected_total_cost);
+        let selection = preview
+            .selection
+            .clone()
+            .expect("complete PaymentQuery returns an exact selection");
+        assert_eq!(selection.mana.as_ref(), Some(&produced));
+        let restricted_mana = preview.restricted_mana.clone();
+        let transaction_id = preview.transaction_id;
+        println!(
+            "{card_name} PaymentQuery accepted transaction={transaction_id} revision={revision} selection={selection:?} restricted_mana={restricted_mana:?}"
+        );
+        latest = tekuthal_normal_player_command(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            TEKUTHAL_NORMAL_PILOT_ID,
+            RuledCommand {
+                cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
+                    transaction_id,
+                    payment: Some(selection),
+                    restricted_mana,
+                })),
+            },
+            battlefield,
+        );
+        assert!(
+            session
+                .engine
+                .as_ref()
+                .expect("normal session has an engine after spell payment")
+                .state
+                .pending_spell_cast
+                .is_none(),
+            "{card_name} commit clears the pending spell cast"
+        );
+        tekuthal_normal_resolve_stack(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            latest,
+            battlefield,
+        )
+    }
+
+    fn tekuthal_normal_activate_bastion(
+        session: &mut EngineSession,
+        directory: &Path,
+        rows: &mut Vec<String>,
+        accepted_commands: &mut usize,
+        mut latest: IpcResponse,
+        battlefield: &mut Vec<BattlefieldObject>,
+    ) -> IpcResponse {
+        let registry = tricerules_cards::registry::global();
+        let bastion_card_id = registry
+            .id_for_name("Karn's Bastion")
+            .expect("Karn's Bastion is in the global registry")
+            .to_owned();
+        let current_actions = kaya_batch(&latest)
+            .legal_by_player
+            .get(&TEKUTHAL_NORMAL_PILOT_ID)
+            .expect("current T5 response includes P17's legal actions");
+        assert!(current_actions.pending_spell_cast.is_none());
+        assert!(current_actions.pending_ability_activation.is_none());
+        kaya_capture_battlefield(&latest, TEKUTHAL_NORMAL_PILOT_ID, battlefield);
+
+        let island_card_id = registry
+            .id_for_name("Island")
+            .expect("Island is in the global registry")
+            .to_owned();
+        let mut produced = PaymentMana::default();
+        for _ in 0..4 {
+            let (object_id, generation, ability_index, output) = battlefield
+                .iter()
+                .filter(|permanent| permanent.card_id == island_card_id && !permanent.tapped)
+                .flat_map(|permanent| {
+                    permanent
+                        .activated_abilities
+                        .iter()
+                        .filter(|mana| mana.is_mana_ability && mana.activatable)
+                        .map(|mana| {
+                            (
+                                permanent.object_id,
+                                permanent.zone_change_generation,
+                                mana.ability_index,
+                                mana.mana_produced.clone(),
+                            )
+                        })
+                })
+                .find(|offer| kaya_output_has_color(&offer.3, 'U'))
+                .expect("current untapped Island offers one blue mana");
+            assert!(kaya_output_has_color(&output, 'U'));
+            latest = tekuthal_normal_player_command(
+                session,
+                directory,
+                rows,
+                accepted_commands,
+                TEKUTHAL_NORMAL_PILOT_ID,
+                RuledCommand {
+                    cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                        source_object_id: object_id,
+                        ability_index,
+                        source_zone: AbilitySourceZone::Battlefield as i32,
+                        expected_zone_change_generation: generation,
+                        ..Default::default()
+                    })),
+                },
+                battlefield,
+            );
+            produced.u += 1;
+            let pool = &session
+                .engine
+                .as_ref()
+                .expect("normal session has an engine while paying Bastion")
+                .state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                .expect("P17 remains in the normal session")
+                .mana_pool;
+            assert_eq!(pool.blue, produced.u);
+            assert_eq!(pool.colorless, 0);
+        }
+        assert_eq!(produced.u, 4);
+
+        let current_actions = kaya_batch(&latest)
+            .legal_by_player
+            .get(&TEKUTHAL_NORMAL_PILOT_ID)
+            .expect("current Island response includes P17's legal actions");
+        assert!(current_actions.pending_spell_cast.is_none());
+        assert!(current_actions.pending_ability_activation.is_none());
+        kaya_capture_battlefield(&latest, TEKUTHAL_NORMAL_PILOT_ID, battlefield);
+        let bastion = battlefield
+            .iter()
+            .find(|permanent| permanent.object_id == 42 && permanent.card_id == bastion_card_id)
+            .cloned()
+            .expect("the current public battlefield offer contains Bastion ObjectId 42");
+        assert!(
+            !bastion.tapped,
+            "Bastion remains ready while Islands produce mana"
+        );
+        let proliferate_index = registry
+            .get(&bastion_card_id)
+            .expect("actual Karn's Bastion definition is globally registered")
+            .primary_face()
+            .activated_abilities
+            .iter()
+            .position(|ability| ability.ability_id.as_str() == "activated_02")
+            .expect("activated_02 is Karn's actual Proliferate ability");
+        let ability = bastion
+            .activated_abilities
+            .iter()
+            .find(|ability| ability.ability_index as usize == proliferate_index)
+            .cloned()
+            .expect("current Bastion offer publishes its actual Proliferate slot");
+        assert!(ability.activatable);
+        assert!(
+            !ability.is_mana_ability,
+            "select the Proliferate slot, not mana"
+        );
+        assert_eq!(ability.mana_cost, "{4}");
+        let mut activation = ActivateAbility {
+            source_object_id: bastion.object_id,
+            ability_index: ability.ability_index,
+            source_zone: AbilitySourceZone::Battlefield as i32,
+            expected_zone_change_generation: bastion.zone_change_generation,
+            ..Default::default()
+        };
+        let mut preview_correlation = u64::try_from(rows.len())
+            .expect("timeline length fits payment preview correlation")
+            .checked_add(1)
+            .expect("payment preview correlation fits u64");
+        let initial_request = IpcEnvelope {
+            msg: Some(Msg::PaymentQuery(PaymentQuery {
+                player_id: TEKUTHAL_NORMAL_PILOT_ID,
+                preview: Some(PreviewPayment {
+                    transaction_id: preview_correlation,
+                    revision: preview_correlation,
+                    activate_ability: Some(activation.clone()),
+                    ..Default::default()
+                }),
+            })),
+        };
+        let initial_response = session
+            .process(&initial_request)
+            .expect("initial Bastion PaymentQuery keeps the normal session open");
+        pair(directory, rows, &initial_request, &initial_response);
+        assert!(
+            initial_response.ok,
+            "initial Bastion PaymentQuery: {}",
+            initial_response.error
+        );
+        let initial_preview = initial_response
+            .batch
+            .as_ref()
+            .and_then(|batch| batch.payment_preview.as_ref())
+            .expect("initial Bastion PaymentQuery returns the current payment preview");
+        assert!(
+            initial_preview.valid,
+            "Bastion preview: {initial_preview:?}"
+        );
+        assert_eq!(initial_preview.total_cost, "{4}");
+        let mut proposed_payment = initial_preview
+            .selection
+            .clone()
+            .expect("initial Bastion preview returns its current state revision");
+        let expected_state_revision = proposed_payment.expected_state_revision;
+        proposed_payment.mana = Some(produced);
+        activation.payment = Some(proposed_payment);
+        activation.restricted_mana = initial_preview.restricted_mana.clone();
+
+        preview_correlation = preview_correlation
+            .checked_add(1)
+            .expect("payment preview correlation fits u64");
+        let payment_request = IpcEnvelope {
+            msg: Some(Msg::PaymentQuery(PaymentQuery {
+                player_id: TEKUTHAL_NORMAL_PILOT_ID,
+                preview: Some(PreviewPayment {
+                    transaction_id: preview_correlation,
+                    revision: preview_correlation,
+                    activate_ability: Some(activation.clone()),
+                    ..Default::default()
+                }),
+            })),
+        };
+        let payment_response = session
+            .process(&payment_request)
+            .expect("selected Bastion PaymentQuery keeps the normal session open");
+        pair(directory, rows, &payment_request, &payment_response);
+        assert!(
+            payment_response.ok,
+            "selected Bastion PaymentQuery: {}",
+            payment_response.error
+        );
+        let preview = payment_response
+            .batch
+            .as_ref()
+            .and_then(|batch| batch.payment_preview.as_ref())
+            .expect("selected Bastion PaymentQuery returns its current preview");
+        assert!(
+            preview.valid && preview.complete,
+            "Bastion preview: {preview:?}"
+        );
+        assert_eq!(preview.total_cost, "{4}");
+        let selection = preview
+            .selection
+            .as_ref()
+            .expect("complete Bastion PaymentQuery returns its exact selection");
+        assert_eq!(selection.expected_state_revision, expected_state_revision);
+        assert_eq!(selection.mana.as_ref(), Some(&produced));
+        activation.payment = preview.selection.clone();
+        activation.restricted_mana = preview.restricted_mana.clone();
+        latest = tekuthal_normal_player_command(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            TEKUTHAL_NORMAL_PILOT_ID,
+            RuledCommand {
+                cmd: Some(Cmd::ActivateAbility(activation)),
+            },
+            battlefield,
+        );
+        let stack_item_id = {
+            let state = &session
+                .engine
+                .as_ref()
+                .expect("normal session has an engine after Bastion payment")
+                .state;
+            assert!(state.pending_ability_activation.is_none());
+            assert!(state.objects[&42].tapped, "Bastion's tap cost is paid");
+            state
+                .stack
+                .last()
+                .expect("committed Bastion activation is on the stack")
+                .id
+        };
+
+        let mut proliferate_offer = None;
+        for _ in 0..8 {
+            proliferate_offer = kaya_choice(&latest, ChoiceKind::Proliferate);
+            if proliferate_offer.is_some() {
+                break;
+            }
+            let priority_player = session
+                .engine
+                .as_ref()
+                .expect("normal session has an engine while Bastion is on the stack")
+                .state
+                .priority_player_id();
+            latest = tekuthal_normal_player_command(
+                session,
+                directory,
+                rows,
+                accepted_commands,
+                priority_player,
+                RuledCommand {
+                    cmd: Some(Cmd::PassPriority(PassPriority {})),
+                },
+                battlefield,
+            );
+        }
+        let first_offer = proliferate_offer
+            .expect("actual Bastion resolution publishes its first Proliferate prompt");
+        assert_ne!(first_offer.resolution_prompt_id, 0);
+        assert_eq!(first_offer.deciding_player_id, TEKUTHAL_NORMAL_PILOT_ID);
+        assert_eq!(first_offer.min, 0);
+        assert_eq!(first_offer.max, 2);
+        assert!(first_offer.candidate_player_ids.is_empty());
+        assert_eq!(first_offer.candidate_object_ids.len(), 2);
+        assert!(first_offer.candidate_object_ids.contains(&36));
+        assert!(first_offer.candidate_object_ids.contains(&41));
+
+        latest = tekuthal_normal_player_command(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            TEKUTHAL_NORMAL_PILOT_ID,
+            RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: first_offer.resolution_prompt_id,
+                    chosen_object_ids: vec![41],
+                    chosen_player_ids: Vec::new(),
+                    decision: ResolutionChoiceDecision::Unspecified as i32,
+                    ..Default::default()
+                })),
+            },
+            battlefield,
+        );
+        assert_eq!(
+            session.engine.as_ref().unwrap().state.objects[&41]
+                .counter_count(tricerules_cards::CounterKind::Night),
+            3,
+            "the first actual Proliferate adds Night to Ring only"
+        );
+        assert_eq!(
+            session.engine.as_ref().unwrap().state.objects[&36]
+                .counter_count(tricerules_cards::CounterKind::Charge),
+            1
+        );
+        let second_offer = kaya_choice(&latest, ChoiceKind::Proliferate)
+            .expect("the first choice immediately publishes the second Proliferate prompt");
+        assert_ne!(
+            second_offer.resolution_prompt_id,
+            first_offer.resolution_prompt_id
+        );
+        assert_eq!(second_offer.deciding_player_id, TEKUTHAL_NORMAL_PILOT_ID);
+        assert_eq!(second_offer.min, 0);
+        assert_eq!(second_offer.max, 2);
+        assert!(second_offer.candidate_player_ids.is_empty());
+        assert_eq!(second_offer.candidate_object_ids.len(), 2);
+        assert!(second_offer.candidate_object_ids.contains(&36));
+        assert!(second_offer.candidate_object_ids.contains(&41));
+
+        let accepted_commands_before_second_choice = *accepted_commands;
+        latest = tekuthal_normal_player_command(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            TEKUTHAL_NORMAL_PILOT_ID,
+            RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: second_offer.resolution_prompt_id,
+                    chosen_object_ids: vec![36],
+                    chosen_player_ids: Vec::new(),
+                    decision: ResolutionChoiceDecision::Unspecified as i32,
+                    ..Default::default()
+                })),
+            },
+            battlefield,
+        );
+        assert_eq!(
+            *accepted_commands,
+            accepted_commands_before_second_choice + 1,
+            "the second fresh choice follows immediately, with no priority pass"
+        );
+        assert!(kaya_choice(&latest, ChoiceKind::Proliferate).is_none());
+        let state = &session
+            .engine
+            .as_ref()
+            .expect("normal session has an engine after both Proliferate choices")
+            .state;
+        assert!(
+            state.stack.is_empty(),
+            "both actual proliferates finish Bastion"
+        );
+        assert!(state.pending_resolution.is_none());
+        assert!(state.pending_ability_activation.is_none());
+        assert_eq!(
+            state.players[state.active_player_idx].id,
+            TEKUTHAL_NORMAL_PILOT_ID
+        );
+        assert_eq!(state.turn_step, tricerules_core::TurnStep::Main1);
+        assert_eq!(state.priority_player_id(), TEKUTHAL_NORMAL_PILOT_ID);
+        assert!(state.objects[&42].tapped, "Bastion remains tapped");
+        assert!(!state.objects[&41].tapped, "Ring remains untapped");
+        assert_eq!(
+            state.objects[&41].counter_count(tricerules_cards::CounterKind::Night),
+            3
+        );
+        assert_eq!(
+            state.objects[&36].counter_count(tricerules_cards::CounterKind::Charge),
+            2
+        );
+        assert_eq!(
+            state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                .unwrap()
+                .life,
+            20
+        );
+        assert!(kaya_batch(&latest)
+            .legal_by_player
+            .get(&TEKUTHAL_NORMAL_PILOT_ID)
+            .expect("final current T5 response includes P17's actions")
+            .pending_ability_activation
+            .is_none());
+        assert!(kaya_batch(&latest).events.iter().any(|event| {
+            matches!(
+                event.ev.as_ref(),
+                Some(Ev::StackResolved(resolved)) if resolved.object_id == stack_item_id
+            )
+        }));
+        latest
+    }
+
+    fn tekuthal_normal_counter_contribution(
+        group: &tricerules_proto::ruled::v1::CounterRemovalGroupChoices,
+        permanent: &BattlefieldObject,
+        option_label: &str,
+        count: u32,
+    ) -> CounterRemovalContribution {
+        let candidate = group
+            .candidates
+            .iter()
+            .find(|candidate| {
+                candidate.object.as_ref().is_some_and(|receipt| {
+                    receipt.object_id == permanent.object_id
+                        && receipt.zone_change_generation == permanent.zone_change_generation
+                })
+            })
+            .expect("current group offer includes the exact permanent incarnation");
+        let option = candidate
+            .options
+            .iter()
+            .find(|option| {
+                option.label.eq_ignore_ascii_case(option_label) && option.available_count >= count
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "current group offer has {count} {option_label} counters on ObjectId {}",
+                    permanent.object_id
+                )
+            });
+        CounterRemovalContribution {
+            object: candidate.object,
+            option_id: option.option_id,
+            count,
+        }
+    }
+
+    fn tekuthal_normal_activate_tekuthal(
+        session: &mut EngineSession,
+        directory: &Path,
+        rows: &mut Vec<String>,
+        accepted_commands: &mut usize,
+        mut latest: IpcResponse,
+        battlefield: &mut Vec<BattlefieldObject>,
+    ) -> IpcResponse {
+        let registry = tricerules_cards::registry::global();
+        let tekuthal_card_id = registry
+            .id_for_name("Tekuthal, Inquiry Dominus")
+            .expect("Tekuthal is in the global registry")
+            .to_owned();
+        let ring_card_id = registry
+            .id_for_name("Replicating Ring")
+            .expect("Replicating Ring is in the global registry")
+            .to_owned();
+        let chalice_card_id = registry
+            .id_for_name("Everflowing Chalice")
+            .expect("Everflowing Chalice is in the global registry")
+            .to_owned();
+
+        kaya_capture_battlefield(&latest, TEKUTHAL_NORMAL_PILOT_ID, battlefield);
+        let current_actions = kaya_batch(&latest)
+            .legal_by_player
+            .get(&TEKUTHAL_NORMAL_PILOT_ID)
+            .expect("current post-Bastion response includes P17's legal actions");
+        assert!(current_actions.pending_ability_activation.is_none());
+        assert!(current_actions.pending_spell_cast.is_none());
+        let tekuthal = battlefield
+            .iter()
+            .find(|permanent| permanent.object_id == 33 && permanent.card_id == tekuthal_card_id)
+            .cloned()
+            .expect("current battlefield offer retains actual Tekuthal ObjectId 33");
+        let activation_ability_index = registry
+            .get(&tekuthal_card_id)
+            .expect("actual Tekuthal definition is globally registered")
+            .primary_face()
+            .activated_abilities
+            .iter()
+            .position(|ability| ability.ability_id.as_str() == "activated_01")
+            .expect("activated_01 is Tekuthal's actual activated ability");
+        let ability = tekuthal
+            .activated_abilities
+            .iter()
+            .find(|ability| ability.ability_index as usize == activation_ability_index)
+            .cloned()
+            .expect("current Tekuthal offer publishes activated_01");
+        assert!(ability.activatable);
+        assert!(!ability.is_mana_ability);
+        let source = CostObjectRef {
+            object_id: tekuthal.object_id,
+            zone_change_generation: tekuthal.zone_change_generation,
+        };
+        let ability_key = (u64::from(source.object_id) << 32) | u64::from(ability.ability_index);
+        let legal_costs = current_actions
+            .cost_choices_by_ability
+            .get(&ability_key)
+            .expect("current Tekuthal offer publishes its grouped counter-removal choices")
+            .clone();
+        assert!(legal_costs.non_mana_costs_payable);
+        let (cost_index, counter_group) = legal_costs
+            .choices
+            .iter()
+            .find_map(|choice| {
+                choice
+                    .counter_removal_group
+                    .as_ref()
+                    .map(|group| (choice.cost_index, group.clone()))
+            })
+            .expect("current Tekuthal offer contains its aggregate counter-removal group");
+        assert_eq!(counter_group.required_count, 3);
+        assert!(
+            !counter_group.candidates.iter().any(|candidate| {
+                candidate
+                    .object
+                    .as_ref()
+                    .is_some_and(|receipt| receipt.object_id == source.object_id)
+            }),
+            "Tekuthal is excluded by the current counter-removal offer"
+        );
+        let ring = battlefield
+            .iter()
+            .find(|permanent| permanent.object_id == 41 && permanent.card_id == ring_card_id)
+            .cloned()
+            .expect("current battlefield offer retains Ring ObjectId 41");
+        let chalice = battlefield
+            .iter()
+            .find(|permanent| permanent.object_id == 36 && permanent.card_id == chalice_card_id)
+            .cloned()
+            .expect("current battlefield offer retains Chalice ObjectId 36");
+        assert!(!ring.tapped);
+        assert_eq!(
+            session.engine.as_ref().unwrap().state.objects[&41]
+                .counter_count(tricerules_cards::CounterKind::Night),
+            3
+        );
+        assert_eq!(
+            session.engine.as_ref().unwrap().state.objects[&36]
+                .counter_count(tricerules_cards::CounterKind::Charge),
+            2
+        );
+        assert_eq!(
+            session.engine.as_ref().unwrap().state.objects[&33].zone,
+            tricerules_core::Zone::Battlefield
+        );
+
+        let cost_selections = vec![CostSelection {
+            cost_index,
+            selection: Some(
+                tricerules_proto::ruled::v1::cost_selection::Selection::CounterRemovalGroup(
+                    CounterRemovalGroupSelection {
+                        contributions: vec![
+                            tekuthal_normal_counter_contribution(&counter_group, &ring, "night", 1),
+                            tekuthal_normal_counter_contribution(
+                                &counter_group,
+                                &chalice,
+                                "charge",
+                                2,
+                            ),
+                        ],
+                    },
+                ),
+            ),
+        }];
+        let flex_payments = vec![
+            FlexPipPayment {
+                pip_index: 1,
+                pay_life: true,
+            },
+            FlexPipPayment {
+                pip_index: 2,
+                pay_life: true,
+            },
+        ];
+        latest = tekuthal_normal_player_command(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            TEKUTHAL_NORMAL_PILOT_ID,
+            RuledCommand {
+                cmd: Some(Cmd::BeginAbilityActivation(BeginAbilityActivation {
+                    source_object_id: source.object_id,
+                    expected_zone_change_generation: source.zone_change_generation,
+                    ability_index: ability.ability_index,
+                    source_zone: AbilitySourceZone::Battlefield as i32,
+                    cost_selections: cost_selections.clone(),
+                    flex_payments: flex_payments.clone(),
+                    ..Default::default()
+                })),
+            },
+            battlefield,
+        );
+        let pending = kaya_batch(&latest)
+            .legal_by_player
+            .get(&TEKUTHAL_NORMAL_PILOT_ID)
+            .and_then(|actions| actions.pending_ability_activation.as_ref())
+            .cloned()
+            .expect("accepted Tekuthal activation publishes its payment transaction");
+        let transaction_id = pending.transaction_id;
+        let transaction_revision = pending.revision;
+        assert_ne!(transaction_id, 0);
+        assert_eq!(pending.source_object_id, source.object_id);
+        assert_eq!(
+            pending.source_zone_change_generation,
+            source.zone_change_generation
+        );
+        assert_eq!(pending.ability_index, ability.ability_index);
+        assert_eq!(pending.cost_selections, cost_selections);
+        assert_eq!(pending.flex_payments, flex_payments);
+        {
+            let state = &session.engine.as_ref().unwrap().state;
+            assert_eq!(
+                state
+                    .players
+                    .iter()
+                    .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                    .unwrap()
+                    .life,
+                20,
+                "Begin does not pay either Phyrexian pip"
+            );
+            assert_eq!(
+                state.objects[&41].counter_count(tricerules_cards::CounterKind::Night),
+                3,
+                "Begin does not remove Ring's Night counter"
+            );
+            assert_eq!(
+                state.objects[&36].counter_count(tricerules_cards::CounterKind::Charge),
+                2,
+                "Begin does not remove Chalice's Charge counters"
+            );
+            assert!(state.stack.is_empty());
+        }
+
+        kaya_capture_battlefield(&latest, TEKUTHAL_NORMAL_PILOT_ID, battlefield);
+        let ring = battlefield
+            .iter()
+            .find(|permanent| permanent.object_id == 41 && permanent.card_id == ring_card_id)
+            .cloned()
+            .expect("current payment view retains Replicating Ring ObjectId 41");
+        let ring_mana = ring
+            .activated_abilities
+            .iter()
+            .find(|mana| mana.is_mana_ability && mana.activatable)
+            .cloned()
+            .expect("Ring publishes its current mana ability");
+        assert!(!ring.tapped);
+        let offered_option_labels = ring_mana
+            .mana_produced
+            .split('/')
+            .map(str::trim)
+            .collect::<Vec<_>>();
+        assert_eq!(offered_option_labels, vec!["W", "U", "B", "R", "G"]);
+        assert_eq!(offered_option_labels.len(), 5);
+        let offered_colors = offered_option_labels
+            .iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>();
+        let expected_colors = vec!["W", "U", "B", "R", "G"]
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(offered_colors, expected_colors);
+        assert!(!offered_colors.contains("C"));
+        let mana_option_index = u32::try_from(
+            offered_option_labels
+                .iter()
+                .position(|option| *option == "U")
+                .expect("current Ring mana offer includes blue"),
+        )
+        .expect("current Ring option index fits u32");
+        latest = tekuthal_normal_player_command(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            TEKUTHAL_NORMAL_PILOT_ID,
+            RuledCommand {
+                cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                    source_object_id: ring.object_id,
+                    ability_index: ring_mana.ability_index,
+                    mana_option_index,
+                    source_zone: AbilitySourceZone::Battlefield as i32,
+                    expected_zone_change_generation: ring.zone_change_generation,
+                    ..Default::default()
+                })),
+            },
+            battlefield,
+        );
+        let pool = &session
+            .engine
+            .as_ref()
+            .unwrap()
+            .state
+            .players
+            .iter()
+            .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+            .unwrap()
+            .mana_pool;
+        assert_eq!(pool.blue, 1, "Ring's current U option pays generic mana");
+        assert_eq!(pool.colorless, 0, "Ring has no colorless option");
+
+        let pending_after_mana = kaya_batch(&latest)
+            .legal_by_player
+            .get(&TEKUTHAL_NORMAL_PILOT_ID)
+            .and_then(|actions| actions.pending_ability_activation.as_ref())
+            .cloned()
+            .expect("Ring's mana activation preserves Tekuthal's payment transaction");
+        assert_eq!(pending_after_mana.transaction_id, transaction_id);
+        assert_eq!(pending_after_mana.revision, transaction_revision);
+        assert_eq!(pending_after_mana.source_object_id, source.object_id);
+        assert_eq!(
+            pending_after_mana.source_zone_change_generation,
+            source.zone_change_generation
+        );
+        assert_eq!(pending_after_mana.ability_index, ability.ability_index);
+        assert_eq!(pending_after_mana.cost_selections, cost_selections);
+        assert_eq!(pending_after_mana.flex_payments, flex_payments);
+        let payment = pending_after_mana
+            .payment_preview
+            .as_ref()
+            .expect("current Tekuthal transaction publishes its generic payment");
+        assert_eq!(payment.total_cost, "{1} + 4 life");
+        let expected_state_revision = session.engine.as_ref().unwrap().state.command_index;
+        let proposed_commit = CommitAbilityActivation {
+            transaction_id,
+            expected_revision: transaction_revision,
+            flex_payments: Vec::new(),
+            payment: Some(PaymentSelection {
+                expected_state_revision,
+                source: Some(source),
+                mana: Some(PaymentMana {
+                    u: 1,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let payment_request = IpcEnvelope {
+            msg: Some(Msg::PaymentQuery(PaymentQuery {
+                player_id: TEKUTHAL_NORMAL_PILOT_ID,
+                preview: Some(PreviewPayment {
+                    transaction_id,
+                    revision: payment.revision,
+                    commit_ability_activation: Some(proposed_commit),
+                    ..Default::default()
+                }),
+            })),
+        };
+        let payment_response = session
+            .process(&payment_request)
+            .expect("Tekuthal PaymentQuery keeps the normal session open");
+        pair(directory, rows, &payment_request, &payment_response);
+        assert!(
+            payment_response.ok,
+            "Tekuthal PaymentQuery: {}",
+            payment_response.error
+        );
+        let preview = payment_response
+            .batch
+            .as_ref()
+            .and_then(|batch| batch.payment_preview.as_ref())
+            .expect("Tekuthal PaymentQuery returns the current payment preview");
+        assert!(
+            preview.valid && preview.complete,
+            "Tekuthal payment: {preview:?}"
+        );
+        assert_eq!(preview.transaction_id, transaction_id);
+        assert_eq!(preview.total_cost, "{1} + 4 life");
+        let selection = preview
+            .selection
+            .clone()
+            .expect("complete Tekuthal PaymentQuery returns its exact selection");
+        assert_eq!(selection.expected_state_revision, expected_state_revision);
+        assert_eq!(selection.source.as_ref(), Some(&source));
+        assert_eq!(
+            selection.mana.as_ref(),
+            Some(&PaymentMana {
+                u: 1,
+                ..Default::default()
+            })
+        );
+        let restricted_mana = preview.restricted_mana.clone();
+        latest = tekuthal_normal_player_command(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            TEKUTHAL_NORMAL_PILOT_ID,
+            RuledCommand {
+                cmd: Some(Cmd::CommitAbilityActivation(CommitAbilityActivation {
+                    transaction_id,
+                    expected_revision: transaction_revision,
+                    flex_payments: Vec::new(),
+                    payment: Some(selection),
+                    restricted_mana,
+                    ..Default::default()
+                })),
+            },
+            battlefield,
+        );
+        let stack_item_id = {
+            let state = &session.engine.as_ref().unwrap().state;
+            assert!(state.pending_ability_activation.is_none());
+            assert_eq!(
+                state
+                    .players
+                    .iter()
+                    .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                    .unwrap()
+                    .life,
+                16
+            );
+            assert_eq!(
+                state.objects[&41].counter_count(tricerules_cards::CounterKind::Night),
+                2
+            );
+            assert_eq!(
+                state.objects[&36].counter_count(tricerules_cards::CounterKind::Charge),
+                0
+            );
+            assert!(state.objects[&41].tapped);
+            assert_eq!(
+                state
+                    .players
+                    .iter()
+                    .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                    .unwrap()
+                    .mana_pool
+                    .blue,
+                0
+            );
+            state
+                .stack
+                .last()
+                .expect("committed Tekuthal activation is on the stack")
+                .id
+        };
+        latest = tekuthal_normal_resolve_stack(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            latest,
+            battlefield,
+        );
+        let state = &session.engine.as_ref().unwrap().state;
+        let indestructible =
+            tricerules_cards::CounterKind::Keyword(tricerules_cards::Keyword::Indestructible);
+        assert_eq!(state.turn_step, tricerules_core::TurnStep::Main1);
+        assert_eq!(
+            state.players[state.active_player_idx].id,
+            TEKUTHAL_NORMAL_PILOT_ID
+        );
+        assert_eq!(state.priority_player_id(), TEKUTHAL_NORMAL_PILOT_ID);
+        assert!(state.stack.is_empty());
+        assert!(state.pending_resolution.is_none());
+        assert!(state.pending_ability_activation.is_none());
+        assert!(state.pending_spell_cast.is_none());
+        assert_eq!(state.objects[&33].zone, tricerules_core::Zone::Battlefield);
+        assert_eq!(
+            state.zone_change_generation.get(&source.object_id),
+            Some(&source.zone_change_generation)
+        );
+        assert_eq!(state.objects[&33].counter_count(indestructible), 1);
+        assert_eq!(
+            state.objects[&41].counter_count(tricerules_cards::CounterKind::Night),
+            2
+        );
+        assert_eq!(
+            state.objects[&36].counter_count(tricerules_cards::CounterKind::Charge),
+            0
+        );
+        assert!(state.objects[&41].tapped, "Ring supplied the U payment");
+        assert!(state.objects[&42].tapped, "Bastion remains tapped");
+        let pilot = state
+            .players
+            .iter()
+            .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+            .expect("P17 remains in the normal session");
+        assert_eq!(pilot.life, 16);
+        assert_eq!(pilot.mana_pool.blue, 0);
+        assert_eq!(pilot.mana_pool.colorless, 0);
+        assert!(
+            state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_OPPONENT_ID)
+                .unwrap()
+                .hand
+                .contains(&91),
+            "P29's Murder remains in hand"
+        );
+        let tekuthal_view = battlefield
+            .iter()
+            .find(|permanent| permanent.object_id == source.object_id)
+            .expect("current battlefield view retains Tekuthal's same incarnation");
+        assert_eq!(tekuthal_view.card_id, tekuthal_card_id);
+        assert_eq!(
+            tekuthal_view.zone_change_generation,
+            source.zone_change_generation
+        );
+        assert!(tekuthal_view
+            .keywords
+            .iter()
+            .any(|keyword| keyword == "Indestructible"));
+        assert!(kaya_batch(&latest).events.iter().any(|event| {
+            matches!(
+                event.ev.as_ref(),
+                Some(Ev::StackResolved(resolved)) if resolved.object_id == stack_item_id
+            )
+        }));
+        latest
+    }
+
+    fn tekuthal_normal_battlefield_count(
+        session: &EngineSession,
+        player_id: i32,
+        card_name: &str,
+    ) -> usize {
+        let card_id = tricerules_cards::registry::global()
+            .id_for_name(card_name)
+            .expect("battlefield card name resolves through global registry")
+            .to_owned();
+        let state = &session
+            .engine
+            .as_ref()
+            .expect("normal Tekuthal session has an engine")
+            .state;
+        let player = state
+            .players
+            .iter()
+            .find(|player| player.id == player_id)
+            .expect("player remains in normal session");
+        player
+            .battlefield
+            .iter()
+            .filter_map(|object_id| state.objects.get(object_id))
+            .filter(|object| object.card_id == card_id)
+            .count()
+    }
+
+    fn tekuthal_normal_cast_murder(
+        session: &mut EngineSession,
+        directory: &Path,
+        rows: &mut Vec<String>,
+        accepted_commands: &mut usize,
+        mut latest: IpcResponse,
+        pilot_battlefield: &mut Vec<BattlefieldObject>,
+    ) -> IpcResponse {
+        let registry = tricerules_cards::registry::global();
+        let tekuthal_card_id = registry
+            .id_for_name("Tekuthal, Inquiry Dominus")
+            .expect("Tekuthal is in the global registry")
+            .to_owned();
+        let murder_card_id = registry
+            .id_for_name("Murder")
+            .expect("Murder is in the global registry")
+            .to_owned();
+        let swamp_card_id = registry
+            .id_for_name("Swamp")
+            .expect("Swamp is in the global registry")
+            .to_owned();
+        let (turn_instance, tekuthal_generation) = {
+            let state = &session
+                .engine
+                .as_ref()
+                .expect("normal Tekuthal session has an engine before Murder")
+                .state;
+            assert_eq!(state.turn_step, tricerules_core::TurnStep::Main1);
+            assert_eq!(
+                state.players[state.active_player_idx].id,
+                TEKUTHAL_NORMAL_PILOT_ID
+            );
+            assert_eq!(state.priority_player_id(), TEKUTHAL_NORMAL_PILOT_ID);
+            assert!(state.stack.is_empty());
+            assert!(state.pending_spell_cast.is_none());
+            assert!(state.pending_resolution.is_none());
+            assert!(state.pending_ability_activation.is_none());
+
+            let tekuthal = state
+                .objects
+                .get(&33)
+                .expect("physical Tekuthal ObjectId 33 remains in the game state");
+            assert_eq!(tekuthal.card_id, tekuthal_card_id);
+            assert_eq!(tekuthal.zone, tricerules_core::Zone::Battlefield);
+            assert_eq!(
+                tekuthal.counter_count(tricerules_cards::CounterKind::Keyword(
+                    tricerules_cards::Keyword::Indestructible
+                )),
+                1
+            );
+            assert_eq!(
+                state
+                    .players
+                    .iter()
+                    .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                    .expect("P17 remains in the normal session")
+                    .life,
+                16
+            );
+            assert_eq!(
+                state.objects[&41].counter_count(tricerules_cards::CounterKind::Night),
+                2
+            );
+            assert_eq!(
+                state.objects[&36].counter_count(tricerules_cards::CounterKind::Charge),
+                0
+            );
+            assert!(state.objects[&41].tapped);
+            (state.turn_instance, captured_generation(session, 33))
+        };
+
+        let mut opponent_battlefield = Vec::new();
+        kaya_capture_battlefield(
+            &latest,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+            &mut opponent_battlefield,
+        );
+        assert_eq!(
+            opponent_battlefield
+                .iter()
+                .filter(|permanent| permanent.card_id == swamp_card_id && !permanent.tapped)
+                .count(),
+            4,
+            "current P29 battlefield view includes its four untapped Swamps"
+        );
+        let tekuthal_receipt = pilot_battlefield
+            .iter()
+            .find(|permanent| permanent.object_id == 33 && permanent.card_id == tekuthal_card_id)
+            .cloned()
+            .expect("current P17 public view retains Tekuthal ObjectId 33");
+        assert_eq!(tekuthal_receipt.zone_change_generation, tekuthal_generation);
+        assert!(tekuthal_receipt
+            .keywords
+            .iter()
+            .any(|keyword| keyword == "Indestructible"));
+
+        if session
+            .engine
+            .as_ref()
+            .expect("normal Tekuthal session has an engine before Murder priority")
+            .state
+            .priority_player_id()
+            == TEKUTHAL_NORMAL_PILOT_ID
+        {
+            latest = tekuthal_normal_player_command(
+                session,
+                directory,
+                rows,
+                accepted_commands,
+                TEKUTHAL_NORMAL_PILOT_ID,
+                RuledCommand {
+                    cmd: Some(Cmd::PassPriority(PassPriority {})),
+                },
+                pilot_battlefield,
+            );
+            kaya_capture_battlefield(
+                &latest,
+                TEKUTHAL_NORMAL_OPPONENT_ID,
+                &mut opponent_battlefield,
+            );
+        }
+        {
+            let state = &session
+                .engine
+                .as_ref()
+                .expect("normal Tekuthal session has an engine at P29 priority")
+                .state;
+            assert_eq!(state.turn_instance, turn_instance);
+            assert_eq!(state.turn_step, tricerules_core::TurnStep::Main1);
+            assert_eq!(
+                state.players[state.active_player_idx].id,
+                TEKUTHAL_NORMAL_PILOT_ID
+            );
+            assert_eq!(state.priority_player_id(), TEKUTHAL_NORMAL_OPPONENT_ID);
+            assert!(state.stack.is_empty());
+        }
+
+        let opponent_actions = kaya_batch(&latest)
+            .legal_by_player
+            .get(&TEKUTHAL_NORMAL_OPPONENT_ID)
+            .expect("current P29 response includes its legal hand actions");
+        assert!(opponent_actions.pending_spell_cast.is_none());
+        let murder = opponent_actions
+            .hand_actions
+            .iter()
+            .find(|offer| {
+                offer.kind == HandActionKind::HandActionCastSpell as i32
+                    && offer.card_name == "Murder"
+            })
+            .cloned()
+            .expect("current P29 offer contains the actual Murder spell");
+        let murder_hand_index = session
+            .engine
+            .as_ref()
+            .expect("normal Tekuthal session has an engine for P29's current hand")
+            .state
+            .players
+            .iter()
+            .find(|player| player.id == TEKUTHAL_NORMAL_OPPONENT_ID)
+            .expect("P29 remains in the normal session")
+            .hand
+            .iter()
+            .position(|object_id| *object_id == 91)
+            .expect("physical Murder ObjectId 91 remains in P29's current hand");
+        assert_eq!(
+            session.engine.as_ref().unwrap().state.objects[&91].card_id,
+            murder_card_id
+        );
+        assert_eq!(
+            session.engine.as_ref().unwrap().state.objects[&91].zone,
+            tricerules_core::Zone::Hand
+        );
+        assert_eq!(
+            murder.hand_index,
+            u32::try_from(murder_hand_index).expect("current hand slot fits the offer index")
+        );
+        let target_key = (murder.hand_index << 8) | murder.face_index;
+        let target_groups = &opponent_actions
+            .valid_targets_by_hand_slot
+            .get(&target_key)
+            .unwrap_or_else(|| {
+                panic!("current Murder hand slot {target_key} publishes target groups")
+            })
+            .groups;
+        assert_eq!(
+            target_groups.len(),
+            1,
+            "current Murder offer has one target group"
+        );
+        let target_group = &target_groups[0];
+        assert!(target_group
+            .valid_permanent_ids
+            .contains(&tekuthal_receipt.object_id));
+        let target_ref = luxior_normal_target_ref(target_group, &tekuthal_receipt);
+
+        latest = tekuthal_normal_player_command(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+            RuledCommand {
+                cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
+                    announcement: Some(tricerules_proto::ruled::v1::SpellCastAnnouncement {
+                        source: Some(CastSource {
+                            location: Some(
+                                tricerules_proto::ruled::v1::cast_source::Location::HandIndex(
+                                    murder.hand_index,
+                                ),
+                            ),
+                            expected_zone_change_generation: None,
+                        }),
+                        face_index: murder.face_index,
+                        cast_method: CastMethod::Normal as i32,
+                        targets: vec![target_ref],
+                        ..Default::default()
+                    }),
+                })),
+            },
+            pilot_battlefield,
+        );
+        kaya_capture_battlefield(
+            &latest,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+            &mut opponent_battlefield,
+        );
+        let pending = kaya_batch(&latest)
+            .legal_by_player
+            .get(&TEKUTHAL_NORMAL_OPPONENT_ID)
+            .and_then(|actions| actions.pending_spell_cast.as_ref())
+            .expect("current P29 response publishes Murder's pending payment");
+        let initial_payment = pending
+            .payment_preview
+            .as_ref()
+            .expect("pending Murder publishes the canonical payment preview");
+        assert_eq!(initial_payment.total_cost, "{1}{B}{B}");
+        let transaction_id = pending.transaction_id;
+
+        let mut produced = PaymentMana::default();
+        for _ in 0..3 {
+            let (object_id, generation, ability_index, output) = opponent_battlefield
+                .iter()
+                .filter(|permanent| permanent.card_id == swamp_card_id && !permanent.tapped)
+                .flat_map(|permanent| {
+                    permanent
+                        .activated_abilities
+                        .iter()
+                        .filter(|ability| ability.is_mana_ability && ability.activatable)
+                        .map(|ability| {
+                            (
+                                permanent.object_id,
+                                permanent.zone_change_generation,
+                                ability.ability_index,
+                                ability.mana_produced.clone(),
+                            )
+                        })
+                })
+                .find(|source| kaya_output_has_color(&source.3, 'B'))
+                .expect("current untapped P29 Swamps offer black mana for Murder");
+            assert!(kaya_output_has_color(&output, 'B'));
+            latest = tekuthal_normal_player_command(
+                session,
+                directory,
+                rows,
+                accepted_commands,
+                TEKUTHAL_NORMAL_OPPONENT_ID,
+                RuledCommand {
+                    cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                        source_object_id: object_id,
+                        ability_index,
+                        source_zone: AbilitySourceZone::Battlefield as i32,
+                        expected_zone_change_generation: generation,
+                        ..Default::default()
+                    })),
+                },
+                pilot_battlefield,
+            );
+            kaya_capture_battlefield(
+                &latest,
+                TEKUTHAL_NORMAL_OPPONENT_ID,
+                &mut opponent_battlefield,
+            );
+            produced.b += 1;
+            let pool = &session
+                .engine
+                .as_ref()
+                .expect("normal Tekuthal session has an engine while paying Murder")
+                .state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_OPPONENT_ID)
+                .expect("P29 remains in the normal session")
+                .mana_pool;
+            assert_eq!(pool.black, produced.b);
+            assert_eq!(pool.colorless, 0);
+        }
+        assert_eq!(produced.b, 3);
+
+        let pending = kaya_batch(&latest)
+            .legal_by_player
+            .get(&TEKUTHAL_NORMAL_OPPONENT_ID)
+            .and_then(|actions| actions.pending_spell_cast.as_ref())
+            .expect("Murder's payment transaction remains open after Swamp activations");
+        assert_eq!(pending.transaction_id, transaction_id);
+        let payment = pending
+            .payment_preview
+            .as_ref()
+            .expect("current pending Murder keeps its payment preview");
+        assert_eq!(payment.total_cost, "{1}{B}{B}");
+        let revision = payment.revision;
+        let expected_state_revision = session
+            .engine
+            .as_ref()
+            .expect("normal session has an engine for Murder payment preview")
+            .state
+            .command_index;
+        let payment_request = IpcEnvelope {
+            msg: Some(Msg::PaymentQuery(PaymentQuery {
+                player_id: TEKUTHAL_NORMAL_OPPONENT_ID,
+                preview: Some(PreviewPayment {
+                    transaction_id,
+                    revision,
+                    commit_spell_cast: Some(CommitSpellCast {
+                        transaction_id,
+                        payment: Some(PaymentSelection {
+                            expected_state_revision,
+                            mana: Some(produced),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+            })),
+        };
+        let payment_response = session
+            .process(&payment_request)
+            .expect("Murder PaymentQuery keeps the normal session open");
+        pair(directory, rows, &payment_request, &payment_response);
+        assert!(
+            payment_response.ok,
+            "Murder PaymentQuery: {}",
+            payment_response.error
+        );
+        kaya_capture_battlefield(
+            &payment_response,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+            &mut opponent_battlefield,
+        );
+        let preview = payment_response
+            .batch
+            .as_ref()
+            .and_then(|batch| batch.payment_preview.as_ref())
+            .expect("Murder PaymentQuery returns the current payment preview");
+        assert!(
+            preview.valid && preview.complete,
+            "Murder payment: {preview:?}"
+        );
+        assert_eq!(preview.transaction_id, transaction_id);
+        assert_eq!(preview.total_cost, "{1}{B}{B}");
+        let selection = preview
+            .selection
+            .clone()
+            .expect("complete Murder PaymentQuery returns its exact selection");
+        assert_eq!(selection.expected_state_revision, expected_state_revision);
+        assert_eq!(selection.mana.as_ref(), Some(&produced));
+        let restricted_mana = preview.restricted_mana.clone();
+
+        latest = tekuthal_normal_player_command(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+            RuledCommand {
+                cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
+                    transaction_id,
+                    payment: Some(selection),
+                    restricted_mana,
+                })),
+            },
+            pilot_battlefield,
+        );
+        kaya_capture_battlefield(
+            &latest,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+            &mut opponent_battlefield,
+        );
+        assert!(session
+            .engine
+            .as_ref()
+            .expect("normal session has an engine after Murder commit")
+            .state
+            .pending_spell_cast
+            .is_none());
+        assert_eq!(
+            session.engine.as_ref().unwrap().state.objects[&91].zone,
+            tricerules_core::Zone::Stack
+        );
+
+        latest = tekuthal_normal_resolve_stack(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            latest,
+            pilot_battlefield,
+        );
+        kaya_capture_battlefield(
+            &latest,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+            &mut opponent_battlefield,
+        );
+        kaya_capture_battlefield(&latest, TEKUTHAL_NORMAL_PILOT_ID, pilot_battlefield);
+        let state = &session
+            .engine
+            .as_ref()
+            .expect("normal session has an engine after Murder resolves")
+            .state;
+        assert_eq!(state.turn_instance, turn_instance);
+        assert_eq!(state.turn_step, tricerules_core::TurnStep::Main1);
+        assert_eq!(
+            state.players[state.active_player_idx].id,
+            TEKUTHAL_NORMAL_PILOT_ID
+        );
+        assert_eq!(state.priority_player_id(), TEKUTHAL_NORMAL_PILOT_ID);
+        assert!(state.stack.is_empty());
+        assert!(state.pending_spell_cast.is_none());
+        assert!(state.pending_resolution.is_none());
+        assert!(state.pending_ability_activation.is_none());
+        assert_eq!(state.objects[&91].card_id, murder_card_id);
+        assert_eq!(state.objects[&91].zone, tricerules_core::Zone::Graveyard);
+        assert_eq!(state.objects[&33].zone, tricerules_core::Zone::Battlefield);
+        assert_eq!(captured_generation(session, 33), tekuthal_generation);
+        assert_eq!(
+            state.objects[&33].counter_count(tricerules_cards::CounterKind::Keyword(
+                tricerules_cards::Keyword::Indestructible
+            )),
+            1
+        );
+        assert_eq!(
+            state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                .expect("P17 remains in the normal session after Murder")
+                .life,
+            16
+        );
+        assert_eq!(
+            state.objects[&41].counter_count(tricerules_cards::CounterKind::Night),
+            2
+        );
+        assert_eq!(
+            state.objects[&36].counter_count(tricerules_cards::CounterKind::Charge),
+            0
+        );
+        assert!(state.objects[&41].tapped);
+        assert_eq!(
+            state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_OPPONENT_ID)
+                .expect("P29 remains in the normal session after Murder")
+                .mana_pool
+                .black,
+            0
+        );
+        let final_tekuthal_receipt = pilot_battlefield
+            .iter()
+            .find(|permanent| permanent.object_id == 33 && permanent.card_id == tekuthal_card_id)
+            .expect("final P17 public view retains Tekuthal ObjectId 33");
+        assert_eq!(
+            final_tekuthal_receipt.zone_change_generation,
+            tekuthal_generation
+        );
+        assert!(final_tekuthal_receipt
+            .keywords
+            .iter()
+            .any(|keyword| keyword == "Indestructible"));
+        assert!(kaya_batch(&latest)
+            .legal_by_player
+            .get(&TEKUTHAL_NORMAL_OPPONENT_ID)
+            .expect("final response retains P29's current actions")
+            .pending_spell_cast
+            .is_none());
+        println!(
+            "T5 Murder resolved: P29 spent three current Swamp offers; physical Murder91 is in graveyard; same-generation Tekuthal33 remains with Indestructible1; P17 life=16, Ring Night=2, Chalice Charge=0; accepted PlayerCommands={accepted_commands}, timeline records={}",
+            rows.len()
+        );
+        latest
+    }
+
+    #[test]
+    fn tekuthal_normal_pilot_records_and_replays_grouped_activation() {
+        let player_decks = tekuthal_normal_pilot_decks();
+        tekuthal_normal_assert_decks(&player_decks);
+        let validation_names = player_decks
+            .iter()
+            .flat_map(|deck| deck.mainboard_card_name.iter().cloned())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+
+        let mut session = EngineSession::new(false);
+        let validation = session
+            .process(&IpcEnvelope {
+                msg: Some(Msg::ValidateDeck(ValidateDeck {
+                    card_names: validation_names,
+                })),
+            })
+            .expect("ValidateDeck keeps the Tekuthal normal-pilot session open");
+        assert!(
+            validation.ok,
+            "Tekuthal normal-pilot deck validation: {}",
+            validation.error
+        );
+        assert!(validation.missing_card_names.is_empty());
+
+        let root = tempfile::tempdir()
+            .expect("unique normal-pilot capture directory")
+            .keep();
+        println!("retained_capture={}", root.display());
+        fs::create_dir(root.join("raw")).expect("create raw capture directory");
+        let mut rows = Vec::new();
+        let mut manifest = serde_json::json!({
+            "format_version": 1,
+            "source": "server",
+            "privacy": "server_only",
+            "capture_id": root.as_path().file_name().unwrap().to_string_lossy().to_string(),
+            "engine_build": ENGINE_BUILD,
+            "card_data_hash": "",
+            "effective_dev_commands_enabled": false,
+            "complete": false
+        });
+        let start = IpcEnvelope {
+            msg: Some(Msg::SessionStart(SessionStart {
+                game_id: 7_281_036,
+                seed: 3,
+                player_ids: vec![TEKUTHAL_NORMAL_PILOT_ID, TEKUTHAL_NORMAL_OPPONENT_ID],
+                player_decks,
+                dev_commands_enabled: false,
+                diagnostic_capture_enabled: true,
+                ..Default::default()
+            })),
+        };
+        let start_response = session
+            .process(&start)
+            .expect("strict normal SessionStart keeps the pilot open");
+        assert!(
+            start_response.ok,
+            "normal Tekuthal GameStart: {}",
+            start_response.error
+        );
+        assert!(!start_response.effective_dev_commands_enabled);
+        manifest["card_data_hash"] = start_response.card_data_hash.clone().into();
+        fs::write(root.as_path().join("manifest.json"), manifest.to_string())
+            .expect("write initial capture manifest");
+        pair(root.as_path(), &mut rows, &start, &start_response);
+
+        let mut battlefield = Vec::new();
+        kaya_capture_battlefield(&start_response, TEKUTHAL_NORMAL_PILOT_ID, &mut battlefield);
+        let mut accepted_commands = 0usize;
+        let starting = kaya_starting_player_offer(&start_response)
+            .expect("GameStart publishes the current starting-player offer");
+        assert!(starting
+            .eligible_starting_player_ids
+            .contains(&TEKUTHAL_NORMAL_PILOT_ID));
+        let mut latest = tekuthal_normal_player_command(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            starting.deciding_player_id,
+            RuledCommand {
+                cmd: Some(Cmd::ChooseStartingPlayer(ChooseStartingPlayer {
+                    starting_player_id: TEKUTHAL_NORMAL_PILOT_ID,
+                })),
+            },
+            &mut battlefield,
+        );
+        for _ in 0..2 {
+            let Some(opening) = kaya_mulligan_offer(&latest) else {
+                break;
+            };
+            latest = tekuthal_normal_player_command(
+                &mut session,
+                root.as_path(),
+                &mut rows,
+                &mut accepted_commands,
+                opening.deciding_player_id,
+                RuledCommand {
+                    cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
+                },
+                &mut battlefield,
+            );
+        }
+        assert!(
+            kaya_mulligan_offer(&latest).is_none(),
+            "both initial hands are kept with ordinary decisions"
+        );
+
+        let (p17_opening, p17_draws, p29_opening) = {
+            let engine = session
+                .engine
+                .as_ref()
+                .expect("normal session has an engine");
+            let state = &engine.state;
+            assert_eq!(
+                state.players[state.starting_player_idx].id,
+                TEKUTHAL_NORMAL_PILOT_ID
+            );
+            let p17 = state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                .expect("P17 exists in the game state");
+            let p29 = state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_OPPONENT_ID)
+                .expect("P29 exists in the game state");
+            (
+                tekuthal_normal_card_records(state, p17.hand.iter().copied()),
+                tekuthal_normal_card_records(state, p17.library.iter().take(4).copied()),
+                tekuthal_normal_card_records(state, p29.hand.iter().copied()),
+            )
+        };
+        let p17_opening_names = p17_opening
+            .iter()
+            .map(|(object_id, _, name)| (*object_id, name.clone()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            p17_opening_names,
+            vec![
+                (41, "Replicating Ring".to_string()),
+                (42, "Karn's Bastion".to_string()),
+                (89, "Island".to_string()),
+                (33, "Tekuthal, Inquiry Dominus".to_string()),
+                (36, "Everflowing Chalice".to_string()),
+                (58, "Island".to_string()),
+                (64, "Island".to_string()),
+            ]
+        );
+        assert_eq!(
+            p17_draws
+                .iter()
+                .map(|(object_id, _, name)| (*object_id, name.clone()))
+                .collect::<Vec<_>>(),
+            vec![
+                (48, "Island".to_string()),
+                (37, "Everflowing Chalice".to_string()),
+                (51, "Island".to_string()),
+                (49, "Island".to_string())
+            ]
+        );
+        assert_eq!(p29_opening.len(), 7);
+        assert_eq!(
+            p29_opening
+                .iter()
+                .filter(|(_, _, name)| name.as_str() == "Murder")
+                .map(|(object_id, _, _)| *object_id)
+                .collect::<Vec<_>>(),
+            vec![91]
+        );
+        assert_eq!(
+            p29_opening
+                .iter()
+                .filter(|(_, _, name)| name.as_str() == "Swamp")
+                .count(),
+            6
+        );
+        println!(
+            "P17 exact deck order={:?}",
+            tekuthal_normal_pilot_decks()[0].mainboard_card_name
+        );
+        println!(
+            "P29 exact deck order={:?}",
+            tekuthal_normal_pilot_decks()[1].mainboard_card_name
+        );
+        println!("P17 opening hand (ObjectId, global card id, registry name)={p17_opening:?}");
+        println!("P17 scheduled draws T2-T5 from library front={p17_draws:?}");
+        println!("P29 opening hand (ObjectId, global card id, registry name)={p29_opening:?}");
+
+        for _ in 0..32 {
+            let state = &session
+                .engine
+                .as_ref()
+                .expect("normal session has engine")
+                .state;
+            if state.turn_step == tricerules_core::TurnStep::Main1
+                && state.players[state.active_player_idx].id == TEKUTHAL_NORMAL_PILOT_ID
+            {
+                break;
+            }
+            let priority_player = state.priority_player_id();
+            latest = tekuthal_normal_player_command(
+                &mut session,
+                root.as_path(),
+                &mut rows,
+                &mut accepted_commands,
+                priority_player,
+                RuledCommand {
+                    cmd: Some(Cmd::PassPriority(PassPriority {})),
+                },
+                &mut battlefield,
+            );
+        }
+        {
+            let state = &session
+                .engine
+                .as_ref()
+                .expect("normal session has engine")
+                .state;
+            assert_eq!(state.turn_step, tricerules_core::TurnStep::Main1);
+            assert_eq!(
+                state.players[state.active_player_idx].id,
+                TEKUTHAL_NORMAL_PILOT_ID
+            );
+            assert_eq!(state.priority_player_id(), TEKUTHAL_NORMAL_PILOT_ID);
+            assert_eq!(state.players[state.active_player_idx].hand.len(), 7);
+        }
+
+        let island = kaya_batch(&latest)
+            .legal_by_player
+            .get(&TEKUTHAL_NORMAL_PILOT_ID)
+            .expect("P17 receives current T1 hand actions")
+            .hand_actions
+            .iter()
+            .find(|offer| {
+                offer.kind == HandActionKind::HandActionPlayLand as i32
+                    && offer.card_name == "Island"
+            })
+            .cloned()
+            .expect("current T1 hand offer includes an Island");
+        latest = tekuthal_normal_player_command(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            TEKUTHAL_NORMAL_PILOT_ID,
+            RuledCommand {
+                cmd: Some(Cmd::PlayLand(PlayLand {
+                    source: Some(LandSource {
+                        location: Some(
+                            tricerules_proto::ruled::v1::land_source::Location::HandIndex(
+                                island.hand_index,
+                            ),
+                        ),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                })),
+            },
+            &mut battlefield,
+        );
+        {
+            let state = &session
+                .engine
+                .as_ref()
+                .expect("normal session has engine")
+                .state;
+            assert_eq!(
+                state.turn_step,
+                tricerules_core::TurnStep::Main1,
+                "legal T1 land play leaves the active main phase open"
+            );
+            assert_eq!(
+                state.players[state.active_player_idx].id,
+                TEKUTHAL_NORMAL_PILOT_ID
+            );
+            let island_id = tricerules_cards::registry::global()
+                .id_for_name("Island")
+                .expect("Island is in the global registry");
+            assert_eq!(
+                state.players[state.active_player_idx]
+                    .battlefield
+                    .iter()
+                    .filter(|object_id| state.objects[*object_id].card_id == island_id)
+                    .count(),
+                1
+            );
+        }
+        println!(
+            "T1 legal Island played; accepted PlayerCommands={accepted_commands}; phase={:?}",
+            session.engine.as_ref().unwrap().state.turn_step
+        );
+
+        latest = tekuthal_normal_advance_to_main(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+        );
+        latest = tekuthal_normal_play_land(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            &latest,
+            &mut battlefield,
+            TekuthalNormalLandPlan {
+                player_id: TEKUTHAL_NORMAL_OPPONENT_ID,
+                card_name: "Swamp",
+            },
+        );
+        assert_eq!(
+            tekuthal_normal_battlefield_count(&session, TEKUTHAL_NORMAL_OPPONENT_ID, "Swamp"),
+            1
+        );
+
+        latest = tekuthal_normal_advance_to_main(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+            TEKUTHAL_NORMAL_PILOT_ID,
+        );
+        assert!(
+            session
+                .engine
+                .as_ref()
+                .unwrap()
+                .state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                .unwrap()
+                .hand
+                .contains(&48),
+            "P17's real T2 draw is ObjectId 48 Island"
+        );
+        latest = tekuthal_normal_play_land(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            &latest,
+            &mut battlefield,
+            TekuthalNormalLandPlan {
+                player_id: TEKUTHAL_NORMAL_PILOT_ID,
+                card_name: "Island",
+            },
+        );
+        assert_eq!(
+            tekuthal_normal_battlefield_count(&session, TEKUTHAL_NORMAL_PILOT_ID, "Island"),
+            2
+        );
+        latest = tekuthal_normal_cast_from_current_offer(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+            TekuthalNormalCastPlan {
+                card_name: "Everflowing Chalice",
+                expected_total_cost: "{2}",
+                blue_mana: 2,
+                kick_once: true,
+            },
+        );
+        assert_eq!(
+            session.engine.as_ref().unwrap().state.objects[&36].zone,
+            tricerules_core::Zone::Battlefield
+        );
+        assert_eq!(
+            session.engine.as_ref().unwrap().state.objects[&36]
+                .counter_count(tricerules_cards::CounterKind::Charge),
+            1
+        );
+        println!(
+            "T2: Island played; once-kicked Chalice ObjectId=36 entered with one Charge counter"
+        );
+
+        latest = tekuthal_normal_advance_to_main(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+        );
+        latest = tekuthal_normal_play_land(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            &latest,
+            &mut battlefield,
+            TekuthalNormalLandPlan {
+                player_id: TEKUTHAL_NORMAL_OPPONENT_ID,
+                card_name: "Swamp",
+            },
+        );
+        assert_eq!(
+            tekuthal_normal_battlefield_count(&session, TEKUTHAL_NORMAL_OPPONENT_ID, "Swamp"),
+            2
+        );
+
+        latest = tekuthal_normal_advance_to_main(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+            TEKUTHAL_NORMAL_PILOT_ID,
+        );
+        assert!(
+            session
+                .engine
+                .as_ref()
+                .unwrap()
+                .state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                .unwrap()
+                .hand
+                .contains(&37),
+            "P17's real T3 draw is ObjectId 37 Everflowing Chalice"
+        );
+        latest = tekuthal_normal_play_land(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            &latest,
+            &mut battlefield,
+            TekuthalNormalLandPlan {
+                player_id: TEKUTHAL_NORMAL_PILOT_ID,
+                card_name: "Island",
+            },
+        );
+        assert_eq!(
+            tekuthal_normal_battlefield_count(&session, TEKUTHAL_NORMAL_PILOT_ID, "Island"),
+            3
+        );
+        latest = tekuthal_normal_cast_from_current_offer(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+            TekuthalNormalCastPlan {
+                card_name: "Replicating Ring",
+                expected_total_cost: "{3}",
+                blue_mana: 3,
+                kick_once: false,
+            },
+        );
+        assert_eq!(
+            session.engine.as_ref().unwrap().state.objects[&41].zone,
+            tricerules_core::Zone::Battlefield
+        );
+        println!("T3: Island and Replicating Ring ObjectId=41 played through current offers");
+
+        latest = tekuthal_normal_advance_to_main(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+        );
+        latest = tekuthal_normal_play_land(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            &latest,
+            &mut battlefield,
+            TekuthalNormalLandPlan {
+                player_id: TEKUTHAL_NORMAL_OPPONENT_ID,
+                card_name: "Swamp",
+            },
+        );
+        assert_eq!(
+            tekuthal_normal_battlefield_count(&session, TEKUTHAL_NORMAL_OPPONENT_ID, "Swamp"),
+            3
+        );
+
+        latest = tekuthal_normal_advance_to_main(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+            TEKUTHAL_NORMAL_PILOT_ID,
+        );
+        assert!(
+            session
+                .engine
+                .as_ref()
+                .unwrap()
+                .state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                .unwrap()
+                .hand
+                .contains(&51),
+            "P17's real T4 draw is ObjectId 51 Island"
+        );
+        latest = tekuthal_normal_play_land(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            &latest,
+            &mut battlefield,
+            TekuthalNormalLandPlan {
+                player_id: TEKUTHAL_NORMAL_PILOT_ID,
+                card_name: "Island",
+            },
+        );
+        assert_eq!(
+            tekuthal_normal_battlefield_count(&session, TEKUTHAL_NORMAL_PILOT_ID, "Island"),
+            4
+        );
+        assert_eq!(
+            session.engine.as_ref().unwrap().state.objects[&41]
+                .counter_count(tricerules_cards::CounterKind::Night),
+            1,
+            "Ring's ordinary T4 upkeep adds one Night counter before Tekuthal"
+        );
+        latest = tekuthal_normal_cast_from_current_offer(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+            TekuthalNormalCastPlan {
+                card_name: "Tekuthal, Inquiry Dominus",
+                expected_total_cost: "{2}{U}{U}",
+                blue_mana: 4,
+                kick_once: false,
+            },
+        );
+        assert_eq!(
+            session.engine.as_ref().unwrap().state.objects[&33].zone,
+            tricerules_core::Zone::Battlefield
+        );
+        println!("T4: Island and Tekuthal ObjectId=33 played; Ring remains at Night1");
+
+        latest = tekuthal_normal_advance_to_main(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+        );
+        latest = tekuthal_normal_play_land(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            &latest,
+            &mut battlefield,
+            TekuthalNormalLandPlan {
+                player_id: TEKUTHAL_NORMAL_OPPONENT_ID,
+                card_name: "Swamp",
+            },
+        );
+        assert_eq!(
+            tekuthal_normal_battlefield_count(&session, TEKUTHAL_NORMAL_OPPONENT_ID, "Swamp"),
+            4,
+            "a fourth ordinary Swamp avoids a cleanup discard"
+        );
+
+        latest = tekuthal_normal_advance_to_main(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+            TEKUTHAL_NORMAL_PILOT_ID,
+        );
+        assert!(
+            session
+                .engine
+                .as_ref()
+                .unwrap()
+                .state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                .unwrap()
+                .hand
+                .contains(&49),
+            "P17's real T5 draw is ObjectId 49 Island"
+        );
+        assert_eq!(
+            session.engine.as_ref().unwrap().state.objects[&41]
+                .counter_count(tricerules_cards::CounterKind::Night),
+            2,
+            "Ring's ordinary T5 upkeep adds one Night counter"
+        );
+        latest = tekuthal_normal_play_land(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            &latest,
+            &mut battlefield,
+            TekuthalNormalLandPlan {
+                player_id: TEKUTHAL_NORMAL_PILOT_ID,
+                card_name: "Karn's Bastion",
+            },
+        );
+        let final_actions = kaya_batch(&latest)
+            .legal_by_player
+            .get(&TEKUTHAL_NORMAL_PILOT_ID)
+            .expect("current T5 Main1 response includes P17's legal actions");
+        assert!(
+            final_actions.pending_spell_cast.is_none(),
+            "the current T5 Main1 offer has no pending spell payment"
+        );
+        assert!(
+            !final_actions
+                .hand_actions
+                .iter()
+                .any(|offer| offer.kind == HandActionKind::HandActionPlayLand as i32),
+            "P17's current T5 Main1 offer has no second land play"
+        );
+        let state = &session.engine.as_ref().unwrap().state;
+        assert_eq!(state.turn_step, tricerules_core::TurnStep::Main1);
+        assert_eq!(
+            state.players[state.active_player_idx].id,
+            TEKUTHAL_NORMAL_PILOT_ID
+        );
+        assert_eq!(state.priority_player_id(), TEKUTHAL_NORMAL_PILOT_ID);
+        assert_eq!(
+            tekuthal_normal_battlefield_count(&session, TEKUTHAL_NORMAL_PILOT_ID, "Island"),
+            4
+        );
+        assert_eq!(
+            tekuthal_normal_battlefield_count(&session, TEKUTHAL_NORMAL_PILOT_ID, "Karn's Bastion"),
+            1
+        );
+        assert!(!state.objects[&42].tapped, "T5 Bastion is ready");
+        assert_eq!(
+            state.objects[&36].counter_count(tricerules_cards::CounterKind::Charge),
+            1
+        );
+        assert_eq!(
+            state.objects[&41].counter_count(tricerules_cards::CounterKind::Night),
+            2
+        );
+        assert_eq!(state.objects[&33].zone, tricerules_core::Zone::Battlefield);
+        assert_eq!(
+            state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                .unwrap()
+                .life,
+            20
+        );
+        assert!(state.stack.is_empty());
+        assert!(state.pending_spell_cast.is_none());
+        assert!(state.pending_resolution.is_none());
+        assert!(
+            state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_OPPONENT_ID)
+                .unwrap()
+                .hand
+                .contains(&91),
+            "P29's Murder remains in hand"
+        );
+        latest = tekuthal_normal_activate_bastion(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+        );
+        let resolved_actions = kaya_batch(&latest)
+            .legal_by_player
+            .get(&TEKUTHAL_NORMAL_PILOT_ID)
+            .expect("current post-Bastion T5 response includes P17's legal actions");
+        assert!(resolved_actions.pending_spell_cast.is_none());
+        assert!(resolved_actions.pending_ability_activation.is_none());
+        let state = &session.engine.as_ref().unwrap().state;
+        assert_eq!(state.turn_step, tricerules_core::TurnStep::Main1);
+        assert_eq!(
+            state.players[state.active_player_idx].id,
+            TEKUTHAL_NORMAL_PILOT_ID
+        );
+        assert_eq!(state.priority_player_id(), TEKUTHAL_NORMAL_PILOT_ID);
+        assert!(state.stack.is_empty());
+        assert!(state.pending_resolution.is_none());
+        assert!(state.pending_ability_activation.is_none());
+        assert!(state.objects[&42].tapped, "Bastion paid its tap cost");
+        assert!(!state.objects[&41].tapped, "Ring remains untapped");
+        assert_eq!(
+            state.objects[&41].counter_count(tricerules_cards::CounterKind::Night),
+            3
+        );
+        assert_eq!(
+            state.objects[&36].counter_count(tricerules_cards::CounterKind::Charge),
+            2
+        );
+        assert_eq!(
+            state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                .unwrap()
+                .life,
+            20
+        );
+        assert!(
+            state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_OPPONENT_ID)
+                .unwrap()
+                .hand
+                .contains(&91),
+            "P29's Murder remains available after the Bastion activation"
+        );
+        let island_card_id = tricerules_cards::registry::global()
+            .id_for_name("Island")
+            .expect("Island is in the global registry")
+            .to_owned();
+        let pilot = state
+            .players
+            .iter()
+            .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+            .unwrap();
+        let islands = pilot
+            .battlefield
+            .iter()
+            .filter_map(|object_id| state.objects.get(object_id))
+            .filter(|object| object.card_id == island_card_id)
+            .collect::<Vec<_>>();
+        assert_eq!(islands.len(), 4);
+        assert!(islands.iter().all(|island| island.tapped));
+        println!(
+            "T5 Bastion resolved through both current Proliferate prompts: Islands=4 tapped, Bastion=42 tapped, Chalice Charge=2, Ring Night=3, Ring untapped, P17 life=20, accepted PlayerCommands={accepted_commands}"
+        );
+        latest = tekuthal_normal_activate_tekuthal(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+        );
+        let resolved_actions = kaya_batch(&latest)
+            .legal_by_player
+            .get(&TEKUTHAL_NORMAL_PILOT_ID)
+            .expect("current post-Tekuthal T5 response includes P17's legal actions");
+        assert!(resolved_actions.pending_spell_cast.is_none());
+        assert!(resolved_actions.pending_ability_activation.is_none());
+        println!(
+            "T5 Tekuthal activation resolved: P17 life=16, Ring Night=2 tapped, Chalice Charge=0, Tekuthal Indestructible=1, accepted PlayerCommands={accepted_commands}"
+        );
+        latest = tekuthal_normal_cast_murder(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+        );
+        assert!(latest.ok, "final Murder-resolution response is accepted");
+        let final_batch = kaya_batch(&latest);
+        let p17_actions = final_batch
+            .legal_by_player
+            .get(&TEKUTHAL_NORMAL_PILOT_ID)
+            .expect("final response publishes the active P17 private offer");
+        assert!(p17_actions.pending_spell_cast.is_none());
+        assert!(p17_actions.pending_ability_activation.is_none());
+        let p29_actions = final_batch
+            .legal_by_player
+            .get(&TEKUTHAL_NORMAL_OPPONENT_ID)
+            .expect("final response retains P29's private action view");
+        assert!(p29_actions.pending_spell_cast.is_none());
+        assert!(session
+            .engine
+            .as_ref()
+            .expect("normal session has an engine after Murder")
+            .state
+            .stack
+            .is_empty());
+        fs::write(
+            root.as_path().join("timeline.jsonl"),
+            rows.join("\n") + "\n",
+        )
+        .expect("finish normal-pilot timeline");
+        manifest["complete"] = true.into();
+        manifest["accepted_commands"] = accepted_commands.into();
+        fs::write(root.as_path().join("manifest.json"), manifest.to_string())
+            .expect("finish normal-pilot manifest");
+        let expected_state = session
+            .engine
+            .as_ref()
+            .expect("normal session has an engine after T5 Main1")
+            .diagnostic_snapshot()
+            .expect("capture live diagnostic snapshot");
+        let capture = load_capture(root.as_path()).expect("load completed normal-pilot capture");
+        assert!(
+            capture.warnings.is_empty(),
+            "capture warnings: {:?}",
+            capture.warnings
+        );
+        let replayed = reconstruct(&capture, &ReplayOptions::default())
+            .expect("reconstruct the recorded normal-pilot prefix");
+        assert!(
+            replayed.warnings.is_empty(),
+            "replay warnings: {:?}",
+            replayed.warnings
+        );
+        assert!(
+            replayed.differences.is_empty(),
+            "replay differences: {:?}",
+            replayed.differences
+        );
+        assert_eq!(
+            replayed.accepted_commands,
+            u64::try_from(accepted_commands).expect("accepted count fits replay result")
+        );
+        assert_eq!(replayed.state, expected_state);
+        println!(
+            "T1-T5 strict normal curve through P29's Murder replayed exactly; accepted PlayerCommands={accepted_commands}, timeline records={}",
+            rows.len()
+        );
+    }
     fn fixture() -> (tempfile::TempDir, Value) {
         fixture_with_decks(vec![])
     }

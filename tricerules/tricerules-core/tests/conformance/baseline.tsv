@@ -3156,6 +3156,7 @@ teferi,_temporal_pilgrim	0	ability:1	exercised
 teferi,_temporal_pilgrim	0	ability:2	exercised
 teferis_protege	0	ability:0	exercised
 teferis_protege	0	cast	exercised
+tekuthal,_inquiry_dominus	0	ability:0	unsupported: nonmana costs need additional fixture resources
 tempest_angler	0	cast	exercised
 tempest_drake	0	cast	exercised
 tempest_hawk	0	cast	exercised

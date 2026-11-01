@@ -1,0 +1,156 @@
+{
+  "format_version": 1,
+  "oracle_id": "4716ab91-30e6-4c63-8389-a9db8f9414d8",
+  "spans": [
+    {
+      "face_id": "tekuthal_inquiry_dominus",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "tekuthal_inquiry_dominus",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "tekuthal_inquiry_dominus",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "StaticAbilityDef::DoubleControllerProliferations",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::RemoveCountersFromPermanents",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "TargetKind::AnyPermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1/RemoveCountersFromPermanents/filter/kind"
+    },
+    {
+      "symbol": "TargetController::You",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1/RemoveCountersFromPermanents/filter/controller"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Artifact",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1/RemoveCountersFromPermanents/filter/permanent_types/0"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Creature",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1/RemoveCountersFromPermanents/filter/permanent_types/1"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Planeswalker",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1/RemoveCountersFromPermanents/filter/permanent_types/2"
+    },
+    {
+      "symbol": "TargetObjectExclusion::Source",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1/RemoveCountersFromPermanents/filter/excluded_objects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "CounterKind::Keyword(Keyword::Indestructible)",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PutCounters/counter"
+    },
+    {
+      "symbol": "Amount::Fixed(1)",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PutCounters/count"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PutCounters/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "deck_registry::deck_coverage_tekuthal::tekuthal_exact_identity_and_three_counter_activation",
+      "covers": "Exact registered identity and printed characteristics; Flying; DoubleControllerProliferations; line presentation values; the activation's mana cost, three-counter cost and eligible permanent filter; and one Indestructible counter placed on Source."
+    },
+    {
+      "test": "scenario deck_coverage_tekuthal::actual_tekuthal_flying_combat_rejects_ground_block_atomically",
+      "covers": "A ground-only Coral Merfolk cannot block actual Tekuthal; rejection preserves combat state and command index, while an actual flying Storm Crow can block."
+    },
+    {
+      "test": "scenario deck_coverage_tekuthal::actual_tekuthal_phyrexian_payments_use_current_offers_and_counter_distributions",
+      "covers": "Accepts current activation offers across four tested distributions of three eligible counters and all five configured Phyrexian payment choices; commit pays the selected life and mana, removes the offered counters exactly once, and puts one activation on the stack."
+    },
+    {
+      "test": "scenario deck_coverage_tekuthal::actual_tekuthal_phyrexian_rejections_preserve_pending_costs_and_command_index",
+      "covers": "Rejects insufficient life, underfunded mana commit, malformed counter contribution count and stale contribution generation; rejected commands preserve state and command index, and an underfunded commit preserves the accepted pending costs."
+    },
+    {
+      "test": "scenario deck_coverage_tekuthal::actual_tekuthal_karns_bastion_and_gambit_each_offer_two_fresh_proliferates",
+      "covers": "Actual Karn's Bastion and Tezzeret's Gambit each produce two successive Proliferate choices under Tekuthal; the selected poison counter is added once per child and each parent ability or spell resolves once."
+    },
+    {
+      "test": "scenario deck_coverage_tekuthal::actual_tekuthal_ezuri_pays_once_and_delays_four_draws_until_parent_finishes",
+      "covers": "Pays Ezuri's optional {3} once; Tekuthal produces four Proliferate children; Ezuri's four draw triggers wait until the ETB parent completes, then each draws one card."
+    },
+    {
+      "test": "scenario deck_coverage_tekuthal::actual_tekuthal_ripples_unions_children_after_nested_replacement_suspension",
+      "covers": "Actual Ripples of Potential waits through nested Doubling Season choices for both Tekuthal-produced Proliferate children, unions their distinct permanent receipts, and offers its phase cohort only after both children finish."
+    },
+    {
+      "test": "scenario deck_coverage_tekuthal::actual_tekuthal_ripples_one_empty_child_retains_only_the_other_receipt",
+      "covers": "An empty first Proliferate child contributes no receipt; the second child's selected permanent is the sole phase recipient."
+    },
+    {
+      "test": "scenario deck_coverage_tekuthal::actual_tekuthal_ripples_both_empty_children_finish_without_a_phase_cohort",
+      "covers": "Two empty Proliferate children complete Ripples without a phase-cohort choice or changes to the permanent's counters."
+    },
+    {
+      "test": "scenario deck_coverage_tekuthal::actual_tekuthal_ripples_excludes_tatterkite_and_player_from_phase_recipients",
+      "covers": "The actual Tatterkite's counter remains unchanged and the proliferated player is not offered as a permanent phase recipient; Ripples finishes without phasing either."
+    },
+    {
+      "test": "scenario deck_coverage_tekuthal::actual_tekuthal_accepted_source_sacrifice_commit_and_cancel",
+      "covers": "Liquimetal Coating makes actual Tekuthal an artifact so Krark-Clan Ironworks can sacrifice it during the accepted activation payment window; the pending payment survives, cancellation preserves the sacrifice, and commit spends the locked costs without placing an Indestructible counter on the departed source."
+    },
+    {
+      "test": "scenario deck_coverage_tekuthal::actual_tekuthal_indestructible_placement",
+      "covers": "The activation places one Indestructible counter normally, Doubling Season increases placement to two, and an opponent-controlled Vorinclex prevents placement; effective Indestructible matches each counter outcome."
+    },
+    {
+      "test": "scenario deck_coverage_tekuthal::actual_tekuthal_counter_prohibition_preserves_paid_costs",
+      "covers": "Blossombind prohibits counters on actual Tekuthal; the activation remains usable while Tekuthal is tapped, its mana and three-counter costs are paid, and resolution places no Indestructible counter."
+    },
+    {
+      "test": "scenario deck_coverage_tekuthal::actual_tekuthal_counter_removal_loses_protection",
+      "covers": "After Tekuthal gains its Indestructible counter, actual Nesting Grounds moves that counter to Grizzly Bears; Murder then destroys Tekuthal while the recipient retains Indestructible."
+    },
+    {
+      "test": "scenario deck_coverage_tekuthal::actual_tekuthal_tidebinder_counters_activation_after_costs_are_paid",
+      "covers": "Tishana's Tidebinder counters the actual activation after its costs are paid; no Indestructible counter is placed, costs remain spent, and Tidebinder removes Tekuthal's abilities."
+    },
+    {
+      "test": "scenario deck_coverage_tekuthal::actual_tekuthal_prepared_return_generation_rejects_old_source_effect",
+      "covers": "Prepared-state leave and return preserves the same ObjectId with a newer zone-change generation; the old activation cannot place its counter on the returned incarnation. This fixture is not an ordinary recast line."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

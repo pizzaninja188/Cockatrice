@@ -1,0 +1,46 @@
+// https://scryfall.com/card/eoc/78/tekuthal-inquiry-dominus
+// https://api.scryfall.com/cards/2d389264-e2d2-4589-9636-faa11fe46710/rulings
+(
+  id: "tekuthal,_inquiry_dominus",
+  name: "Tekuthal, Inquiry Dominus",
+  face_id: "tekuthal_inquiry_dominus",
+  mana_cost: "{2}{U}{U}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Phyrexian", "Horror"],
+  power: 3,
+  toughness: 5,
+  keywords: [Flying],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: DoubleControllerProliferations,
+    ),
+  ],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [
+        Mana("{1}{U/P}{U/P}"),
+        RemoveCountersFromPermanents(
+          count: 3,
+          counter: None,
+          filter: (
+            kind: AnyPermanent,
+            controller: You,
+            permanent_types: [Artifact, Creature, Planeswalker],
+            excluded_objects: [Source],
+          ),
+        ),
+      ],
+      effect: [
+        PutCounters(
+          counter: Keyword(Indestructible),
+          count: 1,
+          subject: Source,
+        ),
+      ],
+    ),
+  ],
+)

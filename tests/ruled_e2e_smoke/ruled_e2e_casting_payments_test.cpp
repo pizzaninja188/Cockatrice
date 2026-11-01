@@ -4351,5 +4351,4149 @@ TEST_F(RuledE2ESmokeTest, BoseijuChannelPreviewIsPrivateAndSearchMovesTheChosenP
     }
 }
 
+TEST_F(RuledE2ESmokeTest, TekuthalGroupedCounterBeginPaymentCommitReachesBothClients)
+{
+    const auto started = startServers();
+    ASSERT_TRUE(started) << started.message();
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+
+    class CapturingDriver : public OpeningDriver
+    {
+    public:
+        CapturingDriver(bool starts, QString name, QStringList *output) : OpeningDriver(starts, std::move(name), output)
+        {
+        }
+        std::vector<ruled::v1::RuledEventBatch> batches;
+        std::vector<ruled::v1::RuledEventBatch> paymentPreviews;
+        std::vector<ruled::v1::RuledEvent> events;
+
+        void onBatchBegin(const ruled::v1::RuledEventBatch &batch) override
+        {
+            batches.push_back(batch);
+        }
+        void onPaymentPreview(const ruled::v1::RuledEventBatch &batch) override
+        {
+            paymentPreviews.push_back(batch);
+            OpeningDriver::onPaymentPreview(batch);
+        }
+        void onRuledEvent(const ruled::v1::RuledEvent &event) override
+        {
+            OpeningDriver::onRuledEvent(event);
+            events.push_back(event);
+        }
+    };
+
+    CapturingDriver p1(true, QStringLiteral("tekuthal-network-p1"), &transcript);
+    CapturingDriver p2(false, QStringLiteral("tekuthal-network-p2"), &transcript);
+    CapturingDriver spectator(false, QStringLiteral("tekuthal-network-spectator"), &transcript);
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(spectator.loginAndJoinRoom());
+
+    auto pumpClients = [&] {
+        p1.pump(25);
+        p2.pump(25);
+        spectator.pump(25);
+    };
+    auto waitFor = [&](auto predicate, int timeoutMs, const char *what) -> ::testing::AssertionResult {
+        QElapsedTimer wait;
+        wait.start();
+        while (!predicate() && wait.elapsed() < timeoutMs) {
+            pumpClients();
+        }
+        if (!predicate()) {
+            return ::testing::AssertionFailure() << "timeout waiting for " << what;
+        }
+        return ::testing::AssertionSuccess();
+    };
+    auto sendAccepted = [&](CapturingDriver &sender, const ruled::v1::RuledCommand &command, const QString &description,
+                            auto predicate) -> ::testing::AssertionResult {
+        const quint64 commandId = sender.nextCmdId;
+        sender.sendRuled(command, description);
+        const auto what = description.toStdString();
+        const auto responseOrState = waitFor(
+            [&] {
+                const auto response = sender.responses.find(commandId);
+                return response != sender.responses.end() &&
+                       (response->second.response_code() != Response::RespOk || predicate());
+            },
+            15000, what.c_str());
+        if (!responseOrState) {
+            return responseOrState;
+        }
+        const auto response = sender.responses.find(commandId);
+        if (response == sender.responses.end()) {
+            return ::testing::AssertionFailure() << what << ": command response missing";
+        }
+        if (response->second.response_code() != Response::RespOk) {
+            return ::testing::AssertionFailure() << what << ": response code " << response->second.response_code();
+        }
+        if (!predicate()) {
+            return ::testing::AssertionFailure() << what << ": authoritative condition not reached";
+        }
+        return ::testing::AssertionSuccess();
+    };
+
+    CommandContainer createContainer;
+    createContainer.set_room_id(p1.roomId);
+    auto *createGame = createContainer.add_room_command()->MutableExtension(Command_CreateGame::ext);
+    createGame->set_description("Tekuthal grouped payment network case");
+    createGame->set_max_players(2);
+    createGame->set_spectators_allowed(true);
+    createGame->set_spectators_see_everything(false);
+    createGame->set_starting_life_total(20);
+    createGame->set_ruled_game(true);
+    const quint64 createCommandId = p1.nextCmdId;
+    p1.sendContainer(createContainer);
+    ASSERT_TRUE(waitFor([&] { return p1.gameId >= 0 && p1.myId >= 0 && p1.responses.count(createCommandId) != 0; },
+                        10000, "spectatable ruled game creation"));
+    ASSERT_EQ(p1.responses.at(createCommandId).response_code(), Response::RespOk);
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+
+    CommandContainer spectatorJoin;
+    spectatorJoin.set_room_id(spectator.roomId);
+    auto *join = spectatorJoin.add_room_command()->MutableExtension(Command_JoinGame::ext);
+    join->set_game_id(p1.gameId);
+    join->set_spectator(true);
+    const quint64 spectatorJoinCommandId = spectator.nextCmdId;
+    spectator.sendContainer(spectatorJoin);
+    ASSERT_TRUE(
+        waitFor([&] { return spectator.gameId == p1.gameId && spectator.responses.count(spectatorJoinCommandId) != 0; },
+                10000, "spectator GameJoined event"));
+    ASSERT_EQ(spectator.responses.at(spectatorJoinCommandId).response_code(), Response::RespOk);
+
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(waitFor(
+        [&] {
+            return p1.gameStarted && p2.gameStarted && spectator.gameStarted && p1.stateVersion > 0 &&
+                   p2.stateVersion > 0 && spectator.stateVersion > 0;
+        },
+        20000, "three-recipient game start"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000 &&
+           !(p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+             p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId)) {
+        pumpClients();
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    ASSERT_EQ(p1.activePlayer, p1.myId);
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+
+    auto permanent = [&](const CapturingDriver &client, int owner,
+                         const QString &cardId) -> const ObservedState::Permanent * {
+        const auto battlefield = client.battlefieldByPlayer.find(owner);
+        if (battlefield == client.battlefieldByPlayer.end()) {
+            return nullptr;
+        }
+        const auto found = std::find_if(battlefield->second.begin(), battlefield->second.end(),
+                                        [&](const auto &candidate) { return candidate.cardId == cardId; });
+        return found == battlefield->second.end() ? nullptr : &*found;
+    };
+    auto counterCount = [&](const CapturingDriver &client, const QString &cardId, const QString &counterKind,
+                            int count) {
+        const auto *object = permanent(client, p1.myId, cardId);
+        if (!object) {
+            return false;
+        }
+        const QString countText = QStringLiteral("%1 %2 counter(s)").arg(count).arg(counterKind);
+        const QString counterText = QStringLiteral("%1 counter(s)").arg(counterKind);
+        return count == 0
+                   ? object->countersAnnotation.contains(countText) || !object->countersAnnotation.contains(counterText)
+                   : object->countersAnnotation.contains(countText);
+    };
+    auto putCard = [&](const char *name, ruled::v1::DevZone zone, auto predicate) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(p1.myId);
+        dev->mutable_put_card_in_zone()->set_card_name(name);
+        dev->mutable_put_card_in_zone()->set_zone(zone);
+        dev->mutable_put_card_in_zone()->set_ready(true);
+        return sendAccepted(p1, command, QStringLiteral("actual card placement: %1").arg(name), predicate);
+    };
+    ASSERT_TRUE(putCard("Replicating Ring", ruled::v1::DEV_ZONE_BATTLEFIELD, [&] {
+        return permanent(p1, p1.myId, QStringLiteral("replicating_ring")) &&
+               permanent(p2, p1.myId, QStringLiteral("replicating_ring")) &&
+               permanent(spectator, p1.myId, QStringLiteral("replicating_ring"));
+    }));
+    ASSERT_TRUE(putCard("Tekuthal, Inquiry Dominus", ruled::v1::DEV_ZONE_BATTLEFIELD, [&] {
+        return permanent(p1, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus")) &&
+               permanent(p2, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus")) &&
+               permanent(spectator, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus"));
+    }));
+    ASSERT_TRUE(putCard("Everflowing Chalice", ruled::v1::DEV_ZONE_HAND, [&] {
+        return p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Everflowing Chalice")) != nullptr;
+    }));
+    ruled::v1::RuledCommand chaliceMana;
+    chaliceMana.mutable_dev_command()->set_target_player_id(p1.myId);
+    chaliceMana.mutable_dev_command()->mutable_add_mana()->set_c(4);
+    ASSERT_TRUE(sendAccepted(p1, chaliceMana, QStringLiteral("dev-prepared Chalice casting mana"),
+                             [&] { return p1.myPool.c == 4; }));
+
+    const auto *chaliceOfferPtr =
+        p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Everflowing Chalice"));
+    ASSERT_NE(chaliceOfferPtr, nullptr);
+    const auto chaliceOffer = *chaliceOfferPtr;
+    const ruled::v1::LegalCastCostGroup *multikickerGroup = nullptr;
+    const ruled::v1::LegalCastCostOption *multikickerOption = nullptr;
+    for (const auto &group : chaliceOffer.cost_choices().cast_cost_groups()) {
+        for (const auto &option : group.options()) {
+            if (option.has_maximum_repetitions() && option.selectable() && option.maximum_repetitions() >= 2) {
+                multikickerGroup = &group;
+                multikickerOption = &option;
+                break;
+            }
+        }
+        if (multikickerOption) {
+            break;
+        }
+    }
+    ASSERT_NE(multikickerGroup, nullptr);
+    ASSERT_NE(multikickerOption, nullptr);
+    ruled::v1::RuledCommand beginChalice;
+    auto *chaliceAnnouncement = beginChalice.mutable_begin_spell_cast()->mutable_announcement();
+    chaliceAnnouncement->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    chaliceAnnouncement->mutable_source()->set_hand_index(chaliceOffer.hand_index());
+    auto *multikicker = chaliceAnnouncement->add_cast_cost_group_selections();
+    multikicker->set_group_index(multikickerGroup->group_index());
+    multikicker->set_option_index(multikickerOption->option_index());
+    multikicker->set_repetitions(2);
+    ASSERT_TRUE(sendAccepted(p1, beginChalice, QStringLiteral("Begin current Everflowing Chalice multikicker x2"),
+                             [&] { return p1.latestLegal.has_pending_spell_cast(); }));
+    const quint64 chaliceTransaction = p1.latestLegal.pending_spell_cast().transaction_id();
+    ASSERT_NE(chaliceTransaction, 0u);
+
+    ruled::v1::RuledCommand previewChalice;
+    auto *chaliceQuery = previewChalice.mutable_preview_payment();
+    chaliceQuery->set_transaction_id(9301);
+    chaliceQuery->set_revision(1);
+    auto *chalicePayment = chaliceQuery->mutable_commit_spell_cast();
+    chalicePayment->set_transaction_id(chaliceTransaction);
+    chalicePayment->mutable_payment()->CopyFrom(p1.latestLegal.pending_spell_cast().payment_preview().selection());
+    chalicePayment->mutable_payment()->mutable_mana()->set_c(4);
+    const int chalicePreviewCount = p1.paymentPreviewCount;
+    const int chaliceObserverPreviewCount = p2.paymentPreviewCount;
+    const int chaliceSpectatorPreviewCount = spectator.paymentPreviewCount;
+    ASSERT_TRUE(sendAccepted(p1, previewChalice, QStringLiteral("preview actual Chalice payment"), [&] {
+        return p1.paymentPreviewCount == chalicePreviewCount + 1 && p1.paymentPreview.valid() &&
+               p1.paymentPreview.complete();
+    }));
+    EXPECT_EQ(p2.paymentPreviewCount, chaliceObserverPreviewCount);
+    EXPECT_EQ(spectator.paymentPreviewCount, chaliceSpectatorPreviewCount);
+    ruled::v1::RuledCommand commitChalice;
+    auto *chaliceCommit = commitChalice.mutable_commit_spell_cast();
+    chaliceCommit->set_transaction_id(chaliceTransaction);
+    chaliceCommit->mutable_payment()->CopyFrom(p1.paymentPreview.selection());
+    chaliceCommit->mutable_restricted_mana()->CopyFrom(p1.paymentPreview.restricted_mana());
+    ASSERT_TRUE(sendAccepted(p1, commitChalice, QStringLiteral("commit actual Chalice multikicker x2"), [&] {
+        return !p1.latestLegal.has_pending_spell_cast() && p1.stackDepth == 1 && p2.stackDepth == 1 &&
+               spectator.stackDepth == 1;
+    }));
+
+    auto passPriority = [&](CapturingDriver &sender, const QString &description) {
+        const int oldPriority = p1.priorityPlayer;
+        const int oldPhase = p1.phase;
+        const int oldActive = p1.activePlayer;
+        const int oldStack = p1.stackDepth;
+        ruled::v1::RuledCommand pass;
+        pass.mutable_pass_priority();
+        return sendAccepted(sender, pass, description, [&] {
+            return p1.priorityPlayer != oldPriority || p1.phase != oldPhase || p1.activePlayer != oldActive ||
+                   p1.stackDepth != oldStack;
+        });
+    };
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+    ASSERT_TRUE(passPriority(p1, QStringLiteral("pass Chalice priority")));
+    ASSERT_EQ(p1.priorityPlayer, p2.myId);
+    ASSERT_TRUE(passPriority(p2, QStringLiteral("resolve actual Everflowing Chalice")));
+    ASSERT_TRUE(waitFor(
+        [&] {
+            return p1.stackDepth == 0 && p2.stackDepth == 0 && spectator.stackDepth == 0 &&
+                   counterCount(p1, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2) &&
+                   counterCount(p2, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2) &&
+                   counterCount(spectator, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2);
+        },
+        10000, "two real Chalice charge counters at every recipient"));
+
+    const auto *ringBeforeUpkeep = permanent(p1, p1.myId, QStringLiteral("replicating_ring"));
+    ASSERT_NE(ringBeforeUpkeep, nullptr);
+    const quint32 ringTriggerSourceObjectId = ringBeforeUpkeep->oid;
+    const quint64 ringTriggerSourceGeneration = ringBeforeUpkeep->generation;
+    const auto ringTriggerSeen = [&] {
+        return std::any_of(p1.events.begin(), p1.events.end(), [&](const ruled::v1::RuledEvent &event) {
+            return event.has_stack_pushed() && event.stack_pushed().is_triggered() &&
+                   event.stack_pushed().has_ability_source() &&
+                   event.stack_pushed().ability_source().object_id() == ringTriggerSourceObjectId &&
+                   event.stack_pushed().ability_source().zone_change_generation() == ringTriggerSourceGeneration;
+        });
+    };
+    auto atRingTurnMain1 = [&] {
+        return p1.activePlayer == p1.myId && p1.phase == ruled::v1::PHASE_ID_MAIN1 && p1.priorityPlayer == p1.myId &&
+               ringTriggerSeen() && counterCount(p1, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1) &&
+               counterCount(p2, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1) &&
+               counterCount(spectator, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1);
+    };
+    QElapsedTimer advance;
+    advance.start();
+    int passCount = 0;
+    bool opponentForestPlayed = false;
+    while (advance.elapsed() < 60000 && passCount < 100 && !atRingTurnMain1()) {
+        pumpClients();
+        if (atRingTurnMain1()) {
+            break;
+        }
+        if (!opponentForestPlayed && p1.activePlayer == p2.myId && p1.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p2.myId) {
+            const auto *forest = p2.handAction(ruled::v1::HAND_ACTION_PLAY_LAND, QStringLiteral("Forest"));
+            ASSERT_NE(forest, nullptr) << "opponent must play its currently offered Forest before cleanup";
+            ASSERT_TRUE(p2.handSizeByPlayer.count(p2.myId));
+            ASSERT_EQ(p2.handSizeByPlayer.at(p2.myId), 8);
+            ruled::v1::RuledCommand playForest;
+            playForest.mutable_play_land()->mutable_source()->set_hand_index(forest->hand_index());
+            ASSERT_TRUE(sendAccepted(p2, playForest, QStringLiteral("play current offered Forest before cleanup"), [&] {
+                return p2.handSizeByPlayer.count(p2.myId) && p2.handSizeByPlayer.at(p2.myId) == 7 &&
+                       permanent(p1, p2.myId, QStringLiteral("forest")) &&
+                       permanent(p2, p2.myId, QStringLiteral("forest")) &&
+                       permanent(spectator, p2.myId, QStringLiteral("forest"));
+            }));
+            opponentForestPlayed = true;
+            ++passCount;
+            continue;
+        }
+        if (p1.priorityPlayer == p1.myId) {
+            ASSERT_TRUE(passPriority(p1, QStringLiteral("advance to Replicating Ring upkeep")));
+            ++passCount;
+        } else if (p1.priorityPlayer == p2.myId) {
+            ASSERT_TRUE(passPriority(p2, QStringLiteral("advance opponent priority for Ring upkeep")));
+            ++passCount;
+        }
+    }
+    ASSERT_TRUE(opponentForestPlayed) << "the intervening opponent first turn must avoid a cleanup discard";
+    ASSERT_TRUE(atRingTurnMain1()) << "Replicating Ring's ordinary upkeep trigger did not reach Main 1";
+
+    const auto *tekPermanent = permanent(p1, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus"));
+    const auto *ringPermanent = permanent(p1, p1.myId, QStringLiteral("replicating_ring"));
+    const auto *chalicePermanent = permanent(p1, p1.myId, QStringLiteral("everflowing_chalice"));
+    ASSERT_NE(tekPermanent, nullptr);
+    ASSERT_NE(ringPermanent, nullptr);
+    ASSERT_NE(chalicePermanent, nullptr);
+    struct PhysicalReceipt
+    {
+        quint32 objectId = 0;
+        quint64 generation = 0;
+        int physicalCardId = -1;
+    };
+    auto physicalReceipt = [&](const CapturingDriver &client, const QString &cardId) -> std::optional<PhysicalReceipt> {
+        const auto *object = permanent(client, p1.myId, cardId);
+        if (!object) {
+            return std::nullopt;
+        }
+        const auto physical = client.serverCardByEngineOid.find(object->oid);
+        if (physical == client.serverCardByEngineOid.end()) {
+            return std::nullopt;
+        }
+        return PhysicalReceipt{object->oid, object->generation, physical->second};
+    };
+    auto currentBattlefieldObjectForReceipt =
+        [&](const QString &cardId, const PhysicalReceipt &receipt) -> std::optional<ruled::v1::BattlefieldObject> {
+        const auto *observed = permanent(p1, p1.myId, cardId);
+        if (!observed || observed->oid != receipt.objectId || observed->generation != receipt.generation) {
+            return std::nullopt;
+        }
+        for (auto batch = p1.batches.rbegin(); batch != p1.batches.rend(); ++batch) {
+            for (auto event = batch->events().rbegin(); event != batch->events().rend(); ++event) {
+                if (!event->has_zone_view() || event->zone_view().battlefields_unchanged()) {
+                    continue;
+                }
+                const auto &zoneView = event->zone_view();
+                const auto owner = std::find_if(zoneView.per_player().begin(), zoneView.per_player().end(),
+                                                [&](const auto &player) { return player.player_id() == p1.myId; });
+                if (owner == zoneView.per_player().end()) {
+                    return std::nullopt;
+                }
+                const auto object =
+                    std::find_if(owner->battlefield_objects().begin(), owner->battlefield_objects().end(),
+                                 [&](const auto &candidate) { return candidate.object_id() == receipt.objectId; });
+                if (object == owner->battlefield_objects().end()) {
+                    return std::nullopt;
+                }
+                return *object;
+            }
+        }
+        return std::nullopt;
+    };
+    auto expectSharedReceipt = [&](const QString &cardId) -> ::testing::AssertionResult {
+        const auto actor = physicalReceipt(p1, cardId);
+        const auto opponent = physicalReceipt(p2, cardId);
+        const auto watcher = physicalReceipt(spectator, cardId);
+        if (!actor || !opponent || !watcher) {
+            return ::testing::AssertionFailure() << cardId.toStdString() << ": missing recipient physical-card binding";
+        }
+        const auto same = [&](const PhysicalReceipt &receipt) {
+            return receipt.objectId == actor->objectId && receipt.generation == actor->generation &&
+                   receipt.physicalCardId == actor->physicalCardId;
+        };
+        if (!same(*opponent) || !same(*watcher)) {
+            return ::testing::AssertionFailure()
+                   << cardId.toStdString() << ": recipient ObjectId/generation/physical-card receipts differ";
+        }
+        return ::testing::AssertionSuccess();
+    };
+    ASSERT_TRUE(expectSharedReceipt(QStringLiteral("tekuthal,_inquiry_dominus")));
+    ASSERT_TRUE(expectSharedReceipt(QStringLiteral("replicating_ring")));
+    ASSERT_TRUE(expectSharedReceipt(QStringLiteral("everflowing_chalice")));
+    const auto tekReceipt = *physicalReceipt(p1, QStringLiteral("tekuthal,_inquiry_dominus"));
+    const auto ringReceipt = *physicalReceipt(p1, QStringLiteral("replicating_ring"));
+    const auto chaliceReceipt = *physicalReceipt(p1, QStringLiteral("everflowing_chalice"));
+    const auto tekBattlefield =
+        currentBattlefieldObjectForReceipt(QStringLiteral("tekuthal,_inquiry_dominus"), tekReceipt);
+    ASSERT_TRUE(tekBattlefield.has_value());
+    const auto *currentTekPermanent = permanent(p1, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus"));
+    ASSERT_NE(currentTekPermanent, nullptr);
+    const auto tekAbilityIt =
+        std::find_if(tekBattlefield->activated_abilities().begin(), tekBattlefield->activated_abilities().end(),
+                     [](const auto &ability) {
+                         return ability.activatable() && !ability.is_mana_ability() && !ability.mana_cost().empty();
+                     });
+    ASSERT_NE(tekAbilityIt, tekBattlefield->activated_abilities().end());
+    const auto tekAbility = *tekAbilityIt;
+    const quint32 tekObjectId = tekReceipt.objectId;
+    const quint64 tekGeneration = tekReceipt.generation;
+    const auto tekSourceZone = ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD;
+    const quint32 tekAbilityIndex = tekAbility.ability_index();
+    ASSERT_NE(std::find(currentTekPermanent->abilityIndices.begin(), currentTekPermanent->abilityIndices.end(),
+                        tekAbilityIndex),
+              currentTekPermanent->abilityIndices.end());
+    const quint64 tekAbilityKey = (static_cast<quint64>(tekObjectId) << 32) | tekAbilityIndex;
+    EXPECT_EQ(tekObjectId, tekReceipt.objectId);
+    EXPECT_EQ(tekGeneration, tekReceipt.generation);
+    const auto costChoicesIt = p1.latestLegal.cost_choices_by_ability().find(tekAbilityKey);
+    ASSERT_NE(costChoicesIt, p1.latestLegal.cost_choices_by_ability().end());
+    const auto counterGroupChoiceIt =
+        std::find_if(costChoicesIt->second.choices().begin(), costChoicesIt->second.choices().end(),
+                     [](const ruled::v1::LegalCostChoice &choice) { return choice.has_counter_removal_group(); });
+    ASSERT_NE(counterGroupChoiceIt, costChoicesIt->second.choices().end());
+    const auto counterGroupChoice = *counterGroupChoiceIt;
+    ASSERT_EQ(counterGroupChoice.counter_removal_group().required_count(), 3u);
+
+    const QString manaCost = QString::fromStdString(tekAbility.mana_cost());
+    ruled::v1::RuledCommand beginTek;
+    auto *tekBegin = beginTek.mutable_begin_ability_activation();
+    tekBegin->set_source_object_id(tekObjectId);
+    tekBegin->set_source_zone(tekSourceZone);
+    tekBegin->set_expected_zone_change_generation(tekGeneration);
+    tekBegin->set_ability_index(tekAbilityIndex);
+    auto *counterSelection = tekBegin->add_cost_selections();
+    counterSelection->set_cost_index(counterGroupChoice.cost_index());
+    auto *counterContribution = counterSelection->mutable_counter_removal_group();
+    const auto &counterCandidates = counterGroupChoice.counter_removal_group().candidates();
+    auto addCounterContribution = [&](quint32 objectId, quint32 count) -> bool {
+        const auto candidate =
+            std::find_if(counterCandidates.begin(), counterCandidates.end(),
+                         [objectId](const auto &entry) { return entry.object().object_id() == objectId; });
+        if (candidate == counterCandidates.end()) {
+            return false;
+        }
+        const auto option = std::find_if(candidate->options().begin(), candidate->options().end(),
+                                         [count](const auto &entry) { return entry.available_count() >= count; });
+        if (option == candidate->options().end()) {
+            return false;
+        }
+        auto *contribution = counterContribution->add_contributions();
+        contribution->mutable_object()->CopyFrom(candidate->object());
+        contribution->set_option_id(option->option_id());
+        contribution->set_count(count);
+        return true;
+    };
+    ASSERT_TRUE(addCounterContribution(ringPermanent->oid, 1));
+    ASSERT_TRUE(addCounterContribution(chalicePermanent->oid, 2));
+    ASSERT_EQ(counterContribution->contributions_size(), 2);
+    EXPECT_EQ(counterContribution->contributions(0).object().zone_change_generation(), ringPermanent->generation);
+    EXPECT_EQ(counterContribution->contributions(1).object().zone_change_generation(), chalicePermanent->generation);
+    quint32 pipIndex = 0;
+    quint32 flexPaymentCount = 0;
+    for (int i = 0; i < manaCost.size();) {
+        if (manaCost.at(i) != QLatin1Char('{')) {
+            ++i;
+            continue;
+        }
+        const int close = manaCost.indexOf(QLatin1Char('}'), i + 1);
+        ASSERT_GE(close, 0) << manaCost.toStdString();
+        const QString pip = manaCost.mid(i + 1, close - i - 1);
+        if (pip.endsWith(QStringLiteral("/P"))) {
+            auto *flex = tekBegin->add_flex_payments();
+            flex->set_pip_index(pipIndex);
+            flex->set_pay_life(true);
+            ++flexPaymentCount;
+        }
+        ++pipIndex;
+        i = close + 1;
+    }
+    ASSERT_EQ(flexPaymentCount, 2u) << manaCost.toStdString();
+
+    const auto acceptedCounterSelection = tekBegin->cost_selections(0).SerializeAsString();
+    const auto acceptedFlexPayments = tekBegin->flex_payments_size();
+    auto findPendingBatch = [&](const CapturingDriver &client, auto firstBatch, int playerId,
+                                quint64 transactionId) -> const ruled::v1::RuledEventBatch * {
+        for (auto batchIndex = firstBatch; batchIndex < client.batches.size(); ++batchIndex) {
+            const auto &batch = client.batches[batchIndex];
+            const auto legal = batch.legal_by_player().find(playerId);
+            if (legal != batch.legal_by_player().end() && legal->second.has_pending_ability_activation() &&
+                legal->second.pending_ability_activation().transaction_id() == transactionId) {
+                return &batch;
+            }
+        }
+        return nullptr;
+    };
+    auto rawLifeChangedSince = [](const CapturingDriver &client, auto firstBatch, int playerId, auto matches) {
+        for (auto batchIndex = firstBatch; batchIndex < client.batches.size(); ++batchIndex) {
+            for (const auto &event : client.batches[batchIndex].events()) {
+                if (event.has_life_changed()) {
+                    const auto &lifeChanged = event.life_changed();
+                    if (lifeChanged.player_id() == playerId && matches(lifeChanged)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    };
+    const auto anyLifeChange = [](const auto &) { return true; };
+    const auto expectedCommittedLifeChange = [](const auto &lifeChanged) {
+        return lifeChanged.delta() == -4 && lifeChanged.new_total() == 16;
+    };
+    const auto actorLifeBeforeBegin = p1.lifeByPlayer;
+    const auto opponentLifeBeforeBegin = p2.lifeByPlayer;
+    const auto spectatorLifeBeforeBegin = spectator.lifeByPlayer;
+    const auto actorBatchOffsetBeforeBegin = p1.batches.size();
+    const auto opponentBatchOffsetBeforeBegin = p2.batches.size();
+    const auto spectatorBatchOffsetBeforeBegin = spectator.batches.size();
+    const auto actorPreviewOffsetBeforeBegin = p1.paymentPreviews.size();
+    const auto opponentPreviewOffsetBeforeBegin = p2.paymentPreviews.size();
+    const auto spectatorPreviewOffsetBeforeBegin = spectator.paymentPreviews.size();
+    const quint64 actorVersionBeforeBegin = p1.stateVersion;
+    const quint64 opponentVersionBeforeBegin = p2.stateVersion;
+    const quint64 spectatorVersionBeforeBegin = spectator.stateVersion;
+    ASSERT_TRUE(sendAccepted(p1, beginTek, QStringLiteral("Begin current Tekuthal grouped counter activation"), [&] {
+        if (!p1.latestLegal.has_pending_ability_activation() ||
+            p1.latestLegal.pending_ability_activation().stage() != ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT) {
+            return false;
+        }
+        const auto transactionId = p1.latestLegal.pending_ability_activation().transaction_id();
+        const auto *actorBatch = findPendingBatch(p1, actorBatchOffsetBeforeBegin, p1.myId, transactionId);
+        const auto *opponentBatch = findPendingBatch(p2, opponentBatchOffsetBeforeBegin, p2.myId, transactionId);
+        return p1.stateVersion > actorVersionBeforeBegin && actorBatch && opponentBatch &&
+               p2.stateVersion > opponentVersionBeforeBegin &&
+               spectator.batches.size() > spectatorBatchOffsetBeforeBegin &&
+               spectator.stateVersion > spectatorVersionBeforeBegin &&
+               p1.paymentPreviews.size() == actorPreviewOffsetBeforeBegin &&
+               p2.paymentPreviews.size() == opponentPreviewOffsetBeforeBegin &&
+               spectator.paymentPreviews.size() == spectatorPreviewOffsetBeforeBegin;
+    }));
+    const quint64 activationTransaction = p1.latestLegal.pending_ability_activation().transaction_id();
+    const auto originalPending = p1.latestLegal.pending_ability_activation();
+    ASSERT_NE(activationTransaction, 0u);
+    EXPECT_EQ(p1.lifeByPlayer, actorLifeBeforeBegin);
+    EXPECT_EQ(p2.lifeByPlayer, opponentLifeBeforeBegin);
+    EXPECT_EQ(spectator.lifeByPlayer, spectatorLifeBeforeBegin);
+    EXPECT_FALSE(rawLifeChangedSince(p1, actorBatchOffsetBeforeBegin, p1.myId, anyLifeChange));
+    EXPECT_FALSE(rawLifeChangedSince(p2, opponentBatchOffsetBeforeBegin, p1.myId, anyLifeChange));
+    EXPECT_FALSE(rawLifeChangedSince(spectator, spectatorBatchOffsetBeforeBegin, p1.myId, anyLifeChange));
+    EXPECT_TRUE(counterCount(p1, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1));
+    EXPECT_TRUE(counterCount(p1, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2));
+
+    const auto *actorBatch = findPendingBatch(p1, actorBatchOffsetBeforeBegin, p1.myId, activationTransaction);
+    ASSERT_NE(actorBatch, nullptr);
+    EXPECT_EQ(actorBatch->legal_by_player().size(), 1);
+    EXPECT_NE(actorBatch->legal_by_player().find(p1.myId), actorBatch->legal_by_player().end());
+    const auto actorLegal = actorBatch->legal_by_player().find(p1.myId);
+    ASSERT_NE(actorLegal, actorBatch->legal_by_player().end());
+    const auto &actorPending = actorLegal->second.pending_ability_activation();
+    ASSERT_EQ(actorPending.cost_selections_size(), 1);
+    EXPECT_EQ(actorPending.cost_selections(0).SerializeAsString(), acceptedCounterSelection);
+    EXPECT_EQ(actorPending.flex_payments_size(), acceptedFlexPayments);
+    EXPECT_EQ(actorPending.flex_payments(0).pip_index(), originalPending.flex_payments(0).pip_index());
+    EXPECT_TRUE(actorPending.flex_payments(0).pay_life());
+    EXPECT_EQ(actorPending.flex_payments(1).pip_index(), originalPending.flex_payments(1).pip_index());
+    EXPECT_TRUE(actorPending.flex_payments(1).pay_life());
+    EXPECT_TRUE(actorPending.has_payment_preview());
+    EXPECT_EQ(actorPending.locked_total_cost(), originalPending.locked_total_cost());
+    EXPECT_FALSE(actorPending.locked_total_cost().empty());
+    EXPECT_EQ(actorPending.payment_preview().SerializeAsString(),
+              originalPending.payment_preview().SerializeAsString());
+
+    auto checkRedactedRecipient = [&](const CapturingDriver &client, auto firstBatch, int localPlayerId,
+                                      bool isSpectator, bool requirePublicSnapshot) {
+        EXPECT_GT(client.batches.size(), firstBatch);
+        bool sawPublicSnapshot = false;
+        for (auto batchIndex = firstBatch; batchIndex < client.batches.size(); ++batchIndex) {
+            const auto &batch = client.batches[batchIndex];
+            EXPECT_FALSE(batch.has_payment_preview()) << "standalone payment replies are requester-only";
+            if (isSpectator) {
+                EXPECT_TRUE(batch.legal_by_player().empty());
+            }
+            for (const auto &[legalPlayerId, legal] : batch.legal_by_player()) {
+                if (isSpectator) {
+                    ADD_FAILURE() << "spectator received a recipient-private legal entry";
+                    continue;
+                }
+                EXPECT_EQ(legalPlayerId, localPlayerId);
+                EXPECT_EQ(legal.cost_choices_by_ability().count(tekAbilityKey), 0u)
+                    << "Tekuthal cost offers are private to the actor";
+                const auto &pending = legal.pending_ability_activation();
+                if (!legal.has_pending_ability_activation() || pending.transaction_id() != activationTransaction) {
+                    continue;
+                }
+                sawPublicSnapshot = true;
+                EXPECT_EQ(pending.stage(), ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT);
+                EXPECT_EQ(pending.actor_player_id(), p1.myId);
+                EXPECT_EQ(pending.source_object_id(), tekObjectId);
+                EXPECT_EQ(pending.source_zone(), tekSourceZone);
+                EXPECT_EQ(pending.source_zone_change_generation(), tekGeneration);
+                EXPECT_TRUE(pending.locked_total_cost().empty());
+                EXPECT_TRUE(pending.eligible_restricted_mana_group_ids().empty());
+                EXPECT_TRUE(pending.cost_selections().empty());
+                EXPECT_TRUE(pending.flex_payments().empty());
+                EXPECT_FALSE(pending.has_payment_preview());
+            }
+        }
+        if (requirePublicSnapshot) {
+            EXPECT_TRUE(sawPublicSnapshot) << "the other seated client receives a fresh public activation shell";
+        }
+    };
+    const auto *opponentBatch = findPendingBatch(p2, opponentBatchOffsetBeforeBegin, p2.myId, activationTransaction);
+    ASSERT_NE(opponentBatch, nullptr);
+    EXPECT_EQ(opponentBatch->legal_by_player().size(), 1);
+    const auto opponentLegal = opponentBatch->legal_by_player().find(p2.myId);
+    ASSERT_NE(opponentLegal, opponentBatch->legal_by_player().end());
+    EXPECT_TRUE(opponentLegal->second.has_pending_ability_activation());
+    EXPECT_EQ(opponentLegal->second.pending_ability_activation().transaction_id(), activationTransaction);
+    checkRedactedRecipient(p2, opponentBatchOffsetBeforeBegin, p2.myId, false, true);
+    checkRedactedRecipient(spectator, spectatorBatchOffsetBeforeBegin, spectator.myId, true, false);
+
+    const auto currentRingBattlefield =
+        currentBattlefieldObjectForReceipt(QStringLiteral("replicating_ring"), ringReceipt);
+    ASSERT_TRUE(currentRingBattlefield.has_value());
+    const auto *currentRingPermanent = permanent(p1, p1.myId, QStringLiteral("replicating_ring"));
+    ASSERT_NE(currentRingPermanent, nullptr);
+    const auto currentRingAbilityIt =
+        std::find_if(currentRingBattlefield->activated_abilities().begin(),
+                     currentRingBattlefield->activated_abilities().end(), [](const auto &ability) {
+                         return ability.activatable() && ability.is_mana_ability() && !ability.mana_produced().empty();
+                     });
+    ASSERT_NE(currentRingAbilityIt, currentRingBattlefield->activated_abilities().end());
+    const auto currentRingAbility = *currentRingAbilityIt;
+    ASSERT_NE(std::find(currentRingPermanent->abilityIndices.begin(), currentRingPermanent->abilityIndices.end(),
+                        currentRingAbility.ability_index()),
+              currentRingPermanent->abilityIndices.end());
+    const auto productionOptions =
+        QString::fromStdString(currentRingAbility.mana_produced()).split(QLatin1Char('/'), Qt::SkipEmptyParts);
+    int blueOptionIndex = -1;
+    for (int i = 0; i < productionOptions.size(); ++i) {
+        QString option = productionOptions.at(i).trimmed();
+        option.remove(QLatin1Char('{'));
+        option.remove(QLatin1Char('}'));
+        if (option == QStringLiteral("U")) {
+            blueOptionIndex = i;
+            break;
+        }
+    }
+    ASSERT_GE(blueOptionIndex, 0) << currentRingAbility.mana_produced();
+    ruled::v1::RuledCommand ringMana;
+    auto *ringActivation = ringMana.mutable_activate_ability();
+    ringActivation->set_source_object_id(ringReceipt.objectId);
+    ringActivation->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD);
+    ringActivation->set_expected_zone_change_generation(ringReceipt.generation);
+    ringActivation->set_ability_index(currentRingAbility.ability_index());
+    ringActivation->set_mana_option_index(static_cast<quint32>(blueOptionIndex));
+    const auto actorLifeBeforeRing = p1.lifeByPlayer;
+    const auto opponentLifeBeforeRing = p2.lifeByPlayer;
+    const auto spectatorLifeBeforeRing = spectator.lifeByPlayer;
+    const auto actorBatchOffsetBeforeRing = p1.batches.size();
+    const auto opponentBatchOffsetBeforeRing = p2.batches.size();
+    const auto spectatorBatchOffsetBeforeRing = spectator.batches.size();
+    const quint64 actorVersionBeforeRing = p1.stateVersion;
+    const quint64 opponentVersionBeforeRing = p2.stateVersion;
+    const quint64 spectatorVersionBeforeRing = spectator.stateVersion;
+    ASSERT_TRUE(sendAccepted(p1, ringMana, QStringLiteral("activate current Ring blue-mana offer"), [&] {
+        const auto *p1Ring = permanent(p1, p1.myId, QStringLiteral("replicating_ring"));
+        const auto *p2Ring = permanent(p2, p1.myId, QStringLiteral("replicating_ring"));
+        const auto *spectatorRing = permanent(spectator, p1.myId, QStringLiteral("replicating_ring"));
+        return p1.myPool.u == 1 && p1.latestLegal.has_pending_ability_activation() &&
+               p1.latestLegal.pending_ability_activation().transaction_id() == activationTransaction && p1Ring &&
+               p2Ring && spectatorRing && p1Ring->tapped && p2Ring->tapped && spectatorRing->tapped &&
+               p1.stateVersion > actorVersionBeforeRing &&
+               findPendingBatch(p1, actorBatchOffsetBeforeRing, p1.myId, activationTransaction) &&
+               p2.stateVersion > opponentVersionBeforeRing &&
+               findPendingBatch(p2, opponentBatchOffsetBeforeRing, p2.myId, activationTransaction) &&
+               spectator.batches.size() > spectatorBatchOffsetBeforeRing &&
+               spectator.stateVersion > spectatorVersionBeforeRing;
+    }));
+    const auto pendingAfterMana = p1.latestLegal.pending_ability_activation();
+    EXPECT_EQ(pendingAfterMana.cost_selections(0).SerializeAsString(), acceptedCounterSelection);
+    EXPECT_EQ(pendingAfterMana.flex_payments_size(), acceptedFlexPayments);
+    EXPECT_EQ(pendingAfterMana.flex_payments(0).pip_index(), originalPending.flex_payments(0).pip_index());
+    EXPECT_EQ(pendingAfterMana.flex_payments(1).pip_index(), originalPending.flex_payments(1).pip_index());
+    EXPECT_EQ(p1.lifeByPlayer, actorLifeBeforeRing);
+    EXPECT_EQ(p2.lifeByPlayer, opponentLifeBeforeRing);
+    EXPECT_EQ(spectator.lifeByPlayer, spectatorLifeBeforeRing);
+    EXPECT_FALSE(rawLifeChangedSince(p1, actorBatchOffsetBeforeRing, p1.myId, anyLifeChange));
+    EXPECT_FALSE(rawLifeChangedSince(p2, opponentBatchOffsetBeforeRing, p1.myId, anyLifeChange));
+    EXPECT_FALSE(rawLifeChangedSince(spectator, spectatorBatchOffsetBeforeRing, p1.myId, anyLifeChange));
+    EXPECT_TRUE(counterCount(p1, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1));
+    EXPECT_TRUE(counterCount(p1, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2));
+    checkRedactedRecipient(p2, opponentBatchOffsetBeforeRing, p2.myId, false, true);
+    checkRedactedRecipient(spectator, spectatorBatchOffsetBeforeRing, spectator.myId, true, false);
+
+    const int activationPreviewCount = p1.paymentPreviewCount;
+    const int activationObserverPreviewCount = p2.paymentPreviewCount;
+    const int activationSpectatorPreviewCount = spectator.paymentPreviewCount;
+    const auto actorBatchOffsetBeforePreview = p1.batches.size();
+    const auto opponentBatchOffsetBeforePreview = p2.batches.size();
+    const auto spectatorBatchOffsetBeforePreview = spectator.batches.size();
+    const auto actorPreviewOffsetBeforePreview = p1.paymentPreviews.size();
+    const auto opponentPreviewOffsetBeforePreview = p2.paymentPreviews.size();
+    const auto spectatorPreviewOffsetBeforePreview = spectator.paymentPreviews.size();
+    const quint64 actorVersionBeforePreview = p1.stateVersion;
+    const quint64 opponentVersionBeforePreview = p2.stateVersion;
+    const quint64 spectatorVersionBeforePreview = spectator.stateVersion;
+    ruled::v1::RuledCommand previewTek;
+    auto *tekQuery = previewTek.mutable_preview_payment();
+    tekQuery->set_transaction_id(9302);
+    tekQuery->set_revision(1);
+    auto *previewActivation = tekQuery->mutable_commit_ability_activation();
+    previewActivation->set_transaction_id(activationTransaction);
+    previewActivation->set_expected_revision(pendingAfterMana.revision());
+    previewActivation->mutable_payment()->CopyFrom(pendingAfterMana.payment_preview().selection());
+    previewActivation->mutable_payment()->mutable_mana()->set_u(1);
+    ASSERT_EQ(previewActivation->flex_payments_size(), 0);
+    ASSERT_TRUE(sendAccepted(p1, previewTek, QStringLiteral("preview original Tekuthal activation payment"), [&] {
+        return p1.paymentPreviewCount == activationPreviewCount + 1 && p1.paymentPreview.valid() &&
+               p1.paymentPreview.complete() && p1.paymentPreview.selection().mana().u() == 1 &&
+               p1.paymentPreview.selection().mana().c() == 0 &&
+               p1.paymentPreviews.size() == actorPreviewOffsetBeforePreview + 1 &&
+               p1.batches.size() == actorBatchOffsetBeforePreview &&
+               p2.batches.size() == opponentBatchOffsetBeforePreview &&
+               spectator.batches.size() == spectatorBatchOffsetBeforePreview &&
+               p2.paymentPreviews.size() == opponentPreviewOffsetBeforePreview &&
+               spectator.paymentPreviews.size() == spectatorPreviewOffsetBeforePreview &&
+               p1.stateVersion == actorVersionBeforePreview && p2.stateVersion == opponentVersionBeforePreview &&
+               spectator.stateVersion == spectatorVersionBeforePreview;
+    }));
+    EXPECT_EQ(p2.paymentPreviewCount, activationObserverPreviewCount);
+    EXPECT_EQ(spectator.paymentPreviewCount, activationSpectatorPreviewCount);
+    const auto &rawPaymentPreview = p1.paymentPreviews[actorPreviewOffsetBeforePreview];
+    ASSERT_TRUE(rawPaymentPreview.has_payment_preview());
+    EXPECT_TRUE(rawPaymentPreview.events().empty());
+    EXPECT_TRUE(rawPaymentPreview.legal_by_player().empty());
+    EXPECT_EQ(rawPaymentPreview.payment_preview().selection().mana().u(), 1u);
+    EXPECT_EQ(rawPaymentPreview.payment_preview().selection().mana().c(), 0u);
+    EXPECT_EQ(p2.paymentPreviews.size(), opponentPreviewOffsetBeforePreview);
+    EXPECT_EQ(spectator.paymentPreviews.size(), spectatorPreviewOffsetBeforePreview);
+
+    ruled::v1::RuledCommand commitTek;
+    auto *tekCommit = commitTek.mutable_commit_ability_activation();
+    tekCommit->set_transaction_id(activationTransaction);
+    tekCommit->set_expected_revision(pendingAfterMana.revision());
+    tekCommit->mutable_payment()->CopyFrom(p1.paymentPreview.selection());
+    tekCommit->mutable_restricted_mana()->CopyFrom(p1.paymentPreview.restricted_mana());
+    ASSERT_EQ(tekCommit->flex_payments_size(), 0);
+    const auto actorBatchOffsetBeforeCommit = p1.batches.size();
+    const auto opponentBatchOffsetBeforeCommit = p2.batches.size();
+    const auto spectatorBatchOffsetBeforeCommit = spectator.batches.size();
+    ASSERT_TRUE(sendAccepted(p1, commitTek, QStringLiteral("commit original Tekuthal activation"), [&] {
+        const auto *p1Ring = permanent(p1, p1.myId, QStringLiteral("replicating_ring"));
+        const auto *p1Chalice = permanent(p1, p1.myId, QStringLiteral("everflowing_chalice"));
+        const auto *p2Ring = permanent(p2, p1.myId, QStringLiteral("replicating_ring"));
+        const auto *p2Chalice = permanent(p2, p1.myId, QStringLiteral("everflowing_chalice"));
+        const auto *spectatorRing = permanent(spectator, p1.myId, QStringLiteral("replicating_ring"));
+        const auto *spectatorChalice = permanent(spectator, p1.myId, QStringLiteral("everflowing_chalice"));
+        const auto actorLife = p1.lifeByPlayer.find(p1.myId);
+        const auto opponentLife = p2.lifeByPlayer.find(p1.myId);
+        const auto spectatorLife = spectator.lifeByPlayer.find(p1.myId);
+        return !p1.latestLegal.has_pending_ability_activation() && p1.stackDepth == 1 && p2.stackDepth == 1 &&
+               spectator.stackDepth == 1 && actorLife != p1.lifeByPlayer.end() && actorLife->second == 16 &&
+               opponentLife != p2.lifeByPlayer.end() && opponentLife->second == 16 &&
+               spectatorLife != spectator.lifeByPlayer.end() && spectatorLife->second == 16 &&
+               rawLifeChangedSince(p1, actorBatchOffsetBeforeCommit, p1.myId, expectedCommittedLifeChange) &&
+               rawLifeChangedSince(p2, opponentBatchOffsetBeforeCommit, p1.myId, expectedCommittedLifeChange) &&
+               rawLifeChangedSince(spectator, spectatorBatchOffsetBeforeCommit, p1.myId, expectedCommittedLifeChange) &&
+               p1Ring && p1Chalice && p2Ring && p2Chalice && spectatorRing && spectatorChalice &&
+               counterCount(p1, QStringLiteral("replicating_ring"), QStringLiteral("night"), 0) &&
+               counterCount(p1, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 0) &&
+               counterCount(p2, QStringLiteral("replicating_ring"), QStringLiteral("night"), 0) &&
+               counterCount(p2, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 0) &&
+               counterCount(spectator, QStringLiteral("replicating_ring"), QStringLiteral("night"), 0) &&
+               counterCount(spectator, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 0);
+    }));
+    ASSERT_TRUE(rawLifeChangedSince(p1, actorBatchOffsetBeforeCommit, p1.myId, expectedCommittedLifeChange));
+    ASSERT_TRUE(rawLifeChangedSince(p2, opponentBatchOffsetBeforeCommit, p1.myId, expectedCommittedLifeChange));
+    ASSERT_TRUE(rawLifeChangedSince(spectator, spectatorBatchOffsetBeforeCommit, p1.myId, expectedCommittedLifeChange));
+    EXPECT_EQ(p1.lifeByPlayer.at(p1.myId), 16);
+    EXPECT_EQ(p2.lifeByPlayer.at(p1.myId), 16);
+    EXPECT_EQ(spectator.lifeByPlayer.at(p1.myId), 16);
+
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+    ASSERT_TRUE(passPriority(p1, QStringLiteral("pass Tekuthal activation priority")));
+    ASSERT_EQ(p1.priorityPlayer, p2.myId);
+    ASSERT_TRUE(passPriority(p2, QStringLiteral("resolve Tekuthal activation")));
+    const QString indestructibleCounter = QStringLiteral("1 indestructible counter(s)");
+    auto receiptMatches = [&](const CapturingDriver &client, const QString &cardId, const PhysicalReceipt &expected) {
+        const auto current = physicalReceipt(client, cardId);
+        return current && current->objectId == expected.objectId && current->generation == expected.generation &&
+               current->physicalCardId == expected.physicalCardId;
+    };
+    auto allRecipientsMatch = [&](const QString &cardId, const PhysicalReceipt &expected) {
+        return receiptMatches(p1, cardId, expected) && receiptMatches(p2, cardId, expected) &&
+               receiptMatches(spectator, cardId, expected);
+    };
+    ASSERT_TRUE(waitFor(
+        [&] {
+            const auto *p1Tek = permanent(p1, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus"));
+            const auto *p2Tek = permanent(p2, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus"));
+            const auto *spectatorTek = permanent(spectator, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus"));
+            if (!p1Tek || !p2Tek || !spectatorTek || !p1.lifeByPlayer.count(p1.myId) ||
+                !p2.lifeByPlayer.count(p1.myId) || !spectator.lifeByPlayer.count(p1.myId)) {
+                return false;
+            }
+            return p1.stackDepth == 0 && p2.stackDepth == 0 && spectator.stackDepth == 0 && p1Tek->indestructible &&
+                   p2Tek->indestructible && spectatorTek->indestructible &&
+                   p1Tek->countersAnnotation.contains(indestructibleCounter) &&
+                   p2Tek->countersAnnotation.contains(indestructibleCounter) &&
+                   spectatorTek->countersAnnotation.contains(indestructibleCounter) &&
+                   p1Tek->oid == tekReceipt.objectId && p2Tek->oid == tekReceipt.objectId &&
+                   spectatorTek->oid == tekReceipt.objectId && p1Tek->generation == tekReceipt.generation &&
+                   p2Tek->generation == tekReceipt.generation && spectatorTek->generation == tekReceipt.generation &&
+                   p1.lifeByPlayer.at(p1.myId) == 16 && p2.lifeByPlayer.at(p1.myId) == 16 &&
+                   spectator.lifeByPlayer.at(p1.myId) == 16 &&
+                   counterCount(p1, QStringLiteral("replicating_ring"), QStringLiteral("night"), 0) &&
+                   counterCount(p2, QStringLiteral("replicating_ring"), QStringLiteral("night"), 0) &&
+                   counterCount(spectator, QStringLiteral("replicating_ring"), QStringLiteral("night"), 0) &&
+                   counterCount(p1, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 0) &&
+                   counterCount(p2, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 0) &&
+                   counterCount(spectator, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 0) &&
+                   allRecipientsMatch(QStringLiteral("tekuthal,_inquiry_dominus"), tekReceipt) &&
+                   allRecipientsMatch(QStringLiteral("replicating_ring"), ringReceipt) &&
+                   allRecipientsMatch(QStringLiteral("everflowing_chalice"), chaliceReceipt);
+        },
+        15000, "resolved Tekuthal state, counters, and physical receipts at every recipient"));
+    ASSERT_TRUE(expectSharedReceipt(QStringLiteral("tekuthal,_inquiry_dominus")));
+    ASSERT_TRUE(expectSharedReceipt(QStringLiteral("replicating_ring")));
+    ASSERT_TRUE(expectSharedReceipt(QStringLiteral("everflowing_chalice")));
+    for (const auto *client : {&p1, &p2, &spectator}) {
+        const auto *tek = permanent(*client, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus"));
+        ASSERT_NE(tek, nullptr);
+        EXPECT_TRUE(tek->indestructible);
+        EXPECT_TRUE(tek->countersAnnotation.contains(indestructibleCounter)) << tek->countersAnnotation.toStdString();
+        EXPECT_TRUE(counterCount(*client, QStringLiteral("replicating_ring"), QStringLiteral("night"), 0));
+        EXPECT_TRUE(counterCount(*client, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 0));
+        EXPECT_EQ(client->stackDepth, 0);
+    }
+    EXPECT_EQ(p1.lifeByPlayer.at(p1.myId), 16);
+    EXPECT_EQ(p2.lifeByPlayer.at(p1.myId), 16);
+    EXPECT_EQ(spectator.lifeByPlayer.at(p1.myId), 16);
+}
+
+} // namespace
+namespace
+{
+TEST_F(RuledE2ESmokeTest, TekuthalGroupedPaymentSourceSacrificeKeepsOriginalReceiptAndCancelsWithoutUndo)
+{
+    int completedCommitBranches = 0;
+    int completedCancelBranches = 0;
+    for (const bool doCommit : {true, false}) {
+        SCOPED_TRACE(doCommit ? "Tekuthal payment commit" : "Tekuthal payment cancel");
+        ASSERT_TRUE(resumePlanPath.isEmpty());
+        const auto started = startServers();
+        ASSERT_TRUE(started) << started.message();
+        if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+            GTEST_SKIP() << std::string(started.message()).substr(5);
+        }
+
+        class CapturingDriver : public OpeningDriver
+        {
+        public:
+            CapturingDriver(bool starts, QString name, QStringList *output)
+                : OpeningDriver(starts, std::move(name), output)
+            {
+            }
+            std::vector<ruled::v1::RuledEventBatch> batches;
+            std::vector<ruled::v1::RuledEventBatch> paymentPreviews;
+            std::vector<ruled::v1::RuledEvent> events;
+
+            void onBatchBegin(const ruled::v1::RuledEventBatch &batch) override
+            {
+                batches.push_back(batch);
+            }
+            void onPaymentPreview(const ruled::v1::RuledEventBatch &batch) override
+            {
+                paymentPreviews.push_back(batch);
+                OpeningDriver::onPaymentPreview(batch);
+            }
+            void onRuledEvent(const ruled::v1::RuledEvent &event) override
+            {
+                OpeningDriver::onRuledEvent(event);
+                events.push_back(event);
+            }
+        };
+
+        CapturingDriver p1(true, QStringLiteral("tekuthal-source-sac-p1"), &transcript);
+        CapturingDriver p2(false, QStringLiteral("tekuthal-source-sac-p2"), &transcript);
+        ASSERT_TRUE(p1.loginAndJoinRoom());
+        ASSERT_TRUE(p2.loginAndJoinRoom());
+
+        auto pumpClients = [&] {
+            p1.pump(25);
+            p2.pump(25);
+        };
+        auto waitFor = [&](auto predicate, int timeoutMs, const char *what) -> ::testing::AssertionResult {
+            QElapsedTimer wait;
+            wait.start();
+            while (!predicate() && wait.elapsed() < timeoutMs) {
+                pumpClients();
+            }
+            if (!predicate()) {
+                return ::testing::AssertionFailure() << "timeout waiting for " << what;
+            }
+            return ::testing::AssertionSuccess();
+        };
+        auto sendAccepted = [&](CapturingDriver &sender, const ruled::v1::RuledCommand &command,
+                                const QString &description, auto predicate) -> ::testing::AssertionResult {
+            const quint64 commandId = sender.nextCmdId;
+            const auto actorBatchBefore = p1.batches.size();
+            const auto opponentBatchBefore = p2.batches.size();
+            const quint64 actorVersionBefore = p1.stateVersion;
+            const quint64 opponentVersionBefore = p2.stateVersion;
+            sender.sendRuled(command, description);
+            const auto what = description.toStdString();
+            const auto responseOrFreshState = waitFor(
+                [&] {
+                    const auto response = sender.responses.find(commandId);
+                    return response != sender.responses.end() &&
+                           (response->second.response_code() != Response::RespOk ||
+                            (p1.batches.size() > actorBatchBefore && p2.batches.size() > opponentBatchBefore &&
+                             p1.stateVersion > actorVersionBefore && p2.stateVersion > opponentVersionBefore &&
+                             predicate()));
+                },
+                15000, what.c_str());
+            if (!responseOrFreshState) {
+                return responseOrFreshState;
+            }
+            const auto response = sender.responses.find(commandId);
+            if (response == sender.responses.end()) {
+                return ::testing::AssertionFailure() << what << ": command response missing";
+            }
+            if (response->second.response_code() != Response::RespOk) {
+                return ::testing::AssertionFailure() << what << ": response code " << response->second.response_code();
+            }
+            if (p1.batches.size() <= actorBatchBefore || p2.batches.size() <= opponentBatchBefore ||
+                p1.stateVersion <= actorVersionBefore || p2.stateVersion <= opponentVersionBefore) {
+                return ::testing::AssertionFailure() << what << ": fresh recipient snapshots missing";
+            }
+            if (!predicate()) {
+                return ::testing::AssertionFailure() << what << ": authoritative condition not reached";
+            }
+            return ::testing::AssertionSuccess();
+        };
+
+        CommandContainer createContainer;
+        createContainer.set_room_id(p1.roomId);
+        auto *createGame = createContainer.add_room_command()->MutableExtension(Command_CreateGame::ext);
+        createGame->set_description("Tekuthal grouped source-sacrifice network case");
+        createGame->set_max_players(2);
+        createGame->set_starting_life_total(20);
+        createGame->set_ruled_game(true);
+        const quint64 createCommandId = p1.nextCmdId;
+        p1.sendContainer(createContainer);
+        ASSERT_TRUE(waitFor([&] { return p1.gameId >= 0 && p1.myId >= 0 && p1.responses.count(createCommandId) != 0; },
+                            10000, "ruled game creation"));
+        ASSERT_EQ(p1.responses.at(createCommandId).response_code(), Response::RespOk);
+        ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+
+        ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+        ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+        p1.sendReady();
+        p2.sendReady();
+        ASSERT_TRUE(
+            waitFor([&] { return p1.gameStarted && p2.gameStarted && p1.stateVersion > 0 && p2.stateVersion > 0; },
+                    20000, "two-player game start"));
+        ASSERT_TRUE(p1.publishMain1Stops());
+        ASSERT_TRUE(p2.publishMain1Stops());
+        QElapsedTimer opening;
+        opening.start();
+        while (opening.elapsed() < 30000 &&
+               !(p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+                 p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId)) {
+            pumpClients();
+            p1.act();
+            p2.act();
+        }
+        ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+        ASSERT_EQ(p1.activePlayer, p1.myId);
+        ASSERT_EQ(p1.priorityPlayer, p1.myId);
+
+        auto permanent = [&](const CapturingDriver &client, int owner,
+                             const QString &cardId) -> const ObservedState::Permanent * {
+            const auto battlefield = client.battlefieldByPlayer.find(owner);
+            if (battlefield == client.battlefieldByPlayer.end()) {
+                return nullptr;
+            }
+            const auto found = std::find_if(battlefield->second.begin(), battlefield->second.end(),
+                                            [&](const auto &candidate) { return candidate.cardId == cardId; });
+            return found == battlefield->second.end() ? nullptr : &*found;
+        };
+        auto counterCount = [&](const CapturingDriver &client, const QString &cardId, const QString &counterKind,
+                                int count) {
+            const auto *object = permanent(client, p1.myId, cardId);
+            if (!object) {
+                return false;
+            }
+            const QString countText = QStringLiteral("%1 %2 counter(s)").arg(count).arg(counterKind);
+            const QString counterText = QStringLiteral("%1 counter(s)").arg(counterKind);
+            return count == 0 ? object->countersAnnotation.contains(countText) ||
+                                    !object->countersAnnotation.contains(counterText)
+                              : object->countersAnnotation.contains(countText);
+        };
+        auto putCard = [&](const char *name, ruled::v1::DevZone zone, auto predicate) {
+            ruled::v1::RuledCommand command;
+            auto *dev = command.mutable_dev_command();
+            dev->set_target_player_id(p1.myId);
+            dev->mutable_put_card_in_zone()->set_card_name(name);
+            dev->mutable_put_card_in_zone()->set_zone(zone);
+            dev->mutable_put_card_in_zone()->set_ready(true);
+            return sendAccepted(p1, command, QStringLiteral("actual card placement: %1").arg(name), predicate);
+        };
+        auto rawManaPoolUpdateSince = [](const CapturingDriver &client, auto firstBatch, int playerId,
+                                         quint32 colorless) {
+            for (auto batchIndex = firstBatch; batchIndex < client.batches.size(); ++batchIndex) {
+                for (const auto &event : client.batches[batchIndex].events()) {
+                    if (event.has_mana_pool_updated() && event.mana_pool_updated().player_id() == playerId &&
+                        event.mana_pool_updated().c() == colorless) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+
+        ASSERT_TRUE(putCard("Replicating Ring", ruled::v1::DEV_ZONE_BATTLEFIELD, [&] {
+            return permanent(p1, p1.myId, QStringLiteral("replicating_ring")) &&
+                   permanent(p2, p1.myId, QStringLiteral("replicating_ring"));
+        }));
+        ASSERT_TRUE(putCard("Tekuthal, Inquiry Dominus", ruled::v1::DEV_ZONE_BATTLEFIELD, [&] {
+            return permanent(p1, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus")) &&
+                   permanent(p2, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus"));
+        }));
+        ASSERT_TRUE(putCard("Everflowing Chalice", ruled::v1::DEV_ZONE_HAND, [&] {
+            return p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Everflowing Chalice")) != nullptr;
+        }));
+        ASSERT_TRUE(putCard("Liquimetal Coating", ruled::v1::DEV_ZONE_BATTLEFIELD, [&] {
+            return permanent(p1, p1.myId, QStringLiteral("liquimetal_coating")) &&
+                   permanent(p2, p1.myId, QStringLiteral("liquimetal_coating"));
+        }));
+        ASSERT_TRUE(putCard("Krark-Clan Ironworks", ruled::v1::DEV_ZONE_BATTLEFIELD, [&] {
+            return permanent(p1, p1.myId, QStringLiteral("krark-clan_ironworks")) &&
+                   permanent(p2, p1.myId, QStringLiteral("krark-clan_ironworks"));
+        }));
+
+        const auto actorBatchBeforeChaliceMana = p1.batches.size();
+        const auto opponentBatchBeforeChaliceMana = p2.batches.size();
+        ruled::v1::RuledCommand chaliceMana;
+        chaliceMana.mutable_dev_command()->set_target_player_id(p1.myId);
+        chaliceMana.mutable_dev_command()->mutable_add_mana()->set_c(4);
+        ASSERT_TRUE(sendAccepted(p1, chaliceMana, QStringLiteral("dev-prepared actual Chalice casting mana"), [&] {
+            return p1.myPool.c == 4 && p1.myPool.total() == 4 &&
+                   rawManaPoolUpdateSince(p1, actorBatchBeforeChaliceMana, p1.myId, 4) &&
+                   rawManaPoolUpdateSince(p2, opponentBatchBeforeChaliceMana, p1.myId, 4);
+        }));
+
+        const auto *chaliceOfferPtr =
+            p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Everflowing Chalice"));
+        ASSERT_NE(chaliceOfferPtr, nullptr);
+        const auto chaliceOffer = *chaliceOfferPtr;
+        const ruled::v1::LegalCastCostGroup *multikickerGroup = nullptr;
+        const ruled::v1::LegalCastCostOption *multikickerOption = nullptr;
+        for (const auto &group : chaliceOffer.cost_choices().cast_cost_groups()) {
+            for (const auto &option : group.options()) {
+                if (option.has_maximum_repetitions() && option.selectable() && option.maximum_repetitions() >= 2) {
+                    multikickerGroup = &group;
+                    multikickerOption = &option;
+                    break;
+                }
+            }
+            if (multikickerOption) {
+                break;
+            }
+        }
+        ASSERT_NE(multikickerGroup, nullptr);
+        ASSERT_NE(multikickerOption, nullptr);
+        ruled::v1::RuledCommand beginChalice;
+        auto *chaliceAnnouncement = beginChalice.mutable_begin_spell_cast()->mutable_announcement();
+        chaliceAnnouncement->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+        chaliceAnnouncement->mutable_source()->set_hand_index(chaliceOffer.hand_index());
+        auto *multikicker = chaliceAnnouncement->add_cast_cost_group_selections();
+        multikicker->set_group_index(multikickerGroup->group_index());
+        multikicker->set_option_index(multikickerOption->option_index());
+        multikicker->set_repetitions(2);
+
+        ASSERT_FALSE(p1.latestLegal.has_pending_spell_cast());
+        const auto actorBatchOffsetBeforeChaliceBegin = p1.batches.size();
+        const quint64 actorVersionBeforeChaliceBegin = p1.stateVersion;
+        const quint64 beginChaliceCommandId = p1.nextCmdId;
+        p1.sendRuled(beginChalice, QStringLiteral("Begin current Everflowing Chalice multikicker x2"));
+        auto freshActorChalicePending = [&] {
+            for (auto batchIndex = actorBatchOffsetBeforeChaliceBegin; batchIndex < p1.batches.size(); ++batchIndex) {
+                const auto legal = p1.batches[batchIndex].legal_by_player().find(p1.myId);
+                if (legal == p1.batches[batchIndex].legal_by_player().end() ||
+                    !legal->second.has_pending_spell_cast()) {
+                    continue;
+                }
+                const auto &pending = legal->second.pending_spell_cast();
+                if (!pending.transaction_id() || !pending.announcement().source().has_hand_index() ||
+                    pending.announcement().source().hand_index() != chaliceOffer.hand_index() ||
+                    pending.announcement().cast_method() != ruled::v1::CAST_METHOD_NORMAL ||
+                    pending.announcement().cast_cost_group_selections_size() != 1) {
+                    continue;
+                }
+                const auto &cost = pending.announcement().cast_cost_group_selections(0);
+                if (cost.group_index() == multikickerGroup->group_index() &&
+                    cost.option_index() == multikickerOption->option_index() && cost.repetitions() == 2) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        ASSERT_TRUE(waitFor(
+            [&] {
+                const auto response = p1.responses.find(beginChaliceCommandId);
+                return response != p1.responses.end() &&
+                       (response->second.response_code() != Response::RespOk || freshActorChalicePending());
+            },
+            15000, "fresh actor pending Chalice cast"));
+        ASSERT_TRUE(p1.responses.count(beginChaliceCommandId));
+        ASSERT_EQ(p1.responses.at(beginChaliceCommandId).response_code(), Response::RespOk);
+        ASSERT_TRUE(freshActorChalicePending());
+        EXPECT_EQ(p1.stateVersion, actorVersionBeforeChaliceBegin);
+        EXPECT_FALSE(p2.latestLegal.has_pending_spell_cast());
+        const quint64 chaliceTransaction = p1.latestLegal.pending_spell_cast().transaction_id();
+        ASSERT_NE(chaliceTransaction, 0u);
+
+        ruled::v1::RuledCommand previewChalice;
+        auto *chaliceQuery = previewChalice.mutable_preview_payment();
+        chaliceQuery->set_transaction_id(9301);
+        chaliceQuery->set_revision(1);
+        auto *chalicePayment = chaliceQuery->mutable_commit_spell_cast();
+        chalicePayment->set_transaction_id(chaliceTransaction);
+        chalicePayment->mutable_payment()->CopyFrom(p1.latestLegal.pending_spell_cast().payment_preview().selection());
+        chalicePayment->mutable_payment()->mutable_mana()->set_c(4);
+        const int chalicePreviewCount = p1.paymentPreviewCount;
+        const quint64 chalicePreviewCommandId = p1.nextCmdId;
+        p1.sendRuled(previewChalice, QStringLiteral("preview actual Chalice payment"));
+        ASSERT_TRUE(waitFor(
+            [&] {
+                const auto response = p1.responses.find(chalicePreviewCommandId);
+                return response != p1.responses.end() && (response->second.response_code() != Response::RespOk ||
+                                                          (p1.paymentPreviewCount == chalicePreviewCount + 1 &&
+                                                           p1.paymentPreview.valid() && p1.paymentPreview.complete()));
+            },
+            15000, "actual Chalice payment preview"));
+        ASSERT_EQ(p1.responses.at(chalicePreviewCommandId).response_code(), Response::RespOk);
+        ASSERT_EQ(p1.paymentPreviewCount, chalicePreviewCount + 1);
+        EXPECT_EQ(p2.paymentPreviewCount, 0);
+        ruled::v1::RuledCommand commitChalice;
+        auto *chaliceCommit = commitChalice.mutable_commit_spell_cast();
+        chaliceCommit->set_transaction_id(chaliceTransaction);
+        chaliceCommit->mutable_payment()->CopyFrom(p1.paymentPreview.selection());
+        chaliceCommit->mutable_restricted_mana()->CopyFrom(p1.paymentPreview.restricted_mana());
+        ASSERT_TRUE(sendAccepted(p1, commitChalice, QStringLiteral("commit actual Chalice multikicker x2"), [&] {
+            return !p1.latestLegal.has_pending_spell_cast() && p1.stackDepth == 1 && p2.stackDepth == 1;
+        }));
+
+        auto passPriority = [&](CapturingDriver &sender, const QString &description) {
+            const int oldPriority = p1.priorityPlayer;
+            const int oldPhase = p1.phase;
+            const int oldActive = p1.activePlayer;
+            const int oldStack = p1.stackDepth;
+            ruled::v1::RuledCommand pass;
+            pass.mutable_pass_priority();
+            return sendAccepted(sender, pass, description, [&] {
+                return p1.priorityPlayer != oldPriority || p1.phase != oldPhase || p1.activePlayer != oldActive ||
+                       p1.stackDepth != oldStack;
+            });
+        };
+        ASSERT_EQ(p1.priorityPlayer, p1.myId);
+        ASSERT_TRUE(passPriority(p1, QStringLiteral("pass Chalice priority")));
+        ASSERT_EQ(p1.priorityPlayer, p2.myId);
+        ASSERT_TRUE(passPriority(p2, QStringLiteral("resolve actual Everflowing Chalice")));
+        ASSERT_TRUE(waitFor(
+            [&] {
+                return p1.stackDepth == 0 && p2.stackDepth == 0 &&
+                       counterCount(p1, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2) &&
+                       counterCount(p2, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2);
+            },
+            10000, "two real Chalice charge counters at both clients"));
+
+        const auto *ringBeforeUpkeep = permanent(p1, p1.myId, QStringLiteral("replicating_ring"));
+        ASSERT_NE(ringBeforeUpkeep, nullptr);
+        const quint32 ringTriggerSourceObjectId = ringBeforeUpkeep->oid;
+        const quint64 ringTriggerSourceGeneration = ringBeforeUpkeep->generation;
+        const auto ringTriggerSeen = [&] {
+            return std::any_of(p1.events.begin(), p1.events.end(), [&](const ruled::v1::RuledEvent &event) {
+                return event.has_stack_pushed() && event.stack_pushed().is_triggered() &&
+                       event.stack_pushed().has_ability_source() &&
+                       event.stack_pushed().ability_source().object_id() == ringTriggerSourceObjectId &&
+                       event.stack_pushed().ability_source().zone_change_generation() == ringTriggerSourceGeneration;
+            });
+        };
+        auto atRingTurnMain1 = [&] {
+            return p1.activePlayer == p1.myId && p1.phase == ruled::v1::PHASE_ID_MAIN1 &&
+                   p1.priorityPlayer == p1.myId && p2.activePlayer == p1.myId &&
+                   p2.phase == ruled::v1::PHASE_ID_MAIN1 && ringTriggerSeen() &&
+                   counterCount(p1, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1) &&
+                   counterCount(p2, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1) &&
+                   counterCount(p1, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2) &&
+                   counterCount(p2, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2);
+        };
+        QElapsedTimer advance;
+        advance.start();
+        int passCount = 0;
+        bool opponentForestPlayed = false;
+        while (advance.elapsed() < 60000 && passCount < 100 && !atRingTurnMain1()) {
+            pumpClients();
+            if (atRingTurnMain1()) {
+                break;
+            }
+            if (!opponentForestPlayed && p1.activePlayer == p2.myId && p1.phase == ruled::v1::PHASE_ID_MAIN1 &&
+                p1.priorityPlayer == p2.myId) {
+                const auto *forest = p2.handAction(ruled::v1::HAND_ACTION_PLAY_LAND, QStringLiteral("Forest"));
+                ASSERT_NE(forest, nullptr) << "opponent must play its currently offered Forest before cleanup";
+                ASSERT_TRUE(p2.handSizeByPlayer.count(p2.myId));
+                ASSERT_EQ(p2.handSizeByPlayer.at(p2.myId), 8);
+                ruled::v1::RuledCommand playForest;
+                playForest.mutable_play_land()->mutable_source()->set_hand_index(forest->hand_index());
+                ASSERT_TRUE(
+                    sendAccepted(p2, playForest, QStringLiteral("play current offered Forest before cleanup"), [&] {
+                        return p2.handSizeByPlayer.count(p2.myId) && p2.handSizeByPlayer.at(p2.myId) == 7 &&
+                               permanent(p1, p2.myId, QStringLiteral("forest")) &&
+                               permanent(p2, p2.myId, QStringLiteral("forest"));
+                    }));
+                opponentForestPlayed = true;
+                ++passCount;
+                continue;
+            }
+            if (p1.priorityPlayer == p1.myId) {
+                ASSERT_TRUE(passPriority(p1, QStringLiteral("advance to Replicating Ring upkeep")));
+                ++passCount;
+            } else if (p1.priorityPlayer == p2.myId) {
+                ASSERT_TRUE(passPriority(p2, QStringLiteral("advance opponent priority for Ring upkeep")));
+                ++passCount;
+            }
+        }
+        ASSERT_TRUE(opponentForestPlayed) << "the intervening opponent first turn must avoid a cleanup discard";
+        ASSERT_TRUE(atRingTurnMain1()) << "Replicating Ring's ordinary upkeep trigger did not reach Main 1";
+
+        struct PhysicalReceipt
+        {
+            quint32 objectId = 0;
+            quint64 generation = 0;
+            int physicalCardId = -1;
+        };
+        auto physicalReceipt = [&](const CapturingDriver &client,
+                                   const QString &cardId) -> std::optional<PhysicalReceipt> {
+            const auto *object = permanent(client, p1.myId, cardId);
+            if (!object) {
+                return std::nullopt;
+            }
+            const auto physical = client.serverCardByEngineOid.find(object->oid);
+            if (physical == client.serverCardByEngineOid.end()) {
+                return std::nullopt;
+            }
+            return PhysicalReceipt{object->oid, object->generation, physical->second};
+        };
+        auto currentBattlefieldObjectForReceipt =
+            [&](const QString &cardId, const PhysicalReceipt &receipt) -> std::optional<ruled::v1::BattlefieldObject> {
+            const auto *observed = permanent(p1, p1.myId, cardId);
+            if (!observed || observed->oid != receipt.objectId || observed->generation != receipt.generation) {
+                return std::nullopt;
+            }
+            for (auto batch = p1.batches.rbegin(); batch != p1.batches.rend(); ++batch) {
+                for (auto event = batch->events().rbegin(); event != batch->events().rend(); ++event) {
+                    if (!event->has_zone_view() || event->zone_view().battlefields_unchanged()) {
+                        continue;
+                    }
+                    const auto &zoneView = event->zone_view();
+                    const auto owner = std::find_if(zoneView.per_player().begin(), zoneView.per_player().end(),
+                                                    [&](const auto &player) { return player.player_id() == p1.myId; });
+                    if (owner == zoneView.per_player().end()) {
+                        return std::nullopt;
+                    }
+                    const auto object =
+                        std::find_if(owner->battlefield_objects().begin(), owner->battlefield_objects().end(),
+                                     [&](const auto &candidate) { return candidate.object_id() == receipt.objectId; });
+                    if (object == owner->battlefield_objects().end() ||
+                        object->zone_change_generation() != receipt.generation) {
+                        return std::nullopt;
+                    }
+                    return *object;
+                }
+            }
+            return std::nullopt;
+        };
+        auto expectSharedReceipt = [&](const QString &cardId) -> ::testing::AssertionResult {
+            const auto actor = physicalReceipt(p1, cardId);
+            const auto opponent = physicalReceipt(p2, cardId);
+            if (!actor || !opponent) {
+                return ::testing::AssertionFailure()
+                       << cardId.toStdString() << ": missing recipient physical-card binding";
+            }
+            const auto same = [&](const PhysicalReceipt &receipt) {
+                return receipt.objectId == actor->objectId && receipt.generation == actor->generation &&
+                       receipt.physicalCardId == actor->physicalCardId;
+            };
+            if (!same(*opponent)) {
+                return ::testing::AssertionFailure()
+                       << cardId.toStdString() << ": recipient ObjectId/generation/physical-card receipts differ";
+            }
+            return ::testing::AssertionSuccess();
+        };
+        ASSERT_TRUE(expectSharedReceipt(QStringLiteral("tekuthal,_inquiry_dominus")));
+        ASSERT_TRUE(expectSharedReceipt(QStringLiteral("replicating_ring")));
+        ASSERT_TRUE(expectSharedReceipt(QStringLiteral("everflowing_chalice")));
+        ASSERT_TRUE(expectSharedReceipt(QStringLiteral("liquimetal_coating")));
+        ASSERT_TRUE(expectSharedReceipt(QStringLiteral("krark-clan_ironworks")));
+        const auto tekReceipt = *physicalReceipt(p1, QStringLiteral("tekuthal,_inquiry_dominus"));
+        const auto ringReceipt = *physicalReceipt(p1, QStringLiteral("replicating_ring"));
+        const auto chaliceReceipt = *physicalReceipt(p1, QStringLiteral("everflowing_chalice"));
+        const auto coatingReceipt = *physicalReceipt(p1, QStringLiteral("liquimetal_coating"));
+        const auto kciReceipt = *physicalReceipt(p1, QStringLiteral("krark-clan_ironworks"));
+
+        const auto coatingBattlefield =
+            currentBattlefieldObjectForReceipt(QStringLiteral("liquimetal_coating"), coatingReceipt);
+        ASSERT_TRUE(coatingBattlefield.has_value());
+        const auto *coatingPermanent = permanent(p1, p1.myId, QStringLiteral("liquimetal_coating"));
+        ASSERT_NE(coatingPermanent, nullptr);
+        const auto coatingAbilityIt = std::find_if(
+            coatingBattlefield->activated_abilities().begin(), coatingBattlefield->activated_abilities().end(),
+            [](const auto &ability) { return ability.activatable() && !ability.is_mana_ability(); });
+        ASSERT_NE(coatingAbilityIt, coatingBattlefield->activated_abilities().end());
+        const auto coatingAbility = *coatingAbilityIt;
+        const quint64 coatingAbilityKey =
+            (static_cast<quint64>(coatingReceipt.objectId) << 32) | coatingAbility.ability_index();
+        ASSERT_NE(std::find(coatingPermanent->abilityIndices.begin(), coatingPermanent->abilityIndices.end(),
+                            coatingAbility.ability_index()),
+                  coatingPermanent->abilityIndices.end());
+        const auto coatingTargetOffers = p1.latestLegal.valid_targets_by_ability().find(coatingAbilityKey);
+        ASSERT_NE(coatingTargetOffers, p1.latestLegal.valid_targets_by_ability().end());
+        ASSERT_EQ(coatingTargetOffers->second.groups_size(), 1);
+        const auto &coatingTargetGroup = coatingTargetOffers->second.groups(0);
+        ASSERT_TRUE(std::find(coatingTargetGroup.valid_permanent_ids().begin(),
+                              coatingTargetGroup.valid_permanent_ids().end(),
+                              tekReceipt.objectId) != coatingTargetGroup.valid_permanent_ids().end());
+        const auto *tekBeforeCoating = permanent(p1, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus"));
+        ASSERT_NE(tekBeforeCoating, nullptr);
+        ASSERT_EQ(tekBeforeCoating->oid, tekReceipt.objectId);
+        ASSERT_EQ(tekBeforeCoating->generation, tekReceipt.generation);
+        const auto typedTekTarget = std::find_if(
+            coatingTargetGroup.valid_permanent_targets().begin(), coatingTargetGroup.valid_permanent_targets().end(),
+            [&](const auto &candidate) { return candidate.object_id() == tekReceipt.objectId; });
+        if (typedTekTarget != coatingTargetGroup.valid_permanent_targets().end()) {
+            EXPECT_EQ(typedTekTarget->zone_change_generation(), tekBeforeCoating->generation);
+        }
+
+        ruled::v1::RuledCommand coatingCommand;
+        auto *coatingActivation = coatingCommand.mutable_activate_ability();
+        coatingActivation->set_source_object_id(coatingReceipt.objectId);
+        coatingActivation->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD);
+        coatingActivation->set_expected_zone_change_generation(coatingReceipt.generation);
+        coatingActivation->set_ability_index(coatingAbility.ability_index());
+        auto *coatingTarget = coatingActivation->add_targets();
+        coatingTarget->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+        coatingTarget->set_group_index(coatingTargetGroup.group_index());
+        coatingTarget->set_object_id(tekReceipt.objectId);
+        coatingTarget->set_expected_zone_change_generation(tekBeforeCoating->generation);
+        ASSERT_TRUE(sendAccepted(p1, coatingCommand, QStringLiteral("activate current Coating offer on Tekuthal"), [&] {
+            const auto *p1Coating = permanent(p1, p1.myId, QStringLiteral("liquimetal_coating"));
+            const auto *p2Coating = permanent(p2, p1.myId, QStringLiteral("liquimetal_coating"));
+            return p1.stackDepth == 1 && p2.stackDepth == 1 && p1Coating && p2Coating && p1Coating->tapped &&
+                   p2Coating->tapped;
+        }));
+        quint32 coatingStackObjectId = 0;
+        for (const auto &event : p1.events) {
+            if (event.has_stack_pushed() && event.stack_pushed().has_ability_source() &&
+                event.stack_pushed().ability_source().object_id() == coatingReceipt.objectId &&
+                event.stack_pushed().ability_source().zone_change_generation() == coatingReceipt.generation) {
+                EXPECT_TRUE(event.stack_pushed().card_id().empty()) << "ability stack objects have no physical card id";
+                coatingStackObjectId = event.stack_pushed().object_id();
+            }
+        }
+        ASSERT_NE(coatingStackObjectId, 0u);
+        ASSERT_EQ(p1.priorityPlayer, p1.myId);
+        ASSERT_TRUE(passPriority(p1, QStringLiteral("pass Coating ability priority")));
+        ASSERT_EQ(p1.priorityPlayer, p2.myId);
+        ASSERT_TRUE(passPriority(p2, QStringLiteral("resolve Coating on Tekuthal")));
+        ASSERT_TRUE(waitFor(
+            [&] {
+                const auto *p1Tek = permanent(p1, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus"));
+                const auto *p2Tek = permanent(p2, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus"));
+                const bool resolved = std::any_of(p1.events.begin(), p1.events.end(), [&](const auto &event) {
+                    return event.has_stack_resolved() && event.stack_resolved().object_id() == coatingStackObjectId;
+                });
+                return p1.stackDepth == 0 && p2.stackDepth == 0 && resolved && p1Tek && p2Tek &&
+                       p1Tek->oid == tekReceipt.objectId && p2Tek->oid == tekReceipt.objectId &&
+                       p1Tek->generation == tekReceipt.generation && p2Tek->generation == tekReceipt.generation;
+            },
+            10000, "Coating's actual resolved type effect on the original Tekuthal"));
+
+        const auto tekBattlefield =
+            currentBattlefieldObjectForReceipt(QStringLiteral("tekuthal,_inquiry_dominus"), tekReceipt);
+        ASSERT_TRUE(tekBattlefield.has_value());
+        const auto *currentTekPermanent = permanent(p1, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus"));
+        const auto *ringPermanent = permanent(p1, p1.myId, QStringLiteral("replicating_ring"));
+        const auto *chalicePermanent = permanent(p1, p1.myId, QStringLiteral("everflowing_chalice"));
+        ASSERT_NE(currentTekPermanent, nullptr);
+        ASSERT_NE(ringPermanent, nullptr);
+        ASSERT_NE(chalicePermanent, nullptr);
+        const auto tekAbilityIt =
+            std::find_if(tekBattlefield->activated_abilities().begin(), tekBattlefield->activated_abilities().end(),
+                         [](const auto &ability) {
+                             return ability.activatable() && !ability.is_mana_ability() && !ability.mana_cost().empty();
+                         });
+        ASSERT_NE(tekAbilityIt, tekBattlefield->activated_abilities().end());
+        const auto tekAbility = *tekAbilityIt;
+        const quint64 tekAbilityKey = (static_cast<quint64>(tekReceipt.objectId) << 32) | tekAbility.ability_index();
+        ASSERT_NE(std::find(currentTekPermanent->abilityIndices.begin(), currentTekPermanent->abilityIndices.end(),
+                            tekAbility.ability_index()),
+                  currentTekPermanent->abilityIndices.end());
+        const auto tekCostChoices = p1.latestLegal.cost_choices_by_ability().find(tekAbilityKey);
+        ASSERT_NE(tekCostChoices, p1.latestLegal.cost_choices_by_ability().end());
+        const auto counterGroupChoiceIt =
+            std::find_if(tekCostChoices->second.choices().begin(), tekCostChoices->second.choices().end(),
+                         [](const ruled::v1::LegalCostChoice &choice) { return choice.has_counter_removal_group(); });
+        ASSERT_NE(counterGroupChoiceIt, tekCostChoices->second.choices().end());
+        const auto counterGroupChoice = *counterGroupChoiceIt;
+        ASSERT_EQ(counterGroupChoice.counter_removal_group().required_count(), 3u);
+        EXPECT_TRUE(counterCount(p1, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1));
+        EXPECT_TRUE(counterCount(p1, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2));
+        EXPECT_EQ(p1.myPool.total(), 0);
+
+        ruled::v1::RuledCommand beginTek;
+        auto *tekBegin = beginTek.mutable_begin_ability_activation();
+        tekBegin->set_source_object_id(tekReceipt.objectId);
+        tekBegin->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD);
+        tekBegin->set_expected_zone_change_generation(tekReceipt.generation);
+        tekBegin->set_ability_index(tekAbility.ability_index());
+        auto *counterSelection = tekBegin->add_cost_selections();
+        counterSelection->set_cost_index(counterGroupChoice.cost_index());
+        auto *counterContribution = counterSelection->mutable_counter_removal_group();
+        const auto &counterCandidates = counterGroupChoice.counter_removal_group().candidates();
+        auto addCounterContribution = [&](quint32 objectId, quint64 generation, const QString &counterKind,
+                                          quint32 count) -> bool {
+            const auto candidate =
+                std::find_if(counterCandidates.begin(), counterCandidates.end(), [&](const auto &entry) {
+                    return entry.has_object() && entry.object().object_id() == objectId &&
+                           entry.object().zone_change_generation() == generation;
+                });
+            if (candidate == counterCandidates.end()) {
+                return false;
+            }
+            const auto option =
+                std::find_if(candidate->options().begin(), candidate->options().end(), [&](const auto &entry) {
+                    return entry.label() == counterKind.toStdString() && entry.available_count() >= count;
+                });
+            if (option == candidate->options().end()) {
+                return false;
+            }
+            auto *contribution = counterContribution->add_contributions();
+            contribution->mutable_object()->CopyFrom(candidate->object());
+            contribution->set_option_id(option->option_id());
+            contribution->set_count(count);
+            return true;
+        };
+        ASSERT_TRUE(addCounterContribution(ringReceipt.objectId, ringReceipt.generation, QStringLiteral("night"), 1));
+        ASSERT_TRUE(
+            addCounterContribution(chaliceReceipt.objectId, chaliceReceipt.generation, QStringLiteral("charge"), 2));
+        ASSERT_EQ(counterContribution->contributions_size(), 2);
+        EXPECT_EQ(counterContribution->contributions(0).object().zone_change_generation(), ringReceipt.generation);
+        EXPECT_EQ(counterContribution->contributions(1).object().zone_change_generation(), chaliceReceipt.generation);
+
+        const QString manaCost = QString::fromStdString(tekAbility.mana_cost());
+        quint32 pipIndex = 0;
+        quint32 flexPaymentCount = 0;
+        for (int i = 0; i < manaCost.size();) {
+            if (manaCost.at(i) != QLatin1Char('{')) {
+                ++i;
+                continue;
+            }
+            const int close = manaCost.indexOf(QLatin1Char('}'), i + 1);
+            ASSERT_GE(close, 0) << manaCost.toStdString();
+            const QString pip = manaCost.mid(i + 1, close - i - 1);
+            if (pip.endsWith(QStringLiteral("/P"))) {
+                auto *flex = tekBegin->add_flex_payments();
+                flex->set_pip_index(pipIndex);
+                flex->set_pay_life(true);
+                ++flexPaymentCount;
+            }
+            ++pipIndex;
+            i = close + 1;
+        }
+        ASSERT_EQ(flexPaymentCount, 2u) << manaCost.toStdString();
+        ASSERT_EQ(tekBegin->flex_payments_size(), 2);
+        EXPECT_EQ(tekBegin->flex_payments(0).pip_index(), 1u);
+        EXPECT_TRUE(tekBegin->flex_payments(0).pay_life());
+        EXPECT_EQ(tekBegin->flex_payments(1).pip_index(), 2u);
+        EXPECT_TRUE(tekBegin->flex_payments(1).pay_life());
+
+        const auto acceptedCounterSelection = tekBegin->cost_selections(0).SerializeAsString();
+        const auto actorLifeBeforeBegin = p1.lifeByPlayer;
+        const auto opponentLifeBeforeBegin = p2.lifeByPlayer;
+        const auto actorBatchOffsetBeforeBegin = p1.batches.size();
+        const auto opponentBatchOffsetBeforeBegin = p2.batches.size();
+        const auto actorPreviewOffsetBeforeBegin = p1.paymentPreviews.size();
+        const auto opponentPreviewOffsetBeforeBegin = p2.paymentPreviews.size();
+        ASSERT_TRUE(sendAccepted(p1, beginTek, QStringLiteral("Begin current Tekuthal grouped payment"), [&] {
+            return p1.latestLegal.has_pending_ability_activation() &&
+                   p1.latestLegal.pending_ability_activation().stage() == ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT &&
+                   p2.latestLegal.has_pending_ability_activation() &&
+                   p2.latestLegal.pending_ability_activation().transaction_id() ==
+                       p1.latestLegal.pending_ability_activation().transaction_id();
+        }));
+        const quint64 activationTransaction = p1.latestLegal.pending_ability_activation().transaction_id();
+        const auto originalPending = p1.latestLegal.pending_ability_activation();
+        ASSERT_NE(activationTransaction, 0u);
+        ASSERT_TRUE(originalPending.has_payment_preview());
+        const quint64 activationRevision = originalPending.revision();
+        const quint64 tekAbilitySourceGeneration = originalPending.source_zone_change_generation();
+        EXPECT_EQ(originalPending.source_object_id(), tekReceipt.objectId);
+        EXPECT_EQ(tekAbilitySourceGeneration, tekReceipt.generation);
+        EXPECT_EQ(p1.lifeByPlayer, actorLifeBeforeBegin);
+        EXPECT_EQ(p2.lifeByPlayer, opponentLifeBeforeBegin);
+        EXPECT_EQ(p1.paymentPreviews.size(), actorPreviewOffsetBeforeBegin);
+        EXPECT_EQ(p2.paymentPreviews.size(), opponentPreviewOffsetBeforeBegin);
+        EXPECT_TRUE(counterCount(p1, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1));
+        EXPECT_TRUE(counterCount(p1, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2));
+
+        auto findPendingBatch = [&](const CapturingDriver &client, auto firstBatch, int playerId,
+                                    quint64 transactionId) -> const ruled::v1::RuledEventBatch * {
+            for (auto batchIndex = firstBatch; batchIndex < client.batches.size(); ++batchIndex) {
+                const auto &batch = client.batches[batchIndex];
+                const auto legal = batch.legal_by_player().find(playerId);
+                if (legal != batch.legal_by_player().end() && legal->second.has_pending_ability_activation() &&
+                    legal->second.pending_ability_activation().transaction_id() == transactionId) {
+                    return &batch;
+                }
+            }
+            return nullptr;
+        };
+        auto rawLifeChangedSince = [](const CapturingDriver &client, auto firstBatch, int playerId) {
+            for (auto batchIndex = firstBatch; batchIndex < client.batches.size(); ++batchIndex) {
+                for (const auto &event : client.batches[batchIndex].events()) {
+                    if (event.has_life_changed() && event.life_changed().player_id() == playerId) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        auto checkPublicPendingShell = [&](const CapturingDriver &client, auto firstBatch, quint64 transactionId) {
+            bool sawPublicSnapshot = false;
+            EXPECT_GT(client.batches.size(), firstBatch);
+            for (auto batchIndex = firstBatch; batchIndex < client.batches.size(); ++batchIndex) {
+                const auto &batch = client.batches[batchIndex];
+                EXPECT_FALSE(batch.has_payment_preview()) << "standalone payment replies are requester-only";
+                for (const auto &[legalPlayerId, legal] : batch.legal_by_player()) {
+                    EXPECT_EQ(legalPlayerId, client.myId);
+                    EXPECT_EQ(legal.cost_choices_by_ability().count(tekAbilityKey), 0u)
+                        << "Tekuthal cost choices are private to the actor";
+                    if (!legal.has_pending_ability_activation() ||
+                        legal.pending_ability_activation().transaction_id() != transactionId) {
+                        continue;
+                    }
+                    sawPublicSnapshot = true;
+                    const auto &pending = legal.pending_ability_activation();
+                    EXPECT_EQ(pending.stage(), ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT);
+                    EXPECT_EQ(pending.actor_player_id(), p1.myId);
+                    EXPECT_EQ(pending.source_object_id(), tekReceipt.objectId);
+                    EXPECT_EQ(pending.source_zone_change_generation(), tekAbilitySourceGeneration);
+                    EXPECT_TRUE(pending.locked_total_cost().empty());
+                    EXPECT_TRUE(pending.cost_selections().empty());
+                    EXPECT_TRUE(pending.flex_payments().empty());
+                    EXPECT_FALSE(pending.has_payment_preview());
+                }
+            }
+            EXPECT_TRUE(sawPublicSnapshot) << "the nonactor receives a fresh public payment shell";
+        };
+        const auto *actorPendingBatch =
+            findPendingBatch(p1, actorBatchOffsetBeforeBegin, p1.myId, activationTransaction);
+        ASSERT_NE(actorPendingBatch, nullptr);
+        const auto actorPendingLegal = actorPendingBatch->legal_by_player().find(p1.myId);
+        ASSERT_NE(actorPendingLegal, actorPendingBatch->legal_by_player().end());
+        const auto &actorPending = actorPendingLegal->second.pending_ability_activation();
+        ASSERT_EQ(actorPending.cost_selections_size(), 1);
+        EXPECT_EQ(actorPending.cost_selections(0).SerializeAsString(), acceptedCounterSelection);
+        ASSERT_EQ(actorPending.flex_payments_size(), 2);
+        EXPECT_EQ(actorPending.flex_payments(0).pip_index(), 1u);
+        EXPECT_TRUE(actorPending.flex_payments(0).pay_life());
+        EXPECT_EQ(actorPending.flex_payments(1).pip_index(), 2u);
+        EXPECT_TRUE(actorPending.flex_payments(1).pay_life());
+        EXPECT_FALSE(actorPending.locked_total_cost().empty());
+        EXPECT_EQ(actorPending.locked_total_cost(), originalPending.locked_total_cost());
+        EXPECT_EQ(actorPending.payment_preview().SerializeAsString(),
+                  originalPending.payment_preview().SerializeAsString());
+        checkPublicPendingShell(p2, opponentBatchOffsetBeforeBegin, activationTransaction);
+        EXPECT_FALSE(rawLifeChangedSince(p1, actorBatchOffsetBeforeBegin, p1.myId));
+        EXPECT_FALSE(rawLifeChangedSince(p2, opponentBatchOffsetBeforeBegin, p1.myId));
+
+        const auto kciBattlefield =
+            currentBattlefieldObjectForReceipt(QStringLiteral("krark-clan_ironworks"), kciReceipt);
+        ASSERT_TRUE(kciBattlefield.has_value());
+        const auto *kciPermanent = permanent(p1, p1.myId, QStringLiteral("krark-clan_ironworks"));
+        ASSERT_NE(kciPermanent, nullptr);
+        const auto kciAbilityIt = std::find_if(kciBattlefield->activated_abilities().begin(),
+                                               kciBattlefield->activated_abilities().end(), [](const auto &ability) {
+                                                   return ability.activatable() && ability.is_mana_ability() &&
+                                                          !ability.mana_produced().empty();
+                                               });
+        ASSERT_NE(kciAbilityIt, kciBattlefield->activated_abilities().end());
+        const auto kciAbility = *kciAbilityIt;
+        const quint64 kciAbilityKey = (static_cast<quint64>(kciReceipt.objectId) << 32) | kciAbility.ability_index();
+        ASSERT_NE(std::find(kciPermanent->abilityIndices.begin(), kciPermanent->abilityIndices.end(),
+                            kciAbility.ability_index()),
+                  kciPermanent->abilityIndices.end());
+        const auto kciCostChoices = p1.latestLegal.cost_choices_by_ability().find(kciAbilityKey);
+        ASSERT_NE(kciCostChoices, p1.latestLegal.cost_choices_by_ability().end());
+        const ruled::v1::LegalCostChoice *kciSacrificeChoice = nullptr;
+        bool sawTekSourceCandidate = false;
+        for (const auto &choice : kciCostChoices->second.choices()) {
+            for (const auto &candidate : choice.candidate_objects()) {
+                if (!candidate.has_object() || candidate.object().object_id() != tekReceipt.objectId) {
+                    continue;
+                }
+                ASSERT_EQ(candidate.object().zone_change_generation(), tekReceipt.generation);
+                sawTekSourceCandidate = true;
+                kciSacrificeChoice = &choice;
+                break;
+            }
+            if (kciSacrificeChoice) {
+                break;
+            }
+        }
+        ASSERT_TRUE(sawTekSourceCandidate) << "the current KCI offer must include Tekuthal's full source receipt";
+        ASSERT_NE(kciSacrificeChoice, nullptr);
+        const auto pendingForKci = p1.latestLegal.pending_ability_activation();
+        ASSERT_TRUE(pendingForKci.has_payment_preview());
+        ASSERT_EQ(pendingForKci.transaction_id(), activationTransaction);
+        ASSERT_EQ(pendingForKci.revision(), activationRevision);
+
+        ruled::v1::RuledCommand kciSacrifice;
+        auto *kciActivation = kciSacrifice.mutable_activate_ability();
+        kciActivation->set_source_object_id(kciReceipt.objectId);
+        kciActivation->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD);
+        kciActivation->set_expected_zone_change_generation(kciReceipt.generation);
+        kciActivation->set_ability_index(kciAbility.ability_index());
+        auto *kciCostSelection = kciActivation->add_cost_selections();
+        kciCostSelection->set_cost_index(kciSacrificeChoice->cost_index());
+        kciCostSelection->set_permanent_id(tekReceipt.objectId);
+        auto *zeroManaPayment = kciActivation->mutable_payment();
+        zeroManaPayment->set_expected_state_revision(
+            pendingForKci.payment_preview().selection().expected_state_revision());
+        zeroManaPayment->mutable_source()->set_object_id(kciReceipt.objectId);
+        zeroManaPayment->mutable_source()->set_zone_change_generation(kciReceipt.generation);
+        zeroManaPayment->mutable_mana();
+
+        const auto actorLifeBeforeKci = p1.lifeByPlayer;
+        const auto opponentLifeBeforeKci = p2.lifeByPlayer;
+        const auto actorBatchOffsetBeforeKci = p1.batches.size();
+        const auto opponentBatchOffsetBeforeKci = p2.batches.size();
+        const auto actorPhysicalMoveOffsetBeforeKci = p1.physicalMoveEvents.size();
+        const auto opponentPhysicalMoveOffsetBeforeKci = p2.physicalMoveEvents.size();
+        ASSERT_TRUE(
+            sendAccepted(p1, kciSacrifice, QStringLiteral("activate current KCI offer sacrificing Tekuthal"), [&] {
+                const auto *p1Ring = permanent(p1, p1.myId, QStringLiteral("replicating_ring"));
+                const auto *p2Ring = permanent(p2, p1.myId, QStringLiteral("replicating_ring"));
+                const auto *p1Chalice = permanent(p1, p1.myId, QStringLiteral("everflowing_chalice"));
+                const auto *p2Chalice = permanent(p2, p1.myId, QStringLiteral("everflowing_chalice"));
+                const auto p1Graveyard = p1.graveyardOwnerByEngineOid.find(tekReceipt.objectId);
+                const auto p2Graveyard = p2.graveyardOwnerByEngineOid.find(tekReceipt.objectId);
+                return p1.myPool.c == 2 && p1.myPool.total() == 2 &&
+                       rawManaPoolUpdateSince(p1, actorBatchOffsetBeforeKci, p1.myId, 2) &&
+                       rawManaPoolUpdateSince(p2, opponentBatchOffsetBeforeKci, p1.myId, 2) &&
+                       !permanent(p1, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus")) &&
+                       !permanent(p2, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus")) &&
+                       p1Graveyard != p1.graveyardOwnerByEngineOid.end() && p1Graveyard->second == p1.myId &&
+                       p2Graveyard != p2.graveyardOwnerByEngineOid.end() && p2Graveyard->second == p1.myId &&
+                       p1.serverCardByEngineOid.count(tekReceipt.objectId) &&
+                       p2.serverCardByEngineOid.count(tekReceipt.objectId) &&
+                       p1.serverCardByEngineOid.at(tekReceipt.objectId) == tekReceipt.physicalCardId &&
+                       p2.serverCardByEngineOid.at(tekReceipt.objectId) == tekReceipt.physicalCardId && p1Ring &&
+                       p2Ring && p1Chalice && p2Chalice &&
+                       counterCount(p1, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1) &&
+                       counterCount(p2, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1) &&
+                       counterCount(p1, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2) &&
+                       counterCount(p2, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2) &&
+                       p1.latestLegal.has_pending_ability_activation() &&
+                       p1.latestLegal.pending_ability_activation().transaction_id() == activationTransaction &&
+                       p1.latestLegal.pending_ability_activation().revision() == activationRevision &&
+                       p2.latestLegal.has_pending_ability_activation() &&
+                       p2.latestLegal.pending_ability_activation().transaction_id() == activationTransaction &&
+                       p1.stackDepth == 0 && p2.stackDepth == 0;
+            }));
+        EXPECT_EQ(p1.lifeByPlayer, actorLifeBeforeKci);
+        EXPECT_EQ(p2.lifeByPlayer, opponentLifeBeforeKci);
+        EXPECT_EQ(p1.lifeByPlayer, actorLifeBeforeBegin);
+        EXPECT_EQ(p2.lifeByPlayer, opponentLifeBeforeBegin);
+        EXPECT_FALSE(rawLifeChangedSince(p1, actorBatchOffsetBeforeKci, p1.myId));
+        EXPECT_FALSE(rawLifeChangedSince(p2, opponentBatchOffsetBeforeKci, p1.myId));
+
+        const auto pendingAfterKci = p1.latestLegal.pending_ability_activation();
+        EXPECT_EQ(pendingAfterKci.transaction_id(), activationTransaction);
+        EXPECT_EQ(pendingAfterKci.revision(), activationRevision);
+        EXPECT_EQ(pendingAfterKci.stage(), ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT);
+        EXPECT_EQ(pendingAfterKci.actor_player_id(), p1.myId);
+        EXPECT_EQ(pendingAfterKci.source_object_id(), tekReceipt.objectId);
+        EXPECT_EQ(pendingAfterKci.source_zone_change_generation(), tekAbilitySourceGeneration);
+        EXPECT_EQ(pendingAfterKci.cost_selections_size(), originalPending.cost_selections_size());
+        EXPECT_EQ(pendingAfterKci.cost_selections(0).SerializeAsString(),
+                  originalPending.cost_selections(0).SerializeAsString());
+        EXPECT_EQ(pendingAfterKci.flex_payments_size(), originalPending.flex_payments_size());
+        EXPECT_EQ(pendingAfterKci.flex_payments(0).pip_index(), originalPending.flex_payments(0).pip_index());
+        EXPECT_TRUE(pendingAfterKci.flex_payments(0).pay_life());
+        EXPECT_EQ(pendingAfterKci.flex_payments(1).pip_index(), originalPending.flex_payments(1).pip_index());
+        EXPECT_TRUE(pendingAfterKci.flex_payments(1).pay_life());
+        EXPECT_EQ(pendingAfterKci.locked_total_cost(), originalPending.locked_total_cost());
+
+        const auto *actorPendingAfterKci =
+            findPendingBatch(p1, actorBatchOffsetBeforeKci, p1.myId, activationTransaction);
+        ASSERT_NE(actorPendingAfterKci, nullptr);
+        const auto actorLegalAfterKci = actorPendingAfterKci->legal_by_player().find(p1.myId);
+        ASSERT_NE(actorLegalAfterKci, actorPendingAfterKci->legal_by_player().end());
+        const auto &actorPendingRowAfterKci = actorLegalAfterKci->second.pending_ability_activation();
+        ASSERT_EQ(actorPendingRowAfterKci.cost_selections_size(), 1);
+        EXPECT_EQ(actorPendingRowAfterKci.source_object_id(), tekReceipt.objectId);
+        EXPECT_EQ(actorPendingRowAfterKci.source_zone_change_generation(), tekAbilitySourceGeneration);
+        EXPECT_EQ(actorPendingRowAfterKci.cost_selections(0).SerializeAsString(), acceptedCounterSelection);
+        EXPECT_EQ(actorPendingRowAfterKci.flex_payments_size(), 2);
+        EXPECT_EQ(actorPendingRowAfterKci.flex_payments(0).pip_index(), 1u);
+        EXPECT_TRUE(actorPendingRowAfterKci.flex_payments(0).pay_life());
+        EXPECT_EQ(actorPendingRowAfterKci.flex_payments(1).pip_index(), 2u);
+        EXPECT_TRUE(actorPendingRowAfterKci.flex_payments(1).pay_life());
+        checkPublicPendingShell(p2, opponentBatchOffsetBeforeKci, activationTransaction);
+        EXPECT_FALSE(rawLifeChangedSince(p1, actorBatchOffsetBeforeKci, p1.myId));
+        EXPECT_FALSE(rawLifeChangedSince(p2, opponentBatchOffsetBeforeKci, p1.myId));
+
+        for (const auto *client : {&p1, &p2}) {
+            EXPECT_EQ(client->serverCardByEngineOid.at(tekReceipt.objectId), tekReceipt.physicalCardId);
+            EXPECT_EQ(client->graveyardOwnerByEngineOid.at(tekReceipt.objectId), p1.myId);
+            const auto moved =
+                std::find_if(client->physicalMoveEvents.begin() +
+                                 (client == &p1 ? static_cast<std::ptrdiff_t>(actorPhysicalMoveOffsetBeforeKci)
+                                                : static_cast<std::ptrdiff_t>(opponentPhysicalMoveOffsetBeforeKci)),
+                             client->physicalMoveEvents.end(), [&](const Event_MoveCard &move) {
+                                 return move.start_player_id() == p1.myId && move.start_zone() == ZoneNames::TABLE &&
+                                        move.target_zone() == ZoneNames::GRAVE &&
+                                        move.card_id() == tekReceipt.physicalCardId &&
+                                        move.new_card_id() == tekReceipt.physicalCardId;
+                             });
+            EXPECT_NE(moved, client->physicalMoveEvents.end())
+                << "the original physical Tekuthal must move from battlefield to graveyard on both clients";
+        }
+        // Intentional checkpoint: the original Tekuthal payment remains pending after independent KCI mana.
+
+        if (doCommit) {
+            const quint64 paymentPreviewCorrelationTransaction = activationTransaction == 9303 ? 9304 : 9303;
+            const quint64 paymentPreviewCorrelationRevision = activationRevision == 7 ? 8 : 7;
+            ASSERT_NE(paymentPreviewCorrelationTransaction, activationTransaction);
+            ASSERT_NE(paymentPreviewCorrelationRevision, activationRevision);
+            ruled::v1::RuledCommand refreshTekPayment;
+            auto *tekPaymentQuery = refreshTekPayment.mutable_preview_payment();
+            tekPaymentQuery->set_transaction_id(paymentPreviewCorrelationTransaction);
+            tekPaymentQuery->set_revision(paymentPreviewCorrelationRevision);
+            auto *tekPaymentCommit = tekPaymentQuery->mutable_commit_ability_activation();
+            tekPaymentCommit->set_transaction_id(activationTransaction);
+            tekPaymentCommit->set_expected_revision(activationRevision);
+            tekPaymentCommit->mutable_payment()->CopyFrom(pendingAfterKci.payment_preview().selection());
+            tekPaymentCommit->mutable_payment()->mutable_mana()->set_c(1);
+            ASSERT_EQ(tekPaymentCommit->flex_payments_size(), 0);
+            EXPECT_EQ(tekPaymentCommit->transaction_id(), activationTransaction);
+            EXPECT_EQ(tekPaymentCommit->expected_revision(), activationRevision);
+            EXPECT_EQ(tekPaymentCommit->payment().source().object_id(), tekReceipt.objectId);
+            EXPECT_EQ(tekPaymentCommit->payment().source().zone_change_generation(), tekReceipt.generation);
+
+            const int actorPreviewCountBeforeRefresh = p1.paymentPreviewCount;
+            const int opponentPreviewCountBeforeRefresh = p2.paymentPreviewCount;
+            const auto actorPreviewOffsetBeforeRefresh = p1.paymentPreviews.size();
+            const auto opponentPreviewOffsetBeforeRefresh = p2.paymentPreviews.size();
+            const auto actorBatchOffsetBeforeRefresh = p1.batches.size();
+            const auto opponentBatchOffsetBeforeRefresh = p2.batches.size();
+            const quint64 actorVersionBeforeRefresh = p1.stateVersion;
+            const quint64 opponentVersionBeforeRefresh = p2.stateVersion;
+            const quint64 refreshCommandId = p1.nextCmdId;
+            p1.sendRuled(refreshTekPayment, QStringLiteral("refresh original Tekuthal payment after KCI mana"));
+            ASSERT_TRUE(waitFor(
+                [&] {
+                    const auto response = p1.responses.find(refreshCommandId);
+                    return response != p1.responses.end() &&
+                           (response->second.response_code() != Response::RespOk ||
+                            (p1.paymentPreviewCount == actorPreviewCountBeforeRefresh + 1 &&
+                             p1.paymentPreviews.size() == actorPreviewOffsetBeforeRefresh + 1));
+                },
+                15000, "fresh requester Tekuthal payment preview"));
+            ASSERT_TRUE(p1.responses.count(refreshCommandId));
+            ASSERT_EQ(p1.responses.at(refreshCommandId).response_code(), Response::RespOk);
+            ASSERT_EQ(p1.paymentPreviewCount, actorPreviewCountBeforeRefresh + 1);
+            ASSERT_TRUE(p1.paymentPreview.valid()) << p1.paymentPreview.error();
+            ASSERT_TRUE(p1.paymentPreview.complete());
+            EXPECT_EQ(p1.paymentPreview.selection().source().object_id(), tekReceipt.objectId);
+            EXPECT_EQ(p1.paymentPreview.selection().source().zone_change_generation(), tekReceipt.generation);
+            EXPECT_EQ(p1.paymentPreview.selection().mana().c(), 1u);
+            EXPECT_EQ(p1.paymentPreview.selection().mana().w(), 0u);
+            EXPECT_EQ(p1.paymentPreview.selection().mana().u(), 0u);
+            EXPECT_EQ(p1.paymentPreview.selection().mana().b(), 0u);
+            EXPECT_EQ(p1.paymentPreview.selection().mana().r(), 0u);
+            EXPECT_EQ(p1.paymentPreview.selection().mana().g(), 0u);
+            EXPECT_EQ(p1.paymentPreviews.size(), actorPreviewOffsetBeforeRefresh + 1);
+            EXPECT_EQ(p2.paymentPreviewCount, opponentPreviewCountBeforeRefresh);
+            EXPECT_EQ(p2.paymentPreviews.size(), opponentPreviewOffsetBeforeRefresh);
+            EXPECT_EQ(p1.batches.size(), actorBatchOffsetBeforeRefresh);
+            EXPECT_EQ(p2.batches.size(), opponentBatchOffsetBeforeRefresh);
+            EXPECT_EQ(p1.stateVersion, actorVersionBeforeRefresh);
+            EXPECT_EQ(p2.stateVersion, opponentVersionBeforeRefresh);
+            const auto &rawTekPaymentPreview = p1.paymentPreviews[actorPreviewOffsetBeforeRefresh];
+            ASSERT_TRUE(rawTekPaymentPreview.has_payment_preview());
+            EXPECT_EQ(rawTekPaymentPreview.payment_preview().transaction_id(), paymentPreviewCorrelationTransaction);
+            EXPECT_EQ(rawTekPaymentPreview.payment_preview().revision(), paymentPreviewCorrelationRevision);
+            EXPECT_TRUE(rawTekPaymentPreview.events().empty());
+            EXPECT_TRUE(rawTekPaymentPreview.legal_by_player().empty());
+            EXPECT_EQ(rawTekPaymentPreview.payment_preview().selection().source().object_id(), tekReceipt.objectId);
+            EXPECT_EQ(rawTekPaymentPreview.payment_preview().selection().source().zone_change_generation(),
+                      tekReceipt.generation);
+            EXPECT_EQ(rawTekPaymentPreview.payment_preview().selection().mana().c(), 1u);
+            EXPECT_EQ(rawTekPaymentPreview.payment_preview().selection().mana().w(), 0u);
+            EXPECT_EQ(rawTekPaymentPreview.payment_preview().selection().mana().u(), 0u);
+            EXPECT_EQ(rawTekPaymentPreview.payment_preview().selection().mana().b(), 0u);
+            EXPECT_EQ(rawTekPaymentPreview.payment_preview().selection().mana().r(), 0u);
+            EXPECT_EQ(rawTekPaymentPreview.payment_preview().selection().mana().g(), 0u);
+            EXPECT_EQ(p1.lifeByPlayer, actorLifeBeforeBegin);
+            EXPECT_EQ(p2.lifeByPlayer, opponentLifeBeforeBegin);
+            EXPECT_FALSE(rawLifeChangedSince(p1, actorBatchOffsetBeforeRefresh, p1.myId));
+            EXPECT_FALSE(rawLifeChangedSince(p2, opponentBatchOffsetBeforeRefresh, p1.myId));
+
+            ruled::v1::RuledCommand commitTek;
+            auto *tekCommit = commitTek.mutable_commit_ability_activation();
+            tekCommit->set_transaction_id(activationTransaction);
+            tekCommit->set_expected_revision(activationRevision);
+            tekCommit->mutable_payment()->CopyFrom(p1.paymentPreview.selection());
+            tekCommit->mutable_restricted_mana()->CopyFrom(p1.paymentPreview.restricted_mana());
+            ASSERT_EQ(tekCommit->flex_payments_size(), 0);
+            EXPECT_EQ(tekCommit->payment().source().object_id(), tekReceipt.objectId);
+            EXPECT_EQ(tekCommit->payment().source().zone_change_generation(), tekReceipt.generation);
+            const auto actorBatchOffsetBeforeCommit = p1.batches.size();
+            const auto opponentBatchOffsetBeforeCommit = p2.batches.size();
+            const int actorPreviewCountBeforeCommit = p1.paymentPreviewCount;
+            const int opponentPreviewCountBeforeCommit = p2.paymentPreviewCount;
+            const auto actorPreviewOffsetBeforeCommit = p1.paymentPreviews.size();
+            const auto opponentPreviewOffsetBeforeCommit = p2.paymentPreviews.size();
+            const auto actorEventOffsetBeforeCommit = p1.events.size();
+            const auto opponentEventOffsetBeforeCommit = p2.events.size();
+            ASSERT_TRUE(sendAccepted(
+                p1, commitTek, QStringLiteral("commit original Tekuthal payment after KCI sacrifice"), [&] {
+                    const auto actorLife = p1.lifeByPlayer.find(p1.myId);
+                    const auto opponentLife = p2.lifeByPlayer.find(p1.myId);
+                    const auto actorGraveyard = p1.graveyardOwnerByEngineOid.find(tekReceipt.objectId);
+                    const auto opponentGraveyard = p2.graveyardOwnerByEngineOid.find(tekReceipt.objectId);
+                    const bool actorCommittedLifeEvent = std::any_of(
+                        p1.batches.begin() + static_cast<std::ptrdiff_t>(actorBatchOffsetBeforeCommit),
+                        p1.batches.end(), [&](const auto &batch) {
+                            return std::any_of(batch.events().begin(), batch.events().end(), [&](const auto &event) {
+                                return event.has_life_changed() && event.life_changed().player_id() == p1.myId &&
+                                       event.life_changed().delta() == -4 && event.life_changed().new_total() == 16;
+                            });
+                        });
+                    const bool opponentCommittedLifeEvent = std::any_of(
+                        p2.batches.begin() + static_cast<std::ptrdiff_t>(opponentBatchOffsetBeforeCommit),
+                        p2.batches.end(), [&](const auto &batch) {
+                            return std::any_of(batch.events().begin(), batch.events().end(), [&](const auto &event) {
+                                return event.has_life_changed() && event.life_changed().player_id() == p1.myId &&
+                                       event.life_changed().delta() == -4 && event.life_changed().new_total() == 16;
+                            });
+                        });
+                    return !p1.latestLegal.has_pending_ability_activation() &&
+                           !p2.latestLegal.has_pending_ability_activation() && p1.stackDepth == 1 &&
+                           p2.stackDepth == 1 && actorLife != p1.lifeByPlayer.end() && actorLife->second == 16 &&
+                           opponentLife != p2.lifeByPlayer.end() && opponentLife->second == 16 &&
+                           actorCommittedLifeEvent && opponentCommittedLifeEvent && p1.myPool.c == 1 &&
+                           p1.myPool.total() == 1 &&
+                           rawManaPoolUpdateSince(p1, actorBatchOffsetBeforeCommit, p1.myId, 1) &&
+                           rawManaPoolUpdateSince(p2, opponentBatchOffsetBeforeCommit, p1.myId, 1) &&
+                           counterCount(p1, QStringLiteral("replicating_ring"), QStringLiteral("night"), 0) &&
+                           counterCount(p2, QStringLiteral("replicating_ring"), QStringLiteral("night"), 0) &&
+                           counterCount(p1, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 0) &&
+                           counterCount(p2, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 0) &&
+                           !permanent(p1, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus")) &&
+                           !permanent(p2, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus")) &&
+                           actorGraveyard != p1.graveyardOwnerByEngineOid.end() && actorGraveyard->second == p1.myId &&
+                           opponentGraveyard != p2.graveyardOwnerByEngineOid.end() &&
+                           opponentGraveyard->second == p1.myId &&
+                           p1.serverCardByEngineOid.count(tekReceipt.objectId) &&
+                           p2.serverCardByEngineOid.count(tekReceipt.objectId) &&
+                           p1.serverCardByEngineOid.at(tekReceipt.objectId) == tekReceipt.physicalCardId &&
+                           p2.serverCardByEngineOid.at(tekReceipt.objectId) == tekReceipt.physicalCardId;
+                }));
+            ASSERT_TRUE(rawLifeChangedSince(p1, actorBatchOffsetBeforeCommit, p1.myId));
+            ASSERT_TRUE(rawLifeChangedSince(p2, opponentBatchOffsetBeforeCommit, p1.myId));
+            ASSERT_EQ(p1.lifeByPlayer.at(p1.myId), 16);
+            ASSERT_EQ(p2.lifeByPlayer.at(p1.myId), 16);
+            EXPECT_EQ(p1.myPool.c, 1u);
+            EXPECT_EQ(p1.myPool.total(), 1u);
+            EXPECT_EQ(p1.paymentPreviewCount, actorPreviewCountBeforeCommit);
+            EXPECT_EQ(p2.paymentPreviewCount, opponentPreviewCountBeforeCommit);
+            EXPECT_EQ(p1.paymentPreviews.size(), actorPreviewOffsetBeforeCommit);
+            EXPECT_EQ(p2.paymentPreviews.size(), opponentPreviewOffsetBeforeCommit);
+            for (auto batchIndex = actorBatchOffsetBeforeCommit; batchIndex < p1.batches.size(); ++batchIndex) {
+                EXPECT_FALSE(p1.batches[batchIndex].has_payment_preview());
+            }
+            for (auto batchIndex = opponentBatchOffsetBeforeCommit; batchIndex < p2.batches.size(); ++batchIndex) {
+                EXPECT_FALSE(p2.batches[batchIndex].has_payment_preview());
+            }
+            EXPECT_TRUE(counterCount(p1, QStringLiteral("replicating_ring"), QStringLiteral("night"), 0));
+            EXPECT_TRUE(counterCount(p2, QStringLiteral("replicating_ring"), QStringLiteral("night"), 0));
+            EXPECT_TRUE(counterCount(p1, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 0));
+            EXPECT_TRUE(counterCount(p2, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 0));
+            for (const auto *client : {&p1, &p2}) {
+                EXPECT_TRUE(
+                    counterCount(*client, QStringLiteral("replicating_ring"), QStringLiteral("indestructible"), 0));
+                EXPECT_TRUE(
+                    counterCount(*client, QStringLiteral("everflowing_chalice"), QStringLiteral("indestructible"), 0));
+                EXPECT_TRUE(
+                    counterCount(*client, QStringLiteral("liquimetal_coating"), QStringLiteral("indestructible"), 0));
+                EXPECT_TRUE(
+                    counterCount(*client, QStringLiteral("krark-clan_ironworks"), QStringLiteral("indestructible"), 0));
+                const auto *opponentForest = permanent(*client, p2.myId, QStringLiteral("forest"));
+                ASSERT_NE(opponentForest, nullptr);
+                EXPECT_TRUE(
+                    opponentForest->countersAnnotation.contains(QStringLiteral("0 indestructible counter(s)")) ||
+                    !opponentForest->countersAnnotation.contains(QStringLiteral("indestructible counter(s)")));
+            }
+
+            const auto isFreshPostCommitAbilityPush = [&](const auto &event) {
+                if (!event.has_stack_pushed()) {
+                    return false;
+                }
+                const auto &pushed = event.stack_pushed();
+                return !pushed.is_triggered() && !pushed.is_copy() && pushed.card_id().empty() &&
+                       pushed.has_ability_controller_player_id() && pushed.ability_controller_player_id() == p1.myId &&
+                       !pushed.has_ability_source();
+            };
+            const auto actorActivationPush =
+                std::find_if(p1.events.begin() + static_cast<std::ptrdiff_t>(actorEventOffsetBeforeCommit),
+                             p1.events.end(), isFreshPostCommitAbilityPush);
+            ASSERT_NE(actorActivationPush, p1.events.end());
+            ASSERT_EQ(std::count_if(p1.events.begin() + static_cast<std::ptrdiff_t>(actorEventOffsetBeforeCommit),
+                                    p1.events.end(), isFreshPostCommitAbilityPush),
+                      1);
+            const quint32 committedActivationStackObjectId = actorActivationPush->stack_pushed().object_id();
+            ASSERT_NE(committedActivationStackObjectId, 0u);
+            EXPECT_EQ(std::count_if(p2.events.begin() + static_cast<std::ptrdiff_t>(opponentEventOffsetBeforeCommit),
+                                    p2.events.end(),
+                                    [&](const auto &event) {
+                                        return isFreshPostCommitAbilityPush(event) &&
+                                               event.stack_pushed().object_id() == committedActivationStackObjectId;
+                                    }),
+                      1);
+
+            const auto actorEventOffsetBeforeResolution = p1.events.size();
+            const auto opponentEventOffsetBeforeResolution = p2.events.size();
+            ASSERT_EQ(p1.priorityPlayer, p1.myId);
+            ASSERT_TRUE(passPriority(p1, QStringLiteral("pass committed Tekuthal activation priority")));
+            ASSERT_EQ(p1.priorityPlayer, p2.myId);
+            ASSERT_TRUE(passPriority(p2, QStringLiteral("resolve committed Tekuthal activation")));
+            ASSERT_TRUE(waitFor(
+                [&] {
+                    return p1.stackDepth == 0 && p2.stackDepth == 0 &&
+                           std::count_if(p1.events.begin() +
+                                             static_cast<std::ptrdiff_t>(actorEventOffsetBeforeResolution),
+                                         p1.events.end(),
+                                         [&](const auto &event) {
+                                             return event.has_stack_resolved() && event.stack_resolved().object_id() ==
+                                                                                      committedActivationStackObjectId;
+                                         }) == 1 &&
+                           std::count_if(p2.events.begin() +
+                                             static_cast<std::ptrdiff_t>(opponentEventOffsetBeforeResolution),
+                                         p2.events.end(), [&](const auto &event) {
+                                             return event.has_stack_resolved() && event.stack_resolved().object_id() ==
+                                                                                      committedActivationStackObjectId;
+                                         }) == 1;
+                },
+                10000, "committed Tekuthal activation resolves at both clients"));
+            EXPECT_FALSE(p1.latestLegal.has_pending_ability_activation());
+            EXPECT_FALSE(p2.latestLegal.has_pending_ability_activation());
+            EXPECT_EQ(p1.stackDepth, 0);
+            EXPECT_EQ(p2.stackDepth, 0);
+            EXPECT_FALSE(permanent(p1, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus")));
+            EXPECT_FALSE(permanent(p2, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus")));
+            EXPECT_TRUE(counterCount(p1, QStringLiteral("replicating_ring"), QStringLiteral("night"), 0));
+            EXPECT_TRUE(counterCount(p2, QStringLiteral("replicating_ring"), QStringLiteral("night"), 0));
+            EXPECT_TRUE(counterCount(p1, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 0));
+            EXPECT_TRUE(counterCount(p2, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 0));
+            for (const auto *client : {&p1, &p2}) {
+                EXPECT_TRUE(
+                    counterCount(*client, QStringLiteral("replicating_ring"), QStringLiteral("indestructible"), 0));
+                EXPECT_TRUE(
+                    counterCount(*client, QStringLiteral("everflowing_chalice"), QStringLiteral("indestructible"), 0));
+                EXPECT_TRUE(
+                    counterCount(*client, QStringLiteral("liquimetal_coating"), QStringLiteral("indestructible"), 0));
+                EXPECT_TRUE(
+                    counterCount(*client, QStringLiteral("krark-clan_ironworks"), QStringLiteral("indestructible"), 0));
+                const auto *opponentForest = permanent(*client, p2.myId, QStringLiteral("forest"));
+                ASSERT_NE(opponentForest, nullptr);
+                EXPECT_TRUE(
+                    opponentForest->countersAnnotation.contains(QStringLiteral("0 indestructible counter(s)")) ||
+                    !opponentForest->countersAnnotation.contains(QStringLiteral("indestructible counter(s)")));
+            }
+            for (const auto *client : {&p1, &p2}) {
+                const auto physical = client->serverCardByEngineOid.find(tekReceipt.objectId);
+                ASSERT_NE(physical, client->serverCardByEngineOid.end());
+                EXPECT_EQ(physical->second, tekReceipt.physicalCardId);
+                const auto graveyard = client->graveyardOwnerByEngineOid.find(tekReceipt.objectId);
+                ASSERT_NE(graveyard, client->graveyardOwnerByEngineOid.end());
+                EXPECT_EQ(graveyard->second, p1.myId);
+            }
+            ++completedCommitBranches;
+        } else {
+            ruled::v1::RuledCommand cancelTek;
+            auto *cancelActivation = cancelTek.mutable_cancel_ability_activation();
+            cancelActivation->set_transaction_id(activationTransaction);
+            cancelActivation->set_expected_revision(activationRevision);
+            const auto actorBatchOffsetBeforeCancel = p1.batches.size();
+            const auto opponentBatchOffsetBeforeCancel = p2.batches.size();
+            const auto actorPreviewOffsetBeforeCancel = p1.paymentPreviews.size();
+            const auto opponentPreviewOffsetBeforeCancel = p2.paymentPreviews.size();
+            const int actorPreviewCountBeforeCancel = p1.paymentPreviewCount;
+            const int opponentPreviewCountBeforeCancel = p2.paymentPreviewCount;
+            const auto actorEventOffsetBeforeCancel = p1.events.size();
+            const auto opponentEventOffsetBeforeCancel = p2.events.size();
+            const auto actorPoolColorlessBeforeCancel = p1.myPool.c;
+            const auto actorPoolTotalBeforeCancel = p1.myPool.total();
+            const auto actorLifeBeforeCancel = p1.lifeByPlayer;
+            const auto opponentLifeBeforeCancel = p2.lifeByPlayer;
+            auto freshCancelRecipientState = [&](const CapturingDriver &client, auto firstBatch) {
+                bool sawOwnLegalState = false;
+                for (auto batchIndex = firstBatch; batchIndex < client.batches.size(); ++batchIndex) {
+                    const auto &batch = client.batches[batchIndex];
+                    if (batch.has_payment_preview()) {
+                        return false;
+                    }
+                    for (const auto &[legalPlayerId, legal] : batch.legal_by_player()) {
+                        if (legalPlayerId != client.myId) {
+                            return false;
+                        }
+                        sawOwnLegalState = true;
+                        if (legal.has_pending_ability_activation() ||
+                            legal.cost_choices_by_ability().count(tekAbilityKey) != 0) {
+                            return false;
+                        }
+                    }
+                }
+                return sawOwnLegalState;
+            };
+            const quint64 cancelCommandId = p1.nextCmdId;
+            p1.sendRuled(cancelTek, QStringLiteral("cancel original Tekuthal payment after KCI sacrifice"));
+            ASSERT_TRUE(waitFor(
+                [&] {
+                    const auto response = p1.responses.find(cancelCommandId);
+                    return response != p1.responses.end() &&
+                           (response->second.response_code() != Response::RespOk ||
+                            (freshCancelRecipientState(p1, actorBatchOffsetBeforeCancel) &&
+                             freshCancelRecipientState(p2, opponentBatchOffsetBeforeCancel) &&
+                             !p1.latestLegal.has_pending_ability_activation() &&
+                             !p2.latestLegal.has_pending_ability_activation() && p1.stackDepth == 0 &&
+                             p2.stackDepth == 0));
+                },
+                15000, "cancel ACK and fresh recipient pending-activation removal"));
+            ASSERT_TRUE(p1.responses.count(cancelCommandId));
+            ASSERT_EQ(p1.responses.at(cancelCommandId).response_code(), Response::RespOk);
+            ASSERT_TRUE(freshCancelRecipientState(p1, actorBatchOffsetBeforeCancel));
+            ASSERT_TRUE(freshCancelRecipientState(p2, opponentBatchOffsetBeforeCancel));
+            EXPECT_FALSE(p1.latestLegal.has_pending_ability_activation());
+            EXPECT_FALSE(p2.latestLegal.has_pending_ability_activation());
+            EXPECT_EQ(p1.stackDepth, 0);
+            EXPECT_EQ(p2.stackDepth, 0);
+            EXPECT_EQ(p1.paymentPreviewCount, actorPreviewCountBeforeCancel);
+            EXPECT_EQ(p2.paymentPreviewCount, opponentPreviewCountBeforeCancel);
+            EXPECT_EQ(p1.paymentPreviews.size(), actorPreviewOffsetBeforeCancel);
+            EXPECT_EQ(p2.paymentPreviews.size(), opponentPreviewOffsetBeforeCancel);
+            EXPECT_EQ(p1.lifeByPlayer, actorLifeBeforeCancel);
+            EXPECT_EQ(p2.lifeByPlayer, opponentLifeBeforeCancel);
+            EXPECT_EQ(p1.lifeByPlayer, actorLifeBeforeBegin);
+            EXPECT_EQ(p2.lifeByPlayer, opponentLifeBeforeBegin);
+            EXPECT_FALSE(rawLifeChangedSince(p1, actorBatchOffsetBeforeCancel, p1.myId));
+            EXPECT_FALSE(rawLifeChangedSince(p2, opponentBatchOffsetBeforeCancel, p1.myId));
+            EXPECT_EQ(p1.myPool.c, actorPoolColorlessBeforeCancel);
+            EXPECT_EQ(p1.myPool.total(), actorPoolTotalBeforeCancel);
+            EXPECT_EQ(p1.myPool.c, 2u);
+            EXPECT_EQ(p1.myPool.total(), 2u);
+            EXPECT_TRUE(rawManaPoolUpdateSince(p1, actorBatchOffsetBeforeKci, p1.myId, 2));
+            EXPECT_TRUE(rawManaPoolUpdateSince(p2, opponentBatchOffsetBeforeKci, p1.myId, 2));
+            EXPECT_TRUE(counterCount(p1, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1));
+            EXPECT_TRUE(counterCount(p2, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1));
+            EXPECT_TRUE(counterCount(p1, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2));
+            EXPECT_TRUE(counterCount(p2, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2));
+            EXPECT_EQ(std::count_if(p1.events.begin() + static_cast<std::ptrdiff_t>(actorEventOffsetBeforeCancel),
+                                    p1.events.end(), [](const auto &event) { return event.has_stack_pushed(); }),
+                      0);
+            EXPECT_EQ(std::count_if(p2.events.begin() + static_cast<std::ptrdiff_t>(opponentEventOffsetBeforeCancel),
+                                    p2.events.end(), [](const auto &event) { return event.has_stack_pushed(); }),
+                      0);
+            for (const auto *client : {&p1, &p2}) {
+                EXPECT_FALSE(permanent(*client, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus")));
+                const auto physical = client->serverCardByEngineOid.find(tekReceipt.objectId);
+                ASSERT_NE(physical, client->serverCardByEngineOid.end());
+                EXPECT_EQ(physical->second, tekReceipt.physicalCardId);
+                const auto graveyard = client->graveyardOwnerByEngineOid.find(tekReceipt.objectId);
+                ASSERT_NE(graveyard, client->graveyardOwnerByEngineOid.end());
+                EXPECT_EQ(graveyard->second, p1.myId);
+            }
+            const auto actorReturnedTek = std::find_if(
+                p1.physicalMoveEvents.begin() + static_cast<std::ptrdiff_t>(actorPhysicalMoveOffsetBeforeKci),
+                p1.physicalMoveEvents.end(), [&](const Event_MoveCard &move) {
+                    return move.start_player_id() == p1.myId && move.start_zone() == ZoneNames::GRAVE &&
+                           move.target_zone() == ZoneNames::TABLE && move.card_id() == tekReceipt.physicalCardId;
+                });
+            const auto opponentReturnedTek = std::find_if(
+                p2.physicalMoveEvents.begin() + static_cast<std::ptrdiff_t>(opponentPhysicalMoveOffsetBeforeKci),
+                p2.physicalMoveEvents.end(), [&](const Event_MoveCard &move) {
+                    return move.start_player_id() == p1.myId && move.start_zone() == ZoneNames::GRAVE &&
+                           move.target_zone() == ZoneNames::TABLE && move.card_id() == tekReceipt.physicalCardId;
+                });
+            EXPECT_EQ(actorReturnedTek, p1.physicalMoveEvents.end());
+            EXPECT_EQ(opponentReturnedTek, p2.physicalMoveEvents.end());
+            ++completedCancelBranches;
+        }
+        collectServerLogs();
+        servatrice.kill();
+        ASSERT_TRUE(servatrice.waitForFinished(5000));
+        sidecar.kill();
+        ASSERT_TRUE(sidecar.waitForFinished(5000));
+        p1.sock.abort();
+        p2.sock.abort();
+        collectServerLogs();
+    }
+    EXPECT_EQ(completedCommitBranches, 1);
+    EXPECT_EQ(completedCancelBranches, 1);
+}
+TEST_F(RuledE2ESmokeTest, TekuthalGroupedPaymentRejectsStaleContributorAndRestoresActorOnly)
+{
+    int completedStaleBranches = 0;
+    int completedRestorePrefixes = 0;
+    for (const bool doRestore : {false, true}) {
+        SCOPED_TRACE(doRestore ? "legal restore prefix" : "stale contributor rejection");
+        ASSERT_TRUE(resumePlanPath.isEmpty());
+        resumePlanPath.clear();
+
+        QStringList existingServerManifestPaths;
+        QDirIterator existingManifests(tempDir.filePath("captures"), {"manifest.json"}, QDir::Files,
+                                       QDirIterator::Subdirectories);
+        while (existingManifests.hasNext()) {
+            const QString manifestPath = QFileInfo(existingManifests.next()).absoluteFilePath();
+            QFile manifestFile(manifestPath);
+            ASSERT_TRUE(manifestFile.open(QIODevice::ReadOnly));
+            if (QJsonDocument::fromJson(manifestFile.readAll()).object().value("source") == "server") {
+                existingServerManifestPaths.push_back(manifestPath);
+            }
+        }
+
+        const auto started = startServers();
+        ASSERT_TRUE(started) << started.message();
+        if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+            GTEST_SKIP() << std::string(started.message()).substr(5);
+        }
+
+        class CapturingDriver : public OpeningDriver
+        {
+        public:
+            CapturingDriver(bool starts, QString name, QStringList *output)
+                : OpeningDriver(starts, std::move(name), output)
+            {
+            }
+            std::vector<ruled::v1::RuledEventBatch> batches;
+            std::vector<ruled::v1::RuledEventBatch> paymentPreviews;
+            std::vector<ruled::v1::RuledEvent> events;
+
+            void onBatchBegin(const ruled::v1::RuledEventBatch &batch) override
+            {
+                batches.push_back(batch);
+            }
+            void onPaymentPreview(const ruled::v1::RuledEventBatch &batch) override
+            {
+                paymentPreviews.push_back(batch);
+                OpeningDriver::onPaymentPreview(batch);
+            }
+            void onRuledEvent(const ruled::v1::RuledEvent &event) override
+            {
+                OpeningDriver::onRuledEvent(event);
+                events.push_back(event);
+            }
+        };
+
+        CapturingDriver p1(true, QStringLiteral("tekuthal-stale-p1"), &transcript);
+        CapturingDriver p2(false, QStringLiteral("tekuthal-stale-p2"), &transcript);
+        ASSERT_TRUE(p1.loginAndJoinRoom());
+        ASSERT_TRUE(p2.loginAndJoinRoom());
+
+        auto pumpClients = [&] {
+            p1.pump(25);
+            p2.pump(25);
+        };
+        auto waitFor = [&](auto predicate, int timeoutMs, const char *what) -> ::testing::AssertionResult {
+            QElapsedTimer wait;
+            wait.start();
+            while (!predicate() && wait.elapsed() < timeoutMs) {
+                pumpClients();
+            }
+            if (!predicate()) {
+                return ::testing::AssertionFailure() << "timeout waiting for " << what;
+            }
+            return ::testing::AssertionSuccess();
+        };
+        auto sendAccepted = [&](CapturingDriver &sender, const ruled::v1::RuledCommand &command,
+                                const QString &description, auto predicate) -> ::testing::AssertionResult {
+            const quint64 commandId = sender.nextCmdId;
+            const auto actorBatchBefore = p1.batches.size();
+            const auto opponentBatchBefore = p2.batches.size();
+            const quint64 actorVersionBefore = p1.stateVersion;
+            const quint64 opponentVersionBefore = p2.stateVersion;
+            sender.sendRuled(command, description);
+            const auto what = description.toStdString();
+            const auto responseOrFreshState = waitFor(
+                [&] {
+                    const auto response = sender.responses.find(commandId);
+                    return response != sender.responses.end() &&
+                           (response->second.response_code() != Response::RespOk ||
+                            (p1.batches.size() > actorBatchBefore && p2.batches.size() > opponentBatchBefore &&
+                             p1.stateVersion > actorVersionBefore && p2.stateVersion > opponentVersionBefore &&
+                             predicate()));
+                },
+                15000, what.c_str());
+            if (!responseOrFreshState) {
+                return responseOrFreshState;
+            }
+            const auto response = sender.responses.find(commandId);
+            if (response == sender.responses.end()) {
+                return ::testing::AssertionFailure() << what << ": command response missing";
+            }
+            if (response->second.response_code() != Response::RespOk) {
+                return ::testing::AssertionFailure() << what << ": response code " << response->second.response_code();
+            }
+            if (p1.batches.size() <= actorBatchBefore || p2.batches.size() <= opponentBatchBefore ||
+                p1.stateVersion <= actorVersionBefore || p2.stateVersion <= opponentVersionBefore) {
+                return ::testing::AssertionFailure() << what << ": fresh recipient snapshots missing";
+            }
+            if (!predicate()) {
+                return ::testing::AssertionFailure() << what << ": authoritative condition not reached";
+            }
+            return ::testing::AssertionSuccess();
+        };
+
+        CommandContainer createContainer;
+        createContainer.set_room_id(p1.roomId);
+        auto *createGame = createContainer.add_room_command()->MutableExtension(Command_CreateGame::ext);
+        createGame->set_description("Tekuthal grouped stale-contributor network case");
+        createGame->set_max_players(2);
+        createGame->set_spectators_allowed(true);
+        createGame->set_spectators_see_everything(false);
+        createGame->set_starting_life_total(20);
+        createGame->set_ruled_game(true);
+        const quint64 createCommandId = p1.nextCmdId;
+        p1.sendContainer(createContainer);
+        ASSERT_TRUE(waitFor([&] { return p1.gameId >= 0 && p1.myId >= 0 && p1.responses.count(createCommandId) != 0; },
+                            10000, "ruled game creation"));
+        ASSERT_EQ(p1.responses.at(createCommandId).response_code(), Response::RespOk);
+        ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+
+        ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+        ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+        p1.sendReady();
+        p2.sendReady();
+        ASSERT_TRUE(
+            waitFor([&] { return p1.gameStarted && p2.gameStarted && p1.stateVersion > 0 && p2.stateVersion > 0; },
+                    20000, "two-player game start"));
+        ASSERT_TRUE(p1.publishMain1Stops());
+        ASSERT_TRUE(p2.publishMain1Stops());
+        QElapsedTimer opening;
+        opening.start();
+        while (opening.elapsed() < 30000 &&
+               !(p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+                 p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId)) {
+            pumpClients();
+            p1.act();
+            p2.act();
+        }
+        ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+        ASSERT_EQ(p1.activePlayer, p1.myId);
+        ASSERT_EQ(p1.priorityPlayer, p1.myId);
+
+        auto permanent = [&](const CapturingDriver &client, int owner,
+                             const QString &cardId) -> const ObservedState::Permanent * {
+            const auto battlefield = client.battlefieldByPlayer.find(owner);
+            if (battlefield == client.battlefieldByPlayer.end()) {
+                return nullptr;
+            }
+            const auto found = std::find_if(battlefield->second.begin(), battlefield->second.end(),
+                                            [&](const auto &candidate) { return candidate.cardId == cardId; });
+            return found == battlefield->second.end() ? nullptr : &*found;
+        };
+        auto counterCount = [&](const CapturingDriver &client, const QString &cardId, const QString &counterKind,
+                                int count) {
+            const auto *object = permanent(client, p1.myId, cardId);
+            if (!object) {
+                return false;
+            }
+            const QString countText = QStringLiteral("%1 %2 counter(s)").arg(count).arg(counterKind);
+            const QString counterText = QStringLiteral("%1 counter(s)").arg(counterKind);
+            return count == 0 ? object->countersAnnotation.contains(countText) ||
+                                    !object->countersAnnotation.contains(counterText)
+                              : object->countersAnnotation.contains(countText);
+        };
+        auto putCard = [&](const char *name, ruled::v1::DevZone zone, auto predicate) {
+            ruled::v1::RuledCommand command;
+            auto *dev = command.mutable_dev_command();
+            dev->set_target_player_id(p1.myId);
+            dev->mutable_put_card_in_zone()->set_card_name(name);
+            dev->mutable_put_card_in_zone()->set_zone(zone);
+            dev->mutable_put_card_in_zone()->set_ready(true);
+            return sendAccepted(p1, command, QStringLiteral("actual card placement: %1").arg(name), predicate);
+        };
+        auto rawManaPoolUpdateSince = [](const CapturingDriver &client, auto firstBatch, int playerId,
+                                         quint32 colorless) {
+            for (auto batchIndex = firstBatch; batchIndex < client.batches.size(); ++batchIndex) {
+                for (const auto &event : client.batches[batchIndex].events()) {
+                    if (event.has_mana_pool_updated() && event.mana_pool_updated().player_id() == playerId &&
+                        event.mana_pool_updated().c() == colorless) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        auto rawManaPoolMatchesSince = [](const CapturingDriver &client, auto firstBatch, int playerId, quint32 white,
+                                          quint32 blue, quint32 black, quint32 red, quint32 green, quint32 colorless) {
+            for (auto batchIndex = firstBatch; batchIndex < client.batches.size(); ++batchIndex) {
+                for (const auto &event : client.batches[batchIndex].events()) {
+                    if (!event.has_mana_pool_updated() || event.mana_pool_updated().player_id() != playerId) {
+                        continue;
+                    }
+                    const auto &pool = event.mana_pool_updated();
+                    if (pool.w() == white && pool.u() == blue && pool.b() == black && pool.r() == red &&
+                        pool.g() == green && pool.c() == colorless) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        auto rawLifeChangedSince = [](const CapturingDriver &client, auto firstBatch, int playerId) {
+            for (auto batchIndex = firstBatch; batchIndex < client.batches.size(); ++batchIndex) {
+                for (const auto &event : client.batches[batchIndex].events()) {
+                    if (event.has_life_changed() && event.life_changed().player_id() == playerId) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        auto checkOwnLegalKeysSince = [&](const CapturingDriver &client, auto firstBatch) {
+            bool sawLegalState = false;
+            for (auto batchIndex = firstBatch; batchIndex < client.batches.size(); ++batchIndex) {
+                const auto &batch = client.batches[batchIndex];
+                EXPECT_FALSE(batch.has_payment_preview());
+                for (const auto &[legalPlayerId, legal] : batch.legal_by_player()) {
+                    (void)legal;
+                    EXPECT_EQ(legalPlayerId, client.myId);
+                    sawLegalState = true;
+                }
+            }
+            EXPECT_TRUE(sawLegalState);
+        };
+
+        ASSERT_TRUE(putCard("Replicating Ring", ruled::v1::DEV_ZONE_BATTLEFIELD, [&] {
+            return permanent(p1, p1.myId, QStringLiteral("replicating_ring")) &&
+                   permanent(p2, p1.myId, QStringLiteral("replicating_ring"));
+        }));
+        ASSERT_TRUE(putCard("Tekuthal, Inquiry Dominus", ruled::v1::DEV_ZONE_BATTLEFIELD, [&] {
+            return permanent(p1, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus")) &&
+                   permanent(p2, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus"));
+        }));
+        ASSERT_TRUE(putCard("Everflowing Chalice", ruled::v1::DEV_ZONE_HAND, [&] {
+            return p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Everflowing Chalice")) != nullptr;
+        }));
+        ASSERT_TRUE(putCard("Krark-Clan Ironworks", ruled::v1::DEV_ZONE_BATTLEFIELD, [&] {
+            return permanent(p1, p1.myId, QStringLiteral("krark-clan_ironworks")) &&
+                   permanent(p2, p1.myId, QStringLiteral("krark-clan_ironworks"));
+        }));
+
+        const auto actorBatchBeforeChaliceMana = p1.batches.size();
+        const auto opponentBatchBeforeChaliceMana = p2.batches.size();
+        ruled::v1::RuledCommand chaliceMana;
+        chaliceMana.mutable_dev_command()->set_target_player_id(p1.myId);
+        chaliceMana.mutable_dev_command()->mutable_add_mana()->set_c(4);
+        ASSERT_TRUE(sendAccepted(p1, chaliceMana, QStringLiteral("dev-prepared actual Chalice casting mana"), [&] {
+            return p1.myPool.c == 4 && p1.myPool.total() == 4 &&
+                   rawManaPoolUpdateSince(p1, actorBatchBeforeChaliceMana, p1.myId, 4) &&
+                   rawManaPoolUpdateSince(p2, opponentBatchBeforeChaliceMana, p1.myId, 4);
+        }));
+
+        const auto *chaliceOfferPtr =
+            p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Everflowing Chalice"));
+        ASSERT_NE(chaliceOfferPtr, nullptr);
+        const auto chaliceOffer = *chaliceOfferPtr;
+        const ruled::v1::LegalCastCostGroup *multikickerGroup = nullptr;
+        const ruled::v1::LegalCastCostOption *multikickerOption = nullptr;
+        for (const auto &group : chaliceOffer.cost_choices().cast_cost_groups()) {
+            for (const auto &option : group.options()) {
+                if (option.has_maximum_repetitions() && option.selectable() && option.maximum_repetitions() >= 2) {
+                    multikickerGroup = &group;
+                    multikickerOption = &option;
+                    break;
+                }
+            }
+            if (multikickerOption) {
+                break;
+            }
+        }
+        ASSERT_NE(multikickerGroup, nullptr);
+        ASSERT_NE(multikickerOption, nullptr);
+        ruled::v1::RuledCommand beginChalice;
+        auto *chaliceAnnouncement = beginChalice.mutable_begin_spell_cast()->mutable_announcement();
+        chaliceAnnouncement->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+        chaliceAnnouncement->mutable_source()->set_hand_index(chaliceOffer.hand_index());
+        auto *multikicker = chaliceAnnouncement->add_cast_cost_group_selections();
+        multikicker->set_group_index(multikickerGroup->group_index());
+        multikicker->set_option_index(multikickerOption->option_index());
+        multikicker->set_repetitions(2);
+
+        ASSERT_FALSE(p1.latestLegal.has_pending_spell_cast());
+        const auto actorBatchOffsetBeforeChaliceBegin = p1.batches.size();
+        const quint64 actorVersionBeforeChaliceBegin = p1.stateVersion;
+        const quint64 beginChaliceCommandId = p1.nextCmdId;
+        p1.sendRuled(beginChalice, QStringLiteral("Begin current Everflowing Chalice multikicker x2"));
+        auto freshActorChalicePending = [&] {
+            for (auto batchIndex = actorBatchOffsetBeforeChaliceBegin; batchIndex < p1.batches.size(); ++batchIndex) {
+                const auto legal = p1.batches[batchIndex].legal_by_player().find(p1.myId);
+                if (legal == p1.batches[batchIndex].legal_by_player().end() ||
+                    !legal->second.has_pending_spell_cast()) {
+                    continue;
+                }
+                const auto &pending = legal->second.pending_spell_cast();
+                if (!pending.transaction_id() || !pending.announcement().source().has_hand_index() ||
+                    pending.announcement().source().hand_index() != chaliceOffer.hand_index() ||
+                    pending.announcement().cast_method() != ruled::v1::CAST_METHOD_NORMAL ||
+                    pending.announcement().cast_cost_group_selections_size() != 1) {
+                    continue;
+                }
+                const auto &cost = pending.announcement().cast_cost_group_selections(0);
+                if (cost.group_index() == multikickerGroup->group_index() &&
+                    cost.option_index() == multikickerOption->option_index() && cost.repetitions() == 2) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        ASSERT_TRUE(waitFor(
+            [&] {
+                const auto response = p1.responses.find(beginChaliceCommandId);
+                return response != p1.responses.end() &&
+                       (response->second.response_code() != Response::RespOk || freshActorChalicePending());
+            },
+            15000, "fresh actor pending Chalice cast"));
+        ASSERT_TRUE(p1.responses.count(beginChaliceCommandId));
+        ASSERT_EQ(p1.responses.at(beginChaliceCommandId).response_code(), Response::RespOk);
+        ASSERT_TRUE(freshActorChalicePending());
+        EXPECT_EQ(p1.stateVersion, actorVersionBeforeChaliceBegin);
+        EXPECT_FALSE(p2.latestLegal.has_pending_spell_cast());
+        const quint64 chaliceTransaction = p1.latestLegal.pending_spell_cast().transaction_id();
+        ASSERT_NE(chaliceTransaction, 0u);
+
+        ruled::v1::RuledCommand previewChalice;
+        auto *chaliceQuery = previewChalice.mutable_preview_payment();
+        chaliceQuery->set_transaction_id(chaliceTransaction);
+        chaliceQuery->set_revision(chaliceTransaction);
+        auto *chalicePayment = chaliceQuery->mutable_commit_spell_cast();
+        chalicePayment->set_transaction_id(chaliceTransaction);
+        chalicePayment->mutable_payment()->CopyFrom(p1.latestLegal.pending_spell_cast().payment_preview().selection());
+        chalicePayment->mutable_payment()->mutable_mana()->set_c(4);
+        const int chalicePreviewCount = p1.paymentPreviewCount;
+        const quint64 chalicePreviewCommandId = p1.nextCmdId;
+        p1.sendRuled(previewChalice, QStringLiteral("preview actual Chalice payment"));
+        ASSERT_TRUE(waitFor(
+            [&] {
+                const auto response = p1.responses.find(chalicePreviewCommandId);
+                return response != p1.responses.end() && (response->second.response_code() != Response::RespOk ||
+                                                          (p1.paymentPreviewCount == chalicePreviewCount + 1 &&
+                                                           p1.paymentPreview.valid() && p1.paymentPreview.complete()));
+            },
+            15000, "actual Chalice payment preview"));
+        ASSERT_TRUE(p1.responses.count(chalicePreviewCommandId));
+        ASSERT_EQ(p1.responses.at(chalicePreviewCommandId).response_code(), Response::RespOk);
+        ASSERT_EQ(p1.paymentPreviewCount, chalicePreviewCount + 1);
+        EXPECT_EQ(p2.paymentPreviewCount, 0);
+        ruled::v1::RuledCommand commitChalice;
+        auto *chaliceCommit = commitChalice.mutable_commit_spell_cast();
+        chaliceCommit->set_transaction_id(chaliceTransaction);
+        chaliceCommit->mutable_payment()->CopyFrom(p1.paymentPreview.selection());
+        chaliceCommit->mutable_restricted_mana()->CopyFrom(p1.paymentPreview.restricted_mana());
+        ASSERT_TRUE(sendAccepted(p1, commitChalice, QStringLiteral("commit actual Chalice multikicker x2"), [&] {
+            return !p1.latestLegal.has_pending_spell_cast() && p1.stackDepth == 1 && p2.stackDepth == 1;
+        }));
+
+        auto passPriority = [&](CapturingDriver &sender, const QString &description) {
+            const int oldPriority = p1.priorityPlayer;
+            const int oldPhase = p1.phase;
+            const int oldActive = p1.activePlayer;
+            const int oldStack = p1.stackDepth;
+            ruled::v1::RuledCommand pass;
+            pass.mutable_pass_priority();
+            return sendAccepted(sender, pass, description, [&] {
+                return p1.priorityPlayer != oldPriority || p1.phase != oldPhase || p1.activePlayer != oldActive ||
+                       p1.stackDepth != oldStack;
+            });
+        };
+        ASSERT_EQ(p1.priorityPlayer, p1.myId);
+        ASSERT_TRUE(passPriority(p1, QStringLiteral("pass Chalice priority")));
+        ASSERT_EQ(p1.priorityPlayer, p2.myId);
+        ASSERT_TRUE(passPriority(p2, QStringLiteral("resolve actual Everflowing Chalice")));
+        ASSERT_TRUE(waitFor(
+            [&] {
+                return p1.stackDepth == 0 && p2.stackDepth == 0 &&
+                       counterCount(p1, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2) &&
+                       counterCount(p2, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2);
+            },
+            10000, "two real Chalice charge counters at both clients"));
+
+        const auto *ringBeforeUpkeep = permanent(p1, p1.myId, QStringLiteral("replicating_ring"));
+        ASSERT_NE(ringBeforeUpkeep, nullptr);
+        const quint32 ringTriggerSourceObjectId = ringBeforeUpkeep->oid;
+        const quint64 ringTriggerSourceGeneration = ringBeforeUpkeep->generation;
+        const auto ringTriggerSeen = [&] {
+            return std::any_of(p1.events.begin(), p1.events.end(), [&](const ruled::v1::RuledEvent &event) {
+                return event.has_stack_pushed() && event.stack_pushed().is_triggered() &&
+                       event.stack_pushed().has_ability_source() &&
+                       event.stack_pushed().ability_source().object_id() == ringTriggerSourceObjectId &&
+                       event.stack_pushed().ability_source().zone_change_generation() == ringTriggerSourceGeneration;
+            });
+        };
+        auto atRingTurnMain1 = [&] {
+            return p1.activePlayer == p1.myId && p1.phase == ruled::v1::PHASE_ID_MAIN1 &&
+                   p1.priorityPlayer == p1.myId && p2.activePlayer == p1.myId &&
+                   p2.phase == ruled::v1::PHASE_ID_MAIN1 && ringTriggerSeen() &&
+                   counterCount(p1, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1) &&
+                   counterCount(p2, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1) &&
+                   counterCount(p1, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2) &&
+                   counterCount(p2, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2);
+        };
+        QElapsedTimer advance;
+        advance.start();
+        int passCount = 0;
+        bool opponentForestPlayed = false;
+        while (advance.elapsed() < 60000 && passCount < 100 && !atRingTurnMain1()) {
+            pumpClients();
+            if (atRingTurnMain1()) {
+                break;
+            }
+            if (!opponentForestPlayed && p1.activePlayer == p2.myId && p1.phase == ruled::v1::PHASE_ID_MAIN1 &&
+                p1.priorityPlayer == p2.myId) {
+                const auto *forest = p2.handAction(ruled::v1::HAND_ACTION_PLAY_LAND, QStringLiteral("Forest"));
+                ASSERT_NE(forest, nullptr) << "opponent must play its currently offered Forest before cleanup";
+                ASSERT_TRUE(p2.handSizeByPlayer.count(p2.myId));
+                ASSERT_EQ(p2.handSizeByPlayer.at(p2.myId), 8);
+                ruled::v1::RuledCommand playForest;
+                playForest.mutable_play_land()->mutable_source()->set_hand_index(forest->hand_index());
+                ASSERT_TRUE(
+                    sendAccepted(p2, playForest, QStringLiteral("play current offered Forest before cleanup"), [&] {
+                        return p2.handSizeByPlayer.count(p2.myId) && p2.handSizeByPlayer.at(p2.myId) == 7 &&
+                               permanent(p1, p2.myId, QStringLiteral("forest")) &&
+                               permanent(p2, p2.myId, QStringLiteral("forest"));
+                    }));
+                opponentForestPlayed = true;
+                ++passCount;
+                continue;
+            }
+            if (p1.priorityPlayer == p1.myId) {
+                ASSERT_TRUE(passPriority(p1, QStringLiteral("advance to Replicating Ring upkeep")));
+                ++passCount;
+            } else if (p1.priorityPlayer == p2.myId) {
+                ASSERT_TRUE(passPriority(p2, QStringLiteral("advance opponent priority for Ring upkeep")));
+                ++passCount;
+            }
+        }
+        ASSERT_TRUE(opponentForestPlayed) << "the intervening opponent first turn must avoid a cleanup discard";
+        ASSERT_TRUE(atRingTurnMain1()) << "Replicating Ring's ordinary upkeep trigger did not reach Main 1";
+
+        struct PhysicalReceipt
+        {
+            quint32 objectId = 0;
+            quint64 generation = 0;
+            int physicalCardId = -1;
+        };
+        auto physicalReceipt = [&](const CapturingDriver &client,
+                                   const QString &cardId) -> std::optional<PhysicalReceipt> {
+            const auto *object = permanent(client, p1.myId, cardId);
+            if (!object) {
+                return std::nullopt;
+            }
+            const auto physical = client.serverCardByEngineOid.find(object->oid);
+            if (physical == client.serverCardByEngineOid.end()) {
+                return std::nullopt;
+            }
+            return PhysicalReceipt{object->oid, object->generation, physical->second};
+        };
+        auto currentBattlefieldObjectForReceipt =
+            [&](const QString &cardId, const PhysicalReceipt &receipt) -> std::optional<ruled::v1::BattlefieldObject> {
+            const auto *observed = permanent(p1, p1.myId, cardId);
+            if (!observed || observed->oid != receipt.objectId || observed->generation != receipt.generation) {
+                return std::nullopt;
+            }
+            for (auto batch = p1.batches.rbegin(); batch != p1.batches.rend(); ++batch) {
+                for (auto event = batch->events().rbegin(); event != batch->events().rend(); ++event) {
+                    if (!event->has_zone_view() || event->zone_view().battlefields_unchanged()) {
+                        continue;
+                    }
+                    const auto &zoneView = event->zone_view();
+                    const auto owner = std::find_if(zoneView.per_player().begin(), zoneView.per_player().end(),
+                                                    [&](const auto &player) { return player.player_id() == p1.myId; });
+                    if (owner == zoneView.per_player().end()) {
+                        return std::nullopt;
+                    }
+                    const auto object =
+                        std::find_if(owner->battlefield_objects().begin(), owner->battlefield_objects().end(),
+                                     [&](const auto &candidate) { return candidate.object_id() == receipt.objectId; });
+                    if (object == owner->battlefield_objects().end() ||
+                        object->zone_change_generation() != receipt.generation) {
+                        return std::nullopt;
+                    }
+                    return *object;
+                }
+            }
+            return std::nullopt;
+        };
+        auto expectSharedReceipt = [&](const QString &cardId) -> ::testing::AssertionResult {
+            const auto actor = physicalReceipt(p1, cardId);
+            const auto opponent = physicalReceipt(p2, cardId);
+            if (!actor || !opponent) {
+                return ::testing::AssertionFailure()
+                       << cardId.toStdString() << ": missing recipient physical-card binding";
+            }
+            if (actor->objectId != opponent->objectId || actor->generation != opponent->generation ||
+                actor->physicalCardId != opponent->physicalCardId) {
+                return ::testing::AssertionFailure()
+                       << cardId.toStdString() << ": recipient ObjectId/generation/physical-card receipts differ";
+            }
+            return ::testing::AssertionSuccess();
+        };
+        ASSERT_TRUE(expectSharedReceipt(QStringLiteral("tekuthal,_inquiry_dominus")));
+        ASSERT_TRUE(expectSharedReceipt(QStringLiteral("replicating_ring")));
+        ASSERT_TRUE(expectSharedReceipt(QStringLiteral("everflowing_chalice")));
+        ASSERT_TRUE(expectSharedReceipt(QStringLiteral("krark-clan_ironworks")));
+        const auto tekReceipt = *physicalReceipt(p1, QStringLiteral("tekuthal,_inquiry_dominus"));
+        const auto ringReceipt = *physicalReceipt(p1, QStringLiteral("replicating_ring"));
+        const auto chaliceReceipt = *physicalReceipt(p1, QStringLiteral("everflowing_chalice"));
+        const auto kciReceipt = *physicalReceipt(p1, QStringLiteral("krark-clan_ironworks"));
+
+        const auto tekBattlefield =
+            currentBattlefieldObjectForReceipt(QStringLiteral("tekuthal,_inquiry_dominus"), tekReceipt);
+        ASSERT_TRUE(tekBattlefield.has_value());
+        const auto *currentTekPermanent = permanent(p1, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus"));
+        ASSERT_NE(currentTekPermanent, nullptr);
+        const auto tekAbilityIt =
+            std::find_if(tekBattlefield->activated_abilities().begin(), tekBattlefield->activated_abilities().end(),
+                         [](const auto &ability) {
+                             return ability.activatable() && !ability.is_mana_ability() && !ability.mana_cost().empty();
+                         });
+        ASSERT_NE(tekAbilityIt, tekBattlefield->activated_abilities().end());
+        const auto tekAbility = *tekAbilityIt;
+        const quint64 tekAbilityKey = (static_cast<quint64>(tekReceipt.objectId) << 32) | tekAbility.ability_index();
+        ASSERT_NE(std::find(currentTekPermanent->abilityIndices.begin(), currentTekPermanent->abilityIndices.end(),
+                            tekAbility.ability_index()),
+                  currentTekPermanent->abilityIndices.end());
+        const auto tekCostChoices = p1.latestLegal.cost_choices_by_ability().find(tekAbilityKey);
+        ASSERT_NE(tekCostChoices, p1.latestLegal.cost_choices_by_ability().end());
+        const auto counterGroupChoiceIt =
+            std::find_if(tekCostChoices->second.choices().begin(), tekCostChoices->second.choices().end(),
+                         [](const ruled::v1::LegalCostChoice &choice) { return choice.has_counter_removal_group(); });
+        ASSERT_NE(counterGroupChoiceIt, tekCostChoices->second.choices().end());
+        const auto counterGroupChoice = *counterGroupChoiceIt;
+        ASSERT_EQ(counterGroupChoice.counter_removal_group().required_count(), 3u);
+        EXPECT_TRUE(counterCount(p1, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1));
+        EXPECT_TRUE(counterCount(p1, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2));
+        EXPECT_EQ(p1.myPool.total(), 0u);
+
+        ruled::v1::RuledCommand beginTek;
+        auto *tekBegin = beginTek.mutable_begin_ability_activation();
+        tekBegin->set_source_object_id(tekReceipt.objectId);
+        tekBegin->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD);
+        tekBegin->set_expected_zone_change_generation(tekReceipt.generation);
+        tekBegin->set_ability_index(tekAbility.ability_index());
+        auto *counterSelection = tekBegin->add_cost_selections();
+        counterSelection->set_cost_index(counterGroupChoice.cost_index());
+        auto *counterContribution = counterSelection->mutable_counter_removal_group();
+        const auto &counterCandidates = counterGroupChoice.counter_removal_group().candidates();
+        auto addCounterContribution = [&](quint32 objectId, quint64 generation, const QString &counterKind,
+                                          quint32 count) -> bool {
+            const auto candidate =
+                std::find_if(counterCandidates.begin(), counterCandidates.end(), [&](const auto &entry) {
+                    return entry.has_object() && entry.object().object_id() == objectId &&
+                           entry.object().zone_change_generation() == generation;
+                });
+            if (candidate == counterCandidates.end()) {
+                return false;
+            }
+            const auto option =
+                std::find_if(candidate->options().begin(), candidate->options().end(), [&](const auto &entry) {
+                    return entry.label() == counterKind.toStdString() && entry.available_count() >= count;
+                });
+            if (option == candidate->options().end()) {
+                return false;
+            }
+            auto *contribution = counterContribution->add_contributions();
+            contribution->mutable_object()->CopyFrom(candidate->object());
+            contribution->set_option_id(option->option_id());
+            contribution->set_count(count);
+            return true;
+        };
+        ASSERT_TRUE(addCounterContribution(ringReceipt.objectId, ringReceipt.generation, QStringLiteral("night"), 1));
+        ASSERT_TRUE(
+            addCounterContribution(chaliceReceipt.objectId, chaliceReceipt.generation, QStringLiteral("charge"), 2));
+        ASSERT_EQ(counterContribution->contributions_size(), 2);
+
+        const QString manaCost = QString::fromStdString(tekAbility.mana_cost());
+        quint32 pipIndex = 0;
+        quint32 flexPaymentCount = 0;
+        for (int i = 0; i < manaCost.size();) {
+            if (manaCost.at(i) != QLatin1Char('{')) {
+                ++i;
+                continue;
+            }
+            const int close = manaCost.indexOf(QLatin1Char('}'), i + 1);
+            ASSERT_GE(close, 0) << manaCost.toStdString();
+            const QString pip = manaCost.mid(i + 1, close - i - 1);
+            if (pip.endsWith(QStringLiteral("/P"))) {
+                auto *flex = tekBegin->add_flex_payments();
+                flex->set_pip_index(pipIndex);
+                flex->set_pay_life(true);
+                ++flexPaymentCount;
+            }
+            ++pipIndex;
+            i = close + 1;
+        }
+        ASSERT_EQ(flexPaymentCount, 2u) << manaCost.toStdString();
+        ASSERT_EQ(tekBegin->flex_payments_size(), 2);
+        EXPECT_EQ(tekBegin->flex_payments(0).pip_index(), 1u);
+        EXPECT_TRUE(tekBegin->flex_payments(0).pay_life());
+        EXPECT_EQ(tekBegin->flex_payments(1).pip_index(), 2u);
+        EXPECT_TRUE(tekBegin->flex_payments(1).pay_life());
+
+        const auto acceptedCounterSelection = tekBegin->cost_selections(0).SerializeAsString();
+        const auto actorLifeBeforeBegin = p1.lifeByPlayer;
+        const auto opponentLifeBeforeBegin = p2.lifeByPlayer;
+        const auto actorBatchOffsetBeforeBegin = p1.batches.size();
+        const auto opponentBatchOffsetBeforeBegin = p2.batches.size();
+        const auto actorPreviewOffsetBeforeBegin = p1.paymentPreviews.size();
+        const auto opponentPreviewOffsetBeforeBegin = p2.paymentPreviews.size();
+        ASSERT_TRUE(sendAccepted(p1, beginTek, QStringLiteral("Begin current Tekuthal grouped payment"), [&] {
+            return p1.latestLegal.has_pending_ability_activation() &&
+                   p1.latestLegal.pending_ability_activation().stage() == ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT &&
+                   p2.latestLegal.has_pending_ability_activation() &&
+                   p2.latestLegal.pending_ability_activation().transaction_id() ==
+                       p1.latestLegal.pending_ability_activation().transaction_id();
+        }));
+        const quint64 activationTransaction = p1.latestLegal.pending_ability_activation().transaction_id();
+        const auto originalPending = p1.latestLegal.pending_ability_activation();
+        ASSERT_NE(activationTransaction, 0u);
+        ASSERT_TRUE(originalPending.has_payment_preview());
+        const quint64 activationRevision = originalPending.revision();
+        const quint32 tekAbilitySourceObjectId = originalPending.source_object_id();
+        const quint64 tekAbilitySourceGeneration = originalPending.source_zone_change_generation();
+        ASSERT_EQ(tekAbilitySourceObjectId, tekReceipt.objectId);
+        ASSERT_EQ(tekAbilitySourceGeneration, tekReceipt.generation);
+        ASSERT_EQ(originalPending.cost_selections_size(), 1);
+        ASSERT_EQ(originalPending.cost_selections(0).SerializeAsString(), acceptedCounterSelection);
+        ASSERT_EQ(originalPending.flex_payments_size(), 2);
+        ASSERT_FALSE(originalPending.locked_total_cost().empty());
+        const std::string originalLockedTotalCost = originalPending.locked_total_cost();
+        EXPECT_EQ(p1.lifeByPlayer, actorLifeBeforeBegin);
+        EXPECT_EQ(p2.lifeByPlayer, opponentLifeBeforeBegin);
+        EXPECT_TRUE(counterCount(p1, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1));
+        EXPECT_TRUE(counterCount(p2, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1));
+        EXPECT_TRUE(counterCount(p1, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2));
+        EXPECT_TRUE(counterCount(p2, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2));
+
+        auto findPendingBatch = [&](const CapturingDriver &client, auto firstBatch, int playerId,
+                                    quint64 transactionId) -> const ruled::v1::RuledEventBatch * {
+            for (auto batchIndex = firstBatch; batchIndex < client.batches.size(); ++batchIndex) {
+                const auto &batch = client.batches[batchIndex];
+                const auto legal = batch.legal_by_player().find(playerId);
+                if (legal != batch.legal_by_player().end() && legal->second.has_pending_ability_activation() &&
+                    legal->second.pending_ability_activation().transaction_id() == transactionId) {
+                    return &batch;
+                }
+            }
+            return nullptr;
+        };
+        auto checkPublicPendingShell = [&](const CapturingDriver &client, auto firstBatch, quint64 transactionId) {
+            bool sawPublicSnapshot = false;
+            EXPECT_GT(client.batches.size(), firstBatch);
+            for (auto batchIndex = firstBatch; batchIndex < client.batches.size(); ++batchIndex) {
+                const auto &batch = client.batches[batchIndex];
+                EXPECT_FALSE(batch.has_payment_preview());
+                for (const auto &[legalPlayerId, legal] : batch.legal_by_player()) {
+                    EXPECT_EQ(legalPlayerId, client.myId);
+                    EXPECT_EQ(legal.cost_choices_by_ability().count(tekAbilityKey), 0u);
+                    if (!legal.has_pending_ability_activation() ||
+                        legal.pending_ability_activation().transaction_id() != transactionId) {
+                        continue;
+                    }
+                    sawPublicSnapshot = true;
+                    const auto &pending = legal.pending_ability_activation();
+                    EXPECT_EQ(pending.stage(), ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT);
+                    EXPECT_EQ(pending.actor_player_id(), p1.myId);
+                    EXPECT_EQ(pending.source_object_id(), tekAbilitySourceObjectId);
+                    EXPECT_EQ(pending.source_zone_change_generation(), tekAbilitySourceGeneration);
+                    EXPECT_TRUE(pending.locked_total_cost().empty());
+                    EXPECT_TRUE(pending.cost_selections().empty());
+                    EXPECT_TRUE(pending.flex_payments().empty());
+                    EXPECT_FALSE(pending.has_payment_preview());
+                }
+            }
+            EXPECT_TRUE(sawPublicSnapshot);
+        };
+        const auto *actorPendingBatch =
+            findPendingBatch(p1, actorBatchOffsetBeforeBegin, p1.myId, activationTransaction);
+        ASSERT_NE(actorPendingBatch, nullptr);
+        const auto actorPendingLegal = actorPendingBatch->legal_by_player().find(p1.myId);
+        ASSERT_NE(actorPendingLegal, actorPendingBatch->legal_by_player().end());
+        const auto &actorPendingRow = actorPendingLegal->second.pending_ability_activation();
+        EXPECT_EQ(actorPendingRow.SerializeAsString(), originalPending.SerializeAsString());
+        checkPublicPendingShell(p2, opponentBatchOffsetBeforeBegin, activationTransaction);
+        checkOwnLegalKeysSince(p1, actorBatchOffsetBeforeBegin);
+        checkOwnLegalKeysSince(p2, opponentBatchOffsetBeforeBegin);
+        EXPECT_EQ(p1.paymentPreviews.size(), actorPreviewOffsetBeforeBegin);
+        EXPECT_EQ(p2.paymentPreviews.size(), opponentPreviewOffsetBeforeBegin);
+        EXPECT_FALSE(rawLifeChangedSince(p1, actorBatchOffsetBeforeBegin, p1.myId));
+        EXPECT_FALSE(rawLifeChangedSince(p2, opponentBatchOffsetBeforeBegin, p1.myId));
+
+        if (!doRestore) {
+            const auto kciBattlefield =
+                currentBattlefieldObjectForReceipt(QStringLiteral("krark-clan_ironworks"), kciReceipt);
+            ASSERT_TRUE(kciBattlefield.has_value());
+            const auto *kciPermanent = permanent(p1, p1.myId, QStringLiteral("krark-clan_ironworks"));
+            ASSERT_NE(kciPermanent, nullptr);
+            const auto kciAbilityIt = std::find_if(
+                kciBattlefield->activated_abilities().begin(), kciBattlefield->activated_abilities().end(),
+                [](const auto &ability) {
+                    return ability.activatable() && ability.is_mana_ability() && !ability.mana_produced().empty();
+                });
+            ASSERT_NE(kciAbilityIt, kciBattlefield->activated_abilities().end());
+            const auto kciAbility = *kciAbilityIt;
+            const quint64 kciAbilityKey =
+                (static_cast<quint64>(kciReceipt.objectId) << 32) | kciAbility.ability_index();
+            ASSERT_NE(std::find(kciPermanent->abilityIndices.begin(), kciPermanent->abilityIndices.end(),
+                                kciAbility.ability_index()),
+                      kciPermanent->abilityIndices.end());
+            const auto kciCostChoices = p1.latestLegal.cost_choices_by_ability().find(kciAbilityKey);
+            ASSERT_NE(kciCostChoices, p1.latestLegal.cost_choices_by_ability().end());
+            const ruled::v1::LegalCostChoice *kciSacrificeChoice = nullptr;
+            bool sawCurrentRingCandidate = false;
+            for (const auto &choice : kciCostChoices->second.choices()) {
+                for (const auto &candidate : choice.candidate_objects()) {
+                    if (!candidate.has_object() || candidate.object().object_id() != ringReceipt.objectId) {
+                        continue;
+                    }
+                    ASSERT_EQ(candidate.object().zone_change_generation(), ringReceipt.generation);
+                    sawCurrentRingCandidate = true;
+                    kciSacrificeChoice = &choice;
+                    break;
+                }
+                if (kciSacrificeChoice) {
+                    break;
+                }
+            }
+            ASSERT_TRUE(sawCurrentRingCandidate);
+            ASSERT_NE(kciSacrificeChoice, nullptr);
+            const auto pendingForKci = p1.latestLegal.pending_ability_activation();
+            ASSERT_EQ(pendingForKci.transaction_id(), activationTransaction);
+            ASSERT_EQ(pendingForKci.revision(), activationRevision);
+            ASSERT_TRUE(pendingForKci.has_payment_preview());
+
+            ruled::v1::RuledCommand kciSacrifice;
+            auto *kciActivation = kciSacrifice.mutable_activate_ability();
+            kciActivation->set_source_object_id(kciReceipt.objectId);
+            kciActivation->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD);
+            kciActivation->set_expected_zone_change_generation(kciReceipt.generation);
+            kciActivation->set_ability_index(kciAbility.ability_index());
+            auto *kciCostSelection = kciActivation->add_cost_selections();
+            kciCostSelection->set_cost_index(kciSacrificeChoice->cost_index());
+            kciCostSelection->set_permanent_id(ringReceipt.objectId);
+            auto *zeroManaPayment = kciActivation->mutable_payment();
+            zeroManaPayment->set_expected_state_revision(
+                pendingForKci.payment_preview().selection().expected_state_revision());
+            zeroManaPayment->mutable_source()->set_object_id(kciReceipt.objectId);
+            zeroManaPayment->mutable_source()->set_zone_change_generation(kciReceipt.generation);
+            zeroManaPayment->mutable_mana();
+
+            const auto actorBatchOffsetBeforeKci = p1.batches.size();
+            const auto opponentBatchOffsetBeforeKci = p2.batches.size();
+            const auto actorPhysicalMoveOffsetBeforeKci = p1.physicalMoveEvents.size();
+            const auto opponentPhysicalMoveOffsetBeforeKci = p2.physicalMoveEvents.size();
+            ASSERT_TRUE(sendAccepted(
+                p1, kciSacrifice, QStringLiteral("activate current KCI offer sacrificing Replicating Ring"), [&] {
+                    const auto *p1Tek = permanent(p1, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus"));
+                    const auto *p2Tek = permanent(p2, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus"));
+                    const auto p1RingGrave = p1.graveyardOwnerByEngineOid.find(ringReceipt.objectId);
+                    const auto p2RingGrave = p2.graveyardOwnerByEngineOid.find(ringReceipt.objectId);
+                    const auto p1RingPhysical = p1.serverCardByEngineOid.find(ringReceipt.objectId);
+                    const auto p2RingPhysical = p2.serverCardByEngineOid.find(ringReceipt.objectId);
+                    return p1.myPool.c == 2 && p1.myPool.total() == 2 &&
+                           rawManaPoolUpdateSince(p1, actorBatchOffsetBeforeKci, p1.myId, 2) &&
+                           rawManaPoolUpdateSince(p2, opponentBatchOffsetBeforeKci, p1.myId, 2) &&
+                           !permanent(p1, p1.myId, QStringLiteral("replicating_ring")) &&
+                           !permanent(p2, p1.myId, QStringLiteral("replicating_ring")) &&
+                           counterCount(p1, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2) &&
+                           counterCount(p2, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2) &&
+                           p1Tek && p2Tek && p1Tek->oid == tekReceipt.objectId && p2Tek->oid == tekReceipt.objectId &&
+                           p1Tek->generation == tekReceipt.generation && p2Tek->generation == tekReceipt.generation &&
+                           p1RingGrave != p1.graveyardOwnerByEngineOid.end() && p1RingGrave->second == p1.myId &&
+                           p2RingGrave != p2.graveyardOwnerByEngineOid.end() && p2RingGrave->second == p1.myId &&
+                           p1RingPhysical != p1.serverCardByEngineOid.end() &&
+                           p1RingPhysical->second == ringReceipt.physicalCardId &&
+                           p2RingPhysical != p2.serverCardByEngineOid.end() &&
+                           p2RingPhysical->second == ringReceipt.physicalCardId &&
+                           p1.latestLegal.has_pending_ability_activation() &&
+                           p1.latestLegal.pending_ability_activation().transaction_id() == activationTransaction &&
+                           p1.latestLegal.pending_ability_activation().revision() == activationRevision &&
+                           p2.latestLegal.has_pending_ability_activation() &&
+                           p2.latestLegal.pending_ability_activation().transaction_id() == activationTransaction &&
+                           p1.stackDepth == 0 && p2.stackDepth == 0;
+                }));
+            EXPECT_EQ(p1.lifeByPlayer, actorLifeBeforeBegin);
+            EXPECT_EQ(p2.lifeByPlayer, opponentLifeBeforeBegin);
+            EXPECT_FALSE(rawLifeChangedSince(p1, actorBatchOffsetBeforeKci, p1.myId));
+            EXPECT_FALSE(rawLifeChangedSince(p2, opponentBatchOffsetBeforeKci, p1.myId));
+            EXPECT_EQ(p1.serverCardByEngineOid.at(ringReceipt.objectId), ringReceipt.physicalCardId);
+            EXPECT_EQ(p2.serverCardByEngineOid.at(ringReceipt.objectId), ringReceipt.physicalCardId);
+            EXPECT_EQ(p1.graveyardOwnerByEngineOid.at(ringReceipt.objectId), p1.myId);
+            EXPECT_EQ(p2.graveyardOwnerByEngineOid.at(ringReceipt.objectId), p1.myId);
+            for (const auto *client : {&p1, &p2}) {
+                const auto firstMove =
+                    client == &p1 ? actorPhysicalMoveOffsetBeforeKci : opponentPhysicalMoveOffsetBeforeKci;
+                const auto move =
+                    std::find_if(client->physicalMoveEvents.begin() + static_cast<std::ptrdiff_t>(firstMove),
+                                 client->physicalMoveEvents.end(), [&](const Event_MoveCard &event) {
+                                     return event.start_player_id() == p1.myId &&
+                                            event.start_zone() == ZoneNames::TABLE &&
+                                            event.target_zone() == ZoneNames::GRAVE &&
+                                            event.card_id() == ringReceipt.physicalCardId &&
+                                            event.new_card_id() == ringReceipt.physicalCardId;
+                                 });
+                EXPECT_NE(move, client->physicalMoveEvents.end());
+            }
+
+            const auto pendingAfterSacrifice = p1.latestLegal.pending_ability_activation();
+            EXPECT_EQ(pendingAfterSacrifice.transaction_id(), activationTransaction);
+            EXPECT_EQ(pendingAfterSacrifice.revision(), activationRevision);
+            EXPECT_EQ(pendingAfterSacrifice.stage(), ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT);
+            EXPECT_EQ(pendingAfterSacrifice.actor_player_id(), p1.myId);
+            EXPECT_EQ(pendingAfterSacrifice.source_object_id(), tekAbilitySourceObjectId);
+            EXPECT_EQ(pendingAfterSacrifice.source_zone_change_generation(), tekAbilitySourceGeneration);
+            ASSERT_EQ(pendingAfterSacrifice.cost_selections_size(), originalPending.cost_selections_size());
+            EXPECT_EQ(pendingAfterSacrifice.cost_selections(0).SerializeAsString(),
+                      originalPending.cost_selections(0).SerializeAsString());
+            EXPECT_EQ(pendingAfterSacrifice.flex_payments_size(), originalPending.flex_payments_size());
+            for (int i = 0; i < originalPending.flex_payments_size(); ++i) {
+                EXPECT_EQ(pendingAfterSacrifice.flex_payments(i).SerializeAsString(),
+                          originalPending.flex_payments(i).SerializeAsString());
+            }
+            EXPECT_EQ(pendingAfterSacrifice.locked_total_cost(), originalLockedTotalCost);
+
+            const auto *actorPendingBatchAfterSacrifice =
+                findPendingBatch(p1, actorBatchOffsetBeforeKci, p1.myId, activationTransaction);
+            ASSERT_NE(actorPendingBatchAfterSacrifice, nullptr);
+            const auto actorLegalAfterSacrifice = actorPendingBatchAfterSacrifice->legal_by_player().find(p1.myId);
+            ASSERT_NE(actorLegalAfterSacrifice, actorPendingBatchAfterSacrifice->legal_by_player().end());
+            EXPECT_EQ(actorLegalAfterSacrifice->second.pending_ability_activation().transaction_id(),
+                      activationTransaction);
+            EXPECT_EQ(actorLegalAfterSacrifice->second.pending_ability_activation().revision(), activationRevision);
+            EXPECT_EQ(actorLegalAfterSacrifice->second.pending_ability_activation().source_object_id(),
+                      tekAbilitySourceObjectId);
+            EXPECT_EQ(actorLegalAfterSacrifice->second.pending_ability_activation().source_zone_change_generation(),
+                      tekAbilitySourceGeneration);
+            ASSERT_EQ(actorLegalAfterSacrifice->second.pending_ability_activation().cost_selections_size(),
+                      originalPending.cost_selections_size());
+            EXPECT_EQ(
+                actorLegalAfterSacrifice->second.pending_ability_activation().cost_selections(0).SerializeAsString(),
+                originalPending.cost_selections(0).SerializeAsString());
+            EXPECT_EQ(actorLegalAfterSacrifice->second.pending_ability_activation().locked_total_cost(),
+                      originalLockedTotalCost);
+            EXPECT_EQ(actorLegalAfterSacrifice->second.pending_ability_activation().flex_payments_size(), 2);
+            for (int i = 0; i < originalPending.flex_payments_size(); ++i) {
+                EXPECT_EQ(
+                    actorLegalAfterSacrifice->second.pending_ability_activation().flex_payments(i).SerializeAsString(),
+                    originalPending.flex_payments(i).SerializeAsString());
+            }
+            checkPublicPendingShell(p2, opponentBatchOffsetBeforeKci, activationTransaction);
+            checkOwnLegalKeysSince(p1, actorBatchOffsetBeforeKci);
+            checkOwnLegalKeysSince(p2, opponentBatchOffsetBeforeKci);
+
+            const auto actorLifeAfterSacrifice = p1.lifeByPlayer;
+            const auto opponentLifeAfterSacrifice = p2.lifeByPlayer;
+            const auto actorBatchCountAfterSacrifice = p1.batches.size();
+            const auto opponentBatchCountAfterSacrifice = p2.batches.size();
+            const auto actorEventCountAfterSacrifice = p1.events.size();
+            const auto opponentEventCountAfterSacrifice = p2.events.size();
+            const auto actorMoveCountAfterSacrifice = p1.physicalMoveEvents.size();
+            const auto opponentMoveCountAfterSacrifice = p2.physicalMoveEvents.size();
+            const auto actorStateVersionAfterSacrifice = p1.stateVersion;
+            const auto opponentStateVersionAfterSacrifice = p2.stateVersion;
+            const auto actorPendingBytesAfterSacrifice = pendingAfterSacrifice.SerializeAsString();
+            const auto opponentPendingBytesAfterSacrifice =
+                p2.latestLegal.pending_ability_activation().SerializeAsString();
+            const auto actorPreviewCountAfterSacrifice = p1.paymentPreviewCount;
+            const auto opponentPreviewCountAfterSacrifice = p2.paymentPreviewCount;
+            const auto actorPreviewSizeAfterSacrifice = p1.paymentPreviews.size();
+            const auto opponentPreviewSizeAfterSacrifice = p2.paymentPreviews.size();
+            const auto actorPoolWAfterSacrifice = p1.myPool.w;
+            const auto actorPoolUAfterSacrifice = p1.myPool.u;
+            const auto actorPoolBAfterSacrifice = p1.myPool.b;
+            const auto actorPoolRAfterSacrifice = p1.myPool.r;
+            const auto actorPoolGAfterSacrifice = p1.myPool.g;
+            const auto actorPoolCAfterSacrifice = p1.myPool.c;
+            const auto actorPoolTotalAfterSacrifice = p1.myPool.total();
+
+            auto staleResourcesUnchanged = [&] {
+                if (p1.myPool.w != actorPoolWAfterSacrifice || p1.myPool.u != actorPoolUAfterSacrifice ||
+                    p1.myPool.b != actorPoolBAfterSacrifice || p1.myPool.r != actorPoolRAfterSacrifice ||
+                    p1.myPool.g != actorPoolGAfterSacrifice || p1.myPool.c != actorPoolCAfterSacrifice ||
+                    p1.myPool.total() != actorPoolTotalAfterSacrifice || p1.stackDepth != 0 || p2.stackDepth != 0 ||
+                    p1.lifeByPlayer != actorLifeAfterSacrifice || p2.lifeByPlayer != opponentLifeAfterSacrifice) {
+                    return false;
+                }
+                for (const auto *client : {&p1, &p2}) {
+                    const auto *tek = permanent(*client, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus"));
+                    const auto *chalice = permanent(*client, p1.myId, QStringLiteral("everflowing_chalice"));
+                    const auto ringPhysical = client->serverCardByEngineOid.find(ringReceipt.objectId);
+                    const auto ringGrave = client->graveyardOwnerByEngineOid.find(ringReceipt.objectId);
+                    if (permanent(*client, p1.myId, QStringLiteral("replicating_ring")) || !tek || !chalice ||
+                        tek->oid != tekReceipt.objectId || tek->generation != tekReceipt.generation ||
+                        ringPhysical == client->serverCardByEngineOid.end() ||
+                        ringPhysical->second != ringReceipt.physicalCardId ||
+                        ringGrave == client->graveyardOwnerByEngineOid.end() || ringGrave->second != p1.myId ||
+                        !counterCount(*client, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2)) {
+                        return false;
+                    }
+                }
+                return p1.latestLegal.has_pending_ability_activation() &&
+                       p1.latestLegal.pending_ability_activation().SerializeAsString() ==
+                           actorPendingBytesAfterSacrifice &&
+                       p2.latestLegal.has_pending_ability_activation() &&
+                       p2.latestLegal.pending_ability_activation().SerializeAsString() ==
+                           opponentPendingBytesAfterSacrifice;
+            };
+            auto sendRejectedWithoutEffects = [&](CapturingDriver &sender, const ruled::v1::RuledCommand &command,
+                                                  const QString &description) -> ::testing::AssertionResult {
+                const quint64 commandId = sender.nextCmdId;
+                sender.sendRuled(command, description);
+                const auto what = description.toStdString();
+                const auto ack = waitFor([&] { return sender.responses.count(commandId) != 0; }, 15000, what.c_str());
+                if (!ack) {
+                    return ack;
+                }
+                const auto response = sender.responses.find(commandId);
+                if (response == sender.responses.end()) {
+                    return ::testing::AssertionFailure() << what << ": exact command response missing";
+                }
+                if (response->second.response_code() == Response::RespOk) {
+                    return ::testing::AssertionFailure() << what << ": expected a non-OK command response";
+                }
+                if (p1.stateVersion != actorStateVersionAfterSacrifice ||
+                    p2.stateVersion != opponentStateVersionAfterSacrifice ||
+                    p1.batches.size() != actorBatchCountAfterSacrifice ||
+                    p2.batches.size() != opponentBatchCountAfterSacrifice ||
+                    p1.events.size() != actorEventCountAfterSacrifice ||
+                    p2.events.size() != opponentEventCountAfterSacrifice ||
+                    p1.physicalMoveEvents.size() != actorMoveCountAfterSacrifice ||
+                    p2.physicalMoveEvents.size() != opponentMoveCountAfterSacrifice ||
+                    p1.paymentPreviewCount != actorPreviewCountAfterSacrifice + 1 ||
+                    p2.paymentPreviewCount != opponentPreviewCountAfterSacrifice ||
+                    p1.paymentPreviews.size() != actorPreviewSizeAfterSacrifice + 1 ||
+                    p2.paymentPreviews.size() != opponentPreviewSizeAfterSacrifice) {
+                    return ::testing::AssertionFailure() << what << ": rejected command advanced observable state";
+                }
+                if (!staleResourcesUnchanged()) {
+                    return ::testing::AssertionFailure()
+                           << what << ": rejected command changed the post-sacrifice baseline";
+                }
+                return ::testing::AssertionSuccess();
+            };
+
+            const quint64 previewCorrelationTransaction = activationTransaction;
+            const quint64 previewCorrelationRevision = activationRevision;
+            ruled::v1::RuledCommand previewStaleParent;
+            auto *staleQuery = previewStaleParent.mutable_preview_payment();
+            staleQuery->set_transaction_id(previewCorrelationTransaction);
+            staleQuery->set_revision(previewCorrelationRevision);
+            auto *staleParent = staleQuery->mutable_commit_ability_activation();
+            staleParent->set_transaction_id(activationTransaction);
+            staleParent->set_expected_revision(activationRevision);
+            ruled::v1::PaymentSelection staleParentPayment;
+            staleParentPayment.mutable_source()->set_object_id(tekAbilitySourceObjectId);
+            staleParentPayment.mutable_source()->set_zone_change_generation(tekAbilitySourceGeneration);
+            staleParentPayment.mutable_mana()->set_c(1);
+            staleParentPayment.set_expected_state_revision(pendingAfterSacrifice.payment_preview().revision() + 1);
+            staleParent->mutable_payment()->CopyFrom(staleParentPayment);
+            ASSERT_EQ(staleParent->flex_payments_size(), 0);
+            EXPECT_EQ(staleParent->payment().source().object_id(), tekAbilitySourceObjectId);
+            EXPECT_EQ(staleParent->payment().source().zone_change_generation(), tekAbilitySourceGeneration);
+            EXPECT_EQ(staleParent->payment().mana().c(), 1u);
+            EXPECT_EQ(staleParent->payment().expected_state_revision(),
+                      pendingAfterSacrifice.payment_preview().revision() + 1);
+            const auto staleParentSelection = staleParent->payment();
+
+            const int actorPreviewCountBeforeStalePreview = p1.paymentPreviewCount;
+            const int opponentPreviewCountBeforeStalePreview = p2.paymentPreviewCount;
+            const auto actorPreviewSizeBeforeStalePreview = p1.paymentPreviews.size();
+            const auto opponentPreviewSizeBeforeStalePreview = p2.paymentPreviews.size();
+            const auto actorBatchCountBeforeStalePreview = p1.batches.size();
+            const auto opponentBatchCountBeforeStalePreview = p2.batches.size();
+            const quint64 actorVersionBeforeStalePreview = p1.stateVersion;
+            const quint64 opponentVersionBeforeStalePreview = p2.stateVersion;
+            const quint64 stalePreviewCommandId = p1.nextCmdId;
+            p1.sendRuled(previewStaleParent,
+                         QStringLiteral("preview original Tekuthal payment with stale Ring contributor"));
+            ASSERT_TRUE(waitFor(
+                [&] {
+                    const auto response = p1.responses.find(stalePreviewCommandId);
+                    return response != p1.responses.end() &&
+                           (response->second.response_code() != Response::RespOk ||
+                            (p1.paymentPreviewCount == actorPreviewCountBeforeStalePreview + 1 &&
+                             p1.paymentPreviews.size() == actorPreviewSizeBeforeStalePreview + 1));
+                },
+                15000, "requester-only stale-contributor payment preview"));
+            ASSERT_TRUE(p1.responses.count(stalePreviewCommandId));
+            ASSERT_EQ(p1.responses.at(stalePreviewCommandId).response_code(), Response::RespOk);
+            ASSERT_EQ(p1.paymentPreviewCount, actorPreviewCountBeforeStalePreview + 1);
+            ASSERT_EQ(p1.paymentPreviews.size(), actorPreviewSizeBeforeStalePreview + 1);
+            ASSERT_FALSE(p1.paymentPreview.valid()) << p1.paymentPreview.error();
+            EXPECT_FALSE(p1.paymentPreview.complete());
+            EXPECT_FALSE(p1.paymentPreview.error().empty());
+            EXPECT_FALSE(p1.paymentPreview.has_selection());
+            EXPECT_EQ(p1.paymentPreview.transaction_id(), previewCorrelationTransaction);
+            EXPECT_EQ(p1.paymentPreview.revision(), previewCorrelationRevision);
+            EXPECT_EQ(p2.paymentPreviewCount, opponentPreviewCountBeforeStalePreview);
+            EXPECT_EQ(p2.paymentPreviews.size(), opponentPreviewSizeBeforeStalePreview);
+            EXPECT_EQ(p1.batches.size(), actorBatchCountBeforeStalePreview);
+            EXPECT_EQ(p2.batches.size(), opponentBatchCountBeforeStalePreview);
+            EXPECT_EQ(p1.stateVersion, actorVersionBeforeStalePreview);
+            EXPECT_EQ(p2.stateVersion, opponentVersionBeforeStalePreview);
+            const auto &rawStalePreview = p1.paymentPreviews[actorPreviewSizeBeforeStalePreview];
+            ASSERT_TRUE(rawStalePreview.has_payment_preview());
+            EXPECT_EQ(rawStalePreview.payment_preview().transaction_id(), previewCorrelationTransaction);
+            EXPECT_EQ(rawStalePreview.payment_preview().revision(), previewCorrelationRevision);
+            EXPECT_FALSE(rawStalePreview.payment_preview().valid());
+            EXPECT_FALSE(rawStalePreview.payment_preview().complete());
+            EXPECT_FALSE(rawStalePreview.payment_preview().error().empty());
+            EXPECT_FALSE(rawStalePreview.payment_preview().has_selection());
+            EXPECT_TRUE(rawStalePreview.events().empty());
+            EXPECT_TRUE(rawStalePreview.legal_by_player().empty());
+            EXPECT_EQ(p1.latestLegal.pending_ability_activation().SerializeAsString(), actorPendingBytesAfterSacrifice);
+            EXPECT_EQ(p2.latestLegal.pending_ability_activation().SerializeAsString(),
+                      opponentPendingBytesAfterSacrifice);
+            for (auto batchIndex = actorBatchCountBeforeStalePreview; batchIndex < p1.batches.size(); ++batchIndex) {
+                EXPECT_FALSE(p1.batches[batchIndex].has_payment_preview());
+            }
+            for (auto batchIndex = opponentBatchCountBeforeStalePreview; batchIndex < p2.batches.size(); ++batchIndex) {
+                EXPECT_FALSE(p2.batches[batchIndex].has_payment_preview());
+            }
+            EXPECT_TRUE(staleResourcesUnchanged());
+
+            ruled::v1::RuledCommand staleContributorCommit;
+            auto *staleCommit = staleContributorCommit.mutable_commit_ability_activation();
+            staleCommit->set_transaction_id(activationTransaction);
+            staleCommit->set_expected_revision(activationRevision);
+            staleCommit->mutable_payment()->CopyFrom(staleParentSelection);
+            ASSERT_EQ(staleCommit->flex_payments_size(), 0);
+            ASSERT_TRUE(sendRejectedWithoutEffects(
+                p1, staleContributorCommit,
+                QStringLiteral("commit original Tekuthal payment with stale Ring contributor")));
+
+            ruled::v1::RuledCommand wrongActorCommit;
+            auto *wrongActor = wrongActorCommit.mutable_commit_ability_activation();
+            wrongActor->set_transaction_id(activationTransaction);
+            wrongActor->set_expected_revision(activationRevision);
+            wrongActor->mutable_payment()->CopyFrom(staleParentSelection);
+            wrongActor->mutable_restricted_mana()->CopyFrom(p1.paymentPreview.restricted_mana());
+            ASSERT_TRUE(sendRejectedWithoutEffects(p2, wrongActorCommit,
+                                                   QStringLiteral("opponent commit against actor's Tekuthal payment")));
+
+            ruled::v1::RuledCommand staleRevisionCommit;
+            auto *staleRevision = staleRevisionCommit.mutable_commit_ability_activation();
+            staleRevision->set_transaction_id(activationTransaction);
+            staleRevision->set_expected_revision(activationRevision + 1);
+            staleRevision->mutable_payment()->CopyFrom(staleParentSelection);
+            staleRevision->mutable_restricted_mana()->CopyFrom(p1.paymentPreview.restricted_mana());
+            ASSERT_TRUE(sendRejectedWithoutEffects(
+                p1, staleRevisionCommit, QStringLiteral("commit original Tekuthal payment with stale revision")));
+
+            ruled::v1::RuledCommand cancelTek;
+            auto *cancelActivation = cancelTek.mutable_cancel_ability_activation();
+            cancelActivation->set_transaction_id(activationTransaction);
+            cancelActivation->set_expected_revision(activationRevision);
+            auto freshCancelRecipientState = [&](const CapturingDriver &client, auto firstBatch) {
+                bool sawOwnLegalState = false;
+                for (auto batchIndex = firstBatch; batchIndex < client.batches.size(); ++batchIndex) {
+                    const auto &batch = client.batches[batchIndex];
+                    if (batch.has_payment_preview()) {
+                        return false;
+                    }
+                    for (const auto &[legalPlayerId, legal] : batch.legal_by_player()) {
+                        if (legalPlayerId != client.myId || legal.has_pending_ability_activation()) {
+                            return false;
+                        }
+                        sawOwnLegalState = true;
+                    }
+                }
+                return sawOwnLegalState;
+            };
+            const auto actorBatchOffsetBeforeCancel = p1.batches.size();
+            const auto opponentBatchOffsetBeforeCancel = p2.batches.size();
+            const auto actorEventOffsetBeforeCancel = p1.events.size();
+            const auto opponentEventOffsetBeforeCancel = p2.events.size();
+            const auto actorPhysicalMoveOffsetBeforeCancel = p1.physicalMoveEvents.size();
+            const auto opponentPhysicalMoveOffsetBeforeCancel = p2.physicalMoveEvents.size();
+            const int actorPreviewCountBeforeCancel = p1.paymentPreviewCount;
+            const int opponentPreviewCountBeforeCancel = p2.paymentPreviewCount;
+            const auto actorPreviewOffsetBeforeCancel = p1.paymentPreviews.size();
+            const auto opponentPreviewOffsetBeforeCancel = p2.paymentPreviews.size();
+            const quint64 cancelCommandId = p1.nextCmdId;
+            p1.sendRuled(cancelTek,
+                         QStringLiteral("cancel original Tekuthal payment after stale-contributor rejection"));
+            ASSERT_TRUE(waitFor(
+                [&] {
+                    const auto response = p1.responses.find(cancelCommandId);
+                    return response != p1.responses.end() &&
+                           (response->second.response_code() != Response::RespOk ||
+                            (freshCancelRecipientState(p1, actorBatchOffsetBeforeCancel) &&
+                             freshCancelRecipientState(p2, opponentBatchOffsetBeforeCancel) &&
+                             !p1.latestLegal.has_pending_ability_activation() &&
+                             !p2.latestLegal.has_pending_ability_activation() && p1.stackDepth == 0 &&
+                             p2.stackDepth == 0));
+                },
+                15000, "cancel ACK and fresh recipient pending-activation removal"));
+            ASSERT_TRUE(p1.responses.count(cancelCommandId));
+            ASSERT_EQ(p1.responses.at(cancelCommandId).response_code(), Response::RespOk);
+            ASSERT_TRUE(freshCancelRecipientState(p1, actorBatchOffsetBeforeCancel));
+            ASSERT_TRUE(freshCancelRecipientState(p2, opponentBatchOffsetBeforeCancel));
+            EXPECT_FALSE(p1.latestLegal.has_pending_ability_activation());
+            EXPECT_FALSE(p2.latestLegal.has_pending_ability_activation());
+            EXPECT_EQ(p1.stackDepth, 0);
+            EXPECT_EQ(p2.stackDepth, 0);
+            EXPECT_EQ(p1.paymentPreviewCount, actorPreviewCountBeforeCancel);
+            EXPECT_EQ(p2.paymentPreviewCount, opponentPreviewCountBeforeCancel);
+            EXPECT_EQ(p1.paymentPreviews.size(), actorPreviewOffsetBeforeCancel);
+            EXPECT_EQ(p2.paymentPreviews.size(), opponentPreviewOffsetBeforeCancel);
+            EXPECT_EQ(p1.lifeByPlayer, actorLifeAfterSacrifice);
+            EXPECT_EQ(p2.lifeByPlayer, opponentLifeAfterSacrifice);
+            EXPECT_FALSE(rawLifeChangedSince(p1, actorBatchOffsetBeforeCancel, p1.myId));
+            EXPECT_FALSE(rawLifeChangedSince(p2, opponentBatchOffsetBeforeCancel, p1.myId));
+            EXPECT_EQ(p1.myPool.c, 2u);
+            EXPECT_EQ(p1.myPool.total(), 2u);
+            EXPECT_TRUE(rawManaPoolUpdateSince(p1, actorBatchOffsetBeforeKci, p1.myId, 2));
+            EXPECT_TRUE(rawManaPoolUpdateSince(p2, opponentBatchOffsetBeforeKci, p1.myId, 2));
+            for (const auto *client : {&p1, &p2}) {
+                const auto *tek = permanent(*client, p1.myId, QStringLiteral("tekuthal,_inquiry_dominus"));
+                ASSERT_NE(tek, nullptr);
+                EXPECT_EQ(tek->oid, tekReceipt.objectId);
+                EXPECT_EQ(tek->generation, tekReceipt.generation);
+                EXPECT_FALSE(permanent(*client, p1.myId, QStringLiteral("replicating_ring")));
+                EXPECT_TRUE(counterCount(*client, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2));
+                ASSERT_NE(client->serverCardByEngineOid.find(ringReceipt.objectId),
+                          client->serverCardByEngineOid.end());
+                EXPECT_EQ(client->serverCardByEngineOid.at(ringReceipt.objectId), ringReceipt.physicalCardId);
+                ASSERT_NE(client->graveyardOwnerByEngineOid.find(ringReceipt.objectId),
+                          client->graveyardOwnerByEngineOid.end());
+                EXPECT_EQ(client->graveyardOwnerByEngineOid.at(ringReceipt.objectId), p1.myId);
+            }
+            EXPECT_EQ(p1.physicalMoveEvents.size(), actorPhysicalMoveOffsetBeforeCancel);
+            EXPECT_EQ(p2.physicalMoveEvents.size(), opponentPhysicalMoveOffsetBeforeCancel);
+            EXPECT_EQ(std::count_if(p1.events.begin() + static_cast<std::ptrdiff_t>(actorEventOffsetBeforeCancel),
+                                    p1.events.end(), [](const auto &event) { return event.has_stack_pushed(); }),
+                      0);
+            EXPECT_EQ(std::count_if(p2.events.begin() + static_cast<std::ptrdiff_t>(opponentEventOffsetBeforeCancel),
+                                    p2.events.end(), [](const auto &event) { return event.has_stack_pushed(); }),
+                      0);
+
+            collectServerLogs();
+            ASSERT_NE(servatrice.state(), QProcess::NotRunning);
+            servatrice.kill();
+            ASSERT_TRUE(servatrice.waitForFinished(5000));
+            ASSERT_NE(sidecar.state(), QProcess::NotRunning);
+            sidecar.kill();
+            ASSERT_TRUE(sidecar.waitForFinished(5000));
+            p1.sock.abort();
+            p2.sock.abort();
+            collectServerLogs();
+            ++completedStaleBranches;
+        } else {
+            const auto ringBattlefield =
+                currentBattlefieldObjectForReceipt(QStringLiteral("replicating_ring"), ringReceipt);
+            ASSERT_TRUE(ringBattlefield.has_value());
+            const auto *ringPermanent = permanent(p1, p1.myId, QStringLiteral("replicating_ring"));
+            ASSERT_NE(ringPermanent, nullptr);
+            ASSERT_FALSE(ringPermanent->tapped);
+            const auto ringManaAbilityIt = std::find_if(
+                ringBattlefield->activated_abilities().begin(), ringBattlefield->activated_abilities().end(),
+                [](const auto &ability) {
+                    return ability.activatable() && ability.is_mana_ability() && !ability.mana_produced().empty();
+                });
+            ASSERT_NE(ringManaAbilityIt, ringBattlefield->activated_abilities().end());
+            const auto ringManaAbility = *ringManaAbilityIt;
+            ASSERT_NE(std::find(ringPermanent->abilityIndices.begin(), ringPermanent->abilityIndices.end(),
+                                ringManaAbility.ability_index()),
+                      ringPermanent->abilityIndices.end());
+            const auto ringProductionOptions =
+                QString::fromStdString(ringManaAbility.mana_produced()).split(QLatin1Char('/'), Qt::SkipEmptyParts);
+            int blueOptionIndex = -1;
+            for (int i = 0; i < ringProductionOptions.size(); ++i) {
+                QString option = ringProductionOptions.at(i).trimmed();
+                option.remove(QLatin1Char('{'));
+                option.remove(QLatin1Char('}'));
+                if (option == QStringLiteral("U")) {
+                    blueOptionIndex = i;
+                    break;
+                }
+            }
+            ASSERT_GE(blueOptionIndex, 0) << ringManaAbility.mana_produced();
+
+            const auto kciRestoreBattlefield =
+                currentBattlefieldObjectForReceipt(QStringLiteral("krark-clan_ironworks"), kciReceipt);
+            ASSERT_TRUE(kciRestoreBattlefield.has_value());
+            const auto *kciRestorePermanent = permanent(p1, p1.myId, QStringLiteral("krark-clan_ironworks"));
+            ASSERT_NE(kciRestorePermanent, nullptr);
+            const auto kciRestoreAbilityIt = std::find_if(
+                kciRestoreBattlefield->activated_abilities().begin(),
+                kciRestoreBattlefield->activated_abilities().end(), [](const auto &ability) {
+                    return ability.activatable() && ability.is_mana_ability() && !ability.mana_produced().empty();
+                });
+            ASSERT_NE(kciRestoreAbilityIt, kciRestoreBattlefield->activated_abilities().end());
+            const auto kciRestoreAbility = *kciRestoreAbilityIt;
+            const quint64 kciRestoreAbilityKey =
+                (static_cast<quint64>(kciReceipt.objectId) << 32) | kciRestoreAbility.ability_index();
+            ASSERT_NE(p1.latestLegal.cost_choices_by_ability().find(kciRestoreAbilityKey),
+                      p1.latestLegal.cost_choices_by_ability().end());
+
+            const auto actorPendingBeforeRingMana = p1.latestLegal.pending_ability_activation();
+            const auto opponentPendingBeforeRingMana = p2.latestLegal.pending_ability_activation();
+            auto samePendingPublicIdentity = [](const auto &before, const auto &after) {
+                return before.transaction_id() == after.transaction_id() && before.revision() == after.revision() &&
+                       before.stage() == after.stage() && before.actor_player_id() == after.actor_player_id() &&
+                       before.source_object_id() == after.source_object_id() &&
+                       before.source_zone() == after.source_zone() &&
+                       before.source_zone_change_generation() == after.source_zone_change_generation();
+            };
+            auto sameActorPendingPaymentRows = [&](const auto &before, const auto &after) {
+                if (!samePendingPublicIdentity(before, after) ||
+                    before.cost_selections_size() != after.cost_selections_size() ||
+                    before.flex_payments_size() != after.flex_payments_size() ||
+                    before.locked_total_cost() != after.locked_total_cost()) {
+                    return false;
+                }
+                for (int i = 0; i < before.cost_selections_size(); ++i) {
+                    if (before.cost_selections(i).SerializeAsString() != after.cost_selections(i).SerializeAsString()) {
+                        return false;
+                    }
+                }
+                for (int i = 0; i < before.flex_payments_size(); ++i) {
+                    if (before.flex_payments(i).SerializeAsString() != after.flex_payments(i).SerializeAsString()) {
+                        return false;
+                    }
+                }
+                return true;
+            };
+            ASSERT_TRUE(p1.latestLegal.pending_ability_activation().has_payment_preview());
+            const quint64 actorBatchBeforeRingMana = p1.batches.size();
+            const quint64 opponentBatchBeforeRingMana = p2.batches.size();
+            ruled::v1::RuledCommand ringMana;
+            auto *ringActivation = ringMana.mutable_activate_ability();
+            ringActivation->set_source_object_id(ringReceipt.objectId);
+            ringActivation->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD);
+            ringActivation->set_expected_zone_change_generation(ringReceipt.generation);
+            ringActivation->set_ability_index(ringManaAbility.ability_index());
+            ringActivation->set_mana_option_index(static_cast<quint32>(blueOptionIndex));
+            const auto *opponentRingBeforeMana = permanent(p2, p1.myId, QStringLiteral("replicating_ring"));
+            ASSERT_NE(opponentRingBeforeMana, nullptr);
+            ASSERT_FALSE(opponentRingBeforeMana->tapped);
+            ASSERT_TRUE(sendAccepted(
+                p1, ringMana, QStringLiteral("activate current Ring blue-mana offer in pending payment"), [&] {
+                    const auto *actorRing = permanent(p1, p1.myId, QStringLiteral("replicating_ring"));
+                    const auto *opponentRing = permanent(p2, p1.myId, QStringLiteral("replicating_ring"));
+                    if (!p1.latestLegal.has_pending_ability_activation() ||
+                        !p2.latestLegal.has_pending_ability_activation()) {
+                        return false;
+                    }
+                    const auto &actorPendingAfter = p1.latestLegal.pending_ability_activation();
+                    const auto &opponentPendingAfter = p2.latestLegal.pending_ability_activation();
+                    return p1.myPool.u == 1 && p1.myPool.total() == 1 && actorRing && actorRing->tapped &&
+                           opponentRing && opponentRing->tapped &&
+                           rawManaPoolMatchesSince(p1, actorBatchBeforeRingMana, p1.myId, 0, 1, 0, 0, 0, 0) &&
+                           rawManaPoolMatchesSince(p2, opponentBatchBeforeRingMana, p1.myId, 0, 1, 0, 0, 0, 0) &&
+                           sameActorPendingPaymentRows(actorPendingBeforeRingMana, actorPendingAfter) &&
+                           samePendingPublicIdentity(opponentPendingBeforeRingMana, opponentPendingAfter);
+                }));
+            const auto actorPendingAfterRingMana = p1.latestLegal.pending_ability_activation();
+            const auto savedActorPendingBytes = actorPendingAfterRingMana.SerializeAsString();
+            const auto savedPaymentPreview = actorPendingAfterRingMana.payment_preview();
+            const quint64 savedPendingTransaction = actorPendingAfterRingMana.transaction_id();
+            const quint64 savedPendingRevision = actorPendingAfterRingMana.revision();
+            const quint64 savedEnginePaymentRevision = savedPaymentPreview.revision();
+            const quint32 savedSourceObjectId = actorPendingAfterRingMana.source_object_id();
+            const quint64 savedSourceGeneration = actorPendingAfterRingMana.source_zone_change_generation();
+            const std::string savedLockedTotalCost = actorPendingAfterRingMana.locked_total_cost();
+            ASSERT_EQ(savedPendingTransaction, activationTransaction);
+            ASSERT_EQ(savedPendingRevision, activationRevision);
+            ASSERT_EQ(savedSourceObjectId, tekReceipt.objectId);
+            ASSERT_EQ(savedSourceGeneration, tekReceipt.generation);
+            ASSERT_EQ(actorPendingAfterRingMana.cost_selections_size(), originalPending.cost_selections_size());
+            ASSERT_EQ(actorPendingAfterRingMana.flex_payments_size(), originalPending.flex_payments_size());
+            ASSERT_EQ(savedLockedTotalCost, originalLockedTotalCost);
+            ASSERT_TRUE(actorPendingAfterRingMana.has_payment_preview());
+
+            const auto savedActorLifeMap = p1.lifeByPlayer;
+            const auto savedOpponentLifeMap = p2.lifeByPlayer;
+            const quint32 savedPoolWhite = p1.myPool.w;
+            const quint32 savedPoolBlue = p1.myPool.u;
+            const quint32 savedPoolBlack = p1.myPool.b;
+            const quint32 savedPoolRed = p1.myPool.r;
+            const quint32 savedPoolGreen = p1.myPool.g;
+            const quint32 savedPoolColorless = p1.myPool.c;
+            ASSERT_EQ(savedPoolBlue, 1u);
+            ASSERT_EQ(p1.myPool.total(), 1u);
+            EXPECT_TRUE(counterCount(p1, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1));
+            EXPECT_TRUE(counterCount(p2, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1));
+            EXPECT_TRUE(counterCount(p1, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2));
+            EXPECT_TRUE(counterCount(p2, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2));
+
+            const std::pair<QString, PhysicalReceipt> savedReceiptCards[] = {
+                {QStringLiteral("tekuthal,_inquiry_dominus"), tekReceipt},
+                {QStringLiteral("replicating_ring"), ringReceipt},
+                {QStringLiteral("everflowing_chalice"), chaliceReceipt},
+                {QStringLiteral("krark-clan_ironworks"), kciReceipt},
+            };
+            auto checkPhysicalReceipts = [&](const CapturingDriver &client) -> ::testing::AssertionResult {
+                for (const auto &[cardId, receipt] : savedReceiptCards) {
+                    const auto *object = permanent(client, p1.myId, cardId);
+                    if (!object || object->oid != receipt.objectId || object->generation != receipt.generation) {
+                        return ::testing::AssertionFailure()
+                               << cardId.toStdString() << ": restored battlefield ObjectId/generation differs";
+                    }
+                    const auto physical = client.serverCardByEngineOid.find(receipt.objectId);
+                    if (physical == client.serverCardByEngineOid.end() || physical->second != receipt.physicalCardId) {
+                        return ::testing::AssertionFailure()
+                               << cardId.toStdString() << ": restored engine-to-physical binding differs";
+                    }
+                }
+                return ::testing::AssertionSuccess();
+            };
+            ASSERT_TRUE(checkPhysicalReceipts(p1));
+            ASSERT_TRUE(checkPhysicalReceipts(p2));
+
+            collectServerLogs();
+            ASSERT_NE(servatrice.state(), QProcess::NotRunning);
+            servatrice.kill();
+            ASSERT_TRUE(servatrice.waitForFinished(5000));
+            ASSERT_NE(sidecar.state(), QProcess::NotRunning);
+            sidecar.kill();
+            ASSERT_TRUE(sidecar.waitForFinished(5000));
+            p1.sock.abort();
+            p2.sock.abort();
+            collectServerLogs();
+
+            QStringList newServerCaptureDirs;
+            QDirIterator manifests(tempDir.filePath("captures"), {"manifest.json"}, QDir::Files,
+                                   QDirIterator::Subdirectories);
+            while (manifests.hasNext()) {
+                const QString manifestPath = QFileInfo(manifests.next()).absoluteFilePath();
+                QFile manifestFile(manifestPath);
+                ASSERT_TRUE(manifestFile.open(QIODevice::ReadOnly));
+                if (existingServerManifestPaths.contains(manifestPath)) {
+                    continue;
+                }
+                if (QJsonDocument::fromJson(manifestFile.readAll()).object().value("source") == "server") {
+                    newServerCaptureDirs.push_back(QFileInfo(manifestPath).absolutePath());
+                }
+            }
+            ASSERT_EQ(newServerCaptureDirs.size(), 1) << newServerCaptureDirs.join(QLatin1Char('\n')).toStdString();
+            const QString captureDir = newServerCaptureDirs.front();
+            const QString planDir = tempDir.filePath("tekuthal-restore-prefix-plan");
+            QProcess replay;
+            replay.start(QStringLiteral(RULED_E2E_REPLAY_PATH),
+                         {QStringLiteral("--capture"), captureDir, QStringLiteral("--resume-plan"),
+                          QStringLiteral("--output"), planDir});
+            ASSERT_TRUE(replay.waitForStarted(10000));
+            ASSERT_TRUE(replay.waitForFinished(60000));
+            ASSERT_EQ(replay.exitStatus(), QProcess::NormalExit) << replay.readAllStandardError().constData();
+            ASSERT_EQ(replay.exitCode(), 0) << replay.readAllStandardError().constData();
+            resumePlanPath = planDir + "/resume-plan.pb";
+            ASSERT_TRUE(QFileInfo::exists(resumePlanPath));
+
+            const auto restarted = startServers();
+            ASSERT_TRUE(restarted) << restarted.message();
+            if (std::string(restarted.message()).rfind("SKIP:", 0) == 0) {
+                GTEST_SKIP() << std::string(restarted.message()).substr(5);
+            }
+
+            CapturingDriver resumed1(true, QStringLiteral("tekuthal-restored-p1"), &transcript);
+            CapturingDriver resumed2(false, QStringLiteral("tekuthal-restored-p2"), &transcript);
+            CapturingDriver *resumedSpectatorToPump = nullptr;
+            auto pumpResumed = [&] {
+                resumed1.pump(25);
+                resumed2.pump(25);
+                if (resumedSpectatorToPump) {
+                    resumedSpectatorToPump->pump(25);
+                }
+            };
+            auto waitResumed = [&](auto predicate, int timeoutMs, const char *what) -> ::testing::AssertionResult {
+                QElapsedTimer wait;
+                wait.start();
+                while (!predicate() && wait.elapsed() < timeoutMs) {
+                    pumpResumed();
+                }
+                if (!predicate()) {
+                    return ::testing::AssertionFailure() << "timeout waiting for " << what;
+                }
+                return ::testing::AssertionSuccess();
+            };
+            auto latestRawManaPoolMatchesSince = [](const CapturingDriver &client, auto firstBatch, int playerId,
+                                                    quint32 white, quint32 blue, quint32 black, quint32 red,
+                                                    quint32 green, quint32 colorless) {
+                bool sawManaPoolUpdate = false;
+                bool latestMatches = false;
+                for (auto batchIndex = firstBatch; batchIndex < client.batches.size(); ++batchIndex) {
+                    for (const auto &event : client.batches[batchIndex].events()) {
+                        if (!event.has_mana_pool_updated() || event.mana_pool_updated().player_id() != playerId) {
+                            continue;
+                        }
+                        const auto &pool = event.mana_pool_updated();
+                        sawManaPoolUpdate = true;
+                        latestMatches = pool.w() == white && pool.u() == blue && pool.b() == black && pool.r() == red &&
+                                        pool.g() == green && pool.c() == colorless;
+                    }
+                }
+                return sawManaPoolUpdate && latestMatches;
+            };
+            ASSERT_TRUE(resumed1.loginAndJoinRoom());
+            ASSERT_TRUE(resumed2.loginAndJoinRoom());
+
+            CommandContainer resumedCreateContainer;
+            resumedCreateContainer.set_room_id(resumed1.roomId);
+            auto *resumedCreateGame =
+                resumedCreateContainer.add_room_command()->MutableExtension(Command_CreateGame::ext);
+            resumedCreateGame->set_description("Tekuthal restored grouped payment network case");
+            resumedCreateGame->set_max_players(2);
+            resumedCreateGame->set_spectators_allowed(true);
+            resumedCreateGame->set_spectators_see_everything(false);
+            resumedCreateGame->set_starting_life_total(20);
+            resumedCreateGame->set_ruled_game(true);
+            const quint64 resumedCreateCommandId = resumed1.nextCmdId;
+            resumed1.sendContainer(resumedCreateContainer);
+            ASSERT_TRUE(waitResumed(
+                [&] {
+                    return resumed1.gameId >= 0 && resumed1.myId >= 0 &&
+                           resumed1.responses.count(resumedCreateCommandId) != 0;
+                },
+                10000, "restored ruled game creation"));
+            ASSERT_EQ(resumed1.responses.at(resumedCreateCommandId).response_code(), Response::RespOk);
+            ASSERT_TRUE(resumed2.joinRuledGame(resumed1.gameId));
+            ASSERT_TRUE(resumed1.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+            ASSERT_TRUE(resumed2.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+            const auto resumedActorFirstBatch = resumed1.batches.size();
+            const auto resumedOpponentFirstBatch = resumed2.batches.size();
+            resumed1.sendReady();
+            resumed2.sendReady();
+            ASSERT_TRUE(waitResumed(
+                [&] {
+                    if (!resumed1.latestLegal.has_pending_ability_activation() ||
+                        !resumed2.latestLegal.has_pending_ability_activation()) {
+                        return false;
+                    }
+                    const auto &restoredActorPending = resumed1.latestLegal.pending_ability_activation();
+                    const auto &restoredOpponentPending = resumed2.latestLegal.pending_ability_activation();
+                    const auto *restoredRing = permanent(resumed1, p1.myId, QStringLiteral("replicating_ring"));
+                    const auto *restoredOpponentRing = permanent(resumed2, p1.myId, QStringLiteral("replicating_ring"));
+                    return resumed1.gameStarted && resumed2.gameStarted &&
+                           resumed1.batches.size() > resumedActorFirstBatch &&
+                           resumed2.batches.size() > resumedOpponentFirstBatch && resumed1.myPool.w == savedPoolWhite &&
+                           resumed1.myPool.u == savedPoolBlue && resumed1.myPool.b == savedPoolBlack &&
+                           resumed1.myPool.r == savedPoolRed && resumed1.myPool.g == savedPoolGreen &&
+                           resumed1.myPool.c == savedPoolColorless && resumed1.myPool.total() == 1 && restoredRing &&
+                           restoredRing->tapped && restoredOpponentRing && restoredOpponentRing->tapped &&
+                           restoredActorPending.SerializeAsString() == savedActorPendingBytes &&
+                           samePendingPublicIdentity(opponentPendingBeforeRingMana, restoredOpponentPending) &&
+                           latestRawManaPoolMatchesSince(resumed1, resumedActorFirstBatch, p1.myId, savedPoolWhite,
+                                                         savedPoolBlue, savedPoolBlack, savedPoolRed, savedPoolGreen,
+                                                         savedPoolColorless) &&
+                           latestRawManaPoolMatchesSince(resumed2, resumedOpponentFirstBatch, p1.myId, savedPoolWhite,
+                                                         savedPoolBlue, savedPoolBlack, savedPoolRed, savedPoolGreen,
+                                                         savedPoolColorless);
+                },
+                20000, "restored actor and public pending snapshots"));
+            ASSERT_EQ(resumed1.myId, p1.myId);
+            ASSERT_EQ(resumed2.myId, p2.myId);
+
+            ASSERT_TRUE(resumed1.latestLegal.has_pending_ability_activation());
+            const auto &restoredPending = resumed1.latestLegal.pending_ability_activation();
+            EXPECT_EQ(restoredPending.SerializeAsString(), savedActorPendingBytes);
+            EXPECT_EQ(restoredPending.transaction_id(), savedPendingTransaction);
+            EXPECT_EQ(restoredPending.revision(), savedPendingRevision);
+            EXPECT_EQ(restoredPending.source_object_id(), savedSourceObjectId);
+            EXPECT_EQ(restoredPending.source_zone_change_generation(), savedSourceGeneration);
+            ASSERT_EQ(restoredPending.cost_selections_size(), originalPending.cost_selections_size());
+            EXPECT_EQ(restoredPending.cost_selections(0).SerializeAsString(),
+                      originalPending.cost_selections(0).SerializeAsString());
+            ASSERT_EQ(restoredPending.flex_payments_size(), originalPending.flex_payments_size());
+            EXPECT_EQ(restoredPending.flex_payments(0).SerializeAsString(),
+                      originalPending.flex_payments(0).SerializeAsString());
+            EXPECT_EQ(restoredPending.flex_payments(1).SerializeAsString(),
+                      originalPending.flex_payments(1).SerializeAsString());
+            EXPECT_EQ(restoredPending.locked_total_cost(), savedLockedTotalCost);
+            ASSERT_TRUE(restoredPending.has_payment_preview());
+            EXPECT_EQ(restoredPending.payment_preview().revision(), savedEnginePaymentRevision);
+            EXPECT_EQ(restoredPending.payment_preview().SerializeAsString(), savedPaymentPreview.SerializeAsString());
+
+            EXPECT_EQ(resumed1.myPool.w, savedPoolWhite);
+            EXPECT_EQ(resumed1.myPool.u, savedPoolBlue);
+            EXPECT_EQ(resumed1.myPool.b, savedPoolBlack);
+            EXPECT_EQ(resumed1.myPool.r, savedPoolRed);
+            EXPECT_EQ(resumed1.myPool.g, savedPoolGreen);
+            EXPECT_EQ(resumed1.myPool.c, savedPoolColorless);
+            EXPECT_EQ(resumed1.myPool.total(), 1u);
+            if (!savedActorLifeMap.empty()) {
+                EXPECT_EQ(resumed1.lifeByPlayer, savedActorLifeMap);
+            }
+            if (!savedOpponentLifeMap.empty()) {
+                EXPECT_EQ(resumed2.lifeByPlayer, savedOpponentLifeMap);
+            }
+            EXPECT_TRUE(rawManaPoolMatchesSince(resumed1, resumedActorFirstBatch, p1.myId, savedPoolWhite,
+                                                savedPoolBlue, savedPoolBlack, savedPoolRed, savedPoolGreen,
+                                                savedPoolColorless));
+            EXPECT_TRUE(rawManaPoolMatchesSince(resumed2, resumedOpponentFirstBatch, p1.myId, savedPoolWhite,
+                                                savedPoolBlue, savedPoolBlack, savedPoolRed, savedPoolGreen,
+                                                savedPoolColorless));
+            EXPECT_TRUE(resumed1.latestLegal.cost_choices_by_ability().count(kciRestoreAbilityKey) != 0);
+            EXPECT_EQ(resumed2.latestLegal.cost_choices_by_ability().count(kciRestoreAbilityKey), 0u);
+            ASSERT_TRUE(checkPhysicalReceipts(resumed1));
+            ASSERT_TRUE(checkPhysicalReceipts(resumed2));
+            EXPECT_TRUE(counterCount(resumed1, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1));
+            EXPECT_TRUE(counterCount(resumed2, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1));
+            EXPECT_TRUE(counterCount(resumed1, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2));
+            EXPECT_TRUE(counterCount(resumed2, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2));
+
+            const ruled::v1::RuledEventBatch *actorPendingBatchAfterRestore = nullptr;
+            for (auto batchIndex = resumedActorFirstBatch; batchIndex < resumed1.batches.size(); ++batchIndex) {
+                const auto &batch = resumed1.batches[batchIndex];
+                const auto legal = batch.legal_by_player().find(resumed1.myId);
+                if (legal != batch.legal_by_player().end() && legal->second.has_pending_ability_activation() &&
+                    legal->second.pending_ability_activation().transaction_id() == savedPendingTransaction &&
+                    legal->second.pending_ability_activation().SerializeAsString() == savedActorPendingBytes) {
+                    actorPendingBatchAfterRestore = &batch;
+                }
+            }
+            ASSERT_NE(actorPendingBatchAfterRestore, nullptr);
+            const auto actorLegalAfterRestore = actorPendingBatchAfterRestore->legal_by_player().find(resumed1.myId);
+            ASSERT_NE(actorLegalAfterRestore, actorPendingBatchAfterRestore->legal_by_player().end());
+            EXPECT_EQ(actorLegalAfterRestore->second.pending_ability_activation().SerializeAsString(),
+                      savedActorPendingBytes);
+            bool actorSawKciRestoreChoices = false;
+            for (auto batchIndex = resumedActorFirstBatch; batchIndex < resumed1.batches.size(); ++batchIndex) {
+                const auto &batch = resumed1.batches[batchIndex];
+                EXPECT_FALSE(batch.has_payment_preview());
+                for (const auto &[legalPlayerId, legal] : batch.legal_by_player()) {
+                    EXPECT_EQ(legalPlayerId, resumed1.myId);
+                    actorSawKciRestoreChoices =
+                        actorSawKciRestoreChoices || legal.cost_choices_by_ability().count(kciRestoreAbilityKey) != 0;
+                }
+            }
+            EXPECT_TRUE(actorSawKciRestoreChoices);
+            checkOwnLegalKeysSince(resumed1, resumedActorFirstBatch);
+            checkPublicPendingShell(resumed2, resumedOpponentFirstBatch, savedPendingTransaction);
+            for (auto batchIndex = resumedOpponentFirstBatch; batchIndex < resumed2.batches.size(); ++batchIndex) {
+                const auto &batch = resumed2.batches[batchIndex];
+                EXPECT_FALSE(batch.has_payment_preview());
+                for (const auto &[legalPlayerId, legal] : batch.legal_by_player()) {
+                    EXPECT_EQ(legalPlayerId, resumed2.myId);
+                    EXPECT_EQ(legal.cost_choices_by_ability().count(kciRestoreAbilityKey), 0u);
+                }
+            }
+            EXPECT_EQ(resumed1.paymentPreviewCount, 0);
+            EXPECT_TRUE(resumed1.paymentPreviews.empty());
+            EXPECT_EQ(resumed2.paymentPreviewCount, 0);
+            EXPECT_TRUE(resumed2.paymentPreviews.empty());
+
+            CapturingDriver resumedSpectator(false, QStringLiteral("tekuthal-restored-spectator"), &transcript);
+            resumedSpectatorToPump = &resumedSpectator;
+            ASSERT_TRUE(resumedSpectator.loginAndJoinRoom());
+            CommandContainer resumedSpectatorJoin;
+            resumedSpectatorJoin.set_room_id(resumedSpectator.roomId);
+            auto *resumedJoin = resumedSpectatorJoin.add_room_command()->MutableExtension(Command_JoinGame::ext);
+            resumedJoin->set_game_id(resumed1.gameId);
+            resumedJoin->set_spectator(true);
+            const quint64 resumedSpectatorJoinCommandId = resumedSpectator.nextCmdId;
+            const auto resumedSpectatorFirstBatch = resumedSpectator.batches.size();
+            resumedSpectator.sendContainer(resumedSpectatorJoin);
+            ASSERT_TRUE(waitResumed(
+                [&] {
+                    return resumedSpectator.gameId == resumed1.gameId &&
+                           resumedSpectator.responses.count(resumedSpectatorJoinCommandId) != 0 &&
+                           resumedSpectator.batches.size() > resumedSpectatorFirstBatch;
+                },
+                10000, "restored game spectator join snapshot"));
+            ASSERT_EQ(resumedSpectator.responses.at(resumedSpectatorJoinCommandId).response_code(), Response::RespOk);
+            pumpResumed();
+
+            EXPECT_TRUE(checkPhysicalReceipts(resumed1));
+            EXPECT_TRUE(checkPhysicalReceipts(resumed2));
+            EXPECT_TRUE(checkPhysicalReceipts(resumedSpectator));
+            for (const auto *client : {&resumed1, &resumed2, &resumedSpectator}) {
+                EXPECT_TRUE(counterCount(*client, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1));
+                EXPECT_TRUE(counterCount(*client, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2));
+                const auto *restoredRing = permanent(*client, p1.myId, QStringLiteral("replicating_ring"));
+                ASSERT_NE(restoredRing, nullptr);
+                EXPECT_TRUE(restoredRing->tapped);
+            }
+            EXPECT_TRUE(rawManaPoolMatchesSince(resumedSpectator, resumedSpectatorFirstBatch, p1.myId, savedPoolWhite,
+                                                savedPoolBlue, savedPoolBlack, savedPoolRed, savedPoolGreen,
+                                                savedPoolColorless));
+            bool sawSpectatorSnapshot = false;
+            for (auto batchIndex = resumedSpectatorFirstBatch; batchIndex < resumedSpectator.batches.size();
+                 ++batchIndex) {
+                const auto &batch = resumedSpectator.batches[batchIndex];
+                sawSpectatorSnapshot = true;
+                EXPECT_FALSE(batch.has_payment_preview());
+                EXPECT_TRUE(batch.legal_by_player().empty());
+            }
+            EXPECT_TRUE(sawSpectatorSnapshot);
+            EXPECT_EQ(resumedSpectator.paymentPreviewCount, 0);
+            EXPECT_TRUE(resumedSpectator.paymentPreviews.empty());
+
+            auto countLifeChangesSince = [](const CapturingDriver &client, auto firstBatch, auto predicate) {
+                int count = 0;
+                for (auto batchIndex = firstBatch; batchIndex < client.batches.size(); ++batchIndex) {
+                    for (const auto &event : client.batches[batchIndex].events()) {
+                        if (event.has_life_changed() && predicate(event.life_changed())) {
+                            ++count;
+                        }
+                    }
+                }
+                return count;
+            };
+            auto countManaPoolUpdatesSince = [](const CapturingDriver &client, auto firstBatch) {
+                int count = 0;
+                for (auto batchIndex = firstBatch; batchIndex < client.batches.size(); ++batchIndex) {
+                    for (const auto &event : client.batches[batchIndex].events()) {
+                        if (event.has_mana_pool_updated()) {
+                            ++count;
+                        }
+                    }
+                }
+                return count;
+            };
+            auto tekActivationStackObjectIdsSince = [&](const CapturingDriver &client, auto firstBatch) {
+                std::vector<quint32> objectIds;
+                for (auto batchIndex = firstBatch; batchIndex < client.batches.size(); ++batchIndex) {
+                    for (const auto &event : client.batches[batchIndex].events()) {
+                        if (!event.has_stack_pushed()) {
+                            continue;
+                        }
+                        const auto &pushed = event.stack_pushed();
+                        if (!pushed.is_triggered() && !pushed.is_copy() && pushed.card_id().empty() &&
+                            pushed.has_ability_controller_player_id() &&
+                            pushed.ability_controller_player_id() == resumed1.myId && pushed.has_ability_source() &&
+                            pushed.ability_source().object_id() == tekReceipt.objectId &&
+                            pushed.ability_source().zone_change_generation() == tekReceipt.generation) {
+                            objectIds.push_back(pushed.object_id());
+                        }
+                    }
+                }
+                return objectIds;
+            };
+            auto lifeMapShowsCommittedPayment = [&](const CapturingDriver &client,
+                                                    const std::map<int, int> &lifeBeforeCommit) {
+                auto expectedLifeMap = lifeBeforeCommit;
+                expectedLifeMap.insert_or_assign(p1.myId, 16);
+                return client.lifeByPlayer == expectedLifeMap;
+            };
+
+            const auto actorLifeMapBeforePreview = resumed1.lifeByPlayer;
+            const auto opponentLifeMapBeforePreview = resumed2.lifeByPlayer;
+            const auto spectatorLifeMapBeforePreview = resumedSpectator.lifeByPlayer;
+            const auto actorBatchBeforePreview = resumed1.batches.size();
+            const auto opponentBatchBeforePreview = resumed2.batches.size();
+            const auto spectatorBatchBeforePreview = resumedSpectator.batches.size();
+            const auto actorVersionBeforePreview = resumed1.stateVersion;
+            const auto opponentVersionBeforePreview = resumed2.stateVersion;
+            const auto spectatorVersionBeforePreview = resumedSpectator.stateVersion;
+            const auto actorPreviewCountBeforePreview = resumed1.paymentPreviewCount;
+            const auto opponentPreviewCountBeforePreview = resumed2.paymentPreviewCount;
+            const auto spectatorPreviewCountBeforePreview = resumedSpectator.paymentPreviewCount;
+            const auto actorPreviewOffsetBeforePreview = resumed1.paymentPreviews.size();
+            const auto opponentPreviewOffsetBeforePreview = resumed2.paymentPreviews.size();
+            const auto spectatorPreviewOffsetBeforePreview = resumedSpectator.paymentPreviews.size();
+            const auto actorPendingBytesBeforePreview =
+                resumed1.latestLegal.pending_ability_activation().SerializeAsString();
+            const auto publicPendingBeforePreview = resumed2.latestLegal.pending_ability_activation();
+
+            const quint64 previewCorrelationTransaction = 9303u;
+            const quint64 previewCorrelationRevision = 1u;
+            ruled::v1::RuledCommand previewTek;
+            auto *tekQuery = previewTek.mutable_preview_payment();
+            tekQuery->set_transaction_id(previewCorrelationTransaction);
+            tekQuery->set_revision(previewCorrelationRevision);
+            auto *previewActivation = tekQuery->mutable_commit_ability_activation();
+            previewActivation->set_transaction_id(savedPendingTransaction);
+            previewActivation->set_expected_revision(savedPendingRevision);
+            auto *previewPayment = previewActivation->mutable_payment();
+            previewPayment->CopyFrom(resumed1.latestLegal.pending_ability_activation().payment_preview().selection());
+            previewPayment->mutable_mana()->set_u(savedPoolBlue);
+            ASSERT_EQ(previewActivation->flex_payments_size(), 0);
+            EXPECT_EQ(previewPayment->source().object_id(), savedSourceObjectId);
+            EXPECT_EQ(previewPayment->source().zone_change_generation(), savedSourceGeneration);
+            const quint64 previewCommandId = resumed1.nextCmdId;
+            resumed1.sendRuled(previewTek, QStringLiteral("preview restored Tekuthal activation with Ring blue mana"));
+            ASSERT_TRUE(waitResumed(
+                [&] {
+                    const auto response = resumed1.responses.find(previewCommandId);
+                    return response != resumed1.responses.end() &&
+                           (response->second.response_code() != Response::RespOk ||
+                            (resumed1.paymentPreviewCount == actorPreviewCountBeforePreview + 1 &&
+                             resumed1.paymentPreviews.size() == actorPreviewOffsetBeforePreview + 1));
+                },
+                15000, "restored Tekuthal payment preview response"));
+            ASSERT_NE(resumed1.responses.find(previewCommandId), resumed1.responses.end());
+            ASSERT_EQ(resumed1.responses.at(previewCommandId).response_code(), Response::RespOk);
+            ASSERT_EQ(resumed1.paymentPreviewCount, actorPreviewCountBeforePreview + 1);
+            ASSERT_EQ(resumed1.paymentPreviews.size(), actorPreviewOffsetBeforePreview + 1);
+            ASSERT_TRUE(resumed1.paymentPreview.valid()) << resumed1.paymentPreview.error();
+            ASSERT_TRUE(resumed1.paymentPreview.complete());
+            EXPECT_EQ(resumed1.paymentPreview.transaction_id(), previewCorrelationTransaction);
+            EXPECT_EQ(resumed1.paymentPreview.revision(), previewCorrelationRevision);
+            EXPECT_EQ(resumed1.paymentPreview.selection().source().object_id(), savedSourceObjectId);
+            EXPECT_EQ(resumed1.paymentPreview.selection().source().zone_change_generation(), savedSourceGeneration);
+            EXPECT_EQ(resumed1.paymentPreview.selection().mana().w(), 0u);
+            EXPECT_EQ(resumed1.paymentPreview.selection().mana().u(), savedPoolBlue);
+            EXPECT_EQ(resumed1.paymentPreview.selection().mana().b(), 0u);
+            EXPECT_EQ(resumed1.paymentPreview.selection().mana().r(), 0u);
+            EXPECT_EQ(resumed1.paymentPreview.selection().mana().g(), 0u);
+            EXPECT_EQ(resumed1.paymentPreview.selection().mana().c(), 0u);
+            EXPECT_EQ(resumed2.paymentPreviewCount, opponentPreviewCountBeforePreview);
+            EXPECT_EQ(resumedSpectator.paymentPreviewCount, spectatorPreviewCountBeforePreview);
+            EXPECT_EQ(resumed2.paymentPreviews.size(), opponentPreviewOffsetBeforePreview);
+            EXPECT_EQ(resumedSpectator.paymentPreviews.size(), spectatorPreviewOffsetBeforePreview);
+            EXPECT_EQ(resumed1.batches.size(), actorBatchBeforePreview);
+            EXPECT_EQ(resumed2.batches.size(), opponentBatchBeforePreview);
+            EXPECT_EQ(resumedSpectator.batches.size(), spectatorBatchBeforePreview);
+            EXPECT_EQ(resumed1.stateVersion, actorVersionBeforePreview);
+            EXPECT_EQ(resumed2.stateVersion, opponentVersionBeforePreview);
+            EXPECT_EQ(resumedSpectator.stateVersion, spectatorVersionBeforePreview);
+            EXPECT_EQ(actorPendingBytesBeforePreview, savedActorPendingBytes);
+            EXPECT_EQ(resumed1.latestLegal.pending_ability_activation().SerializeAsString(),
+                      actorPendingBytesBeforePreview);
+            EXPECT_TRUE(samePendingPublicIdentity(publicPendingBeforePreview,
+                                                  resumed2.latestLegal.pending_ability_activation()));
+            EXPECT_EQ(resumed1.lifeByPlayer, actorLifeMapBeforePreview);
+            EXPECT_EQ(resumed2.lifeByPlayer, opponentLifeMapBeforePreview);
+            EXPECT_EQ(resumedSpectator.lifeByPlayer, spectatorLifeMapBeforePreview);
+            EXPECT_EQ(resumed1.myPool.w, savedPoolWhite);
+            EXPECT_EQ(resumed1.myPool.u, savedPoolBlue);
+            EXPECT_EQ(resumed1.myPool.b, savedPoolBlack);
+            EXPECT_EQ(resumed1.myPool.r, savedPoolRed);
+            EXPECT_EQ(resumed1.myPool.g, savedPoolGreen);
+            EXPECT_EQ(resumed1.myPool.c, savedPoolColorless);
+            for (const auto *client : {&resumed1, &resumed2, &resumedSpectator}) {
+                EXPECT_TRUE(counterCount(*client, QStringLiteral("replicating_ring"), QStringLiteral("night"), 1));
+                EXPECT_TRUE(counterCount(*client, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 2));
+            }
+            const auto &rawPaymentPreview = resumed1.paymentPreviews[actorPreviewOffsetBeforePreview];
+            ASSERT_TRUE(rawPaymentPreview.has_payment_preview());
+            EXPECT_EQ(rawPaymentPreview.payment_preview().transaction_id(), previewCorrelationTransaction);
+            EXPECT_EQ(rawPaymentPreview.payment_preview().revision(), previewCorrelationRevision);
+            EXPECT_TRUE(rawPaymentPreview.payment_preview().valid());
+            EXPECT_TRUE(rawPaymentPreview.payment_preview().complete());
+            EXPECT_EQ(rawPaymentPreview.payment_preview().selection().source().object_id(), savedSourceObjectId);
+            EXPECT_EQ(rawPaymentPreview.payment_preview().selection().source().zone_change_generation(),
+                      savedSourceGeneration);
+            EXPECT_EQ(rawPaymentPreview.payment_preview().selection().mana().u(), savedPoolBlue);
+            EXPECT_TRUE(rawPaymentPreview.events().empty());
+            EXPECT_TRUE(rawPaymentPreview.legal_by_player().empty());
+
+            ruled::v1::RuledCommand commitTek;
+            auto *tekCommit = commitTek.mutable_commit_ability_activation();
+            tekCommit->set_transaction_id(savedPendingTransaction);
+            tekCommit->set_expected_revision(savedPendingRevision);
+            tekCommit->mutable_payment()->CopyFrom(resumed1.paymentPreview.selection());
+            tekCommit->mutable_restricted_mana()->CopyFrom(resumed1.paymentPreview.restricted_mana());
+            ASSERT_EQ(tekCommit->flex_payments_size(), 0);
+            EXPECT_EQ(tekCommit->payment().source().object_id(), savedSourceObjectId);
+            EXPECT_EQ(tekCommit->payment().source().zone_change_generation(), savedSourceGeneration);
+            const auto commitPayloadBytes = commitTek.SerializeAsString();
+            const auto actorLifeMapBeforeCommit = resumed1.lifeByPlayer;
+            const auto opponentLifeMapBeforeCommit = resumed2.lifeByPlayer;
+            const auto spectatorLifeMapBeforeCommit = resumedSpectator.lifeByPlayer;
+            const auto actorBatchBeforeCommit = resumed1.batches.size();
+            const auto opponentBatchBeforeCommit = resumed2.batches.size();
+            const auto spectatorBatchBeforeCommit = resumedSpectator.batches.size();
+            const auto actorPreviewCountBeforeCommit = resumed1.paymentPreviewCount;
+            const auto opponentPreviewCountBeforeCommit = resumed2.paymentPreviewCount;
+            const auto spectatorPreviewCountBeforeCommit = resumedSpectator.paymentPreviewCount;
+            const auto actorPreviewOffsetBeforeCommit = resumed1.paymentPreviews.size();
+            const auto opponentPreviewOffsetBeforeCommit = resumed2.paymentPreviews.size();
+            const auto spectatorPreviewOffsetBeforeCommit = resumedSpectator.paymentPreviews.size();
+            auto commitResultsReached = [&] {
+                const auto actorPushes = tekActivationStackObjectIdsSince(resumed1, actorBatchBeforeCommit);
+                const auto opponentPushes = tekActivationStackObjectIdsSince(resumed2, opponentBatchBeforeCommit);
+                const auto spectatorPushes =
+                    tekActivationStackObjectIdsSince(resumedSpectator, spectatorBatchBeforeCommit);
+                const auto *actorRing = permanent(resumed1, p1.myId, QStringLiteral("replicating_ring"));
+                const auto *opponentRing = permanent(resumed2, p1.myId, QStringLiteral("replicating_ring"));
+                const auto *spectatorRing = permanent(resumedSpectator, p1.myId, QStringLiteral("replicating_ring"));
+                return resumed1.batches.size() > actorBatchBeforeCommit &&
+                       resumed2.batches.size() > opponentBatchBeforeCommit &&
+                       resumedSpectator.batches.size() > spectatorBatchBeforeCommit &&
+                       !resumed1.latestLegal.has_pending_ability_activation() &&
+                       !resumed2.latestLegal.has_pending_ability_activation() &&
+                       !resumedSpectator.latestLegal.has_pending_ability_activation() && resumed1.stackDepth == 1 &&
+                       resumed2.stackDepth == 1 && resumedSpectator.stackDepth == 1 && actorRing && actorRing->tapped &&
+                       opponentRing && opponentRing->tapped && spectatorRing && spectatorRing->tapped &&
+                       lifeMapShowsCommittedPayment(resumed1, actorLifeMapBeforeCommit) &&
+                       lifeMapShowsCommittedPayment(resumed2, opponentLifeMapBeforeCommit) &&
+                       lifeMapShowsCommittedPayment(resumedSpectator, spectatorLifeMapBeforeCommit) &&
+                       countLifeChangesSince(resumed1, actorBatchBeforeCommit,
+                                             [&](const auto &change) {
+                                                 return change.player_id() == resumed1.myId && change.delta() == -4 &&
+                                                        change.new_total() == 16;
+                                             }) == 1 &&
+                       countLifeChangesSince(resumed2, opponentBatchBeforeCommit,
+                                             [&](const auto &change) {
+                                                 return change.player_id() == resumed1.myId && change.delta() == -4 &&
+                                                        change.new_total() == 16;
+                                             }) == 1 &&
+                       countLifeChangesSince(resumedSpectator, spectatorBatchBeforeCommit,
+                                             [&](const auto &change) {
+                                                 return change.player_id() == resumed1.myId && change.delta() == -4 &&
+                                                        change.new_total() == 16;
+                                             }) == 1 &&
+                       countLifeChangesSince(resumed1, actorBatchBeforeCommit, [](const auto &) { return true; }) ==
+                           1 &&
+                       countLifeChangesSince(resumed2, opponentBatchBeforeCommit, [](const auto &) { return true; }) ==
+                           1 &&
+                       countLifeChangesSince(resumedSpectator, spectatorBatchBeforeCommit,
+                                             [](const auto &) { return true; }) == 1 &&
+                       resumed1.myPool.w == 0 && resumed1.myPool.u == 0 && resumed1.myPool.b == 0 &&
+                       resumed1.myPool.r == 0 && resumed1.myPool.g == 0 && resumed1.myPool.c == 0 &&
+                       resumed1.myPool.total() == 0 &&
+                       latestRawManaPoolMatchesSince(resumed1, actorBatchBeforeCommit, resumed1.myId, 0, 0, 0, 0, 0,
+                                                     0) &&
+                       latestRawManaPoolMatchesSince(resumed2, opponentBatchBeforeCommit, resumed1.myId, 0, 0, 0, 0, 0,
+                                                     0) &&
+                       latestRawManaPoolMatchesSince(resumedSpectator, spectatorBatchBeforeCommit, resumed1.myId, 0, 0,
+                                                     0, 0, 0, 0) &&
+                       counterCount(resumed1, QStringLiteral("replicating_ring"), QStringLiteral("night"), 0) &&
+                       counterCount(resumed2, QStringLiteral("replicating_ring"), QStringLiteral("night"), 0) &&
+                       counterCount(resumedSpectator, QStringLiteral("replicating_ring"), QStringLiteral("night"), 0) &&
+                       counterCount(resumed1, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 0) &&
+                       counterCount(resumed2, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 0) &&
+                       counterCount(resumedSpectator, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"),
+                                    0) &&
+                       counterCount(resumed1, QStringLiteral("tekuthal,_inquiry_dominus"),
+                                    QStringLiteral("indestructible"), 0) &&
+                       counterCount(resumed2, QStringLiteral("tekuthal,_inquiry_dominus"),
+                                    QStringLiteral("indestructible"), 0) &&
+                       counterCount(resumedSpectator, QStringLiteral("tekuthal,_inquiry_dominus"),
+                                    QStringLiteral("indestructible"), 0) &&
+                       checkPhysicalReceipts(resumed1) && checkPhysicalReceipts(resumed2) &&
+                       checkPhysicalReceipts(resumedSpectator) && actorPushes.size() == 1 && actorPushes.front() != 0 &&
+                       opponentPushes == actorPushes && spectatorPushes == actorPushes;
+            };
+            const quint64 commitCommandId = resumed1.nextCmdId;
+            resumed1.sendRuled(commitTek, QStringLiteral("commit restored Tekuthal activation"));
+            ASSERT_TRUE(waitResumed(
+                [&] {
+                    const auto response = resumed1.responses.find(commitCommandId);
+                    return response != resumed1.responses.end() &&
+                           (response->second.response_code() != Response::RespOk || commitResultsReached());
+                },
+                15000, "restored Tekuthal commit and three-recipient results"));
+            ASSERT_NE(resumed1.responses.find(commitCommandId), resumed1.responses.end());
+            ASSERT_EQ(resumed1.responses.at(commitCommandId).response_code(), Response::RespOk);
+            ASSERT_TRUE(commitResultsReached());
+            const auto committedStackObjectIds = tekActivationStackObjectIdsSince(resumed1, actorBatchBeforeCommit);
+            ASSERT_EQ(committedStackObjectIds.size(), 1u);
+            const quint32 committedActivationStackObjectId = committedStackObjectIds.front();
+            ASSERT_NE(committedActivationStackObjectId, 0u);
+            EXPECT_EQ(resumed1.lifeByPlayer.at(resumed1.myId), 16);
+            EXPECT_EQ(resumed2.lifeByPlayer.at(resumed1.myId), 16);
+            EXPECT_EQ(resumedSpectator.lifeByPlayer.at(resumed1.myId), 16);
+            EXPECT_EQ(resumed1.stackDepth, 1);
+            EXPECT_EQ(resumed2.stackDepth, 1);
+            EXPECT_EQ(resumedSpectator.stackDepth, 1);
+            EXPECT_EQ(resumed1.paymentPreviewCount, actorPreviewCountBeforeCommit);
+            EXPECT_EQ(resumed2.paymentPreviewCount, opponentPreviewCountBeforeCommit);
+            EXPECT_EQ(resumedSpectator.paymentPreviewCount, spectatorPreviewCountBeforeCommit);
+            EXPECT_EQ(resumed1.paymentPreviews.size(), actorPreviewOffsetBeforeCommit);
+            EXPECT_EQ(resumed2.paymentPreviews.size(), opponentPreviewOffsetBeforeCommit);
+            EXPECT_EQ(resumedSpectator.paymentPreviews.size(), spectatorPreviewOffsetBeforeCommit);
+            checkOwnLegalKeysSince(resumed1, actorBatchBeforeCommit);
+            for (auto batchIndex = actorBatchBeforeCommit; batchIndex < resumed1.batches.size(); ++batchIndex) {
+                const auto &batch = resumed1.batches[batchIndex];
+                EXPECT_FALSE(batch.has_payment_preview());
+                for (const auto &[legalPlayerId, legal] : batch.legal_by_player()) {
+                    EXPECT_EQ(legalPlayerId, resumed1.myId);
+                }
+            }
+            for (auto batchIndex = opponentBatchBeforeCommit; batchIndex < resumed2.batches.size(); ++batchIndex) {
+                const auto &batch = resumed2.batches[batchIndex];
+                EXPECT_FALSE(batch.has_payment_preview());
+                for (const auto &[legalPlayerId, legal] : batch.legal_by_player()) {
+                    EXPECT_EQ(legalPlayerId, resumed2.myId);
+                    EXPECT_EQ(legal.cost_choices_by_ability().count(tekAbilityKey), 0u);
+                    EXPECT_EQ(legal.cost_choices_by_ability().count(kciRestoreAbilityKey), 0u);
+                    if (legal.has_pending_ability_activation()) {
+                        const auto &pending = legal.pending_ability_activation();
+                        EXPECT_TRUE(pending.locked_total_cost().empty());
+                        EXPECT_TRUE(pending.eligible_restricted_mana_group_ids().empty());
+                        EXPECT_TRUE(pending.cost_selections().empty());
+                        EXPECT_TRUE(pending.flex_payments().empty());
+                        EXPECT_FALSE(pending.has_payment_preview());
+                    }
+                }
+            }
+            for (auto batchIndex = spectatorBatchBeforeCommit; batchIndex < resumedSpectator.batches.size();
+                 ++batchIndex) {
+                const auto &batch = resumedSpectator.batches[batchIndex];
+                EXPECT_FALSE(batch.has_payment_preview());
+                EXPECT_TRUE(batch.legal_by_player().empty());
+            }
+
+            const auto actorBatchAfterCommit = resumed1.batches.size();
+            const auto opponentBatchAfterCommit = resumed2.batches.size();
+            const auto spectatorBatchAfterCommit = resumedSpectator.batches.size();
+            const auto actorVersionAfterCommit = resumed1.stateVersion;
+            const auto opponentVersionAfterCommit = resumed2.stateVersion;
+            const auto spectatorVersionAfterCommit = resumedSpectator.stateVersion;
+            const auto actorEventsAfterCommit = resumed1.events.size();
+            const auto opponentEventsAfterCommit = resumed2.events.size();
+            const auto spectatorEventsAfterCommit = resumedSpectator.events.size();
+            const auto actorMovesAfterCommit = resumed1.physicalMoveEvents.size();
+            const auto opponentMovesAfterCommit = resumed2.physicalMoveEvents.size();
+            const auto spectatorMovesAfterCommit = resumedSpectator.physicalMoveEvents.size();
+            const auto actorPreviewCountAfterCommit = resumed1.paymentPreviewCount;
+            const auto opponentPreviewCountAfterCommit = resumed2.paymentPreviewCount;
+            const auto spectatorPreviewCountAfterCommit = resumedSpectator.paymentPreviewCount;
+            const auto actorPreviewSizeAfterCommit = resumed1.paymentPreviews.size();
+            const auto opponentPreviewSizeAfterCommit = resumed2.paymentPreviews.size();
+            const auto spectatorPreviewSizeAfterCommit = resumedSpectator.paymentPreviews.size();
+            const auto actorLifeMapAfterCommit = resumed1.lifeByPlayer;
+            const auto opponentLifeMapAfterCommit = resumed2.lifeByPlayer;
+            const auto spectatorLifeMapAfterCommit = resumedSpectator.lifeByPlayer;
+            const quint64 duplicateCommandId = resumed1.nextCmdId;
+            ASSERT_NE(duplicateCommandId, commitCommandId);
+            ASSERT_EQ(commitTek.SerializeAsString(), commitPayloadBytes);
+            resumed1.sendRuled(commitTek, QStringLiteral("duplicate restored Tekuthal commit"));
+            ASSERT_TRUE(waitResumed([&] { return resumed1.responses.count(duplicateCommandId) != 0; }, 15000,
+                                    "duplicate restored Tekuthal commit rejection"));
+            ASSERT_NE(resumed1.responses.find(duplicateCommandId), resumed1.responses.end());
+            EXPECT_NE(resumed1.responses.at(duplicateCommandId).response_code(), Response::RespOk);
+            EXPECT_EQ(commitTek.SerializeAsString(), commitPayloadBytes);
+            EXPECT_EQ(resumed1.batches.size(), actorBatchAfterCommit);
+            EXPECT_EQ(resumed2.batches.size(), opponentBatchAfterCommit);
+            EXPECT_EQ(resumedSpectator.batches.size(), spectatorBatchAfterCommit);
+            EXPECT_EQ(resumed1.stateVersion, actorVersionAfterCommit);
+            EXPECT_EQ(resumed2.stateVersion, opponentVersionAfterCommit);
+            EXPECT_EQ(resumedSpectator.stateVersion, spectatorVersionAfterCommit);
+            EXPECT_EQ(resumed1.events.size(), actorEventsAfterCommit);
+            EXPECT_EQ(resumed2.events.size(), opponentEventsAfterCommit);
+            EXPECT_EQ(resumedSpectator.events.size(), spectatorEventsAfterCommit);
+            EXPECT_EQ(resumed1.physicalMoveEvents.size(), actorMovesAfterCommit);
+            EXPECT_EQ(resumed2.physicalMoveEvents.size(), opponentMovesAfterCommit);
+            EXPECT_EQ(resumedSpectator.physicalMoveEvents.size(), spectatorMovesAfterCommit);
+            EXPECT_EQ(resumed1.paymentPreviewCount, actorPreviewCountAfterCommit);
+            EXPECT_EQ(resumed2.paymentPreviewCount, opponentPreviewCountAfterCommit);
+            EXPECT_EQ(resumedSpectator.paymentPreviewCount, spectatorPreviewCountAfterCommit);
+            EXPECT_EQ(resumed1.paymentPreviews.size(), actorPreviewSizeAfterCommit);
+            EXPECT_EQ(resumed2.paymentPreviews.size(), opponentPreviewSizeAfterCommit);
+            EXPECT_EQ(resumedSpectator.paymentPreviews.size(), spectatorPreviewSizeAfterCommit);
+            EXPECT_EQ(resumed1.lifeByPlayer, actorLifeMapAfterCommit);
+            EXPECT_EQ(resumed2.lifeByPlayer, opponentLifeMapAfterCommit);
+            EXPECT_EQ(resumedSpectator.lifeByPlayer, spectatorLifeMapAfterCommit);
+            EXPECT_FALSE(resumed1.latestLegal.has_pending_ability_activation());
+            EXPECT_FALSE(resumed2.latestLegal.has_pending_ability_activation());
+            EXPECT_FALSE(resumedSpectator.latestLegal.has_pending_ability_activation());
+            EXPECT_EQ(resumed1.myPool.total(), 0);
+            EXPECT_EQ(resumed1.myPool.w, 0);
+            EXPECT_EQ(resumed1.myPool.u, 0);
+            EXPECT_EQ(resumed1.myPool.b, 0);
+            EXPECT_EQ(resumed1.myPool.r, 0);
+            EXPECT_EQ(resumed1.myPool.g, 0);
+            EXPECT_EQ(resumed1.myPool.c, 0);
+            EXPECT_EQ(resumed1.stackDepth, 1);
+            EXPECT_EQ(resumed2.stackDepth, 1);
+            EXPECT_EQ(resumedSpectator.stackDepth, 1);
+            EXPECT_EQ(countLifeChangesSince(resumed1, actorBatchAfterCommit, [](const auto &) { return true; }), 0);
+            EXPECT_EQ(countLifeChangesSince(resumed2, opponentBatchAfterCommit, [](const auto &) { return true; }), 0);
+            EXPECT_EQ(
+                countLifeChangesSince(resumedSpectator, spectatorBatchAfterCommit, [](const auto &) { return true; }),
+                0);
+            EXPECT_EQ(countManaPoolUpdatesSince(resumed1, actorBatchAfterCommit), 0);
+            EXPECT_EQ(countManaPoolUpdatesSince(resumed2, opponentBatchAfterCommit), 0);
+            EXPECT_EQ(countManaPoolUpdatesSince(resumedSpectator, spectatorBatchAfterCommit), 0);
+            EXPECT_TRUE(tekActivationStackObjectIdsSince(resumed1, actorBatchAfterCommit).empty());
+            EXPECT_TRUE(tekActivationStackObjectIdsSince(resumed2, opponentBatchAfterCommit).empty());
+            EXPECT_TRUE(tekActivationStackObjectIdsSince(resumedSpectator, spectatorBatchAfterCommit).empty());
+            EXPECT_TRUE(checkPhysicalReceipts(resumed1));
+            EXPECT_TRUE(checkPhysicalReceipts(resumed2));
+            EXPECT_TRUE(checkPhysicalReceipts(resumedSpectator));
+            for (const auto *client : {&resumed1, &resumed2, &resumedSpectator}) {
+                EXPECT_TRUE(counterCount(*client, QStringLiteral("replicating_ring"), QStringLiteral("night"), 0));
+                EXPECT_TRUE(counterCount(*client, QStringLiteral("everflowing_chalice"), QStringLiteral("charge"), 0));
+                EXPECT_TRUE(counterCount(*client, QStringLiteral("tekuthal,_inquiry_dominus"),
+                                         QStringLiteral("indestructible"), 0));
+                const auto *committedRing = permanent(*client, p1.myId, QStringLiteral("replicating_ring"));
+                ASSERT_NE(committedRing, nullptr);
+                EXPECT_TRUE(committedRing->tapped);
+            }
+
+            // Keep the activated ability on the stack here; its existing network case covers resolution.
+            collectServerLogs();
+            ASSERT_NE(servatrice.state(), QProcess::NotRunning);
+            servatrice.kill();
+            ASSERT_TRUE(servatrice.waitForFinished(5000));
+            ASSERT_NE(sidecar.state(), QProcess::NotRunning);
+            sidecar.kill();
+            ASSERT_TRUE(sidecar.waitForFinished(5000));
+            p1.sock.abort();
+            p2.sock.abort();
+            resumed1.sock.abort();
+            resumed2.sock.abort();
+            resumedSpectator.sock.abort();
+            collectServerLogs();
+            ++completedRestorePrefixes;
+        }
+    }
+    EXPECT_EQ(completedStaleBranches, 1);
+    EXPECT_EQ(completedRestorePrefixes, 1);
+}
 } // namespace
 } // namespace ruled_e2e

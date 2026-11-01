@@ -1186,6 +1186,9 @@ mod issue_misc44_batch;
 mod issue_misc45_batch;
 #[path = "scenario/tekuthal_runtime.rs"]
 mod tekuthal_runtime;
+
+#[path = "scenario/deck_coverage_tekuthal.rs"]
+mod deck_coverage_tekuthal;
 #[path = "scenario/tend_the_sprigs.rs"]
 mod tend_the_sprigs;
 
