@@ -2,7 +2,7 @@ use super::{EffectCx, EffectOutcome};
 use crate::engine::EngineError;
 use crate::engine::GameEngine;
 use crate::state::{
-    PendingProgramProliferateStage, PendingResolution, PendingResolutionPresentation,
+    PendingProliferateStage, PendingResolution, PendingResolutionPresentation,
     ResolutionContinuation,
 };
 use crate::{engine::GameEvent, state::Zone};
@@ -12,13 +12,29 @@ use tricerules_proto::ruled::v1 as rv1;
 /// each existing kind to each chosen recipient. Object and player identities stay in separate
 /// candidate domains throughout the prompt and continuation.
 pub(super) fn proliferate(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
+    let stack = cx.parked_stack();
+    let transaction = crate::engine::proliferate::PendingProliferateTransaction::new(cx.controller);
+    match cx
+        .engine
+        .begin_initial_proliferate_action(stack.clone(), transaction, cx.events)?
+    {
+        crate::engine::proliferate::InitialProliferateProgress::Unreplaced => {}
+        crate::engine::proliferate::InitialProliferateProgress::ContinuedInline => {
+            return Ok(EffectOutcome::Continue)
+        }
+        crate::engine::proliferate::InitialProliferateProgress::Parked => {
+            return Ok(EffectOutcome::Suspended)
+        }
+    }
     let mut candidate_objects = cx
         .engine
         .state
         .objects
         .values()
         .filter(|object| {
-            object.zone == Zone::Battlefield && object.counters.values().any(|count| *count > 0)
+            object.zone == Zone::Battlefield
+                && object.phase_status.is_none()
+                && object.counters.values().any(|count| *count > 0)
         })
         .map(|object| object.id)
         .collect::<Vec<_>>();
@@ -64,14 +80,12 @@ pub(super) fn proliferate(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engine
     let max = candidate_objects
         .len()
         .saturating_add(candidate_player_ids.len()) as u32;
-    let stack = cx.parked_stack();
     let is_program = stack.program.is_some();
-    let stage = if is_program
-        && cx
-            .engine
-            .state
-            .player_idx(cx.controller)
-            .is_none_or(|index| cx.engine.state.players[index].has_lost)
+    let stage = if cx
+        .engine
+        .state
+        .player_idx(cx.controller)
+        .is_none_or(|index| cx.engine.state.players[index].has_lost)
     {
         let candidates = super::resolution_choice_delegate_candidates(
             &cx.engine.state,
@@ -83,34 +97,39 @@ pub(super) fn proliferate(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engine
         let slots = candidates.into_iter().map(Some).collect::<Vec<_>>();
         (
             selector,
-            PendingProgramProliferateStage::ChoosingDelegate { candidates: slots },
+            PendingProliferateStage::ChoosingDelegate { candidates: slots },
         )
     } else {
-        (
-            cx.controller,
-            PendingProgramProliferateStage::SelectingRecipients,
-        )
+        (cx.controller, PendingProliferateStage::SelectingRecipients)
     };
     let deciding_player = stage.0;
     let pending_prompt = match &stage.1 {
-        PendingProgramProliferateStage::ChoosingDelegate { .. } => format!(
+        PendingProliferateStage::ChoosingDelegate { .. } => format!(
             "P{deciding_player}: choose a player to make P{}'s Proliferate choice.",
             cx.controller
         ),
-        PendingProgramProliferateStage::SelectingRecipients => prompt.clone(),
+        PendingProliferateStage::SelectingRecipients => prompt.clone(),
     };
+    let choosing_delegate = matches!(&stage.1, PendingProliferateStage::ChoosingDelegate { .. });
     let continuation = if is_program {
         ResolutionContinuation::ProgramProliferate {
             stack,
             candidate_generations,
             candidate_player_ids: candidate_player_ids.clone(),
             stage: stage.1,
+            transaction: crate::engine::proliferate::PendingProliferateTransaction::new(
+                cx.controller,
+            ),
         }
     } else {
         ResolutionContinuation::Proliferate {
             stack,
             candidate_generations,
             candidate_player_ids: candidate_player_ids.clone(),
+            stage: stage.1,
+            transaction: crate::engine::proliferate::PendingProliferateTransaction::new(
+                cx.controller,
+            ),
         }
     };
     cx.engine.state.pending_resolution = Some(PendingResolution {
@@ -119,44 +138,16 @@ pub(super) fn proliferate(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engine
         deciding_player,
         presentation: PendingResolutionPresentation {
             source_object_id: cx.top.id,
-            candidates: if matches!(
-                &continuation,
-                ResolutionContinuation::ProgramProliferate {
-                    stage: PendingProgramProliferateStage::ChoosingDelegate { .. },
-                    ..
-                }
-            ) {
+            candidates: if choosing_delegate {
                 Vec::new()
             } else {
                 candidate_objects.clone()
             },
-            min: u32::from(matches!(
-                &continuation,
-                ResolutionContinuation::ProgramProliferate {
-                    stage: PendingProgramProliferateStage::ChoosingDelegate { .. },
-                    ..
-                }
-            )),
-            max: if matches!(
-                &continuation,
-                ResolutionContinuation::ProgramProliferate {
-                    stage: PendingProgramProliferateStage::ChoosingDelegate { .. },
-                    ..
-                }
-            ) {
-                1
-            } else {
-                max
-            },
+            min: u32::from(choosing_delegate),
+            max: if choosing_delegate { 1 } else { max },
             ordered: false,
             prompt: pending_prompt.clone(),
-            choice_kind: if matches!(
-                &continuation,
-                ResolutionContinuation::ProgramProliferate {
-                    stage: PendingProgramProliferateStage::ChoosingDelegate { .. },
-                    ..
-                }
-            ) {
+            choice_kind: if choosing_delegate {
                 rv1::ChoiceKind::ResolutionBranch
             } else {
                 rv1::ChoiceKind::Proliferate
@@ -165,13 +156,13 @@ pub(super) fn proliferate(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engine
         },
         continuation,
     });
-    if is_program {
-        let event =
-            cx.engine
-                .program_proliferate_choice_event()
-                .ok_or(EngineError::ProgramInvariant(
-                    "typed Proliferate prompt does not match its continuation",
-                ))?;
+    if is_program || choosing_delegate {
+        let event = cx
+            .engine
+            .proliferate_choice_event()
+            .ok_or(EngineError::ProgramInvariant(
+                "Proliferate prompt does not match its continuation",
+            ))?;
         cx.events.push(event);
     } else {
         let candidate_names = candidate_objects
@@ -207,7 +198,10 @@ pub(super) fn proliferate(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engine
     Ok(EffectOutcome::Suspended)
 }
 
-fn prolif_delegate_selector(state: &crate::state::GameState, controller: i32) -> Option<i32> {
+pub(in crate::engine) fn prolif_delegate_selector(
+    state: &crate::state::GameState,
+    controller: i32,
+) -> Option<i32> {
     let index = state.player_idx(controller)?;
     if !state.players[index].has_lost {
         return Some(controller);
@@ -228,24 +222,35 @@ impl GameEngine {
     /// Rebuild the private actor/delegate Proliferate offer from the parked program state. This
     /// keeps presentation data a projection of the engine continuation and gives each delegation
     /// or recipient choice a newly assigned actor-scoped prompt id.
-    pub(in crate::engine) fn program_proliferate_choice_event(&self) -> Option<rv1::RuledEvent> {
+    pub(in crate::engine) fn proliferate_choice_event(&self) -> Option<rv1::RuledEvent> {
         let pending = self.state.pending_resolution.as_ref()?;
-        let ResolutionContinuation::ProgramProliferate {
-            stack,
-            candidate_generations,
-            candidate_player_ids,
-            stage,
-        } = &pending.continuation
-        else {
-            return None;
-        };
+        let (candidate_generations, candidate_player_ids, stage, actor) =
+            match &pending.continuation {
+                ResolutionContinuation::ProgramProliferate {
+                    candidate_generations,
+                    candidate_player_ids,
+                    stage,
+                    transaction,
+                    ..
+                }
+                | ResolutionContinuation::Proliferate {
+                    candidate_generations,
+                    candidate_player_ids,
+                    stage,
+                    transaction,
+                    ..
+                } => (
+                    candidate_generations,
+                    candidate_player_ids,
+                    stage,
+                    transaction.actor,
+                ),
+                _ => return None,
+            };
         let (choice_kind, minimum, maximum, branches, object_ids, player_ids, names) = match stage {
-            PendingProgramProliferateStage::ChoosingDelegate { candidates } => {
-                let eligible = super::resolution_choice_delegate_candidates(
-                    &self.state,
-                    stack.item.controller,
-                    stack.item.controller,
-                );
+            PendingProliferateStage::ChoosingDelegate { candidates } => {
+                let eligible =
+                    super::resolution_choice_delegate_candidates(&self.state, actor, actor);
                 let branches = candidates
                     .iter()
                     .enumerate()
@@ -283,7 +288,7 @@ impl GameEngine {
                     Vec::new(),
                 )
             }
-            PendingProgramProliferateStage::SelectingRecipients => {
+            PendingProliferateStage::SelectingRecipients => {
                 let object_ids = candidate_generations
                     .iter()
                     .filter_map(|&(object_id, generation)| {
@@ -333,15 +338,15 @@ impl GameEngine {
             }
         };
         let (prompt, min, max) = match stage {
-            PendingProgramProliferateStage::ChoosingDelegate { .. } => (
+            PendingProliferateStage::ChoosingDelegate { .. } => (
                 format!(
                     "P{}: choose a player to make P{}'s Proliferate choice.",
-                    pending.deciding_player, stack.item.controller
+                    pending.deciding_player, actor
                 ),
                 minimum,
                 maximum,
             ),
-            PendingProgramProliferateStage::SelectingRecipients => (
+            PendingProliferateStage::SelectingRecipients => (
                 "Choose any number of permanents and/or players with counters.".to_string(),
                 minimum,
                 maximum,

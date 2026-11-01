@@ -997,6 +997,10 @@ impl GameEngine {
                     // The source-bound loyalty timing rule is read from active definitions at
                     // activation time; it does not materialize a continuous-effect payload.
                 }
+                StaticAbilityDef::DoubleControllerProliferations => {
+                    // CR 701.34a: this replaces the resolving Proliferate action in its
+                    // controller's resolution path; it emits no layer effect on entry.
+                }
                 StaticAbilityDef::GrantKeywordToPermanents { filter, keyword } => {
                     self.state.continuous_effects.push(ContinuousEffect {
                         trigger_grant_origin: None,

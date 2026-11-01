@@ -232,6 +232,7 @@ mod phasing;
 mod preparation;
 mod presentation;
 mod priority;
+pub(crate) mod proliferate;
 pub(crate) mod replacement;
 mod resolution;
 pub(crate) mod reveals;

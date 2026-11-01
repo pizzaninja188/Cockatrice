@@ -3964,6 +3964,24 @@ fn issue_169_grouped_taps_cannot_pretend_to_supply_one_observed_object() {
 use super::*;
 
 #[test]
+fn identified_double_controller_proliferations_static_round_trips() {
+    let source = r#"(ability_id: "tekuthal_static", presentation: Fallback,
+        definition: DoubleControllerProliferations)"#;
+    let ability: crate::IdentifiedStaticAbility =
+        ron::from_str(source).expect("Tekuthal's identified static ability parses");
+    assert_eq!(
+        ability.definition,
+        StaticAbilityDef::DoubleControllerProliferations
+    );
+    let encoded = ron::to_string(&ability).expect("identified static ability serializes");
+    assert_eq!(
+        ron::from_str::<crate::IdentifiedStaticAbility>(&encoded)
+            .expect("identified static ability round-trips"),
+        ability
+    );
+}
+
+#[test]
 fn carth_loyalty_cost_static_is_parameter_free_and_round_trips() {
     let ability: StaticAbilityDef =
         ron::from_str("ControllerPlaneswalkerLoyaltyCostsAdditionalOne").unwrap();

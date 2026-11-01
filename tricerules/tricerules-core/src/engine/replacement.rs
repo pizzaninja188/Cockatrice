@@ -1454,6 +1454,203 @@ impl GameEngine {
         event.applied_replacements.push(instance.clone());
     }
 
+    /// Re-project the exact current typed Proliferate counter-order offer without allocating
+    /// replacement handles or advancing its saved batch. The observer return may have reset only
+    /// the prompt correlation; the application IDs and source incarnations remain engine-owned.
+    pub(super) fn current_proliferate_counter_placement_choice_event(
+        &self,
+    ) -> Result<Option<rv1::RuledEvent>, EngineError> {
+        let Some(pending) = self.state.pending_resolution.as_ref() else {
+            return Ok(None);
+        };
+        let ResolutionContinuation::CounterReplacement {
+            stack: Some(stack),
+            completion: crate::state::CounterPlacementCompletion::Proliferate { .. },
+        } = &pending.continuation
+        else {
+            return Ok(None);
+        };
+        if pending.presentation.choice_kind != rv1::ChoiceKind::ReplacementEffect
+            || pending.presentation.source_object_id != stack.item.id
+        {
+            return Err(EngineError::ProgramInvariant(
+                "Proliferate counter-order presentation does not match its stack item",
+            ));
+        }
+        let Some(PendingReplacementEvent::Counters(batch)) =
+            self.state.pending_replacement_event.as_ref()
+        else {
+            return Err(EngineError::ProgramInvariant(
+                "Proliferate counter-order choice has no paired Counters batch",
+            ));
+        };
+        let batch = batch.as_ref();
+        let Some(event) = batch.events.get(batch.event_index) else {
+            return Err(EngineError::ProgramInvariant(
+                "Proliferate counter-order batch has no current event",
+            ));
+        };
+        if event.counter_move_context.is_some() {
+            return Err(EngineError::ProgramInvariant(
+                "Proliferate counter-order event unexpectedly has counter-move context",
+            ));
+        }
+        if batch.applications.len() < 2
+            || batch
+                .applications
+                .iter()
+                .any(|application| application.event_index != batch.event_index)
+        {
+            return Err(EngineError::ProgramInvariant(
+                "Proliferate counter-order applications do not match the current event",
+            ));
+        }
+        let current_candidates = self.counter_replacement_candidates_in_current_state(event);
+        if current_candidates.len() != batch.applications.len() {
+            return Err(EngineError::ProgramInvariant(
+                "Proliferate counter-order application set is no longer current",
+            ));
+        }
+        let mut labels = Vec::with_capacity(batch.applications.len());
+        for application in &batch.applications {
+            let mut matches = current_candidates
+                .iter()
+                .filter(|(candidate, _)| candidate == &application.replacement);
+            let Some((_, label)) = matches.next() else {
+                return Err(EngineError::ProgramInvariant(
+                    "Proliferate counter-order application source is no longer current",
+                ));
+            };
+            if matches.next().is_some() {
+                return Err(EngineError::ProgramInvariant(
+                    "Proliferate counter-order application source is ambiguous",
+                ));
+            }
+            labels.push(label.clone());
+        }
+        if current_candidates.iter().any(|(candidate, _)| {
+            !batch
+                .applications
+                .iter()
+                .any(|application| application.replacement == *candidate)
+        }) {
+            return Err(EngineError::ProgramInvariant(
+                "Proliferate counter-order has an unbound current replacement source",
+            ));
+        }
+        let application_ids = batch
+            .applications
+            .iter()
+            .map(|application| application.choice_id)
+            .collect::<Vec<_>>();
+        if pending.presentation.candidates != application_ids {
+            return Err(EngineError::ProgramInvariant(
+                "Proliferate counter-order handles do not match their saved applications",
+            ));
+        }
+        let current_decider = match &event.recipient {
+            CounterPlacementRecipient::Object { object_id, .. } => self.controller_of(*object_id),
+            CounterPlacementRecipient::EnteringObject { .. } => event
+                .entry_context
+                .as_ref()
+                .map(|context| context.destination_controller),
+            CounterPlacementRecipient::Player { player_id } => Some(*player_id),
+        }
+        .ok_or(EngineError::ProgramInvariant(
+            "Proliferate counter-order recipient has no current decider",
+        ))?;
+        if current_decider != pending.deciding_player {
+            return Err(EngineError::ProgramInvariant(
+                "Proliferate counter-order decider changed without refreshing the batch",
+            ));
+        }
+        let (choice, _) = self.counter_placement_choice_event(
+            event,
+            pending.deciding_player,
+            stack.item.id,
+            pending.resolution_prompt_id.get(),
+            &batch.applications,
+            &labels,
+        );
+        Ok(Some(choice))
+    }
+
+    /// Build the one concrete ReplacementEffect projection shared by initial counter-order
+    /// parking and observer restoration of unchanged saved Proliferate work.
+    fn counter_placement_choice_event(
+        &self,
+        event: &ProposedCounterPlacement,
+        deciding_player: PlayerId,
+        source_object_id: ObjectId,
+        resolution_prompt_id: u64,
+        applications: &[CounterPlacementApplication],
+        labels: &[String],
+    ) -> (rv1::RuledEvent, String) {
+        let prompt = match &event.recipient {
+            CounterPlacementRecipient::Object { object_id, .. } => format!(
+                "Choose the next counter replacement effect for {}.",
+                self.replacement_object_display_name(*object_id, None)
+            ),
+            CounterPlacementRecipient::EnteringObject { object_id, .. } => format!(
+                "Choose the next counter replacement effect for {} entering the battlefield.",
+                self.replacement_object_display_name(*object_id, None)
+            ),
+            CounterPlacementRecipient::Player { player_id } => {
+                format!("Choose the next counter replacement effect for P{player_id}.")
+            }
+        };
+        let application_ids = applications
+            .iter()
+            .map(|application| application.choice_id)
+            .collect::<Vec<_>>();
+        let replacement_options = applications
+            .iter()
+            .zip(labels)
+            .map(|(application, label)| {
+                self.replacement_source_presentation(application.replacement.source_object_id)
+                    .option(application.choice_id, label.clone())
+            })
+            .collect();
+        (
+            rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                    rv1::ResolutionChoiceRequired {
+                        resolution_prompt_id,
+                        accepted_permanent_selections: Vec::new(),
+                        variable_mana_contribution: false,
+                        candidate_token_identities: Vec::new(),
+                        candidate_player_ids: Vec::new(),
+                        deciding_player_id: deciding_player,
+                        source_object_id,
+                        prompt_text: prompt.clone(),
+                        choice_kind: rv1::ChoiceKind::ReplacementEffect as i32,
+                        candidate_object_ids: application_ids,
+                        candidate_card_ids: vec![String::new(); applications.len()],
+                        min: 1,
+                        max: 1,
+                        ordered: false,
+                        candidate_names: labels.to_vec(),
+                        candidate_server_card_ids: Vec::new(),
+                        candidate_selectable: Vec::new(),
+                        resolution_branches: Vec::new(),
+                        mana_cost: String::new(),
+                        unique_names: false,
+                        generic_mana_cost: 0,
+                        payment_currently_legal: false,
+                        public_reveal: None,
+                        candidate_source_zones: Vec::new(),
+                        combat_defender_options: Vec::new(),
+                        waterbend: false,
+                        selection_slots: Vec::new(),
+                        replacement_options,
+                        selection_alternatives: Vec::new(),
+                    },
+                )),
+            },
+            prompt,
+        )
+    }
+
     pub(super) fn park_counter_placement_choice(
         &mut self,
         mut batch: PendingCounterPlacementBatch,
@@ -1474,38 +1671,18 @@ impl GameEngine {
                 .unwrap_or(event.actor),
             CounterPlacementRecipient::Player { player_id } => *player_id,
         };
-        let mut application_ids = Vec::with_capacity(candidates.len());
-        let mut candidate_names = Vec::with_capacity(candidates.len());
-        let mut replacement_options = Vec::with_capacity(candidates.len());
         batch.applications.clear();
+        let mut labels = Vec::with_capacity(candidates.len());
         for (replacement, label) in candidates {
             let choice_id = self.state.next_replacement_application_id;
             self.state.next_replacement_application_id = choice_id.saturating_add(1);
-            let option = self
-                .replacement_source_presentation(replacement.source_object_id)
-                .option(choice_id, label.clone());
-            replacement_options.push(option);
-            application_ids.push(choice_id);
-            candidate_names.push(label);
+            labels.push(label);
             batch.applications.push(CounterPlacementApplication {
                 choice_id,
                 event_index: batch.event_index,
                 replacement,
             });
         }
-        let prompt = match &event.recipient {
-            CounterPlacementRecipient::Object { object_id, .. } => format!(
-                "Choose the next counter replacement effect for {}.",
-                self.replacement_object_display_name(*object_id, None)
-            ),
-            CounterPlacementRecipient::EnteringObject { object_id, .. } => format!(
-                "Choose the next counter replacement effect for {} entering the battlefield.",
-                self.replacement_object_display_name(*object_id, None)
-            ),
-            CounterPlacementRecipient::Player { player_id } => {
-                format!("Choose the next counter replacement effect for P{player_id}.")
-            }
-        };
         let source_object_id = stack
             .as_ref()
             .map(|parked| parked.item.id)
@@ -1532,41 +1709,20 @@ impl GameEngine {
                 }
                 _ => 0,
             });
-        out.push(rv1::RuledEvent {
-            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
-                rv1::ResolutionChoiceRequired {
-                    resolution_prompt_id: 0,
-                    accepted_permanent_selections: Vec::new(),
-                    variable_mana_contribution: false,
-                    candidate_token_identities: Vec::new(),
-                    candidate_player_ids: Vec::new(),
-                    deciding_player_id: deciding_player,
-                    source_object_id,
-                    prompt_text: prompt.clone(),
-                    choice_kind: rv1::ChoiceKind::ReplacementEffect as i32,
-                    candidate_object_ids: application_ids.clone(),
-                    candidate_card_ids: vec![String::new(); application_ids.len()],
-                    min: 1,
-                    max: 1,
-                    ordered: false,
-                    candidate_names,
-                    candidate_server_card_ids: Vec::new(),
-                    candidate_selectable: Vec::new(),
-                    resolution_branches: Vec::new(),
-                    mana_cost: String::new(),
-                    unique_names: false,
-                    generic_mana_cost: 0,
-                    payment_currently_legal: false,
-                    public_reveal: None,
-                    candidate_source_zones: Vec::new(),
-                    combat_defender_options: Vec::new(),
-                    waterbend: false,
-                    selection_slots: Vec::new(),
-                    replacement_options,
-                    selection_alternatives: Vec::new(),
-                },
-            )),
-        });
+        let application_ids = batch
+            .applications
+            .iter()
+            .map(|application| application.choice_id)
+            .collect::<Vec<_>>();
+        let (choice_event, prompt) = self.counter_placement_choice_event(
+            event,
+            deciding_player,
+            source_object_id,
+            0,
+            &batch.applications,
+            &labels,
+        );
+        out.push(choice_event);
         out.push(ev_log(prompt.clone()));
         self.state.pending_replacement_event =
             Some(PendingReplacementEvent::Counters(Box::new(batch)));
@@ -2365,8 +2521,8 @@ impl GameEngine {
         let mut game_events = Vec::new();
         let mut receipts = Vec::new();
         let timestamp = self.state.command_index;
-        if let crate::state::CounterPlacementCompletion::Proliferate { player_id } = completion {
-            out.push(ev_log(format!("P{player_id} proliferates.")));
+        if let crate::state::CounterPlacementCompletion::Proliferate { transaction } = completion {
+            out.push(ev_log(format!("P{} proliferates.", transaction.actor)));
         }
         for event in events {
             let mut recipient_received_counters = false;
@@ -2566,8 +2722,10 @@ impl GameEngine {
                 }
             }
         }
-        if let crate::state::CounterPlacementCompletion::Proliferate { player_id } = completion {
-            game_events.push(GameEvent::Proliferated { player: *player_id });
+        if let crate::state::CounterPlacementCompletion::Proliferate { transaction } = completion {
+            game_events.push(GameEvent::Proliferated {
+                player: transaction.actor,
+            });
         }
         if let crate::state::CounterPlacementCompletion::Amass {
             controller,
@@ -2872,7 +3030,7 @@ impl GameEngine {
                 stack: Some(stack),
                 completion:
                     completion @ crate::state::CounterPlacementCompletion::Proliferate { .. },
-            } if stack.program.is_some() => (stack.clone(), completion.clone()),
+            } => (stack.clone(), completion.clone()),
             ResolutionContinuation::CounterReplacement {
                 stack: Some(stack),
                 completion:
@@ -3063,6 +3221,16 @@ impl GameEngine {
                 return Err(error);
             }
         };
+        if let crate::state::CounterPlacementCompletion::Proliferate { transaction } = &completion {
+            let completion_events = self.finish_proliferate_counter_leaf(
+                stack,
+                transaction.clone(),
+                receipts,
+                Vec::new(),
+            )?;
+            out.extend(completion_events.events);
+            return Ok(());
+        }
         let mut previous_result = if begun_flat {
             stack.previous_result.clone()
         } else {
@@ -3389,6 +3557,14 @@ impl GameEngine {
                 return Err(error);
             }
         };
+        if let crate::state::CounterPlacementCompletion::Proliferate { transaction } = &completion {
+            return self.finish_proliferate_counter_leaf(
+                stack,
+                transaction.clone(),
+                receipts,
+                events,
+            );
+        }
         if let crate::state::CounterPlacementCompletion::BlightEffect {
             player,
             count,
@@ -3448,21 +3624,6 @@ impl GameEngine {
                 stack.item,
                 stack.resume_effect_index,
                 previous_result,
-                events,
-            );
-        }
-        if stack.program.is_some()
-            && matches!(
-                &completion,
-                crate::state::CounterPlacementCompletion::Proliferate { .. }
-            )
-        {
-            return self.complete_parked_stack_with_previous(
-                stack,
-                crate::state::EffectResult {
-                    counter_placements: receipts,
-                    ..Default::default()
-                },
                 events,
             );
         }
@@ -9030,7 +9191,9 @@ mod tests {
         else {
             unreachable!()
         };
-        *completion = crate::state::CounterPlacementCompletion::Proliferate { player_id: 0 };
+        *completion = crate::state::CounterPlacementCompletion::Proliferate {
+            transaction: crate::engine::proliferate::PendingProliferateTransaction::new(0),
+        };
         assert!(!engine.begun_combined_counter_placement(&wrong_completion, Some(&replacement)));
 
         let mut wrong_actor = replacement.clone();
@@ -9186,7 +9349,9 @@ mod tests {
         else {
             unreachable!()
         };
-        *completion = crate::state::CounterPlacementCompletion::Proliferate { player_id: 0 };
+        *completion = crate::state::CounterPlacementCompletion::Proliferate {
+            transaction: crate::engine::proliferate::PendingProliferateTransaction::new(0),
+        };
         assert!(!engine.begun_wolf_counter_placement(&wrong_completion, Some(&replacement)));
 
         let mut wrong_actor = replacement.clone();

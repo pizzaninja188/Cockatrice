@@ -19,6 +19,28 @@ fn observed_token_cohort_key(
         .map(|object| (object.object_id, object.zone_change_generation))
 }
 
+fn is_begun_proliferate_observer_continuation(
+    pending: &crate::state::PendingResolution,
+    replacement: Option<&super::replacement::PendingReplacementEvent>,
+) -> bool {
+    match (&pending.continuation, replacement) {
+        (
+            ResolutionContinuation::ProgramProliferate { .. }
+            | ResolutionContinuation::ProliferateReplacement { .. }
+            | ResolutionContinuation::Proliferate { .. },
+            _,
+        ) => true,
+        (
+            ResolutionContinuation::CounterReplacement {
+                stack: Some(stack),
+                completion: crate::state::CounterPlacementCompletion::Proliferate { .. },
+            },
+            Some(super::replacement::PendingReplacementEvent::Counters(_)),
+        ) => stack.program.is_some(),
+        _ => false,
+    }
+}
+
 /// Sorcery-speed window: your main phase, stack empty, you are the active player (CR 307.5,
 /// 601.2; lands CR 305.3).
 pub(super) fn sorcery_speed_available(state: &GameState, player: PlayerId) -> bool {
@@ -238,6 +260,12 @@ impl GameEngine {
             .and_then(|batch| batch.suspended_resolution.as_ref().map(|pending|
                 (pending, batch.suspended_replacement_event.as_ref())))
             .and_then(|(pending, replacement)| {
+                if is_begun_proliferate_observer_continuation(pending, replacement) {
+                    // Keep the exact saved Proliferate action and its paired event together.
+                    // A generic authored Program is discardable below, but these typed action
+                    // continuations have already begun and retain their cursor/receipts.
+                    return None;
+                }
                 if self.begun_exact_owner_exile_return(pending, replacement).is_some() {
                     // The independent observer must restore the begun return and its cursor.
                     return None;
@@ -666,9 +694,20 @@ impl GameEngine {
                     // reconciled only after departed-owned objects have been removed.
                     preserve = true;
                 }
+                ResolutionContinuation::ProliferateReplacement { .. } => {
+                    // The action-time replacement-order choice has begun resolving. Keep the
+                    // original actor, lineage and parked parent until departed sources and the
+                    // current delegate can be reconciled against the live state (CR 608.2m).
+                    preserve = true;
+                }
                 ResolutionContinuation::ProgramProliferate { .. } => {
                     // CR 608.2m preserves the started typed instruction and its exact parent
                     // cursor. Its departed controller receives a delegated recipient choice.
+                    preserve = true;
+                }
+                ResolutionContinuation::Proliferate { .. } => {
+                    // CR 608.2m preserves a begun flat Proliferate instruction, including its
+                    // original actor, replacement transaction and parked legacy parent result.
                     preserve = true;
                 }
                 ResolutionContinuation::PermanentChoice { .. }
@@ -681,12 +720,21 @@ impl GameEngine {
                     preserve = true;
                 }
                 ResolutionContinuation::CounterReplacement {
-                    stack: Some(stack),
-                    completion: crate::state::CounterPlacementCompletion::Proliferate { .. },
-                } if stack.program.is_some() => {
+                    stack: Some(_),
+                    completion: crate::state::CounterPlacementCompletion::Proliferate {
+                        transaction,
+                    },
+                } if matches!(
+                    self.state.pending_replacement_event.as_ref(),
+                    Some(super::replacement::PendingReplacementEvent::Counters(batch))
+                        if batch
+                            .events
+                            .get(batch.event_index)
+                            .is_some_and(|event| event.actor == transaction.actor)
+                ) => {
                     // Proliferate has already selected its recipients. A recipient's independent
-                    // CR 616.1 replacement-order choice can finish even if the original effect
-                    // controller or physical source leaves (CR 608.2m).
+                    // CR 616.1 order choice can finish with its paired counter event even if the
+                    // original effect controller or physical source leaves (CR 608.2m).
                     preserve = true;
                 }
                 ResolutionContinuation::CounterReplacement { .. }
@@ -1368,7 +1416,8 @@ impl GameEngine {
         self.refresh_optional_triggered_ability_departure(events)?;
         self.refresh_each_opponent_scry_departure(events)?;
         self.refresh_chosen_counter_addition_departure(events)?;
-        self.refresh_program_proliferate_departure(events)?;
+        self.refresh_proliferate_replacement_departure(events)?;
+        self.refresh_proliferate_departure(events)?;
         self.refresh_counter_placement_departure(events)?;
         self.refresh_battlefield_cohort_move_departure(
             &departed_objects,

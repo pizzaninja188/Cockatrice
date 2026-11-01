@@ -11,36 +11,46 @@ impl GameEngine {
         if matches!(
             &pending.continuation,
             ResolutionContinuation::ProgramProliferate {
-                stage: crate::state::PendingProgramProliferateStage::ChoosingDelegate { .. },
+                stage: crate::state::PendingProliferateStage::ChoosingDelegate { .. },
+                ..
+            } | ResolutionContinuation::Proliferate {
+                stage: crate::state::PendingProliferateStage::ChoosingDelegate { .. },
                 ..
             }
         ) {
-            return self.finish_program_proliferate_delegate(pending, answer, decision);
+            return self.finish_proliferate_delegate(pending, answer, decision);
         }
-        let is_program = matches!(
-            &pending.continuation,
-            ResolutionContinuation::ProgramProliferate {
-                stage: crate::state::PendingProgramProliferateStage::SelectingRecipients,
-                ..
-            }
-        );
-        let (stack, candidate_generations, candidate_player_ids) = match &pending.continuation {
-            ResolutionContinuation::Proliferate {
-                stack,
-                candidate_generations,
-                candidate_player_ids,
-            } => (stack, candidate_generations, candidate_player_ids),
-            ResolutionContinuation::ProgramProliferate {
-                stack,
-                candidate_generations,
-                candidate_player_ids,
-                stage: crate::state::PendingProgramProliferateStage::SelectingRecipients,
-            } => (stack, candidate_generations, candidate_player_ids),
-            _ => {
-                self.state.pending_resolution = Some(pending);
-                return Err(EngineError::Illegal("not a Proliferate choice"));
-            }
-        };
+        let (stack, candidate_generations, candidate_player_ids, transaction) =
+            match &pending.continuation {
+                ResolutionContinuation::Proliferate {
+                    stack,
+                    candidate_generations,
+                    candidate_player_ids,
+                    stage: crate::state::PendingProliferateStage::SelectingRecipients,
+                    transaction,
+                } => (
+                    stack,
+                    candidate_generations,
+                    candidate_player_ids,
+                    transaction,
+                ),
+                ResolutionContinuation::ProgramProliferate {
+                    stack,
+                    candidate_generations,
+                    candidate_player_ids,
+                    stage: crate::state::PendingProliferateStage::SelectingRecipients,
+                    transaction,
+                } => (
+                    stack,
+                    candidate_generations,
+                    candidate_player_ids,
+                    transaction,
+                ),
+                _ => {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal("not a Proliferate choice"));
+                }
+            };
 
         if decision != rv1::ResolutionChoiceDecision::Unspecified
             || answer.selected_branch_index != 0
@@ -78,7 +88,9 @@ impl GameEngine {
                     candidate == object_id && generation == current_generation
                 });
             let still_has_counters = self.state.objects.get(&object_id).is_some_and(|object| {
-                object.zone == Zone::Battlefield && object.counters.values().any(|count| *count > 0)
+                object.zone == Zone::Battlefield
+                    && object.phase_status.is_none()
+                    && object.counters.values().any(|count| *count > 0)
             });
             if !pending.presentation.candidates.contains(&object_id)
                 || !current_candidate
@@ -108,7 +120,7 @@ impl GameEngine {
         }
 
         let mut placements = Vec::new();
-        let effect_controller = stack.item.controller;
+        let effect_controller = transaction.actor;
         for &object_id in chosen_objects {
             let counters = self
                 .state
@@ -153,35 +165,17 @@ impl GameEngine {
             placements,
             stack.clone(),
             crate::state::CounterPlacementCompletion::Proliferate {
-                player_id: effect_controller,
+                transaction: transaction.clone(),
             },
             &mut logs,
         )?;
         let Some(receipts) = receipts else {
             return Ok(finish_with_events(self, logs));
         };
-        let mut previous_result = stack.previous_result.clone();
-        if is_program || stack.program.is_some() {
-            self.complete_parked_stack_with_previous(
-                stack,
-                EffectResult {
-                    counter_placements: receipts,
-                    ..Default::default()
-                },
-                logs,
-            )
-        } else {
-            previous_result.counter_placements.extend(receipts);
-            self.complete_parked_resolution_with_previous(
-                stack.item,
-                stack.resume_effect_index,
-                previous_result,
-                logs,
-            )
-        }
+        self.finish_proliferate_counter_leaf(stack, transaction.clone(), receipts, logs)
     }
 
-    fn finish_program_proliferate_delegate(
+    fn finish_proliferate_delegate(
         &mut self,
         mut pending: PendingResolution,
         answer: &rv1::SubmitResolutionChoice,
@@ -201,12 +195,19 @@ impl GameEngine {
                 "a departed Proliferate chooser must select a live delegate",
             ));
         }
-        let (stack, candidates) = match &pending.continuation {
+        let (stack, candidates, transaction) = match &pending.continuation {
             ResolutionContinuation::ProgramProliferate {
                 stack,
-                stage: crate::state::PendingProgramProliferateStage::ChoosingDelegate { candidates },
+                stage: crate::state::PendingProliferateStage::ChoosingDelegate { candidates },
+                transaction,
                 ..
-            } => (stack.clone(), candidates.clone()),
+            }
+            | ResolutionContinuation::Proliferate {
+                stack,
+                stage: crate::state::PendingProliferateStage::ChoosingDelegate { candidates },
+                transaction,
+                ..
+            } => (stack.clone(), candidates.clone(), transaction.clone()),
             _ => {
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::Illegal(
@@ -218,11 +219,8 @@ impl GameEngine {
             .get(answer.selected_branch_index as usize)
             .copied()
             .flatten();
-        let eligible = resolution::resolution_choice_delegate_candidates(
-            &self.state,
-            stack.item.controller,
-            stack.item.controller,
-        );
+        let actor = transaction.actor;
+        let eligible = resolution::resolution_choice_delegate_candidates(&self.state, actor, actor);
         let Some(delegate) = delegate.filter(|delegate| eligible.contains(delegate)) else {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
@@ -244,7 +242,12 @@ impl GameEngine {
                 candidate_generations,
                 candidate_player_ids,
                 ..
-            } => current_program_proliferate_candidates(
+            }
+            | ResolutionContinuation::Proliferate {
+                candidate_generations,
+                candidate_player_ids,
+                ..
+            } => current_proliferate_candidates(
                 &self.state,
                 candidate_generations,
                 candidate_player_ids,
@@ -252,32 +255,49 @@ impl GameEngine {
             _ => unreachable!("validated Proliferate delegate continuation"),
         };
         if candidate_generations.is_empty() && candidate_player_ids.is_empty() {
-            let controller = stack.item.controller;
-            return self.complete_program_proliferate_without_candidates(
+            return self.complete_proliferate_without_candidates(
                 stack,
-                format!("No eligible recipients remain for P{controller}'s Proliferate choice."),
+                transaction,
+                format!("No eligible recipients remain for P{actor}'s Proliferate choice."),
             );
         }
         let maximum = candidate_generations
             .len()
             .saturating_add(candidate_player_ids.len()) as u32;
-        let ResolutionContinuation::ProgramProliferate {
-            candidate_generations: pending_generations,
-            candidate_player_ids: pending_players,
-            stage,
-            ..
-        } = &mut pending.continuation
-        else {
-            unreachable!("validated Proliferate delegate continuation")
-        };
-        *pending_generations = candidate_generations;
-        *pending_players = candidate_player_ids;
-        *stage = crate::state::PendingProgramProliferateStage::SelectingRecipients;
+        match &mut pending.continuation {
+            ResolutionContinuation::ProgramProliferate {
+                candidate_generations: pending_generations,
+                candidate_player_ids: pending_players,
+                stage,
+                ..
+            }
+            | ResolutionContinuation::Proliferate {
+                candidate_generations: pending_generations,
+                candidate_player_ids: pending_players,
+                stage,
+                ..
+            } => {
+                *pending_generations = candidate_generations;
+                *pending_players = candidate_player_ids;
+                *stage = crate::state::PendingProliferateStage::SelectingRecipients;
+            }
+            _ => unreachable!("validated Proliferate delegate continuation"),
+        }
         pending.deciding_player = delegate;
-        pending.presentation.candidates = pending_generations
-            .iter()
-            .map(|(object_id, _)| *object_id)
-            .collect();
+        pending.presentation.candidates = match &pending.continuation {
+            ResolutionContinuation::ProgramProliferate {
+                candidate_generations,
+                ..
+            }
+            | ResolutionContinuation::Proliferate {
+                candidate_generations,
+                ..
+            } => candidate_generations
+                .iter()
+                .map(|(object_id, _)| *object_id)
+                .collect(),
+            _ => unreachable!("validated Proliferate recipient continuation"),
+        };
         pending.presentation.min = 0;
         pending.presentation.max = maximum;
         pending.presentation.choice_kind = rv1::ChoiceKind::Proliferate;
@@ -286,65 +306,74 @@ impl GameEngine {
         pending.resolution_prompt_id = crate::state::ResolutionPromptId::UNASSIGNED;
         pending.resolution_prompt_semantics = None;
         let mut events = vec![ev_log(format!(
-            "P{} chooses P{delegate} to make the Proliferate choice.",
-            stack.item.controller
+            "P{actor} chooses P{delegate} to make the Proliferate choice."
         ))];
         self.state.pending_resolution = Some(pending);
         events.push(
-            self.program_proliferate_choice_event()
-                .expect("delegated Proliferate recipient choice remains parked"),
+            self.proliferate_choice_event()
+                .expect("delegated Proliferate choice remains parked"),
         );
         Ok(finish_with_events(self, events))
     }
 
-    fn complete_program_proliferate_without_candidates(
+    fn complete_proliferate_without_candidates(
         &mut self,
         stack: ParkedStackResolution,
+        transaction: crate::engine::proliferate::PendingProliferateTransaction,
         log: String,
     ) -> Result<RuledEventBatch, EngineError> {
         let mut events = vec![ev_log(log)];
         self.fire_triggers(
             &[GameEvent::Proliferated {
-                player: stack.item.controller,
+                player: transaction.actor,
             }],
             &mut events,
         );
-        self.complete_parked_stack_with_previous(stack, EffectResult::default(), events)
+        self.finish_proliferate_counter_leaf(stack, transaction, vec![], events)
     }
 
-    /// Reconcile the program's currently parked Proliferate prompt after a concession. Preserve
-    /// stable delegate indices, retire departed recipients, and transfer only the choice actor;
-    /// the stored stack controller remains authoritative for counter placements and the
-    /// `Proliferated` event.
-    pub(in crate::engine) fn refresh_program_proliferate_departure(
+    /// Reconcile a parked Proliferate prompt after a concession. Preserve stable delegate indices,
+    /// retire departed recipients, and transfer only the choice actor; the transaction's original
+    /// actor remains authoritative for counter placements and the `Proliferated` event.
+    pub(in crate::engine) fn refresh_proliferate_departure(
         &mut self,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
         let Some(mut pending) = self.state.pending_resolution.take() else {
             return Ok(());
         };
-        let (stack, old_generations, old_players, old_stage) = match &pending.continuation {
-            ResolutionContinuation::ProgramProliferate {
-                stack,
-                candidate_generations,
-                candidate_player_ids,
-                stage,
-            } => (
-                stack.clone(),
-                candidate_generations.clone(),
-                candidate_player_ids.clone(),
-                stage.clone(),
-            ),
-            _ => {
-                self.state.pending_resolution = Some(pending);
-                return Ok(());
-            }
-        };
+        let (stack, transaction, old_generations, old_players, old_stage) =
+            match &pending.continuation {
+                ResolutionContinuation::ProgramProliferate {
+                    stack,
+                    candidate_generations,
+                    candidate_player_ids,
+                    stage,
+                    transaction,
+                }
+                | ResolutionContinuation::Proliferate {
+                    stack,
+                    candidate_generations,
+                    candidate_player_ids,
+                    stage,
+                    transaction,
+                } => (
+                    stack.clone(),
+                    transaction.clone(),
+                    candidate_generations.clone(),
+                    candidate_player_ids.clone(),
+                    stage.clone(),
+                ),
+                _ => {
+                    self.state.pending_resolution = Some(pending);
+                    return Ok(());
+                }
+            };
         let (candidate_generations, candidate_player_ids) =
-            current_program_proliferate_candidates(&self.state, &old_generations, &old_players);
+            current_proliferate_candidates(&self.state, &old_generations, &old_players);
         let candidates_changed =
             candidate_generations != old_generations || candidate_player_ids != old_players;
-        let controller = stack.item.controller;
+        let controller = transaction.actor;
         let controller_live = self
             .state
             .player_idx(controller)
@@ -355,8 +384,9 @@ impl GameEngine {
             .is_some_and(|index| !self.state.players[index].has_lost);
 
         if candidate_generations.is_empty() && candidate_player_ids.is_empty() {
-            let batch = self.complete_program_proliferate_without_candidates(
+            let batch = self.complete_proliferate_without_candidates(
                 stack,
+                transaction,
                 format!("No eligible recipients remain for P{controller}'s Proliferate choice."),
             )?;
             events.extend(batch.events);
@@ -381,18 +411,19 @@ impl GameEngine {
         let eligible =
             resolution::resolution_choice_delegate_candidates(&self.state, controller, controller);
         let selector_needed = match &old_stage {
-            crate::state::PendingProgramProliferateStage::SelectingRecipients => {
+            crate::state::PendingProliferateStage::SelectingRecipients => {
                 !controller_live && !current_chooser_live
             }
-            crate::state::PendingProgramProliferateStage::ChoosingDelegate { .. } => true,
+            crate::state::PendingProliferateStage::ChoosingDelegate { .. } => true,
         };
         if !selector_needed && current_chooser_live && !candidates_changed {
             self.state.pending_resolution = Some(pending);
             return Ok(());
         }
         if selector_needed && eligible.is_empty() {
-            let batch = self.complete_program_proliferate_without_candidates(
+            let batch = self.complete_proliferate_without_candidates(
                 stack,
+                transaction,
                 format!("No live player can choose for P{controller}'s Proliferate effect."),
             )?;
             events.extend(batch.events);
@@ -405,10 +436,10 @@ impl GameEngine {
 
         let stage = if selector_needed {
             let mut slots = match &old_stage {
-                crate::state::PendingProgramProliferateStage::ChoosingDelegate { candidates } => {
+                crate::state::PendingProliferateStage::ChoosingDelegate { candidates } => {
                     candidates.clone()
                 }
-                crate::state::PendingProgramProliferateStage::SelectingRecipients => Vec::new(),
+                crate::state::PendingProliferateStage::SelectingRecipients => Vec::new(),
             };
             for slot in &mut slots {
                 if slot.is_some_and(|candidate| !eligible.contains(&candidate)) {
@@ -420,18 +451,18 @@ impl GameEngine {
                     slots.push(Some(candidate));
                 }
             }
-            crate::state::PendingProgramProliferateStage::ChoosingDelegate { candidates: slots }
+            crate::state::PendingProliferateStage::ChoosingDelegate { candidates: slots }
         } else {
-            crate::state::PendingProgramProliferateStage::SelectingRecipients
+            crate::state::PendingProliferateStage::SelectingRecipients
         };
         let delegate_prompt = matches!(
             stage,
-            crate::state::PendingProgramProliferateStage::ChoosingDelegate { .. }
+            crate::state::PendingProliferateStage::ChoosingDelegate { .. }
         );
         let recipient_chooser = if current_chooser_live
             && matches!(
                 &old_stage,
-                crate::state::PendingProgramProliferateStage::SelectingRecipients
+                crate::state::PendingProliferateStage::SelectingRecipients
             ) {
             pending.deciding_player
         } else {
@@ -444,10 +475,10 @@ impl GameEngine {
             && matches!(
                 (&old_stage, &stage),
                 (
-                    crate::state::PendingProgramProliferateStage::ChoosingDelegate {
+                    crate::state::PendingProliferateStage::ChoosingDelegate {
                         candidates: old
                     },
-                    crate::state::PendingProgramProliferateStage::ChoosingDelegate {
+                    crate::state::PendingProliferateStage::ChoosingDelegate {
                         candidates: new
                     }
                 ) if old == new
@@ -486,18 +517,25 @@ impl GameEngine {
         };
         pending.resolution_prompt_id = crate::state::ResolutionPromptId::UNASSIGNED;
         pending.resolution_prompt_semantics = None;
-        let ResolutionContinuation::ProgramProliferate {
-            candidate_generations: pending_generations,
-            candidate_player_ids: pending_players,
-            stage: pending_stage,
-            ..
-        } = &mut pending.continuation
-        else {
-            unreachable!("validated Program Proliferate continuation")
-        };
-        *pending_generations = candidate_generations;
-        *pending_players = candidate_player_ids;
-        *pending_stage = stage;
+        match &mut pending.continuation {
+            ResolutionContinuation::ProgramProliferate {
+                candidate_generations: pending_generations,
+                candidate_player_ids: pending_players,
+                stage: pending_stage,
+                ..
+            }
+            | ResolutionContinuation::Proliferate {
+                candidate_generations: pending_generations,
+                candidate_player_ids: pending_players,
+                stage: pending_stage,
+                ..
+            } => {
+                *pending_generations = candidate_generations;
+                *pending_players = candidate_player_ids;
+                *pending_stage = stage;
+            }
+            _ => unreachable!("validated Proliferate continuation"),
+        }
         self.state.pending_resolution = Some(pending);
         events.push(ev_log(if delegate_prompt {
             format!("P{selector} must choose a replacement for P{controller}'s Proliferate choice.")
@@ -505,14 +543,14 @@ impl GameEngine {
             format!("P{controller}'s Proliferate recipient offer has been refreshed.")
         }));
         events.push(
-            self.program_proliferate_choice_event()
-                .expect("refreshed program Proliferate remains parked"),
+            self.proliferate_choice_event()
+                .expect("refreshed Proliferate choice remains parked"),
         );
         Ok(())
     }
 }
 
-fn current_program_proliferate_candidates(
+fn current_proliferate_candidates(
     state: &crate::state::GameState,
     candidate_generations: &[(u32, u64)],
     candidate_player_ids: &[i32],
@@ -529,6 +567,7 @@ fn current_program_proliferate_candidates(
                 == *generation
                 && state.objects.get(object_id).is_some_and(|object| {
                     object.zone == Zone::Battlefield
+                        && object.phase_status.is_none()
                         && object.counters.values().any(|count| *count > 0)
                 })
         })

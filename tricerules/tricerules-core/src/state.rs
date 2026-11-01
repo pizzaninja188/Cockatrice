@@ -1505,12 +1505,12 @@ pub(crate) enum PendingOptionalTriggeredAbilityStage {
     ChoosingDelegate { candidates: Vec<Option<PlayerId>> },
 }
 
-/// The resultless Proliferate instruction in a typed program can keep resolving after its
-/// controller leaves (CR 608.2m). The next live player chooses a delegate; the delegate then
-/// receives the original Proliferate recipient menu. `None` slots preserve branch indices if a
-/// delegate candidate leaves while that selector prompt is parked.
+/// A begun Proliferate recipient choice can keep resolving after its actor leaves (CR 608.2m).
+/// The next live player chooses a delegate; the delegate then receives the original recipient
+/// menu. `None` slots preserve branch indices if a delegate candidate leaves while the selector
+/// prompt is parked.
 #[derive(serde::Serialize, Debug, Clone)]
-pub(crate) enum PendingProgramProliferateStage {
+pub(crate) enum PendingProliferateStage {
     SelectingRecipients,
     ChoosingDelegate { candidates: Vec<Option<PlayerId>> },
 }
@@ -1996,19 +1996,27 @@ pub enum ResolutionContinuation {
         hand_filter: ZoneCardFilter,
         permanent_filter: TargetFilter,
     },
+    /// CR 701.34: choose the next action-time replacement before any recipient selection.
+    ProliferateReplacement {
+        stack: ParkedStackResolution,
+        transaction: crate::engine::proliferate::PendingProliferateTransaction,
+    },
     /// CR 701.34: mixed selection of generation-bound permanents and distinct player ids.
     Proliferate {
         stack: ParkedStackResolution,
         candidate_generations: Vec<(ObjectId, u64)>,
         candidate_player_ids: Vec<PlayerId>,
+        stage: PendingProliferateStage,
+        transaction: crate::engine::proliferate::PendingProliferateTransaction,
     },
-    /// Program Proliferate is separate from the legacy flat-effect continuation so its complete
-    /// typed cursor and private delegation stage survive chooser departure.
+    /// Keep the typed Program cursor in its own continuation while sharing the Proliferate choice
+    /// stage with the legacy flat-effect continuation.
     ProgramProliferate {
         stack: ParkedStackResolution,
         candidate_generations: Vec<(ObjectId, u64)>,
         candidate_player_ids: Vec<PlayerId>,
-        stage: PendingProgramProliferateStage,
+        stage: PendingProliferateStage,
+        transaction: crate::engine::proliferate::PendingProliferateTransaction,
     },
     AmassChoice {
         stack: ParkedStackResolution,
@@ -2335,7 +2343,7 @@ pub(crate) enum CounterPlacementCompletion {
         snapshot: BTreeMap<CounterKind, u32>,
     },
     Proliferate {
-        player_id: PlayerId,
+        transaction: crate::engine::proliferate::PendingProliferateTransaction,
     },
     ActivationCost {
         replay: ActivationCostReplay,
@@ -2456,6 +2464,7 @@ impl ResolutionContinuation {
             | Self::ProgramPartitionMove { stack, .. }
             | Self::ProgramHandLibraryReturn { stack, .. }
             | Self::BeholdChoice { stack, .. }
+            | Self::ProliferateReplacement { stack, .. }
             | Self::Proliferate { stack, .. }
             | Self::ProgramProliferate { stack, .. }
             | Self::AmassChoice { stack, .. }
@@ -2533,6 +2542,7 @@ impl ResolutionContinuation {
             | Self::ProgramPartitionMove { stack, .. }
             | Self::ProgramHandLibraryReturn { stack, .. }
             | Self::BeholdChoice { stack, .. }
+            | Self::ProliferateReplacement { stack, .. }
             | Self::Proliferate { stack, .. }
             | Self::ProgramProliferate { stack, .. }
             | Self::AmassChoice { stack, .. }

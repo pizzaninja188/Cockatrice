@@ -1388,6 +1388,12 @@ impl GameEngine {
         }
         if matches!(
             pending.continuation,
+            ResolutionContinuation::ProliferateReplacement { .. }
+        ) {
+            return self.finish_proliferate_replacement_choice(pending, answer, decision);
+        }
+        if matches!(
+            pending.continuation,
             ResolutionContinuation::Proliferate { .. }
                 | ResolutionContinuation::ProgramProliferate { .. }
         ) {
@@ -1653,6 +1659,9 @@ impl GameEngine {
             }
             ResolutionContinuation::ProgramProliferate { .. } => {
                 unreachable!("Program Proliferate branch handled before object-choice validation")
+            }
+            ResolutionContinuation::ProliferateReplacement { .. } => {
+                unreachable!("Proliferate replacement handled before object-choice validation")
             }
             ResolutionContinuation::AmassChoice { .. } => {
                 self.finish_amass_choice(pending, chosen[0])

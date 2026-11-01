@@ -2767,6 +2767,10 @@ pub enum StaticAbilityDef {
     DoubleControllerDraws {
         condition: DrawReplacementCondition,
     },
+    /// Tekuthal, Inquiry Dominus replaces each Proliferate action its controller performs with
+    /// two successive proliferations. This is a specialized action-time replacement, not a
+    /// counter-placement replacement or a materialized continuous-layer effect.
+    DoubleControllerProliferations,
     /// CR 121.2: each selected player's successful draws are limited per turn. Narset, Parter
     /// of Veils limits opponents; Spirit of the Labyrinth applies the same limit to all players.
     LimitDrawsPerTurn {

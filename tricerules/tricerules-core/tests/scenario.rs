@@ -1095,6 +1095,7 @@ mod issue_460_reviewed_instances;
 mod issue_465_token_blockers;
 #[path = "scenario/issue_500_proliferate_cohort.rs"]
 mod issue_500_proliferate_cohort;
+
 #[path = "scenario/issue_combat_tricks_batch.rs"]
 mod issue_combat_tricks_batch;
 #[path = "scenario/issue_dies_batch.rs"]
@@ -1183,6 +1184,8 @@ mod issue_misc43_batch;
 mod issue_misc44_batch;
 #[path = "scenario/issue_misc45_batch.rs"]
 mod issue_misc45_batch;
+#[path = "scenario/tekuthal_runtime.rs"]
+mod tekuthal_runtime;
 #[path = "scenario/tend_the_sprigs.rs"]
 mod tend_the_sprigs;
 

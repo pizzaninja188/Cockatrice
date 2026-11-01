@@ -97,7 +97,7 @@ mod kaya_multiscry_tests;
 #[cfg(test)]
 mod portal_sacrifice_tests;
 mod program;
-mod proliferate;
+pub(super) mod proliferate;
 mod pump_counters;
 mod restrictions;
 #[cfg(test)]
@@ -2977,6 +2977,105 @@ impl GameEngine {
             }
             return Ok(true);
         }
+        #[derive(Clone, Copy)]
+        enum SavedProliferateStage {
+            OuterReplacement,
+            Recipient,
+            CounterOrder,
+        }
+        let saved_proliferate_stage = self.state.pending_resolution.as_ref().and_then(|pending| {
+            match &pending.continuation {
+                ResolutionContinuation::ProliferateReplacement { .. } => {
+                    Some(SavedProliferateStage::OuterReplacement)
+                }
+                ResolutionContinuation::ProgramProliferate { .. }
+                | ResolutionContinuation::Proliferate { .. } => {
+                    Some(SavedProliferateStage::Recipient)
+                }
+                ResolutionContinuation::CounterReplacement {
+                    stack: Some(_),
+                    completion:
+                        crate::state::CounterPlacementCompletion::Proliferate { transaction },
+                } if matches!(
+                    self.state.pending_replacement_event.as_ref(),
+                    Some(super::replacement::PendingReplacementEvent::Counters(batch))
+                        if batch
+                            .events
+                            .get(batch.event_index)
+                            .is_some_and(|event| event.actor == transaction.actor)
+                ) =>
+                {
+                    Some(SavedProliferateStage::CounterOrder)
+                }
+                _ => None,
+            }
+        });
+        if let Some(saved_stage) = saved_proliferate_stage {
+            // Reconcile the restored action at its current typed stage. Outer replacement work
+            // can advance into a delegate or recipient offer, a nested counter order can retain
+            // its opaque applications, and a saved recipient can advance into the Program tail.
+            // Never restart the authored instruction or accept an earlier Aura event as evidence
+            // that this current choice was published.
+            let event_start = events.len();
+            match saved_stage {
+                SavedProliferateStage::OuterReplacement => {
+                    self.refresh_proliferate_replacement_departure(events)?;
+                }
+                SavedProliferateStage::Recipient => {
+                    self.refresh_proliferate_departure(events)?;
+                }
+                SavedProliferateStage::CounterOrder => {
+                    self.refresh_counter_placement_departure(events)?;
+                }
+            }
+
+            let current_offer = self.state.pending_resolution.as_ref().map(|pending| {
+                (
+                    pending.presentation.choice_kind,
+                    pending.presentation.source_object_id,
+                    pending.deciding_player,
+                )
+            });
+            let current_offer_was_emitted =
+                current_offer.is_some_and(|(choice_kind, source_object_id, deciding_player)| {
+                    events[event_start..].iter().any(|event| {
+                        matches!(
+                            event.ev.as_ref(),
+                            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice))
+                                if choice.choice_kind == choice_kind as i32
+                                    && choice.source_object_id == source_object_id
+                                    && choice.deciding_player_id == deciding_player
+                        )
+                    })
+                });
+            if !current_offer_was_emitted {
+                let current_event = match self
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .map(|pending| &pending.continuation)
+                {
+                    Some(ResolutionContinuation::ProliferateReplacement { .. }) => {
+                        self.proliferate_replacement_choice_event()
+                    }
+                    Some(ResolutionContinuation::ProgramProliferate { .. })
+                    | Some(ResolutionContinuation::Proliferate { .. }) => {
+                        self.proliferate_choice_event()
+                    }
+                    Some(ResolutionContinuation::CounterReplacement {
+                        stack: Some(_),
+                        completion: crate::state::CounterPlacementCompletion::Proliferate { .. },
+                    }) => self.current_proliferate_counter_placement_choice_event()?,
+                    _ => None,
+                };
+                if let Some(event) = current_event {
+                    events.push(event);
+                } else if self.state.pending_resolution.is_some() {
+                    self.republish_cached_resolution_choice(events)?;
+                }
+            }
+            return Ok(true);
+        }
         if self.reprocess_suspended_battlefield_entry(events)? {
             return Ok(true);
         }
@@ -3191,6 +3290,52 @@ impl GameEngine {
             {
                 if let Some(choice) = self.chosen_counter_addition_choice_event() {
                     events.push(choice);
+                }
+            }
+            return Ok(true);
+        }
+        if self
+            .state
+            .pending_resolution
+            .as_ref()
+            .is_some_and(|pending| {
+                matches!(
+                    &pending.continuation,
+                    ResolutionContinuation::ProgramProliferate { .. }
+                        | ResolutionContinuation::Proliferate { .. }
+                )
+            })
+        {
+            // Reconcile the saved recipient transaction in place. Re-entering the Program leaf
+            // would rebuild the action root and discard committed receipts or its cursor.
+            let refresh_event_start = events.len();
+            self.refresh_proliferate_departure(events)?;
+            let current_offer = self.state.pending_resolution.as_ref().and_then(|pending| {
+                matches!(
+                    &pending.continuation,
+                    ResolutionContinuation::ProgramProliferate { .. }
+                        | ResolutionContinuation::Proliferate { .. }
+                )
+                .then_some((
+                    pending.presentation.choice_kind,
+                    pending.presentation.source_object_id,
+                    pending.deciding_player,
+                ))
+            });
+            if let Some((choice_kind, source_object_id, deciding_player)) = current_offer {
+                let current_offer_was_emitted = events[refresh_event_start..].iter().any(|event| {
+                    matches!(
+                        event.ev.as_ref(),
+                        Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice))
+                            if choice.choice_kind == choice_kind as i32
+                                && choice.source_object_id == source_object_id
+                                && choice.deciding_player_id == deciding_player
+                    )
+                });
+                if !current_offer_was_emitted {
+                    if let Some(event) = self.proliferate_choice_event() {
+                        events.push(event);
+                    }
                 }
             }
             return Ok(true);
