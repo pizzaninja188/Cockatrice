@@ -3,6 +3,7 @@ add_executable(
   ${CMAKE_SOURCE_DIR}/cockatrice/src/game/prompt/game_prompt_widget.cpp
   ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_large_choice_picker.cpp
   ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_resolution_choice_dialog.cpp
+  ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_counter_quantity_dialog.cpp
 )
 
 target_include_directories(game_prompt_widget_test PRIVATE ${CMAKE_SOURCE_DIR}/cockatrice/src

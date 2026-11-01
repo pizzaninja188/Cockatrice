@@ -413,6 +413,44 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src, const RuledP
                 data.nonManaCostsPayable = false;
                 break;
         }
+        if (choice.kind() == ruled::v1::COST_CHOICE_KIND_REMOVE_COUNTERS_FROM_PERMANENTS &&
+            choice.zone() == ruled::v1::COST_CHOICE_ZONE_BATTLEFIELD && choice.has_counter_removal_group()) {
+            const auto &wireGroup = choice.counter_removal_group();
+            RuledCounterRemovalGroup group;
+            group.requiredCount = wireGroup.required_count();
+            bool valid = group.requiredCount > 0 && wireGroup.candidates_size() > 0;
+            QSet<quint32> candidateObjectIds;
+            for (const auto &wireCandidate : wireGroup.candidates()) {
+                if (!wireCandidate.has_object() || wireCandidate.object().object_id() == 0 ||
+                    candidateObjectIds.contains(wireCandidate.object().object_id()) ||
+                    wireCandidate.options_size() == 0) {
+                    valid = false;
+                    break;
+                }
+                RuledCounterRemovalGroupCandidate candidate;
+                candidate.objectId = wireCandidate.object().object_id();
+                candidate.zoneChangeGeneration = wireCandidate.object().zone_change_generation();
+                candidateObjectIds.insert(candidate.objectId);
+                QSet<quint32> optionIds;
+                for (const auto &option : wireCandidate.options()) {
+                    if (option.option_id() == 0 || option.available_count() == 0 ||
+                        optionIds.contains(option.option_id())) {
+                        valid = false;
+                        break;
+                    }
+                    optionIds.insert(option.option_id());
+                    candidate.options.append({option.option_id(), QString::fromStdString(option.label()),
+                                              option.available_count()});
+                }
+                if (!valid) {
+                    break;
+                }
+                group.candidates.append(candidate);
+            }
+            if (valid) {
+                parsed.counterRemovalGroup = group;
+            }
+        }
         for (const quint32 candidate : choice.candidate_ids()) {
             parsed.candidateIds.insert(candidate);
         }

@@ -9,6 +9,294 @@
 #include <QVBoxLayout>
 #include <QWidgetAction>
 
+#include <map>
+#include <tuple>
+
+namespace
+{
+
+using CounterInventoryKey = std::tuple<quint32, quint64, quint32>;
+using CounterContributionKey = std::tuple<int, quint32, quint64, quint32>;
+
+bool isKnownAbilitySourceZone(ruled::v1::AbilitySourceZone sourceZone)
+{
+    switch (sourceZone) {
+        case ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD:
+        case ruled::v1::ABILITY_SOURCE_ZONE_HAND:
+        case ruled::v1::ABILITY_SOURCE_ZONE_GRAVEYARD:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool addCounterCount(quint64 count, quint64 &total)
+{
+    if (count > std::numeric_limits<quint64>::max() - total) {
+        return false;
+    }
+    total += count;
+    return true;
+}
+
+const RuledCounterRemovalGroupCandidate *findCounterCandidate(const RuledCounterRemovalGroup &group, quint32 objectId)
+{
+    const RuledCounterRemovalGroupCandidate *found = nullptr;
+    for (const auto &candidate : group.candidates) {
+        if (candidate.objectId != objectId) {
+            continue;
+        }
+        if (found) {
+            return nullptr;
+        }
+        found = &candidate;
+    }
+    return found;
+}
+
+const RuledCounterRemovalOption *findCounterOption(const RuledCounterRemovalGroupCandidate &candidate,
+                                                   quint32 optionId)
+{
+    const RuledCounterRemovalOption *found = nullptr;
+    for (const auto &option : candidate.options) {
+        if (option.optionId != optionId) {
+            continue;
+        }
+        if (found) {
+            return nullptr;
+        }
+        found = &option;
+    }
+    return found;
+}
+
+bool validCounterGroupChoice(const RuledCostChoice &choice)
+{
+    if (choice.costIndex < 0 || choice.zone != RuledCostChoiceZone::Battlefield ||
+        choice.kind != RuledCostChoiceKind::Unspecified || !choice.counterRemovalGroup ||
+        choice.counterRemovalGroup->requiredCount == 0 || choice.counterRemovalGroup->candidates.isEmpty()) {
+        return false;
+    }
+    QSet<quint32> candidateObjectIds;
+    for (const auto &candidate : choice.counterRemovalGroup->candidates) {
+        if (candidate.objectId == 0 || candidateObjectIds.contains(candidate.objectId) || candidate.options.isEmpty()) {
+            return false;
+        }
+        candidateObjectIds.insert(candidate.objectId);
+        QSet<quint32> optionIds;
+        for (const auto &option : candidate.options) {
+            if (option.optionId == 0 || option.availableCount == 0 || optionIds.contains(option.optionId)) {
+                return false;
+            }
+            optionIds.insert(option.optionId);
+        }
+    }
+    return true;
+}
+
+bool collectCounterGroupChoices(const QVector<RuledCostChoice> &choices,
+                                bool requireOnlyGroups,
+                                QMap<int, const RuledCostChoice *> &groups)
+{
+    groups.clear();
+    QSet<int> costIndices;
+    for (const auto &choice : choices) {
+        if (choice.costIndex < 0 || costIndices.contains(choice.costIndex)) {
+            return false;
+        }
+        costIndices.insert(choice.costIndex);
+        if (!choice.counterRemovalGroup) {
+            if (requireOnlyGroups) {
+                return false;
+            }
+            continue;
+        }
+        if (!validCounterGroupChoice(choice)) {
+            return false;
+        }
+        groups.insert(choice.costIndex, &choice);
+    }
+    return true;
+}
+
+bool sameCounterGroupMaterial(const RuledCostChoice &left, const RuledCostChoice &right)
+{
+    if (!validCounterGroupChoice(left) || !validCounterGroupChoice(right) || left.costIndex != right.costIndex ||
+        left.zone != right.zone || left.kind != right.kind ||
+        left.counterRemovalGroup->requiredCount != right.counterRemovalGroup->requiredCount ||
+        left.counterRemovalGroup->candidates.size() != right.counterRemovalGroup->candidates.size()) {
+        return false;
+    }
+    for (const auto &candidate : left.counterRemovalGroup->candidates) {
+        const auto *current = findCounterCandidate(*right.counterRemovalGroup, candidate.objectId);
+        if (!current || candidate.zoneChangeGeneration != current->zoneChangeGeneration ||
+            candidate.options.size() != current->options.size()) {
+            return false;
+        }
+        for (const auto &option : candidate.options) {
+            const auto *currentOption = findCounterOption(*current, option.optionId);
+            if (!currentOption || option.availableCount != currentOption->availableCount) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool sameCounterGroupOffers(const QVector<RuledCostChoice> &left, const QVector<RuledCostChoice> &right)
+{
+    QMap<int, const RuledCostChoice *> leftGroups;
+    QMap<int, const RuledCostChoice *> rightGroups;
+    if (!collectCounterGroupChoices(left, true, leftGroups) || !collectCounterGroupChoices(right, true, rightGroups) ||
+        leftGroups.isEmpty() || leftGroups.size() != rightGroups.size()) {
+        return false;
+    }
+    for (auto it = leftGroups.cbegin(); it != leftGroups.cend(); ++it) {
+        const auto current = rightGroups.constFind(it.key());
+        if (current == rightGroups.cend() || !sameCounterGroupMaterial(*it.value(), *current.value())) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool validCounterContributionRows(const QVector<RuledCostChoice> &choices,
+                                  const QVector<RuledPendingCounterContribution> &rows,
+                                  bool requireComplete,
+                                  bool requireOnlyGroups)
+{
+    QMap<int, const RuledCostChoice *> groups;
+    if (!collectCounterGroupChoices(choices, requireOnlyGroups, groups) || groups.isEmpty()) {
+        return false;
+    }
+
+    std::map<quint32, quint64> objectGenerations;
+    std::map<CounterInventoryKey, quint32> availabilityCeilings;
+    for (auto it = groups.cbegin(); it != groups.cend(); ++it) {
+        const auto &group = *it.value()->counterRemovalGroup;
+        for (const auto &candidate : group.candidates) {
+            const auto [generation, inserted] =
+                objectGenerations.emplace(candidate.objectId, candidate.zoneChangeGeneration);
+            if (!inserted && generation->second != candidate.zoneChangeGeneration) {
+                return false;
+            }
+            for (const auto &option : candidate.options) {
+                const CounterInventoryKey key{candidate.objectId, candidate.zoneChangeGeneration, option.optionId};
+                const auto [ceiling, newKey] = availabilityCeilings.emplace(key, option.availableCount);
+                if (!newKey) {
+                    ceiling->second = std::min(ceiling->second, option.availableCount);
+                }
+            }
+        }
+    }
+
+    QMap<int, quint64> totalsByCost;
+    std::map<CounterInventoryKey, quint64> usedByObjectAndKind;
+    std::map<CounterContributionKey, bool> seenRows;
+    for (const auto &row : rows) {
+        const auto groupIt = groups.constFind(row.costIndex);
+        if (groupIt == groups.cend() || row.objectId == 0 || row.optionId == 0 || row.count == 0) {
+            return false;
+        }
+        const auto &group = *groupIt.value()->counterRemovalGroup;
+        const auto *candidate = findCounterCandidate(group, row.objectId);
+        if (!candidate || candidate->zoneChangeGeneration != row.zoneChangeGeneration) {
+            return false;
+        }
+        const auto *option = findCounterOption(*candidate, row.optionId);
+        if (!option || row.count > option->availableCount) {
+            return false;
+        }
+
+        const CounterContributionKey rowKey{row.costIndex, row.objectId, row.zoneChangeGeneration, row.optionId};
+        if (!seenRows.emplace(rowKey, true).second) {
+            return false;
+        }
+        auto total = totalsByCost.value(row.costIndex, 0);
+        if (!addCounterCount(row.count, total) || total > group.requiredCount) {
+            return false;
+        }
+        totalsByCost.insert(row.costIndex, total);
+
+        const CounterInventoryKey inventoryKey{row.objectId, row.zoneChangeGeneration, row.optionId};
+        auto used = usedByObjectAndKind[inventoryKey];
+        if (!addCounterCount(row.count, used)) {
+            return false;
+        }
+        usedByObjectAndKind[inventoryKey] = used;
+    }
+
+    for (const auto &usage : usedByObjectAndKind) {
+        const auto ceiling = availabilityCeilings.find(usage.first);
+        if (ceiling == availabilityCeilings.end() || usage.second > ceiling->second) {
+            return false;
+        }
+    }
+    if (requireComplete) {
+        for (auto it = groups.cbegin(); it != groups.cend(); ++it) {
+            if (totalsByCost.value(it.key(), 0) != it.value()->counterRemovalGroup->requiredCount) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+} // namespace
+
+QVector<RuledFlexPip> RuledPendingCast::parseFlexPips(const QString &manaCost)
+{
+    // Walk the Scryfall brace groups in order so each pip's index matches the engine's
+    // ManaCost pip order. Flexible pips (CR 107.4d–f) contain a slash: {G/U} hybrid,
+    // {2/W} mono-hybrid, {C/P} Phyrexian. Everything else just advances the index.
+    QVector<RuledFlexPip> out;
+    const QString validColors = QStringLiteral("WUBRG");
+    quint32 index = 0;
+    bool inBraces = false;
+    QString token;
+    for (QChar c : manaCost) {
+        if (c == '{') {
+            inBraces = true;
+            token.clear();
+            continue;
+        }
+        if (c == '}') {
+            inBraces = false;
+            const int slash = token.indexOf('/');
+            if (slash > 0) {
+                const QString left = token.left(slash).toUpper();
+                const QString right = token.mid(slash + 1).toUpper();
+                RuledFlexPip pip;
+                pip.pipIndex = index;
+                bool numeric = false;
+                const int leftNum = left.toInt(&numeric);
+                if (right == QLatin1String("P") && left.size() == 1 && validColors.contains(left)) {
+                    pip.phyrexian = true;
+                    pip.colorA = left.at(0);
+                    out.append(pip);
+                } else if (numeric && right.size() == 1 && validColors.contains(right)) {
+                    pip.generic = leftNum;
+                    pip.colorA = right.at(0);
+                    out.append(pip);
+                } else if (left.size() == 1 && right.size() == 1 && validColors.contains(left) &&
+                           validColors.contains(right)) {
+                    pip.colorA = left.at(0);
+                    pip.colorB = right.at(0);
+                    out.append(pip);
+                }
+                // Unrecognized slash forms (e.g. {G/U/P}, {S}) are left for the engine to reject.
+            }
+            ++index;
+            token.clear();
+            continue;
+        }
+        if (inBraces) {
+            token.append(c);
+        }
+    }
+    return out;
+}
+
 RuledPendingCast::RuledPendingCast() = default;
 
 bool RuledPendingCast::chooseCounterCosts(QWidget *parent, PendingActivatedAbility &pending)
@@ -53,6 +341,247 @@ bool RuledPendingCast::chooseCounterCosts(QWidget *parent, PendingActivatedAbili
         ++pending.nextCostChoice;
     }
     return pending.valid;
+}
+
+bool ruledStageCounterContributions(PendingActivatedAbility &pending,
+                                    int costIndex,
+                                    quint32 objectId,
+                                    quint64 zoneChangeGeneration,
+                                    const QVector<RuledPendingCounterContribution> &replacementRows)
+{
+    if (!pending.valid || pending.stage != PendingActivatedAbility::Stage::Announcing ||
+        pending.engineTransactionId != 0 || pending.permanentAction || costIndex < 0 || objectId == 0) {
+        return false;
+    }
+    if (replacementRows.isEmpty()) {
+        pending.counterGroupContributions.erase(
+            std::remove_if(pending.counterGroupContributions.begin(), pending.counterGroupContributions.end(),
+                           [=](const auto &row) {
+                               return row.costIndex == costIndex && row.objectId == objectId &&
+                                      row.zoneChangeGeneration == zoneChangeGeneration;
+                           }),
+            pending.counterGroupContributions.end());
+        pending.counterGroupConfirmed = false;
+        return true;
+    }
+
+    QMap<int, const RuledCostChoice *> groups;
+    if (!collectCounterGroupChoices(pending.costChoices, false, groups)) {
+        return false;
+    }
+    const auto groupIt = groups.constFind(costIndex);
+    if (groupIt == groups.cend() ||
+        !findCounterCandidate(*groupIt.value()->counterRemovalGroup, objectId)) {
+        return false;
+    }
+    const auto *candidate = findCounterCandidate(*groupIt.value()->counterRemovalGroup, objectId);
+    if (!candidate || candidate->zoneChangeGeneration != zoneChangeGeneration) {
+        return false;
+    }
+
+    QVector<RuledPendingCounterContribution> updated;
+    for (const auto &row : pending.counterGroupContributions) {
+        if (row.costIndex == costIndex && row.objectId == objectId && row.zoneChangeGeneration == zoneChangeGeneration) {
+            continue;
+        }
+        updated.append(row);
+    }
+    QSet<quint32> optionIds;
+    QVector<RuledPendingCounterContribution> normalizedRows;
+    for (const auto &row : replacementRows) {
+        if (row.costIndex != costIndex || row.objectId != objectId ||
+            row.zoneChangeGeneration != zoneChangeGeneration || row.optionId == 0 || optionIds.contains(row.optionId)) {
+            return false;
+        }
+        optionIds.insert(row.optionId);
+        if (!findCounterOption(*candidate, row.optionId)) {
+            return false;
+        }
+        if (row.count != 0) {
+            normalizedRows.append(row);
+        }
+    }
+    updated += normalizedRows;
+    if (!validCounterContributionRows(pending.costChoices, updated, false, false)) {
+        return false;
+    }
+    pending.counterGroupContributions = updated;
+    pending.counterGroupConfirmed = false;
+    return true;
+}
+
+bool ruledReconcileCounterContributions(PendingActivatedAbility &pending,
+                                        const QVector<RuledCostChoice> &currentChoices)
+{
+    if (!pending.valid || pending.stage != PendingActivatedAbility::Stage::Announcing ||
+        pending.engineTransactionId != 0 || pending.permanentAction) {
+        return false;
+    }
+
+    QMap<int, const RuledCostChoice *> previousGroups;
+    QMap<int, const RuledCostChoice *> currentGroups;
+    if (!collectCounterGroupChoices(pending.costChoices, false, previousGroups) ||
+        !collectCounterGroupChoices(currentChoices, false, currentGroups)) {
+        pending.counterGroupContributions.clear();
+        pending.counterGroupConfirmed = false;
+        pending.costChoices = currentChoices;
+        return false;
+    }
+
+    QSet<int> changedCostIndices;
+    for (auto it = previousGroups.cbegin(); it != previousGroups.cend(); ++it) {
+        const auto current = currentGroups.constFind(it.key());
+        if (current == currentGroups.cend() || !sameCounterGroupMaterial(*it.value(), *current.value())) {
+            changedCostIndices.insert(it.key());
+        }
+    }
+    for (auto it = currentGroups.cbegin(); it != currentGroups.cend(); ++it) {
+        if (!previousGroups.contains(it.key())) {
+            changedCostIndices.insert(it.key());
+        }
+    }
+
+    const bool materialChanged = !changedCostIndices.isEmpty();
+    if (materialChanged) {
+        pending.counterGroupContributions.erase(
+            std::remove_if(pending.counterGroupContributions.begin(), pending.counterGroupContributions.end(),
+                           [&changedCostIndices](const auto &row) { return changedCostIndices.contains(row.costIndex); }),
+            pending.counterGroupContributions.end());
+        pending.counterGroupConfirmed = false;
+    }
+
+    const bool rowsValid = validCounterContributionRows(currentChoices, pending.counterGroupContributions, false, false);
+    if (!rowsValid) {
+        pending.counterGroupContributions.clear();
+        pending.counterGroupConfirmed = false;
+    } else if (pending.counterGroupConfirmed &&
+               !validCounterContributionRows(currentChoices, pending.counterGroupContributions, true, true)) {
+        pending.counterGroupConfirmed = false;
+    }
+
+    const bool confirmationStillValid = !pending.counterGroupConfirmed ||
+                                        validCounterContributionRows(
+                                            currentChoices, pending.counterGroupContributions, true, true);
+    pending.costChoices = currentChoices;
+    return !materialChanged && rowsValid && confirmationStillValid;
+}
+
+bool ruledConfirmCounterContributions(PendingActivatedAbility &pending)
+{
+    if (!pending.valid || pending.stage != PendingActivatedAbility::Stage::Announcing ||
+        pending.engineTransactionId != 0 || pending.permanentAction ||
+        !validCounterContributionRows(pending.costChoices, pending.counterGroupContributions, true, true)) {
+        pending.counterGroupConfirmed = false;
+        return false;
+    }
+    pending.counterGroupConfirmed = true;
+    return true;
+}
+
+std::optional<ruled::v1::BeginAbilityActivation> ruledBuildCounterGroupBegin(
+    const RuledClientState &state,
+    const PendingActivatedAbility &pending,
+    const QVector<ruled::v1::FlexPipPayment> &flexPayments)
+{
+    if (!pending.valid || pending.stage != PendingActivatedAbility::Stage::Announcing ||
+        pending.engineTransactionId != 0 || pending.permanentAction || !pending.counterGroupConfirmed ||
+        pending.permanentOid == 0 || pending.abilityIndex < 0 || pending.selectedMode || !pending.selectedTargets.isEmpty() ||
+        pending.needsTarget || pending.waitingForTarget || pending.chosenOpponentTargets ||
+        pending.deferredReturnTappedCreature || pending.waitingForReturnTappedCreatureCandidate ||
+        pending.xValue != 0 || pending.manaOptionIndex != 0 || pending.manaSplitFirstColorCount != 0 ||
+        pending.castingPermissionId != 0 || pending.loyaltyXChoice || !pending.costSelections.isEmpty()) {
+        return std::nullopt;
+    }
+
+    const auto currentSourceZone = state.abilitySourceZone(pending.permanentOid);
+    if (!isKnownAbilitySourceZone(pending.sourceZone) || !isKnownAbilitySourceZone(currentSourceZone) ||
+        state.abilitySourceGeneration(pending.permanentOid) != pending.expectedZoneChangeGeneration ||
+        currentSourceZone != pending.sourceZone ||
+        !state.activatedAbilityIndicesForOid(pending.permanentOid).contains(pending.abilityIndex)) {
+        return std::nullopt;
+    }
+    const auto ability = state.activatedAbilityForOid(pending.permanentOid, pending.abilityIndex);
+    if (!ability || !ability->activatable || ability->xCounterManaChoice || ability->loyaltyXChoice ||
+        ability->manaCost.contains(QLatin1Char('X'), Qt::CaseInsensitive)) {
+        return std::nullopt;
+    }
+    const auto abilityKey = RuledClientState::abilityTargetKey(pending.permanentOid, pending.abilityIndex);
+    if (!state.abilityCostData.contains(abilityKey) ||
+        state.abilityNeedsTarget(pending.permanentOid, pending.abilityIndex) ||
+        state.activatedAbilityModesByAbility.contains(abilityKey)) {
+        return std::nullopt;
+    }
+    const auto currentChoices = state.abilityCostChoices(pending.permanentOid, pending.abilityIndex);
+    if (!sameCounterGroupOffers(pending.costChoices, currentChoices) ||
+        !validCounterContributionRows(currentChoices, pending.counterGroupContributions, true, true)) {
+        return std::nullopt;
+    }
+
+    QSet<quint32> expectedPhiIndices;
+    QSet<quint32> allPipIndices;
+    const auto currentFlexPips = RuledPendingCast::parseFlexPips(ability->manaCost);
+    if (currentFlexPips.size() != pending.flexPips.size()) {
+        return std::nullopt;
+    }
+    for (int pipPosition = 0; pipPosition < currentFlexPips.size(); ++pipPosition) {
+        const auto &pip = currentFlexPips.at(pipPosition);
+        const auto &cachedPip = pending.flexPips.at(pipPosition);
+        if (pip.pipIndex != cachedPip.pipIndex || pip.colorA != cachedPip.colorA ||
+            pip.colorB != cachedPip.colorB || pip.generic != cachedPip.generic ||
+            pip.phyrexian != cachedPip.phyrexian || pip.genericPaid != cachedPip.genericPaid ||
+            allPipIndices.contains(pip.pipIndex)) {
+            return std::nullopt;
+        }
+        allPipIndices.insert(pip.pipIndex);
+        if (pip.phyrexian) {
+            expectedPhiIndices.insert(pip.pipIndex);
+        }
+    }
+    QSet<quint32> suppliedPhiIndices;
+    for (const auto &payment : flexPayments) {
+        if (!expectedPhiIndices.contains(payment.pip_index()) || suppliedPhiIndices.contains(payment.pip_index())) {
+            return std::nullopt;
+        }
+        suppliedPhiIndices.insert(payment.pip_index());
+    }
+    if (suppliedPhiIndices.size() != expectedPhiIndices.size()) {
+        return std::nullopt;
+    }
+
+    ruled::v1::BeginAbilityActivation begin;
+    begin.set_source_object_id(pending.permanentOid);
+    begin.set_expected_zone_change_generation(pending.expectedZoneChangeGeneration);
+    begin.set_source_zone(pending.sourceZone);
+    begin.set_ability_index(static_cast<quint32>(pending.abilityIndex));
+
+    auto sortedRows = pending.counterGroupContributions;
+    std::sort(sortedRows.begin(), sortedRows.end(), [](const auto &left, const auto &right) {
+        return std::tie(left.costIndex, left.objectId, left.zoneChangeGeneration, left.optionId) <
+               std::tie(right.costIndex, right.objectId, right.zoneChangeGeneration, right.optionId);
+    });
+    ruled::v1::CostSelection *selection = nullptr;
+    int activeCostIndex = -1;
+    for (const auto &row : sortedRows) {
+        if (!selection || activeCostIndex != row.costIndex) {
+            selection = begin.add_cost_selections();
+            selection->set_cost_index(static_cast<quint32>(row.costIndex));
+            activeCostIndex = row.costIndex;
+        }
+        auto *contribution = selection->mutable_counter_removal_group()->add_contributions();
+        contribution->mutable_object()->set_object_id(row.objectId);
+        contribution->mutable_object()->set_zone_change_generation(row.zoneChangeGeneration);
+        contribution->set_option_id(row.optionId);
+        contribution->set_count(row.count);
+    }
+
+    auto sortedFlexPayments = flexPayments;
+    std::sort(sortedFlexPayments.begin(), sortedFlexPayments.end(), [](const auto &left, const auto &right) {
+        return left.pip_index() < right.pip_index();
+    });
+    for (const auto &payment : sortedFlexPayments) {
+        begin.add_flex_payments()->CopyFrom(payment);
+    }
+    return begin;
 }
 
 PendingRuledSpellCast &RuledPendingCast::beginSpell()

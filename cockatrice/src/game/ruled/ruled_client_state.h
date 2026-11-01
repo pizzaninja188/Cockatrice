@@ -346,6 +346,19 @@ struct RuledCounterRemovalOption
     quint32 availableCount = 0;
 };
 
+struct RuledCounterRemovalGroupCandidate
+{
+    quint32 objectId = 0;
+    quint64 zoneChangeGeneration = 0;
+    QVector<RuledCounterRemovalOption> options;
+};
+
+struct RuledCounterRemovalGroup
+{
+    quint32 requiredCount = 0;
+    QVector<RuledCounterRemovalGroupCandidate> candidates;
+};
+
 struct RuledCostChoice
 {
     int costIndex = -1;
@@ -363,6 +376,7 @@ struct RuledCostChoice
     quint64 counterSourceGeneration = 0;
     quint32 counterCount = 0;
     QVector<RuledCounterRemovalOption> counterOptions;
+    std::optional<RuledCounterRemovalGroup> counterRemovalGroup;
 };
 
 enum class RuledCastCostOptionKind : int

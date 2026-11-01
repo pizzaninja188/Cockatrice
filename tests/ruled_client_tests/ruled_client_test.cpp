@@ -382,6 +382,8 @@ protected:
 constexpr quint32 kUnsupportedCostSourceOid = 700;
 constexpr quint64 kUnsupportedCostSourceGeneration = 4;
 constexpr int kUnsupportedCostAbilityIndex = 1;
+constexpr quint32 kNightCounterOptionId = 0xf00dbaad;
+constexpr quint32 kChargeCounterOptionId = 0x51a7e001;
 
 void setWireCostChoiceKind(ruled::v1::LegalCostChoice *choice, int wireKind)
 {
@@ -406,12 +408,13 @@ ruled::v1::RuledEventBatch unsupportedCostBatch(int laterWireKind = static_cast<
     auto *ability = source->add_activated_abilities();
     ability->set_ability_index(kUnsupportedCostAbilityIndex);
     ability->set_text("Pay an ordinary activated cost.");
+    ability->set_mana_cost("{B/P}{W/P}");
     ability->set_activatable(true);
 
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
-    const quint64 key = (static_cast<quint64>(kUnsupportedCostSourceOid) << 32) |
-                        static_cast<quint32>(kUnsupportedCostAbilityIndex);
-    auto &costs = (*actions.mutable_cost_choices_by_ability())[key];
+    const quint64 wireKey = (static_cast<quint64>(kUnsupportedCostSourceOid) << 32) |
+                            static_cast<quint32>(kUnsupportedCostAbilityIndex);
+    auto &costs = (*actions.mutable_cost_choices_by_ability())[wireKey];
     costs.set_non_mana_costs_payable(true);
     const auto addChoice = [&](int costIndex, int wireKind, quint32 candidateId, quint64 generation) {
         auto *choice = costs.add_choices();
@@ -452,6 +455,74 @@ ruled::v1::RuledEventBatch unsupportedCostBatch(int laterWireKind = static_cast<
         action->set_mana_cost("{1}");
     }
     return batch;
+}
+
+ruled::v1::RuledEventBatch aggregateCounterOfferBatch()
+{
+    auto batch = unsupportedCostBatch(9);
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    const quint64 wireKey = (static_cast<quint64>(kUnsupportedCostSourceOid) << 32) |
+                            static_cast<quint32>(kUnsupportedCostAbilityIndex);
+    auto *choice = (*actions.mutable_cost_choices_by_ability())[wireKey].mutable_choices(0);
+    auto *group = choice->mutable_counter_removal_group();
+    group->set_required_count(3);
+    group->clear_candidates();
+
+    auto addCandidate = [&](quint32 objectId, quint64 generation, quint32 chargeAvailable, quint32 nightAvailable) {
+        auto *candidate = group->add_candidates();
+        candidate->mutable_object()->set_object_id(objectId);
+        candidate->mutable_object()->set_zone_change_generation(generation);
+        if (nightAvailable > 0) {
+            auto *night = candidate->add_options();
+            night->set_option_id(kNightCounterOptionId);
+            night->set_label("Night");
+            night->set_available_count(nightAvailable);
+        }
+        if (chargeAvailable > 0) {
+            auto *charge = candidate->add_options();
+            charge->set_option_id(kChargeCounterOptionId);
+            charge->set_label("Charge");
+            charge->set_available_count(chargeAvailable);
+        }
+    };
+    addCandidate(901, 13, 3, 2);
+    addCandidate(902, 17, 2, 0);
+    addCandidate(903, 21, 1, 0);
+    return batch;
+}
+
+PendingActivatedAbility makeAggregateCounterDraft(const RuledClientState &state)
+{
+    PendingActivatedAbility pending;
+    pending.valid = true;
+    pending.permanentOid = kUnsupportedCostSourceOid;
+    pending.sourceZone = state.abilitySourceZone(kUnsupportedCostSourceOid);
+    pending.expectedZoneChangeGeneration = kUnsupportedCostSourceGeneration;
+    pending.abilityIndex = kUnsupportedCostAbilityIndex;
+    pending.costChoices = state.abilityCostChoices(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+    const auto ability = state.activatedAbilityForOid(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+    if (ability) {
+        pending.flexPips = RuledPendingCast::parseFlexPips(ability->manaCost);
+    }
+    return pending;
+}
+
+QVector<ruled::v1::FlexPipPayment> aggregatePhiPayments(const PendingActivatedAbility &pending,
+                                                       bool payLifeForFirstPhi = false)
+{
+    QVector<ruled::v1::FlexPipPayment> payments;
+    int phiCount = 0;
+    for (const auto &pip : pending.flexPips) {
+        if (!pip.phyrexian) {
+            continue;
+        }
+        ruled::v1::FlexPipPayment payment;
+        payment.set_pip_index(pip.pipIndex);
+        payment.set_pay_life((phiCount == 0) == payLifeForFirstPhi);
+        payments.append(payment);
+        ++phiCount;
+    }
+    return payments;
 }
 
 PendingActivatedAbility &prepareUnsupportedCostDraft(RuledPendingCast &owner, const RuledClientState &state)
@@ -4730,6 +4801,772 @@ TEST_F(RuledClientTest, ParsesAuthoritativeActivatedCostChoicesAndPayability)
     EXPECT_EQ(choices.at(2).candidateIds, QSet<quint32>({501, 502}));
 }
 
+TEST_F(RuledClientTest, AggregateCounterOffersPreserveKindsQuantitiesAndIncarnations)
+{
+    auto batch = unsupportedCostBatch(9);
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    const quint64 key = (static_cast<quint64>(kUnsupportedCostSourceOid) << 32) |
+                        static_cast<quint32>(kUnsupportedCostAbilityIndex);
+    auto &costs = (*actions.mutable_cost_choices_by_ability())[key];
+    auto *choice = costs.mutable_choices(0);
+    auto *group = choice->mutable_counter_removal_group();
+    group->set_required_count(3);
+    group->clear_candidates();
+
+    auto *first = group->add_candidates();
+    first->mutable_object()->set_object_id(901);
+    first->mutable_object()->set_zone_change_generation(13);
+    auto *night = first->add_options();
+    night->set_option_id(0xf00dbaad);
+    night->set_label("Night");
+    night->set_available_count(2);
+    auto *firstCharge = first->add_options();
+    firstCharge->set_option_id(0x51a7e001);
+    firstCharge->set_label("Charge");
+    firstCharge->set_available_count(3);
+
+    auto *second = group->add_candidates();
+    second->mutable_object()->set_object_id(902);
+    second->mutable_object()->set_zone_change_generation(17);
+    auto *secondCharge = second->add_options();
+    secondCharge->set_option_id(0x51a7e001);
+    secondCharge->set_label("Charge");
+    secondCharge->set_available_count(2);
+
+    applyRaw(batch);
+
+    ASSERT_TRUE(state->activatedAbilityForOid(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex));
+    const auto stateKey = RuledClientState::abilityTargetKey(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+    ASSERT_TRUE(state->abilityCostData.contains(stateKey));
+    EXPECT_FALSE(state->abilityCostData.value(stateKey).nonManaCostsPayable);
+    EXPECT_FALSE(state->abilityActivatable(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex));
+    const auto choices = state->abilityCostChoices(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+    ASSERT_EQ(choices.size(), 1);
+    EXPECT_EQ(choices.front().kind, RuledCostChoiceKind::Unspecified);
+    ASSERT_TRUE(choices.front().counterRemovalGroup.has_value());
+
+    const auto &parsed = *choices.front().counterRemovalGroup;
+    EXPECT_EQ(parsed.requiredCount, 3u);
+    ASSERT_EQ(parsed.candidates.size(), 2);
+    EXPECT_EQ(parsed.candidates.at(0).objectId, 901u);
+    EXPECT_EQ(parsed.candidates.at(0).zoneChangeGeneration, 13u);
+    ASSERT_EQ(parsed.candidates.at(0).options.size(), 2);
+    EXPECT_EQ(parsed.candidates.at(0).options.at(0).optionId, 0xf00dbaadu);
+    EXPECT_EQ(parsed.candidates.at(0).options.at(0).label, QStringLiteral("Night"));
+    EXPECT_EQ(parsed.candidates.at(0).options.at(0).availableCount, 2u);
+    EXPECT_EQ(parsed.candidates.at(0).options.at(1).optionId, 0x51a7e001u);
+    EXPECT_EQ(parsed.candidates.at(0).options.at(1).label, QStringLiteral("Charge"));
+    EXPECT_EQ(parsed.candidates.at(0).options.at(1).availableCount, 3u);
+    EXPECT_EQ(parsed.candidates.at(1).objectId, 902u);
+    EXPECT_EQ(parsed.candidates.at(1).zoneChangeGeneration, 17u);
+    ASSERT_EQ(parsed.candidates.at(1).options.size(), 1);
+    EXPECT_EQ(parsed.candidates.at(1).options.at(0).optionId, 0x51a7e001u);
+    EXPECT_EQ(parsed.candidates.at(1).options.at(0).label, QStringLiteral("Charge"));
+    EXPECT_EQ(parsed.candidates.at(1).options.at(0).availableCount, 2u);
+}
+
+TEST_F(RuledClientTest, AggregateCounterOffersRejectMalformedGroupsAtomically)
+{
+    const auto checkRejected = [&](ruled::v1::RuledEventBatch batch) {
+        applyRaw(batch);
+        const auto choices = state->abilityCostChoices(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+        ASSERT_EQ(choices.size(), 1);
+        EXPECT_EQ(choices.front().kind, RuledCostChoiceKind::Unspecified);
+        EXPECT_FALSE(choices.front().counterRemovalGroup.has_value());
+        const auto key = RuledClientState::abilityTargetKey(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+        ASSERT_TRUE(state->abilityCostData.contains(key));
+        EXPECT_FALSE(state->abilityCostData.value(key).nonManaCostsPayable);
+        EXPECT_FALSE(state->abilityActivatable(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex));
+    };
+
+    for (int malformed = 0; malformed < 10; ++malformed) {
+        auto batch = unsupportedCostBatch(9);
+        auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+        const quint64 wireKey = (static_cast<quint64>(kUnsupportedCostSourceOid) << 32) |
+                                static_cast<quint32>(kUnsupportedCostAbilityIndex);
+        auto *choice = (*actions.mutable_cost_choices_by_ability())[wireKey].mutable_choices(0);
+        auto *group = choice->mutable_counter_removal_group();
+        auto *candidate = group->mutable_candidates(0);
+        auto *option = candidate->mutable_options(0);
+        const auto existingOptionId = option->option_id();
+        switch (malformed) {
+            case 0:
+                choice->clear_counter_removal_group();
+                break;
+            case 1:
+                group->set_required_count(0);
+                break;
+            case 2:
+                candidate->clear_object();
+                break;
+            case 3:
+                candidate->mutable_object()->set_object_id(0);
+                break;
+            case 4: {
+                auto *duplicate = group->add_candidates();
+                duplicate->mutable_object()->set_object_id(901);
+                duplicate->mutable_object()->set_zone_change_generation(99);
+                auto *duplicateOption = duplicate->add_options();
+                duplicateOption->set_option_id(2);
+                duplicateOption->set_available_count(1);
+                break;
+            }
+            case 5:
+                candidate->clear_options();
+                break;
+            case 6: {
+                auto *duplicateOption = candidate->add_options();
+                duplicateOption->set_option_id(existingOptionId);
+                duplicateOption->set_available_count(1);
+                break;
+            }
+            case 7:
+                option->set_option_id(0);
+                break;
+            case 8:
+                option->set_available_count(0);
+                break;
+            case 9: {
+                const auto *zoneField = choice->GetDescriptor()->FindFieldByName("zone");
+                choice->GetReflection()->SetEnumValue(choice, zoneField, 777);
+                break;
+            }
+        }
+        checkRejected(std::move(batch));
+    }
+
+    auto unknownKind = unsupportedCostBatch(9);
+    auto &actions = (*unknownKind.mutable_legal_by_player())[kLocalPlayer];
+    const quint64 wireKey = (static_cast<quint64>(kUnsupportedCostSourceOid) << 32) |
+                            static_cast<quint32>(kUnsupportedCostAbilityIndex);
+    auto *choice = (*actions.mutable_cost_choices_by_ability())[wireKey].mutable_choices(0);
+    setWireCostChoiceKind(choice, 777);
+    checkRejected(std::move(unknownKind));
+}
+
+TEST_F(RuledClientTest, AggregateCounterOfferAcceptsZeroIncarnationGeneration)
+{
+    auto batch = unsupportedCostBatch(9);
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    const quint64 wireKey = (static_cast<quint64>(kUnsupportedCostSourceOid) << 32) |
+                            static_cast<quint32>(kUnsupportedCostAbilityIndex);
+    auto *choice = (*actions.mutable_cost_choices_by_ability())[wireKey].mutable_choices(0);
+    choice->mutable_counter_removal_group()->mutable_candidates(0)->mutable_object()->set_zone_change_generation(0);
+    applyRaw(batch);
+
+    const auto choices = state->abilityCostChoices(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+    ASSERT_EQ(choices.size(), 1);
+    ASSERT_TRUE(choices.front().counterRemovalGroup.has_value());
+    ASSERT_EQ(choices.front().counterRemovalGroup->candidates.size(), 1);
+    EXPECT_EQ(choices.front().counterRemovalGroup->candidates.front().zoneChangeGeneration, 0u);
+    EXPECT_FALSE(state->abilityActivatable(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex));
+}
+
+TEST_F(RuledClientTest, AggregateCounterSelectionSerializesTwoKindsOnOnePermanentAndSplitCards)
+{
+    applyRaw(aggregateCounterOfferBatch());
+    EXPECT_FALSE(state->abilityActivatable(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex));
+
+    const auto makeDraft = [&]() {
+        return makeAggregateCounterDraft(*state);
+    };
+    const QVector<QVector<RuledPendingCounterContribution>> patterns = {
+        {{1, 901, 13, kNightCounterOptionId, 2}, {1, 901, 13, kChargeCounterOptionId, 1}},
+        {{1, 901, 13, kNightCounterOptionId, 1}, {1, 902, 17, kChargeCounterOptionId, 2}},
+        {{1, 901, 13, kChargeCounterOptionId, 3}},
+        {{1, 901, 13, kChargeCounterOptionId, 1},
+         {1, 902, 17, kChargeCounterOptionId, 1},
+         {1, 903, 21, kChargeCounterOptionId, 1}},
+    };
+
+    for (int patternIndex = 0; patternIndex < patterns.size(); ++patternIndex) {
+        auto pending = makeDraft();
+        QVector<QPair<quint32, quint64>> receipts;
+        for (const auto &row : patterns.at(patternIndex)) {
+            const QPair<quint32, quint64> receipt{row.objectId, row.zoneChangeGeneration};
+            if (!receipts.contains(receipt)) {
+                receipts.append(receipt);
+            }
+        }
+        for (const auto &receipt : receipts) {
+            QVector<RuledPendingCounterContribution> receiptRows;
+            for (const auto &row : patterns.at(patternIndex)) {
+                if (row.objectId == receipt.first && row.zoneChangeGeneration == receipt.second) {
+                    receiptRows.append(row);
+                }
+            }
+            EXPECT_TRUE(ruledStageCounterContributions(pending, 1, receipt.first, receipt.second, receiptRows))
+                << "pattern " << patternIndex;
+        }
+        EXPECT_TRUE(ruledConfirmCounterContributions(pending)) << "pattern " << patternIndex;
+
+        ASSERT_EQ(pending.flexPips.size(), 2);
+        auto flexPayments = aggregatePhiPayments(pending, patternIndex % 2 != 0);
+        const auto generated = ruledBuildCounterGroupBegin(*state, pending, flexPayments);
+        EXPECT_TRUE(generated.has_value()) << "pattern " << patternIndex;
+        if (generated) {
+            std::string bytes;
+            ASSERT_TRUE(generated->SerializeToString(&bytes));
+            ruled::v1::BeginAbilityActivation roundTrip;
+            ASSERT_TRUE(roundTrip.ParseFromString(bytes));
+            EXPECT_EQ(roundTrip.source_object_id(), kUnsupportedCostSourceOid);
+            EXPECT_EQ(roundTrip.expected_zone_change_generation(), kUnsupportedCostSourceGeneration);
+            EXPECT_EQ(roundTrip.source_zone(), ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD);
+            EXPECT_EQ(roundTrip.ability_index(), static_cast<quint32>(kUnsupportedCostAbilityIndex));
+            EXPECT_FALSE(roundTrip.has_own_target());
+            EXPECT_FALSE(roundTrip.has_opponent_player_id());
+            ASSERT_EQ(roundTrip.cost_selections_size(), 1);
+            const auto &selection = roundTrip.cost_selections(0);
+            EXPECT_EQ(selection.cost_index(), 1u);
+            ASSERT_TRUE(selection.has_counter_removal_group());
+            ASSERT_EQ(selection.counter_removal_group().contributions_size(), patterns.at(patternIndex).size());
+            auto expectedRows = patterns.at(patternIndex);
+            std::sort(expectedRows.begin(), expectedRows.end(), [](const auto &left, const auto &right) {
+                return std::tie(left.costIndex, left.objectId, left.zoneChangeGeneration, left.optionId) <
+                       std::tie(right.costIndex, right.objectId, right.zoneChangeGeneration, right.optionId);
+            });
+            for (int rowIndex = 0; rowIndex < expectedRows.size(); ++rowIndex) {
+                const auto &expected = expectedRows.at(rowIndex);
+                const auto &actual = selection.counter_removal_group().contributions(rowIndex);
+                EXPECT_EQ(actual.object().object_id(), expected.objectId);
+                EXPECT_EQ(actual.object().zone_change_generation(), expected.zoneChangeGeneration);
+                EXPECT_EQ(actual.option_id(), expected.optionId);
+                EXPECT_EQ(actual.count(), expected.count);
+            }
+            ASSERT_EQ(roundTrip.flex_payments_size(), 2);
+            EXPECT_EQ(roundTrip.flex_payments(0).pip_index(), pending.flexPips.at(0).pipIndex);
+            EXPECT_EQ(roundTrip.flex_payments(1).pip_index(), pending.flexPips.at(1).pipIndex);
+            EXPECT_EQ(roundTrip.flex_payments(0).pay_life(), patternIndex % 2 != 0);
+            EXPECT_EQ(roundTrip.flex_payments(1).pay_life(), patternIndex % 2 == 0);
+        }
+    }
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+}
+
+TEST_F(RuledClientTest, AggregateCounterContributionsRejectIncompleteMalformedAndOverfullDrafts)
+{
+    applyRaw(aggregateCounterOfferBatch());
+    auto flexPayments = aggregatePhiPayments(makeAggregateCounterDraft(*state));
+
+    auto incomplete = makeAggregateCounterDraft(*state);
+    const QVector<RuledPendingCounterContribution> twoCounters = {{1, 901, 13, kNightCounterOptionId, 2}};
+    ASSERT_TRUE(ruledStageCounterContributions(incomplete, 1, 901, 13, twoCounters));
+    EXPECT_FALSE(ruledConfirmCounterContributions(incomplete));
+    EXPECT_FALSE(ruledBuildCounterGroupBegin(*state, incomplete, flexPayments).has_value());
+
+    auto oversized = makeAggregateCounterDraft(*state);
+    const QVector<RuledPendingCounterContribution> fourCounters = {{1, 901, 13, kChargeCounterOptionId, 4}};
+    EXPECT_FALSE(ruledStageCounterContributions(oversized, 1, 901, 13, fourCounters));
+    EXPECT_TRUE(oversized.counterGroupContributions.isEmpty());
+
+    const QVector<QVector<RuledPendingCounterContribution>> malformedRows = {
+        {{1, 901, 13, 0xdeadbeefu, 1}},
+        {{1, 901, 13, kChargeCounterOptionId, 1}, {1, 901, 13, kChargeCounterOptionId, 1}},
+        {{2, 901, 13, kChargeCounterOptionId, 1}},
+        {{1, 901, 14, kChargeCounterOptionId, 1}},
+    };
+    for (const auto &rows : malformedRows) {
+        auto malformed = makeAggregateCounterDraft(*state);
+        EXPECT_FALSE(ruledStageCounterContributions(malformed, 1, 901, 13, rows));
+        EXPECT_TRUE(malformed.counterGroupContributions.isEmpty());
+        EXPECT_FALSE(malformed.counterGroupConfirmed);
+    }
+
+    auto complete = makeAggregateCounterDraft(*state);
+    ASSERT_EQ(complete.costChoices.size(), 1);
+    ASSERT_TRUE(complete.costChoices.front().counterRemovalGroup.has_value());
+    ASSERT_EQ(complete.costChoices.front().counterRemovalGroup->requiredCount, 3u);
+    ASSERT_TRUE(ruledStageCounterContributions(
+        complete, 1, 901, 13, {{1, 901, 13, kChargeCounterOptionId, 3}}));
+    ASSERT_TRUE(ruledConfirmCounterContributions(complete));
+    EXPECT_TRUE(complete.counterGroupConfirmed);
+    ASSERT_TRUE(ruledBuildCounterGroupBegin(*state, complete, aggregatePhiPayments(complete)).has_value());
+
+    auto rawZero = complete;
+    rawZero.counterGroupContributions.append({1, 901, 13, kNightCounterOptionId, 0});
+    const auto rawZeroRowsBeforeBuild = rawZero.counterGroupContributions;
+    const bool rawZeroConfirmedBeforeBuild = rawZero.counterGroupConfirmed;
+    ASSERT_EQ(rawZeroRowsBeforeBuild.size(), 2);
+    EXPECT_EQ(rawZeroRowsBeforeBuild.at(0).optionId, kChargeCounterOptionId);
+    EXPECT_EQ(rawZeroRowsBeforeBuild.at(0).count, 3u);
+    EXPECT_EQ(rawZeroRowsBeforeBuild.at(1).optionId, kNightCounterOptionId);
+    EXPECT_EQ(rawZeroRowsBeforeBuild.at(1).count, 0u);
+    EXPECT_FALSE(ruledBuildCounterGroupBegin(*state, rawZero, aggregatePhiPayments(rawZero)).has_value());
+    EXPECT_EQ(rawZero.counterGroupContributions.size(), rawZeroRowsBeforeBuild.size());
+    EXPECT_EQ(rawZero.counterGroupConfirmed, rawZeroConfirmedBeforeBuild);
+    for (int rowIndex = 0; rowIndex < rawZeroRowsBeforeBuild.size(); ++rowIndex) {
+        EXPECT_EQ(rawZero.counterGroupContributions.at(rowIndex).costIndex,
+                  rawZeroRowsBeforeBuild.at(rowIndex).costIndex);
+        EXPECT_EQ(rawZero.counterGroupContributions.at(rowIndex).objectId,
+                  rawZeroRowsBeforeBuild.at(rowIndex).objectId);
+        EXPECT_EQ(rawZero.counterGroupContributions.at(rowIndex).zoneChangeGeneration,
+                  rawZeroRowsBeforeBuild.at(rowIndex).zoneChangeGeneration);
+        EXPECT_EQ(rawZero.counterGroupContributions.at(rowIndex).optionId,
+                  rawZeroRowsBeforeBuild.at(rowIndex).optionId);
+        EXPECT_EQ(rawZero.counterGroupContributions.at(rowIndex).count,
+                  rawZeroRowsBeforeBuild.at(rowIndex).count);
+    }
+
+    EXPECT_TRUE(ruledStageCounterContributions(complete, 1, 901, 13,
+                                               QVector<RuledPendingCounterContribution>{}));
+    EXPECT_TRUE(complete.counterGroupContributions.isEmpty());
+    EXPECT_FALSE(complete.counterGroupConfirmed);
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+}
+
+TEST_F(RuledClientTest, AggregateCounterZeroRowsDeselectOnlyTheirReceiptAndRejectMalformedRows)
+{
+    auto batch = aggregateCounterOfferBatch();
+    const quint64 wireKey = (static_cast<quint64>(kUnsupportedCostSourceOid) << 32) |
+                            static_cast<quint32>(kUnsupportedCostAbilityIndex);
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    auto &costs = (*actions.mutable_cost_choices_by_ability())[wireKey];
+    costs.mutable_choices(0)->mutable_counter_removal_group()->set_required_count(6);
+    applyRaw(batch);
+
+    auto pending = makeAggregateCounterDraft(*state);
+    ASSERT_TRUE(ruledStageCounterContributions(
+        pending, 1, 901, 13, {{1, 901, 13, kNightCounterOptionId, 1}, {1, 901, 13, kChargeCounterOptionId, 2}}));
+    ASSERT_TRUE(ruledStageCounterContributions(pending, 1, 902, 17, {{1, 902, 17, kChargeCounterOptionId, 2}}));
+    ASSERT_TRUE(ruledStageCounterContributions(pending, 1, 903, 21, {{1, 903, 21, kChargeCounterOptionId, 1}}));
+    ASSERT_TRUE(ruledConfirmCounterContributions(pending));
+
+    const bool partialZeroAccepted = ruledStageCounterContributions(
+        pending, 1, 901, 13, {{1, 901, 13, kNightCounterOptionId, 0}, {1, 901, 13, kChargeCounterOptionId, 2}});
+    EXPECT_TRUE(partialZeroAccepted);
+    if (partialZeroAccepted) {
+        EXPECT_FALSE(pending.counterGroupConfirmed);
+        ASSERT_EQ(pending.counterGroupContributions.size(), 3);
+        EXPECT_EQ(std::count_if(pending.counterGroupContributions.cbegin(), pending.counterGroupContributions.cend(),
+                                [](const auto &row) { return row.objectId == 901; }),
+                  1);
+        const auto selectedCharge = std::find_if(pending.counterGroupContributions.cbegin(),
+                                                 pending.counterGroupContributions.cend(), [](const auto &row) {
+                                                     return row.objectId == 901;
+                                                 });
+        ASSERT_NE(selectedCharge, pending.counterGroupContributions.cend());
+        EXPECT_EQ(selectedCharge->optionId, kChargeCounterOptionId);
+        EXPECT_EQ(selectedCharge->count, 2u);
+        EXPECT_EQ(std::count_if(pending.counterGroupContributions.cbegin(), pending.counterGroupContributions.cend(),
+                                [](const auto &row) { return row.objectId == 902 || row.objectId == 903; }),
+                  2);
+    }
+
+    const bool allZeroAccepted = ruledStageCounterContributions(
+        pending, 1, 901, 13, {{1, 901, 13, kNightCounterOptionId, 0}, {1, 901, 13, kChargeCounterOptionId, 0}});
+    EXPECT_TRUE(allZeroAccepted);
+    if (allZeroAccepted) {
+        EXPECT_FALSE(pending.counterGroupConfirmed);
+        ASSERT_EQ(pending.counterGroupContributions.size(), 2);
+        EXPECT_TRUE(std::none_of(pending.counterGroupContributions.cbegin(), pending.counterGroupContributions.cend(),
+                                 [](const auto &row) { return row.objectId == 901; }));
+        EXPECT_TRUE(std::any_of(pending.counterGroupContributions.cbegin(), pending.counterGroupContributions.cend(),
+                                [](const auto &row) { return row.objectId == 902 && row.count == 2; }));
+        EXPECT_TRUE(std::any_of(pending.counterGroupContributions.cbegin(), pending.counterGroupContributions.cend(),
+                                [](const auto &row) { return row.objectId == 903 && row.count == 1; }));
+    }
+
+    costs.mutable_choices(0)->mutable_counter_removal_group()->set_required_count(3);
+    applyRaw(batch);
+    auto confirmed = makeAggregateCounterDraft(*state);
+    ASSERT_TRUE(ruledStageCounterContributions(confirmed, 1, 901, 13, {{1, 901, 13, kChargeCounterOptionId, 3}}));
+    ASSERT_TRUE(ruledConfirmCounterContributions(confirmed));
+    const QVector<QVector<RuledPendingCounterContribution>> malformedZeroRows = {
+        {{2, 901, 13, kNightCounterOptionId, 0}},
+        {{1, 902, 17, kNightCounterOptionId, 0}},
+        {{1, 901, 99, kNightCounterOptionId, 0}},
+        {{1, 901, 13, 0, 0}},
+        {{1, 901, 13, 0xdeadbeefu, 0}},
+        {{1, 901, 13, kNightCounterOptionId, 0}, {1, 901, 13, kNightCounterOptionId, 0}},
+        {{1, 901, 13, kNightCounterOptionId, 0}, {1, 901, 13, kChargeCounterOptionId, 4}},
+    };
+    for (const auto &rows : malformedZeroRows) {
+        auto malformed = confirmed;
+        EXPECT_FALSE(ruledStageCounterContributions(malformed, 1, 901, 13, rows));
+        EXPECT_TRUE(malformed.counterGroupConfirmed);
+        ASSERT_EQ(malformed.counterGroupContributions.size(), 1);
+        EXPECT_EQ(malformed.counterGroupContributions.front().objectId, 901u);
+        EXPECT_EQ(malformed.counterGroupContributions.front().optionId, kChargeCounterOptionId);
+        EXPECT_EQ(malformed.counterGroupContributions.front().count, 3u);
+    }
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+}
+
+TEST_F(RuledClientTest, AggregateCounterGroupAvailabilityIsSharedAcrossCostIndices)
+{
+    auto batch = aggregateCounterOfferBatch();
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    const quint64 wireKey = (static_cast<quint64>(kUnsupportedCostSourceOid) << 32) |
+                            static_cast<quint32>(kUnsupportedCostAbilityIndex);
+    auto &costs = (*actions.mutable_cost_choices_by_ability())[wireKey];
+    auto *first = costs.mutable_choices(0);
+    first->mutable_counter_removal_group()->set_required_count(2);
+    ruled::v1::LegalCostChoice second;
+    second.CopyFrom(*first);
+    second.set_cost_index(4);
+    second.mutable_counter_removal_group()->set_required_count(2);
+    *costs.add_choices() = second;
+    applyRaw(batch);
+
+    auto staged = makeAggregateCounterDraft(*state);
+    staged.costChoices = state->abilityCostChoices(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+    const QVector<RuledPendingCounterContribution> firstUse = {{1, 901, 13, kChargeCounterOptionId, 2}};
+    const QVector<RuledPendingCounterContribution> secondUse = {{4, 901, 13, kChargeCounterOptionId, 2}};
+    ASSERT_TRUE(ruledStageCounterContributions(staged, 1, 901, 13, firstUse));
+    EXPECT_FALSE(ruledStageCounterContributions(staged, 4, 901, 13, secondUse));
+    ASSERT_EQ(staged.counterGroupContributions.size(), 1);
+
+    auto invalidCombined = makeAggregateCounterDraft(*state);
+    invalidCombined.costChoices = staged.costChoices;
+    invalidCombined.counterGroupContributions = {firstUse.front(), secondUse.front()};
+    invalidCombined.counterGroupConfirmed = true;
+    EXPECT_FALSE(ruledConfirmCounterContributions(invalidCombined));
+    invalidCombined.counterGroupConfirmed = true;
+    auto flexPayments = aggregatePhiPayments(invalidCombined);
+    EXPECT_FALSE(ruledBuildCounterGroupBegin(*state, invalidCombined, flexPayments).has_value());
+}
+
+TEST_F(RuledClientTest, AggregateCounterContributionCountsUseFullUnsignedRange)
+{
+    auto batch = aggregateCounterOfferBatch();
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    const quint64 wireKey = (static_cast<quint64>(kUnsupportedCostSourceOid) << 32) |
+                            static_cast<quint32>(kUnsupportedCostAbilityIndex);
+    auto *choice = (*actions.mutable_cost_choices_by_ability())[wireKey].mutable_choices(0);
+    auto *group = choice->mutable_counter_removal_group();
+    const quint32 maximum = std::numeric_limits<quint32>::max();
+    group->set_required_count(maximum);
+    group->clear_candidates();
+    auto *candidate = group->add_candidates();
+    candidate->mutable_object()->set_object_id(901);
+    candidate->mutable_object()->set_zone_change_generation(13);
+    auto *charge = candidate->add_options();
+    charge->set_option_id(kChargeCounterOptionId);
+    charge->set_label("Charge");
+    charge->set_available_count(maximum);
+    auto *night = candidate->add_options();
+    night->set_option_id(kNightCounterOptionId);
+    night->set_label("Night");
+    night->set_available_count(1);
+    applyRaw(batch);
+
+    auto pending = makeAggregateCounterDraft(*state);
+    const QVector<RuledPendingCounterContribution> exactMaximum = {
+        {1, 901, 13, kChargeCounterOptionId, maximum}};
+    ASSERT_TRUE(ruledStageCounterContributions(pending, 1, 901, 13, exactMaximum));
+    ASSERT_TRUE(ruledConfirmCounterContributions(pending));
+    auto flexPayments = aggregatePhiPayments(pending);
+    const auto generated = ruledBuildCounterGroupBegin(*state, pending, flexPayments);
+    ASSERT_TRUE(generated.has_value());
+    ASSERT_EQ(generated->cost_selections_size(), 1);
+    ASSERT_EQ(generated->cost_selections(0).counter_removal_group().contributions_size(), 1);
+    EXPECT_EQ(generated->cost_selections(0).counter_removal_group().contributions(0).count(), maximum);
+
+    const QVector<RuledPendingCounterContribution> overMaximum = {
+        {1, 901, 13, kChargeCounterOptionId, maximum}, {1, 901, 13, kNightCounterOptionId, 1}};
+    EXPECT_FALSE(ruledStageCounterContributions(pending, 1, 901, 13, overMaximum));
+    ASSERT_EQ(pending.counterGroupContributions.size(), 1);
+    EXPECT_EQ(pending.counterGroupContributions.front().count, maximum);
+    EXPECT_TRUE(pending.counterGroupConfirmed);
+}
+
+TEST_F(RuledClientTest, AggregateCounterBuilderRechecksLiveSourceAndCompleteUniquePhiChoices)
+{
+    applyRaw(aggregateCounterOfferBatch());
+    auto pending = makeAggregateCounterDraft(*state);
+    const QVector<RuledPendingCounterContribution> exactRows = {
+        {1, 901, 13, kNightCounterOptionId, 1}, {1, 901, 13, kChargeCounterOptionId, 2}};
+    ASSERT_TRUE(ruledStageCounterContributions(pending, 1, 901, 13, exactRows));
+    ASSERT_TRUE(ruledConfirmCounterContributions(pending));
+
+    ASSERT_EQ(pending.flexPips.size(), 2);
+    auto completePhi = aggregatePhiPayments(pending);
+    ASSERT_EQ(completePhi.size(), 2);
+    EXPECT_FALSE(completePhi.front().pay_life());
+    EXPECT_TRUE(completePhi.back().pay_life());
+    EXPECT_TRUE(ruledBuildCounterGroupBegin(*state, pending, completePhi).has_value());
+
+    QVector<ruled::v1::FlexPipPayment> missingPhi{completePhi.front()};
+    EXPECT_FALSE(ruledBuildCounterGroupBegin(*state, pending, missingPhi).has_value());
+    QVector<ruled::v1::FlexPipPayment> duplicatePhi = completePhi;
+    duplicatePhi.append(ruled::v1::FlexPipPayment{});
+    duplicatePhi.back().set_pip_index(completePhi.front().pip_index());
+    EXPECT_FALSE(ruledBuildCounterGroupBegin(*state, pending, duplicatePhi).has_value());
+    QVector<ruled::v1::FlexPipPayment> unknownPhi = completePhi;
+    unknownPhi.append(ruled::v1::FlexPipPayment{});
+    unknownPhi.back().set_pip_index(77);
+    EXPECT_FALSE(ruledBuildCounterGroupBegin(*state, pending, unknownPhi).has_value());
+
+    auto changedInventory = aggregateCounterOfferBatch();
+    auto &changedActions = (*changedInventory.mutable_legal_by_player())[kLocalPlayer];
+    const quint64 wireKey = (static_cast<quint64>(kUnsupportedCostSourceOid) << 32) |
+                            static_cast<quint32>(kUnsupportedCostAbilityIndex);
+    auto *changedChoice = (*changedActions.mutable_cost_choices_by_ability())[wireKey].mutable_choices(0);
+    changedChoice->mutable_counter_removal_group()->mutable_candidates(0)->mutable_options(1)->set_available_count(2);
+    applyRaw(changedInventory);
+    EXPECT_FALSE(ruledBuildCounterGroupBegin(*state, pending, completePhi).has_value());
+    EXPECT_TRUE(pending.counterGroupConfirmed);
+    ASSERT_EQ(pending.counterGroupContributions.size(), 2);
+    EXPECT_EQ(pending.counterGroupContributions.front().zoneChangeGeneration, 13u);
+
+    auto changedSource = aggregateCounterOfferBatch();
+    auto *zoneView = changedSource.mutable_events(0)->mutable_zone_view();
+    zoneView->mutable_per_player(0)->mutable_battlefield_objects(0)->set_zone_change_generation(99);
+    applyRaw(changedSource);
+    EXPECT_FALSE(ruledBuildCounterGroupBegin(*state, pending, completePhi).has_value());
+    EXPECT_TRUE(pending.counterGroupConfirmed);
+    EXPECT_EQ(pending.expectedZoneChangeGeneration, kUnsupportedCostSourceGeneration);
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+}
+
+TEST_F(RuledClientTest, AggregateCounterBeginUsesTheCurrentPublishedManaCostWithoutReconcile)
+{
+    applyRaw(aggregateCounterOfferBatch());
+    auto pending = makeAggregateCounterDraft(*state);
+    const auto published = state->activatedAbilityForOid(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+    ASSERT_TRUE(published.has_value());
+    EXPECT_EQ(published->manaCost, QStringLiteral("{B/P}{W/P}"));
+    const auto parsedCurrentPips = RuledPendingCast::parseFlexPips(published->manaCost);
+    ASSERT_EQ(parsedCurrentPips.size(), 2);
+    ASSERT_EQ(pending.flexPips.size(), parsedCurrentPips.size());
+    ASSERT_TRUE(pending.flexPips.at(0).phyrexian);
+    ASSERT_TRUE(pending.flexPips.at(1).phyrexian);
+    EXPECT_EQ(pending.flexPips.at(0).pipIndex, parsedCurrentPips.at(0).pipIndex);
+    EXPECT_EQ(pending.flexPips.at(1).pipIndex, parsedCurrentPips.at(1).pipIndex);
+
+    const QVector<RuledPendingCounterContribution> exactRows = {
+        {1, 901, 13, kNightCounterOptionId, 1}, {1, 901, 13, kChargeCounterOptionId, 2}};
+    ASSERT_TRUE(ruledStageCounterContributions(pending, 1, 901, 13, exactRows));
+    ASSERT_TRUE(ruledConfirmCounterContributions(pending));
+    auto currentCostPayments = aggregatePhiPayments(pending);
+    ASSERT_EQ(currentCostPayments.size(), parsedCurrentPips.size());
+    EXPECT_EQ(currentCostPayments.at(0).pip_index(), parsedCurrentPips.at(0).pipIndex);
+    EXPECT_EQ(currentCostPayments.at(1).pip_index(), parsedCurrentPips.at(1).pipIndex);
+    EXPECT_FALSE(currentCostPayments.at(0).pay_life());
+    EXPECT_TRUE(currentCostPayments.at(1).pay_life());
+    const auto baseline = ruledBuildCounterGroupBegin(*state, pending, currentCostPayments);
+    ASSERT_TRUE(baseline.has_value());
+    ASSERT_EQ(baseline->flex_payments_size(), 2);
+    EXPECT_FALSE(baseline->flex_payments(0).pay_life());
+    EXPECT_TRUE(baseline->flex_payments(1).pay_life());
+
+    auto clearedCache = pending;
+    clearedCache.flexPips.clear();
+    EXPECT_FALSE(ruledBuildCounterGroupBegin(*state, clearedCache, {}).has_value());
+
+    auto inventedIndices = pending;
+    inventedIndices.flexPips[0].pipIndex = 3;
+    inventedIndices.flexPips[1].pipIndex = 9;
+    const auto inventedPayments = aggregatePhiPayments(inventedIndices);
+    EXPECT_FALSE(ruledBuildCounterGroupBegin(*state, inventedIndices, inventedPayments).has_value());
+
+    auto refreshedSource = aggregateCounterOfferBatch();
+    auto *refreshedAbility = refreshedSource.mutable_events(0)
+                                 ->mutable_zone_view()
+                                 ->mutable_per_player(0)
+                                 ->mutable_battlefield_objects(0)
+                                 ->mutable_activated_abilities(0);
+    refreshedAbility->set_mana_cost("{1}{B/P}{W/P}");
+    applyRaw(refreshedSource);
+    const auto currentAbility = state->activatedAbilityForOid(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+    ASSERT_TRUE(currentAbility.has_value());
+    EXPECT_EQ(currentAbility->manaCost, QStringLiteral("{1}{B/P}{W/P}"));
+    // Deliberately skip counter-draft reconciliation: the builder must notice that its cached
+    // Phi indices no longer match the current engine-published ability cost.
+    EXPECT_FALSE(ruledBuildCounterGroupBegin(*state, pending, currentCostPayments).has_value());
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+}
+
+TEST_F(RuledClientTest, AggregateCounterBeginRejectsCurrentTargetModalAndXShapes)
+{
+    const auto makeConfirmedPending = [&]() -> PendingActivatedAbility {
+        auto pending = makeAggregateCounterDraft(*state);
+        const QVector<RuledPendingCounterContribution> exactRows = {
+            {1, 901, 13, kNightCounterOptionId, 1}, {1, 901, 13, kChargeCounterOptionId, 2}};
+        EXPECT_TRUE(ruledStageCounterContributions(pending, 1, 901, 13, exactRows));
+        EXPECT_TRUE(ruledConfirmCounterContributions(pending));
+        return pending;
+    };
+    const auto key = RuledClientState::abilityTargetKey(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+
+    applyRaw(aggregateCounterOfferBatch());
+    auto targeted = makeConfirmedPending();
+    const auto phiPayments = aggregatePhiPayments(targeted);
+    EXPECT_TRUE(ruledBuildCounterGroupBegin(*state, targeted, phiPayments).has_value());
+    state->validTargetsByAbility.insert(key, RuledClientState::SpellTargetData{});
+    EXPECT_FALSE(ruledBuildCounterGroupBegin(*state, targeted, phiPayments).has_value());
+
+    applyRaw(aggregateCounterOfferBatch());
+    auto modal = makeConfirmedPending();
+    auto payments = aggregatePhiPayments(modal);
+    RuledActivatedAbilityModeOffer modeOffer;
+    modeOffer.minModes = 1;
+    modeOffer.maxModes = 1;
+    RuledModalSpellOption mode;
+    mode.modeIndex = 0;
+    mode.selectable = true;
+    modeOffer.modes.append(mode);
+    state->activatedAbilityModesByAbility.insert(key, modeOffer);
+    EXPECT_FALSE(ruledBuildCounterGroupBegin(*state, modal, payments).has_value());
+
+    applyRaw(aggregateCounterOfferBatch());
+    auto counterX = makeConfirmedPending();
+    payments = aggregatePhiPayments(counterX);
+    auto &abilityEntries = state->activatedAbilitiesByOid[kUnsupportedCostSourceOid];
+    ASSERT_EQ(abilityEntries.size(), kUnsupportedCostAbilityIndex + 1);
+    ASSERT_TRUE(abilityEntries.at(kUnsupportedCostAbilityIndex).has_value());
+    abilityEntries[kUnsupportedCostAbilityIndex]->xCounterManaChoice =
+        RuledXCounterManaChoice{QStringLiteral("charge"), 2, QStringLiteral("B"), QStringLiteral("G")};
+    EXPECT_FALSE(ruledBuildCounterGroupBegin(*state, counterX, payments).has_value());
+
+    applyRaw(aggregateCounterOfferBatch());
+    auto loyaltyX = makeConfirmedPending();
+    payments = aggregatePhiPayments(loyaltyX);
+    auto &loyaltyEntries = state->activatedAbilitiesByOid[kUnsupportedCostSourceOid];
+    ASSERT_EQ(loyaltyEntries.size(), kUnsupportedCostAbilityIndex + 1);
+    ASSERT_TRUE(loyaltyEntries.at(kUnsupportedCostAbilityIndex).has_value());
+    loyaltyEntries[kUnsupportedCostAbilityIndex]->loyaltyXChoice = RuledLoyaltyXChoice{0, 5};
+    EXPECT_FALSE(ruledBuildCounterGroupBegin(*state, loyaltyX, payments).has_value());
+
+    applyRaw(aggregateCounterOfferBatch());
+    auto manaX = makeConfirmedPending();
+    auto &manaXEntries = state->activatedAbilitiesByOid[kUnsupportedCostSourceOid];
+    ASSERT_EQ(manaXEntries.size(), kUnsupportedCostAbilityIndex + 1);
+    ASSERT_TRUE(manaXEntries.at(kUnsupportedCostAbilityIndex).has_value());
+    manaXEntries[kUnsupportedCostAbilityIndex]->manaCost = QStringLiteral("{X}{B/P}{W/P}");
+    manaX.flexPips = RuledPendingCast::parseFlexPips(manaXEntries.at(kUnsupportedCostAbilityIndex)->manaCost);
+    payments = aggregatePhiPayments(manaX);
+    EXPECT_FALSE(ruledBuildCounterGroupBegin(*state, manaX, payments).has_value());
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+}
+
+TEST_F(RuledClientTest, AggregateCounterBeginRejectsUnknownCurrentSourceZoneEvenWhenCached)
+{
+    applyRaw(aggregateCounterOfferBatch());
+    auto pending = makeAggregateCounterDraft(*state);
+    const QVector<RuledPendingCounterContribution> exactRows = {
+        {1, 901, 13, kNightCounterOptionId, 1}, {1, 901, 13, kChargeCounterOptionId, 2}};
+    ASSERT_TRUE(ruledStageCounterContributions(pending, 1, 901, 13, exactRows));
+    ASSERT_TRUE(ruledConfirmCounterContributions(pending));
+
+    const auto unknownZone = static_cast<ruled::v1::AbilitySourceZone>(99);
+    state->zoneAbilitySourceByOid.insert(kUnsupportedCostSourceOid, unknownZone);
+    pending.sourceZone = unknownZone;
+    EXPECT_FALSE(ruledBuildCounterGroupBegin(*state, pending, aggregatePhiPayments(pending)).has_value());
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+}
+
+TEST_F(RuledClientTest, AggregateCounterDraftRefreshRequiresNewConfirmationWithoutRebindingGeneration)
+{
+    applyRaw(aggregateCounterOfferBatch());
+    PendingActivatedAbility pending;
+    pending.valid = true;
+    pending.permanentOid = kUnsupportedCostSourceOid;
+    pending.sourceZone = state->abilitySourceZone(kUnsupportedCostSourceOid);
+    pending.expectedZoneChangeGeneration = kUnsupportedCostSourceGeneration;
+    pending.abilityIndex = kUnsupportedCostAbilityIndex;
+    pending.costChoices = state->abilityCostChoices(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+    pending.counterGroupContributions = {{1, 901, 13, kChargeCounterOptionId, 3}};
+    pending.counterGroupConfirmed = true;
+
+    auto changed = aggregateCounterOfferBatch();
+    auto &actions = (*changed.mutable_legal_by_player())[kLocalPlayer];
+    const quint64 wireKey = (static_cast<quint64>(kUnsupportedCostSourceOid) << 32) |
+                            static_cast<quint32>(kUnsupportedCostAbilityIndex);
+    auto *choice = (*actions.mutable_cost_choices_by_ability())[wireKey].mutable_choices(0);
+    choice->mutable_counter_removal_group()->mutable_candidates(0)->mutable_object()->set_zone_change_generation(99);
+    applyRaw(changed);
+    const auto changedChoices = state->abilityCostChoices(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+    EXPECT_FALSE(ruledReconcileCounterContributions(pending, changedChoices));
+    EXPECT_TRUE(pending.counterGroupContributions.isEmpty());
+    EXPECT_FALSE(pending.counterGroupConfirmed);
+    ASSERT_EQ(pending.costChoices.size(), 1);
+    ASSERT_TRUE(pending.costChoices.front().counterRemovalGroup.has_value());
+    EXPECT_EQ(pending.costChoices.front().counterRemovalGroup->candidates.front().zoneChangeGeneration, 99u);
+
+    pending.counterGroupContributions = {{1, 901, 99, kChargeCounterOptionId, 3}};
+    pending.counterGroupConfirmed = true;
+    auto cosmetic = aggregateCounterOfferBatch();
+    auto &cosmeticActions = (*cosmetic.mutable_legal_by_player())[kLocalPlayer];
+    auto *cosmeticChoice = (*cosmeticActions.mutable_cost_choices_by_ability())[wireKey].mutable_choices(0);
+    auto *cosmeticGroup = cosmeticChoice->mutable_counter_removal_group();
+    cosmeticGroup->mutable_candidates(0)->mutable_object()->set_zone_change_generation(99);
+    cosmeticGroup->mutable_candidates(0)->mutable_options(0)->set_label("Night counters");
+    cosmeticGroup->mutable_candidates()->SwapElements(0, 1);
+    cosmeticGroup->mutable_candidates(1)->mutable_options()->SwapElements(0, 1);
+    applyRaw(cosmetic);
+    const auto cosmeticChoices = state->abilityCostChoices(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+    EXPECT_TRUE(ruledReconcileCounterContributions(pending, cosmeticChoices));
+    ASSERT_EQ(pending.counterGroupContributions.size(), 1);
+    EXPECT_EQ(pending.counterGroupContributions.front().zoneChangeGeneration, 99u);
+    EXPECT_TRUE(pending.counterGroupConfirmed);
+
+    for (int materialChange = 0; materialChange < 3; ++materialChange) {
+        applyRaw(aggregateCounterOfferBatch());
+        auto draft = makeAggregateCounterDraft(*state);
+        if (materialChange == 2) {
+            ASSERT_TRUE(ruledStageCounterContributions(
+                draft, 1, 901, 13, {{1, 901, 13, kNightCounterOptionId, 1}}));
+            ASSERT_TRUE(ruledStageCounterContributions(
+                draft, 1, 902, 17, {{1, 902, 17, kChargeCounterOptionId, 2}}));
+        } else {
+            ASSERT_TRUE(ruledStageCounterContributions(
+                draft, 1, 901, 13, {{1, 901, 13, kNightCounterOptionId, 1},
+                                    {1, 901, 13, kChargeCounterOptionId, 2}}));
+        }
+        ASSERT_TRUE(ruledConfirmCounterContributions(draft));
+        const auto oldRows = draft.counterGroupContributions;
+        const auto oldGeneration = oldRows.front().zoneChangeGeneration;
+
+        auto refreshed = aggregateCounterOfferBatch();
+        auto &refreshedActions = (*refreshed.mutable_legal_by_player())[kLocalPlayer];
+        auto *refreshedChoice =
+            (*refreshedActions.mutable_cost_choices_by_ability())[wireKey].mutable_choices(0);
+        auto *refreshedGroup = refreshedChoice->mutable_counter_removal_group();
+        if (materialChange == 0) {
+            refreshedGroup->mutable_candidates(0)->mutable_options(1)->set_available_count(2);
+        } else if (materialChange == 1) {
+            refreshedChoice->set_kind(ruled::v1::COST_CHOICE_KIND_TAP);
+        } else {
+            refreshedGroup->mutable_candidates()->DeleteSubrange(1, 1);
+        }
+        applyRaw(refreshed);
+
+        auto flexPayments = aggregatePhiPayments(draft);
+        EXPECT_FALSE(ruledBuildCounterGroupBegin(*state, draft, flexPayments).has_value());
+        EXPECT_TRUE(draft.counterGroupConfirmed);
+        ASSERT_EQ(draft.counterGroupContributions.size(), oldRows.size());
+        for (int rowIndex = 0; rowIndex < oldRows.size(); ++rowIndex) {
+            EXPECT_EQ(draft.counterGroupContributions.at(rowIndex).objectId, oldRows.at(rowIndex).objectId);
+            EXPECT_EQ(draft.counterGroupContributions.at(rowIndex).zoneChangeGeneration,
+                      oldRows.at(rowIndex).zoneChangeGeneration);
+            EXPECT_EQ(draft.counterGroupContributions.at(rowIndex).optionId, oldRows.at(rowIndex).optionId);
+            EXPECT_EQ(draft.counterGroupContributions.at(rowIndex).count, oldRows.at(rowIndex).count);
+        }
+        EXPECT_EQ(draft.counterGroupContributions.front().zoneChangeGeneration, oldGeneration);
+
+        const auto refreshedChoices = state->abilityCostChoices(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
+        EXPECT_FALSE(ruledReconcileCounterContributions(draft, refreshedChoices));
+        EXPECT_TRUE(draft.counterGroupContributions.isEmpty());
+        EXPECT_FALSE(draft.counterGroupConfirmed);
+        ASSERT_EQ(draft.costChoices.size(), 1);
+        if (materialChange == 1) {
+            EXPECT_EQ(draft.costChoices.front().kind, RuledCostChoiceKind::Tap);
+            EXPECT_FALSE(draft.costChoices.front().counterRemovalGroup.has_value());
+        } else {
+            ASSERT_TRUE(draft.costChoices.front().counterRemovalGroup.has_value());
+            if (materialChange == 0) {
+                EXPECT_EQ(draft.costChoices.front().counterRemovalGroup->candidates.front().options.at(1).availableCount,
+                          2u);
+            } else {
+                EXPECT_FALSE(std::any_of(draft.costChoices.front().counterRemovalGroup->candidates.cbegin(),
+                                         draft.costChoices.front().counterRemovalGroup->candidates.cend(),
+                                         [](const auto &candidate) { return candidate.objectId == 902; }));
+            }
+        }
+    }
+}
+
 TEST_F(RuledClientTest, UnsupportedCounterKindsDisablePositiveLegacyCostOffers)
 {
     apply(unsupportedCostBatch());
@@ -4857,7 +5694,7 @@ TEST_F(RuledClientTest, UnsupportedLiveOffersPreserveSubmittedAndMatchingAccepte
     EXPECT_EQ(draft.remainingCost.value(QChar('G')), 2);
 }
 
-TEST_F(RuledClientTest, UnsupportedCostRefreshCancelsRealSelectionAndDirectContinuationWithoutCommands)
+TEST_F(RuledClientTest, AggregateCounterCapabilitiesRemainUnsupportedBeforeCompleteIntegration)
 {
     const QVector<AbilityCommandProbe> probes = {AbilityCommandProbe::Activate,
                                                   AbilityCommandProbe::Begin,
@@ -4932,6 +5769,17 @@ TEST_F(RuledClientTest, UnsupportedCostRefreshCancelsRealSelectionAndDirectConti
         ASSERT_EQ(current.size(), 2);
         EXPECT_EQ(current.at(0).kind, RuledCostChoiceKind::Tap);
         EXPECT_EQ(current.at(1).kind, RuledCostChoiceKind::Unspecified);
+        if (wireKind == 9) {
+            ASSERT_TRUE(current.at(1).counterRemovalGroup.has_value());
+            EXPECT_EQ(current.at(1).counterRemovalGroup->requiredCount, 3u);
+        } else {
+            EXPECT_FALSE(current.at(1).counterRemovalGroup.has_value());
+        }
+        const auto costDataKey = RuledClientState::abilityTargetKey(kUnsupportedCostSourceOid,
+                                                                     kUnsupportedCostAbilityIndex);
+        ASSERT_TRUE(state->abilityCostData.contains(costDataKey));
+        EXPECT_FALSE(state->abilityCostData.value(costDataKey).nonManaCostsPayable);
+        EXPECT_FALSE(state->abilityActivatable(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex));
 
         for (const auto probe : probes) {
             RuledPendingCast transaction;
@@ -4991,6 +5839,7 @@ TEST_F(RuledClientTest, UnsupportedCostRefreshCancelsRealSelectionAndDirectConti
     const auto cachedUnsupported = state->abilityCostChoices(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
     ASSERT_EQ(cachedUnsupported.size(), 2);
     ASSERT_EQ(cachedUnsupported.at(1).kind, RuledCostChoiceKind::Unspecified);
+    ASSERT_TRUE(cachedUnsupported.at(1).counterRemovalGroup.has_value());
     apply(unsupportedCostBatch(static_cast<int>(ruled::v1::COST_CHOICE_KIND_TAP), true));
     const auto refreshedSupported = state->abilityCostChoices(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex);
     ASSERT_EQ(refreshedSupported.size(), 2);

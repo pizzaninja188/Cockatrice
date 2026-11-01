@@ -1,4 +1,5 @@
 #include "game/ruled/ruled_resolution_choice_dialog.h"
+#include "game/ruled/ruled_counter_quantity_dialog.h"
 #include "game_prompt_widget.h"
 
 #include <QApplication>
@@ -10,8 +11,49 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QSignalSpy>
+#include <QTest>
 #include <QTimer>
 #include <gtest/gtest.h>
+
+#include <limits>
+
+namespace
+{
+using CounterDialog = RuledCounterQuantityDialog;
+using CounterContext = CounterDialog::Context;
+
+QLineEdit *counterInput(CounterDialog &dialog, quint32 optionId)
+{
+    return dialog.findChild<QLineEdit *>(QStringLiteral("counterQuantityInput_") + QString::number(optionId));
+}
+
+QPushButton *counterButton(CounterDialog &dialog, const char *objectName)
+{
+    return dialog.findChild<QPushButton *>(objectName);
+}
+
+void replaceCounterTextByKeyboard(QLineEdit *input, const QString &text)
+{
+    input->setFocus();
+    QTest::keyClick(input, Qt::Key_A, Qt::ControlModifier);
+    QTest::keyClick(input, Qt::Key_Backspace);
+    if (!text.isEmpty()) {
+        QTest::keyClicks(input, text);
+    }
+}
+
+CounterContext basicCounterContext()
+{
+    CounterContext context;
+    context.costIndex = 3;
+    context.objectId = 101;
+    context.zoneChangeGeneration = 0;
+    context.offeredOptions = {{20, "Charge", 5}, {10, "Night", 5}};
+    context.remainingForThisObject = 3;
+    context.displayName = "Test artifact";
+    return context;
+}
+} // namespace
 
 class GamePromptWidgetTest : public ::testing::Test
 {
@@ -677,6 +719,43 @@ TEST_F(GamePromptWidgetTest, GraveyardCostSelectionRequiresExactCountAndCanCance
     EXPECT_EQ(cancelSpy.count(), 1);
 }
 
+TEST_F(GamePromptWidgetTest, AggregateCounterConfirmRequiresExactValidTotal)
+{
+    QSignalSpy confirmSpy(widget.get(), &GamePromptWidget::ruledCostSelectionConfirmRequested);
+    GamePromptWidget::RuledPromptState state;
+    state.mode = PromptMode::CostSelection;
+    state.required = 3;
+    state.selected = 2;
+    state.costSelectionConfirmable = false;
+    widget->setRuledPromptState(state);
+
+    ASSERT_NE(btn("resolutionHandPickConfirmButton"), nullptr);
+    EXPECT_FALSE(btn("resolutionHandPickConfirmButton")->isEnabled());
+    btn("resolutionHandPickConfirmButton")->click();
+    EXPECT_EQ(confirmSpy.count(), 0);
+
+    state.selected = 3;
+    state.costSelectionConfirmable = true;
+    widget->setRuledPromptState(state);
+    EXPECT_TRUE(btn("resolutionHandPickConfirmButton")->isEnabled());
+    btn("resolutionHandPickConfirmButton")->click();
+    EXPECT_EQ(confirmSpy.count(), 1);
+
+    state.selected = 4;
+    state.costSelectionConfirmable = false;
+    widget->setRuledPromptState(state);
+    EXPECT_FALSE(btn("resolutionHandPickConfirmButton")->isEnabled());
+    btn("resolutionHandPickConfirmButton")->click();
+    EXPECT_EQ(confirmSpy.count(), 1);
+
+    state.selected = 3;
+    state.costSelectionConfirmable = false;
+    widget->setRuledPromptState(state);
+    EXPECT_FALSE(btn("resolutionHandPickConfirmButton")->isEnabled());
+    btn("resolutionHandPickConfirmButton")->click();
+    EXPECT_EQ(confirmSpy.count(), 1);
+}
+
 TEST_F(GamePromptWidgetTest, MandatoryResolutionCostSelectionDoesNotOfferCancel)
 {
     GamePromptWidget::RuledPromptState state;
@@ -1225,4 +1304,257 @@ TEST(RuledResolutionChoiceDialogTest, DeclineClearsSelectionOnlyWhenEmptyAnswerI
         const auto result = askRuledResolutionChoice("Choose a card", {101}, {"Test card"}, minimum, 1, false, false);
         EXPECT_EQ(result.size(), minimum);
     }
+}
+
+TEST(RuledCounterQuantityDialogTest, CounterQuantityDialogEditsTwoKindsOnTheSameObject)
+{
+    CounterContext context = basicCounterContext();
+    context.offeredOptions = {{20, "Night", 5}, {10, "Charge", 5}, {30, "Oil", 5}};
+    context.initialQuantities.insert(10, 1);
+
+    CounterDialog dialog(context);
+    dialog.show();
+    QApplication::processEvents();
+
+    auto *night = counterInput(dialog, 20);
+    auto *charge = counterInput(dialog, 10);
+    auto *oil = counterInput(dialog, 30);
+    auto *apply = counterButton(dialog, "counterQuantityApplyButton");
+    ASSERT_NE(night, nullptr);
+    ASSERT_NE(charge, nullptr);
+    ASSERT_NE(oil, nullptr);
+    ASSERT_NE(apply, nullptr);
+
+    // The option IDs deliberately do not sort in display-label order.
+    replaceCounterTextByKeyboard(night, "2");
+    replaceCounterTextByKeyboard(charge, "1");
+    replaceCounterTextByKeyboard(oil, "0");
+    EXPECT_TRUE(apply->isEnabled());
+    apply->click();
+
+    ASSERT_EQ(dialog.result(), QDialog::Accepted);
+    const auto result = dialog.acceptedQuantityResult();
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->costIndex, context.costIndex);
+    EXPECT_EQ(result->objectId, context.objectId);
+    EXPECT_EQ(result->zoneChangeGeneration, 0U);
+    ASSERT_EQ(result->selections.size(), 2);
+    EXPECT_EQ(result->selections.at(0).optionId, 10U);
+    EXPECT_EQ(result->selections.at(0).count, 1U);
+    EXPECT_EQ(result->selections.at(1).optionId, 20U);
+    EXPECT_EQ(result->selections.at(1).count, 2U);
+
+    // Typing zero for every offered kind applies an empty selection; it is not Cancel.
+    dialog.setContext(context);
+    dialog.show();
+    QApplication::processEvents();
+    for (const auto &option : context.offeredOptions) {
+        auto *input = counterInput(dialog, option.optionId);
+        ASSERT_NE(input, nullptr);
+        replaceCounterTextByKeyboard(input, "0");
+    }
+    EXPECT_TRUE(apply->isEnabled());
+    apply->click();
+    ASSERT_EQ(dialog.result(), QDialog::Accepted);
+    const auto emptyResult = dialog.acceptedQuantityResult();
+    ASSERT_TRUE(emptyResult.has_value());
+    EXPECT_TRUE(emptyResult->selections.isEmpty());
+}
+
+TEST(RuledCounterQuantityDialogTest, CounterQuantityDialogRejectsUnsignedOverflowAndOverAvailability)
+{
+    const quint32 maxUint32 = std::numeric_limits<quint32>::max();
+    CounterContext context = basicCounterContext();
+    context.offeredOptions = {{11, "Any counter", maxUint32}};
+    context.remainingForThisObject = maxUint32;
+
+    CounterDialog dialog(context);
+    dialog.show();
+    QApplication::processEvents();
+    auto *input = counterInput(dialog, 11);
+    auto *apply = counterButton(dialog, "counterQuantityApplyButton");
+    ASSERT_NE(input, nullptr);
+    ASSERT_NE(apply, nullptr);
+
+    const QString invalidValues[] = {QString(), QStringLiteral("-1"), QStringLiteral("abc"),
+                                     QStringLiteral("1.5"), QStringLiteral("4294967296")};
+    for (const QString &invalid : invalidValues) {
+        replaceCounterTextByKeyboard(input, invalid);
+        EXPECT_FALSE(apply->isEnabled()) << invalid.toStdString();
+    }
+
+    context.offeredOptions = {{12, "Charge", 10}};
+    dialog.setContext(context);
+    QApplication::processEvents();
+    input = counterInput(dialog, 12);
+    ASSERT_NE(input, nullptr);
+    replaceCounterTextByKeyboard(input, "11");
+    EXPECT_FALSE(apply->isEnabled());
+
+    context.offeredOptions = {{12, "Charge", 20}, {13, "Night", 20}};
+    context.remainingForThisObject = 12;
+    dialog.setContext(context);
+    QApplication::processEvents();
+    auto *charge = counterInput(dialog, 12);
+    auto *night = counterInput(dialog, 13);
+    ASSERT_NE(charge, nullptr);
+    ASSERT_NE(night, nullptr);
+    replaceCounterTextByKeyboard(charge, "8");
+    replaceCounterTextByKeyboard(night, "5");
+    EXPECT_FALSE(apply->isEnabled());
+
+    context.offeredOptions = {{14, "Night", maxUint32}};
+    context.remainingForThisObject = maxUint32;
+    dialog.setContext(context);
+    QApplication::processEvents();
+    input = counterInput(dialog, 14);
+    ASSERT_NE(input, nullptr);
+    replaceCounterTextByKeyboard(input, QString::number(static_cast<qulonglong>(maxUint32)));
+    EXPECT_TRUE(apply->isEnabled());
+    apply->click();
+
+    const auto result = dialog.acceptedQuantityResult();
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(result->selections.size(), 1);
+    EXPECT_EQ(result->selections.first().count, maxUint32);
+}
+
+TEST(RuledCounterQuantityDialogTest, CounterQuantityDialogCancelPreservesDraft)
+{
+    CounterContext context = basicCounterContext();
+    context.offeredOptions = {{31, "Charge", 5}};
+    context.remainingForThisObject = 5;
+    context.initialQuantities.insert(31, 2);
+    const quint32 draftBefore = context.initialQuantities.value(31);
+
+    CounterDialog canceled(context);
+    canceled.show();
+    QApplication::processEvents();
+    auto *cancelInput = counterInput(canceled, 31);
+    auto *cancelButton = counterButton(canceled, "counterQuantityCancelButton");
+    ASSERT_NE(cancelInput, nullptr);
+    ASSERT_NE(cancelButton, nullptr);
+    replaceCounterTextByKeyboard(cancelInput, "4");
+    cancelButton->click();
+    EXPECT_EQ(canceled.result(), QDialog::Rejected);
+    EXPECT_FALSE(canceled.acceptedQuantityResult().has_value());
+    EXPECT_EQ(context.initialQuantities.value(31), draftBefore);
+
+    CounterDialog closed(context);
+    closed.show();
+    QApplication::processEvents();
+    auto *closeInput = counterInput(closed, 31);
+    ASSERT_NE(closeInput, nullptr);
+    replaceCounterTextByKeyboard(closeInput, "3");
+    closed.close();
+    EXPECT_EQ(closed.result(), QDialog::Rejected);
+    EXPECT_FALSE(closed.acceptedQuantityResult().has_value());
+    EXPECT_EQ(context.initialQuantities.value(31), draftBefore);
+}
+
+TEST(RuledCounterQuantityDialogTest, CounterQuantityDialogReopensWithoutDuplicateRows)
+{
+    CounterContext first = basicCounterContext();
+    first.displayName = "Same card name";
+    first.objectId = 701;
+    first.offeredOptions = {{33, "Charge", 5}, {44, "Night", 5}};
+    first.remainingForThisObject = 5;
+    first.initialQuantities.insert(33, 2);
+
+    CounterDialog dialog(first);
+    dialog.show();
+    QApplication::processEvents();
+    EXPECT_EQ(dialog.findChildren<QLineEdit *>().size(), 2);
+    ASSERT_NE(counterInput(dialog, 33), nullptr);
+    EXPECT_EQ(counterInput(dialog, 33)->text(), QStringLiteral("2"));
+    replaceCounterTextByKeyboard(counterInput(dialog, 33), "4");
+
+    CounterContext second = first;
+    second.objectId = 702;
+    second.offeredOptions = {{33, "Charge counters", 5}, {55, "Oil", 5}};
+    second.initialQuantities.clear();
+    second.initialQuantities.insert(33, 1);
+    dialog.setContext(second);
+    QApplication::processEvents();
+    EXPECT_EQ(dialog.findChildren<QLineEdit *>().size(), 2);
+    EXPECT_EQ(counterInput(dialog, 44), nullptr);
+    ASSERT_NE(counterInput(dialog, 33), nullptr);
+    ASSERT_NE(counterInput(dialog, 55), nullptr);
+    EXPECT_EQ(counterInput(dialog, 33)->text(), QStringLiteral("1"));
+
+    dialog.setContext(second);
+    QApplication::processEvents();
+    EXPECT_EQ(dialog.findChildren<QLineEdit *>().size(), 2);
+    auto *chargeAfterReopen = counterInput(dialog, 33);
+    auto *oilAfterReopen = counterInput(dialog, 55);
+    auto *apply = counterButton(dialog, "counterQuantityApplyButton");
+    ASSERT_NE(chargeAfterReopen, nullptr);
+    ASSERT_NE(oilAfterReopen, nullptr);
+    ASSERT_NE(apply, nullptr);
+    EXPECT_EQ(chargeAfterReopen->text(), QStringLiteral("1"));
+    replaceCounterTextByKeyboard(chargeAfterReopen, "3");
+    replaceCounterTextByKeyboard(oilAfterReopen, "0");
+    apply->click();
+
+    const auto result = dialog.acceptedQuantityResult();
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->objectId, 702U);
+    EXPECT_EQ(result->zoneChangeGeneration, 0U);
+    ASSERT_EQ(result->selections.size(), 1);
+    EXPECT_EQ(result->selections.first().optionId, 33U);
+    EXPECT_EQ(result->selections.first().count, 3U);
+}
+
+TEST(RuledCounterQuantityDialogTest, CounterQuantityDialogRejectsStaleCapturedContextValues)
+{
+    CounterContext captured = basicCounterContext();
+    captured.offeredOptions = {{12, "Charge", 5}, {7, "Night", 5}};
+    captured.initialQuantities.insert(12, 1);
+    CounterDialog dialog(captured);
+    ASSERT_NE(counterButton(dialog, "counterQuantityApplyButton"), nullptr);
+    EXPECT_TRUE(counterButton(dialog, "counterQuantityApplyButton")->isEnabled());
+
+    CounterDialog::Result result;
+    result.costIndex = captured.costIndex;
+    result.objectId = captured.objectId;
+    result.zoneChangeGeneration = captured.zoneChangeGeneration;
+    result.selections = {{12, 2}, {7, 1}};
+    EXPECT_TRUE(CounterDialog::isResultCurrent(captured, captured, result));
+
+    CounterContext current = captured;
+    current.offeredOptions = {{7, "Renamed night", 5}, {12, "Renamed charge", 5}};
+    EXPECT_TRUE(CounterDialog::isResultCurrent(captured, current, result));
+
+    current = captured;
+    current.initialQuantities.insert(12, 3);
+    EXPECT_TRUE(CounterDialog::isResultCurrent(captured, current, result));
+
+    current = captured;
+    current.initialQuantities.clear();
+    current.initialQuantities.insert(99, 3);
+    EXPECT_TRUE(CounterDialog::isResultCurrent(captured, current, result));
+
+    current = captured;
+    current.objectId += 1;
+    EXPECT_FALSE(CounterDialog::isResultCurrent(captured, current, result));
+
+    current = captured;
+    current.zoneChangeGeneration += 1;
+    EXPECT_FALSE(CounterDialog::isResultCurrent(captured, current, result));
+
+    current = captured;
+    current.offeredOptions.removeLast();
+    EXPECT_FALSE(CounterDialog::isResultCurrent(captured, current, result));
+
+    current = captured;
+    current.offeredOptions[0].availableCount = 4;
+    EXPECT_FALSE(CounterDialog::isResultCurrent(captured, current, result));
+
+    current = captured;
+    current.remainingForThisObject = 4;
+    EXPECT_FALSE(CounterDialog::isResultCurrent(captured, current, result));
+
+    auto mismatchedResult = result;
+    mismatchedResult.zoneChangeGeneration += 1;
+    EXPECT_FALSE(CounterDialog::isResultCurrent(captured, captured, mismatchedResult));
 }

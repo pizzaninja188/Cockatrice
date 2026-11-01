@@ -74,6 +74,15 @@ struct RuledPendingCostSelection
     quint32 counterOptionId = 0;
 };
 
+struct RuledPendingCounterContribution
+{
+    int costIndex = -1;
+    quint32 objectId = 0;
+    quint64 zoneChangeGeneration = 0;
+    quint32 optionId = 0;
+    quint32 count = 0;
+};
+
 inline bool ruledCounterSelectionStillLegal(const RuledPendingCostSelection &selection, const RuledCostChoice &choice)
 {
     if (choice.kind != RuledCostChoiceKind::RemoveCounters || choice.counterCount == 0 ||
@@ -215,6 +224,8 @@ struct PendingActivatedAbility
     QVector<quint32> lifePipIndices;
     bool targetingCostApplied = false;
     bool restartAfterTargetInvalidation = false;
+    QVector<RuledPendingCounterContribution> counterGroupContributions;
+    bool counterGroupConfirmed = false;
 
     /// Shared activation identity and selected target payload; payment cohorts are appended by the host.
     void writeActivationHeader(ruled::v1::ActivateAbility &command) const
@@ -243,6 +254,20 @@ struct PendingActivatedAbility
         }
     }
 };
+
+[[nodiscard]] bool ruledStageCounterContributions(
+    PendingActivatedAbility &pending,
+    int costIndex,
+    quint32 objectId,
+    quint64 zoneChangeGeneration,
+    const QVector<RuledPendingCounterContribution> &replacementRows);
+[[nodiscard]] bool ruledReconcileCounterContributions(PendingActivatedAbility &pending,
+                                                      const QVector<RuledCostChoice> &currentChoices);
+[[nodiscard]] bool ruledConfirmCounterContributions(PendingActivatedAbility &pending);
+[[nodiscard]] std::optional<ruled::v1::BeginAbilityActivation> ruledBuildCounterGroupBegin(
+    const RuledClientState &state,
+    const PendingActivatedAbility &pending,
+    const QVector<ruled::v1::FlexPipPayment> &flexPayments);
 
 template <typename Prompt>
 [[nodiscard]] inline bool ruledApplyLoyaltyXChoice(PendingActivatedAbility &pending,

@@ -216,59 +216,6 @@ QString RuledPendingCast::formatSimpleManaCost(const QMap<QChar, int> &cost)
     return out;
 }
 
-QVector<RuledFlexPip> RuledPendingCast::parseFlexPips(const QString &manaCost)
-{
-    // Walk the Scryfall brace groups in order so each pip's index matches the engine's
-    // ManaCost pip order. Flexible pips (CR 107.4d–f) contain a slash: {G/U} hybrid,
-    // {2/W} mono-hybrid, {C/P} Phyrexian. Everything else just advances the index.
-    QVector<RuledFlexPip> out;
-    const QString validColors = QStringLiteral("WUBRG");
-    quint32 index = 0;
-    bool inBraces = false;
-    QString token;
-    for (QChar c : manaCost) {
-        if (c == '{') {
-            inBraces = true;
-            token.clear();
-            continue;
-        }
-        if (c == '}') {
-            inBraces = false;
-            const int slash = token.indexOf('/');
-            if (slash > 0) {
-                const QString left = token.left(slash).toUpper();
-                const QString right = token.mid(slash + 1).toUpper();
-                RuledFlexPip pip;
-                pip.pipIndex = index;
-                bool numeric = false;
-                const int leftNum = left.toInt(&numeric);
-                if (right == QLatin1String("P") && left.size() == 1 && validColors.contains(left)) {
-                    pip.phyrexian = true;
-                    pip.colorA = left.at(0);
-                    out.append(pip);
-                } else if (numeric && right.size() == 1 && validColors.contains(right)) {
-                    pip.generic = leftNum;
-                    pip.colorA = right.at(0);
-                    out.append(pip);
-                } else if (left.size() == 1 && right.size() == 1 && validColors.contains(left) &&
-                           validColors.contains(right)) {
-                    pip.colorA = left.at(0);
-                    pip.colorB = right.at(0);
-                    out.append(pip);
-                }
-                // Unrecognized slash forms (e.g. {G/U/P}, {S}) are left for the engine to reject.
-            }
-            ++index;
-            token.clear();
-            continue;
-        }
-        if (inBraces) {
-            token.append(c);
-        }
-    }
-    return out;
-}
-
 bool RuledPendingCast::flexPipMatchesColor(const RuledFlexPip &pip, QChar color)
 {
     const QChar c = color.toUpper();

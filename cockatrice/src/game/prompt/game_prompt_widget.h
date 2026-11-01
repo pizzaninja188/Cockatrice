@@ -5,6 +5,8 @@
 #include <QVector>
 #include <QWidget>
 
+#include <optional>
+
 class QLabel;
 class QPushButton;
 class QHBoxLayout;
@@ -128,6 +130,8 @@ public:
         bool variableManaContribution = false;
         /// ClickChoice only: label for the optional empty answer when it has specific meaning.
         QString clickChoiceDeclineLabel;
+        /// CostSelection only: an explicit caller result overrides the legacy selected-count check.
+        std::optional<bool> costSelectionConfirmable = std::nullopt;
     };
 
     /// Independent async inputs that all mean "mid-cast / mid-activation" and OR into
