@@ -4,8 +4,8 @@ use crate::primitives::{
     BattlefieldAggregate, CardResultAction, CardResultSource, CastCostGroupDef, CastCostOptionDef,
     CastCostReceiptCondition, CompiledProgram, EffectContext, FaceChangeAction, GameCondition,
     ObjectContributionKind, ProgramCastPaymentProfile, ProgramRequiredInput, SpecialActionAffected,
-    SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter, TargetKind, TargetSchema,
-    TargetingDef, TokenCopySource, TriggerCondition, ZoneCardFilter,
+    SpellEffectKind, SpellKeyword, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
+    TargetSchema, TargetingDef, TokenCopySource, TriggerCondition, ZoneCardFilter,
 };
 use crate::token_def::TokenDefinition;
 use crate::PresentationFaceMetadata;
@@ -1237,7 +1237,13 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                     reason,
                 })?;
         }
-        if let StaticAbilityDef::GrantSpellKeyword { filter, .. } = ability {
+        if let StaticAbilityDef::GrantSpellKeyword { filter, keyword } = ability {
+            if *keyword == SpellKeyword::Rebound {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "static Rebound spell keyword grants are not supported".into(),
+                });
+            }
             filter
                 .validate()
                 .map_err(|reason| RegistryError::InvalidCard {

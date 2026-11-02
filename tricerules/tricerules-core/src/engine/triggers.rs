@@ -579,12 +579,16 @@ impl GameEngine {
                 )),
                 GameEvent::PhaseBegan {
                     phase: rv1::PhaseId::Upkeep,
-                    ..
-                } => delayed.extend(self.state.dispatch_event_observers(
-                    ObservedGameEvent::BeginningOfUpkeep {
-                        turn_instance: self.state.turn_instance,
-                    },
-                )),
+                    active_player,
+                } => {
+                    delayed.extend(self.state.dispatch_event_observers(
+                        ObservedGameEvent::BeginningOfUpkeep {
+                            active_player: *active_player,
+                            turn_instance: self.state.turn_instance,
+                        },
+                    ));
+                    delayed.extend(self.collect_scheduled_rebound_triggers(*active_player));
+                }
                 GameEvent::Dies { source, .. } => {
                     delayed.extend(self.state.dispatch_event_observers(ObservedGameEvent::Dies(
                         TriggerObjectRef {

@@ -226,4 +226,8 @@ pub enum SpellKeyword {
     /// CR 702.85: when this spell is cast, exile through the first nonland with lower mana value;
     /// the resulting spell must also be lower mana value, and all uncast cards go to library bottom.
     Cascade,
+    /// CR 702.88: a hand-cast instant or sorcery that resolves is exiled for a possible cast on its
+    /// controller's next upkeep. Multiple instances are redundant. Printed on Artful Maneuver and
+    /// Taigam's Strike.
+    Rebound,
 }

@@ -3607,3 +3607,3193 @@ fn narset_c1_admitted_flat_grant_captures_flashback_without_rebound_exit() {
     );
     narset_c1_assert_no_scheduled_rebounds(&engine, "the non-hand Flashback resolution");
 }
+
+#[test]
+fn narset_phase_c2_rebound_waits_for_own_upkeep_then_declines_once() {
+    let (mut engine, source, source_generation) = narset_rebound_lifetime_fixture(6_110_401);
+    let controller = engine.state.players[0].id;
+    let opponent = engine.state.players[1].id;
+    arm_narset_observer(&mut engine, source);
+    ensure_in_hand(&mut engine, 0, "opt");
+    let hand_before_opt = engine.state.players[0].hand.len();
+    let (opt, cast_batch) = narset_c1_cast_actual_hand_spell(
+        &mut engine,
+        0,
+        "opt",
+        0,
+        0,
+        Vec::new(),
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    assert_one_rebound_trigger_for_cast(&engine, source, source_generation, opt);
+    assert_eq!(
+        cast_batch
+            .events
+            .iter()
+            .filter(|event| matches!(&event.ev, Some(Ev::StackPushed(_))))
+            .count(),
+        2,
+        "the actual Opt and its ordinary grant trigger are each pushed once"
+    );
+    narset_c1_assert_no_scheduled_rebounds(&engine, "before the actual Opt resolves");
+
+    narset_c1_capture_priority_round(&mut engine);
+    let exact_grant = expected_rebound_grants_for_cast(opt);
+    assert_eq!(serialized_rebound_grants(&engine), exact_grant);
+    narset_c1_assert_no_scheduled_rebounds(&engine, "while the actual Opt's grant is live");
+
+    let scry_batch = narset_c1_capture_priority_round(&mut engine);
+    let (scry_decider, scry_prompt_id, scry_candidates) = {
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the actual Opt reaches its printed Scry choice");
+        assert_eq!(pending.presentation.source_object_id, opt.object_id);
+        assert_eq!(pending.presentation.choice_kind, ChoiceKind::LibraryTop);
+        (
+            pending.deciding_player,
+            pending.resolution_prompt_id.get(),
+            pending.presentation.candidates.clone(),
+        )
+    };
+    let scry_offer = find_resolution_choice(&scry_batch)
+        .expect("the actual Scry publishes its current resolution choice");
+    assert_eq!(scry_offer.source_object_id, opt.object_id);
+    assert_eq!(
+        scry_offer.choice_kind,
+        ChoiceKind::LibraryTop as i32,
+        "the actual Opt parks at its printed Scry"
+    );
+    assert_ne!(
+        scry_prompt_id, 0,
+        "the Scry offer has a genuine prompt nonce"
+    );
+    assert_eq!(scry_offer.resolution_prompt_id, scry_prompt_id);
+    let mut scry_answer = submit_resolution_choice(scry_candidates);
+    match scry_answer.cmd.as_mut() {
+        Some(Cmd::SubmitResolutionChoice(answer)) => {
+            answer.resolution_prompt_id = scry_offer.resolution_prompt_id;
+        }
+        _ => panic!("the actual Scry answer is a resolution-choice command"),
+    }
+    let opt_completion = engine
+        .apply_command(scry_decider, &scry_answer)
+        .expect("answer the current Scry offer and finish the actual Opt");
+    narset_c1_assert_one_stack_resolved(
+        &opt_completion,
+        opt.object_id,
+        controller,
+        tricerules_proto::ruled::v1::StackResolveDestination::Exile,
+    );
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(engine.state.players[0].hand.len(), hand_before_opt);
+    assert_eq!(
+        engine.state.objects[&opt.object_id].zone,
+        tricerules_core::Zone::Exile
+    );
+    assert_eq!(engine.state.objects[&opt.object_id].owner, controller);
+    let opt_stack_generation = opt
+        .zone_change_generation
+        .expect("the actual Opt retains its exact stack incarnation");
+    let exile_generation = engine.state.zone_change_generation[&opt.object_id];
+    assert_eq!(exile_generation, opt_stack_generation + 1);
+    assert_eq!(serialized_rebound_grants(&engine), serde_json::json!([]));
+
+    let saved_schedule = narset_c1_exclusion_scheduled_rebounds(&engine);
+    let saved_records = saved_schedule
+        .as_array()
+        .expect("diagnostics expose the private scheduled-Rebound records");
+    assert_eq!(
+        saved_records.len(),
+        1,
+        "the exact Opt schedules Rebound once"
+    );
+    let saved_record = saved_records[0].clone();
+    assert_eq!(
+        saved_record["source"]["object_id"],
+        serde_json::json!(opt.object_id)
+    );
+    assert_eq!(
+        saved_record["source"]["zone_change_generation"],
+        serde_json::json!(opt_stack_generation.to_string())
+    );
+    assert_eq!(
+        saved_record["exiled"]["object_id"],
+        serde_json::json!(opt.object_id)
+    );
+    assert_eq!(
+        saved_record["exiled"]["zone_change_generation"],
+        serde_json::json!(exile_generation.to_string())
+    );
+    assert_eq!(saved_record["controller"], serde_json::json!(controller));
+    assert_eq!(saved_record["card_id"], serde_json::json!("opt"));
+    assert_eq!(saved_record["card_name"], serde_json::json!("Opt"));
+    assert_eq!(saved_record["source_face_index"], serde_json::json!("0"));
+
+    end_active_turn(&mut engine, controller);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(
+        narset_c1_exclusion_scheduled_rebounds(&engine),
+        saved_schedule,
+        "the opponent's upkeep leaves the exact Opt schedule untouched"
+    );
+    assert_eq!(
+        engine.state.objects[&opt.object_id].zone,
+        tricerules_core::Zone::Exile
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&opt.object_id],
+        exile_generation
+    );
+
+    pass_priority_round(&mut engine);
+    pass_priority_round(&mut engine);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Main1);
+    end_active_turn(&mut engine, opponent);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Upkeep);
+
+    let rebound_triggers = engine
+        .state
+        .stack
+        .iter()
+        .filter(|item| {
+            item.is_triggered
+                && !item.is_copy
+                && item.card_id == "opt"
+                && item.controller == controller
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        rebound_triggers.len(),
+        1,
+        "the exact exiled Opt creates one ordinary noncopy Rebound trigger at its controller's next own upkeep"
+    );
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "the delayed Rebound trigger is the only object on the stack"
+    );
+    let rebound_trigger = &engine.state.stack[0];
+    assert!(rebound_trigger.is_triggered);
+    assert!(!rebound_trigger.is_copy);
+    assert_eq!(rebound_trigger.card_id, "opt");
+    assert_eq!(rebound_trigger.face_index, 0);
+    assert_eq!(rebound_trigger.controller, controller);
+    assert_eq!(
+        rebound_trigger.source_permanent_id,
+        Some(opt.object_id),
+        "the delayed trigger keeps the old physical Opt as its source"
+    );
+    assert_eq!(
+        rebound_trigger.source_zone_change, opt_stack_generation,
+        "the trigger source is the Opt's old stack incarnation"
+    );
+    assert_eq!(
+        rebound_trigger.trigger_context.observed_object,
+        Some(tricerules_core::state::TriggerObjectRef {
+            object_id: opt.object_id,
+            zone_change_generation: exile_generation,
+            controller_at_event: controller,
+        }),
+        "the trigger watches the exact current exile incarnation"
+    );
+    let rebound_trigger_id = rebound_trigger.id;
+    assert_eq!(
+        narset_c1_exclusion_scheduled_rebounds(&engine),
+        serde_json::json!([]),
+        "the matched one-shot schedule is consumed when the trigger is staged"
+    );
+    assert_eq!(
+        engine.state.objects[&opt.object_id].zone,
+        tricerules_core::Zone::Exile
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&opt.object_id],
+        exile_generation
+    );
+
+    let trigger_resolution = narset_c1_capture_priority_round(&mut engine);
+    assert!(engine.state.stack.is_empty());
+    let special_offer = find_resolution_choice(&trigger_resolution)
+        .expect("resolving only the delayed trigger publishes its optional cast offer");
+    assert_eq!(special_offer.choice_kind, ChoiceKind::SpecialCast as i32);
+    assert_ne!(special_offer.resolution_prompt_id, 0);
+    let (deciding_player, current_prompt_id) = {
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the delayed trigger parks at the optional Rebound cast offer");
+        assert_eq!(pending.deciding_player, controller);
+        assert_eq!(pending.presentation.choice_kind, ChoiceKind::SpecialCast);
+        assert_eq!(pending.presentation.min, 0);
+        assert_eq!(pending.presentation.max, 1);
+        assert_eq!(
+            pending.presentation.candidates,
+            vec![opt.object_id],
+            "the offer names only the exact exiled Opt"
+        );
+        assert_eq!(
+            pending.presentation.source_object_id, rebound_trigger_id,
+            "the parked parent and prompt source are the delayed trigger"
+        );
+        assert_ne!(
+            pending.presentation.source_object_id, opt.object_id,
+            "the prompt source is not assumed to be the physical Opt"
+        );
+        let tricerules_core::state::ResolutionContinuation::SpecialCast {
+            stack,
+            exiled,
+            face_index,
+            method,
+            cost,
+            permission_scope,
+            completion,
+            ..
+        } = &pending.continuation
+        else {
+            panic!("the delayed trigger owns an existing SpecialCast continuation");
+        };
+        assert_eq!(stack.item.id, rebound_trigger_id);
+        assert!(stack.item.is_triggered);
+        assert!(!stack.item.is_copy);
+        assert_eq!(stack.item.source_permanent_id, Some(opt.object_id));
+        assert_eq!(stack.item.source_zone_change, opt_stack_generation);
+        assert_eq!(stack.item.card_id, "opt");
+        assert_eq!(stack.item.face_index, 0);
+        assert_eq!(stack.item.controller, controller);
+        assert_eq!(exiled.object_id, opt.object_id);
+        assert_eq!(exiled.zone_change_generation, exile_generation);
+        assert_eq!(exiled.controller_at_event, controller);
+        assert_eq!(*face_index, 0);
+        assert_eq!(*method, tricerules_core::state::SpellCastMethod::Permission);
+        assert_eq!(
+            *cost,
+            tricerules_cards::mana::ManaCost::default(),
+            "the Rebound offer uses zero alternate mana cost"
+        );
+        assert_eq!(
+            *permission_scope,
+            Some(tricerules_core::state::ExilePlayPermissionScope::CastCard)
+        );
+        assert!(matches!(
+            completion,
+            tricerules_core::state::SpecialCastCompletion::ResumeStack
+        ));
+        (pending.deciding_player, pending.resolution_prompt_id.get())
+    };
+    assert_eq!(
+        special_offer.source_object_id, rebound_trigger_id,
+        "the current wire offer uses the delayed trigger as its parent"
+    );
+    assert_eq!(special_offer.resolution_prompt_id, current_prompt_id);
+    assert_ne!(
+        current_prompt_id, 0,
+        "the current cast offer has a real nonce"
+    );
+
+    let mut decline = submit_resolution_decision(ResolutionChoiceDecision::Decline);
+    match decline.cmd.as_mut() {
+        Some(Cmd::SubmitResolutionChoice(answer)) => {
+            answer.resolution_prompt_id = special_offer.resolution_prompt_id;
+        }
+        _ => panic!("the Rebound decline is a resolution-choice command"),
+    }
+    let decline_batch = engine
+        .apply_command(deciding_player, &decline)
+        .expect("decline the genuine current Rebound offer");
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(
+        engine.state.objects[&opt.object_id].zone,
+        tricerules_core::Zone::Exile
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&opt.object_id],
+        exile_generation
+    );
+    assert_eq!(engine.state.objects[&opt.object_id].owner, controller);
+    assert!(
+        decline_batch.events.iter().all(|event| {
+            !matches!(
+                &event.ev,
+                Some(Ev::StackPushed(pushed)) if pushed.object_id == opt.object_id
+            )
+        }),
+        "declining does not cast the exact exiled Opt"
+    );
+    assert!(
+        engine
+            .state
+            .active_exile_play_permissions
+            .iter()
+            .all(|permission| permission.object_id != opt.object_id),
+        "the decline leaves no persistent permission for this Opt"
+    );
+    assert_eq!(
+        narset_c1_exclusion_scheduled_rebounds(&engine),
+        serde_json::json!([])
+    );
+    assert_eq!(serialized_rebound_grants(&engine), serde_json::json!([]));
+
+    pass_priority_round(&mut engine);
+    pass_priority_round(&mut engine);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Main1);
+    end_active_turn(&mut engine, controller);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(
+        narset_c1_exclusion_scheduled_rebounds(&engine),
+        serde_json::json!([]),
+        "the declined opportunity does not retry at an opponent's upkeep"
+    );
+    pass_priority_round(&mut engine);
+    pass_priority_round(&mut engine);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Main1);
+    end_active_turn(&mut engine, opponent);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    assert!(engine.state.stack.is_empty());
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(
+        narset_c1_exclusion_scheduled_rebounds(&engine),
+        serde_json::json!([]),
+        "the one-shot Rebound opportunity does not return at the next own upkeep"
+    );
+    assert_eq!(
+        engine.state.objects[&opt.object_id].zone,
+        tricerules_core::Zone::Exile
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&opt.object_id],
+        exile_generation
+    );
+    assert!(engine
+        .state
+        .active_exile_play_permissions
+        .iter()
+        .all(|permission| permission.object_id != opt.object_id));
+}
+
+struct NarsetC2ReboundTriggerFixture {
+    engine: GameEngine,
+    controller: i32,
+    opponent: i32,
+    opt_object_id: u32,
+    exile_generation: u64,
+    rebound_trigger_id: u32,
+}
+
+fn narset_c2_rebound_trigger_fixture(seed: u64) -> NarsetC2ReboundTriggerFixture {
+    let (mut engine, source, source_generation) = narset_rebound_lifetime_fixture(seed);
+    let controller = engine.state.players[0].id;
+    let opponent = engine.state.players[1].id;
+    arm_narset_observer(&mut engine, source);
+
+    ensure_in_hand(&mut engine, 0, "opt");
+    let hand_before_opt = engine.state.players[0].hand.len();
+    let (opt, cast_batch) = narset_c1_cast_actual_hand_spell(
+        &mut engine,
+        0,
+        "opt",
+        0,
+        0,
+        Vec::new(),
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    assert_one_rebound_trigger_for_cast(&engine, source, source_generation, opt);
+    assert_eq!(
+        cast_batch
+            .events
+            .iter()
+            .filter(|event| matches!(&event.ev, Some(Ev::StackPushed(_))))
+            .count(),
+        2,
+        "the actual Opt and its ordinary grant trigger are each pushed once"
+    );
+
+    narset_c1_capture_priority_round(&mut engine);
+    assert_eq!(
+        serialized_rebound_grants(&engine),
+        expected_rebound_grants_for_cast(opt),
+        "resolving the actual grant trigger records this exact Opt cast"
+    );
+    let scry_batch = narset_c1_capture_priority_round(&mut engine);
+    let (scry_decider, scry_candidates) = {
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the actual Opt reaches its printed Scry choice");
+        assert_eq!(pending.presentation.source_object_id, opt.object_id);
+        assert_eq!(pending.presentation.choice_kind, ChoiceKind::LibraryTop);
+        (
+            pending.deciding_player,
+            pending.presentation.candidates.clone(),
+        )
+    };
+    let scry_offer = find_resolution_choice(&scry_batch)
+        .expect("the actual Scry publishes its current resolution choice");
+    assert_eq!(scry_offer.choice_kind, ChoiceKind::LibraryTop as i32);
+    let mut scry_answer = submit_resolution_choice(scry_candidates);
+    match scry_answer.cmd.as_mut() {
+        Some(Cmd::SubmitResolutionChoice(answer)) => {
+            answer.resolution_prompt_id = scry_offer.resolution_prompt_id;
+        }
+        _ => panic!("the actual Scry answer is a resolution-choice command"),
+    }
+    let opt_completion = engine
+        .apply_command(scry_decider, &scry_answer)
+        .expect("answer the current Scry choice and finish the actual Opt");
+    narset_c1_assert_one_stack_resolved(
+        &opt_completion,
+        opt.object_id,
+        controller,
+        tricerules_proto::ruled::v1::StackResolveDestination::Exile,
+    );
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(engine.state.players[0].hand.len(), hand_before_opt);
+    assert_eq!(
+        engine.state.objects[&opt.object_id].zone,
+        tricerules_core::Zone::Exile
+    );
+    assert_eq!(engine.state.objects[&opt.object_id].owner, controller);
+    let opt_stack_generation = opt
+        .zone_change_generation
+        .expect("the actual Opt retains its exact stack incarnation");
+    let exile_generation = engine.state.zone_change_generation[&opt.object_id];
+    assert_eq!(exile_generation, opt_stack_generation + 1);
+    assert_eq!(serialized_rebound_grants(&engine), serde_json::json!([]));
+
+    let schedule = narset_c1_exclusion_scheduled_rebounds(&engine);
+    let records = schedule
+        .as_array()
+        .expect("diagnostics expose the scheduled-Rebound records");
+    assert_eq!(records.len(), 1, "the exact Opt schedules Rebound once");
+    assert_eq!(
+        records[0]["source"]["object_id"],
+        serde_json::json!(opt.object_id)
+    );
+    assert_eq!(
+        records[0]["source"]["zone_change_generation"],
+        serde_json::json!(opt_stack_generation.to_string())
+    );
+    assert_eq!(
+        records[0]["exiled"]["object_id"],
+        serde_json::json!(opt.object_id)
+    );
+    assert_eq!(
+        records[0]["exiled"]["zone_change_generation"],
+        serde_json::json!(exile_generation.to_string())
+    );
+    assert_eq!(records[0]["controller"], serde_json::json!(controller));
+
+    end_active_turn(&mut engine, controller);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    assert_eq!(
+        narset_c1_exclusion_scheduled_rebounds(&engine),
+        schedule,
+        "the opponent's upkeep leaves the exact Opt schedule untouched"
+    );
+    assert_eq!(
+        engine.state.objects[&opt.object_id].zone,
+        tricerules_core::Zone::Exile
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&opt.object_id],
+        exile_generation
+    );
+    pass_priority_round(&mut engine);
+    pass_priority_round(&mut engine);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Main1);
+    end_active_turn(&mut engine, opponent);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Upkeep);
+
+    assert_eq!(engine.state.stack.len(), 1);
+    let rebound_trigger = &engine.state.stack[0];
+    assert!(rebound_trigger.is_triggered);
+    assert!(!rebound_trigger.is_copy);
+    assert_eq!(rebound_trigger.card_id, "opt");
+    assert_eq!(rebound_trigger.controller, controller);
+    assert_eq!(rebound_trigger.source_permanent_id, Some(opt.object_id));
+    assert_eq!(rebound_trigger.source_zone_change, opt_stack_generation);
+    assert_eq!(
+        rebound_trigger.trigger_context.observed_object,
+        Some(tricerules_core::state::TriggerObjectRef {
+            object_id: opt.object_id,
+            zone_change_generation: exile_generation,
+            controller_at_event: controller,
+        })
+    );
+    let rebound_trigger_id = rebound_trigger.id;
+    assert_eq!(
+        narset_c1_exclusion_scheduled_rebounds(&engine),
+        serde_json::json!([]),
+        "staging the own-upkeep trigger consumes the one-shot schedule"
+    );
+
+    NarsetC2ReboundTriggerFixture {
+        engine,
+        controller,
+        opponent,
+        opt_object_id: opt.object_id,
+        exile_generation,
+        rebound_trigger_id,
+    }
+}
+
+#[test]
+fn narset_phase_c2_accepts_rebound_opt_and_completes_scry_draw() {
+    use tricerules_proto::ruled::v1 as rv1;
+
+    let NarsetC2ReboundTriggerFixture {
+        mut engine,
+        controller,
+        opt_object_id,
+        exile_generation,
+        rebound_trigger_id,
+        opponent,
+        ..
+    } = narset_c2_rebound_trigger_fixture(6_110_402);
+    let trigger_resolution = narset_c1_capture_priority_round(&mut engine);
+    assert!(engine.state.stack.is_empty());
+    let special_offer = find_resolution_choice(&trigger_resolution)
+        .expect("resolving the genuine delayed trigger publishes its optional cast offer");
+    assert_eq!(special_offer.choice_kind, ChoiceKind::SpecialCast as i32);
+    assert_eq!(special_offer.source_object_id, rebound_trigger_id);
+    assert_eq!(special_offer.candidate_object_ids, vec![opt_object_id]);
+    assert_eq!(special_offer.candidate_selectable, [true]);
+    assert_ne!(special_offer.resolution_prompt_id, 0);
+
+    let (deciding_player, current_prompt_id) = {
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the delayed trigger parks at the optional Rebound cast offer");
+        assert_eq!(pending.deciding_player, controller);
+        assert_eq!(pending.presentation.choice_kind, ChoiceKind::SpecialCast);
+        assert_eq!(pending.presentation.candidates, vec![opt_object_id]);
+        let tricerules_core::state::ResolutionContinuation::SpecialCast {
+            stack,
+            exiled,
+            face_index,
+            method,
+            cost,
+            permission_scope,
+            completion,
+            ..
+        } = &pending.continuation
+        else {
+            panic!("the delayed trigger owns an existing SpecialCast continuation");
+        };
+        assert_eq!(stack.item.id, rebound_trigger_id);
+        assert_eq!(exiled.object_id, opt_object_id);
+        assert_eq!(exiled.zone_change_generation, exile_generation);
+        assert_eq!(*face_index, 0);
+        assert_eq!(*method, tricerules_core::state::SpellCastMethod::Permission);
+        assert_eq!(*cost, tricerules_cards::mana::ManaCost::default());
+        assert_eq!(
+            *permission_scope,
+            Some(tricerules_core::state::ExilePlayPermissionScope::CastCard)
+        );
+        assert!(matches!(
+            completion,
+            tricerules_core::state::SpecialCastCompletion::ResumeStack
+        ));
+        (pending.deciding_player, pending.resolution_prompt_id.get())
+    };
+    assert_eq!(special_offer.resolution_prompt_id, current_prompt_id);
+
+    let current_legal = engine.initial_response_batch();
+    let offered_actions = current_legal.legal_by_player[&controller]
+        .zone_cast_actions
+        .iter()
+        .filter(|action| action.object_id == opt_object_id)
+        .cloned()
+        .collect::<Vec<_>>();
+    assert_eq!(offered_actions.len(), 1);
+    let action = &offered_actions[0];
+    assert_eq!(action.source_zone, rv1::CastSourceZone::Exile as i32);
+    assert_eq!(action.object_id, opt_object_id);
+    assert_eq!(action.zone_change_generation, exile_generation);
+    assert_eq!(action.face_index, 0);
+    assert_eq!(action.cast_method, rv1::CastMethod::Permission as i32);
+    assert_eq!(action.cost, "", "zero Rebound cost is the empty string");
+    let offered_permission_id = action
+        .casting_permission_id
+        .expect("the current legal offer carries its permission id");
+    assert_ne!(offered_permission_id, 0);
+    let announcement = rv1::SpellCastAnnouncement {
+        source: Some(exile_cast_source(opt_object_id, exile_generation)),
+        face_index: action.face_index,
+        cast_method: action.cast_method,
+        casting_permission_id: Some(offered_permission_id),
+        ..Default::default()
+    };
+    let begin_batch = engine
+        .apply_command(
+            deciding_player,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: current_prompt_id,
+                    decision: ResolutionChoiceDecision::CastSpell as i32,
+                    spell_cast_announcement: Some(announcement),
+                    ..Default::default()
+                })),
+            },
+        )
+        .expect("accept the current genuine Rebound cast offer");
+    assert_eq!(
+        begin_batch
+            .events
+            .iter()
+            .filter(|event| matches!(&event.ev, Some(Ev::StackPushed(pushed)) if pushed.object_id == opt_object_id))
+            .count(),
+        0,
+        "beginning the child cast does not publish StackPushed"
+    );
+    assert_eq!(
+        engine.state.objects[&opt_object_id].zone,
+        tricerules_core::Zone::Stack
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&opt_object_id],
+        exile_generation + 1
+    );
+    let pending_cast = engine
+        .state
+        .pending_spell_cast
+        .as_ref()
+        .expect("the accepted Rebound choice creates a pending spell transaction");
+    assert!(pending_cast.resolution_time_offer);
+    assert_eq!(pending_cast.caster, controller);
+    assert_eq!(pending_cast.reserved_object_id, opt_object_id);
+    assert_eq!(pending_cast.original_zone, tricerules_core::Zone::Exile);
+    assert_eq!(
+        pending_cast.original_zone_change_generation,
+        exile_generation
+    );
+    assert_eq!(
+        pending_cast.announcement.casting_permission_id,
+        Some(offered_permission_id)
+    );
+    let parked_parent = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the parent resolution stays suspended while the child is paid");
+    let tricerules_core::state::ResolutionContinuation::SpecialCast { stack, .. } =
+        &parked_parent.continuation
+    else {
+        panic!("the parked parent remains the delayed Rebound trigger");
+    };
+    assert_eq!(stack.item.id, rebound_trigger_id);
+
+    let caster_index = engine
+        .state
+        .player_idx(controller)
+        .expect("the Rebound controller remains in the game");
+    let mana_before_commit = engine.state.players[caster_index].mana_pool;
+    let transaction_id = pending_cast.transaction_id;
+    let revision = engine.state.command_index;
+    let preview = engine.preview_payment_scenario(
+        controller,
+        &rv1::PreviewPayment {
+            transaction_id,
+            revision,
+            commit_spell_cast: Some(rv1::CommitSpellCast {
+                transaction_id,
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    );
+    assert!(preview.valid && preview.complete, "{preview:?}");
+    assert_eq!(
+        engine.state.command_index, revision,
+        "preview is query-only"
+    );
+    assert_eq!(
+        engine.state.players[caster_index].mana_pool,
+        mana_before_commit
+    );
+    let cast_batch = engine
+        .apply_scenario_command(
+            controller,
+            &RuledCommand {
+                cmd: Some(Cmd::CommitSpellCast(rv1::CommitSpellCast {
+                    transaction_id,
+                    payment: preview.selection,
+                    restricted_mana: preview.restricted_mana,
+                })),
+            },
+        )
+        .expect("commit the free physical Opt cast from Exile");
+    assert_eq!(
+        engine.state.players[caster_index].mana_pool,
+        mana_before_commit
+    );
+    assert!(engine.state.pending_spell_cast.is_none());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(!engine
+        .state
+        .stack
+        .iter()
+        .any(|item| item.id == rebound_trigger_id));
+    let parent_resolved_index = cast_batch
+        .events
+        .iter()
+        .position(|event| {
+            matches!(&event.ev, Some(Ev::StackResolved(resolved)) if resolved.object_id == rebound_trigger_id)
+        })
+        .expect("the delayed Rebound parent resolves exactly once after its accepted child");
+    assert!(
+        cast_batch
+            .events
+            .iter()
+            .any(|event| matches!(&event.ev, Some(Ev::PriorityChanged(_)))),
+        "parent completion publishes priority after resolving the delayed trigger"
+    );
+    for (event_index, event) in cast_batch.events.iter().enumerate() {
+        if matches!(&event.ev, Some(Ev::PriorityChanged(_))) {
+            assert!(
+                parent_resolved_index < event_index,
+                "the parent StackResolved must precede every PriorityChanged in the child commit batch"
+            );
+        }
+    }
+    assert_eq!(
+        cast_batch
+            .events
+            .iter()
+            .filter(|event| matches!(&event.ev, Some(Ev::StackPushed(pushed)) if pushed.object_id == opt_object_id))
+            .count(),
+        1,
+        "committing publishes one physical Opt spell push"
+    );
+    assert_eq!(
+        engine.state.objects[&opt_object_id].zone,
+        tricerules_core::Zone::Stack
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&opt_object_id],
+        exile_generation + 1
+    );
+    let recast = engine
+        .state
+        .stack
+        .iter()
+        .find(|item| item.id == opt_object_id)
+        .expect("the exact exiled Opt is the committed physical spell");
+    assert_eq!(recast.card_id, "opt");
+    assert_eq!(recast.controller, controller);
+    assert_eq!(recast.cast_by, Some(controller));
+    assert_eq!(recast.face_index, 0);
+    assert_eq!(
+        recast.cast_method,
+        tricerules_core::state::SpellCastMethod::Permission
+    );
+    assert!(!recast.is_copy);
+    assert!(!recast.is_triggered);
+    assert!(recast.cast_occurrence.is_some());
+    assert!(engine
+        .state
+        .active_exile_play_permissions
+        .iter()
+        .all(|permission| permission.object_id != opt_object_id));
+    narset_c1_assert_no_scheduled_rebounds(&engine, "the accepted Rebound cast");
+    assert_eq!(serialized_rebound_grants(&engine), serde_json::json!([]));
+
+    let hand_before_recast_resolution = engine.state.players[caster_index].hand.len();
+    let recast_resolution = narset_c1_capture_priority_round(&mut engine);
+    let scry_offer = find_resolution_choice(&recast_resolution)
+        .expect("the actual recast Opt reaches its printed Scry choice");
+    assert_eq!(scry_offer.source_object_id, opt_object_id);
+    assert_eq!(scry_offer.choice_kind, ChoiceKind::LibraryTop as i32);
+    let (scry_decider, scry_candidates) = {
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the recast Opt parks at its Scry choice");
+        assert_eq!(pending.presentation.source_object_id, opt_object_id);
+        assert_eq!(pending.presentation.choice_kind, ChoiceKind::LibraryTop);
+        (
+            pending.deciding_player,
+            pending.presentation.candidates.clone(),
+        )
+    };
+    let mut scry_answer = submit_resolution_choice(scry_candidates);
+    match scry_answer.cmd.as_mut() {
+        Some(Cmd::SubmitResolutionChoice(answer)) => {
+            answer.resolution_prompt_id = scry_offer.resolution_prompt_id;
+        }
+        _ => panic!("the recast Scry answer is a resolution-choice command"),
+    }
+    let opt_completion = engine
+        .apply_command(scry_decider, &scry_answer)
+        .expect("finish the actual recast Scry and Draw");
+    narset_c1_assert_one_stack_resolved(
+        &opt_completion,
+        opt_object_id,
+        controller,
+        rv1::StackResolveDestination::Graveyard,
+    );
+    assert_eq!(
+        engine.state.players[caster_index].hand.len(),
+        hand_before_recast_resolution + 1
+    );
+    assert_eq!(
+        engine.state.objects[&opt_object_id].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&opt_object_id],
+        exile_generation + 2
+    );
+    assert!(engine.state.stack.is_empty());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.pending_spell_cast.is_none());
+    narset_c1_assert_no_scheduled_rebounds(&engine, "the completed Rebound Opt recast");
+    assert!(engine
+        .state
+        .active_exile_play_permissions
+        .iter()
+        .all(|permission| permission.object_id != opt_object_id));
+
+    pass_priority_round(&mut engine);
+    pass_priority_round(&mut engine);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Main1);
+    end_active_turn(&mut engine, controller);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    assert!(engine.state.stack.is_empty());
+    narset_c1_assert_no_scheduled_rebounds(
+        &engine,
+        "the opponent's upkeep after the accepted Rebound cast",
+    );
+    pass_priority_round(&mut engine);
+    pass_priority_round(&mut engine);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Main1);
+    end_active_turn(&mut engine, opponent);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    assert!(engine.state.stack.is_empty());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(triggered_stack_ids(&engine).is_empty());
+    narset_c1_assert_no_scheduled_rebounds(
+        &engine,
+        "the next own upkeep after the accepted Rebound cast",
+    );
+    assert!(engine
+        .state
+        .active_exile_play_permissions
+        .iter()
+        .all(|permission| permission.object_id != opt_object_id));
+}
+
+#[test]
+fn narset_phase_c2_actual_tishanas_tidebinder_counters_delayed_trigger() {
+    use tricerules_proto::ruled::v1 as rv1;
+
+    let NarsetC2ReboundTriggerFixture {
+        mut engine,
+        controller,
+        opponent,
+        opt_object_id,
+        exile_generation,
+        rebound_trigger_id,
+        ..
+    } = narset_c2_rebound_trigger_fixture(6_110_403);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    assert_eq!(engine.state.stack.len(), 1);
+    assert_eq!(engine.state.stack[0].id, rebound_trigger_id);
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine
+        .state
+        .active_exile_play_permissions
+        .iter()
+        .all(|permission| permission.object_id != opt_object_id));
+
+    engine
+        .apply_scenario_command(controller, &pass())
+        .expect("give the opponent priority before the delayed trigger resolves");
+    let tidebinder = cast_hand_card(
+        &mut engine,
+        1,
+        "tishanas_tidebinder",
+        ManaGift {
+            u: 1,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    pass_priority_round(&mut engine);
+    assert_eq!(
+        engine.state.objects[&tidebinder.object_id].zone,
+        tricerules_core::Zone::Battlefield,
+        "the actual Tidebinder resolves before its target is chosen"
+    );
+
+    let current_offer = engine.initial_response_batch();
+    let target_offer = current_offer.legal_by_player[&opponent]
+        .valid_targets_by_ability
+        .values()
+        .find(|ability_targets| {
+            ability_targets
+                .groups
+                .iter()
+                .any(|group| group.valid_stack_ids.contains(&rebound_trigger_id))
+        })
+        .expect("the current Tidebinder offer includes the delayed trigger on the stack");
+    assert!(target_offer
+        .groups
+        .iter()
+        .any(|group| group.valid_stack_ids.contains(&rebound_trigger_id)));
+    let choose_trigger = RuledCommand {
+        cmd: Some(Cmd::ChooseTriggerTarget(rv1::ChooseTriggerTarget {
+            targets: vec![TargetRef {
+                object_id: rebound_trigger_id,
+                kind: TargetRefKind::Stack as i32,
+                ..Default::default()
+            }],
+            ..Default::default()
+        })),
+    };
+    engine
+        .apply_scenario_command(opponent, &choose_trigger)
+        .expect("target the current ordinary Rebound trigger with Tidebinder");
+    let counter_batch = narset_c1_capture_priority_round(&mut engine);
+    assert_eq!(
+        counter_batch
+            .events
+            .iter()
+            .filter(|event| matches!(&event.ev, Some(Ev::StackObjectCountered(countered)) if countered.object_id == rebound_trigger_id))
+            .count(),
+        1,
+        "Tidebinder counters the exact ordinary delayed Rebound trigger"
+    );
+    assert!(!engine
+        .state
+        .stack
+        .iter()
+        .any(|item| item.id == rebound_trigger_id));
+    assert!(engine.state.stack.is_empty());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.pending_spell_cast.is_none());
+    assert!(!counter_batch.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(Ev::ResolutionChoiceRequired(choice))
+            if choice.choice_kind == ChoiceKind::SpecialCast as i32
+    )));
+    assert_eq!(
+        engine.state.objects[&opt_object_id].zone,
+        tricerules_core::Zone::Exile
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&opt_object_id],
+        exile_generation
+    );
+    assert!(engine
+        .state
+        .active_exile_play_permissions
+        .iter()
+        .all(|permission| permission.object_id != opt_object_id));
+    assert!(engine.initial_response_batch().legal_by_player[&controller]
+        .zone_cast_actions
+        .iter()
+        .all(|action| action.object_id != opt_object_id));
+    narset_c1_assert_no_scheduled_rebounds(&engine, "the countered delayed Rebound trigger");
+
+    pass_priority_round(&mut engine);
+    pass_priority_round(&mut engine);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Main1);
+    end_active_turn(&mut engine, controller);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    assert!(engine.state.stack.is_empty());
+    narset_c1_assert_no_scheduled_rebounds(
+        &engine,
+        "the opponent's upkeep after Tidebinder counters Rebound",
+    );
+    pass_priority_round(&mut engine);
+    pass_priority_round(&mut engine);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Main1);
+    end_active_turn(&mut engine, opponent);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    assert!(engine.state.stack.is_empty());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(triggered_stack_ids(&engine).is_empty());
+    assert_eq!(
+        engine.state.objects[&opt_object_id].zone,
+        tricerules_core::Zone::Exile
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&opt_object_id],
+        exile_generation
+    );
+    narset_c1_assert_no_scheduled_rebounds(
+        &engine,
+        "the next own upkeep after Tidebinder counters Rebound",
+    );
+    assert!(engine
+        .state
+        .active_exile_play_permissions
+        .iter()
+        .all(|permission| permission.object_id != opt_object_id));
+}
+
+#[test]
+fn narset_phase_c2_printed_artful_maneuver_resolves_and_schedules_once() {
+    use tricerules_proto::ruled::v1::StackResolveDestination;
+
+    const ARTFUL_MANEUVER_RON: &str = r#"(
+      id: "artful_maneuver",
+      name: "Artful Maneuver",
+      face_id: "artful_maneuver",
+      mana_cost: "{1}{W}",
+      types: ["Instant"],
+      spell_keywords: [Rebound],
+      spell_effect: [PumpTarget(power: 2, toughness: 2)],
+    )"#;
+    static REGISTRY: OnceLock<CardRegistry> = OnceLock::new();
+    let registry = REGISTRY.get_or_init(|| {
+        CardRegistry::from_chunks_and_tokens(
+            &[
+                ARTFUL_MANEUVER_RON,
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[],
+        )
+        .expect(
+            "the printed Artful Maneuver and shipped Grizzly Bears fixture definitions register",
+        )
+    });
+
+    let decks = Some(vec![
+        deck_with("forest", &["artful_maneuver", "grizzly_bears"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(registry, 6_110_404, &[0, 1], 20, decks, true)
+        .expect("printed Artful Maneuver prepared-state fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+
+    let grizzly = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
+    let grizzly_generation = engine
+        .state
+        .zone_change_generation
+        .get(&grizzly)
+        .copied()
+        .unwrap_or(0);
+    let controller = engine.state.players[0].id;
+    assert_eq!(
+        engine.state.objects[&grizzly].zone,
+        tricerules_core::Zone::Battlefield
+    );
+    assert_eq!(engine.effective_power(grizzly), Some(2));
+    assert_eq!(engine.effective_toughness(grizzly), Some(2));
+
+    let (artful, cast_batch) = narset_c1_cast_actual_hand_spell(
+        &mut engine,
+        0,
+        "artful_maneuver",
+        0,
+        0,
+        vec![TargetRef {
+            expected_zone_change_generation: Some(grizzly_generation),
+            object_id: grizzly,
+            damage_amount: 0,
+            group_index: 0,
+            kind: 0,
+        }],
+        ManaGift {
+            w: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let stack_generation = artful
+        .zone_change_generation
+        .expect("the actual Artful Maneuver hand cast has a stack generation");
+    let artful_owner = engine.state.objects[&artful.object_id].owner;
+    assert_eq!(artful_owner, controller);
+    assert_eq!(
+        cast_batch
+            .events
+            .iter()
+            .filter(|event| matches!(&event.ev, Some(Ev::StackPushed(pushed)) if pushed.object_id == artful.object_id))
+            .count(),
+        1,
+        "the physical hand cast publishes only its own StackPushed event"
+    );
+    assert!(engine.state.stack.iter().all(|item| !item.is_triggered));
+    assert_eq!(serialized_observer_count(&engine), 0);
+    assert_eq!(serialized_rebound_grants(&engine), serde_json::json!([]));
+    narset_c1_assert_no_scheduled_rebounds(&engine, "before printed Artful Maneuver resolves");
+    assert_eq!(
+        engine.state.objects[&artful.object_id].zone,
+        tricerules_core::Zone::Stack
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&artful.object_id],
+        stack_generation
+    );
+    assert_eq!(
+        engine
+            .state
+            .zone_change_generation
+            .get(&grizzly)
+            .copied()
+            .unwrap_or(0),
+        grizzly_generation,
+        "casting does not change the targeted Grizzly incarnation"
+    );
+    assert_eq!(engine.effective_power(grizzly), Some(2));
+    assert_eq!(engine.effective_toughness(grizzly), Some(2));
+
+    let presentation = engine.state.stack_presentations[&artful.object_id]
+        .primary
+        .clone();
+    let resolution = narset_c1_capture_priority_round(&mut engine);
+    narset_c1_assert_one_stack_resolved(
+        &resolution,
+        artful.object_id,
+        artful_owner,
+        StackResolveDestination::Exile,
+    );
+
+    let exile_generation = engine.state.zone_change_generation[&artful.object_id];
+    assert_eq!(exile_generation, stack_generation + 1);
+    assert_eq!(
+        engine.state.objects[&artful.object_id].zone,
+        tricerules_core::Zone::Exile
+    );
+    assert_eq!(engine.state.objects[&artful.object_id].owner, artful_owner);
+    assert_eq!(
+        engine.state.players[0]
+            .exile
+            .iter()
+            .filter(|object_id| **object_id == artful.object_id)
+            .count(),
+        1,
+        "the exact physical Artful Maneuver is exiled once"
+    );
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(
+        engine
+            .state
+            .zone_change_generation
+            .get(&grizzly)
+            .copied()
+            .unwrap_or(0),
+        grizzly_generation,
+        "resolving the pump keeps the same Grizzly incarnation"
+    );
+    assert_eq!(engine.effective_power(grizzly), Some(4));
+    assert_eq!(engine.effective_toughness(grizzly), Some(4));
+    assert_eq!(serialized_observer_count(&engine), 0);
+    assert_eq!(serialized_rebound_grants(&engine), serde_json::json!([]));
+
+    let snapshot = engine
+        .diagnostic_snapshot()
+        .expect("serialize complete state with the printed Rebound schedule");
+    let scheduled = snapshot["state"]["scheduled_rebounds"]
+        .as_array()
+        .expect("diagnostics expose scheduled-Rebound records");
+    assert_eq!(
+        scheduled.len(),
+        1,
+        "printed Artful Maneuver schedules Rebound once"
+    );
+    let record = &scheduled[0];
+    assert_eq!(
+        record["source"]["object_id"],
+        serde_json::json!(artful.object_id)
+    );
+    assert_eq!(
+        record["source"]["zone_change_generation"],
+        serde_json::json!(stack_generation.to_string())
+    );
+    assert_eq!(
+        record["source"]["controller_at_event"],
+        serde_json::json!(controller)
+    );
+    assert_eq!(
+        record["exiled"]["object_id"],
+        serde_json::json!(artful.object_id)
+    );
+    assert_eq!(
+        record["exiled"]["zone_change_generation"],
+        serde_json::json!(exile_generation.to_string())
+    );
+    assert_eq!(
+        record["exiled"]["controller_at_event"],
+        serde_json::json!(controller)
+    );
+    assert_eq!(record["controller"], serde_json::json!(controller));
+    assert_eq!(record["card_id"], serde_json::json!("artful_maneuver"));
+    assert_eq!(record["card_name"], serde_json::json!("Artful Maneuver"));
+    assert_eq!(record["source_face_index"], serde_json::json!("0"));
+    assert_eq!(
+        record["presentation"],
+        serde_json::to_value(&presentation)
+            .expect("serialize the captured Artful Maneuver presentation")
+    );
+}
+#[test]
+fn narset_phase_c2_model_keeps_rebound_grants_and_executor_closed() {
+    use tricerules_card_model::card_def::{ModalDef, ModeDef, RawCardDefinition};
+    use tricerules_card_model::primitives::{
+        Amount, AuthoredBlock, CardProgram, CardTypeFilter, CompiledProgram, EffectContext,
+        Instruction, InstructionKind, PlayerRecipient, SpellCastFilter, SpellEffectKind,
+        SpellKeyword, StaticAbilityDef, StaticEmblemEffect,
+    };
+    use tricerules_card_model::registry::RegistryError;
+    use tricerules_card_model::{AbilityPresentation, CardFaceId, ModeId, ProgramOwnerId};
+
+    let expect_rebound_rejection =
+        |raw: &RawCardDefinition, case: &str| match narset_phase_b_model_registry(raw) {
+            Err(RegistryError::InvalidCard { id, reason }) => {
+                assert_eq!(id, raw.id, "{case} must fail for the mutated card itself");
+                assert!(
+                    reason.contains("Rebound"),
+                    "{case} must identify the Rebound profile violation, got {reason:?}"
+                );
+            }
+            Err(RegistryError::Ron(error)) => {
+                panic!("{case} unexpectedly failed as a RON parse error: {error}")
+            }
+            Ok(_) => panic!("registry accepted invalid Rebound grant {case}"),
+        };
+
+    let mut static_grant = narset_phase_b_parse_model_baseline(
+        r#"(
+            id: "narset_rebound_static_grant_fixture",
+            name: "Narset Rebound Static Grant Fixture",
+            face_id: "narset_rebound_static_grant_fixture",
+            mana_cost: "{1}",
+            types: ["Enchantment"],
+            static_abilities: [(
+                ability_id: "grant_01",
+                presentation: Fallback,
+                definition: GrantSpellKeyword(
+                    filter: (card_type: Some(InstantOrSorcery)),
+                    keyword: Cascade,
+                ),
+            )],
+        )"#,
+    );
+    narset_phase_b_expect_model_admitted(
+        &static_grant,
+        "the enchantment's static Instant-or-Sorcery Cascade grant",
+    );
+    let static_ability = static_grant
+        .static_abilities
+        .iter_mut()
+        .find(|ability| ability.ability_id.as_str() == "grant_01")
+        .expect("the static grant is found by its authored ability ID");
+    match &mut static_ability.definition {
+        StaticAbilityDef::GrantSpellKeyword { keyword, .. } => {
+            *keyword = SpellKeyword::Rebound;
+        }
+        other => panic!("grant_01 is the expected GrantSpellKeyword, got {other:?}"),
+    }
+    expect_rebound_rejection(&static_grant, "static GrantSpellKeyword(Rebound)");
+
+    let storm_emblem = || SpellEffectKind::CreateStaticEmblem {
+        emblem_id: "narset_rebound_model_emblem".into(),
+        display_name: "Narset Rebound Model Emblem".into(),
+        effects: vec![StaticEmblemEffect::GrantSpellKeyword {
+            filter: SpellCastFilter {
+                card_type: Some(CardTypeFilter::InstantOrSorcery),
+                ..Default::default()
+            },
+            keyword: SpellKeyword::Storm,
+        }],
+    };
+    let set_emblem_grant_to_rebound = |effect: &mut SpellEffectKind, case: &str| {
+        let SpellEffectKind::CreateStaticEmblem { effects, .. } = effect else {
+            panic!("{case} contains the expected CreateStaticEmblem")
+        };
+        let StaticEmblemEffect::GrantSpellKeyword { keyword, .. } = effects
+            .get_mut(0)
+            .unwrap_or_else(|| panic!("{case} emblem has its grant effect"))
+        else {
+            panic!("{case} emblem has the expected GrantSpellKeyword")
+        };
+        *keyword = SpellKeyword::Rebound;
+    };
+
+    let mut activated_emblem =
+        narset_phase_b_parse_model_baseline(NARSET_PHASE_B_MODEL_ACTIVATED_BASELINE);
+    narset_phase_b_activated_mut(&mut activated_emblem, "activated_01").effect =
+        vec![storm_emblem()];
+    narset_phase_b_expect_model_admitted(
+        &activated_emblem,
+        "the activated artifact's static Storm emblem grant",
+    );
+    let activated = narset_phase_b_activated_mut(&mut activated_emblem, "activated_01");
+    let [emblem_effect] = activated.effect.as_mut_slice() else {
+        panic!("activated_01 retains its single static emblem instruction")
+    };
+    set_emblem_grant_to_rebound(emblem_effect, "activated_01");
+    expect_rebound_rejection(&activated_emblem, "activated Storm emblem Rebound grant");
+
+    let mut triggered_modal_emblem =
+        narset_phase_b_parse_model_baseline(NARSET_PHASE_B_MODEL_TRIGGERED_BASELINE);
+    let triggered = narset_phase_b_triggered_mut(&mut triggered_modal_emblem, "triggered_01");
+    triggered.effect.clear();
+    triggered.modal = Some(ModalDef {
+        min_modes: 1,
+        max_modes: 1,
+        all_modes_cast_cost: None,
+        trigger_mode_selection_restriction: None,
+        modes: vec![ModeDef {
+            mode_id: ModeId::new("emblem_01").expect("valid stable model mode ID"),
+            presentation: AbilityPresentation::Fallback,
+            linked_cast_cost: None,
+            effects: vec![storm_emblem()],
+            program: None,
+            targeting: None,
+        }],
+    });
+    narset_phase_b_expect_model_admitted(
+        &triggered_modal_emblem,
+        "the triggered ability's one-mode Storm emblem grant",
+    );
+
+    let mut rejected_triggered_modal = triggered_modal_emblem.clone();
+    let mode = narset_phase_b_triggered_mut(&mut rejected_triggered_modal, "triggered_01")
+        .modal
+        .as_mut()
+        .expect("triggered_01 owns the admitted modal")
+        .modes
+        .iter_mut()
+        .find(|mode| mode.mode_id.as_str() == "emblem_01")
+        .expect("the Storm emblem mode is found by its authored mode ID");
+    let [emblem_effect] = mode.effects.as_mut_slice() else {
+        panic!("emblem_01 retains its single static emblem instruction")
+    };
+    set_emblem_grant_to_rebound(emblem_effect, "triggered_01/emblem_01");
+    expect_rebound_rejection(
+        &rejected_triggered_modal,
+        "triggered modal Storm emblem Rebound grant",
+    );
+
+    let gain_life = SpellEffectKind::GainLife {
+        who: PlayerRecipient::Controller,
+        amount: Amount::Fixed(1),
+    };
+    SpellEffectKind::validate_list(std::slice::from_ref(&gain_life))
+        .expect("ordinary GainLife remains valid in a legacy effect list");
+    gain_life
+        .validate(EffectContext::Ability)
+        .expect("ordinary GainLife remains valid in an ability context");
+
+    let cast_rebounded = SpellEffectKind::CastReboundedCard;
+    let list_error = SpellEffectKind::validate_list(std::slice::from_ref(&cast_rebounded))
+        .expect_err("CastReboundedCard is reserved outside authored effect lists");
+    assert!(
+        list_error.contains("CastReboundedCard"),
+        "effect-list rejection identifies the reserved executor, got {list_error:?}"
+    );
+    let ability_error = cast_rebounded
+        .validate(EffectContext::Ability)
+        .expect_err("CastReboundedCard is reserved outside engine-created delayed triggers");
+    assert!(
+        ability_error.contains("CastReboundedCard"),
+        "ability-context rejection identifies the reserved executor, got {ability_error:?}"
+    );
+
+    let one_perform_program = |effect| CardProgram {
+        body: AuthoredBlock {
+            steps: vec![Instruction {
+                id: "perform_01".into(),
+                bind: Vec::new(),
+                input: None,
+                kind: InstructionKind::Perform(Box::new(effect)),
+            }],
+            yields: Vec::new(),
+        },
+        target_bindings: Vec::new(),
+        target_aliases: Vec::new(),
+    };
+    let owner = ProgramOwnerId::face(
+        "narset_rebound_model_spell_fixture",
+        CardFaceId::new("narset_rebound_model_spell_fixture").expect("valid stable model face ID"),
+    );
+    CompiledProgram::compile(
+        owner.clone(),
+        EffectContext::Spell,
+        &one_perform_program(gain_life.clone()),
+    )
+    .expect("the existing one-instruction Program admits ordinary GainLife");
+    assert!(
+        CompiledProgram::compile(
+            owner,
+            EffectContext::Spell,
+            &one_perform_program(cast_rebounded),
+        )
+        .is_err(),
+        "the otherwise-identical one-instruction Program rejects CastReboundedCard"
+    );
+}
+
+const NARSET_C2_ARTFUL_MANEUVER_RON: &str = r#"(
+  id: "artful_maneuver",
+  name: "Artful Maneuver",
+  face_id: "artful_maneuver",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  spell_keywords: [Rebound],
+  spell_effect: [PumpTarget(power: 2, toughness: 2)],
+)"#;
+
+fn narset_phase_c2_interaction_registry() -> &'static CardRegistry {
+    static REGISTRY: OnceLock<CardRegistry> = OnceLock::new();
+    REGISTRY.get_or_init(|| {
+        CardRegistry::from_chunks_and_tokens(
+            &[
+                REBOUND_OBSERVER_RON,
+                NARSET_C2_ARTFUL_MANEUVER_RON,
+                include_str!("../../../tricerules-cards/data/opt.ron"),
+                include_str!("../../../tricerules-cards/data/village_rites.ron"),
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+            ],
+            &[],
+        )
+        .expect(
+            "the C2 observer, printed Rebound spell, shipped cost spell, and creatures register",
+        )
+    })
+}
+
+struct NarsetC2ArtfulScheduleFixture {
+    engine: GameEngine,
+    controller: i32,
+    opponent: i32,
+    artful_object_id: u32,
+    artful_stack_generation: u64,
+    artful_exile_generation: u64,
+    targets: Vec<u32>,
+}
+
+fn narset_phase_c2_artful_schedule_fixture(
+    seed: u64,
+    include_second_creature: bool,
+) -> NarsetC2ArtfulScheduleFixture {
+    let deck_cards = if include_second_creature {
+        vec![
+            REBOUND_OBSERVER,
+            "artful_maneuver",
+            "grizzly_bears",
+            "grizzly_bears",
+        ]
+    } else {
+        vec![REBOUND_OBSERVER, "artful_maneuver", "grizzly_bears"]
+    };
+    let decks = Some(vec![
+        deck_with("forest", &deck_cards),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(
+        narset_phase_c2_interaction_registry(),
+        seed,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("C2 printed Artful Maneuver fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+
+    let source = move_fixture_card_to_zone(&mut engine, 0, REBOUND_OBSERVER, DevZone::Battlefield);
+    let source_generation = engine.state.zone_change_generation[&source];
+    arm_narset_observer(&mut engine, source);
+
+    let target_a = move_fixture_card_to_zone(&mut engine, 0, "grizzly_bears", DevZone::Battlefield);
+    let target_a_generation = engine.state.zone_change_generation[&target_a];
+    let mut targets = vec![target_a];
+    if include_second_creature {
+        let target_b =
+            move_fixture_card_to_zone(&mut engine, 0, "grizzly_bears", DevZone::Battlefield);
+        assert_ne!(target_a, target_b);
+        targets.push(target_b);
+    }
+    let controller = engine.state.players[0].id;
+    let opponent = engine.state.players[1].id;
+    let (artful, cast_batch) = narset_c1_cast_actual_hand_spell(
+        &mut engine,
+        0,
+        "artful_maneuver",
+        0,
+        0,
+        vec![TargetRef {
+            expected_zone_change_generation: Some(target_a_generation),
+            object_id: target_a,
+            damage_amount: 0,
+            group_index: 0,
+            kind: TargetRefKind::Permanent as i32,
+        }],
+        ManaGift {
+            w: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let artful_stack_generation = artful
+        .zone_change_generation
+        .expect("the actual Artful Maneuver hand cast has its stack generation");
+    assert!(engine
+        .state
+        .stack
+        .iter()
+        .any(|item| item.id == artful.object_id && !item.is_triggered));
+    assert_eq!(
+        cast_batch
+            .events
+            .iter()
+            .filter(|event| matches!(&event.ev, Some(Ev::StackPushed(_))))
+            .count(),
+        2,
+        "the actual Artful Maneuver and its external observer trigger are each pushed once"
+    );
+    assert_one_rebound_trigger_for_cast(&engine, source, source_generation, artful);
+    assert_eq!(
+        serialized_rebound_grants(&engine),
+        serde_json::json!([]),
+        "the external Rebound grant is not installed before its actual trigger resolves"
+    );
+
+    narset_c1_capture_priority_round(&mut engine);
+    assert_eq!(
+        serialized_rebound_grants(&engine),
+        expected_rebound_grants_for_cast(artful),
+        "the external observer grants Rebound to this exact printed Artful Maneuver cast"
+    );
+    assert_eq!(engine.state.stack.len(), 1);
+    assert_eq!(engine.state.stack[0].id, artful.object_id);
+
+    let resolution = narset_c1_capture_priority_round(&mut engine);
+    narset_c1_assert_one_stack_resolved(
+        &resolution,
+        artful.object_id,
+        controller,
+        tricerules_proto::ruled::v1::StackResolveDestination::Exile,
+    );
+    assert_eq!(
+        engine.state.objects[&artful.object_id].zone,
+        tricerules_core::Zone::Exile
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&artful.object_id],
+        artful_stack_generation + 1
+    );
+    assert_eq!(engine.effective_power(target_a), Some(4));
+    assert_eq!(engine.effective_toughness(target_a), Some(4));
+    assert_eq!(serialized_rebound_grants(&engine), serde_json::json!([]));
+
+    let schedule = narset_c1_exclusion_scheduled_rebounds(&engine);
+    let records = schedule
+        .as_array()
+        .expect("diagnostics expose the scheduled-Rebound records");
+    assert_eq!(
+        records.len(),
+        1,
+        "printed and externally granted Rebound schedule this exact cast only once"
+    );
+    assert_eq!(
+        records[0]["source"]["object_id"],
+        serde_json::json!(artful.object_id)
+    );
+    assert_eq!(
+        records[0]["source"]["zone_change_generation"],
+        serde_json::json!(artful_stack_generation.to_string())
+    );
+    let artful_exile_generation = engine.state.zone_change_generation[&artful.object_id];
+    assert_eq!(
+        records[0]["exiled"]["zone_change_generation"],
+        serde_json::json!(artful_exile_generation.to_string())
+    );
+    assert_eq!(records[0]["card_id"], serde_json::json!("artful_maneuver"));
+    assert_eq!(records[0]["controller"], serde_json::json!(controller));
+
+    NarsetC2ArtfulScheduleFixture {
+        engine,
+        controller,
+        opponent,
+        artful_object_id: artful.object_id,
+        artful_stack_generation,
+        artful_exile_generation,
+        targets,
+    }
+}
+
+fn narset_phase_c2_advance_to_next_own_rebound_upkeep(
+    engine: &mut GameEngine,
+    controller: i32,
+    opponent: i32,
+    card_id: &str,
+    object_id: u32,
+    stack_generation: u64,
+    expected_exile_generations: (u64, u64),
+) -> u32 {
+    let (current_exile_generation, watched_rebound_exile_generation) = expected_exile_generations;
+    let scheduled_before_opponent_turn = narset_c1_exclusion_scheduled_rebounds(engine);
+    assert_eq!(
+        scheduled_before_opponent_turn.as_array().map(Vec::len),
+        Some(1),
+        "one exact Rebound schedule remains before the opponent's turn"
+    );
+
+    end_active_turn(engine, controller);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(
+        narset_c1_exclusion_scheduled_rebounds(engine),
+        scheduled_before_opponent_turn,
+        "the opponent's upkeep leaves the current Rebound schedule untouched"
+    );
+    assert_eq!(
+        engine.state.objects[&object_id].zone,
+        tricerules_core::Zone::Exile
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&object_id],
+        current_exile_generation
+    );
+
+    pass_priority_round(engine);
+    pass_priority_round(engine);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Main1);
+    end_active_turn(engine, opponent);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Upkeep);
+
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "the one-shot Rebound schedule stages one ordinary trigger at its controller's own upkeep"
+    );
+    let trigger = &engine.state.stack[0];
+    assert!(trigger.is_triggered);
+    assert!(!trigger.is_copy);
+    assert_eq!(trigger.card_id, card_id);
+    assert_eq!(trigger.controller, controller);
+    assert_eq!(trigger.source_permanent_id, Some(object_id));
+    assert_eq!(trigger.source_zone_change, stack_generation);
+    assert_eq!(
+        trigger.trigger_context.observed_object,
+        Some(tricerules_core::state::TriggerObjectRef {
+            object_id,
+            zone_change_generation: watched_rebound_exile_generation,
+            controller_at_event: controller,
+        })
+    );
+    let trigger_id = trigger.id;
+    assert_eq!(triggered_stack_ids(engine), vec![trigger_id]);
+    narset_c1_assert_no_scheduled_rebounds(engine, "the one-shot own-upkeep Rebound trigger");
+    trigger_id
+}
+
+fn narset_phase_c2_assert_no_next_own_upkeep_rebound(
+    engine: &mut GameEngine,
+    controller: i32,
+    opponent: i32,
+    object_id: u32,
+) {
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    assert!(engine.state.stack.is_empty());
+    assert!(engine.state.pending_resolution.is_none());
+    narset_c1_assert_no_scheduled_rebounds(engine, "after the one-shot Rebound opportunity");
+
+    pass_priority_round(engine);
+    pass_priority_round(engine);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Main1);
+    end_active_turn(engine, controller);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    assert!(engine.state.stack.is_empty());
+    assert!(triggered_stack_ids(engine).is_empty());
+    narset_c1_assert_no_scheduled_rebounds(engine, "the opponent's upkeep after the opportunity");
+    assert!(engine
+        .state
+        .active_exile_play_permissions
+        .iter()
+        .all(|permission| permission.object_id != object_id));
+
+    pass_priority_round(engine);
+    pass_priority_round(engine);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Main1);
+    end_active_turn(engine, opponent);
+    assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    assert!(engine.state.stack.is_empty());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(triggered_stack_ids(engine).is_empty());
+    narset_c1_assert_no_scheduled_rebounds(engine, "the next own upkeep after the opportunity");
+    assert!(engine
+        .state
+        .active_exile_play_permissions
+        .iter()
+        .all(|permission| permission.object_id != object_id));
+}
+
+fn narset_phase_c2_dev_move_card(
+    engine: &mut GameEngine,
+    player_id: i32,
+    card_name: &str,
+    zone: DevZone,
+) -> RuledEventBatch {
+    engine.enable_dev_commands();
+    engine
+        .apply_scenario_command(
+            player_id,
+            &RuledCommand {
+                cmd: Some(Cmd::DevCommand(DevCommand {
+                    target_player_id: player_id,
+                    dev: Some(dev_command::Dev::MoveCard(DevMoveCard {
+                        card_name: card_name.into(),
+                        zone: zone as i32,
+                        ready: true,
+                    })),
+                })),
+            },
+        )
+        .expect("perform the explicitly prepared physical-zone movement")
+}
+
+fn narset_phase_c2_village_rites_sacrifice_selection(
+    choices: &tricerules_proto::ruled::v1::LegalCostChoices,
+    object_id: u32,
+    generation: u64,
+) -> tricerules_proto::ruled::v1::CostSelection {
+    use tricerules_proto::ruled::v1 as rv1;
+
+    assert!(choices.non_mana_costs_payable);
+    assert_eq!(choices.choices.len(), 1);
+    let choice = &choices.choices[0];
+    assert_eq!(choice.kind, rv1::CostChoiceKind::Sacrifice as i32);
+    assert_eq!(choice.zone, rv1::CostChoiceZone::Battlefield as i32);
+    assert_eq!(choice.min, 1);
+    assert_eq!(choice.max, 1);
+    assert_eq!(choice.cost_index, 0);
+    let candidates = choice
+        .candidate_objects
+        .iter()
+        .filter_map(|candidate| candidate.object.as_ref())
+        .filter(|candidate| candidate.object_id == object_id)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        candidates.len(),
+        1,
+        "the live cost offer publishes the chosen creature exactly once"
+    );
+    assert_eq!(
+        candidates[0].zone_change_generation, generation,
+        "the sacrifice uses the exact current candidate generation"
+    );
+    rv1::CostSelection {
+        cost_index: choice.cost_index,
+        selection: Some(rv1::cost_selection::Selection::PermanentId(
+            candidates[0].object_id,
+        )),
+    }
+}
+
+fn narset_phase_c2_village_rites_zone_action(
+    engine: &mut GameEngine,
+    controller: i32,
+    village_rites: u32,
+) -> tricerules_proto::ruled::v1::LegalZoneCastAction {
+    let legal = engine.initial_response_batch();
+    let actions = legal
+        .legal_by_player
+        .get(&controller)
+        .expect("the Rebound controller has current legal actions")
+        .zone_cast_actions
+        .iter()
+        .filter(|action| action.object_id == village_rites)
+        .cloned()
+        .collect::<Vec<_>>();
+    assert_eq!(
+        actions.len(),
+        1,
+        "Village Rites has one current Rebound cast action"
+    );
+    actions.into_iter().next().unwrap()
+}
+
+#[test]
+fn narset_phase_c2_printed_artful_and_external_rebound_deduplicate_and_use_fresh_target() {
+    use tricerules_proto::ruled::v1 as rv1;
+
+    let NarsetC2ArtfulScheduleFixture {
+        mut engine,
+        controller,
+        opponent,
+        artful_object_id,
+        artful_stack_generation,
+        artful_exile_generation,
+        targets,
+    } = narset_phase_c2_artful_schedule_fixture(6_110_405, true);
+    let target_a = targets[0];
+    let target_b = targets[1];
+    assert_ne!(target_a, target_b);
+
+    let trigger_id = narset_phase_c2_advance_to_next_own_rebound_upkeep(
+        &mut engine,
+        controller,
+        opponent,
+        "artful_maneuver",
+        artful_object_id,
+        artful_stack_generation,
+        (artful_exile_generation, artful_exile_generation),
+    );
+    assert_eq!(
+        engine.effective_power(target_a),
+        Some(2),
+        "the original target's first-turn pump expires before the own-upkeep recast"
+    );
+    assert_eq!(
+        engine.effective_toughness(target_a),
+        Some(2),
+        "the original target's first-turn toughness bonus expires before the own-upkeep recast"
+    );
+
+    let trigger_resolution = narset_c1_capture_priority_round(&mut engine);
+    assert!(engine.state.stack.is_empty());
+    let special_offer = find_resolution_choice(&trigger_resolution)
+        .expect("the exact exiled Artful Maneuver has a current Rebound offer");
+    assert_eq!(
+        special_offer.choice_kind,
+        rv1::ChoiceKind::SpecialCast as i32
+    );
+    assert_eq!(special_offer.source_object_id, trigger_id);
+    assert_eq!(special_offer.candidate_object_ids, vec![artful_object_id]);
+    assert_eq!(special_offer.candidate_selectable, vec![true]);
+    let (deciding_player, current_prompt_id) = {
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the delayed trigger parks at the printed Artful Maneuver offer");
+        assert_eq!(pending.deciding_player, controller);
+        assert_eq!(pending.presentation.choice_kind, ChoiceKind::SpecialCast);
+        assert_eq!(pending.presentation.candidates, vec![artful_object_id]);
+        let tricerules_core::state::ResolutionContinuation::SpecialCast {
+            stack,
+            exiled,
+            method,
+            cost,
+            ..
+        } = &pending.continuation
+        else {
+            panic!("the delayed trigger owns the SpecialCast continuation");
+        };
+        assert_eq!(stack.item.id, trigger_id);
+        assert_eq!(exiled.object_id, artful_object_id);
+        assert_eq!(exiled.zone_change_generation, artful_exile_generation);
+        assert_eq!(*method, tricerules_core::state::SpellCastMethod::Permission);
+        assert_eq!(*cost, tricerules_cards::mana::ManaCost::default());
+        (pending.deciding_player, pending.resolution_prompt_id.get())
+    };
+    assert_eq!(special_offer.resolution_prompt_id, current_prompt_id);
+
+    let (face_index, cast_method, permission_id, fresh_target) = {
+        let current = engine.initial_response_batch();
+        let legal = current
+            .legal_by_player
+            .get(&controller)
+            .expect("the Rebound controller receives the current target and cast offers");
+        let actions = legal
+            .zone_cast_actions
+            .iter()
+            .filter(|action| action.object_id == artful_object_id)
+            .collect::<Vec<_>>();
+        assert_eq!(actions.len(), 1);
+        let action = actions[0];
+        assert_eq!(action.source_zone, rv1::CastSourceZone::Exile as i32);
+        assert_eq!(action.zone_change_generation, artful_exile_generation);
+        assert_eq!(action.face_index, 0);
+        assert_eq!(action.cast_method, rv1::CastMethod::Permission as i32);
+        assert_eq!(
+            action.cost, "",
+            "Rebound waives Artful Maneuver's mana cost"
+        );
+        let permission_id = action
+            .casting_permission_id
+            .expect("the current permission action carries its opaque permission id");
+        assert_ne!(permission_id, 0);
+
+        let targets_key = (u64::from(artful_object_id) << 8) | u64::from(action.face_index);
+        let offered_targets = legal
+            .valid_targets_by_zone_object
+            .get(&targets_key)
+            .expect("the current exile action publishes Artful Maneuver's target groups");
+        assert_eq!(offered_targets.groups.len(), 1);
+        let group = &offered_targets.groups[0];
+        assert_eq!(group.min, 1);
+        assert_eq!(group.max, 1);
+        assert!(group.valid_permanent_ids.contains(&target_b));
+        assert!(group.valid_permanent_ids.contains(&target_a));
+        let target_generation = engine.state.zone_change_generation[&target_b];
+        (
+            action.face_index,
+            action.cast_method,
+            permission_id,
+            rv1::TargetRef {
+                object_id: target_b,
+                expected_zone_change_generation: Some(target_generation),
+                damage_amount: 0,
+                group_index: group.group_index,
+                kind: rv1::TargetRefKind::Permanent as i32,
+            },
+        )
+    };
+    assert_eq!(fresh_target.object_id, target_b);
+    assert_ne!(fresh_target.object_id, target_a);
+
+    let announcement = rv1::SpellCastAnnouncement {
+        targets: vec![fresh_target],
+        face_index,
+        source: Some(exile_cast_source(artful_object_id, artful_exile_generation)),
+        cast_method,
+        casting_permission_id: Some(permission_id),
+        ..Default::default()
+    };
+    let begin_batch = engine
+        .apply_command(
+            deciding_player,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: current_prompt_id,
+                    decision: rv1::ResolutionChoiceDecision::CastSpell as i32,
+                    spell_cast_announcement: Some(announcement),
+                    ..Default::default()
+                })),
+            },
+        )
+        .expect("accept the current published Artful Maneuver Rebound offer and target B");
+    assert!(begin_batch.events.iter().all(|event| {
+        !matches!(&event.ev, Some(Ev::StackPushed(pushed)) if pushed.object_id == artful_object_id)
+    }));
+    assert_eq!(
+        engine.state.objects[&artful_object_id].zone,
+        tricerules_core::Zone::Stack
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&artful_object_id],
+        artful_exile_generation + 1
+    );
+    let transaction_id = {
+        let pending_cast = engine
+            .state
+            .pending_spell_cast
+            .as_ref()
+            .expect("the current Rebound choice starts a payment transaction");
+        assert!(pending_cast.resolution_time_offer);
+        assert_eq!(pending_cast.caster, controller);
+        assert_eq!(pending_cast.reserved_object_id, artful_object_id);
+        assert_eq!(pending_cast.original_zone, tricerules_core::Zone::Exile);
+        assert_eq!(
+            pending_cast.original_zone_change_generation,
+            artful_exile_generation
+        );
+        pending_cast.transaction_id
+    };
+    let parked_parent = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the delayed parent remains suspended during the child cast");
+    let tricerules_core::state::ResolutionContinuation::SpecialCast { stack, .. } =
+        &parked_parent.continuation
+    else {
+        panic!("the parked parent remains the delayed Rebound trigger");
+    };
+    assert_eq!(stack.item.id, trigger_id);
+
+    let controller_index = engine
+        .state
+        .player_idx(controller)
+        .expect("the Rebound controller remains in the game");
+    let mana_before_commit = engine.state.players[controller_index].mana_pool;
+    let revision = engine.state.command_index;
+    let preview = engine.preview_payment_scenario(
+        controller,
+        &rv1::PreviewPayment {
+            transaction_id,
+            revision,
+            commit_spell_cast: Some(rv1::CommitSpellCast {
+                transaction_id,
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    );
+    assert!(preview.valid && preview.complete, "{preview:?}");
+    assert_eq!(engine.state.command_index, revision);
+    assert_eq!(
+        engine.state.players[controller_index].mana_pool,
+        mana_before_commit
+    );
+    let cast_batch = engine
+        .apply_scenario_command(
+            controller,
+            &RuledCommand {
+                cmd: Some(Cmd::CommitSpellCast(rv1::CommitSpellCast {
+                    transaction_id,
+                    payment: preview.selection,
+                    restricted_mana: preview.restricted_mana,
+                })),
+            },
+        )
+        .expect("commit the actual Rebound Artful Maneuver cast");
+    assert_eq!(
+        engine.state.players[controller_index].mana_pool,
+        mana_before_commit
+    );
+    assert!(engine.state.pending_spell_cast.is_none());
+    assert!(engine.state.pending_resolution.is_none());
+    let parent_resolved_index = cast_batch
+        .events
+        .iter()
+        .position(|event| {
+            matches!(&event.ev, Some(Ev::StackResolved(resolved)) if resolved.object_id == trigger_id)
+        })
+        .expect("the delayed Rebound parent resolves exactly once after its child commits");
+    assert!(cast_batch
+        .events
+        .iter()
+        .any(|event| { matches!(&event.ev, Some(Ev::PriorityChanged(_))) }));
+    for (event_index, event) in cast_batch.events.iter().enumerate() {
+        if matches!(&event.ev, Some(Ev::PriorityChanged(_))) {
+            assert!(
+                parent_resolved_index < event_index,
+                "the delayed parent resolves before priority is published"
+            );
+        }
+    }
+    assert_eq!(
+        cast_batch
+            .events
+            .iter()
+            .filter(|event| matches!(&event.ev, Some(Ev::StackPushed(pushed)) if pushed.object_id == artful_object_id))
+            .count(),
+        1
+    );
+    let recast = engine
+        .state
+        .stack
+        .iter()
+        .find(|item| item.id == artful_object_id)
+        .expect("the exact Artful Maneuver is the committed physical spell");
+    assert_eq!(recast.card_id, "artful_maneuver");
+    assert_eq!(recast.controller, controller);
+    assert_eq!(recast.cast_by, Some(controller));
+    assert_eq!(
+        recast.cast_method,
+        tricerules_core::state::SpellCastMethod::Permission
+    );
+    assert_eq!(recast.targets.len(), 1);
+    assert_eq!(recast.targets[0].object_id, target_b);
+    assert_eq!(
+        recast.targets[0].zone_change_generation,
+        Some(engine.state.zone_change_generation[&target_b])
+    );
+    assert!(!recast.is_copy);
+    assert!(!recast.is_triggered);
+    assert!(recast.cast_occurrence.is_some());
+    assert!(engine
+        .state
+        .active_exile_play_permissions
+        .iter()
+        .all(|permission| permission.object_id != artful_object_id));
+    narset_c1_assert_no_scheduled_rebounds(&engine, "the accepted printed Artful Maneuver recast");
+
+    let resolution = narset_c1_capture_priority_round(&mut engine);
+    narset_c1_assert_one_stack_resolved(
+        &resolution,
+        artful_object_id,
+        controller,
+        rv1::StackResolveDestination::Graveyard,
+    );
+    assert_eq!(
+        engine.state.objects[&artful_object_id].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&artful_object_id],
+        artful_exile_generation + 2
+    );
+    assert_eq!(engine.effective_power(target_a), Some(2));
+    assert_eq!(engine.effective_toughness(target_a), Some(2));
+    assert_eq!(engine.effective_power(target_b), Some(4));
+    assert_eq!(engine.effective_toughness(target_b), Some(4));
+    narset_c1_assert_no_scheduled_rebounds(&engine, "the completed Rebound Artful Maneuver recast");
+    narset_phase_c2_assert_no_next_own_upkeep_rebound(
+        &mut engine,
+        controller,
+        opponent,
+        artful_object_id,
+    );
+    assert_eq!(
+        engine.state.objects[&artful_object_id].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&artful_object_id],
+        artful_exile_generation + 2
+    );
+}
+#[test]
+fn narset_phase_c2_rebound_village_rites_keeps_mandatory_sacrifice_across_cancel_and_retry() {
+    use tricerules_proto::ruled::v1 as rv1;
+
+    let decks = Some(vec![
+        deck_with(
+            "forest",
+            &[
+                REBOUND_OBSERVER,
+                "village_rites",
+                "grizzly_bears",
+                "grizzly_bears",
+            ],
+        ),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(
+        narset_phase_c2_interaction_registry(),
+        6_110_406,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("Village Rites C2 interaction fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let source = move_fixture_card_to_zone(&mut engine, 0, REBOUND_OBSERVER, DevZone::Battlefield);
+    let source_generation = engine.state.zone_change_generation[&source];
+    arm_narset_observer(&mut engine, source);
+    let sacrifice_a =
+        move_fixture_card_to_zone(&mut engine, 0, "grizzly_bears", DevZone::Battlefield);
+    let sacrifice_b =
+        move_fixture_card_to_zone(&mut engine, 0, "grizzly_bears", DevZone::Battlefield);
+    assert_ne!(sacrifice_a, sacrifice_b);
+    let sacrifice_a_generation = engine.state.zone_change_generation[&sacrifice_a];
+    ensure_in_hand(&mut engine, 0, "village_rites");
+    let controller = engine.state.players[0].id;
+    let opponent = engine.state.players[1].id;
+
+    let (hand_action, first_cost_selection) = {
+        let current = engine.initial_response_batch();
+        let legal = current
+            .legal_by_player
+            .get(&controller)
+            .expect("the active Rebound controller has current hand actions");
+        let actions = legal
+            .hand_actions
+            .iter()
+            .filter(|action| action.card_name == "Village Rites")
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(actions.len(), 1);
+        let action = actions.into_iter().next().unwrap();
+        assert_eq!(action.cost, "{B}");
+        let costs = action
+            .cost_choices
+            .as_ref()
+            .expect("the current Village Rites hand action publishes its additional cost");
+        (
+            action.clone(),
+            narset_phase_c2_village_rites_sacrifice_selection(
+                costs,
+                sacrifice_a,
+                sacrifice_a_generation,
+            ),
+        )
+    };
+    give_mana(
+        &mut engine,
+        controller,
+        ManaGift {
+            b: 1,
+            ..Default::default()
+        },
+    );
+    let mut first_cast = cast_spell_with_costs(
+        hand_action.hand_index as usize,
+        Vec::new(),
+        vec![first_cost_selection.clone()],
+    );
+    authoring_actions::pay(&engine, controller, &mut first_cast)
+        .expect("preview payment for the actual hand Village Rites cast");
+    let first_cast_batch = engine
+        .apply_scenario_command(controller, &first_cast)
+        .expect("cast shipped Village Rites with its live sacrifice receipt");
+    let village_rites = engine
+        .state
+        .stack
+        .iter()
+        .find(|item| {
+            item.card_id == "village_rites"
+                && item.cast_by == Some(controller)
+                && !item.is_triggered
+                && !item.is_copy
+        })
+        .and_then(|item| item.cast_occurrence)
+        .expect("the physical hand-cast Village Rites has its actual occurrence");
+    assert_eq!(
+        first_cast_batch
+            .events
+            .iter()
+            .filter(|event| matches!(&event.ev, Some(Ev::StackPushed(pushed)) if pushed.object_id == village_rites.object_id))
+            .count(),
+        1
+    );
+    assert_eq!(
+        engine.state.objects[&sacrifice_a].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    let first_sacrifice_generation = sacrifice_a_generation + 1;
+    assert_eq!(
+        engine.state.zone_change_generation[&sacrifice_a],
+        first_sacrifice_generation
+    );
+    assert_eq!(
+        engine.state.objects[&sacrifice_b].zone,
+        tricerules_core::Zone::Battlefield
+    );
+    assert_eq!(engine.state.stack.len(), 2);
+    assert_one_rebound_trigger_for_cast(&engine, source, source_generation, village_rites);
+    assert_eq!(serialized_rebound_grants(&engine), serde_json::json!([]));
+
+    narset_c1_capture_priority_round(&mut engine);
+    assert_eq!(
+        serialized_rebound_grants(&engine),
+        expected_rebound_grants_for_cast(village_rites),
+        "the observer grants Rebound to this exact shipped Village Rites cast"
+    );
+    let first_resolution_baseline = engine.state.players[0].hand.len();
+    let first_resolution = narset_c1_capture_priority_round(&mut engine);
+    narset_c1_assert_one_stack_resolved(
+        &first_resolution,
+        village_rites.object_id,
+        controller,
+        rv1::StackResolveDestination::Exile,
+    );
+    assert_eq!(
+        engine.state.players[0].hand.len(),
+        first_resolution_baseline + 2,
+        "the actual first Village Rites resolution draws two cards"
+    );
+    let village_exile_generation = engine.state.zone_change_generation[&village_rites.object_id];
+    assert_eq!(
+        engine.state.objects[&village_rites.object_id].zone,
+        tricerules_core::Zone::Exile
+    );
+    assert_eq!(
+        village_exile_generation,
+        village_rites
+            .zone_change_generation
+            .expect("the exact Village Rites stack occurrence has its generation")
+            + 1
+    );
+    let first_schedule = narset_c1_exclusion_scheduled_rebounds(&engine);
+    assert_eq!(first_schedule.as_array().map(Vec::len), Some(1));
+    assert_eq!(
+        first_schedule[0]["exiled"]["zone_change_generation"],
+        serde_json::json!(village_exile_generation.to_string())
+    );
+    assert_eq!(serialized_rebound_grants(&engine), serde_json::json!([]));
+
+    let trigger_id = narset_phase_c2_advance_to_next_own_rebound_upkeep(
+        &mut engine,
+        controller,
+        opponent,
+        "village_rites",
+        village_rites.object_id,
+        village_rites.zone_change_generation.unwrap(),
+        (village_exile_generation, village_exile_generation),
+    );
+    let trigger_resolution = narset_c1_capture_priority_round(&mut engine);
+    let special_offer = find_resolution_choice(&trigger_resolution)
+        .expect("the exact exiled Village Rites has its current Rebound cast offer");
+    assert_eq!(
+        special_offer.choice_kind,
+        rv1::ChoiceKind::SpecialCast as i32
+    );
+    assert_eq!(special_offer.source_object_id, trigger_id);
+    assert_eq!(
+        special_offer.candidate_object_ids,
+        vec![village_rites.object_id]
+    );
+    assert_eq!(special_offer.candidate_selectable, vec![true]);
+    let (deciding_player, first_prompt_id) = {
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the delayed trigger parks at the shipped Village Rites cast offer");
+        assert_eq!(pending.deciding_player, controller);
+        assert_eq!(pending.presentation.choice_kind, ChoiceKind::SpecialCast);
+        let tricerules_core::state::ResolutionContinuation::SpecialCast {
+            stack,
+            exiled,
+            method,
+            cost,
+            ..
+        } = &pending.continuation
+        else {
+            panic!("the delayed trigger owns the Village Rites SpecialCast continuation");
+        };
+        assert_eq!(stack.item.id, trigger_id);
+        assert_eq!(exiled.object_id, village_rites.object_id);
+        assert_eq!(exiled.zone_change_generation, village_exile_generation);
+        assert_eq!(*method, tricerules_core::state::SpellCastMethod::Permission);
+        assert_eq!(*cost, tricerules_cards::mana::ManaCost::default());
+        (pending.deciding_player, pending.resolution_prompt_id.get())
+    };
+    assert_eq!(special_offer.resolution_prompt_id, first_prompt_id);
+
+    let first_action =
+        narset_phase_c2_village_rites_zone_action(&mut engine, controller, village_rites.object_id);
+    assert_eq!(first_action.source_zone, rv1::CastSourceZone::Exile as i32);
+    assert_eq!(
+        first_action.zone_change_generation,
+        village_exile_generation
+    );
+    assert_eq!(first_action.face_index, 0);
+    assert_eq!(first_action.cast_method, rv1::CastMethod::Permission as i32);
+    assert_eq!(first_action.cost, "", "Rebound waives only the mana cost");
+    let first_permission_id = first_action
+        .casting_permission_id
+        .expect("the live Rebound action publishes its permission id");
+    assert_ne!(first_permission_id, 0);
+    let first_cost_choices = first_action
+        .cost_choices
+        .as_ref()
+        .expect("the current Rebound action retains Village Rites' additional cost");
+    let first_retry_cost_selection = narset_phase_c2_village_rites_sacrifice_selection(
+        first_cost_choices,
+        sacrifice_b,
+        engine.state.zone_change_generation[&sacrifice_b],
+    );
+    assert!(
+        first_cost_choices.choices[0]
+            .candidate_objects
+            .iter()
+            .filter_map(|candidate| candidate.object.as_ref())
+            .any(|receipt| receipt.object_id == sacrifice_b),
+        "the zero-mana Rebound offer still publishes the required sacrifice"
+    );
+    let first_announcement = rv1::SpellCastAnnouncement {
+        source: Some(exile_cast_source(
+            village_rites.object_id,
+            village_exile_generation,
+        )),
+        face_index: first_action.face_index,
+        cast_method: first_action.cast_method,
+        casting_permission_id: Some(first_permission_id),
+        cost_selections: vec![first_retry_cost_selection],
+        ..Default::default()
+    };
+    let begin_batch = engine
+        .apply_command(
+            deciding_player,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: first_prompt_id,
+                    decision: rv1::ResolutionChoiceDecision::CastSpell as i32,
+                    spell_cast_announcement: Some(first_announcement),
+                    ..Default::default()
+                })),
+            },
+        )
+        .expect("begin the real Village Rites Rebound payment transaction");
+    assert!(begin_batch.events.iter().all(|event| {
+        !matches!(&event.ev, Some(Ev::StackPushed(pushed)) if pushed.object_id == village_rites.object_id)
+    }));
+    assert_eq!(
+        engine.state.objects[&village_rites.object_id].zone,
+        tricerules_core::Zone::Stack
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&village_rites.object_id],
+        village_exile_generation + 1
+    );
+    assert_eq!(
+        engine.state.objects[&sacrifice_b].zone,
+        tricerules_core::Zone::Battlefield
+    );
+    let hand_before_cancel = engine.state.players[0].hand.clone();
+    let mana_before_cancel = engine.state.players[0].mana_pool;
+    let transaction_id = engine
+        .state
+        .pending_spell_cast
+        .as_ref()
+        .expect("the accepted offer creates a pending spell payment")
+        .transaction_id;
+    assert!(
+        engine
+            .state
+            .pending_spell_cast
+            .as_ref()
+            .unwrap()
+            .resolution_time_offer
+    );
+    assert_eq!(
+        engine.state.pending_spell_cast.as_ref().unwrap().caster,
+        controller
+    );
+    assert_eq!(
+        engine
+            .state
+            .pending_spell_cast
+            .as_ref()
+            .unwrap()
+            .original_zone_change_generation,
+        village_exile_generation
+    );
+    assert!(engine.state.pending_resolution.is_some());
+
+    let cancel_batch = engine
+        .apply_scenario_command(
+            controller,
+            &RuledCommand {
+                cmd: Some(Cmd::CancelSpellCast(rv1::CancelSpellCast {
+                    transaction_id,
+                })),
+            },
+        )
+        .expect("cancel the current Village Rites cast without paying its costs");
+    assert!(engine.state.pending_spell_cast.is_none());
+    assert_eq!(
+        engine.state.objects[&village_rites.object_id].zone,
+        tricerules_core::Zone::Exile
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&village_rites.object_id],
+        village_exile_generation
+    );
+    assert_eq!(
+        engine.state.objects[&sacrifice_b].zone,
+        tricerules_core::Zone::Battlefield
+    );
+    assert_eq!(engine.state.players[0].hand, hand_before_cancel);
+    assert_eq!(engine.state.players[0].mana_pool, mana_before_cancel);
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the delayed parent is restored")
+            .deciding_player,
+        controller
+    );
+    assert!(engine.state.stack.is_empty());
+    assert!(cancel_batch.events.iter().all(|event| {
+        !matches!(&event.ev, Some(Ev::StackResolved(resolved)) if resolved.object_id == trigger_id)
+    }));
+    narset_c1_assert_no_scheduled_rebounds(&engine, "after cancelling the pending cast");
+    let restored_offer = find_resolution_choice(&cancel_batch)
+        .expect("cancellation republishes the current Rebound offer");
+    assert_eq!(
+        restored_offer.choice_kind,
+        rv1::ChoiceKind::SpecialCast as i32
+    );
+    assert_eq!(restored_offer.source_object_id, trigger_id);
+    assert_eq!(
+        restored_offer.candidate_object_ids,
+        vec![village_rites.object_id]
+    );
+    let restored_prompt_id = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the parent resolution is restored after cancellation")
+        .resolution_prompt_id
+        .get();
+    assert_eq!(restored_offer.resolution_prompt_id, restored_prompt_id);
+
+    let retry_action =
+        narset_phase_c2_village_rites_zone_action(&mut engine, controller, village_rites.object_id);
+    assert_eq!(retry_action.source_zone, rv1::CastSourceZone::Exile as i32);
+    assert_eq!(
+        retry_action.zone_change_generation,
+        village_exile_generation
+    );
+    assert_eq!(retry_action.cast_method, rv1::CastMethod::Permission as i32);
+    assert_eq!(retry_action.cost, "");
+    let retry_permission_id = retry_action
+        .casting_permission_id
+        .expect("the reissued Rebound action has a current permission id");
+    let retry_cost_choices = retry_action
+        .cost_choices
+        .as_ref()
+        .expect("the reissued action retains the mandatory sacrifice cost");
+    let retry_cost_selection = narset_phase_c2_village_rites_sacrifice_selection(
+        retry_cost_choices,
+        sacrifice_b,
+        engine.state.zone_change_generation[&sacrifice_b],
+    );
+    assert!(retry_cost_choices.choices[0]
+        .candidate_objects
+        .iter()
+        .filter_map(|candidate| candidate.object.as_ref())
+        .any(|candidate| {
+            candidate.object_id == sacrifice_b
+                && candidate.zone_change_generation
+                    == engine.state.zone_change_generation[&sacrifice_b]
+        }));
+    let retry_announcement = rv1::SpellCastAnnouncement {
+        source: Some(exile_cast_source(
+            village_rites.object_id,
+            village_exile_generation,
+        )),
+        face_index: retry_action.face_index,
+        cast_method: retry_action.cast_method,
+        casting_permission_id: Some(retry_permission_id),
+        cost_selections: vec![retry_cost_selection],
+        ..Default::default()
+    };
+    let retry_begin = engine
+        .apply_command(
+            controller,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: restored_prompt_id,
+                    decision: rv1::ResolutionChoiceDecision::CastSpell as i32,
+                    spell_cast_announcement: Some(retry_announcement),
+                    ..Default::default()
+                })),
+            },
+        )
+        .expect("retry Village Rites with the reissued prompt and current cost receipt");
+    assert!(retry_begin.events.iter().all(|event| {
+        !matches!(&event.ev, Some(Ev::StackPushed(pushed)) if pushed.object_id == village_rites.object_id)
+    }));
+    assert!(engine.state.pending_resolution.is_some());
+
+    let (transaction_id, controller_index) = {
+        let pending = engine
+            .state
+            .pending_spell_cast
+            .as_ref()
+            .expect("the retried actual cast awaits payment");
+        assert!(pending.resolution_time_offer);
+        assert_eq!(pending.caster, controller);
+        assert_eq!(pending.reserved_object_id, village_rites.object_id);
+        assert_eq!(pending.original_zone, tricerules_core::Zone::Exile);
+        assert_eq!(
+            pending.original_zone_change_generation,
+            village_exile_generation
+        );
+        (
+            pending.transaction_id,
+            engine
+                .state
+                .player_idx(controller)
+                .expect("the current PlayerId is valid"),
+        )
+    };
+    let mana_before_commit = engine.state.players[controller_index].mana_pool;
+    let revision = engine.state.command_index;
+    let preview = engine.preview_payment_scenario(
+        controller,
+        &rv1::PreviewPayment {
+            transaction_id,
+            revision,
+            commit_spell_cast: Some(rv1::CommitSpellCast {
+                transaction_id,
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    );
+    assert!(preview.valid && preview.complete, "{preview:?}");
+    assert_eq!(
+        engine.state.command_index, revision,
+        "preview remains query-only"
+    );
+    assert_eq!(
+        engine.state.players[controller_index].mana_pool,
+        mana_before_commit
+    );
+    let cast_batch = engine
+        .apply_scenario_command(
+            controller,
+            &RuledCommand {
+                cmd: Some(Cmd::CommitSpellCast(rv1::CommitSpellCast {
+                    transaction_id,
+                    payment: preview.selection,
+                    restricted_mana: preview.restricted_mana,
+                })),
+            },
+        )
+        .expect("commit the retried Village Rites cast using the actual PlayerId payment preview");
+    assert_eq!(
+        engine.state.players[controller_index].mana_pool,
+        mana_before_commit
+    );
+    assert_eq!(
+        engine.state.objects[&sacrifice_b].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    let second_sacrifice_generation = retry_cost_choices.choices[0]
+        .candidate_objects
+        .iter()
+        .filter_map(|candidate| candidate.object.as_ref())
+        .find(|candidate| candidate.object_id == sacrifice_b)
+        .expect("the reissued offer had B's generation-bound receipt")
+        .zone_change_generation
+        + 1;
+    assert_eq!(
+        engine.state.zone_change_generation[&sacrifice_b],
+        second_sacrifice_generation
+    );
+    assert_eq!(
+        engine.state.objects[&village_rites.object_id].zone,
+        tricerules_core::Zone::Stack
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&village_rites.object_id],
+        village_exile_generation + 1
+    );
+    assert!(engine.state.pending_spell_cast.is_none());
+    assert!(engine.state.pending_resolution.is_none());
+    let parent_resolved_indices = cast_batch
+        .events
+        .iter()
+        .enumerate()
+        .filter_map(|(index, event)| {
+            matches!(&event.ev, Some(Ev::StackResolved(resolved)) if resolved.object_id == trigger_id)
+                .then_some(index)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        parent_resolved_indices.len(),
+        1,
+        "the parked delayed trigger resumes and resolves exactly once"
+    );
+    assert!(cast_batch
+        .events
+        .iter()
+        .any(|event| { matches!(&event.ev, Some(Ev::PriorityChanged(_))) }));
+    for (event_index, event) in cast_batch.events.iter().enumerate() {
+        if matches!(&event.ev, Some(Ev::PriorityChanged(_))) {
+            assert!(
+                parent_resolved_indices[0] < event_index,
+                "the Rebound parent resolves before priority is published"
+            );
+        }
+    }
+    assert_eq!(
+        cast_batch
+            .events
+            .iter()
+            .filter(|event| matches!(&event.ev, Some(Ev::StackPushed(pushed)) if pushed.object_id == village_rites.object_id))
+            .count(),
+        1,
+        "the physical Village Rites recast is pushed exactly once"
+    );
+    let recast = engine
+        .state
+        .stack
+        .iter()
+        .find(|item| item.id == village_rites.object_id)
+        .expect("the exact exiled Village Rites is committed as a physical spell");
+    assert_eq!(recast.card_id, "village_rites");
+    assert_eq!(recast.cast_by, Some(controller));
+    assert_eq!(
+        recast.cast_method,
+        tricerules_core::state::SpellCastMethod::Permission
+    );
+    assert!(!recast.is_triggered);
+    assert!(!recast.is_copy);
+    assert!(recast.cast_occurrence.is_some());
+    assert!(engine
+        .state
+        .active_exile_play_permissions
+        .iter()
+        .all(|permission| permission.object_id != village_rites.object_id));
+
+    let hand_before_rebound_resolution = engine.state.players[controller_index].hand.len();
+    let recast_resolution = narset_c1_capture_priority_round(&mut engine);
+    narset_c1_assert_one_stack_resolved(
+        &recast_resolution,
+        village_rites.object_id,
+        controller,
+        rv1::StackResolveDestination::Graveyard,
+    );
+    assert_eq!(
+        engine.state.players[controller_index].hand.len(),
+        hand_before_rebound_resolution + 2,
+        "the actual recast Village Rites resolution draws two cards"
+    );
+    assert_eq!(
+        engine.state.objects[&village_rites.object_id].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&village_rites.object_id],
+        village_exile_generation + 2
+    );
+    assert_eq!(
+        engine.state.objects[&sacrifice_a].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert_eq!(
+        engine.state.objects[&sacrifice_b].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert!(engine.state.stack.is_empty());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.pending_spell_cast.is_none());
+    narset_c1_assert_no_scheduled_rebounds(&engine, "the completed Village Rites Rebound recast");
+    narset_phase_c2_assert_no_next_own_upkeep_rebound(
+        &mut engine,
+        controller,
+        opponent,
+        village_rites.object_id,
+    );
+    assert_eq!(
+        engine.state.objects[&village_rites.object_id].zone,
+        tricerules_core::Zone::Graveyard
+    );
+}
+#[test]
+fn narset_phase_c2_stale_rebound_exile_generation_does_not_cast_returned_opt() {
+    use tricerules_proto::ruled::v1 as rv1;
+
+    let decks = Some(vec![
+        deck_with("forest", &[REBOUND_OBSERVER, "opt"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(
+        narset_phase_c2_interaction_registry(),
+        6_110_407,
+        &[0, 1],
+        20,
+        decks,
+        true,
+    )
+    .expect("single-Opt stale-generation fixture engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let controller = engine.state.players[0].id;
+    let opponent = engine.state.players[1].id;
+    let source = move_fixture_card_to_zone(&mut engine, 0, REBOUND_OBSERVER, DevZone::Battlefield);
+    let source_generation = engine.state.zone_change_generation[&source];
+    arm_narset_observer(&mut engine, source);
+    ensure_in_hand(&mut engine, 0, "opt");
+    assert_eq!(
+        engine
+            .state
+            .objects
+            .values()
+            .filter(|object| object.card_id == "opt")
+            .count(),
+        1,
+        "the physical deck contains exactly one Opt"
+    );
+    let (opt, cast_batch) = narset_c1_cast_actual_hand_spell(
+        &mut engine,
+        0,
+        "opt",
+        0,
+        0,
+        Vec::new(),
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    assert_eq!(
+        cast_batch
+            .events
+            .iter()
+            .filter(|event| matches!(&event.ev, Some(Ev::StackPushed(_))))
+            .count(),
+        2,
+        "the actual Opt and its external observer trigger are each pushed once"
+    );
+    assert_one_rebound_trigger_for_cast(&engine, source, source_generation, opt);
+    narset_c1_capture_priority_round(&mut engine);
+    assert_eq!(
+        serialized_rebound_grants(&engine),
+        expected_rebound_grants_for_cast(opt)
+    );
+
+    let scry_batch = narset_c1_capture_priority_round(&mut engine);
+    let scry_offer =
+        find_resolution_choice(&scry_batch).expect("the actual Opt publishes its real Scry choice");
+    assert_eq!(scry_offer.source_object_id, opt.object_id);
+    assert_eq!(scry_offer.choice_kind, rv1::ChoiceKind::LibraryTop as i32);
+    let (deciding_player, scry_prompt_id, candidates) = {
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the actual Opt parks at Scry");
+        assert_eq!(pending.deciding_player, controller);
+        assert_eq!(pending.presentation.choice_kind, ChoiceKind::LibraryTop);
+        (
+            pending.deciding_player,
+            pending.resolution_prompt_id.get(),
+            pending.presentation.candidates.clone(),
+        )
+    };
+    assert_eq!(scry_offer.resolution_prompt_id, scry_prompt_id);
+    let mut scry_answer = submit_resolution_choice(candidates);
+    let Some(Cmd::SubmitResolutionChoice(answer)) = scry_answer.cmd.as_mut() else {
+        panic!("the current Opt Scry answer is a SubmitResolutionChoice");
+    };
+    answer.resolution_prompt_id = scry_offer.resolution_prompt_id;
+    let opt_resolution = engine
+        .apply_command(deciding_player, &scry_answer)
+        .expect("answer the actual Opt's currently published Scry choice");
+    narset_c1_assert_one_stack_resolved(
+        &opt_resolution,
+        opt.object_id,
+        controller,
+        rv1::StackResolveDestination::Exile,
+    );
+    assert_eq!(
+        engine.state.objects[&opt.object_id].zone,
+        tricerules_core::Zone::Exile
+    );
+    let opt_stack_generation = opt
+        .zone_change_generation
+        .expect("the actual Opt retains its exact stack incarnation");
+    let old_exile_generation = engine.state.zone_change_generation[&opt.object_id];
+    assert_eq!(old_exile_generation, opt_stack_generation + 1);
+    assert_eq!(engine.state.objects[&opt.object_id].owner, controller);
+    assert_eq!(
+        engine.state.players[0]
+            .exile
+            .iter()
+            .filter(|id| **id == opt.object_id)
+            .count(),
+        1
+    );
+    let saved_schedule = narset_c1_exclusion_scheduled_rebounds(&engine);
+    assert_eq!(saved_schedule.as_array().map(Vec::len), Some(1));
+    assert_eq!(
+        saved_schedule[0]["exiled"]["object_id"],
+        serde_json::json!(opt.object_id)
+    );
+    assert_eq!(
+        saved_schedule[0]["exiled"]["zone_change_generation"],
+        serde_json::json!(old_exile_generation.to_string())
+    );
+    assert_eq!(serialized_rebound_grants(&engine), serde_json::json!([]));
+    let filler = engine.state.players[0]
+        .library
+        .iter()
+        .copied()
+        .find(|object_id| engine.state.objects[object_id].card_id == "forest")
+        .expect("a different registered filler remains in the library");
+    let filler_generation = engine
+        .state
+        .zone_change_generation
+        .get(&filler)
+        .copied()
+        .unwrap_or(0);
+
+    let card_name = narset_phase_c2_interaction_registry()
+        .get("opt")
+        .expect("Opt remains registered")
+        .name
+        .clone();
+    let to_hand = narset_phase_c2_dev_move_card(&mut engine, controller, &card_name, DevZone::Hand);
+    assert!(to_hand.events.iter().any(
+        |event| matches!(&event.ev, Some(Ev::PermanentMoved(moved)) if moved.object_id == opt.object_id)
+    ));
+    assert_eq!(
+        engine.state.objects[&opt.object_id].zone,
+        tricerules_core::Zone::Hand
+    );
+    assert!(engine.state.players[0].hand.contains(&opt.object_id));
+    assert_eq!(
+        engine.state.zone_change_generation[&opt.object_id],
+        old_exile_generation + 1
+    );
+    assert_eq!(
+        narset_c1_exclusion_scheduled_rebounds(&engine),
+        saved_schedule,
+        "leaving the watched exile incarnation does not rewrite its saved receipt"
+    );
+    assert_eq!(
+        engine
+            .state
+            .zone_change_generation
+            .get(&filler)
+            .copied()
+            .unwrap_or(0),
+        filler_generation
+    );
+    assert!(engine.state.players[0].library.contains(&filler));
+
+    let to_exile =
+        narset_phase_c2_dev_move_card(&mut engine, controller, &card_name, DevZone::Exile);
+    assert!(to_exile.events.iter().any(
+        |event| matches!(&event.ev, Some(Ev::PermanentMoved(moved)) if moved.object_id == opt.object_id)
+    ));
+    let new_exile_generation = engine.state.zone_change_generation[&opt.object_id];
+    assert_eq!(
+        engine.state.objects[&opt.object_id].zone,
+        tricerules_core::Zone::Exile
+    );
+    assert!(engine.state.players[0].exile.contains(&opt.object_id));
+    assert_eq!(new_exile_generation, old_exile_generation + 2);
+    assert_ne!(new_exile_generation, old_exile_generation);
+    assert_eq!(
+        narset_c1_exclusion_scheduled_rebounds(&engine),
+        saved_schedule,
+        "the saved Rebound watches only the old exile incarnation"
+    );
+    assert_eq!(
+        engine
+            .state
+            .zone_change_generation
+            .get(&filler)
+            .copied()
+            .unwrap_or(0),
+        filler_generation
+    );
+    assert!(engine.state.players[0].library.contains(&filler));
+    assert_eq!(
+        engine
+            .state
+            .objects
+            .values()
+            .filter(|object| object.card_id == "opt")
+            .count(),
+        1,
+        "DevMoveCard cannot select a different Opt from the library"
+    );
+
+    let trigger_id = narset_phase_c2_advance_to_next_own_rebound_upkeep(
+        &mut engine,
+        controller,
+        opponent,
+        "opt",
+        opt.object_id,
+        opt_stack_generation,
+        (new_exile_generation, old_exile_generation),
+    );
+    assert_eq!(
+        engine.state.objects[&opt.object_id].zone,
+        tricerules_core::Zone::Exile
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&opt.object_id],
+        new_exile_generation
+    );
+    let trigger_resolution = narset_c1_capture_priority_round(&mut engine);
+    let resolved_triggers = trigger_resolution
+        .events
+        .iter()
+        .filter_map(|event| match &event.ev {
+            Some(Ev::StackResolved(resolved)) if resolved.object_id == trigger_id => Some(resolved),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(resolved_triggers.len(), 1);
+    assert!(trigger_resolution.events.iter().all(|event| {
+        !matches!(
+            &event.ev,
+            Some(Ev::ResolutionChoiceRequired(choice))
+                if choice.choice_kind == ChoiceKind::SpecialCast as i32
+        )
+    }));
+    assert!(engine.state.stack.is_empty());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.pending_spell_cast.is_none());
+    narset_c1_assert_no_scheduled_rebounds(&engine, "the stale watched exile incarnation");
+    let current_legal = engine.initial_response_batch();
+    let legal = &current_legal.legal_by_player[&controller];
+    assert!(
+        legal
+            .zone_cast_actions
+            .iter()
+            .all(|action| action.object_id != opt.object_id),
+        "the returned Opt's new exile incarnation has no Rebound cast permission"
+    );
+    assert!(
+        !legal
+            .valid_targets_by_zone_object
+            .contains_key(&(u64::from(opt.object_id) << 8)),
+        "no cast target group is published for the stale Rebound opportunity"
+    );
+    assert!(engine
+        .state
+        .active_exile_play_permissions
+        .iter()
+        .all(|permission| permission.object_id != opt.object_id));
+    assert_eq!(
+        engine.state.objects[&opt.object_id].zone,
+        tricerules_core::Zone::Exile
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&opt.object_id],
+        new_exile_generation
+    );
+
+    narset_phase_c2_assert_no_next_own_upkeep_rebound(
+        &mut engine,
+        controller,
+        opponent,
+        opt.object_id,
+    );
+    assert_eq!(
+        engine.state.objects[&opt.object_id].zone,
+        tricerules_core::Zone::Exile
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&opt.object_id],
+        new_exile_generation
+    );
+}
+
+#[test]
+fn narset_phase_c2_printed_artful_without_legal_creature_target_consumes_rebound_once() {
+    let NarsetC2ArtfulScheduleFixture {
+        mut engine,
+        controller,
+        opponent,
+        artful_object_id,
+        artful_stack_generation,
+        artful_exile_generation,
+        targets,
+    } = narset_phase_c2_artful_schedule_fixture(6_110_408, false);
+    let removed_creature = targets[0];
+    let removed_generation = engine.state.zone_change_generation[&removed_creature];
+    let schedule_before_removal = narset_c1_exclusion_scheduled_rebounds(&engine);
+
+    let removed = move_fixture_card_to_zone(&mut engine, 0, "grizzly_bears", DevZone::Graveyard);
+    assert_eq!(removed, removed_creature);
+    assert_eq!(
+        engine.state.objects[&removed_creature].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&removed_creature],
+        removed_generation + 1,
+        "the exact previously targeted creature has a new graveyard incarnation"
+    );
+    assert!(engine
+        .state
+        .players
+        .iter()
+        .flat_map(|player| player.battlefield.iter())
+        .all(|object_id| !engine
+            .characteristics(*object_id)
+            .expect("every battlefield object has characteristics")
+            .is_creature()));
+    assert_eq!(
+        narset_c1_exclusion_scheduled_rebounds(&engine),
+        schedule_before_removal,
+        "prepared creature movement leaves the exact delayed Rebound receipt unchanged"
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&artful_object_id],
+        artful_exile_generation
+    );
+
+    let trigger_id = narset_phase_c2_advance_to_next_own_rebound_upkeep(
+        &mut engine,
+        controller,
+        opponent,
+        "artful_maneuver",
+        artful_object_id,
+        artful_stack_generation,
+        (artful_exile_generation, artful_exile_generation),
+    );
+    let trigger_resolution = narset_c1_capture_priority_round(&mut engine);
+    let resolved_trigger = trigger_resolution
+        .events
+        .iter()
+        .filter_map(|event| match &event.ev {
+            Some(Ev::StackResolved(resolved)) if resolved.object_id == trigger_id => Some(resolved),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        resolved_trigger.len(),
+        1,
+        "the ordinary delayed trigger resolves once despite there being no legal creature targets"
+    );
+    assert!(
+        trigger_resolution.events.iter().all(|event| {
+            !matches!(
+                &event.ev,
+                Some(Ev::ResolutionChoiceRequired(choice))
+                    if choice.choice_kind == ChoiceKind::SpecialCast as i32
+            )
+        }),
+        "the targetless Rebound trigger publishes no cast choice"
+    );
+    assert!(engine.state.stack.is_empty());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.pending_spell_cast.is_none());
+    assert_eq!(
+        engine.state.objects[&artful_object_id].zone,
+        tricerules_core::Zone::Exile
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&artful_object_id],
+        artful_exile_generation
+    );
+    assert_eq!(
+        engine.state.objects[&removed_creature].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&removed_creature],
+        removed_generation + 1
+    );
+    narset_c1_assert_no_scheduled_rebounds(
+        &engine,
+        "the printed Artful trigger with no legal target",
+    );
+    let current_legal = engine.initial_response_batch();
+    let legal = &current_legal.legal_by_player[&controller];
+    assert!(legal
+        .zone_cast_actions
+        .iter()
+        .all(|action| action.object_id != artful_object_id));
+    assert!(
+        !legal
+            .valid_targets_by_zone_object
+            .contains_key(&(u64::from(artful_object_id) << 8)),
+        "the empty current creature target set prevents a Rebound cast action"
+    );
+    assert!(engine
+        .state
+        .active_exile_play_permissions
+        .iter()
+        .all(|permission| permission.object_id != artful_object_id));
+
+    narset_phase_c2_assert_no_next_own_upkeep_rebound(
+        &mut engine,
+        controller,
+        opponent,
+        artful_object_id,
+    );
+    assert_eq!(
+        engine.state.objects[&artful_object_id].zone,
+        tricerules_core::Zone::Exile
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&artful_object_id],
+        artful_exile_generation
+    );
+}

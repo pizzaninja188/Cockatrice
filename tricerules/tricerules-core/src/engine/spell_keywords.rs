@@ -34,13 +34,15 @@ impl GameEngine {
         let mut triggers = Vec::new();
         for keyword in [SpellKeyword::Storm, SpellKeyword::Cascade] {
             for origin in self.spell_keyword_origins(face, fact, keyword) {
-                triggers.push(self.collected_spell_keyword_trigger(
+                if let Some(trigger) = self.collected_spell_keyword_trigger(
                     &spell,
                     face.name.clone(),
                     fact,
                     keyword,
                     origin,
-                ));
+                ) {
+                    triggers.push(trigger);
+                }
             }
         }
         triggers
@@ -141,14 +143,8 @@ impl GameEngine {
         fact: &crate::state::SpellCastFact,
         keyword: SpellKeyword,
         origin: SpellKeywordOrigin,
-    ) -> CollectedTrigger {
-        let ability_id_text = match keyword {
-            SpellKeyword::Storm => "storm",
-            SpellKeyword::Cascade => "cascade",
-        };
-        let ability_id = tricerules_card_model::AbilityId::new(ability_id_text)
-            .expect("intrinsic spell keyword ability id");
-        let ability_text = match keyword {
+    ) -> Option<CollectedTrigger> {
+        let (ability_id_text, ability_text, effect) = match keyword {
             SpellKeyword::Storm => {
                 let earlier_casts = self
                     .state
@@ -156,26 +152,28 @@ impl GameEngine {
                     .current
                     .spells_cast
                     .saturating_sub(1);
-                format!(
-                    "Storm — copy this spell {earlier_casts} time{}",
-                    if earlier_casts == 1 { "" } else { "s" }
+                (
+                    "storm",
+                    format!(
+                        "Storm — copy this spell {earlier_casts} time{}",
+                        if earlier_casts == 1 { "" } else { "s" }
+                    ),
+                    SpellEffectKind::CopyCapturedSpell {
+                        count: earlier_casts,
+                    },
                 )
             }
-            SpellKeyword::Cascade => "Cascade".to_owned(),
+            SpellKeyword::Cascade => (
+                "cascade",
+                "Cascade".to_owned(),
+                SpellEffectKind::Cascade {
+                    source_mana_value: fact.mana_value,
+                },
+            ),
+            SpellKeyword::Rebound => return None,
         };
-        let effect = match keyword {
-            SpellKeyword::Storm => SpellEffectKind::CopyCapturedSpell {
-                count: self
-                    .state
-                    .turn_history
-                    .current
-                    .spells_cast
-                    .saturating_sub(1),
-            },
-            SpellKeyword::Cascade => SpellEffectKind::Cascade {
-                source_mana_value: fact.mana_value,
-            },
-        };
+        let ability_id = tricerules_card_model::AbilityId::new(ability_id_text)
+            .expect("intrinsic spell keyword ability id");
         let ability = TriggeredAbilityDef {
             ability_id: ability_id.clone(),
             presentation: tricerules_card_model::AbilityPresentation::Fallback,
@@ -210,7 +208,7 @@ impl GameEngine {
             ability_text.clone(),
         );
 
-        CollectedTrigger {
+        Some(CollectedTrigger {
             captured_spell: Some(Box::new(spell.clone())),
             source_label,
             source_id: spell.id,
@@ -227,6 +225,6 @@ impl GameEngine {
             ability,
             ability_text,
             trigger_context: TriggerContext::default(),
-        }
+        })
     }
 }

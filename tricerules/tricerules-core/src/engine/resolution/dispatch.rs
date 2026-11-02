@@ -336,6 +336,7 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::CopyCapturedSpell { .. } => {
             stack_ops::copy_target_spell(cx, effect)?
         }
+        SpellEffectKind::CastReboundedCard => zones::cast_rebounded_card(cx)?,
         SpellEffectKind::GrantCapturedSpellRebound => {
             cx.engine.grant_captured_spell_rebound(cx.top)?;
             EffectOutcome::Continue

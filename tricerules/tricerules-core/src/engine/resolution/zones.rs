@@ -5910,6 +5910,100 @@ fn resolve_library_cast_offer(
     Ok(EffectOutcome::Suspended)
 }
 
+/// Rebound's delayed trigger offers only the exact Exile incarnation captured when its resolving
+/// spell left the stack. A later zone incarnation with the same physical object id is not a
+/// substitute for that receipt.
+pub(super) fn cast_rebounded_card(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
+    let exiled = cx
+        .top
+        .trigger_context
+        .observed_object
+        .ok_or(EngineError::ProgramInvariant(
+            "CastReboundedCard requires its captured Exile object reference",
+        ))?;
+    let exact_exile_is_current = cx
+        .engine
+        .state
+        .objects
+        .get(&exiled.object_id)
+        .is_some_and(|object| object.zone == Zone::Exile)
+        && cx
+            .engine
+            .state
+            .zone_change_generation
+            .get(&exiled.object_id)
+            .copied()
+            == Some(exiled.zone_change_generation);
+    if !exact_exile_is_current {
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let controller = cx.controller;
+    let mut stack =
+        ParkedStackResolution::new(cx.top.clone()).with_previous_result(cx.effect_result.clone());
+    stack.resume_effect_index = Some(cx.effect_index + 1);
+    let completion = SpecialCastCompletion::ResumeStack;
+    let prompt = format!(
+        "Cast {} without paying its mana cost?",
+        object_display_name(&cx.engine.state, cx.engine.registry, exiled.object_id)
+    );
+    let completion_for_no_cast = completion.clone();
+    let stack_for_no_cast = stack.clone();
+    cx.engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+        deciding_player: controller,
+        presentation: PendingResolutionPresentation {
+            source_object_id: stack.item.id,
+            candidates: vec![exiled.object_id],
+            min: 0,
+            max: 1,
+            ordered: false,
+            prompt: prompt.clone(),
+            choice_kind: rv1::ChoiceKind::SpecialCast,
+            unique_names: false,
+        },
+        continuation: ResolutionContinuation::SpecialCast {
+            stack,
+            exiled,
+            face_index: cx.top.face_index,
+            method: SpellCastMethod::Permission,
+            cost: ManaCost::default(),
+            undo_history_start: cx.engine.state.undoable_mana_abilities.len(),
+            permission_scope: Some(ExilePlayPermissionScope::CastCard),
+            return_source_to_owner_hand_if_cast: false,
+            max_face_mana_value: None,
+            completion,
+        },
+    });
+
+    let can_cast = super::super::legal_actions::legal_zone_cast_actions(cx.engine, controller)
+        .iter()
+        .any(|action| action.object_id == exiled.object_id);
+    if !can_cast {
+        cx.engine.state.pending_resolution = None;
+        let suspended = cx.engine.finish_special_cast_completion(
+            &completion_for_no_cast,
+            false,
+            stack_for_no_cast,
+            cx.events,
+        )?;
+        return Ok(if suspended {
+            EffectOutcome::Suspended
+        } else {
+            EffectOutcome::Continue
+        });
+    }
+
+    cx.events.push(
+        cx.engine
+            .resolution_payment_choice_event()
+            .expect("Rebound cast offer"),
+    );
+    cx.events.push(ev_log(prompt));
+    Ok(EffectOutcome::Suspended)
+}
+
 /// CR 701.22 scry enters the shared private top-library partition state machine. Scry's selected
 /// cohort goes to the library bottom; the retained cohort may require a second ordering choice.
 pub(super) fn scry(

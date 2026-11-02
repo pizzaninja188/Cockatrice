@@ -1941,6 +1941,7 @@ fn validate_effect_targets(
         | SpellEffectKind::CopyNextSpellThisTurn
         | SpellEffectKind::CopyCapturedSpell { .. }
         | SpellEffectKind::NextHandInstantOrSorceryGainsReboundThisTurn
+        | SpellEffectKind::CastReboundedCard
         | SpellEffectKind::GrantCapturedSpellRebound
         | SpellEffectKind::Untap {
             subject: EffectSubject::Source

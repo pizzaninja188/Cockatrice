@@ -3920,6 +3920,7 @@ pub(crate) enum ObservedGameEvent {
         turn_instance: u64,
     },
     BeginningOfUpkeep {
+        active_player: PlayerId,
         turn_instance: u64,
     },
     TurnEnded {
@@ -4236,7 +4237,8 @@ pub struct GameState {
     /// stack incarnation. Copies and spell snapshots do not carry this noncopiable provenance.
     #[serde(serialize_with = "serialize_hand_cast_holders_as_ordered_pairs")]
     pub(crate) hand_cast_holders: BTreeMap<(ObjectId, Option<u64>), PlayerId>,
-    /// C1 foundation records for Rebound replacement exits; a later upkeep consumer owns them.
+    /// One-shot Rebound opportunities captured at stack exit; the matching controller's actual
+    /// upkeep consumes them.
     pub(crate) scheduled_rebounds: Vec<ScheduledRebound>,
     /// One receipt for each activation-observing trigger, keyed by the trigger's virtual id.
     pub(crate) captured_activated_abilities: BTreeMap<ObjectId, CapturedActivatedAbility>,
@@ -4758,7 +4760,7 @@ impl GameState {
                         target_turn_instance: Some(target_turn_instance),
                         ..
                     },
-                    ObservedGameEvent::BeginningOfUpkeep { turn_instance },
+                    ObservedGameEvent::BeginningOfUpkeep { turn_instance, .. },
                 ) if turn_instance == *target_turn_instance => true,
                 (
                     EventObserverMatcher::AtBeginningOfNextTurnUpkeep {
@@ -5037,7 +5039,10 @@ mod event_observer_tests {
 
         engine
             .state
-            .dispatch_event_observers(ObservedGameEvent::BeginningOfUpkeep { turn_instance: 7 });
+            .dispatch_event_observers(ObservedGameEvent::BeginningOfUpkeep {
+                active_player: 0,
+                turn_instance: 7,
+            });
         assert!(matches!(
             engine.state.active_event_observers[0].matcher,
             EventObserverMatcher::AtBeginningOfNextTurnUpkeep {
@@ -5064,7 +5069,10 @@ mod event_observer_tests {
 
         engine
             .state
-            .dispatch_event_observers(ObservedGameEvent::BeginningOfUpkeep { turn_instance: 9 });
+            .dispatch_event_observers(ObservedGameEvent::BeginningOfUpkeep {
+                active_player: 1,
+                turn_instance: 9,
+            });
         assert!(engine.state.active_event_observers.is_empty());
         assert_eq!(engine.state.pending_immediate_observer_actions.len(), 1);
     }
@@ -5098,7 +5106,10 @@ mod event_observer_tests {
             });
         engine
             .state
-            .dispatch_event_observers(ObservedGameEvent::BeginningOfUpkeep { turn_instance: 13 });
+            .dispatch_event_observers(ObservedGameEvent::BeginningOfUpkeep {
+                active_player: 0,
+                turn_instance: 13,
+            });
 
         assert!(engine.state.active_event_observers.is_empty());
         assert!(engine.state.pending_immediate_observer_actions.is_empty());

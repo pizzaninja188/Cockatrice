@@ -1680,6 +1680,7 @@ impl GameEngine {
         let crime_events = pending.crime_events.clone();
         let origin = pending_state.original_zone;
         let original_holder = pending_state.original_holder;
+        let resolution_time_offer = pending_state.resolution_time_offer;
         let prepare_source = self.state.prepare_spell_sources.get(&oid).cloned();
         let payment_plan = self.prepare_cost_transaction_commit(payment_plan)?;
         let payment = self.commit_prevalidated_cost_transaction(payment_plan, None)?;
@@ -1911,7 +1912,9 @@ impl GameEngine {
         // Both kinds of triggers are waiting when the cast completes, so they form one CR 603.3b
         // ordering group rather than forcing an artificial target-trigger/cast-trigger order.
         self.stage_triggers(target_triggers);
-        batch.events.push(ev_priority_changed(self));
+        if !resolution_time_offer {
+            batch.events.push(ev_priority_changed(self));
+        }
         fill_legal(&mut batch, self);
         Ok(batch)
     }

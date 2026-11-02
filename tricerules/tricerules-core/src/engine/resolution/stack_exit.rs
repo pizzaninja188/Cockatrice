@@ -165,21 +165,25 @@ impl GameEngine {
         let Some(holder) = self.state.hand_cast_holders.get(&key).copied() else {
             return false;
         };
-        let is_instant_or_sorcery = self
+        let Some(face) = self
             .registry
             .get(&item.card_id)
             .and_then(|definition| definition.face(item.face_index))
-            .is_some_and(|face| {
-                face.types
-                    .iter()
-                    .any(|kind| kind == "Instant" || kind == "Sorcery")
-            });
+        else {
+            return false;
+        };
+        let is_instant_or_sorcery = face
+            .types
+            .iter()
+            .any(|kind| kind == "Instant" || kind == "Sorcery");
+        let has_printed_rebound = face.spell_keywords.contains(&SpellKeyword::Rebound);
+        let has_exact_external_rebound_grant = self.state.rebound_spell_grants.contains(&key);
         // Resolution has popped this item from `state.stack`; the captured terminal item and its
         // exact physical Stack incarnation are the authority through completion and parking.
         is_instant_or_sorcery
             && item.cast_by == Some(item.controller)
             && holder == item.controller
-            && self.state.rebound_spell_grants.contains(&key)
+            && (has_printed_rebound || has_exact_external_rebound_grant)
             && self.stack_backing_object_is_current(item)
     }
 

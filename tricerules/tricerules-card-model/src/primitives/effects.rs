@@ -1570,6 +1570,10 @@ pub enum SpellEffectKind {
     CopyCapturedSpell {
         count: u32,
     },
+    /// Engine-created executor for one delayed Rebound trigger; its private context identifies
+    /// the exact Exile incarnation that may be offered to its controller.
+    #[serde(skip_deserializing)]
+    CastReboundedCard,
     /// Engine-created trigger executor; the trigger's private context identifies the exact cast.
     GrantCapturedSpellRebound,
     /// CR 613.4 layer 7c: give every creature matching `filter` +power/+toughness until end of
@@ -4193,6 +4197,7 @@ impl SpellEffectKind {
             | SpellEffectKind::CopyNextSpellThisTurn
             | SpellEffectKind::CopyCapturedSpell { .. }
             | SpellEffectKind::NextHandInstantOrSorceryGainsReboundThisTurn
+            | SpellEffectKind::CastReboundedCard
             | SpellEffectKind::GrantCapturedSpellRebound
             | SpellEffectKind::PutAbilitySourceOntoBattlefieldTappedAndAttacking
             | SpellEffectKind::PutAbilitySourceOntoBattlefield
@@ -4543,6 +4548,15 @@ impl SpellEffectKind {
     /// effects). Rules that depend on *sibling* effects live here; per-effect rules live in
     /// [`SpellEffectKind::validate`], which the caller runs too.
     pub fn validate_list(effects: &[SpellEffectKind]) -> Result<(), String> {
+        if effects
+            .iter()
+            .any(SpellEffectKind::contains_engine_created_rebound_cast)
+        {
+            return Err(
+                "CastReboundedCard is reserved for an engine-created delayed Rebound trigger"
+                    .into(),
+            );
+        }
         if effects.iter().any(|effect| {
             matches!(
                 effect,
@@ -4731,6 +4745,12 @@ impl SpellEffectKind {
     /// `context` distinguishes spells from abilities so source-bound subjects are
     /// rejected where they make no sense.
     pub fn validate(&self, context: EffectContext) -> Result<(), String> {
+        if self.contains_engine_created_rebound_cast() {
+            return Err(
+                "CastReboundedCard is reserved for an engine-created delayed Rebound trigger"
+                    .into(),
+            );
+        }
         if self.contains_captured_spell_rebound_grant()
             && !matches!(self, Self::GrantCapturedSpellRebound)
         {
@@ -5230,7 +5250,15 @@ impl SpellEffectKind {
                             );
                         }
                     }
-                    StaticEmblemEffect::GrantSpellKeyword { filter, .. } => filter.validate()?,
+                    StaticEmblemEffect::GrantSpellKeyword { filter, keyword } => {
+                        if *keyword == SpellKeyword::Rebound {
+                            return Err(
+                                "static emblem Rebound spell keyword grants are not supported"
+                                    .into(),
+                            );
+                        }
+                        filter.validate()?;
+                    }
                     StaticEmblemEffect::PreventAllButOneDamageToYouAndYourPlaneswalkers => {}
                     StaticEmblemEffect::PlaneswalkerLoyaltyInstantTiming => {}
                 }
@@ -7296,6 +7324,10 @@ impl SpellEffectKind {
             } => activated_ability_contains(ability),
             _ => false,
         }
+    }
+
+    fn contains_engine_created_rebound_cast(&self) -> bool {
+        self.contains_legacy_flat_signature(|effect| matches!(effect, Self::CastReboundedCard))
     }
 
     pub(crate) fn requires_triggering_spell_context(&self) -> bool {
