@@ -1,0 +1,62 @@
+{
+  "format_version": 1,
+  "oracle_id": "e1de0c94-0ecc-425a-9b92-27c2745d07e7",
+  "spans": [
+    {
+      "face_id": "narset_transcendent",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/effect/0"
+      ]
+    },
+    {
+      "face_id": "narset_transcendent",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1",
+        "/faces/0/activated_abilities/1/effect/0"
+      ]
+    },
+    {
+      "face_id": "narset_transcendent",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/2",
+        "/faces/0/activated_abilities/2/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "deck_registry::deck_coverage_narset_transcendent::narset_exact_identity_and_all_three_loyalty_abilities",
+      "covers": "Typed registry assertions for exact identity, face, mainboard status, mana cost, types, printed and intrinsic loyalty; all three stable ability IDs, Oracle lines, costs, untargeted effect shapes, the exact look filter, Rebound grant instruction, and emblem effect."
+    },
+    {
+      "test": "scenario deck_coverage_narset_transcendent::narset_cast_and_loyalty_timing_pay_printed_costs",
+      "covers": "Prepared actual-card assertions for Narset's printed cast cost, atomic insufficient and wrong-color payments, loyalty timing, controller ownership, and legal +1 behavior."
+    },
+    {
+      "test": "scenario deck_coverage_narset_transcendent::narset_plus_one_preserves_private_top_or_reveals_only_the_accepted_card",
+      "covers": "Prepared actual-card +1 look choices preserve private top-card identity and reveal only an accepted eligible card."
+    },
+    {
+      "test": "scenario deck_coverage_narset_transcendent::narset_minus_two_grants_then_rebounds_the_actual_hand_spell",
+      "covers": "Prepared two-player actual-card assertions: -2 moves loyalty from six to four; a normally paid hand Divination receives Rebound only after its exact cast trigger resolves, draws two and exiles, has no offer during the opponent's upkeep, then uses the current own-upkeep SpecialCast receipt to recast from the exact exile generation for the {0} zero-mana cost and draw two into its owner's graveyard without a Rebound loop."
+    },
+    {
+      "test": "scenario deck_coverage_narset_transcendent::narset_minus_two_unconsumed_effect_expires_at_cleanup",
+      "covers": "Prepared actual-card assertions: an unused -2 observer expires at cleanup, and a hand Divination on the next own turn draws two and resolves to the graveyard without a grant or Rebound schedule."
+    },
+    {
+      "test": "scenario deck_coverage_narset_transcendent::narset_minus_nine_creates_a_persistent_three_player_prohibition",
+      "covers": "Prepared three-player actual-card assertions: -9 pays all nine loyalty and its ability resolves after Narset enters its owner's graveyard; the controller's emblem blocks two opponents' noncreature Begins atomically on different prepared Main1 turns while the controller's Divination and opponents' Creature and Artifact Creature spells resolve."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1327,6 +1327,9 @@ mod deck_coverage_skitterbeam_battalion;
 #[path = "scenario/draw_discard_tail.rs"]
 mod draw_discard_tail;
 
+#[path = "scenario/deck_coverage_narset_transcendent.rs"]
+mod deck_coverage_narset_transcendent;
+
 #[path = "scenario/deck_coverage_narset_rebound_capability.rs"]
 mod deck_coverage_narset_rebound_capability;
 

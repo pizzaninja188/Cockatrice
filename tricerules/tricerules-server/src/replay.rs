@@ -8994,4 +8994,2881 @@ mod tests {
             "phasing preserves both +1/+1 counters"
         );
     }
+    fn narset_normal_fixed_decks() -> Vec<PlayerDeck> {
+        let mut pilot = Vec::new();
+        pilot.extend(vec!["Narset Transcendent".to_string(); 4]);
+        pilot.extend(vec!["Divination".to_string(); 4]);
+        pilot.extend(vec!["Island".to_string(); 26]);
+        pilot.extend(vec!["Plains".to_string(); 26]);
+
+        let mut opponent = Vec::new();
+        opponent.extend(vec!["Divination".to_string(); 4]);
+        opponent.extend(vec!["Ornithopter".to_string(); 4]);
+        opponent.extend(vec!["Island".to_string(); 52]);
+
+        vec![
+            PlayerDeck {
+                player_id: TEKUTHAL_NORMAL_PILOT_ID,
+                mainboard_card_name: pilot,
+                commander_setup: Some(CommanderSetup {
+                    declaration: Some(commander_setup::Declaration::NoCommander(true)),
+                }),
+            },
+            PlayerDeck {
+                player_id: TEKUTHAL_NORMAL_OPPONENT_ID,
+                mainboard_card_name: opponent,
+                commander_setup: Some(CommanderSetup {
+                    declaration: Some(commander_setup::Declaration::NoCommander(true)),
+                }),
+            },
+        ]
+    }
+
+    fn narset_normal_assert_decks(player_decks: &[PlayerDeck]) {
+        let registry = tricerules_cards::registry::global();
+        assert_eq!(player_decks.len(), 2);
+        for (deck, expected_player_id) in player_decks
+            .iter()
+            .zip([TEKUTHAL_NORMAL_PILOT_ID, TEKUTHAL_NORMAL_OPPONENT_ID])
+        {
+            assert_eq!(deck.player_id, expected_player_id);
+            assert_eq!(deck.mainboard_card_name.len(), 60);
+            assert!(matches!(
+                deck.commander_setup
+                    .as_ref()
+                    .and_then(|setup| setup.declaration.as_ref()),
+                Some(commander_setup::Declaration::NoCommander(true))
+            ));
+            for card_name in deck
+                .mainboard_card_name
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+            {
+                assert!(
+                    registry.id_for_name(card_name).is_some(),
+                    "Narset normal deck card name is absent from the registry: {card_name}"
+                );
+                let copies = deck
+                    .mainboard_card_name
+                    .iter()
+                    .filter(|candidate| *candidate == card_name)
+                    .count();
+                if matches!(card_name.as_str(), "Island" | "Plains") {
+                    assert!(copies > 4, "basics are not subject to the nonbasic cap");
+                } else {
+                    assert!(copies <= 4, "too many copies of nonbasic {card_name}");
+                }
+            }
+        }
+    }
+
+    fn narset_normal_player_command(
+        session: &mut EngineSession,
+        directory: &Path,
+        rows: &mut Vec<String>,
+        accepted_commands: &mut usize,
+        player_id: i32,
+        command: RuledCommand,
+        battlefield: &mut Vec<BattlefieldObject>,
+    ) -> IpcResponse {
+        assert!(
+            *accepted_commands < 8_192,
+            "Narset normal pilot stays inside the accepted-command bound"
+        );
+        tekuthal_normal_player_command(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            player_id,
+            command,
+            battlefield,
+        )
+    }
+
+    fn narset_normal_advance_to_main(
+        session: &mut EngineSession,
+        directory: &Path,
+        rows: &mut Vec<String>,
+        accepted_commands: &mut usize,
+        latest: IpcResponse,
+        battlefield: &mut Vec<BattlefieldObject>,
+        target_player_id: i32,
+    ) -> IpcResponse {
+        narset_normal_advance_to_step(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            latest,
+            battlefield,
+            target_player_id,
+            tricerules_core::TurnStep::Main1,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn narset_normal_advance_to_step(
+        session: &mut EngineSession,
+        directory: &Path,
+        rows: &mut Vec<String>,
+        accepted_commands: &mut usize,
+        mut latest: IpcResponse,
+        battlefield: &mut Vec<BattlefieldObject>,
+        target_player_id: i32,
+        target_step: tricerules_core::TurnStep,
+    ) -> IpcResponse {
+        for _ in 0..8_192 {
+            let state = &session
+                .engine
+                .as_ref()
+                .expect("Narset normal session has an engine")
+                .state;
+            if state.pending_resolution.is_some() {
+                return latest;
+            }
+            if state.turn_step == target_step
+                && state.players[state.active_player_idx].id == target_player_id
+                && state.priority_player_id() == target_player_id
+                && state.stack.is_empty()
+            {
+                kaya_capture_battlefield(&latest, target_player_id, battlefield);
+                return latest;
+            }
+
+            let mut priority_player = state.priority_player_id();
+            let discard_count = if state.turn_step == tricerules_core::TurnStep::Cleanup
+                && !state.cleanup_priority_active
+                && state.cleanup_discard_player == Some(priority_player)
+            {
+                state
+                    .players
+                    .iter()
+                    .find(|player| player.id == priority_player)
+                    .expect("cleanup actor is in the game")
+                    .hand
+                    .len()
+                    .saturating_sub(7)
+            } else {
+                0
+            };
+            if discard_count > 0 {
+                let legal_actions = kaya_batch(&latest)
+                    .legal_by_player
+                    .get(&priority_player)
+                    .expect("current cleanup actor receives legal hand actions");
+                let mut cleanup_offers = legal_actions
+                    .hand_actions
+                    .iter()
+                    .filter(|offer| {
+                        let protected = (priority_player == TEKUTHAL_NORMAL_PILOT_ID
+                            && matches!(
+                                offer.card_name.as_str(),
+                                "Narset Transcendent" | "Divination"
+                            ))
+                            || (priority_player == TEKUTHAL_NORMAL_OPPONENT_ID
+                                && matches!(
+                                    offer.card_name.as_str(),
+                                    "Divination" | "Ornithopter"
+                                ));
+                        offer.kind == HandActionKind::HandActionCleanupDiscard as i32 && !protected
+                    })
+                    .map(|offer| offer.hand_index)
+                    .collect::<Vec<_>>();
+                cleanup_offers.sort_unstable();
+                cleanup_offers.truncate(discard_count);
+                assert_eq!(
+                    cleanup_offers.len(),
+                    discard_count,
+                    "current cleanup offers preserve Narset, Divination, and Ornithopter"
+                );
+                latest = narset_normal_player_command(
+                    session,
+                    directory,
+                    rows,
+                    accepted_commands,
+                    priority_player,
+                    RuledCommand {
+                        cmd: Some(Cmd::DiscardToHandSize(DiscardToHandSize {
+                            hand_card_indices: cleanup_offers,
+                        })),
+                    },
+                    battlefield,
+                );
+                priority_player = session
+                    .engine
+                    .as_ref()
+                    .expect("Narset session has an engine after cleanup discard")
+                    .state
+                    .priority_player_id();
+                assert!(kaya_batch(&latest)
+                    .legal_by_player
+                    .contains_key(&priority_player));
+            }
+
+            latest = narset_normal_player_command(
+                session,
+                directory,
+                rows,
+                accepted_commands,
+                priority_player,
+                RuledCommand {
+                    cmd: Some(Cmd::PassPriority(PassPriority {})),
+                },
+                battlefield,
+            );
+        }
+        panic!("Narset normal priority passes did not reach player {target_player_id}'s {target_step:?}");
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn narset_normal_play_land(
+        session: &mut EngineSession,
+        directory: &Path,
+        rows: &mut Vec<String>,
+        accepted_commands: &mut usize,
+        latest: &IpcResponse,
+        battlefield: &mut Vec<BattlefieldObject>,
+        player_id: i32,
+        p17_islands: &mut usize,
+        p17_plains: &mut usize,
+    ) -> IpcResponse {
+        let offers = kaya_batch(latest)
+            .legal_by_player
+            .get(&player_id)
+            .expect("active player receives current land offers")
+            .hand_actions
+            .iter()
+            .filter(|offer| offer.kind == HandActionKind::HandActionPlayLand as i32)
+            .collect::<Vec<_>>();
+        let selected = if player_id == TEKUTHAL_NORMAL_PILOT_ID && *p17_islands == 0 {
+            offers
+                .iter()
+                .filter(|offer| offer.card_name == "Island")
+                .min_by_key(|offer| offer.hand_index)
+                .expect("P17's current hand offers the missing first Island")
+        } else if player_id == TEKUTHAL_NORMAL_PILOT_ID && *p17_plains == 0 {
+            offers
+                .iter()
+                .filter(|offer| offer.card_name == "Plains")
+                .min_by_key(|offer| offer.hand_index)
+                .expect("P17's current hand offers the missing Plains")
+        } else if player_id == TEKUTHAL_NORMAL_OPPONENT_ID {
+            offers
+                .iter()
+                .filter(|offer| offer.card_name == "Island")
+                .min_by_key(|offer| offer.hand_index)
+                .expect("P29's current hand offers an ordinary Island")
+        } else {
+            offers
+                .iter()
+                .min_by_key(|offer| offer.hand_index)
+                .expect("P17's current hand offers an ordinary basic land")
+        };
+        let card_name = selected.card_name.to_string();
+        let hand_index = selected.hand_index;
+        let response = narset_normal_player_command(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            player_id,
+            RuledCommand {
+                cmd: Some(Cmd::PlayLand(PlayLand {
+                    source: Some(LandSource {
+                        location: Some(
+                            tricerules_proto::ruled::v1::land_source::Location::HandIndex(
+                                hand_index,
+                            ),
+                        ),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                })),
+            },
+            battlefield,
+        );
+        kaya_capture_battlefield(&response, player_id, battlefield);
+        assert!(response.ok, "current {card_name} land offer is accepted");
+        if player_id == TEKUTHAL_NORMAL_PILOT_ID {
+            match card_name.as_str() {
+                "Island" => *p17_islands += 1,
+                "Plains" => *p17_plains += 1,
+                _ => panic!("P17's frozen land plan only plays Island or Plains"),
+            }
+        }
+        response
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn narset_normal_cast_from_current_offer(
+        session: &mut EngineSession,
+        directory: &Path,
+        rows: &mut Vec<String>,
+        accepted_commands: &mut usize,
+        mut latest: IpcResponse,
+        battlefield: &mut Vec<BattlefieldObject>,
+        card_name: &str,
+        expected_total_cost: &str,
+        blue_mana: u32,
+        white_mana: u32,
+        expected_source_object_id: Option<u32>,
+        resolve_after_commit: bool,
+    ) -> IpcResponse {
+        let p17_hand = &session
+            .engine
+            .as_ref()
+            .expect("Narset session has an engine before the offered cast")
+            .state
+            .players
+            .iter()
+            .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+            .expect("P17 owns the current hand offer")
+            .hand;
+        let spell = kaya_batch(&latest)
+            .legal_by_player
+            .get(&TEKUTHAL_NORMAL_PILOT_ID)
+            .expect("P17 receives the current legal hand actions")
+            .hand_actions
+            .iter()
+            .find(|offer| {
+                offer.kind == HandActionKind::HandActionCastSpell as i32
+                    && offer.card_name == card_name
+                    && expected_source_object_id.is_none_or(|expected| {
+                        usize::try_from(offer.hand_index)
+                            .ok()
+                            .and_then(|index| p17_hand.get(index))
+                            == Some(&expected)
+                    })
+            })
+            .cloned()
+            .unwrap_or_else(|| panic!("current P17 hand offer includes castable {card_name}"));
+        let (source_object_id, source_generation) = {
+            let state = &session
+                .engine
+                .as_ref()
+                .expect("Narset session has an engine before the offered cast")
+                .state;
+            let player = state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                .expect("P17 owns the current hand offer");
+            let object_id = *player
+                .hand
+                .get(usize::try_from(spell.hand_index).expect("hand index fits usize"))
+                .expect("current hand offer resolves to a physical card");
+            let object = state
+                .objects
+                .get(&object_id)
+                .expect("current hand offer resolves to a game object");
+            assert_eq!(object.zone, tricerules_core::Zone::Hand);
+            assert_eq!(
+                object.card_id,
+                tricerules_cards::registry::global()
+                    .id_for_name(card_name)
+                    .expect("the offered card name is in the global registry")
+            );
+            (
+                object_id,
+                state
+                    .zone_change_generation
+                    .get(&object_id)
+                    .copied()
+                    .unwrap_or(0),
+            )
+        };
+        if card_name == "Narset Transcendent" {
+            assert_eq!(
+                (source_object_id, source_generation, spell.face_index),
+                (30, 1, 0)
+            );
+        }
+        if let Some(expected) = expected_source_object_id {
+            assert_eq!(source_object_id, expected);
+        }
+        println!(
+            "{card_name} current hand offer source ObjectId={source_object_id} generation={source_generation} face_index={} cast_method=Normal",
+            spell.face_index
+        );
+        latest = narset_normal_player_command(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            TEKUTHAL_NORMAL_PILOT_ID,
+            RuledCommand {
+                cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
+                    announcement: Some(tricerules_proto::ruled::v1::SpellCastAnnouncement {
+                        source: Some(CastSource {
+                            location: Some(
+                                tricerules_proto::ruled::v1::cast_source::Location::HandIndex(
+                                    spell.hand_index,
+                                ),
+                            ),
+                            expected_zone_change_generation: None,
+                        }),
+                        face_index: spell.face_index,
+                        cast_cost_group_selections: Vec::new(),
+                        cast_method: CastMethod::Normal as i32,
+                        ..Default::default()
+                    }),
+                })),
+            },
+            battlefield,
+        );
+        let pending = kaya_batch(&latest)
+            .legal_by_player
+            .get(&TEKUTHAL_NORMAL_PILOT_ID)
+            .and_then(|actions| actions.pending_spell_cast.as_ref())
+            .expect("current normal cast publishes its pending payment");
+        let payment_preview = pending
+            .payment_preview
+            .as_ref()
+            .expect("pending normal cast publishes its payment preview");
+        assert_eq!(payment_preview.total_cost, expected_total_cost);
+        let transaction_id = pending.transaction_id;
+
+        let mut produced = PaymentMana::default();
+        for (color, count) in [('W', white_mana), ('U', blue_mana)] {
+            for _ in 0..count {
+                let (object_id, generation, ability_index, output) = battlefield
+                    .iter()
+                    .filter(|permanent| {
+                        !permanent.tapped
+                            && matches!(permanent.card_id.as_str(), "island" | "plains")
+                    })
+                    .flat_map(|permanent| {
+                        permanent
+                            .activated_abilities
+                            .iter()
+                            .filter(|ability| ability.is_mana_ability && ability.activatable)
+                            .map(|ability| {
+                                (
+                                    permanent.object_id,
+                                    permanent.zone_change_generation,
+                                    ability.ability_index,
+                                    ability.mana_produced.clone(),
+                                )
+                            })
+                    })
+                    .find(|source| kaya_output_has_color(&source.3, color))
+                    .unwrap_or_else(|| {
+                        panic!("current untapped Island/Plains offers produce {color}")
+                    });
+                narset_normal_player_command(
+                    session,
+                    directory,
+                    rows,
+                    accepted_commands,
+                    TEKUTHAL_NORMAL_PILOT_ID,
+                    RuledCommand {
+                        cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                            source_object_id: object_id,
+                            ability_index,
+                            source_zone: AbilitySourceZone::Battlefield as i32,
+                            expected_zone_change_generation: generation,
+                            ..Default::default()
+                        })),
+                    },
+                    battlefield,
+                );
+                if color == 'U' {
+                    produced.u += 1;
+                } else {
+                    produced.w += 1;
+                }
+                let state = &session
+                    .engine
+                    .as_ref()
+                    .expect("Narset session remains open after current mana ability")
+                    .state;
+                let player = state
+                    .players
+                    .iter()
+                    .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                    .expect("P17 remains in the current normal session");
+                assert_eq!(player.mana_pool.blue, produced.u);
+                assert_eq!(player.mana_pool.white, produced.w);
+                assert_eq!(player.mana_pool.colorless, 0);
+                println!(
+                    "{card_name} current {color} source ObjectId={object_id} generation={generation} ability={ability_index} output={output}; pool={:?}",
+                    player.mana_pool
+                );
+            }
+        }
+
+        let current_revision = {
+            let state = &session
+                .engine
+                .as_ref()
+                .expect("Narset session has an engine after current mana abilities")
+                .state;
+            let pending = state
+                .pending_spell_cast
+                .as_ref()
+                .expect("current mana abilities preserve the pending spell cast");
+            assert_eq!(pending.transaction_id, transaction_id);
+            assert_eq!(pending.caster, TEKUTHAL_NORMAL_PILOT_ID);
+            assert_eq!(pending.reserved_object_id, source_object_id);
+            state.command_index
+        };
+        let payment_request = IpcEnvelope {
+            msg: Some(Msg::PaymentQuery(PaymentQuery {
+                player_id: TEKUTHAL_NORMAL_PILOT_ID,
+                preview: Some(PreviewPayment {
+                    transaction_id,
+                    revision: current_revision,
+                    commit_spell_cast: Some(CommitSpellCast {
+                        transaction_id,
+                        payment: Some(PaymentSelection {
+                            expected_state_revision: current_revision,
+                            mana: Some(produced),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+            })),
+        };
+        let payment_response = session
+            .process(&payment_request)
+            .expect("PaymentQuery keeps the Narset normal session open");
+        pair(directory, rows, &payment_request, &payment_response);
+        assert!(
+            payment_response.ok,
+            "{card_name} PaymentQuery: {}",
+            payment_response.error
+        );
+        let preview = payment_response
+            .batch
+            .as_ref()
+            .and_then(|batch| batch.payment_preview.as_ref())
+            .expect("PaymentQuery returns the current payment preview");
+        assert!(
+            preview.valid && preview.complete,
+            "{card_name}: {preview:?}"
+        );
+        assert_eq!(preview.transaction_id, transaction_id);
+        assert_eq!(preview.total_cost, expected_total_cost);
+        let selection = preview
+            .selection
+            .clone()
+            .expect("complete PaymentQuery returns its exact current selection");
+        assert_eq!(selection.expected_state_revision, current_revision);
+        assert_eq!(selection.mana.as_ref(), Some(&produced));
+        let restricted_mana = preview.restricted_mana.clone();
+        println!(
+            "{card_name} PaymentQuery transaction={transaction_id} revision={current_revision} returned_selection={selection:?} restricted_mana={restricted_mana:?}"
+        );
+        latest = narset_normal_player_command(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            TEKUTHAL_NORMAL_PILOT_ID,
+            RuledCommand {
+                cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
+                    transaction_id,
+                    payment: Some(selection),
+                    restricted_mana,
+                })),
+            },
+            battlefield,
+        );
+        assert!(session
+            .engine
+            .as_ref()
+            .expect("Narset session has an engine after payment")
+            .state
+            .pending_spell_cast
+            .is_none());
+        if resolve_after_commit {
+            narset_normal_resolve_stack(
+                session,
+                directory,
+                rows,
+                accepted_commands,
+                latest,
+                battlefield,
+            )
+        } else {
+            latest
+        }
+    }
+
+    fn narset_normal_resolve_stack(
+        session: &mut EngineSession,
+        directory: &Path,
+        rows: &mut Vec<String>,
+        accepted_commands: &mut usize,
+        mut latest: IpcResponse,
+        battlefield: &mut Vec<BattlefieldObject>,
+    ) -> IpcResponse {
+        for _ in 0..16 {
+            let state = &session
+                .engine
+                .as_ref()
+                .expect("Narset normal session has an engine")
+                .state;
+            if state.stack.is_empty() {
+                return latest;
+            }
+            let priority_player = state.priority_player_id();
+            latest = narset_normal_player_command(
+                session,
+                directory,
+                rows,
+                accepted_commands,
+                priority_player,
+                RuledCommand {
+                    cmd: Some(Cmd::PassPriority(PassPriority {})),
+                },
+                battlefield,
+            );
+        }
+        assert!(session
+            .engine
+            .as_ref()
+            .expect("Narset normal session has an engine")
+            .state
+            .stack
+            .is_empty());
+        latest
+    }
+
+    fn narset_normal_resolve_top_stack(
+        session: &mut EngineSession,
+        directory: &Path,
+        rows: &mut Vec<String>,
+        accepted_commands: &mut usize,
+        mut latest: IpcResponse,
+        battlefield: &mut Vec<BattlefieldObject>,
+    ) -> IpcResponse {
+        let top_id = session
+            .engine
+            .as_ref()
+            .expect("Narset normal session has an engine before top resolution")
+            .state
+            .stack
+            .last()
+            .expect("Narset has a current top stack item to resolve")
+            .id;
+        for _ in 0..16 {
+            let state = &session
+                .engine
+                .as_ref()
+                .expect("Narset normal session has an engine during top resolution")
+                .state;
+            if !state.stack.iter().any(|item| item.id == top_id) {
+                return latest;
+            }
+            let priority_player = state.priority_player_id();
+            latest = narset_normal_player_command(
+                session,
+                directory,
+                rows,
+                accepted_commands,
+                priority_player,
+                RuledCommand {
+                    cmd: Some(Cmd::PassPriority(PassPriority {})),
+                },
+                battlefield,
+            );
+        }
+        panic!("Narset top stack item {top_id} did not resolve within the priority bound");
+    }
+
+    fn narset_normal_activate_loyalty(
+        session: &mut EngineSession,
+        directory: &Path,
+        rows: &mut Vec<String>,
+        accepted_commands: &mut usize,
+        battlefield: &mut Vec<BattlefieldObject>,
+        ability_id: &str,
+    ) -> IpcResponse {
+        let (source_object_id, source_generation, ability_index, activatable) = {
+            let narset = battlefield
+                .iter()
+                .find(|permanent| permanent.card_id == "narset_transcendent")
+                .expect("the current Narset battlefield view is present before activation");
+            let ability = narset
+                .activated_abilities
+                .iter()
+                .find(|ability| {
+                    ability.presentation.as_ref().is_some_and(|presentation| {
+                        presentation.path.iter().any(|part| {
+                            part.kind == PresentationPathKind::Ability as i32
+                                && part.id == ability_id
+                        })
+                    })
+                })
+                .unwrap_or_else(|| panic!("current Narset view contains {ability_id}"));
+            (
+                narset.object_id,
+                narset.zone_change_generation,
+                ability.ability_index,
+                ability.activatable,
+            )
+        };
+        assert!(activatable, "current Narset view offers {ability_id}");
+        narset_normal_player_command(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            TEKUTHAL_NORMAL_PILOT_ID,
+            RuledCommand {
+                cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                    source_object_id,
+                    ability_index,
+                    source_zone: AbilitySourceZone::Battlefield as i32,
+                    expected_zone_change_generation: source_generation,
+                    ..Default::default()
+                })),
+            },
+            battlefield,
+        )
+    }
+
+    fn narset_normal_state_field(session: &EngineSession, field: &str) -> Value {
+        session
+            .engine
+            .as_ref()
+            .expect("Narset normal session has an engine for state diagnostics")
+            .diagnostic_snapshot()
+            .expect("serialize Narset normal state diagnostics")["state"][field]
+            .clone()
+    }
+
+    fn narset_normal_decline_current_look(
+        session: &mut EngineSession,
+        directory: &Path,
+        rows: &mut Vec<String>,
+        accepted_commands: &mut usize,
+        latest: IpcResponse,
+        battlefield: &mut Vec<BattlefieldObject>,
+    ) -> IpcResponse {
+        let choice = kaya_choice(&latest, ChoiceKind::LibraryLook)
+            .expect("resolved current Narset +1 publishes its LibraryLook choice");
+        assert_eq!(choice.deciding_player_id, TEKUTHAL_NORMAL_PILOT_ID);
+        assert_ne!(choice.resolution_prompt_id, 0);
+        assert_eq!(choice.min, 0);
+        assert!(choice.max <= 1);
+        assert!(kaya_batch(&latest)
+            .events
+            .iter()
+            .all(|event| !matches!(event.ev, Some(Ev::CardsRevealed(_)))));
+        narset_normal_player_command(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            TEKUTHAL_NORMAL_PILOT_ID,
+            RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: choice.resolution_prompt_id,
+                    chosen_object_ids: Vec::new(),
+                    decision: ResolutionChoiceDecision::Unspecified as i32,
+                    ..Default::default()
+                })),
+            },
+            battlefield,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn narset_normal_accept_rebound_offer(
+        session: &mut EngineSession,
+        directory: &Path,
+        rows: &mut Vec<String>,
+        accepted_commands: &mut usize,
+        mut latest: IpcResponse,
+        battlefield: &mut Vec<BattlefieldObject>,
+        object_id: u32,
+        exile_generation: u64,
+    ) -> IpcResponse {
+        let choice = kaya_choice(&latest, ChoiceKind::SpecialCast)
+            .expect("the current Rebound trigger offers its exact SpecialCast choice");
+        assert_eq!(choice.deciding_player_id, TEKUTHAL_NORMAL_PILOT_ID);
+        assert_ne!(choice.resolution_prompt_id, 0);
+        assert_eq!(choice.candidate_object_ids, vec![object_id]);
+        assert_eq!(choice.candidate_selectable, [true]);
+        let trigger_id = choice.source_object_id;
+        let (permission_id, face_index) = {
+            let engine = session
+                .engine
+                .as_ref()
+                .expect("Narset normal session has an engine at the Rebound choice");
+            let pending = engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .expect("the current SpecialCast choice remains pending");
+            assert_eq!(pending.deciding_player, TEKUTHAL_NORMAL_PILOT_ID);
+            assert_eq!(pending.presentation.choice_kind, ChoiceKind::SpecialCast);
+            assert_eq!(pending.presentation.candidates, vec![object_id]);
+            assert_eq!(
+                pending.resolution_prompt_id.get(),
+                choice.resolution_prompt_id
+            );
+            let tricerules_core::state::ResolutionContinuation::SpecialCast {
+                stack,
+                exiled,
+                face_index,
+                method,
+                cost,
+                permission_scope,
+                completion,
+                ..
+            } = &pending.continuation
+            else {
+                panic!("the current Rebound trigger owns the SpecialCast continuation");
+            };
+            assert_eq!(stack.item.id, trigger_id);
+            assert!(stack.item.is_triggered);
+            assert_eq!(stack.item.controller, TEKUTHAL_NORMAL_PILOT_ID);
+            assert_eq!(exiled.object_id, object_id);
+            assert_eq!(exiled.zone_change_generation, exile_generation);
+            assert_eq!(*face_index, 0);
+            assert_eq!(*method, tricerules_core::state::SpellCastMethod::Permission);
+            assert_eq!(*cost, tricerules_cards::mana::ManaCost::default());
+            assert_eq!(
+                *permission_scope,
+                Some(tricerules_core::state::ExilePlayPermissionScope::CastCard)
+            );
+            assert!(matches!(
+                completion,
+                tricerules_core::state::SpecialCastCompletion::ResumeStack
+            ));
+            assert!(engine
+                .state
+                .active_exile_play_permissions
+                .iter()
+                .all(|permission| permission.object_id != object_id));
+            let action = kaya_batch(&latest)
+                .legal_by_player
+                .get(&TEKUTHAL_NORMAL_PILOT_ID)
+                .expect("P17 receives the current Rebound offer")
+                .zone_cast_actions
+                .iter()
+                .find(|action| action.object_id == object_id)
+                .expect("the exact exiled Divination has a current cast offer");
+            assert_eq!(action.card_name, "Divination");
+            assert_eq!(
+                action.source_zone,
+                tricerules_proto::ruled::v1::CastSourceZone::Exile as i32
+            );
+            assert_eq!(action.zone_change_generation, exile_generation);
+            assert_eq!(action.face_index, 0);
+            assert_eq!(
+                action.cast_method,
+                tricerules_proto::ruled::v1::CastMethod::Permission as i32
+            );
+            assert_eq!(action.cost, "");
+            let permission_id = action
+                .casting_permission_id
+                .expect("the current Rebound offer includes its exact permission ID");
+            assert_ne!(permission_id, 0);
+            (
+                permission_id,
+                u32::try_from(*face_index).expect("face index fits the wire"),
+            )
+        };
+
+        latest = narset_normal_player_command(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            TEKUTHAL_NORMAL_PILOT_ID,
+            RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: choice.resolution_prompt_id,
+                    decision: ResolutionChoiceDecision::CastSpell as i32,
+                    spell_cast_announcement: Some(
+                        tricerules_proto::ruled::v1::SpellCastAnnouncement {
+                            source: Some(CastSource {
+                                location: Some(
+                                    tricerules_proto::ruled::v1::cast_source::Location::ExileObjectId(
+                                        object_id,
+                                    ),
+                                ),
+                                expected_zone_change_generation: Some(exile_generation),
+                            }),
+                            face_index,
+                            cast_method: CastMethod::Permission as i32,
+                            casting_permission_id: Some(permission_id),
+                            ..Default::default()
+                        },
+                    ),
+                    ..Default::default()
+                })),
+            },
+            battlefield,
+        );
+        assert!(kaya_batch(&latest)
+            .events
+            .iter()
+            .all(|event| !matches!(event.ev, Some(Ev::StackPushed(_)))));
+        let (transaction_id, current_revision, mana_before) = {
+            let engine = session
+                .engine
+                .as_ref()
+                .expect("Narset normal session has an engine after accepting Rebound");
+            let pending = engine
+                .state
+                .pending_spell_cast
+                .as_ref()
+                .expect("the accepted Rebound offer opens its staged payment");
+            assert!(pending.resolution_time_offer);
+            assert_eq!(pending.caster, TEKUTHAL_NORMAL_PILOT_ID);
+            assert_eq!(pending.reserved_object_id, object_id);
+            assert_eq!(pending.original_zone, tricerules_core::Zone::Exile);
+            assert_eq!(pending.original_zone_change_generation, exile_generation);
+            assert_eq!(
+                pending.announcement.casting_permission_id,
+                Some(permission_id)
+            );
+            let source = pending
+                .announcement
+                .source
+                .as_ref()
+                .expect("the staged Rebound cast keeps its exact Exile source");
+            assert_eq!(
+                source.location,
+                Some(tricerules_proto::ruled::v1::cast_source::Location::ExileObjectId(object_id))
+            );
+            assert_eq!(
+                source.expected_zone_change_generation,
+                Some(exile_generation)
+            );
+            assert_eq!(pending.announcement.face_index, face_index);
+            assert_eq!(
+                pending.announcement.cast_method,
+                CastMethod::Permission as i32
+            );
+            assert_eq!(
+                engine.state.objects[&object_id].zone,
+                tricerules_core::Zone::Stack
+            );
+            assert_eq!(
+                engine.state.zone_change_generation.get(&object_id),
+                Some(&(exile_generation + 1))
+            );
+            let p17 = engine
+                .state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                .expect("P17 remains in the game");
+            (
+                pending.transaction_id,
+                engine.state.command_index,
+                p17.mana_pool,
+            )
+        };
+        let payment_request = IpcEnvelope {
+            msg: Some(Msg::PaymentQuery(PaymentQuery {
+                player_id: TEKUTHAL_NORMAL_PILOT_ID,
+                preview: Some(PreviewPayment {
+                    transaction_id,
+                    revision: current_revision,
+                    commit_spell_cast: Some(CommitSpellCast {
+                        transaction_id,
+                        payment: Some(PaymentSelection {
+                            expected_state_revision: current_revision,
+                            mana: Some(PaymentMana::default()),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+            })),
+        };
+        let payment_response = session
+            .process(&payment_request)
+            .expect("PaymentQuery keeps the Rebound normal session open");
+        pair(directory, rows, &payment_request, &payment_response);
+        assert!(
+            payment_response.ok,
+            "Rebound PaymentQuery: {}",
+            payment_response.error
+        );
+        let preview = payment_response
+            .batch
+            .as_ref()
+            .and_then(|batch| batch.payment_preview.as_ref())
+            .expect("Rebound PaymentQuery returns the current payment preview");
+        assert!(
+            preview.valid && preview.complete,
+            "Rebound zero-cost preview: {preview:?}"
+        );
+        assert_eq!(preview.transaction_id, transaction_id);
+        assert_eq!(preview.revision, current_revision);
+        assert_eq!(preview.total_cost, "{0}");
+        let selection = preview
+            .selection
+            .clone()
+            .expect("current zero-cost preview returns its payment selection");
+        assert_eq!(selection.expected_state_revision, current_revision);
+        assert_eq!(selection.mana, Some(PaymentMana::default()));
+        let restricted_mana = preview.restricted_mana.clone();
+        latest = narset_normal_player_command(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            TEKUTHAL_NORMAL_PILOT_ID,
+            RuledCommand {
+                cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
+                    transaction_id,
+                    payment: Some(selection.clone()),
+                    restricted_mana,
+                })),
+            },
+            battlefield,
+        );
+        let engine = session
+            .engine
+            .as_ref()
+            .expect("Narset normal session has an engine after Rebound payment");
+        assert!(engine.state.pending_spell_cast.is_none());
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(engine.state.players[0].mana_pool, mana_before);
+        assert!(!engine.state.stack.iter().any(|item| item.id == trigger_id));
+        assert_eq!(
+            kaya_batch(&latest)
+                .events
+                .iter()
+                .filter(|event| {
+                    matches!(&event.ev, Some(Ev::StackResolved(resolved)) if resolved.object_id == trigger_id)
+                })
+                .count(),
+            1,
+            "the parent Rebound trigger resolves exactly once at payment commit"
+        );
+        assert_eq!(
+            kaya_batch(&latest)
+                .events
+                .iter()
+                .filter(|event| matches!(&event.ev, Some(Ev::StackPushed(pushed)) if pushed.object_id == object_id))
+                .count(),
+            1,
+            "payment commit publishes the exact Rebound Divination once"
+        );
+        assert_eq!(engine.state.stack.len(), 1);
+        let spell = engine
+            .state
+            .stack
+            .iter()
+            .find(|item| item.id == object_id)
+            .expect("the exact exiled Divination is now the physical spell");
+        assert_eq!(spell.card_id, "divination");
+        assert_eq!(spell.cast_by, Some(TEKUTHAL_NORMAL_PILOT_ID));
+        assert_eq!(
+            spell.cast_method,
+            tricerules_core::state::SpellCastMethod::Permission
+        );
+        assert_eq!(
+            spell
+                .cast_occurrence
+                .expect("the Rebound spell has its exact occurrence")
+                .zone_change_generation,
+            Some(exile_generation + 1)
+        );
+        assert_eq!(
+            narset_normal_state_field(session, "rebound_spell_grants"),
+            serde_json::json!([])
+        );
+        assert_eq!(
+            narset_normal_state_field(session, "scheduled_rebounds"),
+            serde_json::json!([])
+        );
+        println!(
+            "Rebound accepted current SpecialCast nonce={} permission={} source={object_id}@{exile_generation} transaction={transaction_id} revision={current_revision} returned_selection={selection:?}",
+            choice.resolution_prompt_id,
+            permission_id
+        );
+        latest
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn narset_normal_float_blue(
+        session: &mut EngineSession,
+        directory: &Path,
+        rows: &mut Vec<String>,
+        accepted_commands: &mut usize,
+        mut latest: IpcResponse,
+        battlefield: &mut Vec<BattlefieldObject>,
+        player_id: i32,
+        count: u32,
+    ) -> IpcResponse {
+        for expected_blue in 1..=count {
+            let (object_id, generation, ability_index, output) =
+                kaya_available_mana_abilities(battlefield)
+                    .into_iter()
+                    .find(|source| {
+                        let permanent = battlefield
+                            .iter()
+                            .find(|permanent| permanent.object_id == source.0)
+                            .expect("current mana offer belongs to a battlefield permanent");
+                        permanent.card_id == "island" && kaya_output_has_color(&source.3, 'U')
+                    })
+                    .expect("current untapped Island view offers blue mana");
+            latest = narset_normal_player_command(
+                session,
+                directory,
+                rows,
+                accepted_commands,
+                player_id,
+                RuledCommand {
+                    cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                        source_object_id: object_id,
+                        ability_index,
+                        source_zone: AbilitySourceZone::Battlefield as i32,
+                        expected_zone_change_generation: generation,
+                        ..Default::default()
+                    })),
+                },
+                battlefield,
+            );
+            kaya_capture_battlefield(&latest, player_id, battlefield);
+            let engine = session
+                .engine
+                .as_ref()
+                .expect("Narset normal session remains open after Island mana");
+            let player = engine
+                .state
+                .players
+                .iter()
+                .find(|player| player.id == player_id)
+                .expect("the Island controller remains in the session");
+            assert_eq!(player.mana_pool.blue, expected_blue);
+            assert_eq!(player.mana_pool.white, 0);
+            assert_eq!(player.mana_pool.black, 0);
+            assert_eq!(player.mana_pool.red, 0);
+            assert_eq!(player.mana_pool.green, 0);
+            assert_eq!(player.mana_pool.colorless, 0);
+            println!(
+                "P{player_id} current Island ObjectId={object_id}@{generation} ability={ability_index} output={output}; pool={:?}",
+                player.mana_pool
+            );
+        }
+        latest
+    }
+
+    fn narset_normal_cast_opponent_zero_cost(
+        session: &mut EngineSession,
+        directory: &Path,
+        rows: &mut Vec<String>,
+        accepted_commands: &mut usize,
+        mut latest: IpcResponse,
+        battlefield: &mut Vec<BattlefieldObject>,
+        expected_object_id: u32,
+    ) -> IpcResponse {
+        let offer = kaya_batch(&latest)
+            .legal_by_player
+            .get(&TEKUTHAL_NORMAL_OPPONENT_ID)
+            .expect("P29 receives the current legal hand actions")
+            .hand_actions
+            .iter()
+            .find(|offer| {
+                offer.kind == HandActionKind::HandActionCastSpell as i32
+                    && offer.card_name == "Ornithopter"
+            })
+            .cloned()
+            .expect("the current P29 hand offer includes Ornithopter");
+        let (source_object_id, source_generation) = {
+            let state = &session
+                .engine
+                .as_ref()
+                .expect("Narset normal session has an engine before Ornithopter")
+                .state;
+            let p29 = state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_OPPONENT_ID)
+                .expect("P29 owns the Ornithopter offer");
+            let object_id = *p29
+                .hand
+                .get(usize::try_from(offer.hand_index).expect("hand index fits usize"))
+                .expect("current Ornithopter offer resolves to a physical card");
+            assert_eq!(object_id, expected_object_id);
+            let object = state
+                .objects
+                .get(&object_id)
+                .expect("current Ornithopter offer resolves to a game object");
+            assert_eq!(object.zone, tricerules_core::Zone::Hand);
+            assert_eq!(
+                object.card_id,
+                tricerules_cards::registry::global()
+                    .id_for_name("Ornithopter")
+                    .expect("Ornithopter is in the global registry")
+            );
+            (
+                object_id,
+                state
+                    .zone_change_generation
+                    .get(&object_id)
+                    .copied()
+                    .unwrap_or(0),
+            )
+        };
+        assert_eq!(source_generation, 0);
+        latest = narset_normal_player_command(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+            RuledCommand {
+                cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
+                    announcement: Some(tricerules_proto::ruled::v1::SpellCastAnnouncement {
+                        source: Some(CastSource {
+                            location: Some(
+                                tricerules_proto::ruled::v1::cast_source::Location::HandIndex(
+                                    offer.hand_index,
+                                ),
+                            ),
+                            expected_zone_change_generation: None,
+                        }),
+                        face_index: offer.face_index,
+                        cast_cost_group_selections: Vec::new(),
+                        cast_method: CastMethod::Normal as i32,
+                        ..Default::default()
+                    }),
+                })),
+            },
+            battlefield,
+        );
+        kaya_capture_battlefield(&latest, TEKUTHAL_NORMAL_OPPONENT_ID, battlefield);
+        let (transaction_id, current_revision, mana_before) = {
+            let engine = session
+                .engine
+                .as_ref()
+                .expect("Narset normal session has an engine after Ornithopter Begin");
+            let pending = engine
+                .state
+                .pending_spell_cast
+                .as_ref()
+                .expect("current Ornithopter Begin publishes its pending payment");
+            assert_eq!(pending.caster, TEKUTHAL_NORMAL_OPPONENT_ID);
+            assert_eq!(pending.reserved_object_id, source_object_id);
+            let p29 = engine
+                .state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_OPPONENT_ID)
+                .expect("P29 remains in the normal session");
+            (
+                pending.transaction_id,
+                engine.state.command_index,
+                p29.mana_pool,
+            )
+        };
+        let payment_request = IpcEnvelope {
+            msg: Some(Msg::PaymentQuery(PaymentQuery {
+                player_id: TEKUTHAL_NORMAL_OPPONENT_ID,
+                preview: Some(PreviewPayment {
+                    transaction_id,
+                    revision: current_revision,
+                    commit_spell_cast: Some(CommitSpellCast {
+                        transaction_id,
+                        payment: Some(PaymentSelection {
+                            expected_state_revision: current_revision,
+                            mana: Some(PaymentMana::default()),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+            })),
+        };
+        let payment_response = session
+            .process(&payment_request)
+            .expect("P29 Ornithopter PaymentQuery keeps the normal session open");
+        pair(directory, rows, &payment_request, &payment_response);
+        assert!(
+            payment_response.ok,
+            "Ornithopter PaymentQuery: {}",
+            payment_response.error
+        );
+        let preview = payment_response
+            .batch
+            .as_ref()
+            .and_then(|batch| batch.payment_preview.as_ref())
+            .expect("Ornithopter PaymentQuery returns its current preview");
+        assert!(
+            preview.valid && preview.complete,
+            "Ornithopter preview: {preview:?}"
+        );
+        assert_eq!(preview.transaction_id, transaction_id);
+        assert_eq!(preview.revision, current_revision);
+        assert_eq!(preview.total_cost, "{0}");
+        let selection = preview
+            .selection
+            .clone()
+            .expect("zero-cost Ornithopter preview returns its selection");
+        assert_eq!(selection.expected_state_revision, current_revision);
+        assert_eq!(selection.mana, Some(PaymentMana::default()));
+        let restricted_mana = preview.restricted_mana.clone();
+        latest = narset_normal_player_command(
+            session,
+            directory,
+            rows,
+            accepted_commands,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+            RuledCommand {
+                cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
+                    transaction_id,
+                    payment: Some(selection),
+                    restricted_mana,
+                })),
+            },
+            battlefield,
+        );
+        kaya_capture_battlefield(&latest, TEKUTHAL_NORMAL_OPPONENT_ID, battlefield);
+        let engine = session
+            .engine
+            .as_ref()
+            .expect("Narset normal session has an engine after Ornithopter payment");
+        assert!(engine.state.pending_spell_cast.is_none());
+        let p29 = engine
+            .state
+            .players
+            .iter()
+            .find(|player| player.id == TEKUTHAL_NORMAL_OPPONENT_ID)
+            .expect("P29 remains in the game after Ornithopter payment");
+        assert_eq!(p29.mana_pool, mana_before, "zero-cost cast spends no mana");
+        assert_eq!(
+            p29.mana_pool.blue, 3,
+            "the three blue mana remains floating"
+        );
+        let spell = engine
+            .state
+            .stack
+            .iter()
+            .find(|item| item.id == source_object_id)
+            .expect("Ornithopter commits as the physical spell");
+        assert_eq!(spell.card_id, "ornithopter");
+        assert_eq!(spell.cast_by, Some(TEKUTHAL_NORMAL_OPPONENT_ID));
+        assert_eq!(
+            spell.cast_method,
+            tricerules_core::state::SpellCastMethod::Normal
+        );
+        assert_eq!(
+            engine.state.zone_change_generation.get(&source_object_id),
+            Some(&1)
+        );
+        println!(
+            "P29 current Ornithopter ObjectId={source_object_id}@{source_generation} paid {transaction_id} with zero mana; floating pool remains {:?}",
+            p29.mana_pool
+        );
+        latest
+    }
+
+    #[test]
+    fn narset_normal_pilot_records_and_replays_all_three_loyalty_abilities() {
+        let player_decks = narset_normal_fixed_decks();
+        narset_normal_assert_decks(&player_decks);
+        let validation_names = player_decks
+            .iter()
+            .flat_map(|deck| deck.mainboard_card_name.iter().cloned())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+
+        let mut session = EngineSession::new(false);
+        let validation = session
+            .process(&IpcEnvelope {
+                msg: Some(Msg::ValidateDeck(ValidateDeck {
+                    card_names: validation_names,
+                })),
+            })
+            .expect("ValidateDeck keeps the Narset normal session open");
+        assert!(
+            validation.ok,
+            "Narset deck validation: {}",
+            validation.error
+        );
+        assert!(validation.missing_card_names.is_empty());
+
+        let root = tempfile::tempdir()
+            .expect("unique Narset normal-pilot capture directory")
+            .keep();
+        println!("retained_capture={}", root.display());
+        fs::create_dir(root.join("raw")).expect("create raw capture directory");
+        let mut rows = Vec::new();
+        let mut manifest = serde_json::json!({
+            "format_version": 1,
+            "source": "server",
+            "privacy": "server_only",
+            "capture_id": root.as_path().file_name().unwrap().to_string_lossy().to_string(),
+            "engine_build": ENGINE_BUILD,
+            "card_data_hash": "",
+            "effective_dev_commands_enabled": false,
+            "complete": false
+        });
+        let start = IpcEnvelope {
+            msg: Some(Msg::SessionStart(SessionStart {
+                game_id: 7_281_102,
+                seed: 19,
+                player_ids: vec![TEKUTHAL_NORMAL_PILOT_ID, TEKUTHAL_NORMAL_OPPONENT_ID],
+                player_decks,
+                dev_commands_enabled: false,
+                diagnostic_capture_enabled: true,
+                ..Default::default()
+            })),
+        };
+        let start_response = session
+            .process(&start)
+            .expect("normal Narset SessionStart keeps the session open");
+        assert!(
+            start_response.ok,
+            "Narset GameStart: {}",
+            start_response.error
+        );
+        assert!(!start_response.effective_dev_commands_enabled);
+        manifest["card_data_hash"] = start_response.card_data_hash.clone().into();
+        fs::write(root.as_path().join("manifest.json"), manifest.to_string())
+            .expect("write initial normal capture manifest");
+        pair(root.as_path(), &mut rows, &start, &start_response);
+
+        let mut battlefield = Vec::new();
+        let mut p29_battlefield = Vec::new();
+        kaya_capture_battlefield(&start_response, TEKUTHAL_NORMAL_PILOT_ID, &mut battlefield);
+        kaya_capture_battlefield(
+            &start_response,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+            &mut p29_battlefield,
+        );
+        let mut accepted_commands = 0usize;
+        let starting = kaya_starting_player_offer(&start_response)
+            .expect("GameStart publishes the current starting-player offer");
+        assert!(starting
+            .eligible_starting_player_ids
+            .contains(&TEKUTHAL_NORMAL_PILOT_ID));
+        let mut latest = narset_normal_player_command(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            starting.deciding_player_id,
+            RuledCommand {
+                cmd: Some(Cmd::ChooseStartingPlayer(ChooseStartingPlayer {
+                    starting_player_id: TEKUTHAL_NORMAL_PILOT_ID,
+                })),
+            },
+            &mut battlefield,
+        );
+        for _ in 0..2 {
+            let Some(opening) = kaya_mulligan_offer(&latest) else {
+                break;
+            };
+            latest = narset_normal_player_command(
+                &mut session,
+                root.as_path(),
+                &mut rows,
+                &mut accepted_commands,
+                opening.deciding_player_id,
+                RuledCommand {
+                    cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
+                },
+                &mut battlefield,
+            );
+        }
+        assert!(
+            kaya_mulligan_offer(&latest).is_none(),
+            "both actual opening hands are kept through current offers"
+        );
+        let receipt_decks = narset_normal_fixed_decks();
+        println!(
+            "P17 exact deck order={:?}",
+            &receipt_decks[0].mainboard_card_name
+        );
+        println!(
+            "P29 exact deck order={:?}",
+            &receipt_decks[1].mainboard_card_name
+        );
+        println!("frozen normal SessionStart seed=19, game_id=7281102, effective_dev=false");
+
+        let mut p17_islands = 0usize;
+        let mut p17_plains = 0usize;
+        let mut p17_turns = 0u32;
+        for p17_turn in 1..=4 {
+            latest = narset_normal_advance_to_main(
+                &mut session,
+                root.as_path(),
+                &mut rows,
+                &mut accepted_commands,
+                latest,
+                &mut battlefield,
+                TEKUTHAL_NORMAL_PILOT_ID,
+            );
+            p17_turns += 1;
+            assert_eq!(p17_turns, p17_turn);
+            assert!(
+                p17_turns <= 24,
+                "Narset driver stays inside its P17 turn bound"
+            );
+            assert_eq!(
+                session
+                    .engine
+                    .as_ref()
+                    .expect("Narset normal session has an engine")
+                    .state
+                    .turn_step,
+                tricerules_core::TurnStep::Main1
+            );
+            latest = narset_normal_play_land(
+                &mut session,
+                root.as_path(),
+                &mut rows,
+                &mut accepted_commands,
+                &latest,
+                &mut battlefield,
+                TEKUTHAL_NORMAL_PILOT_ID,
+                &mut p17_islands,
+                &mut p17_plains,
+            );
+            if p17_turn < 4 {
+                latest = narset_normal_advance_to_main(
+                    &mut session,
+                    root.as_path(),
+                    &mut rows,
+                    &mut accepted_commands,
+                    latest,
+                    &mut p29_battlefield,
+                    TEKUTHAL_NORMAL_OPPONENT_ID,
+                );
+                latest = narset_normal_play_land(
+                    &mut session,
+                    root.as_path(),
+                    &mut rows,
+                    &mut accepted_commands,
+                    &latest,
+                    &mut p29_battlefield,
+                    TEKUTHAL_NORMAL_OPPONENT_ID,
+                    &mut p17_islands,
+                    &mut p17_plains,
+                );
+            }
+        }
+        let state = &session
+            .engine
+            .as_ref()
+            .expect("Narset normal session reaches its T4 checkpoint")
+            .state;
+        assert_eq!(state.turn_step, tricerules_core::TurnStep::Main1);
+        assert_eq!(
+            state.players[state.active_player_idx].id,
+            TEKUTHAL_NORMAL_PILOT_ID
+        );
+        assert_eq!(state.priority_player_id(), TEKUTHAL_NORMAL_PILOT_ID);
+        assert!(state.stack.is_empty());
+        assert!(state.pending_spell_cast.is_none());
+        assert!(state.pending_resolution.is_none());
+        assert_eq!((p17_islands, p17_plains), (3, 1));
+        assert_eq!(
+            battlefield
+                .iter()
+                .filter(|permanent| permanent.card_id == "island")
+                .count(),
+            3,
+            "P17 has three ordinary Islands at T4"
+        );
+        assert_eq!(
+            battlefield
+                .iter()
+                .filter(|permanent| permanent.card_id == "plains")
+                .count(),
+            1,
+            "P17 has one ordinary Plains at T4"
+        );
+
+        narset_normal_cast_from_current_offer(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+            "Narset Transcendent",
+            "{2}{W}{U}",
+            3,
+            1,
+            Some(30),
+            true,
+        );
+        let narset = battlefield
+            .iter()
+            .find(|permanent| permanent.card_id == "narset_transcendent")
+            .expect("the ordinary T4 cast resolves as the actual Narset permanent");
+        assert_eq!((narset.object_id, narset.zone_change_generation), (30, 3));
+        assert_eq!(narset.loyalty, 6);
+        assert!(session
+            .engine
+            .as_ref()
+            .expect("Narset session remains open after the printed cast")
+            .state
+            .stack
+            .is_empty());
+
+        let plus_one = narset
+            .activated_abilities
+            .iter()
+            .find(|ability| {
+                ability.presentation.as_ref().is_some_and(|presentation| {
+                    presentation.path.iter().any(|part| {
+                        part.kind == PresentationPathKind::Ability as i32
+                            && part.id == "activated_01"
+                    })
+                })
+            })
+            .expect("current Narset view identifies the +1 by stable ability ID");
+        assert!(plus_one.activatable, "current Narset view offers its +1");
+        let narset_object_id = narset.object_id;
+        let narset_generation = narset.zone_change_generation;
+        let ability_index = plus_one.ability_index;
+        let (hand_before, library_before, draws_before) = {
+            let state = &session.engine.as_ref().unwrap().state;
+            let player = state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                .expect("P17 remains in the normal session");
+            (
+                player.hand.len(),
+                player.library.len(),
+                state
+                    .turn_history
+                    .current
+                    .player(TEKUTHAL_NORMAL_PILOT_ID)
+                    .cards_drawn,
+            )
+        };
+        latest = narset_normal_player_command(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            TEKUTHAL_NORMAL_PILOT_ID,
+            RuledCommand {
+                cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                    source_object_id: narset_object_id,
+                    ability_index,
+                    source_zone: AbilitySourceZone::Battlefield as i32,
+                    expected_zone_change_generation: narset_generation,
+                    ..Default::default()
+                })),
+            },
+            &mut battlefield,
+        );
+        let activated_narset = battlefield
+            .iter()
+            .find(|permanent| permanent.card_id == "narset_transcendent")
+            .expect("current response retains the activated Narset permanent");
+        assert_eq!(activated_narset.loyalty, 7, "the ordinary +1 cost is paid");
+        assert_eq!(
+            session
+                .engine
+                .as_ref()
+                .expect("Narset activation has an engine")
+                .state
+                .stack
+                .last()
+                .and_then(|item| item.source_permanent_id),
+            Some(narset_object_id)
+        );
+
+        let mut choice = kaya_choice(&latest, ChoiceKind::LibraryLook);
+        for _ in 0..8 {
+            if choice.is_some() {
+                break;
+            }
+            let priority_player = session
+                .engine
+                .as_ref()
+                .expect("Narset ability has an engine while resolving")
+                .state
+                .priority_player_id();
+            latest = narset_normal_player_command(
+                &mut session,
+                root.as_path(),
+                &mut rows,
+                &mut accepted_commands,
+                priority_player,
+                RuledCommand {
+                    cmd: Some(Cmd::PassPriority(PassPriority {})),
+                },
+                &mut battlefield,
+            );
+            choice = kaya_choice(&latest, ChoiceKind::LibraryLook);
+        }
+        let choice = choice.expect("Narset's resolved +1 publishes its private top-card offer");
+        assert_eq!(choice.deciding_player_id, TEKUTHAL_NORMAL_PILOT_ID);
+        assert_ne!(
+            choice.resolution_prompt_id, 0,
+            "current choice nonce is present"
+        );
+        assert_eq!(choice.min, 0, "Narset may decline the top card");
+        assert_eq!(choice.max, 1);
+        assert_eq!(choice.candidate_object_ids, vec![34]);
+        assert_eq!(choice.candidate_card_ids, vec!["divination".to_string()]);
+        assert_eq!(choice.candidate_names, vec!["Divination".to_string()]);
+        assert_eq!(choice.candidate_selectable, vec![true]);
+        assert!(
+            kaya_batch(&latest)
+                .events
+                .iter()
+                .all(|event| !matches!(event.ev, Some(Ev::CardsRevealed(_)))),
+            "looking privately at the offered top card has not revealed it publicly"
+        );
+
+        latest = narset_normal_player_command(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            choice.deciding_player_id,
+            RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+                    resolution_prompt_id: choice.resolution_prompt_id,
+                    chosen_object_ids: vec![34],
+                    decision: ResolutionChoiceDecision::Unspecified as i32,
+                    ..Default::default()
+                })),
+            },
+            &mut battlefield,
+        );
+        let revealed = kaya_batch(&latest)
+            .events
+            .iter()
+            .filter_map(|event| match event.ev.as_ref() {
+                Some(Ev::CardsRevealed(cards)) => Some(cards),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            revealed.len(),
+            1,
+            "accepting one card emits one reveal group"
+        );
+        assert_eq!(revealed[0].zone_owner_player_id, TEKUTHAL_NORMAL_PILOT_ID);
+        assert_eq!(
+            revealed[0].cards.len(),
+            1,
+            "only the selected top card is revealed"
+        );
+        assert_eq!(revealed[0].cards[0].object_id, 34);
+        assert_eq!(revealed[0].cards[0].zone_change_generation, 0);
+        assert_eq!(revealed[0].cards[0].card_id, "divination");
+        assert_eq!(revealed[0].cards[0].card_name, "Divination");
+        assert!(kaya_choice(&latest, ChoiceKind::LibraryLook).is_none());
+
+        let state = &session
+            .engine
+            .as_ref()
+            .expect("Narset choice response retains the normal session")
+            .state;
+        let p17 = state
+            .players
+            .iter()
+            .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+            .expect("P17 remains in the session");
+        assert!(
+            p17.hand.contains(&34),
+            "the selected Divination enters P17's hand"
+        );
+        assert_eq!(state.objects[&34].zone, tricerules_core::Zone::Hand);
+        assert_eq!(state.zone_change_generation.get(&34), Some(&1));
+        assert_eq!(p17.hand.len(), hand_before + 1);
+        assert_eq!(p17.library.len(), library_before - 1);
+        assert_eq!(
+            state
+                .turn_history
+                .current
+                .player(TEKUTHAL_NORMAL_PILOT_ID)
+                .cards_drawn,
+            draws_before,
+            "Narset's +1 moves the selected card to hand without drawing"
+        );
+        assert!(state.stack.is_empty());
+        assert!(state.pending_resolution.is_none());
+        let final_narset = battlefield
+            .iter()
+            .find(|permanent| permanent.card_id == "narset_transcendent")
+            .expect("Narset remains on the battlefield after its +1 resolves");
+        assert_eq!(final_narset.loyalty, 7);
+
+        // Finish P29's ordinary T4 before beginning the fixed T5 Rebound line.
+        latest = narset_normal_advance_to_main(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut p29_battlefield,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+        );
+        latest = narset_normal_play_land(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            &latest,
+            &mut p29_battlefield,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+            &mut p17_islands,
+            &mut p17_plains,
+        );
+        latest = narset_normal_advance_to_main(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+            TEKUTHAL_NORMAL_PILOT_ID,
+        );
+        p17_turns += 1;
+        assert_eq!(p17_turns, 5);
+        assert!(
+            p17_turns <= 24,
+            "Narset driver stays inside its P17 turn bound"
+        );
+        assert_eq!(
+            session.engine.as_ref().unwrap().state.active_player_id(),
+            TEKUTHAL_NORMAL_PILOT_ID,
+            "the fixed driver reaches P17's natural fifth turn"
+        );
+        narset_normal_play_land(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            &latest,
+            &mut battlefield,
+            TEKUTHAL_NORMAL_PILOT_ID,
+            &mut p17_islands,
+            &mut p17_plains,
+        );
+        let narset_before_minus_two = battlefield
+            .iter()
+            .find(|permanent| permanent.card_id == "narset_transcendent")
+            .expect("the actual Narset remains in P17's current battlefield view");
+        assert_eq!(narset_before_minus_two.loyalty, 7);
+        let narset_object_id = narset_before_minus_two.object_id;
+        let narset_generation = narset_before_minus_two.zone_change_generation;
+        latest = narset_normal_activate_loyalty(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            &mut battlefield,
+            "activated_02",
+        );
+        {
+            let state = &session.engine.as_ref().unwrap().state;
+            assert_eq!(state.turn_step, tricerules_core::TurnStep::Main1);
+            assert_eq!(state.active_player_id(), TEKUTHAL_NORMAL_PILOT_ID);
+            assert_eq!(state.priority_player_id(), TEKUTHAL_NORMAL_PILOT_ID);
+            assert_eq!(
+                state.objects[&narset_object_id]
+                    .counter_count(tricerules_cards::primitives::CounterKind::Loyalty),
+                5
+            );
+            assert_eq!(state.stack.len(), 1);
+            assert_eq!(state.stack[0].source_permanent_id, Some(narset_object_id));
+            assert_eq!(state.stack[0].source_zone_change, narset_generation);
+        }
+        latest = narset_normal_resolve_top_stack(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+        );
+        {
+            let state = &session.engine.as_ref().unwrap().state;
+            assert!(state.stack.is_empty());
+            assert!(state.pending_resolution.is_none());
+            assert_eq!(state.active_event_observers.len(), 1);
+            assert_eq!(
+                narset_normal_state_field(&session, "rebound_spell_grants"),
+                serde_json::json!([])
+            );
+            assert_eq!(
+                narset_normal_state_field(&session, "scheduled_rebounds"),
+                serde_json::json!([])
+            );
+        }
+
+        let original_divination = 36;
+        {
+            let state = &session.engine.as_ref().unwrap().state;
+            assert!(state.players[0].hand.contains(&original_divination));
+            assert_eq!(
+                state.objects[&original_divination].zone,
+                tricerules_core::Zone::Hand
+            );
+            assert_eq!(
+                state
+                    .zone_change_generation
+                    .get(&original_divination)
+                    .copied()
+                    .unwrap_or(0),
+                0
+            );
+        }
+        latest = narset_normal_cast_from_current_offer(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+            "Divination",
+            "{2}{U}",
+            3,
+            0,
+            Some(original_divination),
+            false,
+        );
+        let (original_occurrence, original_stack_generation, grant_trigger_id) = {
+            let state = &session.engine.as_ref().unwrap().state;
+            assert_eq!(
+                state.objects[&original_divination].zone,
+                tricerules_core::Zone::Stack
+            );
+            let spell = state
+                .stack
+                .iter()
+                .find(|item| item.id == original_divination)
+                .expect("the exact original hand Divination remains on the stack");
+            assert_eq!(spell.cast_by, Some(TEKUTHAL_NORMAL_PILOT_ID));
+            assert_eq!(
+                spell.cast_method,
+                tricerules_core::state::SpellCastMethod::Normal
+            );
+            let occurrence = spell
+                .cast_occurrence
+                .expect("the original Divination has its exact cast occurrence");
+            let spell_index = state
+                .stack
+                .iter()
+                .position(|item| item.id == original_divination)
+                .expect("the original Divination has a stack position");
+            let triggers = state
+                .stack
+                .iter()
+                .filter(|item| item.is_triggered)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                triggers.len(),
+                1,
+                "the actual cast stages one ordinary grant trigger"
+            );
+            let trigger = triggers[0];
+            let trigger_index = state
+                .stack
+                .iter()
+                .position(|item| item.id == trigger.id)
+                .expect("the grant trigger has a current stack position");
+            assert!(
+                trigger_index > spell_index,
+                "the grant trigger is above the exact spell"
+            );
+            assert_eq!(trigger.controller, TEKUTHAL_NORMAL_PILOT_ID);
+            assert_eq!(trigger.source_permanent_id, Some(narset_object_id));
+            assert_eq!(trigger.source_zone_change, narset_generation);
+            let trigger_json = serde_json::to_value(trigger).expect("serialize grant trigger");
+            assert_eq!(
+                trigger_json["trigger_context"]["triggering_spell"],
+                serde_json::to_value(Some(occurrence)).expect("serialize exact spell occurrence")
+            );
+            assert_eq!(
+                kaya_batch(&latest)
+                    .events
+                    .iter()
+                    .filter(|event| matches!(event.ev, Some(Ev::StackPushed(_))))
+                    .count(),
+                2,
+                "the cast response publishes the physical spell and its grant trigger"
+            );
+            assert!(state.active_event_observers.is_empty());
+            assert_eq!(
+                narset_normal_state_field(&session, "rebound_spell_grants"),
+                serde_json::json!([]),
+                "the grant does not exist before its trigger resolves"
+            );
+            assert_eq!(
+                narset_normal_state_field(&session, "scheduled_rebounds"),
+                serde_json::json!([]),
+                "no Rebound is scheduled before the grant trigger resolves"
+            );
+            let generation = state
+                .zone_change_generation
+                .get(&original_divination)
+                .copied()
+                .expect("the original Divination on the stack has a generation");
+            assert_eq!(occurrence.object_id, original_divination);
+            assert_eq!(occurrence.zone_change_generation, Some(generation));
+            (occurrence, generation, trigger.id)
+        };
+
+        latest = narset_normal_resolve_top_stack(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+        );
+        {
+            let state = &session.engine.as_ref().unwrap().state;
+            assert_eq!(state.stack.len(), 1, "only the actual Divination remains");
+            assert_eq!(state.stack[0].id, original_divination);
+            assert!(kaya_batch(&latest).events.iter().any(|event| {
+                matches!(event.ev, Some(Ev::StackResolved(resolved)) if resolved.object_id == grant_trigger_id)
+            }));
+            assert_eq!(
+                narset_normal_state_field(&session, "rebound_spell_grants"),
+                serde_json::json!([[
+                    original_occurrence.object_id,
+                    original_occurrence
+                        .zone_change_generation
+                        .map(|generation| generation.to_string())
+                ]]),
+                "the resolving trigger grants Rebound to this exact cast occurrence"
+            );
+            assert_eq!(
+                narset_normal_state_field(&session, "scheduled_rebounds"),
+                serde_json::json!([])
+            );
+        }
+        let (
+            hand_before_original_resolution,
+            library_before_original_resolution,
+            draws_before_original_resolution,
+        ) = {
+            let state = &session.engine.as_ref().unwrap().state;
+            let p17 = state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                .expect("P17 remains in the Rebound cast turn");
+            (
+                p17.hand.len(),
+                p17.library.len(),
+                state
+                    .turn_history
+                    .current
+                    .player(TEKUTHAL_NORMAL_PILOT_ID)
+                    .cards_drawn,
+            )
+        };
+        latest = narset_normal_resolve_top_stack(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+        );
+        let (original_exile_generation, saved_rebound_schedule) = {
+            let state = &session.engine.as_ref().unwrap().state;
+            let p17 = state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                .expect("P17 remains in the Rebound resolution");
+            let resolved = kaya_batch(&latest)
+                .events
+                .iter()
+                .find_map(|event| match event.ev.as_ref() {
+                    Some(Ev::StackResolved(resolved))
+                        if resolved.object_id == original_divination =>
+                    {
+                        Some(resolved)
+                    }
+                    _ => None,
+                })
+                .expect("the original Divination resolves exactly once");
+            assert_eq!(
+                resolved.destination,
+                tricerules_proto::ruled::v1::StackResolveDestination::Exile as i32
+            );
+            assert!(state.stack.is_empty());
+            assert!(state.pending_resolution.is_none());
+            assert_eq!(p17.hand.len(), hand_before_original_resolution + 2);
+            assert_eq!(p17.library.len() + 2, library_before_original_resolution);
+            assert_eq!(
+                state
+                    .turn_history
+                    .current
+                    .player(TEKUTHAL_NORMAL_PILOT_ID)
+                    .cards_drawn,
+                draws_before_original_resolution + 2,
+                "Divination draws two immediately before its own resolution"
+            );
+            assert_eq!(
+                state.objects[&original_divination].zone,
+                tricerules_core::Zone::Exile
+            );
+            let generation = state
+                .zone_change_generation
+                .get(&original_divination)
+                .copied()
+                .expect("the same physical Divination has an Exile generation");
+            assert_eq!(generation, original_stack_generation + 1);
+            let grants = narset_normal_state_field(&session, "rebound_spell_grants");
+            assert_eq!(grants, serde_json::json!([]));
+            let schedule = narset_normal_state_field(&session, "scheduled_rebounds");
+            let records = schedule
+                .as_array()
+                .expect("diagnostics expose scheduled Rebound records");
+            assert_eq!(records.len(), 1);
+            let record = &records[0];
+            assert_eq!(
+                record["source"]["object_id"],
+                serde_json::json!(original_divination)
+            );
+            assert_eq!(
+                record["source"]["zone_change_generation"],
+                serde_json::json!(original_stack_generation.to_string())
+            );
+            assert_eq!(
+                record["exiled"]["object_id"],
+                serde_json::json!(original_divination)
+            );
+            assert_eq!(
+                record["exiled"]["zone_change_generation"],
+                serde_json::json!(generation.to_string())
+            );
+            assert_eq!(
+                record["controller"],
+                serde_json::json!(TEKUTHAL_NORMAL_PILOT_ID)
+            );
+            assert_eq!(record["card_id"], serde_json::json!("divination"));
+            assert_eq!(record["card_name"], serde_json::json!("Divination"));
+            assert_eq!(record["source_face_index"], serde_json::json!("0"));
+            (generation, schedule)
+        };
+        assert_eq!(
+            session
+                .engine
+                .as_ref()
+                .unwrap()
+                .state
+                .zone_change_generation[&original_divination],
+            original_exile_generation
+        );
+        assert_eq!(
+            session.engine.as_ref().unwrap().state.stack.len(),
+            0,
+            "the exact Rebound schedule waits for its controller's upkeep"
+        );
+
+        latest = narset_normal_advance_to_step(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut p29_battlefield,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+            tricerules_core::TurnStep::Upkeep,
+        );
+        {
+            let state = &session.engine.as_ref().unwrap().state;
+            assert_eq!(state.turn_step, tricerules_core::TurnStep::Upkeep);
+            assert_eq!(state.active_player_id(), TEKUTHAL_NORMAL_OPPONENT_ID);
+            assert_eq!(state.priority_player_id(), TEKUTHAL_NORMAL_OPPONENT_ID);
+            assert!(state.stack.is_empty());
+            assert_eq!(
+                narset_normal_state_field(&session, "scheduled_rebounds"),
+                saved_rebound_schedule
+            );
+            assert!(state
+                .active_exile_play_permissions
+                .iter()
+                .all(|permission| { permission.object_id != original_divination }));
+            let p17_offers = kaya_batch(&latest)
+                .legal_by_player
+                .get(&TEKUTHAL_NORMAL_PILOT_ID)
+                .expect("P17 retains a current private offer view during P29 upkeep");
+            assert!(p17_offers
+                .zone_cast_actions
+                .iter()
+                .all(|action| action.object_id != original_divination));
+            assert!(state.stack.iter().all(|item| !item.is_triggered));
+        }
+        latest = narset_normal_advance_to_main(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut p29_battlefield,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+        );
+        latest = narset_normal_play_land(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            &latest,
+            &mut p29_battlefield,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+            &mut p17_islands,
+            &mut p17_plains,
+        );
+        {
+            let state = &session.engine.as_ref().unwrap().state;
+            let p29 = state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_OPPONENT_ID)
+                .expect("P29 remains in the normal game");
+            assert!(p29
+                .hand
+                .iter()
+                .any(|object_id| state.objects[object_id].card_id == "divination"));
+            assert!(p29
+                .hand
+                .iter()
+                .any(|object_id| state.objects[object_id].card_id == "ornithopter"));
+        }
+
+        latest = narset_normal_advance_to_step(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+            TEKUTHAL_NORMAL_PILOT_ID,
+            tricerules_core::TurnStep::Upkeep,
+        );
+        let rebound_trigger_id = {
+            let state = &session.engine.as_ref().unwrap().state;
+            assert_eq!(state.turn_step, tricerules_core::TurnStep::Upkeep);
+            assert_eq!(state.active_player_id(), TEKUTHAL_NORMAL_PILOT_ID);
+            assert_eq!(state.priority_player_id(), TEKUTHAL_NORMAL_PILOT_ID);
+            assert!(state.stack.is_empty());
+            let choice = kaya_choice(&latest, ChoiceKind::SpecialCast)
+                .expect("P17 T6 upkeep resolves the actual Rebound trigger into its current offer");
+            assert_eq!(choice.candidate_object_ids, vec![original_divination]);
+            let pending = state
+                .pending_resolution
+                .as_ref()
+                .expect("the current Rebound SpecialCast choice remains pending");
+            let tricerules_core::state::ResolutionContinuation::SpecialCast {
+                stack, exiled, ..
+            } = &pending.continuation
+            else {
+                panic!("P17 upkeep choice belongs to the Rebound SpecialCast continuation");
+            };
+            assert!(stack.item.is_triggered);
+            assert_eq!(stack.item.card_id, "divination");
+            assert_eq!(exiled.object_id, original_divination);
+            assert_eq!(exiled.zone_change_generation, original_exile_generation);
+            assert_eq!(
+                narset_normal_state_field(&session, "scheduled_rebounds"),
+                serde_json::json!([])
+            );
+            stack.item.id
+        };
+        latest = narset_normal_accept_rebound_offer(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+            original_divination,
+            original_exile_generation,
+        );
+        let (hand_before_rebound_resolution, draws_before_rebound_resolution) = {
+            let state = &session.engine.as_ref().unwrap().state;
+            let p17 = state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                .expect("P17 remains in the Rebound turn");
+            (
+                p17.hand.len(),
+                state
+                    .turn_history
+                    .current
+                    .player(TEKUTHAL_NORMAL_PILOT_ID)
+                    .cards_drawn,
+            )
+        };
+        latest = narset_normal_resolve_top_stack(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+        );
+        {
+            let state = &session.engine.as_ref().unwrap().state;
+            let p17 = state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                .expect("P17 remains after the free Rebound spell");
+            let rebound_resolution = kaya_batch(&latest)
+                .events
+                .iter()
+                .find_map(|event| match event.ev.as_ref() {
+                    Some(Ev::StackResolved(resolved))
+                        if resolved.object_id == original_divination =>
+                    {
+                        Some(resolved)
+                    }
+                    _ => None,
+                })
+                .expect("the accepted Rebound Divination resolves");
+            assert_eq!(
+                rebound_resolution.destination,
+                tricerules_proto::ruled::v1::StackResolveDestination::Graveyard as i32
+            );
+            assert_eq!(p17.hand.len(), hand_before_rebound_resolution + 2);
+            assert_eq!(
+                state
+                    .turn_history
+                    .current
+                    .player(TEKUTHAL_NORMAL_PILOT_ID)
+                    .cards_drawn,
+                draws_before_rebound_resolution + 2
+            );
+            assert_eq!(
+                state.objects[&original_divination].zone,
+                tricerules_core::Zone::Graveyard
+            );
+            assert_eq!(
+                state.zone_change_generation.get(&original_divination),
+                Some(&(original_exile_generation + 2))
+            );
+            assert!(state.stack.is_empty());
+            assert!(state.pending_resolution.is_none());
+            assert!(state
+                .active_exile_play_permissions
+                .iter()
+                .all(|permission| { permission.object_id != original_divination }));
+            assert_eq!(
+                narset_normal_state_field(&session, "rebound_spell_grants"),
+                serde_json::json!([])
+            );
+            assert_eq!(
+                narset_normal_state_field(&session, "scheduled_rebounds"),
+                serde_json::json!([]),
+                "the Exile cast does not create a Rebound loop"
+            );
+            assert_eq!(
+                kaya_batch(&latest)
+                    .events
+                    .iter()
+                    .filter(|event| {
+                        matches!(&event.ev, Some(Ev::StackResolved(resolved)) if resolved.object_id == rebound_trigger_id)
+                    })
+                    .count(),
+                0,
+                "the parent Rebound trigger does not resolve again with its child Divination"
+            );
+        }
+        latest = narset_normal_advance_to_main(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+            TEKUTHAL_NORMAL_PILOT_ID,
+        );
+        p17_turns += 1;
+        assert_eq!(p17_turns, 6);
+        assert!(
+            p17_turns <= 24,
+            "Narset driver stays inside its P17 turn bound"
+        );
+        latest = narset_normal_play_land(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            &latest,
+            &mut battlefield,
+            TEKUTHAL_NORMAL_PILOT_ID,
+            &mut p17_islands,
+            &mut p17_plains,
+        );
+
+        for p17_turn in 6..=9 {
+            assert_eq!(p17_turns, p17_turn);
+            assert!(
+                p17_turns <= 24,
+                "Narset driver stays inside its P17 turn bound"
+            );
+            let narset = battlefield
+                .iter()
+                .find(|permanent| permanent.card_id == "narset_transcendent")
+                .expect("Narset remains present through the four later +1 abilities");
+            let loyalty_before = narset.loyalty;
+            let expected_loyalty = p17_turn;
+            assert_eq!(loyalty_before, expected_loyalty - 1);
+            let (hand_before, library_before, draws_before) = {
+                let state = &session.engine.as_ref().unwrap().state;
+                let p17 = state
+                    .players
+                    .iter()
+                    .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                    .expect("P17 remains in the normal session");
+                (
+                    p17.hand.len(),
+                    p17.library.len(),
+                    state
+                        .turn_history
+                        .current
+                        .player(TEKUTHAL_NORMAL_PILOT_ID)
+                        .cards_drawn,
+                )
+            };
+            latest = narset_normal_activate_loyalty(
+                &mut session,
+                root.as_path(),
+                &mut rows,
+                &mut accepted_commands,
+                &mut battlefield,
+                "activated_01",
+            );
+            assert_eq!(
+                battlefield
+                    .iter()
+                    .find(|permanent| permanent.card_id == "narset_transcendent")
+                    .expect("the +1 source remains on the battlefield")
+                    .loyalty,
+                loyalty_before + 1
+            );
+            latest = narset_normal_resolve_top_stack(
+                &mut session,
+                root.as_path(),
+                &mut rows,
+                &mut accepted_commands,
+                latest,
+                &mut battlefield,
+            );
+            let look = kaya_choice(&latest, ChoiceKind::LibraryLook)
+                .expect("each later +1 resolves to its current optional look");
+            assert_eq!(look.min, 0);
+            assert!(look.max <= 1);
+            if look.max == 0 {
+                assert!(look
+                    .candidate_selectable
+                    .iter()
+                    .all(|selectable| !selectable));
+            }
+            latest = narset_normal_decline_current_look(
+                &mut session,
+                root.as_path(),
+                &mut rows,
+                &mut accepted_commands,
+                latest,
+                &mut battlefield,
+            );
+            {
+                let state = &session.engine.as_ref().unwrap().state;
+                let p17 = state
+                    .players
+                    .iter()
+                    .find(|player| player.id == TEKUTHAL_NORMAL_PILOT_ID)
+                    .expect("P17 remains after declining the private look");
+                assert_eq!(p17.hand.len(), hand_before);
+                assert_eq!(p17.library.len(), library_before);
+                assert_eq!(
+                    state
+                        .turn_history
+                        .current
+                        .player(TEKUTHAL_NORMAL_PILOT_ID)
+                        .cards_drawn,
+                    draws_before
+                );
+                assert_eq!(state.objects[&30].zone, tricerules_core::Zone::Battlefield);
+                assert_eq!(
+                    state.objects[&30]
+                        .counter_count(tricerules_cards::primitives::CounterKind::Loyalty),
+                    expected_loyalty
+                );
+                assert!(state.stack.is_empty());
+                assert!(state.pending_resolution.is_none());
+            }
+            println!("P17 T{p17_turn} resolved activated_01 and declined the current LibraryLook offer with an empty answer");
+
+            if p17_turn < 9 {
+                latest = narset_normal_advance_to_main(
+                    &mut session,
+                    root.as_path(),
+                    &mut rows,
+                    &mut accepted_commands,
+                    latest,
+                    &mut p29_battlefield,
+                    TEKUTHAL_NORMAL_OPPONENT_ID,
+                );
+                latest = narset_normal_play_land(
+                    &mut session,
+                    root.as_path(),
+                    &mut rows,
+                    &mut accepted_commands,
+                    &latest,
+                    &mut p29_battlefield,
+                    TEKUTHAL_NORMAL_OPPONENT_ID,
+                    &mut p17_islands,
+                    &mut p17_plains,
+                );
+                latest = narset_normal_advance_to_main(
+                    &mut session,
+                    root.as_path(),
+                    &mut rows,
+                    &mut accepted_commands,
+                    latest,
+                    &mut battlefield,
+                    TEKUTHAL_NORMAL_PILOT_ID,
+                );
+                p17_turns += 1;
+                assert_eq!(p17_turns, p17_turn + 1);
+                assert!(
+                    p17_turns <= 24,
+                    "Narset driver stays inside its P17 turn bound"
+                );
+                assert_eq!(
+                    session.engine.as_ref().unwrap().state.active_player_id(),
+                    TEKUTHAL_NORMAL_PILOT_ID
+                );
+                latest = narset_normal_play_land(
+                    &mut session,
+                    root.as_path(),
+                    &mut rows,
+                    &mut accepted_commands,
+                    &latest,
+                    &mut battlefield,
+                    TEKUTHAL_NORMAL_PILOT_ID,
+                    &mut p17_islands,
+                    &mut p17_plains,
+                );
+            }
+        }
+
+        // P29's pre-emblem T9 offer proves Divination remains castable before the restriction.
+        latest = narset_normal_advance_to_main(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut p29_battlefield,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+        );
+        latest = narset_normal_play_land(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            &latest,
+            &mut p29_battlefield,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+            &mut p17_islands,
+            &mut p17_plains,
+        );
+        {
+            let state = &session.engine.as_ref().unwrap().state;
+            assert_eq!(state.turn_step, tricerules_core::TurnStep::Main1);
+            assert_eq!(state.active_player_id(), TEKUTHAL_NORMAL_OPPONENT_ID);
+            assert_eq!(state.priority_player_id(), TEKUTHAL_NORMAL_OPPONENT_ID);
+            assert!(state.stack.is_empty());
+            assert!(state.pending_resolution.is_none());
+            assert!(state.static_emblems.is_empty());
+            assert!(
+                p29_battlefield
+                    .iter()
+                    .filter(|permanent| { permanent.card_id == "island" && !permanent.tapped })
+                    .count()
+                    >= 3
+            );
+            let p29 = state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_OPPONENT_ID)
+                .expect("P29 remains the active player before the emblem");
+            assert!(p29
+                .hand
+                .iter()
+                .any(|object_id| state.objects[object_id].card_id == "divination"));
+            assert!(p29
+                .hand
+                .iter()
+                .any(|object_id| state.objects[object_id].card_id == "ornithopter"));
+            let actions = kaya_batch(&latest)
+                .legal_by_player
+                .get(&TEKUTHAL_NORMAL_OPPONENT_ID)
+                .expect("P29 receives its current pre-emblem cast offers")
+                .hand_actions
+                .iter()
+                .filter(|offer| offer.kind == HandActionKind::HandActionCastSpell as i32)
+                .collect::<Vec<_>>();
+            assert!(actions.iter().any(|offer| offer.card_name == "Divination"));
+            assert!(actions.iter().any(|offer| offer.card_name == "Ornithopter"));
+        }
+
+        latest = narset_normal_advance_to_main(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+            TEKUTHAL_NORMAL_PILOT_ID,
+        );
+        p17_turns += 1;
+        assert_eq!(p17_turns, 10);
+        assert!(
+            p17_turns <= 24,
+            "Narset driver stays inside its P17 turn bound"
+        );
+        assert_eq!(
+            session.engine.as_ref().unwrap().state.active_player_id(),
+            TEKUTHAL_NORMAL_PILOT_ID
+        );
+        narset_normal_play_land(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            &latest,
+            &mut battlefield,
+            TEKUTHAL_NORMAL_PILOT_ID,
+            &mut p17_islands,
+            &mut p17_plains,
+        );
+        let narset_before_ultimate = battlefield
+            .iter()
+            .find(|permanent| permanent.card_id == "narset_transcendent")
+            .expect("the current P17 T10 battlefield view has Narset");
+        assert_eq!(narset_before_ultimate.loyalty, 9);
+        let ultimate_source_generation = narset_before_ultimate.zone_change_generation;
+        latest = narset_normal_activate_loyalty(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            &mut battlefield,
+            "activated_03",
+        );
+        {
+            let state = &session.engine.as_ref().unwrap().state;
+            assert_eq!(state.objects[&30].zone, tricerules_core::Zone::Graveyard);
+            assert_eq!(
+                state.zone_change_generation.get(&30),
+                Some(&(ultimate_source_generation + 1)),
+                "paying -9 moves Narset to the Graveyard before its ability resolves"
+            );
+            assert_eq!(state.stack.len(), 1);
+            assert_eq!(state.stack[0].source_permanent_id, Some(30));
+            assert_eq!(
+                state.stack[0].source_zone_change,
+                ultimate_source_generation
+            );
+            assert!(state.static_emblems.is_empty());
+        }
+        latest = narset_normal_resolve_top_stack(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut battlefield,
+        );
+        {
+            let state = &session.engine.as_ref().unwrap().state;
+            assert!(state.stack.is_empty());
+            assert_eq!(state.static_emblems.len(), 1);
+            let emblem = &state.static_emblems[0];
+            assert_eq!(emblem.controller, TEKUTHAL_NORMAL_PILOT_ID);
+            assert_eq!(emblem.emblem_id, "narset_transcendent_emblem");
+            assert!(emblem.effects.iter().any(|effect| matches!(
+                effect,
+                tricerules_cards::primitives::StaticEmblemEffect::OpponentsCantCastNoncreatureSpells
+            )));
+            assert_eq!(state.objects[&30].zone, tricerules_core::Zone::Graveyard);
+        }
+
+        latest = narset_normal_advance_to_main(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut p29_battlefield,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+        );
+        {
+            let state = &session.engine.as_ref().unwrap().state;
+            assert_eq!(state.turn_step, tricerules_core::TurnStep::Main1);
+            assert_eq!(state.active_player_id(), TEKUTHAL_NORMAL_OPPONENT_ID);
+            assert_eq!(state.priority_player_id(), TEKUTHAL_NORMAL_OPPONENT_ID);
+            assert!(state.stack.is_empty());
+            assert!(state.pending_resolution.is_none());
+            assert_eq!(state.static_emblems.len(), 1);
+            let p29 = state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_OPPONENT_ID)
+                .expect("P29 remains in the post-emblem normal session");
+            assert!(p29
+                .hand
+                .iter()
+                .any(|object_id| state.objects[object_id].card_id == "divination"));
+            assert!(p29
+                .hand
+                .iter()
+                .any(|object_id| state.objects[object_id].card_id == "ornithopter"));
+            let actions = kaya_batch(&latest)
+                .legal_by_player
+                .get(&TEKUTHAL_NORMAL_OPPONENT_ID)
+                .expect("P29 receives the post-emblem current cast offers")
+                .hand_actions
+                .iter()
+                .filter(|offer| offer.kind == HandActionKind::HandActionCastSpell as i32)
+                .collect::<Vec<_>>();
+            assert!(actions.iter().all(|offer| offer.card_name != "Divination"));
+            assert!(actions.iter().any(|offer| offer.card_name == "Ornithopter"));
+        }
+        latest = narset_normal_play_land(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            &latest,
+            &mut p29_battlefield,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+            &mut p17_islands,
+            &mut p17_plains,
+        );
+        latest = narset_normal_float_blue(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut p29_battlefield,
+            TEKUTHAL_NORMAL_OPPONENT_ID,
+            3,
+        );
+        {
+            let actions = kaya_batch(&latest)
+                .legal_by_player
+                .get(&TEKUTHAL_NORMAL_OPPONENT_ID)
+                .expect("P29 receives current offers after floating three blue mana")
+                .hand_actions
+                .iter()
+                .filter(|offer| offer.kind == HandActionKind::HandActionCastSpell as i32)
+                .collect::<Vec<_>>();
+            assert!(actions.iter().all(|offer| offer.card_name != "Divination"));
+            assert!(actions.iter().any(|offer| offer.card_name == "Ornithopter"));
+        }
+        latest = narset_normal_cast_opponent_zero_cost(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut p29_battlefield,
+            97,
+        );
+        latest = narset_normal_resolve_top_stack(
+            &mut session,
+            root.as_path(),
+            &mut rows,
+            &mut accepted_commands,
+            latest,
+            &mut p29_battlefield,
+        );
+        kaya_capture_battlefield(&latest, TEKUTHAL_NORMAL_OPPONENT_ID, &mut p29_battlefield);
+        {
+            let state = &session.engine.as_ref().unwrap().state;
+            assert!(state.stack.is_empty());
+            assert_eq!(state.static_emblems.len(), 1);
+            assert_eq!(state.objects[&30].zone, tricerules_core::Zone::Graveyard);
+            assert_eq!(state.objects[&97].zone, tricerules_core::Zone::Battlefield);
+            assert_eq!(state.zone_change_generation.get(&97), Some(&2));
+            assert_eq!(state.objects[&97].controller, TEKUTHAL_NORMAL_OPPONENT_ID);
+            let p29 = state
+                .players
+                .iter()
+                .find(|player| player.id == TEKUTHAL_NORMAL_OPPONENT_ID)
+                .expect("P29 remains in the completed normal pilot");
+            assert_eq!(
+                p29.mana_pool.blue, 3,
+                "zero-cost Ornithopter spends none of the blue pool"
+            );
+            assert!(p29
+                .hand
+                .iter()
+                .any(|object_id| state.objects[object_id].card_id == "divination"));
+        }
+
+        fs::write(
+            root.as_path().join("timeline.jsonl"),
+            rows.join("\n") + "\n",
+        )
+        .expect("finish Narset normal-pilot timeline");
+        assert_eq!(manifest["effective_dev_commands_enabled"], false);
+        assert!(accepted_commands <= 8_192);
+        assert!(p17_turns <= 24);
+        manifest["complete"] = true.into();
+        manifest["accepted_commands"] = accepted_commands.into();
+        fs::write(root.as_path().join("manifest.json"), manifest.to_string())
+            .expect("finish Narset normal-pilot manifest");
+        let expected_state = session
+            .engine
+            .as_ref()
+            .expect("normal Narset session has an engine after the T10 emblem and opponent cast")
+            .diagnostic_snapshot()
+            .expect("capture the live final diagnostic snapshot");
+        let capture = load_capture(root.as_path()).expect("load completed Narset normal capture");
+        assert!(
+            capture.warnings.is_empty(),
+            "capture warnings: {:?}",
+            capture.warnings
+        );
+        let replayed = reconstruct(&capture, &ReplayOptions::default())
+            .expect("reconstruct the complete normal Narset three-ability curve");
+        assert!(
+            replayed.warnings.is_empty(),
+            "replay warnings: {:?}",
+            replayed.warnings
+        );
+        assert!(
+            replayed.differences.is_empty(),
+            "replay differences: {:?}",
+            replayed.differences
+        );
+        assert_eq!(
+            replayed.accepted_commands,
+            u64::try_from(accepted_commands).expect("accepted command count fits replay result")
+        );
+        assert_eq!(replayed.state, expected_state);
+        println!(
+            "P17 fixed-seed Narset cast/+1, T5 Rebound grant and T6 free recast, T6-T9 +1 declines, T10 -9 emblem, and P29 post-emblem free Ornithopter replayed exactly; accepted PlayerCommands={accepted_commands}, timeline records={}",
+            rows.len()
+        );
+    }
 }

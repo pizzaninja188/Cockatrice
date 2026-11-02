@@ -101,6 +101,8 @@ mod deck_coverage_luxior;
 mod deck_coverage_manifold_key;
 #[path = "../deck_coverage_memory_jar.rs"]
 mod deck_coverage_memory_jar;
+#[path = "../deck_coverage_narset_transcendent.rs"]
+mod deck_coverage_narset_transcendent;
 #[path = "../deck_coverage_oath_of_teferi.rs"]
 mod deck_coverage_oath_of_teferi;
 #[path = "../deck_coverage_onakke_oathkeeper.rs"]

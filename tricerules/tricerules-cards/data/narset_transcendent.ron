@@ -1,0 +1,32 @@
+// Oracle ID e1de0c94-0ecc-425a-9b92-27c2745d07e7; DTK 225 printing 4816d092-e34b-4397-8599-43d8e85a8f39.
+(
+    id: "narset_transcendent",
+    name: "Narset Transcendent",
+    face_id: "narset_transcendent",
+    mana_cost: "{2}{W}{U}",
+    supertypes: ["Legendary"],
+    types: ["Planeswalker", "Narset"],
+    loyalty: 6,
+    activated_abilities: [(
+        ability_id: "activated_01",
+        presentation: OracleLines([1]),
+        costs: [Loyalty(1)],
+        effect: [LookTopCardOptionalToHand(
+            filter: (card_type: Some(Nonland), excluded_card_types: [Creature]),
+        )],
+    ), (
+        ability_id: "activated_02",
+        presentation: OracleLines([2]),
+        costs: [Loyalty(-2)],
+        effect: [NextHandInstantOrSorceryGainsReboundThisTurn],
+    ), (
+        ability_id: "activated_03",
+        presentation: OracleLines([3]),
+        costs: [Loyalty(-9)],
+        effect: [CreateStaticEmblem(
+            emblem_id: "narset_transcendent_emblem",
+            display_name: "Narset Transcendent Emblem",
+            effects: [OpponentsCantCastNoncreatureSpells],
+        )],
+    )],
+)

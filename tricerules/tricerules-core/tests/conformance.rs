@@ -1358,3 +1358,20 @@ fn integrity_rejects_missing_nonphased_physical_objects() {
     }))
     .is_err());
 }
+
+#[test]
+fn narset_transcendent_cast_and_loyalty_abilities_have_complete_fixtures() {
+    for ability in [None, Some(0), Some(1), Some(2)] {
+        let case = Case {
+            card: "narset_transcendent".into(),
+            face: 0,
+            ability,
+        };
+        assert_eq!(
+            evaluate(&case).expect("evaluate the actual Narset fixture"),
+            Outcome::Exercised,
+            "{}",
+            case.key()
+        );
+    }
+}
