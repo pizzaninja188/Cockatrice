@@ -2920,8 +2920,7 @@ impl GameEngine {
                 ResolutionContinuation::ProliferateReplacement { .. } => {
                     Some(SavedProliferateStage::OuterReplacement)
                 }
-                ResolutionContinuation::ProgramProliferate { .. }
-                | ResolutionContinuation::Proliferate { .. } => {
+                ResolutionContinuation::Proliferate { .. } => {
                     Some(SavedProliferateStage::Recipient)
                 }
                 ResolutionContinuation::CounterReplacement {
@@ -2993,8 +2992,7 @@ impl GameEngine {
                     Some(ResolutionContinuation::ProliferateReplacement { .. }) => {
                         self.proliferate_replacement_choice_event()
                     }
-                    Some(ResolutionContinuation::ProgramProliferate { .. })
-                    | Some(ResolutionContinuation::Proliferate { .. }) => {
+                    Some(ResolutionContinuation::Proliferate { .. }) => {
                         self.proliferate_choice_event()
                     }
                     Some(ResolutionContinuation::CounterReplacement {
@@ -3236,20 +3234,18 @@ impl GameEngine {
             .is_some_and(|pending| {
                 matches!(
                     &pending.continuation,
-                    ResolutionContinuation::ProgramProliferate { .. }
-                        | ResolutionContinuation::Proliferate { .. }
+                    ResolutionContinuation::Proliferate { .. }
                 )
             })
         {
-            // Reconcile the saved recipient transaction in place. Re-entering the Program leaf
+            // Reconcile the saved recipient transaction in place. Re-entering the recipient leaf
             // would rebuild the action root and discard committed receipts or its cursor.
             let refresh_event_start = events.len();
             self.refresh_proliferate_departure(events)?;
             let current_offer = self.state.pending_resolution.as_ref().and_then(|pending| {
                 matches!(
                     &pending.continuation,
-                    ResolutionContinuation::ProgramProliferate { .. }
-                        | ResolutionContinuation::Proliferate { .. }
+                    ResolutionContinuation::Proliferate { .. }
                 )
                 .then_some((
                     pending.presentation.choice_kind,

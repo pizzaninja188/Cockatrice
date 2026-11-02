@@ -1366,7 +1366,7 @@ fn saved_program_proliferate_keeps_first_receipt_when_actor_concedes_under_obser
             pending.presentation.choice_kind,
             ruled_v1::ChoiceKind::Proliferate
         );
-        let ResolutionContinuation::ProgramProliferate {
+        let ResolutionContinuation::Proliferate {
             stack,
             candidate_generations,
             stage,
@@ -1497,7 +1497,7 @@ fn saved_program_proliferate_keeps_first_receipt_when_actor_concedes_under_obser
         .as_ref()
         .expect("the begun Program child and its committed first receipt survive below AuraReturn");
     assert_eq!(format!("{saved:?}"), saved_parent);
-    let ResolutionContinuation::ProgramProliferate {
+    let ResolutionContinuation::Proliferate {
         stack, transaction, ..
     } = &saved.continuation
     else {
@@ -1556,7 +1556,7 @@ fn saved_program_proliferate_keeps_first_receipt_when_actor_concedes_under_obser
     assert_ne!(restored_offer.resolution_prompt_id, 0);
     assert_eq!(restored_offer.candidate_object_ids, vec![recipient]);
     let restored = engine.state.pending_resolution.as_ref().unwrap();
-    let ResolutionContinuation::ProgramProliferate {
+    let ResolutionContinuation::Proliferate {
         stack, transaction, ..
     } = &restored.continuation
     else {
@@ -1688,7 +1688,7 @@ fn saved_program_proliferate_refreshes_departed_recipient_after_independent_obse
                 .as_ref()
                 .expect("the second real child is parked");
             assert_eq!(pending.presentation.source_object_id, spell, "{row}");
-            let ResolutionContinuation::ProgramProliferate {
+            let ResolutionContinuation::Proliferate {
                 stack,
                 candidate_generations,
                 stage,
@@ -1799,7 +1799,7 @@ fn saved_program_proliferate_refreshes_departed_recipient_after_independent_obse
             .as_ref()
             .expect("the original Program prefix remains saved after R's controller concedes");
         assert_eq!(format!("{saved:?}"), saved_parent, "{row}");
-        let ResolutionContinuation::ProgramProliferate {
+        let ResolutionContinuation::Proliferate {
             stack, transaction, ..
         } = &saved.continuation
         else {
@@ -1861,7 +1861,7 @@ fn saved_program_proliferate_refreshes_departed_recipient_after_independent_obse
             assert_ne!(restored_offer.resolution_prompt_id, 0);
             assert_eq!(restored_offer.deciding_player_id, 0);
             assert_eq!(restored_offer.candidate_object_ids, vec![survivor]);
-            let ResolutionContinuation::ProgramProliferate {
+            let ResolutionContinuation::Proliferate {
                 stack, transaction, ..
             } = &restored.continuation
             else {
@@ -2262,7 +2262,7 @@ fn saved_proliferate_outer_and_nested_work_survives_actor_departure_under_observ
         .as_ref()
         .expect("the one ordinary original action leaf is now offered to P2");
     assert_eq!(restored.deciding_player, 2);
-    let ResolutionContinuation::ProgramProliferate {
+    let ResolutionContinuation::Proliferate {
         stack,
         candidate_generations,
         transaction,
@@ -2854,7 +2854,7 @@ fn saved_nested_proliferate_recipient_retirement_finishes_leaf_before_remaining_
             .pending_resolution
             .as_ref()
             .expect("the second actual leaf is ready for recipient selection");
-        let ResolutionContinuation::ProgramProliferate {
+        let ResolutionContinuation::Proliferate {
             stack, transaction, ..
         } = &pending.continuation
         else {
@@ -3168,7 +3168,7 @@ fn saved_nested_proliferate_recipient_retirement_finishes_leaf_before_remaining_
             .pending_resolution
             .as_ref()
             .expect("the third actual leaf follows the retired B leaf");
-        let ResolutionContinuation::ProgramProliferate {
+        let ResolutionContinuation::Proliferate {
             stack,
             candidate_generations,
             stage,
@@ -3226,8 +3226,7 @@ fn saved_nested_proliferate_recipient_retirement_finishes_leaf_before_remaining_
     );
     {
         let pending = engine.state.pending_resolution.as_ref().unwrap();
-        let ResolutionContinuation::ProgramProliferate { transaction, .. } = &pending.continuation
-        else {
+        let ResolutionContinuation::Proliferate { transaction, .. } = &pending.continuation else {
             panic!("the actual fourth leaf remains in the original Program");
         };
         assert_eq!(transaction.actor, 0);

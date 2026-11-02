@@ -709,7 +709,7 @@ fn ezuri_program_proliferate_delegates_after_controller_leaves_and_keeps_each_ch
         .resolution_prompt_id
         .get();
     assert_ne!(original, 0);
-    let tricerules_core::state::ResolutionContinuation::ProgramProliferate {
+    let tricerules_core::state::ResolutionContinuation::Proliferate {
         candidate_player_ids,
         ..
     } = &engine
@@ -733,7 +733,7 @@ fn ezuri_program_proliferate_delegates_after_controller_leaves_and_keeps_each_ch
     );
     let selector = find_resolution_choice(&departed)
         .expect("the next live player selects a delegate for P0's started choice");
-    let tricerules_core::state::ResolutionContinuation::ProgramProliferate {
+    let tricerules_core::state::ResolutionContinuation::Proliferate {
         candidate_generations,
         candidate_player_ids,
         ..

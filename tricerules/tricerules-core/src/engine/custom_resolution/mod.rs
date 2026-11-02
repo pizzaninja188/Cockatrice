@@ -1401,7 +1401,6 @@ impl GameEngine {
         if matches!(
             pending.continuation,
             ResolutionContinuation::Proliferate { .. }
-                | ResolutionContinuation::ProgramProliferate { .. }
         ) {
             return self.finish_proliferate_choice(pending, answer, decision);
         }
@@ -1667,9 +1666,6 @@ impl GameEngine {
             }
             ResolutionContinuation::Proliferate { .. } => {
                 unreachable!("Proliferate branch handled before object-choice validation")
-            }
-            ResolutionContinuation::ProgramProliferate { .. } => {
-                unreachable!("Program Proliferate branch handled before object-choice validation")
             }
             ResolutionContinuation::ProliferateReplacement { .. } => {
                 unreachable!("Proliferate replacement handled before object-choice validation")

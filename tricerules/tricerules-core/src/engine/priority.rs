@@ -25,8 +25,7 @@ fn is_begun_proliferate_observer_continuation(
 ) -> bool {
     match (&pending.continuation, replacement) {
         (
-            ResolutionContinuation::ProgramProliferate { .. }
-            | ResolutionContinuation::ProliferateReplacement { .. }
+            ResolutionContinuation::ProliferateReplacement { .. }
             | ResolutionContinuation::Proliferate { .. },
             _,
         ) => true,
@@ -702,14 +701,9 @@ impl GameEngine {
                     // current delegate can be reconciled against the live state (CR 608.2m).
                     preserve = true;
                 }
-                ResolutionContinuation::ProgramProliferate { .. } => {
-                    // CR 608.2m preserves the started typed instruction and its exact parent
-                    // cursor. Its departed controller receives a delegated recipient choice.
-                    preserve = true;
-                }
                 ResolutionContinuation::Proliferate { .. } => {
-                    // CR 608.2m preserves a begun flat Proliferate instruction, including its
-                    // original actor, replacement transaction and parked legacy parent result.
+                    // CR 608.2m preserves the begun action, original actor, replacement
+                    // transaction and parked parent cursor across controller departure.
                     preserve = true;
                 }
                 ResolutionContinuation::PermanentChoice { .. }

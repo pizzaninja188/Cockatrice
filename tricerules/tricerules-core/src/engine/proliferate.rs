@@ -18,7 +18,6 @@ use super::events::{ev_log, finish_with_events, object_display_name};
 use super::{EngineError, GameEngine, GameEvent};
 
 pub(in crate::engine) enum InitialProliferateProgress {
-    Unreplaced,
     ContinuedInline,
     Parked,
 }
@@ -91,28 +90,17 @@ impl PendingProliferateTransaction {
 }
 
 impl GameEngine {
-    /// Begin replacement processing before the first leaf's recipient fast path. `Unreplaced`
-    /// lets the legacy no-replacement path keep its synchronous behavior unchanged.
+    /// Begin the shared replacement and recipient path for the original Proliferate action.
     pub(in crate::engine) fn begin_initial_proliferate_action(
         &mut self,
         stack: crate::state::ParkedStackResolution,
         mut transaction: PendingProliferateTransaction,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<InitialProliferateProgress, EngineError> {
-        let root = transaction
-            .pending_nodes
-            .front()
-            .ok_or(EngineError::ProgramInvariant(
+        if transaction.pending_nodes.front().is_none() {
+            return Err(EngineError::ProgramInvariant(
                 "new Proliferate transaction has no root node",
-            ))?;
-        if self
-            .double_controller_proliferation_replacements(
-                transaction.actor,
-                &root.applied_replacements,
-            )
-            .is_empty()
-        {
-            return Ok(InitialProliferateProgress::Unreplaced);
+            ));
         }
         transaction.current_leaf = transaction.pending_nodes.pop_front();
         match self.drive_proliferate_transaction(stack, transaction, events, false)? {
@@ -210,8 +198,18 @@ impl GameEngine {
             .collect::<Vec<_>>();
 
         if candidate_objects.is_empty() && candidate_player_ids.is_empty() {
-            events.push(ev_log(format!("P{actor} proliferates.")));
-            self.fire_triggers(&[GameEvent::Proliferated { player: actor }], events);
+            let first_unreplaced_leaf = transaction.completed_leaves == 0
+                && transaction
+                    .current_leaf
+                    .as_ref()
+                    .is_some_and(|leaf| leaf.applied_replacements.is_empty());
+            if first_unreplaced_leaf {
+                self.fire_triggers(&[GameEvent::Proliferated { player: actor }], events);
+                events.push(ev_log(format!("P{actor} proliferates.")));
+            } else {
+                events.push(ev_log(format!("P{actor} proliferates.")));
+                self.fire_triggers(&[GameEvent::Proliferated { player: actor }], events);
+            }
             return Ok(false);
         }
 
@@ -234,7 +232,6 @@ impl GameEngine {
             .checked_add(candidate_player_ids.len())
             .and_then(|count| u32::try_from(count).ok())
             .ok_or(EngineError::Illegal("too many Proliferate recipients"))?;
-        let is_program = stack.program.is_some();
         let (deciding_player, stage) = if self
             .state
             .player_idx(actor)
@@ -259,29 +256,16 @@ impl GameEngine {
             ),
             PendingProliferateStage::SelectingRecipients => prompt.clone(),
         };
-        let continuation = if is_program {
-            ResolutionContinuation::ProgramProliferate {
-                stack: stack.clone(),
-                candidate_generations,
-                candidate_player_ids: candidate_player_ids.clone(),
-                stage,
-                transaction,
-            }
-        } else {
-            ResolutionContinuation::Proliferate {
-                stack: stack.clone(),
-                candidate_generations,
-                candidate_player_ids: candidate_player_ids.clone(),
-                stage,
-                transaction,
-            }
+        let continuation = ResolutionContinuation::Proliferate {
+            stack: stack.clone(),
+            candidate_generations,
+            candidate_player_ids: candidate_player_ids.clone(),
+            stage,
+            transaction,
         };
         let choosing_delegate = matches!(
             &continuation,
-            ResolutionContinuation::ProgramProliferate {
-                stage: PendingProliferateStage::ChoosingDelegate { .. },
-                ..
-            } | ResolutionContinuation::Proliferate {
+            ResolutionContinuation::Proliferate {
                 stage: PendingProliferateStage::ChoosingDelegate { .. },
                 ..
             }
@@ -310,7 +294,7 @@ impl GameEngine {
             },
             continuation,
         });
-        if is_program || choosing_delegate {
+        if stack.program.is_some() || choosing_delegate {
             events.push(
                 self.proliferate_choice_event()
                     .ok_or(EngineError::ProgramInvariant(

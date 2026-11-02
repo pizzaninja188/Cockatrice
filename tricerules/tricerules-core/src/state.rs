@@ -2015,17 +2015,9 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         transaction: crate::engine::proliferate::PendingProliferateTransaction,
     },
-    /// CR 701.34: mixed selection of generation-bound permanents and distinct player ids.
+    /// CR 701.34: mixed selection of generation-bound permanents and distinct player ids. When
+    /// this action is a typed Program leaf, `stack.program` retains its parent cursor here.
     Proliferate {
-        stack: ParkedStackResolution,
-        candidate_generations: Vec<(ObjectId, u64)>,
-        candidate_player_ids: Vec<PlayerId>,
-        stage: PendingProliferateStage,
-        transaction: crate::engine::proliferate::PendingProliferateTransaction,
-    },
-    /// Keep the typed Program cursor in its own continuation while sharing the Proliferate choice
-    /// stage with the legacy flat-effect continuation.
-    ProgramProliferate {
         stack: ParkedStackResolution,
         candidate_generations: Vec<(ObjectId, u64)>,
         candidate_player_ids: Vec<PlayerId>,
@@ -2481,7 +2473,6 @@ impl ResolutionContinuation {
             | Self::BeholdChoice { stack, .. }
             | Self::ProliferateReplacement { stack, .. }
             | Self::Proliferate { stack, .. }
-            | Self::ProgramProliferate { stack, .. }
             | Self::AmassChoice { stack, .. }
             | Self::WardPayment { stack, .. }
             | Self::HandChoice { stack, .. }
@@ -2560,7 +2551,6 @@ impl ResolutionContinuation {
             | Self::BeholdChoice { stack, .. }
             | Self::ProliferateReplacement { stack, .. }
             | Self::Proliferate { stack, .. }
-            | Self::ProgramProliferate { stack, .. }
             | Self::AmassChoice { stack, .. }
             | Self::WardPayment { stack, .. }
             | Self::HandChoice { stack, .. }

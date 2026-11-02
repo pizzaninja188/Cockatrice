@@ -10,10 +10,7 @@ impl GameEngine {
     ) -> Result<RuledEventBatch, EngineError> {
         if matches!(
             &pending.continuation,
-            ResolutionContinuation::ProgramProliferate {
-                stage: crate::state::PendingProliferateStage::ChoosingDelegate { .. },
-                ..
-            } | ResolutionContinuation::Proliferate {
+            ResolutionContinuation::Proliferate {
                 stage: crate::state::PendingProliferateStage::ChoosingDelegate { .. },
                 ..
             }
@@ -23,18 +20,6 @@ impl GameEngine {
         let (stack, candidate_generations, candidate_player_ids, transaction) =
             match &pending.continuation {
                 ResolutionContinuation::Proliferate {
-                    stack,
-                    candidate_generations,
-                    candidate_player_ids,
-                    stage: crate::state::PendingProliferateStage::SelectingRecipients,
-                    transaction,
-                } => (
-                    stack,
-                    candidate_generations,
-                    candidate_player_ids,
-                    transaction,
-                ),
-                ResolutionContinuation::ProgramProliferate {
                     stack,
                     candidate_generations,
                     candidate_player_ids,
@@ -196,13 +181,7 @@ impl GameEngine {
             ));
         }
         let (stack, candidates, transaction) = match &pending.continuation {
-            ResolutionContinuation::ProgramProliferate {
-                stack,
-                stage: crate::state::PendingProliferateStage::ChoosingDelegate { candidates },
-                transaction,
-                ..
-            }
-            | ResolutionContinuation::Proliferate {
+            ResolutionContinuation::Proliferate {
                 stack,
                 stage: crate::state::PendingProliferateStage::ChoosingDelegate { candidates },
                 transaction,
@@ -238,12 +217,7 @@ impl GameEngine {
             ));
         }
         let (candidate_generations, candidate_player_ids) = match &pending.continuation {
-            ResolutionContinuation::ProgramProliferate {
-                candidate_generations,
-                candidate_player_ids,
-                ..
-            }
-            | ResolutionContinuation::Proliferate {
+            ResolutionContinuation::Proliferate {
                 candidate_generations,
                 candidate_player_ids,
                 ..
@@ -265,13 +239,7 @@ impl GameEngine {
             .len()
             .saturating_add(candidate_player_ids.len()) as u32;
         match &mut pending.continuation {
-            ResolutionContinuation::ProgramProliferate {
-                candidate_generations: pending_generations,
-                candidate_player_ids: pending_players,
-                stage,
-                ..
-            }
-            | ResolutionContinuation::Proliferate {
+            ResolutionContinuation::Proliferate {
                 candidate_generations: pending_generations,
                 candidate_player_ids: pending_players,
                 stage,
@@ -285,11 +253,7 @@ impl GameEngine {
         }
         pending.deciding_player = delegate;
         pending.presentation.candidates = match &pending.continuation {
-            ResolutionContinuation::ProgramProliferate {
-                candidate_generations,
-                ..
-            }
-            | ResolutionContinuation::Proliferate {
+            ResolutionContinuation::Proliferate {
                 candidate_generations,
                 ..
             } => candidate_generations
@@ -344,14 +308,7 @@ impl GameEngine {
         };
         let (stack, transaction, old_generations, old_players, old_stage) =
             match &pending.continuation {
-                ResolutionContinuation::ProgramProliferate {
-                    stack,
-                    candidate_generations,
-                    candidate_player_ids,
-                    stage,
-                    transaction,
-                }
-                | ResolutionContinuation::Proliferate {
+                ResolutionContinuation::Proliferate {
                     stack,
                     candidate_generations,
                     candidate_player_ids,
@@ -518,13 +475,7 @@ impl GameEngine {
         pending.resolution_prompt_id = crate::state::ResolutionPromptId::UNASSIGNED;
         pending.resolution_prompt_semantics = None;
         match &mut pending.continuation {
-            ResolutionContinuation::ProgramProliferate {
-                candidate_generations: pending_generations,
-                candidate_player_ids: pending_players,
-                stage: pending_stage,
-                ..
-            }
-            | ResolutionContinuation::Proliferate {
+            ResolutionContinuation::Proliferate {
                 candidate_generations: pending_generations,
                 candidate_player_ids: pending_players,
                 stage: pending_stage,
