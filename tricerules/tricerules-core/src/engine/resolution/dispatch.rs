@@ -328,8 +328,17 @@ pub(super) fn execute_effect(
                 .register_next_spell_copy(cx.top, cx.controller, cx.spell_label);
             EffectOutcome::Continue
         }
+        SpellEffectKind::NextHandInstantOrSorceryGainsReboundThisTurn => {
+            cx.engine
+                .register_next_hand_spell_rebound(cx.top, cx.controller, cx.spell_label);
+            EffectOutcome::Continue
+        }
         effect @ SpellEffectKind::CopyCapturedSpell { .. } => {
             stack_ops::copy_target_spell(cx, effect)?
+        }
+        SpellEffectKind::GrantCapturedSpellRebound => {
+            cx.engine.grant_captured_spell_rebound(cx.top)?;
+            EffectOutcome::Continue
         }
         effect @ SpellEffectKind::GainControl { .. } => misc::gain_control(cx, effect)?,
         SpellEffectKind::GiveControlOfSourceToAttackingPlayer => {

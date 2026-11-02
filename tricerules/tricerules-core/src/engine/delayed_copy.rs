@@ -87,35 +87,77 @@ impl GameEngine {
             .state
             .dispatch_event_observers(ObservedGameEvent::SpellCast {
                 controller: fact.caster,
+                origin: fact.origin,
                 instant_or_sorcery: fact
                     .matched_card_types
                     .contains(&CardTypeFilter::InstantOrSorcery),
             });
-        let snapshot = self
-            .state
-            .stack
-            .iter()
-            .find(|spell| spell.id == fact.occurrence.object_id)
-            .cloned();
+        let needs_copy_snapshot = matched.iter().any(|(_, delayed)| {
+            matches!(
+                delayed.ability.effect.as_slice(),
+                [SpellEffectKind::CopyCapturedSpell { .. }]
+            )
+        });
+        let snapshot = needs_copy_snapshot
+            .then(|| {
+                self.state
+                    .stack
+                    .iter()
+                    .find(|spell| spell.id == fact.occurrence.object_id)
+                    .cloned()
+            })
+            .flatten();
         matched
             .into_iter()
-            .map(|(_, delayed)| CollectedTrigger {
-                captured_spell: snapshot.clone().map(Box::new),
-                source_label: delayed.card_name.clone(),
-                source_id: delayed.source.object_id,
-                card_id: delayed.card_id,
-                face_index: delayed.source_face_index,
-                source_zone_change: delayed.source.zone_change_generation,
-                source_face_change: 0,
-                source_fact: None,
-                additional_instances: 0,
-                controller: delayed.controller,
-                ability_index: 0,
-                ability_origin: None,
-                presentation: delayed.presentation,
-                ability_text: format!("{} — copy the next instant or sorcery", delayed.card_name),
-                trigger_context: TriggerContext::default(),
-                ability: delayed.ability,
+            .map(|(_, delayed)| {
+                let copy_payload = matches!(
+                    delayed.ability.effect.as_slice(),
+                    [SpellEffectKind::CopyCapturedSpell { .. }]
+                );
+                let rebound_payload = matches!(
+                    delayed.ability.effect.as_slice(),
+                    [SpellEffectKind::GrantCapturedSpellRebound]
+                );
+                let ability_text = if copy_payload {
+                    format!("{} — copy the next instant or sorcery", delayed.card_name)
+                } else if rebound_payload {
+                    format!(
+                        "{} — grant Rebound to the captured spell",
+                        delayed.card_name
+                    )
+                } else {
+                    delayed.ability.fallback_text(&delayed.card_name)
+                };
+                let trigger_context = if rebound_payload {
+                    TriggerContext {
+                        triggering_spell: Some(fact.occurrence),
+                        ..TriggerContext::default()
+                    }
+                } else {
+                    TriggerContext::default()
+                };
+                CollectedTrigger {
+                    captured_spell: if copy_payload {
+                        snapshot.clone().map(Box::new)
+                    } else {
+                        None
+                    },
+                    source_label: delayed.card_name.clone(),
+                    source_id: delayed.source.object_id,
+                    card_id: delayed.card_id,
+                    face_index: delayed.source_face_index,
+                    source_zone_change: delayed.source.zone_change_generation,
+                    source_face_change: 0,
+                    source_fact: None,
+                    additional_instances: 0,
+                    controller: delayed.controller,
+                    ability_index: 0,
+                    ability_origin: None,
+                    presentation: delayed.presentation,
+                    ability_text,
+                    trigger_context,
+                    ability: delayed.ability,
+                }
             })
             .collect()
     }

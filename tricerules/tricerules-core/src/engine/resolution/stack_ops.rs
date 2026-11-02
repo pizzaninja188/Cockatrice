@@ -705,6 +705,7 @@ pub(crate) fn counter_stack_object(
         return Ok(None);
     }
     let st = engine.state.stack.remove(pos);
+    engine.clear_rebound_grant_for_stack_item(&st);
     if let Some(key) = st.trigger_context.memory_jar_cohort {
         engine.state.memory_jar_cohorts.remove(&key);
     }

@@ -2040,6 +2040,36 @@ impl TriggeredAbilityDef {
             self.trigger,
             TriggerCondition::WheneverPlayerCastsSpell { .. }
         );
+        let uses_captured_spell_rebound_grant = effects
+            .iter()
+            .copied()
+            .any(SpellEffectKind::contains_captured_spell_rebound_grant);
+        if uses_captured_spell_rebound_grant {
+            let expected_filter = SpellCastFilter {
+                card_type: Some(CardTypeFilter::InstantOrSorcery),
+                ..Default::default()
+            };
+            let expected_trigger = matches!(
+                &self.trigger,
+                TriggerCondition::WheneverPlayerCastsSpell {
+                    caster: CastTriggerPlayer::Controller,
+                    filter,
+                    ordinal: None,
+                    ordinal_scope: CastOrdinalScope::AllSpells,
+                } if filter == &expected_filter
+            );
+            if self.effect.as_slice() != [SpellEffectKind::GrantCapturedSpellRebound]
+                || !expected_trigger
+                || self.modal.is_some()
+                || self.program.is_some()
+                || self.targeting.is_some()
+                || self.may
+            {
+                return Err(
+                    "GrantCapturedSpellRebound requires one flat, untargeted, nonoptional controller instant-or-sorcery cast trigger".into(),
+                );
+            }
+        }
         let uses_spell_context = matches!(
             self.intervening_if.as_ref(),
             Some(condition) if condition.requires_triggering_spell_context()

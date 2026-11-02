@@ -3703,6 +3703,9 @@ pub enum EventObserverMatcher {
     NextInstantOrSorceryThisTurn {
         controller: PlayerId,
     },
+    NextHandInstantOrSorceryThisTurn {
+        controller: PlayerId,
+    },
     AtBeginningOfNextEndStep,
     AtBeginningOfControllerNextTurnEndStep {
         controller: PlayerId,
@@ -3744,6 +3747,7 @@ pub struct ActiveEventObserver {
 pub(crate) enum ObservedGameEvent {
     SpellCast {
         controller: PlayerId,
+        origin: Zone,
         instant_or_sorcery: bool,
     },
     TurnBegan {
@@ -4063,6 +4067,10 @@ pub struct GameState {
     pub prepare_spell_sources: BTreeMap<ObjectId, TriggerObjectRef>,
     /// Event-time spell choices for delayed copy triggers, keyed by the trigger's unique id.
     pub captured_spell_copies: BTreeMap<ObjectId, StackItem>,
+    /// Internal CR 702.87 grant foundation, keyed by the exact committed cast occurrence.
+    /// Keeping it in engine state makes diagnostic snapshots reflect active grants; stack-item
+    /// copy snapshots do not include this separate state set.
+    pub(crate) rebound_spell_grants: BTreeSet<(ObjectId, Option<u64>)>,
     /// One receipt for each activation-observing trigger, keyed by the trigger's virtual id.
     pub(crate) captured_activated_abilities: BTreeMap<ObjectId, CapturedActivatedAbility>,
     /// CR 406.6 / 607.2a source-incarnation links to exact objects exiled by the paired ability.
@@ -4524,8 +4532,17 @@ impl GameState {
                     ObservedGameEvent::SpellCast {
                         controller: caster,
                         instant_or_sorcery,
+                        ..
                     },
                 ) => *controller == caster && instant_or_sorcery,
+                (
+                    EventObserverMatcher::NextHandInstantOrSorceryThisTurn { controller },
+                    ObservedGameEvent::SpellCast {
+                        controller: caster,
+                        origin,
+                        instant_or_sorcery,
+                    },
+                ) => *controller == caster && origin == Zone::Hand && instant_or_sorcery,
                 (
                     EventObserverMatcher::WhenWatchedObjectDiesOrIsExiled,
                     ObservedGameEvent::BattlefieldDeparture {

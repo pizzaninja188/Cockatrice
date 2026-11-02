@@ -1561,11 +1561,17 @@ pub enum SpellEffectKind {
     },
     /// Striking Palette and Doublecast: a one-shot delayed copy trigger, expiring this turn.
     CopyNextSpellThisTurn,
+    /// Narset Transcendent's Phase B observer: register for the next own-hand instant or
+    /// sorcery cast this turn, then stage an ordinary trigger that grants the captured spell
+    /// Rebound. The trigger stores only the exact committed cast occurrence.
+    NextHandInstantOrSorceryGainsReboundThisTurn,
     /// Engine-created delayed trigger instruction; its captured spell is stored with the trigger.
     #[serde(skip_deserializing)]
     CopyCapturedSpell {
         count: u32,
     },
+    /// Engine-created trigger executor; the trigger's private context identifies the exact cast.
+    GrantCapturedSpellRebound,
     /// CR 613.4 layer 7c: give every creature matching `filter` +power/+toughness until end of
     /// turn (the mass, one-shot sibling of [`Self::PumpTarget`]). Untargeted — `filter` selects
     /// the set the same way a static anthem does. Glorious Charge / Inspired Charge
@@ -4186,6 +4192,8 @@ impl SpellEffectKind {
             }
             | SpellEffectKind::CopyNextSpellThisTurn
             | SpellEffectKind::CopyCapturedSpell { .. }
+            | SpellEffectKind::NextHandInstantOrSorceryGainsReboundThisTurn
+            | SpellEffectKind::GrantCapturedSpellRebound
             | SpellEffectKind::PutAbilitySourceOntoBattlefieldTappedAndAttacking
             | SpellEffectKind::PutAbilitySourceOntoBattlefield
             | SpellEffectKind::CreateStaticEmblem { .. }
@@ -4723,6 +4731,11 @@ impl SpellEffectKind {
     /// `context` distinguishes spells from abilities so source-bound subjects are
     /// rejected where they make no sense.
     pub fn validate(&self, context: EffectContext) -> Result<(), String> {
+        if self.contains_captured_spell_rebound_grant()
+            && !matches!(self, Self::GrantCapturedSpellRebound)
+        {
+            return Err("GrantCapturedSpellRebound must be a flat triggered ability effect".into());
+        }
         if matches!(self, Self::EquipPlaneswalker { .. }) {
             return Err(
                 "EquipPlaneswalker is supported only as a direct activated ability effect".into(),
@@ -7232,7 +7245,63 @@ impl SpellEffectKind {
         }
     }
 
+    pub(crate) fn contains_captured_spell_rebound_grant(&self) -> bool {
+        fn triggered_ability_contains(ability: &TriggeredAbilityDef) -> bool {
+            ability
+                .effect
+                .iter()
+                .any(SpellEffectKind::contains_captured_spell_rebound_grant)
+                || ability.modal.as_ref().is_some_and(|modal| {
+                    modal
+                        .modes
+                        .iter()
+                        .flat_map(|mode| &mode.effects)
+                        .any(SpellEffectKind::contains_captured_spell_rebound_grant)
+                })
+        }
+
+        fn activated_ability_contains(ability: &ActivatedAbilityDef) -> bool {
+            ability
+                .effect
+                .iter()
+                .any(SpellEffectKind::contains_captured_spell_rebound_grant)
+                || ability.modal.as_ref().is_some_and(|modal| {
+                    modal
+                        .modes
+                        .iter()
+                        .flat_map(|mode| &mode.effects)
+                        .any(SpellEffectKind::contains_captured_spell_rebound_grant)
+                })
+        }
+
+        match self {
+            Self::GrantCapturedSpellRebound => true,
+            Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
+                effect.contains_captured_spell_rebound_grant()
+            }
+            Self::MayBehold { if_beheld, .. } => if_beheld
+                .iter()
+                .any(Self::contains_captured_spell_rebound_grant),
+            Self::CreateReflexiveTrigger { ability, .. } => ability
+                .effect
+                .iter()
+                .any(Self::contains_captured_spell_rebound_grant),
+            Self::GrantTriggeredAbility { ability, .. }
+            | Self::CreateTriggeredEmblem { ability, .. }
+            | Self::CreateDelayedTrigger { ability, .. }
+            | Self::CreateDelayedTriggerThisTurn { ability } => triggered_ability_contains(ability),
+            Self::ApplyPermanentModifier {
+                modifier: ResolvingPermanentModifier::GrantActivatedAbility(ability),
+                ..
+            } => activated_ability_contains(ability),
+            _ => false,
+        }
+    }
+
     pub(crate) fn requires_triggering_spell_context(&self) -> bool {
+        if self.contains_captured_spell_rebound_grant() {
+            return true;
+        }
         match self {
             Self::CounterTriggeringSpell => true,
             Self::DamageTarget { amount, .. }

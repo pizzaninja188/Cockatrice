@@ -840,7 +840,8 @@ impl GameEngine {
                     "chosen Stack card lost its exact physical cast",
                 ));
             };
-            self.state.stack.remove(index);
+            let removed_stack_item = self.state.stack.remove(index);
+            self.clear_rebound_grant_for_stack_item(&removed_stack_item);
             self.state.stack_presentations.remove(&oid);
             if self
                 .state

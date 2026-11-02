@@ -1940,6 +1940,8 @@ fn validate_effect_targets(
         | SpellEffectKind::TapChosenPermanents
         | SpellEffectKind::CopyNextSpellThisTurn
         | SpellEffectKind::CopyCapturedSpell { .. }
+        | SpellEffectKind::NextHandInstantOrSorceryGainsReboundThisTurn
+        | SpellEffectKind::GrantCapturedSpellRebound
         | SpellEffectKind::Untap {
             subject: EffectSubject::Source
                 | EffectSubject::AttachedObject

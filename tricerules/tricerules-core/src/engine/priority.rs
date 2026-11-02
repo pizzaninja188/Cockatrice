@@ -168,6 +168,7 @@ impl GameEngine {
                             rv1::permanent_moved::Destination::Exile,
                         ));
                     }
+                    self.clear_rebound_grant_for_stack_item(&stack.item);
                 }
             }
             return Ok(());
@@ -481,6 +482,7 @@ impl GameEngine {
             // the ordinary departure event path so clients receive the same public removal as
             // they do for a spell that had not begun resolving.
             parked_stack_removal_ids.insert(outer.item.id);
+            self.clear_rebound_grant_for_stack_item(&outer.item);
         }
         if let Some(batch) = self.state.pending_observer_return_batch.as_mut() {
             batch.resume_stack = None;
@@ -845,6 +847,7 @@ impl GameEngine {
                 owner,
                 rv1::permanent_moved::Destination::Exile,
             ));
+            self.clear_rebound_grant_for_stack_item(&outer.item);
         }
         Ok(())
     }
@@ -1038,6 +1041,7 @@ impl GameEngine {
         for item in &departing_items {
             self.refresh_captured_activated_ability(item);
             self.state.captured_activated_abilities.remove(&item.id);
+            self.clear_rebound_grant_for_stack_item(item);
         }
         self.state
             .stack

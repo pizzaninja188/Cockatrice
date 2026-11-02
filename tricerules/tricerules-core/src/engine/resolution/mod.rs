@@ -2019,6 +2019,9 @@ impl GameEngine {
             || has_stack_object
             || top.ability_text.is_some()
             || (top.is_copy && !self.state.objects.contains_key(&top.id));
+        // This is the final-exit hook; clear the exact cast even if a resolving effect already
+        // moved its physical object before the deferred-exit check.
+        self.clear_rebound_grant_for_stack_item(top);
         if !has_deferred_exit {
             return Ok(());
         }
