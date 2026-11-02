@@ -173,19 +173,22 @@ impl GameEngine {
                     ));
                 }
                 events.push(ev_log(format!("P{controller} manifests dread.")));
-                let previous_result = EffectResult {
-                    produced_objects: vec![TriggerObjectRef {
-                        object_id: chosen,
-                        zone_change_generation: self
-                            .state
-                            .zone_change_generation
-                            .get(&chosen)
-                            .copied()
-                            .unwrap_or(0),
-                        controller_at_event: controller,
-                    }],
-                    ..EffectResult::default()
-                };
+                let previous_result = crate::state::OperationResults::from_value(
+                    crate::state::ProgramValue::ManifestedPermanent(
+                        (vec![TriggerObjectRef {
+                            object_id: chosen,
+                            zone_change_generation: self
+                                .state
+                                .zone_change_generation
+                                .get(&chosen)
+                                .copied()
+                                .unwrap_or(0),
+                            controller_at_event: controller,
+                        }])
+                        .into_iter()
+                        .next(),
+                    ),
+                );
                 self.complete_parked_stack_with_previous(stack, previous_result, events)
             }
         }
@@ -234,7 +237,7 @@ impl GameEngine {
             }
             return self.complete_parked_stack_with_previous(
                 stack,
-                EffectResult::default(),
+                OperationResults::default(),
                 events,
             );
         }
@@ -242,7 +245,7 @@ impl GameEngine {
         let Ok(cohort): Result<[ManifestDreadLibraryRef; 2], _> = library_refs.try_into() else {
             return self.complete_parked_stack_with_previous(
                 stack,
-                EffectResult::default(),
+                OperationResults::default(),
                 events,
             );
         };
@@ -259,7 +262,7 @@ impl GameEngine {
         {
             return self.complete_parked_stack_with_previous(
                 stack,
-                EffectResult::default(),
+                OperationResults::default(),
                 events,
             );
         }
@@ -396,7 +399,7 @@ impl GameEngine {
                 reference.library_position,
             ));
         }
-        self.complete_parked_stack_with_previous(stack, EffectResult::default(), events)
+        self.complete_parked_stack_with_previous(stack, OperationResults::default(), events)
     }
 
     pub(in crate::engine) fn refresh_manifest_dread_graveyard_order_departure(
@@ -421,7 +424,7 @@ impl GameEngine {
         self.state.pending_resolution = None;
         let completed = self.complete_parked_stack_with_previous(
             order.stack.clone(),
-            EffectResult::default(),
+            OperationResults::default(),
             Vec::new(),
         )?;
         events.extend(completed.events);
@@ -492,7 +495,7 @@ mod skipped_entry_tests {
             .begin_program_run(&item, vec![ProgramOwnerId::ability(definition)])
             .unwrap();
         engine
-            .run_program_with_previous(&item, program, EffectResult::default(), &mut Vec::new())
+            .run_program_with_previous(&item, program, OperationResults::default(), &mut Vec::new())
             .unwrap();
         let pending = engine
             .state

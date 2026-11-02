@@ -347,7 +347,8 @@ pub(super) fn draw(
         super::super::draw::DrawCompletion::resume_effects(parked_stack, cx.effect_result.clone());
     match engine.start_draw_transaction(requests, completion, spell_label, events)? {
         super::super::draw::DrawProgress::Complete(done) => {
-            cx.effect_result.produced_objects.extend(done.receipts);
+            cx.effect_result
+                .append(crate::state::ProgramValue::DrawReceipt(done.receipts))?;
             Ok(EffectOutcome::Continue)
         }
         super::super::draw::DrawProgress::Parked => Ok(EffectOutcome::Suspended),
@@ -388,9 +389,9 @@ pub(super) fn target_player_draws(
             cx.spell_label,
             cx.events,
         )? {
-            super::super::draw::DrawProgress::Complete(done) => {
-                cx.effect_result.produced_objects.extend(done.receipts)
-            }
+            super::super::draw::DrawProgress::Complete(done) => cx
+                .effect_result
+                .append(crate::state::ProgramValue::DrawReceipt(done.receipts))?,
             super::super::draw::DrawProgress::Parked => return Ok(EffectOutcome::Suspended),
             super::super::draw::DrawProgress::GameEnded => return Ok(EffectOutcome::GameEnded),
         }
@@ -505,14 +506,13 @@ pub(super) fn discard(
             // OptionalExact is not an "up to" instruction. An undersized candidate set is an
             // unpayable result and must not expose a partial-selection prompt.
             if cx.program_state.is_some() {
-                *cx.effect_result = EffectResult {
-                    program_discard_result: Some(crate::state::ProgramDiscardResult {
+                *cx.effect_result = crate::state::OperationResults::from_value(
+                    crate::state::ProgramValue::DiscardResult(crate::state::ProgramDiscardResult {
                         outcome: tricerules_card_model::DiscardResultOutcome::Unpayable,
                         batches: Vec::new(),
                         cards: Vec::new(),
                     }),
-                    ..EffectResult::default()
-                };
+                );
             }
             return Ok(EffectOutcome::Continue);
         }
@@ -583,9 +583,9 @@ pub(super) fn discard(
         });
     }
     if choices.is_empty() {
-        if cx.program_state.is_some() && cx.effect_result.program_discard_result.is_none() {
-            *cx.effect_result = EffectResult {
-                program_discard_result: Some(crate::state::ProgramDiscardResult {
+        if cx.program_state.is_some() && cx.effect_result.discard_result().is_none() {
+            *cx.effect_result = crate::state::OperationResults::from_value(
+                crate::state::ProgramValue::DiscardResult(crate::state::ProgramDiscardResult {
                     outcome: if optional_exact {
                         // No eligible recipient means the optional payment cannot be made. Keep
                         // it distinct from a completed mandatory discard, and never substitute a
@@ -597,8 +597,7 @@ pub(super) fn discard(
                     batches: Vec::new(),
                     cards: Vec::new(),
                 }),
-                ..EffectResult::default()
-            };
+            );
         }
         return Ok(EffectOutcome::Continue);
     }
@@ -827,13 +826,13 @@ pub(super) fn exile_top_with_play_permission(
                 rv1::permanent_moved::Destination::Exile,
                 0,
             ));
-            cx.effect_result.cards.push(payment::card_result_entry(
+            cx.effect_result.record_cards([payment::card_result_entry(
                 &cx.engine.state,
                 cx.engine.registry,
                 CardResultAction::Exile,
                 recipient,
                 *object_id,
-            ));
+            )])?;
         }
         cx.engine.grant_exile_play_permission_group(
             recipient,
@@ -1008,8 +1007,7 @@ pub(super) fn exile(
                     .iter()
                     .any(|target| target.object_id == tid && target.group_index == group_index));
                 cx.effect_result
-                    .cards
-                    .push(payment::committed_card_result_entry(
+                    .record_cards([payment::committed_card_result_entry(
                         &engine.state,
                         engine.registry,
                         CardResultAction::Exile,
@@ -1017,7 +1015,7 @@ pub(super) fn exile(
                         tid,
                         input_zone,
                         previous_generation,
-                    )?);
+                    )?])?;
             }
         }
         if let Some(key) = linked_key {
@@ -1040,11 +1038,11 @@ pub(super) fn exile(
             }
         }
         if let Some(controller_at_event) = controller {
-            cx.effect_result.produced_objects.push(TriggerObjectRef {
+            cx.effect_result.record_exiled_objects([TriggerObjectRef {
                 object_id: tid,
                 zone_change_generation: new_generation,
                 controller_at_event,
-            });
+            }]);
         }
         events.push(ev_log(format!("{spell_label} exiles {tgt}")));
         if let Some(owner_id) = owner {
@@ -1096,8 +1094,7 @@ pub(super) fn exile_target_and_copy_unless_aura(
     )?;
     if outcome != EffectOutcome::Continue {
         return Ok(outcome);
-    }
-    cx.effect_result.produced_objects.clear();
+    };
 
     let Some((types, mut snapshot)) =
         token_copy_source_after_move(cx.engine, target_id, target_generation)
@@ -1128,7 +1125,10 @@ pub(super) fn exile_target_and_copy_unless_aura(
     else {
         return Ok(EffectOutcome::Suspended);
     };
-    cx.effect_result.produced_objects = produced_objects;
+    cx.effect_result
+        .set(crate::state::ProgramValue::CreatedTokenBatch(
+            produced_objects,
+        ));
     Ok(EffectOutcome::Continue)
 }
 
@@ -2158,7 +2158,7 @@ fn choose_hand_cards_for_player(
                     action,
                     spell_label,
                 )?;
-                cx.effect_result.cards.push(result);
+                cx.effect_result.record_cards([result])?;
                 discard_receipts.extend(discard_receipt);
             }
             if !discard_receipts.is_empty() {
@@ -2339,7 +2339,7 @@ pub(super) fn select_hand_cards_for_program(
     let hand = engine.state.players[player_index].hand.clone();
     let chosen_count = count.min(hand.len() as u32);
     if chosen_count == 0 {
-        result.selected_hand_cards.clear();
+        result.set(crate::state::ProgramValue::HandSelection(Vec::new()));
         return Ok(EffectOutcome::Continue);
     }
 
@@ -2807,7 +2807,7 @@ pub(super) fn choose_card(
             }
         }
         ChooseCardSource::CardResultCohort { players } => {
-            for entry in &cx.previous_effect_result.cards {
+            for entry in cx.previous_effect_result.card_entries() {
                 let Some(candidate) =
                     committed_choose_card_candidate(cx.engine, entry, controller, players, &filter)
                 else {
@@ -3502,7 +3502,7 @@ impl GameEngine {
             events.extend(
                 self.complete_parked_stack_with_previous(
                     stack,
-                    crate::state::EffectResult::default(),
+                    crate::state::OperationResults::default(),
                     Vec::new(),
                 )?
                 .events,
@@ -3548,7 +3548,7 @@ impl GameEngine {
                 events.extend(
                     self.complete_parked_stack_with_previous(
                         stack,
-                        crate::state::EffectResult::default(),
+                        crate::state::OperationResults::default(),
                         Vec::new(),
                     )?
                     .events,
@@ -4085,7 +4085,7 @@ pub(super) fn exile_graveyards(
         EffectOutcome::RetainedExile(
             id,
             cx.effect_result
-                .cards
+                .card_entries()
                 .iter()
                 .map(|card| TriggerObjectRef {
                     object_id: card.object_id,
@@ -4528,13 +4528,13 @@ fn exile_graveyard_cohort(
                 records.push(linked);
             }
         }
-        cx.effect_result.cards.push(payment::card_result_entry(
+        cx.effect_result.record_cards([payment::card_result_entry(
             &engine.state,
             engine.registry,
             CardResultAction::Exile,
             owner,
             oid,
-        ));
+        )])?;
         cx.events.push(ev_log(format!(
             "{} moves {name} from graveyard to exile.",
             cx.spell_label
@@ -4794,7 +4794,13 @@ pub(super) fn return_other_linked_exiled_cards(
         .get(&key)
         .cloned()
         .unwrap_or_default();
-    let attempted_receipt = cx.previous_effect_result.produced_objects.first().copied();
+    let attempted_receipt = match cx
+        .previous_effect_result
+        .value(|value| matches!(value, ProgramValue::TriggerObjectLinkedExileReceipt(_)))
+    {
+        Some(ProgramValue::TriggerObjectLinkedExileReceipt(receipt)) => *receipt,
+        _ => None,
+    };
     let excluded_new_imprint = attempted_receipt
         .filter(|receipt| {
             cx.engine
@@ -5484,9 +5490,10 @@ pub(super) fn reveal_top_card_to_hand(cx: &mut EffectCx<'_>) -> Result<EffectOut
             "P{} has no card to reveal for {}.",
             cx.controller, cx.spell_label
         )));
-        cx.effect_result.program_value = Some(crate::state::ProgramValue::RevealedCardReceipt(
-            crate::state::RevealedCardReceipt::EmptyLibrary,
-        ));
+        cx.effect_result
+            .set(crate::state::ProgramValue::RevealedCardReceipt(
+                crate::state::RevealedCardReceipt::EmptyLibrary,
+            ));
         return Ok(EffectOutcome::Continue);
     };
     let object = cx
@@ -5547,19 +5554,23 @@ pub(super) fn reveal_top_card_to_hand(cx: &mut EffectCx<'_>) -> Result<EffectOut
         rv1::permanent_moved::Destination::Hand,
         0,
     ));
-    cx.effect_result.program_value = Some(crate::state::ProgramValue::RevealedCardReceipt(
-        crate::state::RevealedCardReceipt::Revealed {
-            object_id,
-            zone_change_generation,
-            mana_value,
-        },
-    ));
+    cx.effect_result
+        .set(crate::state::ProgramValue::RevealedCardReceipt(
+            crate::state::RevealedCardReceipt::Revealed {
+                object_id,
+                zone_change_generation,
+                mana_value,
+            },
+        ));
     Ok(EffectOutcome::Continue)
 }
 
 pub(super) fn reveal_until_artifact(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
     let Some(player_idx) = cx.engine.state.player_idx(cx.controller) else {
-        cx.effect_result.program_value = Some(crate::state::ProgramValue::Count(0));
+        cx.effect_result.record_count(
+            tricerules_card_model::primitives::CountResultKind::RevealedPrefix,
+            0,
+        );
         return Ok(EffectOutcome::Continue);
     };
     let library: Vec<ObjectId> = cx.engine.state.players[player_idx]
@@ -5594,7 +5605,10 @@ pub(super) fn reveal_until_artifact(cx: &mut EffectCx<'_>) -> Result<EffectOutco
     }
     let revealed_count = u32::try_from(revealed_refs.len())
         .map_err(|_| EngineError::Illegal("revealed library prefix is too large"))?;
-    cx.effect_result.program_value = Some(crate::state::ProgramValue::Count(revealed_count));
+    cx.effect_result.record_count(
+        tricerules_card_model::primitives::CountResultKind::RevealedPrefix,
+        revealed_count,
+    );
     let object_ids: Vec<_> = revealed_refs
         .iter()
         .map(|(object_id, _)| *object_id)
@@ -6126,7 +6140,7 @@ pub(super) fn explore(
                 let Some(receipts) = receipts else {
                     return Ok(EffectOutcome::Suspended);
                 };
-                cx.effect_result.counter_placements.extend(receipts);
+                cx.effect_result.record_counter_placements(receipts);
             }
         }
         cx.events.push(ev_log(format!(
@@ -6204,7 +6218,7 @@ pub(super) fn explore(
     }
 
     let mut stack = ParkedStackResolution::new(cx.top.clone());
-    stack.previous_result = cx.previous_effect_result.clone();
+    stack.previous_result = cx.resume_previous_result.cloned().unwrap_or_default();
     if explorer_is_current_battlefield_incarnation {
         if let Some(proposal) = cx.engine.proposed_object_counter_placement(
             controller,
@@ -6228,9 +6242,8 @@ pub(super) fn explore(
             };
             stack
                 .previous_result
-                .counter_placements
-                .extend(receipts.clone());
-            cx.effect_result.counter_placements.extend(receipts);
+                .record_counter_placements(receipts.clone());
+            cx.effect_result.record_counter_placements(receipts);
         }
     }
     cx.engine.park_explore_choice(
@@ -6773,16 +6786,21 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 ));
                 cx.events
                     .push(ev_log(format!("P{controller} manifests dread.")));
-                cx.effect_result.produced_objects.push(TriggerObjectRef {
-                    object_id,
-                    zone_change_generation: engine
-                        .state
-                        .zone_change_generation
-                        .get(&object_id)
-                        .copied()
-                        .unwrap_or(0),
-                    controller_at_event: controller,
-                });
+                cx.effect_result
+                    .set(crate::state::ProgramValue::ManifestedPermanent(
+                        (vec![TriggerObjectRef {
+                            object_id,
+                            zone_change_generation: engine
+                                .state
+                                .zone_change_generation
+                                .get(&object_id)
+                                .copied()
+                                .unwrap_or(0),
+                            controller_at_event: controller,
+                        }])
+                        .into_iter()
+                        .next(),
+                    ));
                 return Ok(EffectOutcome::Continue);
             }
         }
@@ -7535,7 +7553,7 @@ pub(in crate::engine) struct SearchRequest {
 
 pub(in crate::engine) enum SearchRequestOutcome {
     Parked,
-    Completed(Box<EffectResult>),
+    Completed(Box<OperationResults>),
 }
 
 fn permitted_search_zones(
@@ -7581,15 +7599,19 @@ fn complete_prohibited_search(
     searcher: PlayerId,
     destination: SearchDestination,
     shuffle: bool,
-) -> EffectResult {
+) -> OperationResults {
     if shuffle {
         crate::engine::shuffle_player_library_for_current_command(&mut engine.state, searcher);
         events.push(ev_log(format!("P{searcher} shuffles their library.")));
     }
-    EffectResult {
-        program_value: (destination == SearchDestination::KeepInLibrary)
-            .then(|| ProgramValue::FoundLibraryCohort(Vec::new())),
-        ..Default::default()
+    match destination {
+        SearchDestination::KeepInLibrary => {
+            OperationResults::from_value(ProgramValue::FoundLibraryCohort(Vec::new()))
+        }
+        SearchDestination::Battlefield { .. } => {
+            OperationResults::from_value(ProgramValue::PermanentSelection(Vec::new()))
+        }
+        _ => OperationResults::default(),
     }
 }
 
@@ -8104,7 +8126,8 @@ pub(super) fn search_library(
             cx.events,
         );
         if !resultless_program_search {
-            cx.effect_result.program_value = Some(ProgramValue::FoundLibraryCohort(Vec::new()));
+            cx.effect_result
+                .set(ProgramValue::FoundLibraryCohort(Vec::new()));
         }
         return Ok(EffectOutcome::Continue);
     }
@@ -8444,10 +8467,10 @@ mod tests {
         let operation = engine
             .current_program_perform(&program_state)
             .expect("resolve the exact compiled linked-choice operation");
-        let previous_result = EffectResult::default();
-        let mut effect_result = EffectResult::default();
+        let previous_result = OperationResults::default();
+        let mut effect_result = OperationResults::default();
         let mut events = Vec::new();
-        let outcome = choose_linked_exiled_card(
+        let outcome = super::super::execute_leaf(
             &mut EffectCx {
                 engine,
                 events: &mut events,
@@ -8579,7 +8602,12 @@ mod tests {
         let mut initial_events = Vec::new();
         assert!(matches!(
             engine
-                .run_program_with_previous(&top, run, EffectResult::default(), &mut initial_events,)
+                .run_program_with_previous(
+                    &top,
+                    run,
+                    OperationResults::default(),
+                    &mut initial_events,
+                )
                 .expect("Program parks at its linked-play instruction"),
             ResolutionProgress::Parked
         ));
@@ -8751,7 +8779,12 @@ mod tests {
         let mut initial_events = Vec::new();
         assert!(matches!(
             engine
-                .run_program_with_previous(&top, run, EffectResult::default(), &mut initial_events)
+                .run_program_with_previous(
+                    &top,
+                    run,
+                    OperationResults::default(),
+                    &mut initial_events
+                )
                 .expect("Program parks at its linked-play instruction"),
             ResolutionProgress::Parked
         ));
@@ -9770,10 +9803,10 @@ mod tests {
             }],
             slots: Vec::new(),
             in_flight: None,
-            in_flight_produced_object_provenance: None,
+            in_flight_results: OperationResults::default(),
         };
-        let previous_result = EffectResult::default();
-        let mut effect_result = EffectResult::default();
+        let previous_result = OperationResults::default();
+        let mut effect_result = OperationResults::default();
         let mut events = Vec::new();
         let result = discard(
             &mut EffectCx {
@@ -9803,7 +9836,7 @@ mod tests {
         assert!(matches!(result, EffectOutcome::Continue));
         assert!(engine.state.pending_resolution.is_none());
         assert_eq!(
-            effect_result.program_discard_result.unwrap().outcome,
+            effect_result.discard_result().unwrap().outcome,
             tricerules_card_model::DiscardResultOutcome::Unpayable
         );
         assert!(events.is_empty());
@@ -10033,10 +10066,10 @@ mod tests {
             }],
             slots: Vec::new(),
             in_flight: None,
-            in_flight_produced_object_provenance: None,
+            in_flight_results: OperationResults::default(),
         };
-        let previous_result = EffectResult::default();
-        let mut effect_result = EffectResult::default();
+        let previous_result = OperationResults::default();
+        let mut effect_result = OperationResults::default();
         let mut events = Vec::new();
         let result = reveal_top_card_to_hand(&mut EffectCx {
             engine: &mut engine,
@@ -10062,7 +10095,7 @@ mod tests {
                 "RevealTopCardToHand controller is missing from turn order"
             ))
         ));
-        assert!(effect_result.program_value.is_none());
+        assert!(effect_result.value(|_| true).is_none());
         assert!(events.is_empty());
     }
 

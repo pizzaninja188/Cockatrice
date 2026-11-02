@@ -1885,7 +1885,7 @@ impl GameEngine {
                     self.commit_completed_damage_batch(&completed, events)?;
                     let completed = self.complete_parked_stack_with_previous(
                         *stack,
-                        EffectResult::default(),
+                        OperationResults::default(),
                         Vec::new(),
                     )?;
                     events.extend(completed.events);
@@ -2089,9 +2089,11 @@ impl GameEngine {
                 self.state.combat_damage_priority_pending = true;
                 Ok(finish_with_events(self, events))
             }
-            DamageBatchContinuation::Stack { stack } => {
-                self.complete_parked_stack_with_previous(*stack, EffectResult::default(), events)
-            }
+            DamageBatchContinuation::Stack { stack } => self.complete_parked_stack_with_previous(
+                *stack,
+                OperationResults::default(),
+                events,
+            ),
             DamageBatchContinuation::ManaAbility {
                 resume_resolution, ..
             } => {

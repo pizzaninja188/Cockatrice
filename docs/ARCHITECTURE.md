@@ -435,11 +435,18 @@ Do not re-derive this per card.
   destruction-replacement path until it first overlaps another applicable effect.
 - **Resolution.** `engine/resolution/mod.rs` owns stack setup and the target fizzle, routing
   compiled programs to `engine/resolution/program.rs` and legacy effect lists to
-  `engine/resolution/dispatch.rs`. Ordinary `Perform` leaves reuse effect dispatch; program-only
+  their flat cursor driver. Both invoke `execute_leaf`, which executes the primitive, retains
+  actual partial operation facts on suspension and refreshes look permissions. Ordinary `Perform` leaves reuse effect dispatch; program-only
   result-producing leaves run in the program path. `dispatch.rs` delegates ordinary effects to
   domain submodules (`damage`, `life`, `zones`, `pump_counters`, `mass`, `tokens`, `stack_ops`,
   `misc`) and owns the exhaustive `SpellEffectKind` match, so a new ordinary effect variant needs
   an arm there; the compiler checks that match for exhaustiveness.
+- **Operation results.** `state/operation_results.rs` owns explicit typed `OperationInput` values
+  and private tagged `OperationResults`. Multiple facts can belong to one operation; an absent
+  tag is distinct from a completed empty result. Shared amount/condition readers borrow a
+  `ResolutionFacts` view without projecting Program inputs into generic fields. Suspended
+  operations retain partial facts separately from the parent's saved run context. Output capture
+  checks actual producer tags, cardinality and receipt provenance before publishing typed slots.
 - **Finite spell programs.** The model compiles lexical bindings and explicit branch yields into
   an immutable registry program. `engine/resolution/program.rs` sequences its supported leaves,
   retains entered branch paths/cursors and private typed result slots, and reuses draw, discard

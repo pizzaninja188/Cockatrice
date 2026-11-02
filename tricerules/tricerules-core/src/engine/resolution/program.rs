@@ -98,7 +98,7 @@ mod source_sacrifice_receipt_tests {
 
     #[test]
     fn source_sacrifice_program_count_uses_effective_pre_move_basic_land_type() {
-        use crate::state::{EffectResult, ProgramRunState};
+        use crate::state::{OperationResults, ProgramRunState};
         use tricerules_card_model::primitives::{
             CardTypeFilter, CompiledProgramResultCondition, ResultSlotId,
         };
@@ -189,8 +189,8 @@ mod source_sacrifice_receipt_tests {
             trigger_context: Default::default(),
         };
         let mut events = Vec::new();
-        let mut result = EffectResult::default();
-        let previous = EffectResult::default();
+        let mut result = OperationResults::default();
+        let previous = OperationResults::default();
         let outcome = super::super::misc::sacrifice(
             &mut EffectCx {
                 engine: &mut engine,
@@ -216,7 +216,7 @@ mod source_sacrifice_receipt_tests {
         .expect("Standstill source sacrifice");
         assert_eq!(outcome, EffectOutcome::Continue);
         assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
-        assert_eq!(result.cards.len(), 1);
+        assert_eq!(result.card_entries().len(), 1);
 
         let run = ProgramRunState {
             owner: tricerules_card_model::ProgramOwnerId::face(
@@ -226,11 +226,11 @@ mod source_sacrifice_receipt_tests {
             pending_owners: Vec::new(),
             frames: Vec::new(),
             slots: vec![Some(ProgramValue::CardResultCohort(CardResultCohort {
-                cards: result.cards.clone(),
+                cards: result.card_entries().to_vec(),
                 program_discard_result: None,
             }))],
             in_flight: None,
-            in_flight_produced_object_provenance: None,
+            in_flight_results: OperationResults::default(),
         };
         let count_matches = |card_type| {
             program_result_condition_holds(
@@ -707,11 +707,10 @@ impl GameEngine {
                 "Behold Program input is not its typed permanent selection",
             ));
         };
-        let input_result = EffectResult {
-            produced_objects: objects.clone(),
-            ..EffectResult::default()
-        };
-        let mut result = EffectResult::default();
+        let input_result = crate::state::OperationResults::from_value(
+            crate::state::ProgramValue::PermanentSelection(objects.clone()),
+        );
+        let mut result = OperationResults::default();
         let empty_targets = Vec::new();
         let label = self
             .registry
@@ -740,7 +739,7 @@ impl GameEngine {
             effect_index: instruction_address,
             program_state: Some(program.clone()),
         };
-        let outcome = dispatch::execute_effect(
+        let outcome = super::execute_leaf(
             &mut cx,
             SpellEffectKind::Untap {
                 subject: tricerules_card_model::primitives::EffectSubject::PreviousEffectObject,
@@ -758,7 +757,7 @@ impl GameEngine {
         &mut self,
         top: &StackItem,
         program_state: ProgramRunState,
-        previous_result: EffectResult,
+        previous_result: OperationResults,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<ResolutionProgress, EngineError> {
         self.run_program_with_previous_inner(top, program_state, previous_result, None, events)
@@ -775,8 +774,8 @@ impl GameEngine {
         &mut self,
         top: &StackItem,
         program_state: ProgramRunState,
-        previous_result: EffectResult,
-        operation_result: Option<EffectResult>,
+        previous_result: OperationResults,
+        operation_result: Option<OperationResults>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<ResolutionProgress, EngineError> {
         self.run_program_with_previous_inner(
@@ -818,7 +817,7 @@ impl GameEngine {
             }],
             slots: vec![None; compiled.slots.len()],
             in_flight: None,
-            in_flight_produced_object_provenance: None,
+            in_flight_results: OperationResults::default(),
         })
     }
 
@@ -826,8 +825,8 @@ impl GameEngine {
         &mut self,
         top: &StackItem,
         mut program_state: ProgramRunState,
-        previous_result: EffectResult,
-        operation_result: Option<EffectResult>,
+        previous_result: OperationResults,
+        operation_result: Option<OperationResults>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<ResolutionProgress, EngineError> {
         if self.state.is_terminal() {
@@ -900,7 +899,7 @@ impl GameEngine {
                 &outputs,
                 operation_result,
             )?;
-            program_state.in_flight_produced_object_provenance = None;
+            program_state.in_flight_results = OperationResults::default();
             #[cfg(test)]
             if !outputs.is_empty() {
                 trip_program_failpoint(ProgramFailpoint::SlotPublished)?;
@@ -996,7 +995,7 @@ impl GameEngine {
                     }];
                     program_state.slots = vec![None; next.slots.len()];
                     program_state.in_flight = None;
-                    program_state.in_flight_produced_object_provenance = None;
+                    program_state.in_flight_results = OperationResults::default();
                     continue;
                 }
 
@@ -1398,10 +1397,9 @@ impl GameEngine {
                         program_target_context(top, compiled, instruction.instruction_address)?;
                     program_state.frames[frame_index].next_instruction += 1;
                     program_state.in_flight = Some(outputs.clone());
-                    program_state.in_flight_produced_object_provenance = None;
+                    program_state.in_flight_results = OperationResults::default();
 
-                    let mut previous = EffectResult::default();
-                    if let Some(input) = input {
+                    let operation_input = if let Some(input) = input {
                         let input_slot =
                             compiled.slot(input).ok_or(EngineError::ProgramInvariant(
                                 "resolution program input slot is invalid",
@@ -1420,94 +1418,38 @@ impl GameEngine {
                             &input_slot.result_type,
                             input_value,
                         )?;
-                        previous.input_result_type = Some(input_slot.result_type.clone());
-                        match input_value {
-                            ProgramValue::PermanentSelection(objects) => {
-                                previous.produced_objects = objects.clone();
-                            }
-                            ProgramValue::ManifestedPermanent(Some(object)) => {
-                                previous.produced_objects.push(*object);
-                            }
-                            ProgramValue::ManifestedPermanent(None) => {}
-                            ProgramValue::CounteredAbilitySource(Some(object)) => {
-                                previous.produced_objects.push(*object);
-                            }
-                            ProgramValue::CounteredAbilitySource(None) => {}
-                            value @ ProgramValue::ProliferatedPermanentCohort(_) => {
-                                previous.program_value = Some(value.clone());
-                            }
-                            value @ ProgramValue::ProliferatedPermanentSelection(objects) => {
-                                previous.produced_objects = objects.clone();
-                                previous.program_value = Some(value.clone());
-                            }
-                            value @ ProgramValue::CounterPlacementReceipt(_) => {
-                                previous.program_value = Some(value.clone());
-                            }
-                            value @ ProgramValue::TargetedSpellController(_) => {
-                                previous.program_value = Some(value.clone());
-                            }
-                            ProgramValue::HandSelection(objects) => {
-                                previous.selected_hand_cards = objects.clone();
-                            }
-                            ProgramValue::CardResultCohort(cohort) => {
-                                previous.cards = cohort.cards.clone();
-                            }
-                            ProgramValue::DiscardResult(receipt) => {
-                                previous.program_discard_result = Some(receipt.clone());
-                            }
-                            ProgramValue::TokenCopyBatch(objects) => {
-                                previous.produced_objects = objects.clone();
-                                previous.produced_object_provenance = Some(
-                                    crate::state::ProducedObjectProvenance::TokenCreationBatch,
-                                );
-                            }
-                            ProgramValue::CreatedTokenBatch(objects) => {
-                                previous.produced_objects = objects.clone();
-                            }
-                            ProgramValue::TriggerObjectLinkedExileReceipt(Some(object)) => {
-                                previous.produced_objects.push(*object);
-                            }
-                            ProgramValue::TriggerObjectLinkedExileReceipt(None) => {}
-                            ProgramValue::ExiledObject(Some(object)) => {
-                                previous.produced_objects.push(*object);
-                            }
-                            ProgramValue::ExiledObject(None) => {}
-                            value @ (ProgramValue::FoundLibraryCohort(_)
-                            | ProgramValue::RevealedLibraryCohort(_)
-                            | ProgramValue::RevealedCardReceipt(_)
-                            | ProgramValue::CardPartition(_)
-                            | ProgramValue::Count(_)) => {
-                                previous.program_value = Some(value.clone());
-                            }
-                            _ => {
-                                return Err(EngineError::ProgramInvariant(
-                                    "resolution program input has the wrong type",
-                                ));
-                            }
-                        }
-                    }
+                        Some(OperationInput {
+                            result_type: input_slot.result_type.clone(),
+                            value: input_value.clone(),
+                        })
+                    } else {
+                        None
+                    };
+                    // These domain proofs retain their exact producer/actor/incarnation checks;
+                    // the original typed input already contains the receipts they validate.
                     if is_program_source_sacrifice_reflexive(&effect) {
-                        if let Some(receipt) = program_source_sacrifice_reflexive_receipt(
+                        program_source_sacrifice_reflexive_receipt(
                             compiled,
                             &program_state,
                             input,
                             top,
-                        )? {
-                            previous.sacrificed_objects.push(receipt);
-                        }
+                        )?;
                     }
                     if let Some(counter) = program_counter_placement_reflexive_counter(&effect) {
-                        if let Some(receipt) = program_counter_placement_reflexive_receipt(
+                        program_counter_placement_reflexive_receipt(
                             compiled,
                             &program_state,
                             input,
                             top,
                             counter,
-                        )? {
-                            previous.counter_placements.push(receipt);
-                        }
+                        )?;
                     }
-                    let mut result = EffectResult::default();
+                    let no_input = OperationResults::default();
+                    let previous: &dyn ResolutionFacts = operation_input
+                        .as_ref()
+                        .map(|input| input as &dyn ResolutionFacts)
+                        .unwrap_or(&no_input);
+                    let mut result = OperationResults::default();
                     let label = registry
                         .get(&top.card_id)
                         .and_then(|definition| definition.face(top.face_index))
@@ -1523,7 +1465,7 @@ impl GameEngine {
                                 let candidates = super::current_equipment_receipt_candidates(
                                     self,
                                     equipment,
-                                    &previous.produced_objects,
+                                    previous.object_refs(),
                                 );
                                 match candidates.as_slice() {
                                     [] => {}
@@ -1582,8 +1524,7 @@ impl GameEngine {
                                                             stack,
                                                             equipment,
                                                             created_tokens: previous
-                                                                .produced_objects
-                                                                .clone(),
+                                                                .object_refs().to_vec(),
                                                             candidate_generations: candidates,
                                                             original_offered_chooser: chooser,
                                                             delegated: false,
@@ -1615,6 +1556,7 @@ impl GameEngine {
                     ) {
                         EffectOutcome::Continue
                     } else if target_context.has_bindings && target_context.targets.is_empty() {
+                        result.begin_effect(&effect)?;
                         // CR 608.2b has already taken the one stack-wide target snapshot. A
                         // authored leaf whose own owner-local role groups are now empty is
                         // skipped while its program unit and any later selected modes continue.
@@ -1623,28 +1565,29 @@ impl GameEngine {
                                 matches!(slot.result_type, ResultType::DiscardResult { .. })
                             })
                         }) {
-                            result.program_discard_result = Some(ProgramDiscardResult {
-                                outcome: tricerules_card_model::DiscardResultOutcome::Unpayable,
-                                batches: Vec::new(),
-                                cards: Vec::new(),
-                            });
+                            result.set(crate::state::ProgramValue::DiscardResult(
+                                ProgramDiscardResult {
+                                    outcome: tricerules_card_model::DiscardResultOutcome::Unpayable,
+                                    batches: Vec::new(),
+                                    cards: Vec::new(),
+                                },
+                            ));
                         }
                         if outputs.iter().any(|slot_id| {
                             compiled.slot(*slot_id).is_some_and(|slot| {
                                 matches!(slot.result_type, ResultType::CounterPaymentOutcome)
                             })
                         }) {
-                            result.counter_payment_outcome = Some(
+                            result.set(crate::state::ProgramValue::CounterPaymentOutcome(
                                     tricerules_card_model::primitives::CounterPaymentOutcome::NotOffered,
-                                );
+                                ));
                         }
                         if outputs.iter().any(|slot_id| {
                             compiled.slot(*slot_id).is_some_and(|slot| {
                                 matches!(slot.result_type, ResultType::TargetedSpellController)
                             })
                         }) {
-                            result.program_value =
-                                Some(ProgramValue::TargetedSpellController(None));
+                            result.set(ProgramValue::TargetedSpellController(None));
                         }
                         EffectOutcome::Continue
                     } else {
@@ -1673,24 +1616,15 @@ impl GameEngine {
                             controller: top.controller,
                             affected_player,
                             spell_label: &label,
-                            previous_effect_result: &previous,
+                            previous_effect_result: previous,
                             resume_previous_result: Some(&previous_result),
                             effect_result: &mut result,
                             effect_index: instruction_index as u32,
                             program_state: Some(program_state.clone()),
                         };
-                        if matches!(
-                            &effect,
-                            SpellEffectKind::SelectHandCards { .. }
-                                | SpellEffectKind::PutSelectedHandCardsOnLibraryTop
-                        ) {
-                            run_program_only_leaf(&mut cx, effect)?
-                        } else {
-                            dispatch::execute_effect(&mut cx, effect)?
-                        }
+                        super::execute_leaf(&mut cx, effect)?
                     };
 
-                    self.refresh_hideaway_look_permissions();
                     if outcome == EffectOutcome::GameEnded {
                         return Ok(ResolutionProgress::GameEnded);
                     }
@@ -1719,7 +1653,7 @@ impl GameEngine {
                         &result,
                     )?;
                     program_state.in_flight = None;
-                    program_state.in_flight_produced_object_provenance = None;
+                    program_state.in_flight_results = OperationResults::default();
                     #[cfg(test)]
                     if !outputs.is_empty() {
                         trip_program_failpoint(ProgramFailpoint::SlotPublished)?;
@@ -1777,7 +1711,7 @@ impl GameEngine {
     fn program_choose_leaf_is_selectable(
         &self,
         top: &StackItem,
-        previous_result: &EffectResult,
+        previous_result: &OperationResults,
         branch: &CompiledChooseBranch,
     ) -> bool {
         if branch.cost != ResolutionCost::None || branch.body.steps.len() != 1 {
@@ -2097,7 +2031,7 @@ impl GameEngine {
         &mut self,
         top: &StackItem,
         program_state: &ProgramRunState,
-        result: &EffectResult,
+        result: &OperationResults,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
         self.refresh_hideaway_look_permissions();
@@ -2319,7 +2253,7 @@ fn capture_program_outputs(
     compiled: &CompiledProgram,
     run: &mut ProgramRunState,
     outputs: &[ResultSlotId],
-    result: &EffectResult,
+    result: &OperationResults,
 ) -> Result<(), EngineError> {
     capture_program_outputs_inner(None, compiled, run, outputs, result)
 }
@@ -2330,20 +2264,20 @@ fn capture_program_outputs_for_stack(
     compiled: &CompiledProgram,
     run: &mut ProgramRunState,
     outputs: &[ResultSlotId],
-    result: &EffectResult,
+    result: &OperationResults,
 ) -> Result<(), EngineError> {
     capture_program_outputs_inner(Some((engine, top)), compiled, run, outputs, result)
 }
 
 fn validate_physical_output_cardinality(
-    result: &EffectResult,
+    objects: &[crate::state::TriggerObjectRef],
     cardinality: &Cardinality,
     invariant: &'static str,
 ) -> Result<(), EngineError> {
-    if result.produced_objects.len() < cardinality.min as usize
+    if objects.len() < cardinality.min as usize
         || cardinality
             .max
-            .is_some_and(|max| result.produced_objects.len() > max as usize)
+            .is_some_and(|max| objects.len() > max as usize)
     {
         return Err(EngineError::ProgramInvariant(invariant));
     }
@@ -2351,16 +2285,16 @@ fn validate_physical_output_cardinality(
 }
 
 fn optional_physical_output(
-    result: &EffectResult,
+    objects: &[crate::state::TriggerObjectRef],
     cardinality: &Cardinality,
     invariant: &'static str,
 ) -> Result<Option<crate::state::TriggerObjectRef>, EngineError> {
-    validate_physical_output_cardinality(result, cardinality, invariant)?;
-    Ok(result.produced_objects.first().copied())
+    validate_physical_output_cardinality(objects, cardinality, invariant)?;
+    Ok(objects.first().copied())
 }
 
 fn counter_placement_output(
-    result: &EffectResult,
+    result: &OperationResults,
     counter: CounterKind,
     object: tricerules_card_model::primitives::ConditionObjectRef,
     cardinality: &tricerules_card_model::primitives::Cardinality,
@@ -2382,7 +2316,10 @@ fn counter_placement_output(
         controller_at_event: top.controller,
     };
     let receipts = result
-        .counter_placements
+        .counter_placement_facts()
+        .ok_or(EngineError::ProgramInvariant(
+            "counter placement did not publish its typed completion",
+        ))?
         .iter()
         .copied()
         .filter(|receipt| {
@@ -2438,7 +2375,7 @@ fn counter_placement_receipt_proof(
 }
 
 fn proliferated_permanent_cohort_output(
-    result: &EffectResult,
+    result: &OperationResults,
     cardinality: &Cardinality,
 ) -> Result<Vec<crate::state::TriggerObjectRef>, EngineError> {
     if cardinality.min != 0 || cardinality.max.is_some() {
@@ -2448,7 +2385,12 @@ fn proliferated_permanent_cohort_output(
     }
     let mut seen = std::collections::BTreeSet::new();
     let mut objects = Vec::new();
-    for receipt in &result.counter_placements {
+    for receipt in result
+        .counter_placement_facts()
+        .ok_or(EngineError::ProgramInvariant(
+            "Proliferate did not publish its counter-placement completion",
+        ))?
+    {
         if receipt.count == 0 || receipt.after.checked_sub(receipt.before) != Some(receipt.count) {
             return Err(EngineError::ProgramInvariant(
                 "Proliferate cohort contains an invalid placement receipt",
@@ -2466,7 +2408,7 @@ fn proliferated_permanent_cohort_output(
 }
 
 fn proliferated_permanent_selection_output(
-    result: &EffectResult,
+    result: &OperationResults,
     cardinality: &Cardinality,
 ) -> Result<Vec<crate::state::TriggerObjectRef>, EngineError> {
     if cardinality.min != 0 || cardinality.max.is_some() {
@@ -2474,8 +2416,12 @@ fn proliferated_permanent_selection_output(
             "Proliferate selection has an invalid compiled cardinality",
         ));
     }
-    let Some(ProgramValue::ProliferatedPermanentSelection(objects)) = result.program_value.as_ref()
-    else {
+    let Some(ProgramValue::ProliferatedPermanentSelection(objects)) = result.value(|value| {
+        matches!(
+            value,
+            crate::state::ProgramValue::ProliferatedPermanentSelection(_)
+        )
+    }) else {
         return Err(EngineError::ProgramInvariant(
             "Proliferate choice did not publish its typed selection",
         ));
@@ -2498,46 +2444,52 @@ fn capture_program_outputs_inner(
     compiled: &CompiledProgram,
     run: &mut ProgramRunState,
     outputs: &[ResultSlotId],
-    result: &EffectResult,
+    result: &OperationResults,
 ) -> Result<(), EngineError> {
+    let mut completed = Vec::with_capacity(outputs.len());
     for slot_id in outputs {
         let slot = compiled
             .slot(*slot_id)
             .ok_or(EngineError::ProgramInvariant(
                 "resolution program output slot is invalid",
             ))?;
+        let required = |predicate: fn(&ProgramValue) -> bool, invariant| {
+            result
+                .value(predicate)
+                .cloned()
+                .ok_or(EngineError::ProgramInvariant(invariant))
+        };
         let value = match &slot.result_type {
-            ResultType::DrawReceipt { .. } => {
-                ProgramValue::DrawReceipt(result.produced_objects.clone())
-            }
-            ResultType::DiscardResult { .. } => {
-                ProgramValue::DiscardResult(result.program_discard_result.clone().ok_or(
-                    EngineError::ProgramInvariant(
-                        "discard instruction did not publish its typed result",
-                    ),
-                )?)
-            }
-            ResultType::CounterPaymentOutcome => {
-                ProgramValue::CounterPaymentOutcome(result.counter_payment_outcome.ok_or(
-                    EngineError::ProgramInvariant(
-                        "counter instruction did not publish its typed payment outcome",
-                    ),
-                )?)
-            }
-            ResultType::TargetedSpellController => match result.program_value.as_ref() {
-                Some(value @ ProgramValue::TargetedSpellController(_)) => value.clone(),
-                _ => {
-                    return Err(EngineError::ProgramInvariant(
-                        "counter instruction did not publish its typed target-controller result",
-                    ));
-                }
-            },
+            ResultType::DrawReceipt { .. } => required(
+                |value| matches!(value, ProgramValue::DrawReceipt(_)),
+                "Draw did not publish its typed receipt",
+            )?,
+            ResultType::DiscardResult { .. } => required(
+                |value| matches!(value, ProgramValue::DiscardResult(_)),
+                "discard instruction did not publish its typed result",
+            )?,
+            ResultType::CounterPaymentOutcome => required(
+                |value| matches!(value, ProgramValue::CounterPaymentOutcome(_)),
+                "counter instruction did not publish its typed payment outcome",
+            )?,
+            ResultType::TargetedSpellController => required(
+                |value| matches!(value, ProgramValue::TargetedSpellController(_)),
+                "counter instruction did not publish its typed target-controller result",
+            )?,
             ResultType::CounteredAbilitySource { cardinality } => {
-                ProgramValue::CounteredAbilitySource(optional_physical_output(
-                    result,
+                let value = required(
+                    |value| matches!(value, ProgramValue::CounteredAbilitySource(_)),
+                    "CounterTargetAbility did not publish its source receipt",
+                )?;
+                let ProgramValue::CounteredAbilitySource(object) = &value else {
+                    unreachable!()
+                };
+                validate_physical_output_cardinality(
+                    object.as_slice(),
                     cardinality,
                     "CounterTargetAbility result exceeded its compiled cardinality",
-                )?)
+                )?;
+                value
             }
             ResultType::CounterPlacementReceipt {
                 counter,
@@ -2566,97 +2518,86 @@ fn capture_program_outputs_inner(
                     proliferated_permanent_selection_output(result, cardinality)?,
                 )
             }
-            ResultType::PermanentSelection { .. } => {
-                ProgramValue::PermanentSelection(result.produced_objects.clone())
-            }
+            ResultType::PermanentSelection { .. } => required(
+                |value| matches!(value, ProgramValue::PermanentSelection(_)),
+                "permanent choice did not publish its typed selection",
+            )?,
             ResultType::ManifestedPermanent { cardinality } => {
-                ProgramValue::ManifestedPermanent(optional_physical_output(
-                    result,
+                let value = required(
+                    |value| matches!(value, ProgramValue::ManifestedPermanent(_)),
+                    "Manifest Dread did not publish its typed completion",
+                )?;
+                let ProgramValue::ManifestedPermanent(object) = &value else {
+                    unreachable!()
+                };
+                validate_physical_output_cardinality(
+                    object.as_slice(),
                     cardinality,
                     "Manifest Dread result exceeded its compiled cardinality",
-                )?)
+                )?;
+                value
             }
-            ResultType::HandSelection { .. } => {
-                ProgramValue::HandSelection(result.selected_hand_cards.clone())
-            }
+            ResultType::HandSelection { .. } => required(
+                |value| matches!(value, ProgramValue::HandSelection(_)),
+                "hand choice did not publish its typed selection",
+            )?,
             ResultType::CardResultCohort { .. }
             | ResultType::TargetCardResultCohort { .. }
-            | ResultType::LinkedExileCardResultCohort { .. } => {
-                ProgramValue::CardResultCohort(crate::state::CardResultCohort {
-                    cards: result.cards.clone(),
-                    program_discard_result: None,
-                })
+            | ResultType::LinkedExileCardResultCohort { .. }
+            | ResultType::CastPaymentCohort { .. } => required(
+                |value| matches!(value, ProgramValue::CardResultCohort(_)),
+                "card action did not publish its typed cohort",
+            )?,
+            ResultType::FoundLibraryCohort => required(
+                |value| matches!(value, ProgramValue::FoundLibraryCohort(_)),
+                "retained library search did not publish its exact cohort",
+            )?,
+            ResultType::RevealedLibraryCohort => required(
+                |value| matches!(value, ProgramValue::RevealedLibraryCohort(_)),
+                "cohort reveal did not publish its typed result",
+            )?,
+            ResultType::RevealedCardReceipt => required(
+                |value| matches!(value, ProgramValue::RevealedCardReceipt(_)),
+                "RevealTopCardToHand did not publish its typed receipt",
+            )?,
+            ResultType::Count(kind) => {
+                ProgramValue::Count(result.count(*kind).ok_or(EngineError::ProgramInvariant(
+                    "scalar-count instruction did not publish its typed result",
+                ))?)
             }
-            ResultType::CastPaymentCohort { .. } => {
-                ProgramValue::CardResultCohort(crate::state::CardResultCohort {
-                    cards: result.cards.clone(),
-                    program_discard_result: None,
-                })
-            }
-            ResultType::FoundLibraryCohort => match result.program_value.as_ref() {
-                Some(value @ ProgramValue::FoundLibraryCohort(_)) => value.clone(),
-                _ => {
-                    return Err(EngineError::ProgramInvariant(
-                        "retained library search did not publish its exact cohort",
-                    ));
-                }
-            },
-            ResultType::RevealedLibraryCohort => match result.program_value.as_ref() {
-                Some(value @ ProgramValue::RevealedLibraryCohort(_)) => value.clone(),
-                _ => {
-                    return Err(EngineError::ProgramInvariant(
-                        "cohort reveal did not publish its typed result",
-                    ));
-                }
-            },
-            ResultType::RevealedCardReceipt => match result.program_value.as_ref() {
-                Some(value @ ProgramValue::RevealedCardReceipt(_)) => value.clone(),
-                _ => {
-                    return Err(EngineError::ProgramInvariant(
-                        "RevealTopCardToHand did not publish its typed receipt",
-                    ));
-                }
-            },
-            ResultType::Count(_) => match result.program_value.as_ref() {
-                Some(value @ ProgramValue::Count(_)) => value.clone(),
-                _ => {
-                    return Err(EngineError::ProgramInvariant(
-                        "scalar-count instruction did not publish its typed result",
-                    ));
-                }
-            },
-            ResultType::CardPartition => match result.program_value.as_ref() {
-                Some(value @ ProgramValue::CardPartition(_)) => value.clone(),
-                _ => {
-                    return Err(EngineError::ProgramInvariant(
-                        "cohort split did not publish its typed partition",
-                    ));
-                }
-            },
-            ResultType::TokenCopyBatch => {
-                if result.produced_object_provenance
-                    != Some(crate::state::ProducedObjectProvenance::TokenCreationBatch)
-                {
-                    return Err(EngineError::ProgramInvariant(
-                        "token-copy instruction did not publish its exact token batch",
-                    ));
-                }
-                ProgramValue::TokenCopyBatch(result.produced_objects.clone())
-            }
+            ResultType::CardPartition => required(
+                |value| matches!(value, ProgramValue::CardPartition(_)),
+                "cohort split did not publish its typed partition",
+            )?,
+            ResultType::TokenCopyBatch => required(
+                |value| matches!(value, ProgramValue::TokenCopyBatch(_)),
+                "token-copy instruction did not publish its exact token batch",
+            )?,
             ResultType::ExiledObject { cardinality } => {
                 ProgramValue::ExiledObject(optional_physical_output(
-                    result,
+                    result
+                        .exiled_objects()
+                        .ok_or(EngineError::ProgramInvariant(
+                            "Exile did not publish its movement result",
+                        ))?,
                     cardinality,
                     "Exile result exceeded its compiled cardinality",
                 )?)
             }
             ResultType::CreatedTokenBatch { cardinality } => {
+                let value = required(
+                    |value| matches!(value, ProgramValue::CreatedTokenBatch(_)),
+                    "CreateTokens did not publish its typed token batch",
+                )?;
+                let ProgramValue::CreatedTokenBatch(objects) = &value else {
+                    unreachable!()
+                };
                 validate_physical_output_cardinality(
-                    result,
+                    objects,
                     cardinality,
                     "CreateTokens result exceeded its compiled cardinality",
                 )?;
-                ProgramValue::CreatedTokenBatch(result.produced_objects.clone())
+                value
             }
             ResultType::TriggerObjectLinkedExileReceipt {
                 producer_ability_id,
@@ -2667,7 +2608,11 @@ fn capture_program_outputs_inner(
                     "linked-Exile receipt capture lacks its exact stack occurrence",
                 ))?;
                 let receipt = optional_physical_output(
-                    result,
+                    result
+                        .exiled_objects()
+                        .ok_or(EngineError::ProgramInvariant(
+                            "Exile did not publish its movement result",
+                        ))?,
                     cardinality,
                     "linked-Exile receipt exceeded its compiled cardinality",
                 )?;
@@ -2707,16 +2652,19 @@ fn capture_program_outputs_inner(
                             .unwrap_or(0)
                             == receipt.zone_change_generation
                 });
+
                 ProgramValue::TriggerObjectLinkedExileReceipt(receipt)
             }
         };
-        let destination =
-            run.slots
-                .get_mut(slot_id.0 as usize)
-                .ok_or(EngineError::ProgramInvariant(
-                    "resolution program output slot is outside the frame",
-                ))?;
-        *destination = Some(value);
+        if run.slots.get(slot_id.0 as usize).is_none() {
+            return Err(EngineError::ProgramInvariant(
+                "resolution program output slot is outside the frame",
+            ));
+        }
+        completed.push((*slot_id, value));
+    }
+    for (slot_id, value) in completed {
+        run.slots[slot_id.0 as usize] = Some(value);
     }
     Ok(())
 }
@@ -3144,7 +3092,7 @@ fn program_result_condition_holds(
     }
 }
 
-fn run_program_only_leaf(
+pub(super) fn run_program_only_leaf(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
@@ -3161,7 +3109,7 @@ fn run_program_only_leaf(
             super::zones::select_hand_cards_for_program(cx, amount, ordered, &prompt)
         }
         SpellEffectKind::PutSelectedHandCardsOnLibraryTop => {
-            let selected = &cx.previous_effect_result.selected_hand_cards;
+            let selected = cx.previous_effect_result.hand_cards();
             super::hand_library_return::begin_program_hand_library_return(cx, selected)
         }
         _ => Err(EngineError::Illegal(
@@ -3174,7 +3122,7 @@ fn run_program_only_leaf(
 mod countered_ability_source_tests {
     use super::*;
     use crate::state::{
-        CounterPlacementReceipt, EffectResult, LinkedExileOccurrence, LinkedExiledObject,
+        CounterPlacementReceipt, LinkedExileOccurrence, LinkedExiledObject, OperationResults,
         ProgramRunState, ProgramValue, TriggerObjectRef,
     };
     use tricerules_card_model::primitives::{
@@ -3250,7 +3198,7 @@ mod countered_ability_source_tests {
             frames: Vec::new(),
             slots: vec![slot],
             in_flight: None,
-            in_flight_produced_object_provenance: None,
+            in_flight_results: OperationResults::default(),
         }
     }
 
@@ -3290,7 +3238,8 @@ mod countered_ability_source_tests {
         };
         let mut run = run_with_slot(None);
         run.slots.push(None);
-        let result = EffectResult::default();
+        let mut result = OperationResults::from_exiled_objects(Vec::new());
+        result.record_cards([]).unwrap();
 
         capture_program_outputs(
             &compiled,
@@ -3385,8 +3334,8 @@ mod countered_ability_source_tests {
             zone_change_generation: 7,
             controller_at_event: 0,
         };
-        let mut result = EffectResult::default();
-        result.produced_objects.push(source);
+        let mut result = OperationResults::default();
+        result.set(ProgramValue::CounteredAbilitySource(Some(source)));
         capture_program_outputs(&compiled, &mut run, &[ResultSlotId(0)], &result)
             .expect("the handler's exact source reference is captured");
         assert!(matches!(
@@ -3395,7 +3344,7 @@ mod countered_ability_source_tests {
         ));
 
         run.slots[0] = None;
-        result.produced_objects.clear();
+        result.set(ProgramValue::CounteredAbilitySource(None));
         capture_program_outputs(&compiled, &mut run, &[ResultSlotId(0)], &result)
             .expect("a completed counter with no permanent source writes a completed None result");
         assert!(matches!(
@@ -3403,7 +3352,20 @@ mod countered_ability_source_tests {
             Some(ProgramValue::CounteredAbilitySource(None))
         ));
 
-        result.produced_objects = vec![source, source];
+        assert!(
+            result
+                .publish(ProgramValue::CounteredAbilitySource(Some(source)))
+                .is_err(),
+            "duplicate singleton facts cannot be published"
+        );
+        let mut compiled = compiled;
+        compiled.slots[0].result_type = ResultType::CounteredAbilitySource {
+            cardinality: Cardinality {
+                min: 0,
+                max: Some(0),
+            },
+        };
+        result.set(ProgramValue::CounteredAbilitySource(Some(source)));
         assert!(matches!(
             capture_program_outputs(&compiled, &mut run, &[ResultSlotId(0)], &result),
             Err(EngineError::ProgramInvariant(
@@ -3425,8 +3387,22 @@ mod countered_ability_source_tests {
         top.source_zone_change = source.zone_change_generation;
         top.controller = 1;
         let mut run = run_with_slot(None);
-        let mut result = EffectResult::default();
+        let mut result = OperationResults::default();
 
+        assert!(
+            capture_program_outputs_for_stack(
+                &engine,
+                &top,
+                &compiled,
+                &mut run,
+                &[ResultSlotId(0)],
+                &result,
+            )
+            .is_err(),
+            "an unpublished placement result is not a completed empty placement"
+        );
+        assert!(run.slots[0].is_none());
+        result.record_counter_placements([]);
         capture_program_outputs_for_stack(
             &engine,
             &top,
@@ -3476,7 +3452,7 @@ mod countered_ability_source_tests {
             before: 3,
             after: 5,
         };
-        result.counter_placements.push(receipt);
+        result.record_counter_placements([receipt]);
         capture_program_outputs_for_stack(
             &engine,
             &top,
@@ -3505,7 +3481,7 @@ mod countered_ability_source_tests {
             },
             ..receipt
         };
-        result.counter_placements = vec![wrong_source];
+        result = OperationResults::default().with_counter_placements(vec![wrong_source]);
         capture_program_outputs_for_stack(
             &engine,
             &top,
@@ -3535,7 +3511,7 @@ mod countered_ability_source_tests {
             counter: CounterKind::Charge,
             ..receipt
         };
-        result.counter_placements = vec![wrong_counter];
+        result = OperationResults::default().with_counter_placements(vec![wrong_counter]);
         capture_program_outputs_for_stack(
             &engine,
             &top,
@@ -3556,7 +3532,7 @@ mod countered_ability_source_tests {
             after: 4,
             ..receipt
         };
-        result.counter_placements = vec![uncommitted];
+        result = OperationResults::default().with_counter_placements(vec![uncommitted]);
         assert!(matches!(
             capture_program_outputs_for_stack(
                 &engine,
@@ -3571,8 +3547,8 @@ mod countered_ability_source_tests {
             ))
         ));
 
-        result.counter_placements = vec![receipt];
-        result.counter_placements.push(receipt);
+        result = OperationResults::default().with_counter_placements(vec![receipt]);
+        result.record_counter_placements([receipt]);
         assert!(matches!(
             capture_program_outputs_for_stack(
                 &engine,
@@ -3594,7 +3570,7 @@ mod countered_ability_source_tests {
             },
             ..receipt
         };
-        result.counter_placements = vec![stale];
+        result = OperationResults::default().with_counter_placements(vec![stale]);
         assert!(matches!(
             capture_program_outputs_for_stack(
                 &engine,
@@ -3628,8 +3604,8 @@ mod countered_ability_source_tests {
             before: 3,
             after: 5,
         };
-        let mut result = EffectResult::default();
-        result.counter_placements.push(receipt);
+        let mut result = OperationResults::default();
+        result.record_counter_placements([receipt]);
         let mut run = run_with_slot(None);
 
         capture_program_outputs_for_stack(
@@ -3777,7 +3753,7 @@ mod countered_ability_source_tests {
             frames: Vec::new(),
             slots: vec![None; compiled.slots.len()],
             in_flight: None,
-            in_flight_produced_object_provenance: None,
+            in_flight_results: OperationResults::default(),
         }
     }
 
@@ -3880,7 +3856,7 @@ mod countered_ability_source_tests {
             &compiled,
             &mut no_output_run,
             &outputs,
-            &EffectResult::default(),
+            &OperationResults::from_exiled_objects(Vec::new()),
         )
         .expect("a resultless Exile completes with an empty optional receipt");
         assert!(matches!(
@@ -3888,12 +3864,12 @@ mod countered_ability_source_tests {
             Some(ProgramValue::TriggerObjectLinkedExileReceipt(None))
         ));
 
-        let mut stale_output = EffectResult::default();
-        stale_output.produced_objects.push(TriggerObjectRef {
+        let mut stale_output = OperationResults::default();
+        stale_output.record_exiled_objects([TriggerObjectRef {
             object_id: current_member,
             zone_change_generation: current_generation - 1,
             controller_at_event: 0,
-        });
+        }]);
         let mut stale_generation_run = receipt_run(&compiled);
         capture_program_outputs_for_stack(
             &engine,
@@ -3909,20 +3885,14 @@ mod countered_ability_source_tests {
             Some(ProgramValue::TriggerObjectLinkedExileReceipt(None))
         ));
 
-        // This is the interpreter's existing receipt-slot transfer: None adds no
-        // produced_objects to the preceding EffectResult passed into the consumer.
-        let mut previous_result = EffectResult::default();
-        match stale_generation_run.slots[0].as_ref() {
-            Some(ProgramValue::TriggerObjectLinkedExileReceipt(Some(object))) => {
-                previous_result.produced_objects.push(*object);
-            }
-            Some(ProgramValue::TriggerObjectLinkedExileReceipt(None)) => {}
-            _ => panic!("the receipt slot contains its completed typed None"),
-        }
-        assert!(previous_result.produced_objects.is_empty());
+        let previous_result = OperationInput {
+            result_type: compiled.slots[0].result_type.clone(),
+            value: stale_generation_run.slots[0].clone().unwrap(),
+        };
+        assert!(previous_result.object_refs().is_empty());
 
         let mut events = Vec::new();
-        let mut consumer_result = EffectResult::default();
+        let mut consumer_result = OperationResults::default();
         let outcome = super::super::zones::return_other_linked_exiled_cards(
             &mut super::super::EffectCx {
                 engine: &mut engine,
@@ -4402,7 +4372,7 @@ mod invariant_rollback_tests {
             &mut engine,
             &top,
             owners,
-            crate::state::EffectResult::default(),
+            crate::state::OperationResults::default(),
         );
         let initial_prompt_id = engine
             .state
@@ -4466,7 +4436,7 @@ mod invariant_rollback_tests {
             &mut departed,
             &top,
             owners,
-            crate::state::EffectResult::default(),
+            crate::state::OperationResults::default(),
         );
         let original_prompt_id = departed
             .state
@@ -4864,7 +4834,7 @@ mod invariant_rollback_tests {
                 cards: Vec::new(),
             }))],
             in_flight: None,
-            in_flight_produced_object_provenance: None,
+            in_flight_results: OperationResults::default(),
         };
 
         assert!(program_result_condition_holds(
@@ -4923,7 +4893,7 @@ mod invariant_rollback_tests {
                 frames: Vec::new(),
                 slots: vec![slot],
                 in_flight: None,
-                in_flight_produced_object_provenance: None,
+                in_flight_results: OperationResults::default(),
             };
             program_result_condition_holds(
                 &engine,
@@ -4999,7 +4969,7 @@ mod invariant_rollback_tests {
             frames: Vec::new(),
             slots: vec![Some(cohort)],
             in_flight: None,
-            in_flight_produced_object_provenance: None,
+            in_flight_results: OperationResults::default(),
         };
         let evaluate = |card_type| {
             program_result_condition_holds(
@@ -5140,7 +5110,7 @@ mod invariant_rollback_tests {
             frames: Vec::new(),
             slots: vec![None],
             in_flight: None,
-            in_flight_produced_object_provenance: None,
+            in_flight_results: OperationResults::default(),
         };
         (compiled, run)
     }
@@ -5183,7 +5153,7 @@ mod invariant_rollback_tests {
             frames: Vec::new(),
             slots: vec![None],
             in_flight: None,
-            in_flight_produced_object_provenance: None,
+            in_flight_results: OperationResults::default(),
         };
         (compiled, run)
     }
@@ -5191,7 +5161,7 @@ mod invariant_rollback_tests {
     #[test]
     fn token_copy_batch_capture_rejects_missing_provenance_for_empty_result() {
         let (compiled, mut run) = token_copy_batch_capture_fixture();
-        let result = crate::state::EffectResult::default();
+        let result = crate::state::OperationResults::default();
 
         assert!(matches!(
             capture_program_outputs(&compiled, &mut run, &[ResultSlotId(0)], &result,),
@@ -5205,12 +5175,9 @@ mod invariant_rollback_tests {
     #[test]
     fn token_copy_batch_capture_keeps_a_proven_empty_batch_distinct_from_no_result() {
         let (compiled, mut run) = token_copy_batch_capture_fixture();
-        let result = crate::state::EffectResult {
-            produced_object_provenance: Some(
-                crate::state::ProducedObjectProvenance::TokenCreationBatch,
-            ),
-            ..Default::default()
-        };
+        let result = crate::state::OperationResults::from_value(
+            crate::state::ProgramValue::TokenCopyBatch(Vec::new()),
+        );
 
         capture_program_outputs(&compiled, &mut run, &[ResultSlotId(0)], &result)
             .expect("an empty cohort with the executor's explicit batch marker is typed output");
@@ -5218,6 +5185,19 @@ mod invariant_rollback_tests {
             run.slots[0],
             Some(ProgramValue::TokenCopyBatch(ref objects)) if objects.is_empty()
         ));
+    }
+
+    #[test]
+    fn created_token_capture_rejects_a_permanent_selection_result() {
+        let (compiled, mut run) = created_token_batch_capture_fixture();
+        let result = crate::state::OperationResults::from_value(ProgramValue::PermanentSelection(
+            Vec::new(),
+        ));
+        assert!(capture_program_outputs(&compiled, &mut run, &[ResultSlotId(0)], &result).is_err());
+        assert!(
+            run.slots[0].is_none(),
+            "a different producer cannot publish a token receipt"
+        );
     }
 
     #[test]
@@ -5232,7 +5212,9 @@ mod invariant_rollback_tests {
             &compiled,
             &mut run,
             &[ResultSlotId(0)],
-            &crate::state::EffectResult::default(),
+            &crate::state::OperationResults::from_value(
+                ProgramValue::CreatedTokenBatch(Vec::new()),
+            ),
         )
         .expect("a typed CreateTokens receipt records its completed empty cohort");
         assert!(matches!(
@@ -5553,7 +5535,7 @@ mod invariant_rollback_tests {
                 .run_program_with_previous(
                     &top,
                     run,
-                    crate::state::EffectResult::default(),
+                    crate::state::OperationResults::default(),
                     &mut initial,
                 )
                 .expect("program reaches Choose"),
@@ -5722,7 +5704,7 @@ mod invariant_rollback_tests {
                 .run_program_with_previous(
                     &top,
                     run,
-                    crate::state::EffectResult::default(),
+                    crate::state::OperationResults::default(),
                     &mut initial,
                 )
                 .expect("program reaches Choose"),
@@ -5961,7 +5943,7 @@ mod invariant_rollback_tests {
             .run_program_with_previous(
                 &top,
                 run,
-                crate::state::EffectResult::default(),
+                crate::state::OperationResults::default(),
                 &mut events,
             )
             .expect("single live free branch resolves without a prompt");
@@ -6029,7 +6011,7 @@ mod invariant_rollback_tests {
                 .run_program_with_previous(
                     &top,
                     run,
-                    crate::state::EffectResult::default(),
+                    crate::state::OperationResults::default(),
                     &mut first_offer,
                 )
                 .expect("the single free branch auto-enters and parks at its child selection"),
@@ -6696,7 +6678,7 @@ mod invariant_rollback_tests {
             &mut paid,
             &top,
             owners,
-            crate::state::EffectResult::default(),
+            crate::state::OperationResults::default(),
         );
         let branch_offer = paid
             .program_choose_choice_event()
@@ -6764,7 +6746,7 @@ mod invariant_rollback_tests {
             &mut declined,
             &top,
             owners,
-            crate::state::EffectResult::default(),
+            crate::state::OperationResults::default(),
         );
         let declined_batch = nested_answer(&mut declined, Decision::Decline, 0, Vec::new());
         assert_eq!(declined.state.players[0].life, before + 7);
@@ -6794,7 +6776,7 @@ mod invariant_rollback_tests {
                 .run_program_with_previous(
                     &top,
                     run,
-                    crate::state::EffectResult::default(),
+                    crate::state::OperationResults::default(),
                     &mut events,
                 )
                 .expect("no own graveyard candidate enters Otherwise and tail"),
@@ -6827,7 +6809,7 @@ mod invariant_rollback_tests {
             &mut engine,
             &top,
             owners,
-            crate::state::EffectResult::default(),
+            crate::state::OperationResults::default(),
         );
         nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
         let prompt_id = engine
@@ -6905,7 +6887,7 @@ mod invariant_rollback_tests {
             &mut engine,
             &top,
             owners,
-            crate::state::EffectResult::default(),
+            crate::state::OperationResults::default(),
         );
         nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
 
@@ -6953,7 +6935,7 @@ mod invariant_rollback_tests {
                 .run_program_with_previous(
                     &top,
                     run,
-                    crate::state::EffectResult::default(),
+                    crate::state::OperationResults::default(),
                     &mut events,
                 )
                 .expect("return and target-group rider resolve in order"),
@@ -6982,7 +6964,7 @@ mod invariant_rollback_tests {
             &mut engine,
             &top,
             owners,
-            crate::state::EffectResult::default(),
+            crate::state::OperationResults::default(),
         );
 
         let offer = engine
@@ -7347,7 +7329,7 @@ mod invariant_rollback_tests {
                 &mut engine,
                 &top,
                 owners,
-                crate::state::EffectResult::default(),
+                crate::state::OperationResults::default(),
             );
             nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
             let pending = engine
@@ -7528,7 +7510,7 @@ mod invariant_rollback_tests {
             &mut engine,
             &top,
             owners,
-            crate::state::EffectResult::default(),
+            crate::state::OperationResults::default(),
         );
 
         let (pending, _, _) = parked_program(&engine);
@@ -7675,7 +7657,7 @@ mod invariant_rollback_tests {
                 &mut engine,
                 &top,
                 owners,
-                crate::state::EffectResult::default(),
+                crate::state::OperationResults::default(),
             );
             nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
 
@@ -7735,7 +7717,7 @@ mod invariant_rollback_tests {
                 .run_program_with_previous(
                     &top,
                     run,
-                    crate::state::EffectResult::default(),
+                    crate::state::OperationResults::default(),
                     &mut events,
                 )
                 .expect("no legal sacrifice branch enters Otherwise and its parent tail"),
@@ -7767,7 +7749,7 @@ mod invariant_rollback_tests {
             &mut engine,
             &top,
             owners,
-            crate::state::EffectResult::default(),
+            crate::state::OperationResults::default(),
         );
         nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
         let prompt_id = engine
@@ -7817,7 +7799,7 @@ mod invariant_rollback_tests {
             &mut engine,
             &top,
             owners,
-            crate::state::EffectResult::default(),
+            crate::state::OperationResults::default(),
         );
         nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
         let old_prompt_id = engine
@@ -7912,7 +7894,7 @@ mod invariant_rollback_tests {
             &mut engine,
             &top,
             owners,
-            crate::state::EffectResult::default(),
+            crate::state::OperationResults::default(),
         );
         let initial_payment = nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
         let initial_offer = initial_payment
@@ -8083,7 +8065,7 @@ mod invariant_rollback_tests {
             &mut engine,
             &top,
             owners,
-            crate::state::EffectResult::default(),
+            crate::state::OperationResults::default(),
         );
         let initial_payment = nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
         let initial_offer = initial_payment
@@ -8243,7 +8225,7 @@ mod invariant_rollback_tests {
             &mut engine,
             &top,
             owners,
-            crate::state::EffectResult::default(),
+            crate::state::OperationResults::default(),
         );
         let initial_payment = nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
         let initial_offer = initial_payment
@@ -8391,7 +8373,7 @@ mod invariant_rollback_tests {
             &mut engine,
             &top,
             owners,
-            crate::state::EffectResult::default(),
+            crate::state::OperationResults::default(),
         );
         nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
         move_object_to_zone(
@@ -8440,7 +8422,7 @@ mod invariant_rollback_tests {
             &mut payer_engine,
             &payer_top,
             payer_owners,
-            crate::state::EffectResult::default(),
+            crate::state::OperationResults::default(),
         );
         nested_answer(&mut payer_engine, Decision::SelectBranch, 0, Vec::new());
         payer_engine.state.players[0].has_lost = true;
@@ -8465,7 +8447,7 @@ mod invariant_rollback_tests {
             &mut owner_engine,
             &owner_top,
             owner_owners,
-            crate::state::EffectResult::default(),
+            crate::state::OperationResults::default(),
         );
         nested_answer(&mut owner_engine, Decision::SelectBranch, 0, Vec::new());
         assert_eq!(owner_engine.state.objects[&owner_source].owner, 1);
@@ -8535,7 +8517,7 @@ mod invariant_rollback_tests {
             &mut engine,
             &top,
             owners,
-            crate::state::EffectResult::default(),
+            crate::state::OperationResults::default(),
         );
         nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
 
@@ -8773,7 +8755,7 @@ mod invariant_rollback_tests {
                 &mut engine,
                 &top,
                 owners,
-                crate::state::EffectResult::default(),
+                crate::state::OperationResults::default(),
             );
             let (pending, _, _) = parked_program(&engine);
             assert_eq!(top.controller, 0);
@@ -8828,7 +8810,7 @@ mod invariant_rollback_tests {
             &mut engine,
             &top,
             owners,
-            crate::state::EffectResult::default(),
+            crate::state::OperationResults::default(),
         );
         nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
         let pending = engine
@@ -9090,7 +9072,7 @@ mod invariant_rollback_tests {
         engine: &mut GameEngine,
         top: &StackItem,
         owners: Vec<tricerules_card_model::ProgramOwnerId>,
-        previous: crate::state::EffectResult,
+        previous: crate::state::OperationResults,
     ) {
         let run = engine
             .begin_program_run(top, owners)
@@ -9248,7 +9230,7 @@ mod invariant_rollback_tests {
             &mut engine,
             &top,
             owners,
-            crate::state::EffectResult::default(),
+            crate::state::OperationResults::default(),
         );
         assert_eq!(engine.state.objects[&target].damage, 1);
         assert_eq!(
@@ -9384,15 +9366,17 @@ mod invariant_rollback_tests {
     fn nested_search_previous_result(
         engine: &GameEngine,
         wan: ObjectId,
-    ) -> crate::state::EffectResult {
-        let mut previous = crate::state::EffectResult::default();
+    ) -> crate::state::OperationResults {
+        let mut previous = crate::state::OperationResults::default();
         previous
-            .produced_objects
-            .push(crate::state::TriggerObjectRef {
-                object_id: wan,
-                zone_change_generation: engine.state.zone_change_generation[&wan],
-                controller_at_event: 1,
-            });
+            .append(crate::state::ProgramValue::PermanentSelection(vec![
+                crate::state::TriggerObjectRef {
+                    object_id: wan,
+                    zone_change_generation: engine.state.zone_change_generation[&wan],
+                    controller_at_event: 1,
+                },
+            ]))
+            .expect("typed retention sentinel");
         previous
     }
 
@@ -9525,7 +9509,7 @@ mod invariant_rollback_tests {
                 &mut engine,
                 &top,
                 owners,
-                crate::state::EffectResult::default(),
+                crate::state::OperationResults::default(),
             );
             nested_answer(&mut engine, decision, branch, Vec::new());
             assert_eq!(
@@ -9588,7 +9572,7 @@ mod invariant_rollback_tests {
                 &mut engine,
                 &top,
                 owners,
-                crate::state::EffectResult::default(),
+                crate::state::OperationResults::default(),
             );
             nested_answer(&mut engine, decision, branch, Vec::new());
             let (pending, _, run) = parked_program(&engine);
@@ -9677,7 +9661,7 @@ mod invariant_rollback_tests {
                 &mut engine,
                 &top,
                 owners,
-                crate::state::EffectResult::default(),
+                crate::state::OperationResults::default(),
             );
             let hand_prompt = engine
                 .state
@@ -9836,7 +9820,7 @@ mod invariant_rollback_tests {
                 &mut engine,
                 &top,
                 owners,
-                crate::state::EffectResult::default(),
+                crate::state::OperationResults::default(),
             );
             assert_eq!(
                 engine
@@ -10085,7 +10069,7 @@ mod invariant_rollback_tests {
             engine.state.objects[&wan].counter_count(tricerules_cards::CounterKind::PlusOnePlusOne);
         let drawn_slot = nested_slot_id(&engine, &owners[0], "drawn");
         let previous = nested_search_previous_result(&engine, wan);
-        let seeded = previous.produced_objects[0];
+        let seeded = previous.object_refs()[0];
 
         nested_start(&mut engine, &top, owners.clone(), previous);
         nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
@@ -10098,7 +10082,7 @@ mod invariant_rollback_tests {
         assert_eq!(pending.presentation.candidates, vec![forest]);
         assert_eq!(run.owner, owners[0]);
         assert_eq!(run.pending_owners, owners[1..]);
-        assert_eq!(stack.previous_result.produced_objects, vec![seeded]);
+        assert_eq!(stack.previous_result.object_refs(), vec![seeded]);
         assert_eq!(run.in_flight, Some(Vec::new()));
         assert_eq!(run.slots.len(), 1);
         assert!(nested_slot(run, drawn_slot).is_none());
@@ -10121,7 +10105,7 @@ mod invariant_rollback_tests {
         ));
         assert_eq!(run.owner, owners[0]);
         assert_eq!(run.pending_owners, owners[1..]);
-        assert_eq!(stack.previous_result.produced_objects, vec![seeded]);
+        assert_eq!(stack.previous_result.object_refs(), vec![seeded]);
         assert!(matches!(
             nested_slot(run, drawn_slot),
             Some(ProgramValue::DrawReceipt(cards))
@@ -10182,7 +10166,7 @@ mod invariant_rollback_tests {
         let wan_counters_before =
             engine.state.objects[&wan].counter_count(tricerules_cards::CounterKind::PlusOnePlusOne);
         let previous = nested_search_previous_result(&engine, wan);
-        let seeded = previous.produced_objects[0];
+        let seeded = previous.object_refs()[0];
 
         nested_start(&mut engine, &top, owners.clone(), previous);
         let branch_batch = nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
@@ -10197,7 +10181,7 @@ mod invariant_rollback_tests {
             // Keep the published maximum at authored capacity even when no candidate is eligible.
             assert_eq!((pending.presentation.min, pending.presentation.max), (0, 1));
             assert!(pending.presentation.candidates.is_empty());
-            assert_eq!(stack.previous_result.produced_objects, vec![seeded]);
+            assert_eq!(stack.previous_result.object_refs(), vec![seeded]);
             assert_eq!(run.in_flight, Some(Vec::new()));
             nested_select_objects(&mut engine, Vec::new())
         };
@@ -10226,7 +10210,7 @@ mod invariant_rollback_tests {
         ));
         assert_eq!(run.owner, owners[0]);
         assert_eq!(run.pending_owners, owners[1..]);
-        assert_eq!(stack.previous_result.produced_objects, vec![seeded]);
+        assert_eq!(stack.previous_result.object_refs(), vec![seeded]);
         assert_eq!(run.in_flight, None);
 
         nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
@@ -10316,7 +10300,7 @@ mod invariant_rollback_tests {
             &mut engine,
             &top,
             owners,
-            crate::state::EffectResult::default(),
+            crate::state::OperationResults::default(),
         );
         nested_answer(
             &mut engine,
@@ -10380,15 +10364,17 @@ mod invariant_rollback_tests {
             zone_change_generation: engine.state.zone_change_generation[&seed_object],
             controller_at_event: 0,
         };
-        let mut previous = crate::state::EffectResult::default();
-        previous.produced_objects.push(seeded);
+        let mut previous = crate::state::OperationResults::default();
+        previous
+            .append(crate::state::ProgramValue::PermanentSelection(vec![seeded]))
+            .expect("typed fixture output");
         engine.state.players[0].mana_pool.colorless = 1;
         let before_draws = engine.state.turn_history.current.player(0).cards_drawn;
         nested_start(&mut engine, &top, owners.clone(), previous);
         let (pending, stack, run) = parked_program(&engine);
         assert_eq!(run.owner, owners[0]);
         assert_eq!(run.pending_owners, owners[1..]);
-        assert_eq!(stack.previous_result.produced_objects, vec![seeded]);
+        assert_eq!(stack.previous_result.object_refs(), vec![seeded]);
         let draw_ref = match nested_slot(run, before_slot) {
             Some(ProgramValue::DrawReceipt(cards)) if cards.len() == 1 => cards[0],
             other => panic!("first modal owner must retain its draw receipt: {other:?}"),
@@ -10422,7 +10408,7 @@ mod invariant_rollback_tests {
         let (_, stack, run) = parked_program(&engine);
         assert_eq!(run.owner, owners[0]);
         assert_eq!(run.pending_owners, owners[1..]);
-        assert_eq!(stack.previous_result.produced_objects, vec![seeded]);
+        assert_eq!(stack.previous_result.object_refs(), vec![seeded]);
         assert!(
             matches!(nested_slot(run, before_slot), Some(ProgramValue::DrawReceipt(cards)) if cards[0].object_id == drawn_id)
         );
@@ -10435,7 +10421,7 @@ mod invariant_rollback_tests {
         ));
         assert_eq!(run.owner, owners[0]);
         assert_eq!(run.pending_owners, owners[1..]);
-        assert_eq!(stack.previous_result.produced_objects, vec![seeded]);
+        assert_eq!(stack.previous_result.object_refs(), vec![seeded]);
         assert_eq!(run.in_flight, Some(vec![selected_slot]));
         assert!(
             nested_slot(run, selected_slot).is_none(),
@@ -10450,7 +10436,7 @@ mod invariant_rollback_tests {
         let (pending, stack, run) = parked_program(&engine);
         assert_eq!(run.owner, owners[0]);
         assert_eq!(run.pending_owners, owners[1..]);
-        assert_eq!(stack.previous_result.produced_objects, vec![seeded]);
+        assert_eq!(stack.previous_result.object_refs(), vec![seeded]);
         assert!(matches!(
             &pending.continuation,
             ResolutionContinuation::ProgramChoose {
@@ -10509,8 +10495,10 @@ mod invariant_rollback_tests {
             zone_change_generation: seeded_generation,
             controller_at_event: 0,
         };
-        let mut previous = crate::state::EffectResult::default();
-        previous.produced_objects.push(seeded);
+        let mut previous = crate::state::OperationResults::default();
+        previous
+            .append(crate::state::ProgramValue::PermanentSelection(vec![seeded]))
+            .expect("typed fixture output");
         let draws_before = engine.state.turn_history.current.player(0).cards_drawn;
         let drawn_slot = nested_slot_id(&engine, &owners[0], "drawn");
         let found_slot = nested_slot_id(&engine, &owners[0], "found");
@@ -10522,7 +10510,7 @@ mod invariant_rollback_tests {
             &pending.continuation,
             ResolutionContinuation::SearchLibrary { .. }
         ));
-        assert_eq!(stack.previous_result.produced_objects, vec![seeded]);
+        assert_eq!(stack.previous_result.object_refs(), vec![seeded]);
         assert_eq!(run.in_flight, Some(vec![found_slot]));
         assert!(nested_slot(run, found_slot).is_none());
         assert!(
@@ -10536,7 +10524,7 @@ mod invariant_rollback_tests {
             &pending.continuation,
             ResolutionContinuation::HandChoice { .. }
         ));
-        assert_eq!(stack.previous_result.produced_objects, vec![seeded]);
+        assert_eq!(stack.previous_result.object_refs(), vec![seeded]);
         assert_eq!(run.in_flight, Some(vec![selected_slot]));
         assert!(matches!(
             nested_slot(run, found_slot),
@@ -10589,7 +10577,7 @@ mod invariant_rollback_tests {
             engine.run_program_with_previous(
                 &top,
                 run,
-                crate::state::EffectResult::default(),
+                crate::state::OperationResults::default(),
                 &mut events,
             ),
             Err(EngineError::ProgramInvariant(
@@ -10608,7 +10596,7 @@ mod invariant_rollback_tests {
 #[cfg(test)]
 mod ripples_output_capture_tests {
     use super::*;
-    use crate::state::{CounterPlacementReceipt, EffectResult, ProgramRunState, ProgramValue};
+    use crate::state::{CounterPlacementReceipt, OperationResults, ProgramRunState, ProgramValue};
     use tricerules_card_model::primitives::{
         Cardinality, CompiledBlock, CompiledSlot, EffectContext, ProgramTargetProjection,
     };
@@ -10646,7 +10634,7 @@ mod ripples_output_capture_tests {
             frames: Vec::new(),
             slots: vec![None],
             in_flight: None,
-            in_flight_produced_object_provenance: None,
+            in_flight_results: OperationResults::default(),
         }
     }
 
@@ -10677,14 +10665,11 @@ mod ripples_output_capture_tests {
             zone_change_generation: 9,
             controller_at_event: 0,
         };
-        let result = EffectResult {
-            counter_placements: vec![
-                placement(first, CounterKind::Quest),
-                placement(first, CounterKind::Charge),
-                placement(second, CounterKind::Quest),
-            ],
-            ..EffectResult::default()
-        };
+        let result = crate::state::OperationResults::default().with_counter_placements(vec![
+            placement(first, CounterKind::Quest),
+            placement(first, CounterKind::Charge),
+            placement(second, CounterKind::Quest),
+        ]);
 
         capture_program_outputs(&compiled, &mut run, &[ResultSlotId(0)], &result)
             .expect("successful positive placements produce a typed cohort");
@@ -10700,7 +10685,7 @@ mod ripples_output_capture_tests {
             &compiled,
             &mut run,
             &[ResultSlotId(0)],
-            &EffectResult::default(),
+            &OperationResults::default().with_counter_placements([]),
         )
         .expect("a completed zero-placement result writes an empty typed cohort");
         assert!(matches!(
@@ -10721,14 +10706,14 @@ mod ripples_output_capture_tests {
             zone_change_generation: 6,
             controller_at_event: 0,
         };
-        let mut result = EffectResult {
-            program_value: Some(ProgramValue::PermanentSelection(vec![selected])),
-            ..Default::default()
-        };
+        let mut result =
+            crate::state::OperationResults::from_value(ProgramValue::PermanentSelection(vec![
+                selected,
+            ]));
         assert!(capture_program_outputs(&compiled, &mut run, &[ResultSlotId(0)], &result).is_err());
         assert!(run.slots[0].is_none());
 
-        result.program_value = Some(ProgramValue::ProliferatedPermanentSelection(vec![selected]));
+        result.set(ProgramValue::ProliferatedPermanentSelection(vec![selected]));
         capture_program_outputs(&compiled, &mut run, &[ResultSlotId(0)], &result)
             .expect("only the specialized permanent choice publishes a typed selection");
         assert!(matches!(

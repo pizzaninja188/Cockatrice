@@ -1731,7 +1731,7 @@ impl GameEngine {
                 }),
             ConditionObjectRef::PreviousEffectObject => context
                 .previous_effect_result?
-                .produced_objects
+                .object_refs()
                 .first()
                 .map(|object| (object.object_id, object.zone_change_generation)),
             ConditionObjectRef::TargetAlias(_) => None,
@@ -2175,9 +2175,13 @@ impl GameEngine {
                 }),
             CountExpression::ProgramInputCount => context
                 .previous_effect_result
-                .and_then(|previous| match previous.program_value.as_ref() {
-                    Some(crate::state::ProgramValue::Count(value)) => Some(*value),
-                    _ => None,
+                .and_then(|previous| {
+                    match previous
+                        .value(|value| matches!(value, crate::state::ProgramValue::Count(_)))
+                    {
+                        Some(crate::state::ProgramValue::Count(value)) => Some(*value),
+                        _ => None,
+                    }
                 })
                 .map_or(0, i64::from),
             CountExpression::BoundCardResultCount { .. } => {

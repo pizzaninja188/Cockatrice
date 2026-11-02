@@ -293,7 +293,9 @@ impl GameEngine {
                     return self.finish_amass_after_token_entry(stack, amass, events);
                 }
                 let mut previous_result = stack.previous_result.clone();
-                previous_result.produced_objects = self.token_entry_object_refs(&created_ids);
+                previous_result.set(crate::state::ProgramValue::CreatedTokenBatch(
+                    self.token_entry_object_refs(&created_ids),
+                ));
                 self.complete_parked_stack_with_previous(stack, previous_result, events)
             }
             SimultaneousEntryBatch::Observer(batch) => {

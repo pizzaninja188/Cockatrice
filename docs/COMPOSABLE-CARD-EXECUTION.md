@@ -1,5 +1,13 @@
 # Composable card execution and authoring contract
 
+Implementation update (2026-11-02): the private `EffectResult` carrier is retired. Program
+instructions retain their explicit input value and admitted type through `OperationInput`;
+primitives publish tagged `OperationResults`, including multiple outputs and completed empty
+results. Shared evaluators read these facts without the former input-field projection. Partial
+operation facts survive suspension separately from the parent's run context. Effect lists and
+Programs share the leaf execution boundary while retaining their distinct cursors and retry
+semantics. This changes no authored syntax, card admission, rules behavior or public protocol.
+
 Status (2026-10-25): the approved retirement of existing flat result-predecessor paths is complete.
 The `DrawDiscard` compatibility family, flat `ChooseResolutionBranch`, and flat resolution
 `MayBehold` admission paths are retired. The engine's flat MayBehold branch expansion, restart
@@ -569,7 +577,7 @@ semantic ownership. An instruction sequence never substitutes for a simultaneous
 | [`SpellEffectKind::validate_list`](../tricerules/tricerules-card-model/src/primitives/effects.rs) manually pairs preceding producers and consumers | One model-side program compiler checks operation signatures, typed bindings, scope, cardinality and context |
 | `Conditional` admits selected single instructions and rejects nesting | Finite nested conditional blocks share the runner; conditions are evaluated on entry |
 | [`run_effect_list_with_previous`](../tricerules/tricerules-core/src/engine/resolution/mod.rs) rebuilds flattened branches and advances a flat index | An immutable compiled program plus explicit block/cursor frames owns sequencing |
-| [`EffectResult` and `ParkedStackResolution`](../tricerules/tricerules-core/src/state.rs) carry one implicit previous result | Private typed immutable result slots, an in-flight operation and a saved frame stack |
+| The retired `EffectResult` carrier mixed input and output fields | [`OperationInput` and `OperationResults`](../tricerules/tricerules-core/src/state/operation_results.rs) retain typed values and operation facts; private slots and saved frames own Program dependencies |
 | [`DrawCompletion`](../tricerules/tricerules-core/src/engine/draw.rs) includes `BeginDiscard` and `BrainstormPutBack` sequencing | Draw completion resumes the owning operation/frame; follow-up card actions are instructions |
 | Exact-text recipe matchers assembled some special combinations | Direct RON uses the same typed programs as the rest of the checked-in card corpus |
 | [`SubmitResolutionChoice`](../libcockatrice_protocol/libcockatrice/protocol/pb/ruled_v1.proto) answers whichever prompt is current | Every answer names the exact active `resolution_prompt_id` |

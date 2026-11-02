@@ -35,8 +35,9 @@ fn program_cohort_reveal_id(cx: &EffectCx<'_>) -> String {
 }
 
 pub(super) fn reveal_cohort(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
-    let Some(ProgramValue::FoundLibraryCohort(cohort)) =
-        cx.previous_effect_result.program_value.as_ref()
+    let Some(ProgramValue::FoundLibraryCohort(cohort)) = cx
+        .previous_effect_result
+        .value(|value| matches!(value, crate::state::ProgramValue::FoundLibraryCohort(_)))
     else {
         return Err(EngineError::ProgramInvariant(
             "RevealCohort requires a retained library-search result",
@@ -66,7 +67,7 @@ pub(super) fn reveal_cohort(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engi
         Some(reveal.clone())
     });
     cx.events.extend(reveal_events);
-    cx.effect_result.program_value = Some(ProgramValue::RevealedLibraryCohort(
+    cx.effect_result.set(ProgramValue::RevealedLibraryCohort(
         ProgramRevealedLibraryCohort {
             cards: live,
             public_reveal,
@@ -82,8 +83,9 @@ pub(super) fn choose_cohort_partition(
     let SpellEffectKind::ChooseCohortPartition { chooser, selection } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let Some(ProgramValue::RevealedLibraryCohort(revealed)) =
-        cx.previous_effect_result.program_value.as_ref()
+    let Some(ProgramValue::RevealedLibraryCohort(revealed)) = cx
+        .previous_effect_result
+        .value(|value| matches!(value, crate::state::ProgramValue::RevealedLibraryCohort(_)))
     else {
         return Err(EngineError::ProgramInvariant(
             "ChooseCohortPartition requires a revealed library cohort",
@@ -110,11 +112,12 @@ pub(super) fn choose_cohort_partition(
     // one or two cards; choosing the full set is a forced choice, but it is not an omitted choice.
     // Only an actually empty found set auto-completes without a target prompt.
     if live.is_empty() {
-        cx.effect_result.program_value = Some(ProgramValue::CardPartition(ProgramCardPartition {
-            selected: live,
-            remainder: Vec::new(),
-            public_reveal: revealed.public_reveal.clone(),
-        }));
+        cx.effect_result
+            .set(ProgramValue::CardPartition(ProgramCardPartition {
+                selected: live,
+                remainder: Vec::new(),
+                public_reveal: revealed.public_reveal.clone(),
+            }));
         return Ok(EffectOutcome::Continue);
     }
 
@@ -287,8 +290,9 @@ pub(super) fn move_cohort_partition(
             "typed library partition has unsupported destinations",
         ));
     }
-    let Some(ProgramValue::CardPartition(partition)) =
-        cx.previous_effect_result.program_value.as_ref()
+    let Some(ProgramValue::CardPartition(partition)) = cx
+        .previous_effect_result
+        .value(|value| matches!(value, crate::state::ProgramValue::CardPartition(_)))
     else {
         return Err(EngineError::ProgramInvariant(
             "MoveCohortPartition requires a typed card partition",
@@ -810,11 +814,10 @@ mod tests {
             .commit_observed_zone_move(stale.object_id, Zone::Hand, None, &mut Vec::new())
             .expect("a prior legal instruction moves one search result");
 
-        let previous = EffectResult {
-            program_value: Some(ProgramValue::FoundLibraryCohort(found.clone())),
-            ..Default::default()
-        };
-        let mut result = EffectResult::default();
+        let previous = crate::state::OperationResults::from_value(
+            ProgramValue::FoundLibraryCohort(found.clone()),
+        );
+        let mut result = OperationResults::default();
         let mut events = Vec::new();
         let stack = fixture_stack_item();
         let outcome = reveal_cohort(&mut EffectCx {
@@ -841,12 +844,15 @@ mod tests {
             found[0], stale,
             "the immutable search result remains unchanged"
         );
-        let Some(ProgramValue::RevealedLibraryCohort(revealed)) = result.program_value else {
+        let Some(ProgramValue::RevealedLibraryCohort(revealed)) = result
+            .value(|value| matches!(value, crate::state::ProgramValue::RevealedLibraryCohort(_)))
+        else {
             panic!("reveal publishes a typed cohort");
         };
         assert_eq!(revealed.cards, vec![found[1]]);
         let receipt = revealed
             .public_reveal
+            .clone()
             .expect("live cohort has a reveal receipt");
         assert_eq!(
             receipt
@@ -867,7 +873,7 @@ mod tests {
             Some(rv1::ruled_event::Ev::CardsRevealed(snapshot)) if snapshot == &receipt
         )));
         assert!(matches!(
-            previous.program_value.as_ref(),
+            previous.value(|value| matches!(value, crate::state::ProgramValue::FoundLibraryCohort(_))),
             Some(ProgramValue::FoundLibraryCohort(original)) if original == &found
         ));
     }
@@ -893,7 +899,7 @@ mod tests {
             }],
             slots: vec![Some(ProgramValue::FoundLibraryCohort(Vec::new()))],
             in_flight: Some(vec![ResultSlotId(0)]),
-            in_flight_produced_object_provenance: None,
+            in_flight_results: OperationResults::default(),
         };
         let mut stack = ParkedStackResolution::new(item.clone());
         stack.program = Some(program);

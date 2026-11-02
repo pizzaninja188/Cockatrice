@@ -187,13 +187,15 @@ pub(super) fn lose_life(
     Ok(EffectOutcome::Continue)
 }
 
-fn revealed_card_mana_value(previous: &EffectResult) -> Result<u32, EngineError> {
-    if previous.input_result_type != Some(ResultType::RevealedCardReceipt) {
+fn revealed_card_mana_value(previous: &dyn ResolutionFacts) -> Result<u32, EngineError> {
+    if previous.admitted_type() != Some(&ResultType::RevealedCardReceipt) {
         return Err(EngineError::ProgramInvariant(
             "LoseLife(RevealedCardManaValue) has no typed revealed-card input",
         ));
     }
-    match previous.program_value.as_ref() {
+    match previous
+        .value(|value| matches!(value, crate::state::ProgramValue::RevealedCardReceipt(_)))
+    {
         Some(crate::state::ProgramValue::RevealedCardReceipt(
             crate::state::RevealedCardReceipt::EmptyLibrary,
         )) => Ok(0),
@@ -351,7 +353,7 @@ mod tests {
 
     #[test]
     fn revealed_card_life_amount_requires_a_typed_exact_receipt() {
-        let missing_type = crate::state::EffectResult::default();
+        let missing_type = crate::state::OperationResults::default();
         assert!(matches!(
             revealed_card_mana_value(&missing_type),
             Err(EngineError::ProgramInvariant(
@@ -359,21 +361,10 @@ mod tests {
             ))
         ));
 
-        let missing_receipt = crate::state::EffectResult {
-            input_result_type: Some(ResultType::RevealedCardReceipt),
-            ..Default::default()
-        };
-        assert!(matches!(
-            revealed_card_mana_value(&missing_receipt),
-            Err(EngineError::ProgramInvariant(
-                "LoseLife(RevealedCardManaValue) requires its exact revealed-card receipt"
-            ))
-        ));
-
-        let wrong_receipt = crate::state::EffectResult {
-            input_result_type: Some(ResultType::RevealedCardReceipt),
-            program_value: Some(ProgramValue::Count(1)),
-            ..Default::default()
+        // A declared input with no value is no longer representable.
+        let wrong_receipt = crate::state::OperationInput {
+            result_type: ResultType::RevealedCardReceipt,
+            value: ProgramValue::Count(1),
         };
         assert!(matches!(
             revealed_card_mana_value(&wrong_receipt),
@@ -382,12 +373,9 @@ mod tests {
             ))
         ));
 
-        let wrong_declared_type = crate::state::EffectResult {
-            input_result_type: Some(ResultType::CardPartition),
-            program_value: Some(ProgramValue::RevealedCardReceipt(
-                RevealedCardReceipt::EmptyLibrary,
-            )),
-            ..Default::default()
+        let wrong_declared_type = crate::state::OperationInput {
+            result_type: ResultType::CardPartition,
+            value: ProgramValue::RevealedCardReceipt(RevealedCardReceipt::EmptyLibrary),
         };
         assert!(matches!(
             revealed_card_mana_value(&wrong_declared_type),
@@ -399,25 +387,19 @@ mod tests {
 
     #[test]
     fn revealed_card_life_amount_uses_the_captured_snapshot_and_empty_library_is_zero() {
-        let empty = crate::state::EffectResult {
-            input_result_type: Some(ResultType::RevealedCardReceipt),
-            program_value: Some(ProgramValue::RevealedCardReceipt(
-                RevealedCardReceipt::EmptyLibrary,
-            )),
-            ..Default::default()
+        let empty = crate::state::OperationInput {
+            result_type: ResultType::RevealedCardReceipt,
+            value: ProgramValue::RevealedCardReceipt(RevealedCardReceipt::EmptyLibrary),
         };
         assert_eq!(revealed_card_mana_value(&empty).unwrap(), 0);
 
-        let revealed = crate::state::EffectResult {
-            input_result_type: Some(ResultType::RevealedCardReceipt),
-            program_value: Some(ProgramValue::RevealedCardReceipt(
-                RevealedCardReceipt::Revealed {
-                    object_id: 7,
-                    zone_change_generation: 3,
-                    mana_value: 5,
-                },
-            )),
-            ..Default::default()
+        let revealed = crate::state::OperationInput {
+            result_type: ResultType::RevealedCardReceipt,
+            value: ProgramValue::RevealedCardReceipt(RevealedCardReceipt::Revealed {
+                object_id: 7,
+                zone_change_generation: 3,
+                mana_value: 5,
+            }),
         };
         assert_eq!(revealed_card_mana_value(&revealed).unwrap(), 5);
     }

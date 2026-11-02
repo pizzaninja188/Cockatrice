@@ -114,7 +114,7 @@ fn resolve(
     caller: Caller,
     subjects: &[ObjectId],
     prevent_regeneration: bool,
-) -> (Vec<rv1::RuledEvent>, EffectResult) {
+) -> (Vec<rv1::RuledEvent>, OperationResults) {
     let mut targets = subjects.to_vec();
     if matches!(caller, Caller::Attached) {
         let recipient = deploy(engine, 0, "forest");
@@ -185,7 +185,7 @@ fn resolve(
             (Vec::new(), Vec::new(), Vec::new())
         };
     let mut events = vec![];
-    let mut result = EffectResult::default();
+    let mut result = OperationResults::default();
     let mut cx = EffectCx {
         engine,
         events: &mut events,
@@ -197,7 +197,7 @@ fn resolve(
         controller: 3,
         affected_player: 3,
         spell_label: "Destruction fixture",
-        previous_effect_result: &EffectResult::default(),
+        previous_effect_result: &OperationResults::default(),
         effect_result: &mut result,
         effect_index: 0,
         resume_previous_result: None,
@@ -296,8 +296,8 @@ fn issue_196_destroy_receipts_and_public_moves_use_the_actual_destination_and_ow
                 u32::from(!exile && !matches!(caller, Caller::Attached))
             );
             if matches!(caller, Caller::Chosen | Caller::Source) {
-                assert_eq!(result.cards.len(), 1);
-                let receipt = &result.cards[0];
+                assert_eq!(result.card_entries().len(), 1);
+                let receipt = &result.card_entries()[0];
                 assert_eq!(receipt.action, CardResultAction::Destroy);
                 assert_eq!(
                     (
@@ -309,7 +309,7 @@ fn issue_196_destroy_receipts_and_public_moves_use_the_actual_destination_and_ow
                 );
             } else {
                 assert!(
-                    result.cards.is_empty(),
+                    result.card_entries().is_empty(),
                     "mass/attachment effects do not publish receipts"
                 );
             }
@@ -351,7 +351,7 @@ fn issue_196_survivors_keep_identity_and_only_regeneration_consumes_a_shield() {
             assert_eq!(events.len(), 1);
             assert!(matches!(&events[0].ev, Some(Ev::Log(log)) if log.text == expected_log));
             assert!(moves(&events).is_empty());
-            assert!(result.cards.is_empty());
+            assert!(result.card_entries().is_empty());
             let object = &engine.state.objects[&oid];
             assert_eq!(object.zone, Zone::Battlefield);
             assert_eq!(
@@ -425,7 +425,7 @@ fn issue_196_regeneration_removes_combat_participants_before_logging() {
                 first_strike_damage_done: false,
             });
             let (events, result) = resolve(&mut engine, caller, &[oid], false);
-            assert!(result.cards.is_empty());
+            assert!(result.card_entries().is_empty());
             let removal = events.iter().position(|event| matches!(&event.ev, Some(Ev::RemovedFromCombat(removed)) if removed.object_ids == vec![oid])).expect("removal event");
             assert!(
                 matches!(&events[removal + 1].ev, Some(Ev::Log(log)) if log.text == "Grizzly Bears regenerates.")
@@ -459,7 +459,7 @@ fn issue_196_mass_cant_regenerate_does_not_tap_or_trigger_shielded_permanents() 
     );
     let (events, result) = resolve(&mut engine, Caller::Mass, &[oid], true);
     assert_eq!(moves(&events).len(), 1);
-    assert!(result.cards.is_empty());
+    assert!(result.card_entries().is_empty());
     assert_eq!(engine.state.objects[&oid].zone, Zone::Graveyard);
     assert!(engine.state.staged_trigger_groups.is_empty());
 }
@@ -545,7 +545,7 @@ fn issue_196_cohorts_preserve_move_order_and_departing_observers_in_one_trigger_
         assert_eq!(engine.state.objects[&survives].zone, Zone::Battlefield);
         assert_eq!(engine.state.objects[&regenerates].zone, Zone::Battlefield);
         assert_eq!(
-            result.cards.len(),
+            result.card_entries().len(),
             if matches!(caller, Caller::Chosen) {
                 3
             } else {
@@ -567,7 +567,7 @@ fn issue_196_departed_or_new_generation_source_is_not_destroyed() {
         let generation = engine.state.zone_change_generation[&oid];
         let (events, result) = resolve(&mut engine, Caller::Source, &[oid], false);
         assert!(events.is_empty());
-        assert!(result.cards.is_empty());
+        assert!(result.card_entries().is_empty());
         assert_eq!(engine.state.objects[&oid].zone, zone);
         assert_eq!(engine.state.zone_change_generation[&oid], generation);
     }
@@ -604,7 +604,7 @@ fn issue_196_destroy_result_records_effective_types_before_the_move() {
     let (events, result) = resolve(&mut engine, Caller::Chosen, &[oid], false);
     assert_eq!(moves(&events).len(), 1);
     assert_eq!(engine.state.objects[&oid].zone, Zone::Graveyard);
-    let [receipt] = result.cards.as_slice() else {
+    let [receipt] = result.card_entries() else {
         panic!("successful Destroy creates one card-result receipt");
     };
     assert_eq!(receipt.action, CardResultAction::Destroy);

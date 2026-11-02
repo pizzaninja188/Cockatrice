@@ -216,7 +216,7 @@ pub(super) fn destroy(
                 receipt,
                 trigger_events: departures,
             } => {
-                effect_result.cards.extend(receipt);
+                effect_result.record_cards(receipt)?;
                 trigger_events.extend(departures);
             }
         }
@@ -281,7 +281,7 @@ pub(super) fn sacrifice(
     for (oid, owner, name, source, characteristics) in sacrifices {
         let was_creature = characteristics.is_creature();
         let died = sacrifice_permanent(&mut cx.engine.state, cx.engine.registry, oid)?;
-        cx.effect_result.sacrificed_objects.push(TriggerObjectRef {
+        cx.effect_result.record_sacrifice(TriggerObjectRef {
             object_id: source.object_id,
             zone_change_generation: source.zone_change_generation,
             controller_at_event: source.controller,
@@ -302,7 +302,7 @@ pub(super) fn sacrifice(
                 payment::card_type_filter_matches_characteristics(*card_type, &characteristics)
             })
             .collect();
-        cx.effect_result.cards.push(receipt);
+        cx.effect_result.record_cards([receipt])?;
         cx.events.push(permanent_moved_event(
             &cx.engine.state,
             oid,
@@ -673,7 +673,12 @@ fn create_delayed_trigger_inner(
     let affected_player = match affected_player {
         Some(PlayerRecipient::ProgramInputPlayer) => {
             let Some(crate::state::ProgramValue::TargetedSpellController(Some(player))) =
-                cx.previous_effect_result.program_value.as_ref()
+                cx.previous_effect_result.value(|value| {
+                    matches!(
+                        value,
+                        crate::state::ProgramValue::TargetedSpellController(_)
+                    )
+                })
             else {
                 // A missing typed capture must not silently bind the delayed ability to its
                 // controller. A resolving counter effect publishes this only for a legal target.
@@ -689,7 +694,7 @@ fn create_delayed_trigger_inner(
         None => None,
     };
     let exact_previous = if matches!(subject, Some(EffectSubject::PreviousEffectObject)) {
-        match cx.previous_effect_result.produced_objects.as_slice() {
+        match cx.previous_effect_result.object_refs() {
             [] => None,
             [object] => Some(*object),
             _ => {
@@ -701,22 +706,18 @@ fn create_delayed_trigger_inner(
     } else {
         None
     };
-    let token_copy_cohort = if matches!(subject, Some(EffectSubject::PreviousEffectObjects)) {
-        if cx.previous_effect_result.produced_object_provenance
-            != Some(crate::state::ProducedObjectProvenance::TokenCreationBatch)
-        {
-            return Err(EngineError::Illegal(
-                "CreateDelayedTrigger PreviousEffectObjects requires a token-copy batch receipt",
-            ));
-        }
-        let cohort = cx.previous_effect_result.produced_objects.clone();
-        if cohort.is_empty() {
-            return Ok(EffectOutcome::Continue);
-        }
-        Some(cohort)
-    } else {
-        None
-    };
+    let token_copy_cohort =
+        if matches!(subject, Some(EffectSubject::PreviousEffectObjects)) {
+            let cohort = cx.previous_effect_result.token_copy_batch().ok_or(EngineError::Illegal(
+            "CreateDelayedTrigger PreviousEffectObjects requires a token-copy batch receipt",
+        ))?.to_vec();
+            if cohort.is_empty() {
+                return Ok(EffectOutcome::Continue);
+            }
+            Some(cohort)
+        } else {
+            None
+        };
     let emblem_object = matches!(subject, Some(EffectSubject::TriggerObject))
         .then_some(cx.top.trigger_context.emblem_graveyard_object)
         .flatten();
@@ -1506,13 +1507,10 @@ mod delayed_trigger_tests {
         effect: SpellEffectKind,
         target_controller: Option<i32>,
     ) -> Result<EffectOutcome, EngineError> {
-        let previous_result = crate::state::EffectResult {
-            program_value: Some(crate::state::ProgramValue::TargetedSpellController(
-                target_controller,
-            )),
-            ..Default::default()
-        };
-        let mut effect_result = crate::state::EffectResult::default();
+        let previous_result = crate::state::OperationResults::from_value(
+            crate::state::ProgramValue::TargetedSpellController(target_controller),
+        );
+        let mut effect_result = crate::state::OperationResults::default();
         let mut events = Vec::new();
         let mut cx = EffectCx {
             engine,

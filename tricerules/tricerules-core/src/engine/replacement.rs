@@ -4208,10 +4208,10 @@ impl GameEngine {
         let mut previous_result = if begun_flat {
             stack.previous_result.clone()
         } else {
-            crate::state::EffectResult::default()
+            crate::state::OperationResults::default()
         };
         if begun_flat {
-            previous_result.counter_placements.extend(receipts);
+            previous_result.record_counter_placements(receipts);
         }
         let completion_events =
             self.complete_parked_stack_with_previous(stack, previous_result, Vec::new())?;
@@ -4591,7 +4591,7 @@ impl GameEngine {
         } = &completion
         {
             let mut previous_result = stack.previous_result.clone();
-            previous_result.counter_placements.extend(receipts);
+            previous_result.record_counter_placements(receipts);
             if let Some(revealed) = revealed {
                 self.park_explore_choice(
                     stack,
@@ -4615,7 +4615,7 @@ impl GameEngine {
             );
         }
         let mut previous_result = stack.previous_result.clone();
-        previous_result.counter_placements.extend(receipts);
+        previous_result.record_counter_placements(receipts);
         if let crate::state::CounterPlacementCompletion::Amass {
             controller,
             target_object_id,
@@ -4623,11 +4623,13 @@ impl GameEngine {
             ..
         } = &completion
         {
-            previous_result.produced_objects.push(TriggerObjectRef {
-                object_id: *target_object_id,
-                zone_change_generation: *target_zone_change_generation,
-                controller_at_event: *controller,
-            });
+            previous_result.append(crate::state::ProgramValue::PermanentSelection(vec![
+                TriggerObjectRef {
+                    object_id: *target_object_id,
+                    zone_change_generation: *target_zone_change_generation,
+                    controller_at_event: *controller,
+                },
+            ]))?;
         }
         self.complete_parked_stack_with_previous(stack, previous_result, events)
     }
@@ -5745,7 +5747,7 @@ impl GameEngine {
                 BattlefieldEntryCompletion::ResolutionEffect { .. } if stack.program.is_some() => {
                     self.complete_parked_stack_with_previous(
                         stack,
-                        EffectResult::default(),
+                        OperationResults::default(),
                         Vec::new(),
                     )?
                 }
@@ -5893,7 +5895,11 @@ impl GameEngine {
                     Vec::new(),
                 )?,
             BattlefieldEntryCompletion::ResolutionEffect { .. } if stack.program.is_some() => self
-                .complete_parked_stack_with_previous(stack, EffectResult::default(), Vec::new())?,
+                .complete_parked_stack_with_previous(
+                    stack,
+                    OperationResults::default(),
+                    Vec::new(),
+                )?,
             BattlefieldEntryCompletion::ResolutionEffect { .. }
             | BattlefieldEntryCompletion::Ninjutsu { .. } => self
                 .complete_parked_resolution_with_previous(
@@ -7101,7 +7107,7 @@ impl GameEngine {
                 self.complete_parked_resolution(stack.item, Some(0), events)
             }
             BattlefieldEntryCompletion::ResolutionEffect { .. } if stack.program.is_some() => {
-                self.complete_parked_stack_with_previous(stack, EffectResult::default(), events)
+                self.complete_parked_stack_with_previous(stack, OperationResults::default(), events)
             }
             BattlefieldEntryCompletion::ResolutionEffect { .. }
             | BattlefieldEntryCompletion::Ninjutsu { .. } => self
@@ -7264,7 +7270,9 @@ impl GameEngine {
             return self.finish_amass_after_token_entry(stack, amass, events);
         }
         let mut previous_result = stack.previous_result.clone();
-        previous_result.produced_objects = self.token_entry_object_refs(&created_ids);
+        previous_result.set(crate::state::ProgramValue::CreatedTokenBatch(
+            self.token_entry_object_refs(&created_ids),
+        ));
         self.complete_parked_stack_with_previous(stack, previous_result, events)
     }
 
@@ -8616,7 +8624,11 @@ impl GameEngine {
                     rv1::permanent_moved::Destination::Battlefield,
                 ));
                 if stack.program.is_some() {
-                    self.complete_parked_stack_with_previous(stack, EffectResult::default(), events)
+                    self.complete_parked_stack_with_previous(
+                        stack,
+                        OperationResults::default(),
+                        events,
+                    )
                 } else {
                     self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
                 }
@@ -8720,7 +8732,7 @@ impl GameEngine {
                     }
                     return self.complete_parked_stack_with_previous(
                         stack,
-                        EffectResult::default(),
+                        OperationResults::default(),
                         events,
                     );
                 }
@@ -8758,19 +8770,22 @@ impl GameEngine {
                     ));
                 }
                 events.push(ev_log(format!("P{owner} manifests dread.")));
-                let previous_result = EffectResult {
-                    produced_objects: vec![TriggerObjectRef {
-                        object_id,
-                        zone_change_generation: self
-                            .state
-                            .zone_change_generation
-                            .get(&object_id)
-                            .copied()
-                            .unwrap_or(0),
-                        controller_at_event: owner,
-                    }],
-                    ..EffectResult::default()
-                };
+                let previous_result = crate::state::OperationResults::from_value(
+                    crate::state::ProgramValue::ManifestedPermanent(
+                        (vec![TriggerObjectRef {
+                            object_id,
+                            zone_change_generation: self
+                                .state
+                                .zone_change_generation
+                                .get(&object_id)
+                                .copied()
+                                .unwrap_or(0),
+                            controller_at_event: owner,
+                        }])
+                        .into_iter()
+                        .next(),
+                    ),
+                );
                 self.complete_parked_stack_with_previous(stack, previous_result, events)
             }
             BattlefieldEntryCompletion::TokenBatch(batch) => {
@@ -8789,7 +8804,9 @@ impl GameEngine {
                     return self.finish_amass_after_token_entry(stack, amass, events);
                 }
                 let mut previous_result = stack.previous_result.clone();
-                previous_result.produced_objects = self.token_entry_object_refs(&created_ids);
+                previous_result.set(crate::state::ProgramValue::CreatedTokenBatch(
+                    self.token_entry_object_refs(&created_ids),
+                ));
                 self.complete_parked_stack_with_previous(stack, previous_result, events)
             }
             BattlefieldEntryCompletion::ZoneEntryBatch(mut batch) => {

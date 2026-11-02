@@ -109,7 +109,7 @@ impl GameEngine {
         amass: PendingAmass,
         source_id: ObjectId,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<Option<EffectResult>, EngineError> {
+    ) -> Result<Option<OperationResults>, EngineError> {
         if !self.is_amass_candidate(chosen, controller) {
             return Err(EngineError::Illegal("stale Amass Army choice"));
         }
@@ -141,15 +141,16 @@ impl GameEngine {
         else {
             return Ok(None);
         };
-        Ok(Some(EffectResult {
-            produced_objects: vec![TriggerObjectRef {
-                object_id: chosen,
-                zone_change_generation: generation,
-                controller_at_event: controller,
-            }],
-            counter_placements: receipts,
-            ..Default::default()
-        }))
+        Ok(Some(
+            OperationResults::from_value(ProgramValue::PermanentSelection(vec![
+                TriggerObjectRef {
+                    object_id: chosen,
+                    zone_change_generation: generation,
+                    controller_at_event: controller,
+                },
+            ]))
+            .with_counter_placements(receipts),
+        ))
     }
 
     fn park_amass_choice(
@@ -286,7 +287,9 @@ impl GameEngine {
         let controller = stack.item.controller;
         let candidates = self.amass_candidates(controller);
         match candidates.as_slice() {
-            [] => self.complete_parked_stack_with_previous(stack, EffectResult::default(), events),
+            [] => {
+                self.complete_parked_stack_with_previous(stack, OperationResults::default(), events)
+            }
             [chosen] => {
                 let Some(result) = self.apply_amass(
                     stack.clone(),

@@ -822,7 +822,7 @@ fn observer_restore_keeps_committed_doubled_leaf_and_runs_legacy_tail_once() {
             &spell_label,
             effects,
             0,
-            EffectResult::default(),
+            OperationResults::default(),
             &mut initial_events,
         )
         .expect("prepared legacy Proliferate resolution parks for its first answer");
@@ -1091,7 +1091,7 @@ fn delegated_observer_restore_keeps_committed_doubled_leaf_after_actor_concedes(
             &spell_label,
             effects,
             0,
-            EffectResult::default(),
+            OperationResults::default(),
             &mut initial_events,
         )
         .expect("prepared legacy Proliferate resolution parks for its first answer");

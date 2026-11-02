@@ -1,3 +1,7 @@
+#[path = "state/operation_results.rs"]
+mod operation_results;
+pub(crate) use operation_results::{OperationInput, OperationResults, ResolutionFacts};
+
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use tricerules_card_model::primitives::ResultSlotId;
 use tricerules_card_model::primitives::{
@@ -229,41 +233,6 @@ pub(crate) struct ProgramDiscardResult {
     pub cards: Vec<DiscardCardResultEntry>,
 }
 
-/// Private typed output of one primitive resolution instruction. Card cohorts and semantic
-/// receipts intentionally share this immediate-result boundary: both are consumed only by the
-/// following instruction and never serialized to clients.
-#[derive(serde::Serialize, Debug, Clone, Default)]
-pub(crate) struct EffectResult {
-    /// Static type of the instruction's explicit Program input, retained so generic effect
-    /// consumers can validate the exact authored selection contract at resolution time.
-    pub input_result_type: Option<ResultType>,
-    pub cards: Vec<CardResultEntry>,
-    pub program_discard_result: Option<ProgramDiscardResult>,
-    pub produced_objects: Vec<TriggerObjectRef>,
-    /// Exact generation-bound cards selected privately from a hand by a resolution program.
-    /// They remain in the hand until a later typed program operation moves them.
-    pub selected_hand_cards: Vec<TriggerObjectRef>,
-    /// Provenance required by plural token-copy follow-ups. A general many-object result is not
-    /// interchangeable with the exact cohort produced by one replacement-expanded copy effect.
-    pub produced_object_provenance: Option<ProducedObjectProvenance>,
-    /// Accepted outcome of one fixed-cost soft-counter instruction, captured in that program's
-    /// private result slot after the payment decision is committed.
-    pub counter_payment_outcome: Option<CounterPaymentOutcome>,
-    /// Total mana committed by an immediately preceding Join Forces instruction.
-    pub mana_paid: Option<u32>,
-    pub counter_placements: Vec<CounterPlacementReceipt>,
-    /// Exact battlefield object generations sacrificed by the immediately preceding instruction.
-    pub sacrificed_objects: Vec<TriggerObjectRef>,
-    /// Typed library cohort/partition output from one composable resolution-program operation.
-    /// This remains private to the engine and is never reconstructed from display data.
-    pub program_value: Option<ProgramValue>,
-}
-
-#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ProducedObjectProvenance {
-    TokenCreationBatch,
-}
-
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TargetedPlayerPermanent {
     pub object_id: ObjectId,
@@ -290,24 +259,6 @@ pub(crate) struct CounterPlacementReceipt {
     /// Exact counter totals captured at this placement, before later placements in the same batch.
     pub before: u32,
     pub after: u32,
-}
-
-impl From<CardResultCohort> for EffectResult {
-    fn from(cohort: CardResultCohort) -> Self {
-        Self {
-            input_result_type: None,
-            cards: cohort.cards,
-            program_discard_result: cohort.program_discard_result,
-            produced_objects: Vec::new(),
-            selected_hand_cards: Vec::new(),
-            produced_object_provenance: None,
-            counter_payment_outcome: None,
-            mana_paid: None,
-            counter_placements: Vec::new(),
-            sacrificed_objects: Vec::new(),
-            program_value: None,
-        }
-    }
 }
 
 /// The exact activated ability on the exact incarnation of a permanent.
@@ -1331,7 +1282,7 @@ pub struct ParkedStackResolution {
     /// Exact card cohort produced by the primitive that parked this resolution. It remains
     /// engine-private while a player answers the choice, then becomes the next primitive's
     /// `PreviousEffect` input.
-    pub(crate) previous_result: EffectResult,
+    pub(crate) previous_result: OperationResults,
     /// Immutable authored programs stay in `CardRegistry`; this cursor identifies the entered
     /// blocks and typed slots needed to resume one exact operation after a private choice.
     #[serde(default)]
@@ -1361,12 +1312,12 @@ impl ParkedStackResolution {
         Self {
             item,
             resume_effect_index: None,
-            previous_result: EffectResult::default(),
+            previous_result: OperationResults::default(),
             program: None,
         }
     }
 
-    pub(crate) fn with_previous_result(mut self, result: EffectResult) -> Self {
+    pub(crate) fn with_previous_result(mut self, result: OperationResults) -> Self {
         self.previous_result = result;
         self
     }
@@ -1670,11 +1621,10 @@ pub(crate) struct ProgramRunState {
     /// Output slots of the operation whose domain transaction is in flight. An empty vector is
     /// still meaningful for a resultless operation; `None` means no operation is awaiting commit.
     pub in_flight: Option<Vec<ResultSlotId>>,
-    /// Provenance emitted by the leaf before an asynchronous domain choice parked it. The
-    /// committed object references are returned with the completion; this marker carries the
-    /// matching token-batch proof across that choice without inferring it from display data.
+    /// Actual typed facts emitted before a domain choice parks the operation, distinct from
+    /// the parent's saved run context. Completion adds its receipts before output publication.
     #[serde(default)]
-    pub in_flight_produced_object_provenance: Option<ProducedObjectProvenance>,
+    pub in_flight_results: OperationResults,
 }
 
 /// A Program's receipt-scoped recipient selection. `turn_order_cursor` records the last
@@ -3278,7 +3228,7 @@ pub(crate) enum ZoneEntryCompletion {
         found_ref: (ObjectId, u64),
         revealed_refs: Vec<(ObjectId, u64)>,
         /// Exact in-flight Program operation result, retained until entry and bottoming commit.
-        program_result: Option<Box<EffectResult>>,
+        program_result: Option<Box<OperationResults>>,
     },
 }
 

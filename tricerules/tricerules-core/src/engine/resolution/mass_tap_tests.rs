@@ -133,7 +133,7 @@ fn resolve_with_source_and_target(
         trigger_context: TriggerContext::default(),
     };
     let mut events = vec![];
-    let mut result = EffectResult::default();
+    let mut result = OperationResults::default();
     let mut cx = EffectCx {
         engine,
         events: &mut events,
@@ -145,7 +145,7 @@ fn resolve_with_source_and_target(
         controller: 3,
         affected_player: 3,
         spell_label: "mass-effect fixture",
-        previous_effect_result: &EffectResult::default(),
+        previous_effect_result: &OperationResults::default(),
         effect_result: &mut result,
         effect_index: 0,
         resume_previous_result: None,

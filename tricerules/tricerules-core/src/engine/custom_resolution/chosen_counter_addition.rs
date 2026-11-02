@@ -236,7 +236,7 @@ impl GameEngine {
         ) {
             Ok(Some(receipts)) => {
                 let mut previous_result = stack.previous_result.clone();
-                previous_result.counter_placements.extend(receipts);
+                previous_result.record_counter_placements(receipts);
                 self.complete_parked_resolution_with_previous(
                     stack.item,
                     stack.resume_effect_index,

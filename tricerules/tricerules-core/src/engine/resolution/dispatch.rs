@@ -248,7 +248,7 @@ pub(super) fn execute_effect(
                     tricerules_card_model::primitives::ResultType::ProliferatedPermanentSelection {
                         cardinality,
                     },
-                ) = cx.previous_effect_result.input_result_type.as_ref()
+                ) = cx.previous_effect_result.admitted_type()
                 else {
                     return Err(EngineError::ProgramInvariant(
                         "Program PhaseOut is missing its typed Proliferate selection",
@@ -260,13 +260,18 @@ pub(super) fn execute_effect(
                     ));
                 }
                 let Some(ProgramValue::ProliferatedPermanentSelection(selected)) =
-                    cx.previous_effect_result.program_value.as_ref()
+                    cx.previous_effect_result.value(|value| {
+                        matches!(
+                            value,
+                            crate::state::ProgramValue::ProliferatedPermanentSelection(_)
+                        )
+                    })
                 else {
                     return Err(EngineError::ProgramInvariant(
                         "Program PhaseOut input is not its sealed permanent selection",
                     ));
                 };
-                if selected != &cx.previous_effect_result.produced_objects {
+                if selected != cx.previous_effect_result.object_refs() {
                     return Err(EngineError::ProgramInvariant(
                         "Program PhaseOut objects differ from the sealed permanent selection",
                     ));
@@ -508,7 +513,7 @@ pub(super) fn execute_effect(
 #[cfg(test)]
 mod extra_turn_effect_tests {
     use super::*;
-    use crate::state::{EffectResult, StackItem, TriggerContext};
+    use crate::state::{OperationResults, StackItem, TriggerContext};
     use tricerules_card_model::primitives::SpellEffectKind;
 
     #[test]
@@ -562,8 +567,8 @@ mod extra_turn_effect_tests {
             trigger_context: TriggerContext::default(),
         };
         let captured_controller = copied_ability.controller;
-        let previous_effect_result = EffectResult::default();
-        let mut effect_result = EffectResult::default();
+        let previous_effect_result = OperationResults::default();
+        let mut effect_result = OperationResults::default();
         let mut events = Vec::new();
         let mut cx = EffectCx {
             engine: &mut engine,

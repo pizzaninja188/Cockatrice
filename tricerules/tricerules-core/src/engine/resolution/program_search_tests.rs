@@ -59,7 +59,7 @@ fn ashiok_refreshes_the_existing_solemn_program_search_menu() {
         .expect("actual compiled Program");
     let mut events = Vec::new();
     assert!(matches!(
-        engine.run_program_with_previous(&top, run, EffectResult::default(), &mut events),
+        engine.run_program_with_previous(&top, run, OperationResults::default(), &mut events),
         Ok(ResolutionProgress::Parked)
     ));
 

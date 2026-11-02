@@ -607,11 +607,11 @@ mod library_replacement_tests {
             }],
             slots: vec![None; compiled.slots.len()],
             in_flight: Some(draw_outputs),
-            in_flight_produced_object_provenance: None,
+            in_flight_results: OperationResults::default(),
         };
         let mut stack = ParkedStackResolution::new(top);
         stack.program = Some(program);
-        let completion = DrawCompletion::resume_effects(stack, EffectResult::default());
+        let completion = DrawCompletion::resume_effects(stack, OperationResults::default());
         let DrawCompletion::ResumeEffects(resume) = &completion else {
             panic!("expected the saved-effect draw completion")
         };
@@ -1650,7 +1650,7 @@ struct DrawNode {
 #[serde(rename = "DrawCompletion")]
 pub(crate) struct ResumeEffects {
     stack: ParkedStackResolution,
-    result: EffectResult,
+    result: OperationResults,
 }
 
 #[derive(serde::Serialize, Debug, Clone)]
@@ -1663,7 +1663,7 @@ pub(crate) enum DrawCompletion {
 }
 
 impl DrawCompletion {
-    pub(crate) fn resume_effects(stack: ParkedStackResolution, result: EffectResult) -> Self {
+    pub(crate) fn resume_effects(stack: ParkedStackResolution, result: OperationResults) -> Self {
         Self::ResumeEffects(Box::new(ResumeEffects { stack, result }))
     }
 
@@ -2357,7 +2357,7 @@ impl GameEngine {
         match completed.completion {
             DrawCompletion::ResumeEffects(resume) => {
                 let ResumeEffects { stack, mut result } = *resume;
-                result.produced_objects.extend(completed.receipts);
+                result.append(crate::state::ProgramValue::DrawReceipt(completed.receipts))?;
                 self.complete_parked_stack_with_previous(stack, result, events)
             }
             DrawCompletion::FinishDrawStep {

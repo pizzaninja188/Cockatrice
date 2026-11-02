@@ -63,7 +63,7 @@ impl GameEngine {
             let parent = *progress.parent.take().expect("parent was checked above");
             let completed = self.complete_parked_stack_with_previous(
                 parent,
-                EffectResult::default(),
+                OperationResults::default(),
                 std::mem::take(events),
             )?;
             *events = completed.events;
@@ -956,7 +956,11 @@ impl GameEngine {
                 }],
                 &mut ev,
             );
-            return self.complete_parked_stack_with_previous(*parent, EffectResult::default(), ev);
+            return self.complete_parked_stack_with_previous(
+                *parent,
+                OperationResults::default(),
+                ev,
+            );
         }
         self.fire_triggers(
             &[GameEvent::TargetsChosen {

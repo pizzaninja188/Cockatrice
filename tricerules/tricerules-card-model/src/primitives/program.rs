@@ -4163,9 +4163,6 @@ fn compile_operation_input(
 /// Resolve and check an operation's named input in one operation-family dispatch.
 /// Producer and target-schema checks remain separate: they need the lowered effect and
 /// surrounding compiled instructions rather than only a slot's static type.
-/// Resolve and check an operation's named input in one operation-family dispatch.
-/// Producer and target-schema checks remain separate: they need the lowered effect and
-/// surrounding compiled instructions rather than only a slot's static type.
 fn compile_input(
     effect: &EffectOp,
     input: Option<&str>,

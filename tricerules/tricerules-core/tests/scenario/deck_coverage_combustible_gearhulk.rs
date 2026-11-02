@@ -701,7 +701,7 @@ fn gearhulk_mill_cohort_waits_for_ordered_prevention_then_deals_ten_once() {
     let continuation = &pending_snapshot["state"]["pending_resolution"]["continuation"];
     assert_eq!(continuation["variant"], "DamageReplacement");
     let parked_stack = &continuation["value"]["stack"];
-    assert!(parked_stack["previous_result"]["cards"]
+    assert!(parked_stack["previous_result"]["values"]
         .as_array()
         .expect("the previous primitive result is retained")
         .is_empty());
@@ -727,7 +727,15 @@ fn gearhulk_mill_cohort_waits_for_ordered_prevention_then_deals_ten_once() {
     assert_eq!(frames[1]["path"][0]["arm"], "ChooseOtherwise");
 
     assert_eq!(parked_program["in_flight"], serde_json::json!([]));
-    assert!(parked_program["in_flight_produced_object_provenance"].is_null());
+    assert!(parked_program
+        .get("in_flight_produced_object_provenance")
+        .is_none());
+    let partial_results = parked_program["in_flight_results"]["values"]
+        .as_array()
+        .expect("parked operation has explicit typed partial facts");
+    assert!(partial_results
+        .iter()
+        .all(|fact| fact["variant"] != "Program" || fact["value"]["variant"] != "TokenCopyBatch"));
     let slots = parked_program["slots"].as_array().unwrap();
     assert_eq!(slots.len(), 1);
     assert_eq!(slots[0]["variant"], "CardResultCohort");

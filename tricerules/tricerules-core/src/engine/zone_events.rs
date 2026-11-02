@@ -9,7 +9,7 @@ pub(super) struct CompletedZoneEntryBatch {
     pub(super) stack: ParkedStackResolution,
     /// Captured before the batch consumes its completion metadata. Typed operation results are
     /// resumed through the parked Program cursor; legacy lists retain their flat effect cursor.
-    pub(super) program_operation_result: Option<EffectResult>,
+    pub(super) program_operation_result: Option<OperationResults>,
 }
 
 #[derive(Clone)]
@@ -489,7 +489,7 @@ impl GameEngine {
                 batch.origin,
                 batch.completion.as_ref(),
             ) {
-            Some(EffectResult::default())
+            Some(OperationResults::default())
         } else {
             self.typed_reveal_until_artifact_program_result(
                 &stack,
@@ -611,7 +611,9 @@ impl GameEngine {
                     "typed direct search result lost its zone-entry completion",
                 ));
             };
-            result.produced_objects = typed_search_result_objects;
+            result.set(crate::state::ProgramValue::PermanentSelection(
+                typed_search_result_objects,
+            ));
         }
         self.fire_zone_triggers(snapshot, triggers, events);
         if let Some(crate::state::ZoneEntryCompletion::LibrarySearch(completion)) = completion {
@@ -694,7 +696,7 @@ impl GameEngine {
         stack: &ParkedStackResolution,
         origin: Zone,
         completion: Option<&crate::state::ZoneEntryCompletion>,
-    ) -> Result<Option<EffectResult>, EngineError> {
+    ) -> Result<Option<OperationResults>, EngineError> {
         let Some(crate::state::ZoneEntryCompletion::RevealUntilArtifact {
             library_owner,
             program_result,
@@ -726,10 +728,9 @@ impl GameEngine {
                 "Audacious Reshapers entry lost its exact Program result",
             ))?;
         if *library_owner != stack.item.controller
-            || !matches!(
-                program_result.program_value.as_ref(),
-                Some(crate::state::ProgramValue::Count(_))
-            )
+            || program_result
+                .count(tricerules_card_model::primitives::CountResultKind::RevealedPrefix)
+                .is_none()
         {
             return Err(EngineError::ProgramInvariant(
                 "Audacious Reshapers entry retained an invalid scalar result",

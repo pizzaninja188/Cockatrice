@@ -171,7 +171,7 @@ impl GameEngine {
                     super::super::resolution::library_cohorts::ProgramPartitionMoveProgress::Committed => {
                         return self.complete_parked_stack_with_previous(
                             stack,
-                            EffectResult::default(),
+                            OperationResults::default(),
                             events,
                         );
                     }
@@ -253,14 +253,13 @@ impl GameEngine {
         ))];
         self.complete_parked_stack_with_previous(
             stack,
-            EffectResult {
-                program_value: Some(ProgramValue::CardPartition(ProgramCardPartition {
+            crate::state::OperationResults::from_value(ProgramValue::CardPartition(
+                ProgramCardPartition {
                     selected,
                     remainder,
                     public_reveal,
-                })),
-                ..Default::default()
-            },
+                },
+            )),
             if names.is_empty() { Vec::new() } else { events },
         )
     }
@@ -272,14 +271,13 @@ impl GameEngine {
     ) -> Result<RuledEventBatch, EngineError> {
         self.complete_parked_stack_with_previous(
             stack,
-            EffectResult {
-                program_value: Some(ProgramValue::CardPartition(ProgramCardPartition {
+            crate::state::OperationResults::from_value(ProgramValue::CardPartition(
+                ProgramCardPartition {
                     selected: Vec::new(),
                     remainder: Vec::new(),
                     public_reveal: None,
-                })),
-                ..Default::default()
-            },
+                },
+            )),
             events,
         )
     }
@@ -329,7 +327,7 @@ impl GameEngine {
                 Ok(finish_with_events(self, events))
             }
             super::super::resolution::library_cohorts::ProgramPartitionMoveProgress::Committed => {
-                self.complete_parked_stack_with_previous(stack, EffectResult::default(), events)
+                self.complete_parked_stack_with_previous(stack, OperationResults::default(), events)
             }
         }
     }
@@ -360,7 +358,7 @@ impl GameEngine {
                 ResolutionContinuation::ProgramPartitionMove { .. } => self
                     .complete_parked_stack_with_previous(
                         stack,
-                        EffectResult::default(),
+                        OperationResults::default(),
                         Vec::new(),
                     )?,
                 _ => {
@@ -648,7 +646,7 @@ impl GameEngine {
                 if plan.partition.selected.is_empty() && plan.partition.remainder.is_empty() {
                     let completed = self.complete_parked_stack_with_previous(
                         stack,
-                        EffectResult::default(),
+                        OperationResults::default(),
                         Vec::new(),
                     )?;
                     events.extend(completed.events);
@@ -668,7 +666,7 @@ impl GameEngine {
                     super::super::resolution::library_cohorts::ProgramPartitionMoveProgress::Committed => {
                         let completed = self.complete_parked_stack_with_previous(
                             stack,
-                            EffectResult::default(),
+                            OperationResults::default(),
                             std::mem::take(events),
                         )?;
                         events.extend(completed.events);
@@ -701,10 +699,7 @@ impl GameEngine {
         {
             stack.previous_result.clone()
         } else {
-            EffectResult {
-                program_value: Some(ProgramValue::FoundLibraryCohort(Vec::new())),
-                ..Default::default()
-            }
+            crate::state::OperationResults::from_value(ProgramValue::FoundLibraryCohort(Vec::new()))
         };
         self.complete_parked_stack_with_previous(stack, completion_result, events)
     }

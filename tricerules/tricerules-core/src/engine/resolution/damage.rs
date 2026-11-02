@@ -615,8 +615,8 @@ mod damage_source_tests {
             required_controller: None,
         }];
         let target_role_group_indices = vec![0];
-        let previous_effect_result = EffectResult::default();
-        let mut effect_result = EffectResult::default();
+        let previous_effect_result = OperationResults::default();
+        let mut effect_result = OperationResults::default();
         let mut events = Vec::new();
         let mut cx = EffectCx {
             engine,
@@ -680,8 +680,8 @@ mod damage_source_tests {
             required_controller: None,
         });
         let target_role_group_indices = vec![0, 1];
-        let previous_effect_result = EffectResult::default();
-        let mut effect_result = EffectResult::default();
+        let previous_effect_result = OperationResults::default();
+        let mut effect_result = OperationResults::default();
         let mut events = Vec::new();
         let mut cx = EffectCx {
             engine,

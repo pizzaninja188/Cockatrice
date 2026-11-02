@@ -236,11 +236,11 @@ pub(super) fn exile_all(
             engine.state.zone_change_generation.get(&oid).copied(),
             Some(generation)
         );
-        cx.effect_result.produced_objects.push(TriggerObjectRef {
+        cx.effect_result.record_exiled_objects([TriggerObjectRef {
             object_id: oid,
             zone_change_generation: generation,
             controller_at_event: controller,
-        });
+        }]);
         cx.events
             .push(ev_log(format!("{} exiles {name}", cx.spell_label)));
         cx.events.push(permanent_moved_event(
@@ -412,13 +412,13 @@ pub(super) fn sacrifice_all(
             source.owner,
             rv1::permanent_moved::Destination::Graveyard,
         ));
-        cx.effect_result.cards.push(payment::card_result_entry(
+        cx.effect_result.record_cards([payment::card_result_entry(
             &cx.engine.state,
             cx.engine.registry,
             CardResultAction::Sacrifice,
             source.controller,
             oid,
-        ));
+        )])?;
         departures.push(super::super::mass_sacrifice::SacrificeDeparture {
             source,
             was_creature,
@@ -604,7 +604,7 @@ pub(super) fn untap_chosen_permanents(cx: &mut EffectCx<'_>) -> Result<EffectOut
     // A returned physical object is a new rules object and cannot consume the old receipt.
     let eligible_objects = cx
         .previous_effect_result
-        .produced_objects
+        .object_refs()
         .iter()
         .filter(|chosen| {
             cx.engine
@@ -638,7 +638,7 @@ pub(super) fn tap_chosen_permanents(cx: &mut EffectCx<'_>) -> Result<EffectOutco
         chooser,
         filter,
         cardinality,
-    }) = cx.previous_effect_result.input_result_type.as_ref()
+    }) = cx.previous_effect_result.admitted_type()
     else {
         return Err(EngineError::ProgramInvariant(
             "TapChosenPermanents lacks its typed permanent-selection input",
@@ -650,7 +650,7 @@ pub(super) fn tap_chosen_permanents(cx: &mut EffectCx<'_>) -> Result<EffectOutco
             "TapChosenPermanents requires exactly one resolved chooser",
         ));
     };
-    let produced_objects = &cx.previous_effect_result.produced_objects;
+    let produced_objects = cx.previous_effect_result.object_refs();
     if produced_objects.len() < cardinality.min as usize
         || cardinality
             .max
@@ -708,7 +708,10 @@ pub(super) fn tap_chosen_permanents(cx: &mut EffectCx<'_>) -> Result<EffectOutco
             cx.spell_label
         )));
     }
-    cx.effect_result.program_value = Some(crate::state::ProgramValue::Count(count));
+    cx.effect_result.record_count(
+        tricerules_card_model::primitives::CountResultKind::TappedPermanents,
+        count,
+    );
     Ok(EffectOutcome::Continue)
 }
 

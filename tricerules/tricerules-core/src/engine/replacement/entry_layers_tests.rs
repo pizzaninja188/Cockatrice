@@ -1423,12 +1423,14 @@ fn paid_divination_stack(engine: &mut GameEngine) -> ParkedStackResolution {
     stack.resume_effect_index = Some(0);
     stack
         .previous_result
-        .produced_objects
-        .push(TriggerObjectRef {
-            object_id: spell,
-            zone_change_generation: engine.state.zone_change_generation[&spell],
-            controller_at_event: 0,
-        });
+        .append(crate::state::ProgramValue::PermanentSelection(vec![
+            TriggerObjectRef {
+                object_id: spell,
+                zone_change_generation: engine.state.zone_change_generation[&spell],
+                controller_at_event: 0,
+            },
+        ]))
+        .expect("typed retention sentinel");
     stack
 }
 
@@ -5970,7 +5972,7 @@ fn compleated_grouped_entry_rejects_wrong_actor_stale_epoch_and_old_or_foreign_h
             let (engine, mut stack, _, refs) = suspended_conductive_machete_manifest_dread();
             assert_eq!(
                 format!("{:?}", stack.previous_result),
-                format!("{:?}", crate::state::EffectResult::default()),
+                format!("{:?}", crate::state::OperationResults::default()),
                 "the real Manifest Dread pause has no previous Program result"
             );
             let manifest_ref = refs[0];
@@ -5990,13 +5992,15 @@ fn compleated_grouped_entry_rejects_wrong_actor_stale_epoch_and_old_or_foreign_h
             // Prepared-retention sentinel only; this is not an actual Program output.
             stack
                 .previous_result
-                .produced_objects
-                .push(TriggerObjectRef {
-                    object_id: manifest_ref.object_id,
-                    zone_change_generation: manifest_ref.zone_change_generation,
-                    controller_at_event: object.controller,
-                });
-            assert_eq!(stack.previous_result.produced_objects.len(), 1);
+                .append(crate::state::ProgramValue::PermanentSelection(vec![
+                    TriggerObjectRef {
+                        object_id: manifest_ref.object_id,
+                        zone_change_generation: manifest_ref.zone_change_generation,
+                        controller_at_event: object.controller,
+                    },
+                ]))
+                .expect("typed retention sentinel");
+            assert_eq!(stack.previous_result.object_refs().len(), 1);
             (engine, stack)
         } else {
             let mut engine = engine();
@@ -6008,7 +6012,7 @@ fn compleated_grouped_entry_rejects_wrong_actor_stale_epoch_and_old_or_foreign_h
         let expected_stack_debug = format!("{stack:?}");
         assert_ne!(
             format!("{:?}", stack.previous_result),
-            format!("{:?}", crate::state::EffectResult::default()),
+            format!("{:?}", crate::state::OperationResults::default()),
             "both parked-stack donors carry a nonempty previous result"
         );
         if program_stack {

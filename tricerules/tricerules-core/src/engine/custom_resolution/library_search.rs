@@ -194,7 +194,7 @@ impl GameEngine {
                 &mut events,
             );
         }
-        self.complete_parked_stack_with_previous(stack, EffectResult::default(), events)
+        self.complete_parked_stack_with_previous(stack, OperationResults::default(), events)
     }
 
     pub(super) fn finish_search_zone_scope(
@@ -469,7 +469,7 @@ impl GameEngine {
                 }
                 return self.complete_parked_stack_with_previous(
                     stack,
-                    EffectResult::default(),
+                    OperationResults::default(),
                     events,
                 );
             }
@@ -531,7 +531,7 @@ impl GameEngine {
                 &spell_label,
             )?;
         }
-        self.complete_parked_stack_with_previous(stack, EffectResult::default(), events)
+        self.complete_parked_stack_with_previous(stack, OperationResults::default(), events)
     }
 
     /// A target owner who leaves takes their owned battlefield objects out of the game.
@@ -577,8 +577,11 @@ impl GameEngine {
             self.state.pending_resolution = Some(pending);
             return Ok(());
         }
-        let completed =
-            self.complete_parked_stack_with_previous(stack, EffectResult::default(), Vec::new())?;
+        let completed = self.complete_parked_stack_with_previous(
+            stack,
+            OperationResults::default(),
+            Vec::new(),
+        )?;
         events.extend(completed.events);
         Ok(())
     }
@@ -1155,7 +1158,7 @@ impl GameEngine {
             events.push(ev_log(format!(
                 "P{controller} declines the linked Exile choice."
             )));
-            let previous_result = crate::state::EffectResult::default();
+            let previous_result = crate::state::OperationResults::default();
             if matched_linked_play && stack.program.is_some() {
                 return self.complete_parked_resolution_with_previous(
                     stack.item,
@@ -1206,10 +1209,12 @@ impl GameEngine {
             owner,
             object_id,
         );
-        let previous_result = crate::state::EffectResult {
-            cards: vec![receipt],
-            ..crate::state::EffectResult::default()
-        };
+        let previous_result = crate::state::OperationResults::from_value(
+            crate::state::ProgramValue::CardResultCohort(crate::state::CardResultCohort {
+                cards: vec![receipt],
+                program_discard_result: None,
+            }),
+        );
         if matches!(action, PendingLinkedExileAction::Play { .. }) {
             if let Some(cohort) = self
                 .state
@@ -1517,7 +1522,7 @@ self.state.pending_resolution = Some(PendingResolution {
                 &mut ev,
             );
             let mut previous = stack.previous_result.clone();
-            previous.program_value = Some(crate::state::ProgramValue::FoundLibraryCohort(cohort));
+            previous.set(crate::state::ProgramValue::FoundLibraryCohort(cohort));
             return self.complete_parked_stack_with_previous(stack, previous, ev);
         }
 
@@ -1808,7 +1813,7 @@ self.state.pending_resolution = Some(PendingResolution {
         if is_resultless_program_search(&stack) || self.is_typed_resultful_library_search(&stack) {
             return self.complete_parked_stack_with_previous(
                 stack,
-                crate::state::EffectResult::default(),
+                crate::state::OperationResults::default(),
                 ev,
             );
         }
@@ -3274,9 +3279,9 @@ mod tests {
                 previous_result: Default::default(),
                 program: Some(program),
             };
-            assert!(parked.previous_result.cards.is_empty());
+            assert!(parked.previous_result.card_entries().is_empty());
             let selected_object_id = 99_991;
-            let previous_result: crate::state::EffectResult = CardResultCohort {
+            let previous_result: crate::state::OperationResults = CardResultCohort {
                 cards: vec![CardResultEntry {
                     action: CardResultAction::ChooseLinkedExiledCard,
                     affected_player: 0,
@@ -3613,15 +3618,15 @@ mod tests {
             saved.resume_effect_index = Some(1);
             saved
                 .previous_result
-                .cards
-                .push(crate::state::CardResultEntry {
+                .record_cards([crate::state::CardResultEntry {
                     action: tricerules_card_model::primitives::CardResultAction::Mill,
                     affected_player: 0,
                     object_id: forest,
                     zone_change_generation: 0,
                     matched_card_types: vec![CardTypeFilter::BasicLand],
                     provenance: crate::state::CardResultProvenance::ActionFacts,
-                });
+                }])
+                .expect("typed fixture facts");
             let selected = if count == 0 {
                 Vec::new()
             } else {

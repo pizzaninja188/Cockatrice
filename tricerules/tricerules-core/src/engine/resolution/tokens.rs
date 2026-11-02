@@ -12,13 +12,18 @@ pub(super) fn create_token_copies(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    if matches!(
+    let typed_copy_origin = matches!(
         &source,
         TokenCopySource::TriggerObject | TokenCopySource::LinkedExile { .. }
-    ) {
-        cx.effect_result.produced_object_provenance =
-            Some(crate::state::ProducedObjectProvenance::TokenCreationBatch);
-    }
+    );
+    let token_batch = |objects| {
+        if typed_copy_origin {
+            crate::state::ProgramValue::TokenCopyBatch(objects)
+        } else {
+            crate::state::ProgramValue::CreatedTokenBatch(objects)
+        }
+    };
+    cx.effect_result.set(token_batch(Vec::new()));
     let count = cx.engine.resolve_amount(
         &count,
         AmountContext::for_stack_item(cx.top, cx.controller)
@@ -52,7 +57,7 @@ pub(super) fn create_token_copies(
                 else {
                     return Ok(EffectOutcome::Suspended);
                 };
-                cx.effect_result.produced_objects.extend(produced_objects);
+                cx.effect_result.append(token_batch(produced_objects))?;
             }
             return Ok(EffectOutcome::Continue);
         }
@@ -71,7 +76,7 @@ pub(super) fn create_token_copies(
         else {
             return Ok(EffectOutcome::Suspended);
         };
-        cx.effect_result.produced_objects = produced_objects;
+        cx.effect_result.set(token_batch(produced_objects));
     }
     Ok(EffectOutcome::Continue)
 }
@@ -258,7 +263,9 @@ impl GameEngine {
             return Ok(super::super::events::finish_with_events(self, events));
         };
         let mut previous_result = stack.previous_result.clone();
-        previous_result.produced_objects = produced_objects;
+        previous_result.set(crate::state::ProgramValue::CreatedTokenBatch(
+            produced_objects,
+        ));
         self.complete_parked_stack_with_previous(stack, previous_result, events)
     }
 }
@@ -307,7 +314,8 @@ pub(super) fn create_tokens(
     };
     // CR 608.2: publish the created token(s) so a later instruction in this resolution can name
     // "the token it created" through the shipped `PreviousEffectObject` reference.
-    cx.effect_result.produced_objects = created;
+    cx.effect_result
+        .set(crate::state::ProgramValue::CreatedTokenBatch(created));
 
     Ok(EffectOutcome::Continue)
 }
@@ -350,7 +358,10 @@ pub(super) fn create_token_batch(
     )? {
         return Ok(EffectOutcome::Suspended);
     }
-    cx.effect_result.produced_objects = cx.engine.token_entry_object_refs(&minted_ids);
+    cx.effect_result
+        .set(crate::state::ProgramValue::CreatedTokenBatch(
+            cx.engine.token_entry_object_refs(&minted_ids),
+        ));
     Ok(EffectOutcome::Continue)
 }
 
@@ -412,7 +423,10 @@ pub(super) fn create_attacking_tokens(
         )? {
             return Ok(EffectOutcome::Suspended);
         }
-        cx.effect_result.produced_objects = cx.engine.token_entry_object_refs(&minted_ids);
+        cx.effect_result
+            .set(crate::state::ProgramValue::CreatedTokenBatch(
+                cx.engine.token_entry_object_refs(&minted_ids),
+            ));
         return Ok(EffectOutcome::Continue);
     }
 

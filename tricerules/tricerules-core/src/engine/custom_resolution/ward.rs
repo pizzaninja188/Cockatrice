@@ -217,7 +217,7 @@ impl GameEngine {
             .to_string();
         counter_stack_object_ref(self, ward.target, &label, &mut events)?;
         let mut previous_result = stack.previous_result.clone();
-        previous_result.counter_payment_outcome = Some(outcome);
+        previous_result.set(crate::state::ProgramValue::CounterPaymentOutcome(outcome));
         self.complete_parked_stack_with_previous(stack, previous_result, events)
     }
 

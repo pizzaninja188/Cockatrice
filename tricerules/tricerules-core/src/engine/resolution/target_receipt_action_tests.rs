@@ -56,6 +56,113 @@ fn fixture_engine() -> GameEngine {
     fixture_engine_for(&[0, 1])
 }
 
+#[test]
+fn singleton_modifier_preserves_selection_without_forging_token_copy_provenance() {
+    let mut engine = fixture_engine();
+    let object_id = card_in_zone(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
+    let reference = TriggerObjectRef {
+        object_id,
+        zone_change_generation: engine.state.zone_change_generation[&object_id],
+        controller_at_event: 0,
+    };
+    let input = OperationResults::from_value(ProgramValue::PermanentSelection(vec![reference]));
+    let mut output = OperationResults::default();
+    let top = item(Vec::new());
+    let mut events = Vec::new();
+    execute_leaf(
+        &mut EffectCx {
+            engine: &mut engine,
+            events: &mut events,
+            targets: &[],
+            targets_by_role: &[],
+            target_receipts: &[],
+            target_role_group_indices: &[],
+            top: &top,
+            controller: 0,
+            affected_player: 0,
+            spell_label: "selection provenance",
+            previous_effect_result: &input,
+            resume_previous_result: None,
+            effect_result: &mut output,
+            effect_index: 0,
+            program_state: None,
+        },
+        SpellEffectKind::ApplyPermanentModifier {
+            subject: EffectSubject::PreviousEffectObject,
+            modifier: ResolvingPermanentModifier::GrantKeywords(vec![Keyword::Haste]),
+            duration: ResolvingEffectDuration::UntilEndOfTurn,
+        },
+    )
+    .unwrap();
+    assert!(engine
+        .characteristics(object_id)
+        .unwrap()
+        .keywords
+        .contains(&Keyword::Haste));
+    assert!(output
+        .value(|value| matches!(value, ProgramValue::TokenCopyBatch(_)))
+        .is_none());
+    assert!(
+        matches!(output.value(|value| matches!(value, ProgramValue::PermanentSelection(_))),
+        Some(ProgramValue::PermanentSelection(objects)) if objects.as_slice() == [reference])
+    );
+}
+
+#[test]
+fn token_copy_modifier_reads_its_exact_batch_among_other_operation_facts() {
+    let mut engine = fixture_engine();
+    let unrelated = card_in_zone(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
+    let copied = card_in_zone(&mut engine, 0, "hill_giant", Zone::Battlefield);
+    let reference = |object_id| TriggerObjectRef {
+        object_id,
+        zone_change_generation: engine.state.zone_change_generation[&object_id],
+        controller_at_event: 0,
+    };
+    let mut input =
+        OperationResults::from_value(ProgramValue::PermanentSelection(vec![reference(unrelated)]));
+    input
+        .publish(ProgramValue::TokenCopyBatch(vec![reference(copied)]))
+        .unwrap();
+    let mut output = OperationResults::default();
+    let top = item(Vec::new());
+    let mut events = Vec::new();
+    execute_leaf(
+        &mut EffectCx {
+            engine: &mut engine,
+            events: &mut events,
+            targets: &[],
+            targets_by_role: &[],
+            target_receipts: &[],
+            target_role_group_indices: &[],
+            top: &top,
+            controller: 0,
+            affected_player: 0,
+            spell_label: "exact batch provenance",
+            previous_effect_result: &input,
+            resume_previous_result: None,
+            effect_result: &mut output,
+            effect_index: 0,
+            program_state: None,
+        },
+        SpellEffectKind::ApplyPermanentModifier {
+            subject: EffectSubject::PreviousEffectObjects,
+            modifier: ResolvingPermanentModifier::GrantKeywords(vec![Keyword::Haste]),
+            duration: ResolvingEffectDuration::UntilEndOfTurn,
+        },
+    )
+    .unwrap();
+    assert!(engine
+        .characteristics(copied)
+        .unwrap()
+        .keywords
+        .contains(&Keyword::Haste));
+    assert!(!engine
+        .characteristics(unrelated)
+        .unwrap()
+        .keywords
+        .contains(&Keyword::Haste));
+}
+
 #[derive(Clone, Copy)]
 enum CopyAction {
     Gardens,
@@ -108,11 +215,11 @@ fn invoke_copy_action(
     target_ids: &[ObjectId],
     receipts: &[StackTarget],
     action: CopyAction,
-) -> Result<(EffectOutcome, Vec<rv1::RuledEvent>, EffectResult), EngineError> {
+) -> Result<(EffectOutcome, Vec<rv1::RuledEvent>, OperationResults), EngineError> {
     let role_targets = vec![target_ids.to_vec()];
     let role_group_indices = [0];
-    let previous_effect_result = EffectResult::default();
-    let mut effect_result = EffectResult::default();
+    let previous_effect_result = OperationResults::default();
+    let mut effect_result = OperationResults::default();
     let mut events = Vec::new();
     let outcome = {
         let mut cx = EffectCx {
@@ -387,7 +494,7 @@ fn invoke(
     receipts: &[StackTarget],
     role_group_indices: &[u32],
     action: ChosenAction,
-) -> Result<(EffectOutcome, Vec<rv1::RuledEvent>, EffectResult), EngineError> {
+) -> Result<(EffectOutcome, Vec<rv1::RuledEvent>, OperationResults), EngineError> {
     let targets = receipts
         .iter()
         .map(|target| target.object_id)
@@ -402,8 +509,8 @@ fn invoke(
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
-    let previous_effect_result = EffectResult::default();
-    let mut effect_result = EffectResult::default();
+    let previous_effect_result = OperationResults::default();
+    let mut effect_result = OperationResults::default();
     let mut events = Vec::new();
     let outcome = {
         let mut cx = EffectCx {
@@ -487,15 +594,15 @@ fn invoke_explore(
     engine: &mut GameEngine,
     top: &StackItem,
     receipts: &[StackTarget],
-) -> Result<(EffectOutcome, Vec<rv1::RuledEvent>, EffectResult), EngineError> {
+) -> Result<(EffectOutcome, Vec<rv1::RuledEvent>, OperationResults), EngineError> {
     let targets = receipts
         .iter()
         .map(|target| target.object_id)
         .collect::<Vec<_>>();
     let role_targets = vec![targets.clone()];
     let role_group_indices = [0];
-    let previous_effect_result = EffectResult::default();
-    let mut effect_result = EffectResult::default();
+    let previous_effect_result = OperationResults::default();
+    let mut effect_result = OperationResults::default();
     let mut events = Vec::new();
     let outcome = {
         let mut cx = EffectCx {
@@ -559,14 +666,15 @@ fn is_noop(
     action: ChosenAction,
     engine: &GameEngine,
     ids: &[ObjectId],
-    result: &EffectResult,
+    result: &OperationResults,
 ) -> bool {
     match action {
         ChosenAction::Fight => {
             engine.state.objects[&ids[0]].damage == 0 && engine.state.objects[&ids[1]].damage == 0
         }
         ChosenAction::Destroy | ChosenAction::Sacrifice | ChosenAction::Shuffle => {
-            engine.state.objects[&ids[0]].zone == Zone::Battlefield && result.cards.is_empty()
+            engine.state.objects[&ids[0]].zone == Zone::Battlefield
+                && result.card_entries().is_empty()
         }
         ChosenAction::Attach => engine.state.objects[&ids[0]].attached_to.is_none(),
         ChosenAction::Tap => !engine.state.objects[&ids[0]].tapped,
@@ -680,14 +788,15 @@ fn action_applied(
     action: ChosenAction,
     engine: &GameEngine,
     ids: &[ObjectId],
-    result: &EffectResult,
+    result: &OperationResults,
 ) -> bool {
     match action {
         ChosenAction::Fight => {
             engine.state.objects[&ids[0]].damage > 0 && engine.state.objects[&ids[1]].damage > 0
         }
         ChosenAction::Destroy | ChosenAction::Sacrifice => {
-            engine.state.objects[&ids[0]].zone == Zone::Graveyard && !result.cards.is_empty()
+            engine.state.objects[&ids[0]].zone == Zone::Graveyard
+                && !result.card_entries().is_empty()
         }
         ChosenAction::Attach => {
             engine.state.objects[&ids[0]].attached_to == Some(AttachmentRecipient::Object(ids[1]))
@@ -900,7 +1009,7 @@ fn chosen_token_copy_uses_only_retained_target_receipts_and_captured_incarnation
     )
     .expect("copy the current chosen creature incarnation");
     let token = result
-        .produced_objects
+        .object_refs()
         .first()
         .expect("current target creates a token")
         .object_id;
@@ -947,7 +1056,7 @@ fn chosen_token_copy_uses_only_retained_target_receipts_and_captured_incarnation
         )
         .expect("resolve using the retained target incarnation");
         let token = result
-            .produced_objects
+            .object_refs()
             .first()
             .expect("legal-at-start target creates a token from its LKI")
             .object_id;
@@ -978,7 +1087,7 @@ fn chosen_token_copy_uses_only_retained_target_receipts_and_captured_incarnation
     )
     .expect("resolve without a retained target receipt");
     assert!(
-        result.produced_objects.is_empty(),
+        result.object_refs().is_empty(),
         "an absent legal-at-start receipt cannot use saved LKI"
     );
 }
@@ -1003,7 +1112,7 @@ fn kaya_copy_exception_changes_only_the_new_token_snapshot() {
     )
     .expect("copy the target with Kaya's fixed exception");
     let token = result
-        .produced_objects
+        .object_refs()
         .first()
         .expect("copy exception creates one token")
         .object_id;
@@ -1053,7 +1162,7 @@ fn kaya_copy_exception_changes_only_the_new_token_snapshot() {
     )
     .expect("copy the already modified token without another exception");
     let second_token = second_result
-        .produced_objects
+        .object_refs()
         .first()
         .expect("later copy inherits the exception characteristics")
         .object_id;
@@ -1100,7 +1209,7 @@ fn remove_legendary_copy_exception_preserves_other_owned_values() {
     )
     .expect("copy the target after removing only Legendary");
     let token = result
-        .produced_objects
+        .object_refs()
         .first()
         .expect("copy exception creates a token")
         .object_id;
@@ -1162,7 +1271,7 @@ fn copy_exception_without_color_and_pt_overrides_preserves_copy_cdas() {
     )
     .expect("copy without color or P/T overrides");
     let token = result
-        .produced_objects
+        .object_refs()
         .first()
         .expect("copy exception creates a token")
         .object_id;
@@ -1205,7 +1314,7 @@ fn copy_exception_explicit_colorless_override_removes_only_color_cdas() {
     )
     .expect("apply an explicit colorless override");
     let token = result
-        .produced_objects
+        .object_refs()
         .first()
         .expect("copy exception creates a token")
         .object_id;
@@ -1269,7 +1378,7 @@ fn remove_legendary_copy_exception_updates_active_and_intrinsic_faces() {
     )
     .expect("copy both intrinsic faces after removing Legendary");
     let token = result
-        .produced_objects
+        .object_refs()
         .first()
         .expect("copy exception creates a token")
         .object_id;
@@ -1315,7 +1424,7 @@ fn token_copy_exception_replace_suppresses_changeling_and_existing_creature_subt
     )
     .expect("replace copied creature subtypes");
     let token = result
-        .produced_objects
+        .object_refs()
         .first()
         .expect("replacement exception creates a token")
         .object_id;
@@ -1367,7 +1476,7 @@ fn token_copy_exception_updates_both_double_faced_faces_and_keeps_the_active_fac
     )
     .expect("copy the double-faced target with Kaya's exception");
     let token = result
-        .produced_objects
+        .object_refs()
         .first()
         .expect("double-faced copy creates a token")
         .object_id;
@@ -1419,7 +1528,7 @@ fn token_copy_exception_updates_both_double_faced_faces_and_keeps_the_active_fac
     )
     .expect("copy the transformed token without another exception");
     let later_token = later_result
-        .produced_objects
+        .object_refs()
         .first()
         .expect("transformed copy produces a later token")
         .object_id;
@@ -1465,7 +1574,7 @@ fn kaya_minus_three_exiles_a_non_aura_then_creates_the_exception_token() {
         Some(rv1::ruled_event::Ev::Log(message)) if message.text.contains("exiles")
     )));
     let token = result
-        .produced_objects
+        .object_refs()
         .last()
         .expect("non-Aura target creates one copy token")
         .object_id;
@@ -1529,7 +1638,7 @@ fn kaya_minus_three_prepared_state_uses_old_generation_lki_not_a_returned_perman
     assert_eq!(engine.state.objects[&target].zone, Zone::Battlefield);
     assert_eq!(engine.state.zone_change_generation[&target], new_generation);
     let token = result
-        .produced_objects
+        .object_refs()
         .first()
         .expect("old-generation LKI still supplies the copy source")
         .object_id;
@@ -1575,7 +1684,7 @@ fn kaya_minus_three_prepared_state_fails_closed_when_exact_copy_lki_is_missing()
     )
     .expect("missing old-generation copy LKI is a no-op after Exile attempt");
     assert_eq!(engine.state.objects[&target].zone, Zone::Battlefield);
-    assert!(result.produced_objects.is_empty());
+    assert!(result.object_refs().is_empty());
 }
 
 #[test]
@@ -1615,7 +1724,7 @@ fn kaya_minus_three_prepared_state_uses_derived_aura_types_not_the_copy_face_fla
     )
     .expect("derived Aura LKI suppresses token creation");
     assert_eq!(engine.state.objects[&target].zone, Zone::Battlefield);
-    assert!(result.produced_objects.is_empty());
+    assert!(result.object_refs().is_empty());
 }
 
 #[test]
@@ -1646,7 +1755,7 @@ fn kaya_minus_three_copies_face_down_battlefield_values_before_exile_reveals_the
     .expect("use the face-down battlefield copy snapshot after ordinary Exile");
     assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
     let token = result
-        .produced_objects
+        .object_refs()
         .first()
         .expect("face-down non-Aura source creates a token")
         .object_id;
@@ -2006,7 +2115,7 @@ fn kaya_minus_three_does_not_mint_for_a_departed_original_controller() {
     .expect("begun resolution finishes after its controller leaves");
     assert_eq!(outcome, EffectOutcome::Continue);
     assert_eq!(engine.state.objects[&target].zone, Zone::Exile);
-    assert!(result.produced_objects.is_empty());
+    assert!(result.object_refs().is_empty());
     assert!(engine
         .state
         .objects

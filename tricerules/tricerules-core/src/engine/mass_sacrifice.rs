@@ -79,7 +79,7 @@ impl GameEngine {
         &mut self,
         mut stack: ParkedStackResolution,
         cohort: &[ObjectId],
-        effect_result: &mut EffectResult,
+        effect_result: &mut OperationResults,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
         if cohort.is_empty() {
@@ -110,13 +110,13 @@ impl GameEngine {
                 source.owner,
                 rv1::permanent_moved::Destination::Graveyard,
             ));
-            effect_result.cards.push(super::payment::card_result_entry(
+            effect_result.record_cards([super::payment::card_result_entry(
                 &self.state,
                 self.registry,
                 tricerules_card_model::primitives::CardResultAction::Sacrifice,
                 source.controller,
                 oid,
-            ));
+            )])?;
             departures.push(SacrificeDeparture {
                 source,
                 was_creature,
@@ -426,7 +426,7 @@ impl GameEngine {
             .iter()
             .map(|selection| selection.object_id)
             .collect::<Vec<_>>();
-        let mut effect_result = EffectResult::default();
+        let mut effect_result = OperationResults::default();
         if self.commit_player_set_sacrifice(
             stack.clone(),
             &cohort,
@@ -475,7 +475,7 @@ impl GameEngine {
             .iter()
             .map(|selection| selection.object_id)
             .collect::<Vec<_>>();
-        let mut effect_result = EffectResult::default();
+        let mut effect_result = OperationResults::default();
         if self.commit_player_set_sacrifice(stack.clone(), &cohort, &mut effect_result, events)? {
             return Ok(());
         }
@@ -980,7 +980,7 @@ impl GameEngine {
             )),
         });
         let victims = self.type_choice_sacrifice_victims(sacrifice);
-        let mut effect_result = EffectResult::default();
+        let mut effect_result = OperationResults::default();
         if self.commit_player_set_sacrifice(
             stack.clone(),
             &victims,
@@ -1208,7 +1208,7 @@ impl GameEngine {
             )),
         });
         let victims = self.type_choice_sacrifice_victims(&sacrifice);
-        let mut effect_result = EffectResult::default();
+        let mut effect_result = OperationResults::default();
         if self.commit_player_set_sacrifice(stack.clone(), &victims, &mut effect_result, events)? {
             return Ok(());
         }

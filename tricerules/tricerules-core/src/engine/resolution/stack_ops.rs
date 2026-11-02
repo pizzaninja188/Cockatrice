@@ -48,13 +48,16 @@ pub(super) fn counter_target_spell(
             .then(|| engine.state.stack.iter().find(|item| item.id == tid))
             .flatten()
             .map(|item| item.controller);
-        cx.effect_result.program_value = Some(crate::state::ProgramValue::TargetedSpellController(
-            targeted_spell_controller,
-        ));
+        cx.effect_result
+            .set(crate::state::ProgramValue::TargetedSpellController(
+                targeted_spell_controller,
+            ));
         if !target_identity_is_current {
             if unless_controller_pays.is_some() {
-                cx.effect_result.counter_payment_outcome =
-                    Some(tricerules_card_model::primitives::CounterPaymentOutcome::NotOffered);
+                cx.effect_result
+                    .set(crate::state::ProgramValue::CounterPaymentOutcome(
+                        tricerules_card_model::primitives::CounterPaymentOutcome::NotOffered,
+                    ));
             }
             return Ok(EffectOutcome::Continue);
         }
@@ -81,8 +84,10 @@ pub(super) fn counter_target_spell(
                 .cloned()
             else {
                 if unless_controller_pays.is_some() {
-                    cx.effect_result.counter_payment_outcome =
-                        Some(tricerules_card_model::primitives::CounterPaymentOutcome::NotOffered);
+                    cx.effect_result
+                        .set(crate::state::ProgramValue::CounterPaymentOutcome(
+                            tricerules_card_model::primitives::CounterPaymentOutcome::NotOffered,
+                        ));
                 }
                 return Ok(EffectOutcome::Continue);
             };
@@ -163,8 +168,10 @@ pub(super) fn counter_target_spell(
         }
         counter_stack_object(engine, tid, spell_label, events)?;
     } else if unless_controller_pays.is_some() {
-        cx.effect_result.counter_payment_outcome =
-            Some(tricerules_card_model::primitives::CounterPaymentOutcome::NotOffered);
+        cx.effect_result
+            .set(crate::state::ProgramValue::CounterPaymentOutcome(
+                tricerules_card_model::primitives::CounterPaymentOutcome::NotOffered,
+            ));
     }
 
     Ok(EffectOutcome::Continue)
@@ -217,8 +224,8 @@ mod tests {
         let top = engine.state.stack.last().unwrap().clone();
         assert!(top.trigger_context.triggering_spell.is_none());
         let before = engine.diagnostic_snapshot().unwrap();
-        let prior = EffectResult::default();
-        let mut result = EffectResult::default();
+        let prior = OperationResults::default();
+        let mut result = OperationResults::default();
         let mut events = Vec::new();
         let outcome = {
             let mut cx = EffectCx {
@@ -329,8 +336,8 @@ mod tests {
             .insert(target_id, captured_generation + 1);
         assert!(engine.state.stack.iter().any(|item| item.id == target_id));
 
-        let prior = EffectResult::default();
-        let mut result = EffectResult::default();
+        let prior = OperationResults::default();
+        let mut result = OperationResults::default();
         let mut events = Vec::new();
         let targets = [target_id];
         let outcome = {
@@ -363,10 +370,12 @@ mod tests {
         };
 
         assert!(matches!(outcome, EffectOutcome::Continue));
-        assert_eq!(
-            result.counter_payment_outcome,
-            Some(tricerules_card_model::primitives::CounterPaymentOutcome::NotOffered)
-        );
+        assert!(matches!(
+            result.value(|value| matches!(value, ProgramValue::CounterPaymentOutcome(_))),
+            Some(ProgramValue::CounterPaymentOutcome(
+                tricerules_card_model::primitives::CounterPaymentOutcome::NotOffered
+            ))
+        ));
         assert!(engine.state.pending_resolution.is_none());
         assert!(engine.state.stack.iter().any(|item| item.id == target_id));
         assert!(!events.iter().any(|event| matches!(
@@ -401,8 +410,10 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
         .is_none_or(|index| cx.engine.state.players[index].has_lost)
     {
         counter_stack_object_ref(cx.engine, target, &ward_text, cx.events)?;
-        cx.effect_result.counter_payment_outcome =
-            Some(tricerules_card_model::primitives::CounterPaymentOutcome::ForcedUnpaid);
+        cx.effect_result
+            .set(crate::state::ProgramValue::CounterPaymentOutcome(
+                tricerules_card_model::primitives::CounterPaymentOutcome::ForcedUnpaid,
+            ));
         return Ok(EffectOutcome::Continue);
     }
     let prompt = match &cost {
@@ -811,11 +822,16 @@ pub(super) fn counter_target_ability(
         return Ok(EffectOutcome::Continue);
     };
     if let Some(source_id) = countered.source_permanent_id {
-        cx.effect_result.produced_objects.push(TriggerObjectRef {
-            object_id: source_id,
-            zone_change_generation: countered.source_zone_change,
-            controller_at_event: countered.controller,
-        });
+        cx.effect_result
+            .set(crate::state::ProgramValue::CounteredAbilitySource(
+                (vec![TriggerObjectRef {
+                    object_id: source_id,
+                    zone_change_generation: countered.source_zone_change,
+                    controller_at_event: countered.controller,
+                }])
+                .into_iter()
+                .next(),
+            ));
     }
     Ok(EffectOutcome::Continue)
 }
@@ -1211,8 +1227,8 @@ mod cast_color_tests {
         assert_eq!(original.mana_colors_spent_to_cast.count(), 2);
         assert!(original.cast_occurrence.is_some());
         let mut events = Vec::new();
-        let mut result = EffectResult::default();
-        let prior = EffectResult::default();
+        let mut result = OperationResults::default();
+        let prior = OperationResults::default();
         let targets = [original.id];
         let mut cx = EffectCx {
             engine: &mut engine,
@@ -1341,8 +1357,8 @@ mod cast_color_tests {
         );
 
         let mut events = Vec::new();
-        let mut result = EffectResult::default();
-        let prior = EffectResult::default();
+        let mut result = OperationResults::default();
+        let prior = OperationResults::default();
         let targets = [original.id];
         let mut cx = EffectCx {
             engine: &mut engine,

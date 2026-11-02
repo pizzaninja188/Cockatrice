@@ -408,7 +408,7 @@ impl GameEngine {
         };
         let mut previous_result = stack.previous_result.clone();
         if let Some(outcome) = counter_payment_outcome {
-            previous_result.counter_payment_outcome = Some(outcome);
+            previous_result.set(crate::state::ProgramValue::CounterPaymentOutcome(outcome));
         }
         if stack.program.is_some() {
             self.complete_parked_stack_with_previous(stack, previous_result, events)

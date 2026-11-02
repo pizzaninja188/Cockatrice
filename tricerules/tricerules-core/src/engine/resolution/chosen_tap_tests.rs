@@ -86,7 +86,7 @@ fn resolve_tap(
     engine: &mut GameEngine,
     selected: Vec<TriggerObjectRef>,
     filter: TargetFilter,
-) -> Result<(EffectResult, Vec<rv1::RuledEvent>), EngineError> {
+) -> Result<(OperationResults, Vec<rv1::RuledEvent>), EngineError> {
     resolve_tap_with_cardinality(
         engine,
         selected,
@@ -103,18 +103,17 @@ fn resolve_tap_with_cardinality(
     selected: Vec<TriggerObjectRef>,
     filter: TargetFilter,
     cardinality: Cardinality,
-) -> Result<(EffectResult, Vec<rv1::RuledEvent>), EngineError> {
+) -> Result<(OperationResults, Vec<rv1::RuledEvent>), EngineError> {
     let top = test_stack_item();
-    let previous = EffectResult {
-        input_result_type: Some(ResultType::PermanentSelection {
+    let previous = crate::state::OperationInput {
+        result_type: ResultType::PermanentSelection {
             chooser: PlayerRecipient::Controller,
             filter: Box::new(filter),
             cardinality,
-        }),
-        produced_objects: selected,
-        ..EffectResult::default()
+        },
+        value: crate::state::ProgramValue::PermanentSelection(selected),
     };
-    let mut result = EffectResult::default();
+    let mut result = OperationResults::default();
     let mut events = Vec::new();
     let mut cx = EffectCx {
         engine,
@@ -142,10 +141,10 @@ fn choose_permanents(
     engine: &mut GameEngine,
     min: u32,
     max: u32,
-) -> Result<(EffectResult, Vec<rv1::RuledEvent>, EffectOutcome), EngineError> {
+) -> Result<(OperationResults, Vec<rv1::RuledEvent>, EffectOutcome), EngineError> {
     let top = test_stack_item();
-    let previous = EffectResult::default();
-    let mut result = EffectResult::default();
+    let previous = OperationResults::default();
+    let mut result = OperationResults::default();
     let mut events = Vec::new();
     let mut cx = EffectCx {
         engine,
@@ -320,7 +319,10 @@ fn chosen_tap_publishes_a_zero_count_without_a_zero_effect_event() {
     )
     .unwrap();
     let (result, events) = resolve_tap(&mut engine, Vec::new(), land_filter()).unwrap();
-    assert!(matches!(result.program_value, Some(ProgramValue::Count(0))));
+    assert!(matches!(
+        result.count(tricerules_card_model::primitives::CountResultKind::TappedPermanents),
+        Some(0)
+    ));
     assert!(events.is_empty());
 }
 
@@ -361,8 +363,8 @@ fn mandatory_selection_prompts_for_one_and_candidate_shortage_feeds_zero_count()
     )
     .unwrap();
     assert!(matches!(
-        tapped_result.program_value,
-        Some(ProgramValue::Count(1))
+        tapped_result.count(tricerules_card_model::primitives::CountResultKind::TappedPermanents),
+        Some(1)
     ));
     assert!(enough.state.objects[&first].tapped);
     assert!(!enough.state.objects[&second].tapped);
@@ -379,7 +381,7 @@ fn mandatory_selection_prompts_for_one_and_candidate_shortage_feeds_zero_count()
     let (empty_result, shortage_events, outcome) = choose_permanents(&mut shortage, 1, 2).unwrap();
     assert_eq!(outcome, EffectOutcome::Continue);
     assert!(shortage.state.pending_resolution.is_none());
-    assert!(empty_result.produced_objects.is_empty());
+    assert!(empty_result.object_refs().is_empty());
     assert!(!shortage_events.iter().any(|event| matches!(
         event.ev.as_ref(),
         Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
@@ -387,7 +389,7 @@ fn mandatory_selection_prompts_for_one_and_candidate_shortage_feeds_zero_count()
 
     let (empty_count, tap_events) = resolve_tap_with_cardinality(
         &mut shortage,
-        empty_result.produced_objects,
+        empty_result.object_refs().to_vec(),
         land_filter(),
         Cardinality {
             min: 0,
@@ -396,8 +398,8 @@ fn mandatory_selection_prompts_for_one_and_candidate_shortage_feeds_zero_count()
     )
     .unwrap();
     assert!(matches!(
-        empty_count.program_value,
-        Some(ProgramValue::Count(0))
+        empty_count.count(tricerules_card_model::primitives::CountResultKind::TappedPermanents),
+        Some(0)
     ));
     assert!(tap_events.is_empty());
 }

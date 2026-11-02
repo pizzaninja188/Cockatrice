@@ -1824,7 +1824,11 @@ impl GameEngine {
             });
             return Err(EngineError::Illegal("stale Equipment receipt choice"));
         }
-        self.complete_parked_stack_with_previous(attachment.stack, EffectResult::default(), events)
+        self.complete_parked_stack_with_previous(
+            attachment.stack,
+            OperationResults::default(),
+            events,
+        )
     }
 
     fn select_optional_triggered_ability_delegate(
@@ -2598,7 +2602,7 @@ impl GameEngine {
         self.complete_parked_resolution_with_previous(
             item,
             resume_effect_index,
-            EffectResult::default(),
+            OperationResults::default(),
             ev,
         )
     }
@@ -2677,10 +2681,9 @@ impl GameEngine {
         ))];
         self.complete_parked_stack_with_previous(
             stack,
-            EffectResult {
-                produced_objects,
-                ..Default::default()
-            },
+            crate::state::OperationResults::from_value(
+                crate::state::ProgramValue::PermanentSelection(produced_objects),
+            ),
             events,
         )
     }
@@ -2832,11 +2835,9 @@ impl GameEngine {
         })];
         self.complete_parked_stack_with_previous(
             stack,
-            EffectResult {
-                produced_objects: selected.clone(),
-                program_value: Some(ProgramValue::ProliferatedPermanentSelection(selected)),
-                ..Default::default()
-            },
+            crate::state::OperationResults::from_value(
+                ProgramValue::ProliferatedPermanentSelection(selected),
+            ),
             events,
         )
     }
@@ -3033,10 +3034,9 @@ impl GameEngine {
         };
         self.complete_parked_stack_with_previous(
             stack,
-            EffectResult {
-                produced_objects,
-                ..Default::default()
-            },
+            crate::state::OperationResults::from_value(
+                crate::state::ProgramValue::PermanentSelection(produced_objects),
+            ),
             events,
         )
     }
@@ -3052,7 +3052,7 @@ impl GameEngine {
         };
         self.complete_parked_stack_with_previous(
             stack,
-            EffectResult::default(),
+            OperationResults::default(),
             vec![ev_log(message.to_string())],
         )
     }
@@ -3307,7 +3307,7 @@ impl GameEngine {
         ) else {
             let completed = self.complete_parked_stack_with_previous(
                 attachment.stack,
-                EffectResult::default(),
+                OperationResults::default(),
                 Vec::new(),
             )?;
             events.extend(completed.events);
@@ -3322,7 +3322,7 @@ impl GameEngine {
         if candidates.is_empty() {
             let completed = self.complete_parked_stack_with_previous(
                 attachment.stack,
-                EffectResult::default(),
+                OperationResults::default(),
                 Vec::new(),
             )?;
             events.extend(completed.events);
@@ -3339,7 +3339,7 @@ impl GameEngine {
             );
             let completed = self.complete_parked_stack_with_previous(
                 attachment.stack,
-                EffectResult::default(),
+                OperationResults::default(),
                 attach_events,
             )?;
             events.extend(completed.events);
@@ -3486,10 +3486,7 @@ impl GameEngine {
             self.state.pending_replacement_event = None;
             let completed = self.complete_parked_stack_with_previous(
                 stack,
-                EffectResult {
-                    program_value: Some(ProgramValue::ProliferatedPermanentSelection(Vec::new())),
-                    ..Default::default()
-                },
+                crate::state::OperationResults::from_value(ProgramValue::ProliferatedPermanentSelection(Vec::new())),
                 vec![ev_log(
                     "The departed Proliferate controller has no permanents available for its choice."
                         .into(),
@@ -3530,8 +3527,11 @@ impl GameEngine {
         let mut retry = stack;
         retry.program = Some(program);
         self.state.pending_resolution = None;
-        let completed =
-            self.complete_parked_stack_with_previous(retry, EffectResult::default(), Vec::new())?;
+        let completed = self.complete_parked_stack_with_previous(
+            retry,
+            OperationResults::default(),
+            Vec::new(),
+        )?;
         events.extend(completed.events);
         Ok(())
     }
@@ -3646,7 +3646,7 @@ impl GameEngine {
         &mut self,
         item: StackItem,
         resume_effect_index: Option<u32>,
-        previous_result: EffectResult,
+        previous_result: OperationResults,
         ev: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
         if self.is_pending_linked_exile_play_root(&item) {
@@ -3681,7 +3681,7 @@ impl GameEngine {
         resume_effect_index: Option<u32>,
         effects: Vec<ResolutionEffect>,
         spell_label: String,
-        previous_result: EffectResult,
+        previous_result: OperationResults,
         ev: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
         if self.is_pending_linked_exile_play_root(&item) {
@@ -3708,7 +3708,7 @@ impl GameEngine {
         resume_effect_index: Option<u32>,
         effects: Vec<ResolutionEffect>,
         spell_label: String,
-        previous_result: EffectResult,
+        previous_result: OperationResults,
         mut ev: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
         if let Some(start) = resume_effect_index {
@@ -3756,7 +3756,7 @@ impl GameEngine {
         &mut self,
         item: StackItem,
         resume_effect_index: Option<u32>,
-        previous_result: EffectResult,
+        previous_result: OperationResults,
         ev: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
         let mut cohort = *self
@@ -3776,7 +3776,7 @@ impl GameEngine {
     pub(super) fn complete_parked_stack_with_previous(
         &mut self,
         stack: ParkedStackResolution,
-        previous_result: EffectResult,
+        previous_result: OperationResults,
         mut ev: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
         let Some(program) = stack.program.clone() else {
@@ -3787,29 +3787,16 @@ impl GameEngine {
                 ev,
             );
         };
-        let token_copy_batch_in_flight = program.in_flight.as_ref().is_some_and(|outputs| {
-            self.registry
-                .compiled_program_for_owner(&program.owner)
-                .is_some_and(|compiled| {
-                    outputs.iter().any(|slot_id| {
-                        compiled.slot(*slot_id).is_some_and(|slot| {
-                            matches!(
-                                slot.result_type,
-                                tricerules_card_model::primitives::ResultType::TokenCopyBatch
-                            )
-                        })
-                    })
-                })
-        });
-        let mut operation_result = program.in_flight.as_ref().map(|_| previous_result);
-        if token_copy_batch_in_flight {
-            if let Some(result) = operation_result.as_mut() {
-                // The copy executor's provenance marker was parked by EffectCx before the
-                // replacement/entry choice. Pair it with the committed generation-bound refs;
-                // output capture still rejects a missing marker.
-                result.produced_object_provenance = program.in_flight_produced_object_provenance;
-            }
-        }
+        let operation_result = if program.in_flight.is_some() {
+            Some(
+                program
+                    .in_flight_results
+                    .clone()
+                    .with_completion(previous_result)?,
+            )
+        } else {
+            None
+        };
         let progress = self.resume_program_with_completion(
             &stack.item,
             program,

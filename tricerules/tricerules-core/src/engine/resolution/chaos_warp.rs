@@ -281,7 +281,7 @@ impl GameEngine {
             events.push(ev_log(format!("P{owner} shuffles their library.")));
         } else {
             stack.resume_effect_index = Some(effect_index + 1);
-            stack.previous_result = EffectResult::default();
+            stack.previous_result = OperationResults::default();
         }
         self.state.pending_resolution = None;
         if self.drain_immediate_observer_actions(Some(stack.clone()), events)? {

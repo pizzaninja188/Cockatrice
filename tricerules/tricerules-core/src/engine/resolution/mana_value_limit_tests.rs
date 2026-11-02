@@ -98,8 +98,8 @@ fn resolve_effect(
         trigger_context: TriggerContext::default(),
     };
     let mut events = Vec::new();
-    let mut effect_result = EffectResult::default();
-    let previous_effect_result = EffectResult::default();
+    let mut effect_result = OperationResults::default();
+    let previous_effect_result = OperationResults::default();
     let mut cx = EffectCx {
         engine,
         events: &mut events,

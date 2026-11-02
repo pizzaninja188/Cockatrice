@@ -13,7 +13,7 @@ fn resolve_counter_placements(
         cx.events,
     )?;
     if let Some(receipts) = result {
-        cx.effect_result.counter_placements.extend(receipts);
+        cx.effect_result.record_counter_placements(receipts);
         Ok(EffectOutcome::Continue)
     } else {
         Ok(EffectOutcome::Suspended)
@@ -549,17 +549,16 @@ pub(super) fn apply_permanent_modifier(
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     if matches!(subject, EffectSubject::PreviousEffectObjects) {
-        if cx.previous_effect_result.produced_object_provenance
-            != Some(crate::state::ProducedObjectProvenance::TokenCreationBatch)
-        {
-            return Err(EngineError::Illegal(
+        let cohort = cx
+            .previous_effect_result
+            .token_copy_batch()
+            .ok_or(EngineError::Illegal(
                 "ApplyPermanentModifier PreviousEffectObjects requires a token-copy batch receipt",
-            ));
-        }
-        let cohort = cx.previous_effect_result.produced_objects.clone();
-        cx.effect_result.produced_objects = cohort.clone();
-        cx.effect_result.produced_object_provenance =
-            Some(crate::state::ProducedObjectProvenance::TokenCreationBatch);
+            ))?
+            .to_vec();
+        cx.effect_result
+            .set(crate::state::ProgramValue::TokenCopyBatch(cohort.clone()));
+
         let Some((source_id, runtime_duration)) =
             materialize_resolving_duration(cx, Some(cx.top.id), duration.clone())
         else {
@@ -606,7 +605,9 @@ pub(super) fn apply_permanent_modifier(
         return Ok(EffectOutcome::Continue);
     }
     if matches!(subject, EffectSubject::PreviousEffectObject) {
-        cx.effect_result.produced_objects = cx.previous_effect_result.produced_objects.clone();
+        if let Some(value) = cx.previous_effect_result.object_value() {
+            cx.effect_result.set(value.clone());
+        }
     }
     let Some((object_id, ordinary_source_id)) = cx.resolve_continuous_subject(&subject) else {
         return Ok(EffectOutcome::Continue);
@@ -1696,8 +1697,8 @@ mod growth_tests {
     fn double_now(engine: &mut GameEngine) -> Result<EffectOutcome, EngineError> {
         let top = engine.state.stack.last().unwrap().clone();
         let mut events = Vec::new();
-        let previous = EffectResult::default();
-        let mut result = EffectResult::default();
+        let previous = OperationResults::default();
+        let mut result = OperationResults::default();
         let mut cx = EffectCx {
             engine,
             events: &mut events,

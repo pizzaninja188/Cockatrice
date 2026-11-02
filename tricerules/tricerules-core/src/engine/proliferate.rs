@@ -5,9 +5,9 @@
 //! counter-replacement stages.
 
 use crate::state::{
-    CounterPlacementReceipt, EffectResult, ObjectId, PendingProliferateStage, PendingResolution,
-    PendingResolutionPresentation, PlayerId, ReplacementSourcePresentation, ResolutionContinuation,
-    Zone,
+    CounterPlacementReceipt, ObjectId, OperationResults, PendingProliferateStage,
+    PendingResolution, PendingResolutionPresentation, PlayerId, ReplacementSourcePresentation,
+    ResolutionContinuation, Zone,
 };
 use std::collections::{BTreeSet, VecDeque};
 use tricerules_card_model::primitives::StaticAbilityDef;
@@ -359,17 +359,12 @@ impl GameEngine {
         if stack.program.is_some() {
             self.complete_parked_stack_with_previous(
                 stack,
-                EffectResult {
-                    counter_placements: transaction.counter_placements,
-                    ..Default::default()
-                },
+                OperationResults::default().with_counter_placements(transaction.counter_placements),
                 events,
             )
         } else {
             let mut previous_result = stack.previous_result.clone();
-            previous_result
-                .counter_placements
-                .extend(transaction.counter_placements);
+            previous_result.record_counter_placements(transaction.counter_placements);
             self.complete_parked_resolution_with_previous(
                 stack.item,
                 stack.resume_effect_index,

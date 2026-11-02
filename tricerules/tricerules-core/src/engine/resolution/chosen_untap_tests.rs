@@ -70,11 +70,10 @@ fn consume(engine: &mut GameEngine, chosen: Vec<TriggerObjectRef>) {
         blight_receipts: vec![],
         trigger_context: TriggerContext::default(),
     };
-    let previous = EffectResult {
-        produced_objects: chosen,
-        ..Default::default()
-    };
-    let mut result = EffectResult::default();
+    let previous = crate::state::OperationResults::from_value(
+        crate::state::ProgramValue::PermanentSelection(chosen),
+    );
+    let mut result = OperationResults::default();
     let mut events = Vec::new();
     let mut cx = EffectCx {
         engine,

@@ -32,8 +32,10 @@ pub(super) fn begin(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError>
         })
         .collect::<Vec<_>>();
     let Some(&first_payer) = payer_order.first() else {
-        cx.effect_result.mana_paid = Some(0);
-        cx.effect_result.program_value = Some(crate::state::ProgramValue::Count(0));
+        cx.effect_result.record_count(
+            tricerules_card_model::primitives::CountResultKind::JoinForcesManaPaid,
+            0,
+        );
         return Ok(EffectOutcome::Continue);
     };
 

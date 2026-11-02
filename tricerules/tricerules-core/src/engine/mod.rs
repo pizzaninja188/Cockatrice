@@ -12,24 +12,25 @@ use crate::state::{
     CombatAttackAssignment, CombatDefenderTarget, CombatState, ContinuousEffect, CopiableValues,
     CopyTargetChoiceProgress, CopyTargetObjectOffer, CopyTargetOccurrence,
     CounterPlacementCompletion, DamageDoublingScope, DamagePreventionAmount,
-    DamagePreventionProhibition, DamagePreventionScope, DelayedTriggerPayload, EffectResult,
+    DamagePreventionProhibition, DamagePreventionScope, DelayedTriggerPayload,
     EntryReplacementApplication, EntryReplacementEffectId, EventObserverMatcher,
     EventObserverPayload, ExilePlayPermissionScope, GameObject, GameState, ImmediateObserverAction,
     LinkedChoiceOccurrence, LinkedExileKey, LinkedExileOccurrence, LinkedExiledObject, ObjectId,
-    ObservedGameEvent, ObserverReturnEntry, OpeningSequence, ParkedStackResolution, PendingAmass,
-    PendingBattlefieldEntry, PendingCopyCandidate, PendingEntryTimestampOrder, PendingHandChoice,
-    PendingLibraryLookStage, PendingLibraryPartitionKind, PendingLibraryPartitionStage,
-    PendingManaPayment, PendingObserverReturnBatch, PendingPlayerDiscardChoice,
-    PendingPlayerSetDiscard, PendingProgramCohortPartitionStage, PendingProgramPartitionMoveStage,
-    PendingResolution, PendingResolutionBranch, PendingResolutionBranchStage,
-    PendingResolutionPresentation, PendingTokenEntryBatch, PendingTrigger, PendingTriggerOrder,
-    PendingWardPayment, PendingWardPaymentStage, PersistentActivationUseKey, PlayerId, PlayerState,
+    ObservedGameEvent, ObserverReturnEntry, OpeningSequence, OperationInput, OperationResults,
+    ParkedStackResolution, PendingAmass, PendingBattlefieldEntry, PendingCopyCandidate,
+    PendingEntryTimestampOrder, PendingHandChoice, PendingLibraryLookStage,
+    PendingLibraryPartitionKind, PendingLibraryPartitionStage, PendingManaPayment,
+    PendingObserverReturnBatch, PendingPlayerDiscardChoice, PendingPlayerSetDiscard,
+    PendingProgramCohortPartitionStage, PendingProgramPartitionMoveStage, PendingResolution,
+    PendingResolutionBranch, PendingResolutionBranchStage, PendingResolutionPresentation,
+    PendingTokenEntryBatch, PendingTrigger, PendingTriggerOrder, PendingWardPayment,
+    PendingWardPaymentStage, PersistentActivationUseKey, PlayerId, PlayerState,
     PreparedPermanentDesignation, ProgramCardPartition, ProgramCardRef, ProgramPartitionMovePlan,
-    ProgramRunState, ProgramValue, ReplacementPriority, ResolutionContinuation, RoomState,
-    SimultaneousEntryBatch, SpellCastMethod, StackItem, StackObjectRef, StackPresentation,
-    StackTarget, StagedTrigger, StagedTriggerGroup, StaticEmblemInstance, TokenBattlefieldEntry,
-    TokenEntryBatchOptions, TriggerAbilityOrigin, TriggerContext, TriggerObjectRef,
-    TriggerStackObjectRef, TriggerUseKey, TurnHistory, TurnObjectFact, TurnStep,
+    ProgramRunState, ProgramValue, ReplacementPriority, ResolutionContinuation, ResolutionFacts,
+    RoomState, SimultaneousEntryBatch, SpellCastMethod, StackItem, StackObjectRef,
+    StackPresentation, StackTarget, StagedTrigger, StagedTriggerGroup, StaticEmblemInstance,
+    TokenBattlefieldEntry, TokenEntryBatchOptions, TriggerAbilityOrigin, TriggerContext,
+    TriggerObjectRef, TriggerStackObjectRef, TriggerUseKey, TurnHistory, TurnObjectFact, TurnStep,
     UndoableManaAbility, Zone,
 };
 use crate::state::{DoubleFacedToken, TokenCopySnapshot};
@@ -118,7 +119,7 @@ struct AmountContext<'a> {
     /// this object until CR 608.2n's final move would occur.
     resolving_spell_id: Option<ObjectId>,
     chosen_x: u32,
-    previous_effect_result: Option<&'a EffectResult>,
+    previous_effect_result: Option<&'a dyn ResolutionFacts>,
 }
 
 impl<'a> AmountContext<'a> {
@@ -158,7 +159,7 @@ impl<'a> AmountContext<'a> {
         self
     }
 
-    fn with_previous_effect_result(mut self, result: &'a EffectResult) -> Self {
+    fn with_previous_effect_result(mut self, result: &'a dyn ResolutionFacts) -> Self {
         self.previous_effect_result = Some(result);
         self
     }
@@ -171,7 +172,7 @@ struct ConditionContext<'a> {
     source_zone_change: u64,
     resolving_spell_id: Option<ObjectId>,
     stack_item: Option<&'a StackItem>,
-    previous_effect_result: Option<&'a EffectResult>,
+    previous_effect_result: Option<&'a dyn ResolutionFacts>,
 }
 
 impl<'a> ConditionContext<'a> {
@@ -186,7 +187,7 @@ impl<'a> ConditionContext<'a> {
         }
     }
 
-    fn with_previous_effect_result(mut self, result: &'a EffectResult) -> Self {
+    fn with_previous_effect_result(mut self, result: &'a dyn ResolutionFacts) -> Self {
         self.previous_effect_result = Some(result);
         self
     }

@@ -229,15 +229,14 @@ impl GameEngine {
         events: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
         if stack.program.is_some() {
-            let operation_result = EffectResult {
-                mana_paid: Some(total_paid),
-                program_value: Some(ProgramValue::Count(total_paid)),
-                ..EffectResult::default()
-            };
+            let operation_result = crate::state::OperationResults::from_count(
+                tricerules_card_model::primitives::CountResultKind::JoinForcesManaPaid,
+                total_paid,
+            );
             self.complete_parked_stack_with_previous(stack, operation_result, events)
         } else {
-            let mut previous_result = stack.previous_result;
-            previous_result.mana_paid = Some(total_paid);
+            let previous_result = stack.previous_result;
+
             self.complete_parked_resolution_with_previous(
                 stack.item,
                 stack.resume_effect_index,

@@ -10,11 +10,11 @@ enum CohortMoveProgress {
     Parked,
 }
 
-fn completion_result(stack: &ParkedStackResolution) -> EffectResult {
+fn completion_result(stack: &ParkedStackResolution) -> OperationResults {
     if stack.program.is_some() {
         // Cohort moves are resultless Program instructions. The parked run-level context is
         // already stored on the stack and must remain separate from this operation result.
-        EffectResult::default()
+        OperationResults::default()
     } else {
         // Legacy effect lists publish the suspended operation's result on the parked stack when
         // the executor stamps the resume cursor. Preserve that generic result for the next effect.

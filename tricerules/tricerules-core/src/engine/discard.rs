@@ -70,8 +70,11 @@ impl GameEngine {
             _ => unreachable!("the exact target-hand-discard continuation was checked above"),
         };
         self.state.pending_replacement_event = None;
-        let completed =
-            self.complete_parked_stack_with_previous(stack, EffectResult::default(), Vec::new())?;
+        let completed = self.complete_parked_stack_with_previous(
+            stack,
+            OperationResults::default(),
+            Vec::new(),
+        )?;
         events.extend(completed.events);
         Ok(true)
     }
@@ -605,7 +608,7 @@ impl GameEngine {
         // Keep the per-player semantic discard batches in commit order, and publish them only
         // after every replacement destination and any chosen library order are committed.
         let discard_batches = self.fire_discard_batches(discard_receipts, &mut events);
-        if let Some(early_result) = stack.previous_result.program_discard_result.as_ref() {
+        if let Some(early_result) = stack.previous_result.discard_result() {
             result.program_discard_result = Some(crate::state::ProgramDiscardResult {
                 outcome: early_result.outcome,
                 batches: discard_batches,

@@ -96,10 +96,9 @@ impl GameEngine {
                 .collect();
             return self.complete_parked_stack_with_previous(
                 stack,
-                EffectResult {
-                    selected_hand_cards,
-                    ..Default::default()
-                },
+                crate::state::OperationResults::from_value(
+                    crate::state::ProgramValue::HandSelection(selected_hand_cards),
+                ),
                 vec![ev_log(format!(
                     "P{} chooses {} card{}.",
                     hand_choice.affected_player,
@@ -139,7 +138,7 @@ impl GameEngine {
             if chosen.is_empty() {
                 return self.complete_parked_stack_with_previous(
                     stack,
-                    EffectResult::default(),
+                    OperationResults::default(),
                     events,
                 );
             }
@@ -449,12 +448,15 @@ impl GameEngine {
             })
         {
             if let Some(outcome) = program_discard_outcome {
-                stack.previous_result.program_discard_result =
-                    Some(crate::state::ProgramDiscardResult {
-                        outcome,
-                        batches: Vec::new(),
-                        cards: Vec::new(),
-                    });
+                stack
+                    .previous_result
+                    .set(crate::state::ProgramValue::DiscardResult(
+                        crate::state::ProgramDiscardResult {
+                            outcome,
+                            batches: Vec::new(),
+                            cards: Vec::new(),
+                        },
+                    ));
             }
             let selected = discard
                 .choices

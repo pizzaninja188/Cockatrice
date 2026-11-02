@@ -275,7 +275,7 @@ impl GameEngine {
         if kind == PendingLibraryPartitionKind::Surveil {
             self.fire_triggers(&[GameEvent::Surveilled { player: controller }], &mut ev);
         }
-        self.complete_parked_stack_with_previous(stack, EffectResult::default(), ev)
+        self.complete_parked_stack_with_previous(stack, OperationResults::default(), ev)
     }
 
     /// Finish either step of a bounded library look. Step 0 moves the selected cohort to hand;
@@ -598,7 +598,11 @@ impl GameEngine {
                 ),
                 controller,
             ));
-            return self.complete_parked_stack_with_previous(stack, EffectResult::default(), ev);
+            return self.complete_parked_stack_with_previous(
+                stack,
+                OperationResults::default(),
+                ev,
+            );
         }
 
         let PendingLibraryLookStage::ChooseToHand {
@@ -657,7 +661,11 @@ impl GameEngine {
             &remainder,
             crate::state::PendingHandLookRemainderDisposition::KeepPosition { .. }
         ) {
-            return self.complete_parked_stack_with_previous(stack, EffectResult::default(), ev);
+            return self.complete_parked_stack_with_previous(
+                stack,
+                OperationResults::default(),
+                ev,
+            );
         }
         let crate::state::PendingHandLookRemainderDisposition::Bottom(bottom_order) = remainder
         else {
@@ -677,7 +685,11 @@ impl GameEngine {
                 remaining.len()
             )));
             // The player knows the looked-at cards, but not their new random library order.
-            return self.complete_parked_stack_with_previous(stack, EffectResult::default(), ev);
+            return self.complete_parked_stack_with_previous(
+                stack,
+                OperationResults::default(),
+                ev,
+            );
         }
 
         if remaining.len() <= 1 {
@@ -687,7 +699,11 @@ impl GameEngine {
             for &oid in &remaining {
                 self.state.players[idx].library.push_back(oid);
             }
-            return self.complete_parked_stack_with_previous(stack, EffectResult::default(), ev);
+            return self.complete_parked_stack_with_previous(
+                stack,
+                OperationResults::default(),
+                ev,
+            );
         }
 
         let n = remaining.len() as u32;
@@ -806,15 +822,15 @@ mod library_look_choose_battlefield_tests {
             stack.resume_effect_index = Some(1);
             stack
                 .previous_result
-                .cards
-                .push(crate::state::CardResultEntry {
+                .record_cards([crate::state::CardResultEntry {
                     action: tricerules_card_model::primitives::CardResultAction::Mill,
                     affected_player: 0,
                     object_id: rest,
                     zone_change_generation: 0,
                     matched_card_types: vec![CardTypeFilter::BasicLand],
                     provenance: crate::state::CardResultProvenance::ActionFacts,
-                });
+                }])
+                .expect("typed fixture facts");
             engine.state.pending_resolution = Some(PendingResolution {
                 resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
                 resolution_prompt_semantics: None,
@@ -1016,15 +1032,15 @@ mod library_look_choose_battlefield_tests {
             stack.resume_effect_index = Some(1);
             stack
                 .previous_result
-                .cards
-                .push(crate::state::CardResultEntry {
+                .record_cards([crate::state::CardResultEntry {
                     action: tricerules_card_model::primitives::CardResultAction::Mill,
                     affected_player: 0,
                     object_id: forest,
                     zone_change_generation: 0,
                     matched_card_types: vec![CardTypeFilter::BasicLand],
                     provenance: crate::state::CardResultProvenance::ActionFacts,
-                });
+                }])
+                .expect("typed fixture facts");
             engine.state.pending_resolution = Some(PendingResolution {
                 resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
                 resolution_prompt_semantics: None,

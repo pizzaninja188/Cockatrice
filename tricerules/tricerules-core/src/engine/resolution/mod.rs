@@ -378,13 +378,51 @@ struct EffectCx<'a> {
     /// `controller`.
     affected_player: PlayerId,
     spell_label: &'a str,
-    previous_effect_result: &'a EffectResult,
+    previous_effect_result: &'a dyn ResolutionFacts,
     /// The result context to restore if this operation suspends. For authored programs this is
     /// the run-level context, which stays separate from the operation's explicit typed input.
-    resume_previous_result: Option<&'a EffectResult>,
-    effect_result: &'a mut EffectResult,
+    resume_previous_result: Option<&'a OperationResults>,
+    effect_result: &'a mut OperationResults,
     effect_index: u32,
     program_state: Option<ProgramRunState>,
+}
+
+/// One leaf boundary shared by effect lists and Programs. Outer cursor/retry logic remains
+/// with its driver; actual typed facts are retained if a domain transaction suspends.
+fn execute_leaf(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    cx.effect_result.begin_effect(&effect)?;
+    let outcome = if matches!(
+        effect,
+        SpellEffectKind::SelectHandCards { .. } | SpellEffectKind::PutSelectedHandCardsOnLibraryTop
+    ) {
+        program::run_program_only_leaf(cx, effect)?
+    } else {
+        dispatch::execute_effect(cx, effect)?
+    };
+    if outcome == EffectOutcome::Suspended {
+        if let Some(stack) = cx
+            .engine
+            .state
+            .pending_resolution
+            .as_mut()
+            .and_then(|pending| pending.continuation.stack_mut())
+        {
+            if stack.item.id == cx.top.id {
+                if let (Some(run), Some(expected)) =
+                    (stack.program.as_mut(), cx.program_state.as_ref())
+                {
+                    if run.owner == expected.owner && run.in_flight == expected.in_flight {
+                        run.in_flight_results = cx.effect_result.clone();
+                    }
+                }
+            }
+        }
+    }
+    cx.engine.refresh_hideaway_look_permissions();
+    Ok(outcome)
 }
 
 impl EffectCx<'_> {
@@ -395,29 +433,14 @@ impl EffectCx<'_> {
         }
         let mut program = self.program_state.clone();
         if let Some(run) = program.as_mut() {
-            let token_batch_in_flight = run.in_flight.as_ref().is_some_and(|outputs| {
-                self.engine
-                    .registry
-                    .compiled_program_for_owner(&run.owner)
-                    .is_some_and(|compiled| {
-                        outputs.iter().any(|slot_id| {
-                            compiled.slot(*slot_id).is_some_and(|slot| {
-                                matches!(slot.result_type, ResultType::TokenCopyBatch)
-                            })
-                        })
-                    })
-            });
-            if token_batch_in_flight {
-                run.in_flight_produced_object_provenance =
-                    self.effect_result.produced_object_provenance;
-            }
+            run.in_flight_results = self.effect_result.clone();
         }
         stack.program = program;
         stack
     }
 
     fn previous_battlefield_object(&self) -> Option<ObjectId> {
-        let [selected] = self.previous_effect_result.produced_objects.as_slice() else {
+        let [selected] = self.previous_effect_result.object_refs() else {
             return None;
         };
         let generation = self
@@ -1023,7 +1046,12 @@ fn player_recipients(cx: &EffectCx<'_>, who: PlayerRecipient) -> Vec<PlayerId> {
             players
         }
         PlayerRecipient::ProgramInputPlayer => {
-            match cx.previous_effect_result.program_value.as_ref() {
+            match cx.previous_effect_result.value(|value| {
+                matches!(
+                    value,
+                    crate::state::ProgramValue::TargetedSpellController(_)
+                )
+            }) {
                 Some(crate::state::ProgramValue::TargetedSpellController(Some(player))) => {
                     vec![*player]
                 }
@@ -1919,7 +1947,7 @@ impl GameEngine {
                 direct_draw_effect_is_selectable(
                     self,
                     &top,
-                    &crate::state::EffectResult::default(),
+                    &crate::state::OperationResults::default(),
                     &ability.effect,
                 ) == Some(false)
             }) {
@@ -1953,7 +1981,7 @@ impl GameEngine {
                 if !resolution_branch_is_selectable(
                     self,
                     &top,
-                    &crate::state::EffectResult::default(),
+                    &crate::state::OperationResults::default(),
                     top.controller,
                     top.controller,
                     &branch,
@@ -1979,7 +2007,12 @@ impl GameEngine {
 
         if let Some(owners) = compiled_program_owners {
             let program = self.begin_program_run(&top, owners)?;
-            return self.run_program_with_previous(&top, program, EffectResult::default(), events);
+            return self.run_program_with_previous(
+                &top,
+                program,
+                OperationResults::default(),
+                events,
+            );
         }
         self.run_effect_list(&top, &spell_label, resolution_effects, 0, events)
     }
@@ -2274,7 +2307,7 @@ impl GameEngine {
             spell_label,
             resolution_effects,
             start,
-            EffectResult::default(),
+            OperationResults::default(),
             events,
         )
     }
@@ -2285,7 +2318,7 @@ impl GameEngine {
         spell_label: &str,
         resolution_effects: Vec<ResolutionEffect>,
         start: usize,
-        mut previous_effect_result: EffectResult,
+        mut previous_effect_result: OperationResults,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<ResolutionProgress, EngineError> {
         if self.state.is_terminal() {
@@ -2303,7 +2336,7 @@ impl GameEngine {
                 role_group_indices,
             } = entry;
             if !role_group_indices.is_empty() && effect_targets.is_empty() {
-                previous_effect_result = EffectResult::default();
+                previous_effect_result = OperationResults::default();
                 continue;
             }
             let targets_by_role = role_group_indices
@@ -2316,7 +2349,7 @@ impl GameEngine {
                         .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>();
-            let mut effect_result = EffectResult::default();
+            let mut effect_result = OperationResults::default();
             let outcome = {
                 let mut cx = EffectCx {
                     engine: self,
@@ -2335,9 +2368,8 @@ impl GameEngine {
                     effect_index: index as u32,
                     program_state: None,
                 };
-                dispatch::execute_effect(&mut cx, effect)?
+                execute_leaf(&mut cx, effect)?
             };
-            self.refresh_hideaway_look_permissions();
             if outcome == EffectOutcome::GameEnded {
                 self.state
                     .millennium_calendar_state_trigger_stack_keys
@@ -3123,7 +3155,7 @@ impl GameEngine {
             self.state.pending_replacement_event = None;
             let resumed = self.complete_parked_stack_with_previous(
                 stack,
-                EffectResult::default(),
+                OperationResults::default(),
                 Vec::new(),
             )?;
             events.extend(resumed.events);
@@ -3176,8 +3208,11 @@ impl GameEngine {
 
         self.state.pending_resolution = None;
         self.state.pending_replacement_event = None;
-        let resumed =
-            self.complete_parked_stack_with_previous(retry, EffectResult::default(), Vec::new())?;
+        let resumed = self.complete_parked_stack_with_previous(
+            retry,
+            OperationResults::default(),
+            Vec::new(),
+        )?;
         events.extend(resumed.events);
         Ok(true)
     }
@@ -5637,7 +5672,7 @@ mod attached_subject_tests {
                 .run_program_with_previous(
                     &item,
                     program,
-                    EffectResult::default(),
+                    OperationResults::default(),
                     &mut initial_events,
                 )
                 .expect("run actual Gerrard's Verdict to its target's hand choice"),
@@ -5992,7 +6027,7 @@ mod attached_subject_tests {
                 .run_program_with_previous(
                     &ward_item,
                     program,
-                    crate::state::EffectResult::default(),
+                    crate::state::OperationResults::default(),
                     &mut started,
                 )
                 .expect("run the printed discard Ward Program"),
@@ -6224,7 +6259,7 @@ mod attached_subject_tests {
                 .run_program_with_previous(
                     &ward_item,
                     program,
-                    crate::state::EffectResult::default(),
+                    crate::state::OperationResults::default(),
                     &mut started,
                 )
                 .expect("run the printed discard Ward Program"),
@@ -6937,7 +6972,7 @@ mod attached_subject_tests {
                 .run_program_with_previous(
                     &item,
                     program,
-                    crate::state::EffectResult::default(),
+                    crate::state::OperationResults::default(),
                     &mut initial_events,
                 )
                 .expect("Vow reaches its Dwarf-gated Equipment chooser"),
@@ -8246,7 +8281,7 @@ mod attached_subject_tests {
                 .run_program_with_previous(
                     &item,
                     program,
-                    crate::state::EffectResult::default(),
+                    crate::state::OperationResults::default(),
                     &mut events,
                 )
                 .expect("Destroy parks at the immediate Aura-return boundary"),
@@ -9881,7 +9916,7 @@ mod attached_subject_tests {
                 .run_program_with_previous(
                     &item,
                     program,
-                    crate::state::EffectResult::default(),
+                    crate::state::OperationResults::default(),
                     &mut initial_events,
                 )
                 .unwrap(),
@@ -10051,7 +10086,7 @@ mod attached_subject_tests {
                     .run_program_with_previous(
                         &item,
                         program,
-                        crate::state::EffectResult::default(),
+                        crate::state::OperationResults::default(),
                         &mut initial_events,
                     )
                     .expect("run until the mandatory player-set choice"),
@@ -10273,7 +10308,7 @@ mod attached_subject_tests {
                 .run_program_with_previous(
                     &item,
                     program,
-                    crate::state::EffectResult::default(),
+                    crate::state::OperationResults::default(),
                     &mut initial_events
                 )
                 .unwrap(),
@@ -10566,7 +10601,7 @@ mod attached_subject_tests {
         .unwrap();
         let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
         let item = quantity_item(source, Vec::new());
-        let mut previous = EffectResult::default();
+        let mut previous = OperationResults::default();
         for (player, count) in [(0, 1), (1, 2)] {
             let cards = engine.state.players[player].hand[..count].to_vec();
             for card in cards {
@@ -10579,7 +10614,9 @@ mod attached_subject_tests {
                     crate::state::DiscardCause::Effect,
                 )
                 .unwrap();
-                previous.cards.push(entry);
+                previous
+                    .record_cards([entry])
+                    .expect("typed fixture output");
             }
         }
         for (players, recipient, expected) in [
@@ -10681,7 +10718,7 @@ mod attached_subject_tests {
                     .run_program_with_previous(
                         &item,
                         program,
-                        EffectResult::default(),
+                        OperationResults::default(),
                         &mut Vec::new(),
                     )
                     .expect("run the ordered graveyard threshold into a single library operation");
@@ -11385,8 +11422,8 @@ mod attached_subject_tests {
         )
         .unwrap();
         let mut events = Vec::new();
-        let previous = EffectResult::default();
-        let mut result = EffectResult::default();
+        let previous = OperationResults::default();
+        let mut result = OperationResults::default();
         let mut cx = EffectCx {
             engine: &mut engine,
             events: &mut events,
@@ -13733,8 +13770,8 @@ mod attached_subject_tests {
         item.trigger_context.attacking_player = Some(30);
         item.trigger_context.defending_player = Some(20);
         let mut events = Vec::new();
-        let previous_effect_result = EffectResult::default();
-        let mut effect_result = EffectResult::default();
+        let previous_effect_result = OperationResults::default();
+        let mut effect_result = OperationResults::default();
         let cx = EffectCx {
             engine: &mut engine,
             events: &mut events,
@@ -15765,8 +15802,8 @@ mod source_keyword_tests {
         };
         let top = deathtouch_spell_item(0);
         let mut events = Vec::new();
-        let previous_effect_result = EffectResult::default();
-        let mut effect_result = EffectResult::default();
+        let previous_effect_result = OperationResults::default();
+        let mut effect_result = OperationResults::default();
         let mut cx = EffectCx {
             engine: &mut engine,
             events: &mut events,
@@ -15900,8 +15937,8 @@ mod source_keyword_tests {
         ];
         let top = deathtouch_spell_item(0);
         let mut events = Vec::new();
-        let previous_effect_result = EffectResult::default();
-        let mut effect_result = EffectResult::default();
+        let previous_effect_result = OperationResults::default();
+        let mut effect_result = OperationResults::default();
 
         for (effect_index, effect) in effects.into_iter().enumerate() {
             let mut cx = EffectCx {
@@ -15959,14 +15996,13 @@ mod source_keyword_tests {
             .get(&target)
             .copied()
             .unwrap_or(0);
-        let previous_effect_result = EffectResult {
-            produced_objects: vec![TriggerObjectRef {
+        let previous_effect_result = crate::state::OperationResults::from_value(
+            crate::state::ProgramValue::PermanentSelection(vec![TriggerObjectRef {
                 object_id: target,
                 zone_change_generation: generation,
                 controller_at_event: 1,
-            }],
-            ..EffectResult::default()
-        };
+            }]),
+        );
         let mut events = Vec::new();
         engine
             .phase_out_chosen_creature(target, 0, &mut events)
@@ -15976,7 +16012,7 @@ mod source_keyword_tests {
         // an earlier compatible result across the actual phase-out transition to exercise only
         // the previous_battlefield_object battlefield-availability guard.
         let top = deathtouch_spell_item(0);
-        let mut effect_result = EffectResult::default();
+        let mut effect_result = OperationResults::default();
         let mut cx = EffectCx {
             engine: &mut engine,
             events: &mut events,
@@ -16104,8 +16140,8 @@ mod source_keyword_tests {
         };
         let top = deathtouch_spell_item(0);
         let mut events = Vec::new();
-        let previous_effect_result = EffectResult::default();
-        let mut effect_result = EffectResult::default();
+        let previous_effect_result = OperationResults::default();
+        let mut effect_result = OperationResults::default();
         let mut cx = EffectCx {
             engine: &mut engine,
             events: &mut events,
@@ -16710,8 +16746,8 @@ mod source_keyword_tests {
             .spell_effect[0]
             .clone();
         let mut events = vec![];
-        let previous_effect_result = EffectResult::default();
-        let mut effect_result = EffectResult::default();
+        let previous_effect_result = OperationResults::default();
+        let mut effect_result = OperationResults::default();
         let mut cx = EffectCx {
             engine: &mut engine,
             events: &mut events,
@@ -16759,8 +16795,8 @@ mod source_keyword_tests {
             .spell_effect[0]
             .clone();
         let mut events = vec![];
-        let previous_effect_result = EffectResult::default();
-        let mut effect_result = EffectResult::default();
+        let previous_effect_result = OperationResults::default();
+        let mut effect_result = OperationResults::default();
         let mut cx = EffectCx {
             engine: &mut engine,
             events: &mut events,
@@ -16919,14 +16955,11 @@ mod ripples_proliferated_choice_tests {
                 ..stale_own
             },
         ];
-        let previous = EffectResult {
-            input_result_type: Some(ResultType::ProliferatedPermanentCohort {
+        let previous = crate::state::OperationInput {
+            result_type: ResultType::ProliferatedPermanentCohort {
                 cardinality: Cardinality { min: 0, max: None },
-            }),
-            program_value: Some(crate::state::ProgramValue::ProliferatedPermanentCohort(
-                cohort,
-            )),
-            ..Default::default()
+            },
+            value: crate::state::ProgramValue::ProliferatedPermanentCohort(cohort),
         };
         let owner = tricerules_card_model::ProgramOwnerId::face(
             "ripples_of_potential",
@@ -16938,10 +16971,10 @@ mod ripples_proliferated_choice_tests {
             frames: Vec::new(),
             slots: vec![None],
             in_flight: Some(Vec::new()),
-            in_flight_produced_object_provenance: None,
+            in_flight_results: OperationResults::default(),
         };
         let mut events = Vec::new();
-        let mut effect_result = EffectResult::default();
+        let mut effect_result = OperationResults::default();
         let empty_targets = [];
         let mut cx = EffectCx {
             engine: &mut engine,

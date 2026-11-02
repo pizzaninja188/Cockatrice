@@ -9,8 +9,8 @@ use crate::state::{
     ParkedStackResolution, PendingChosenCounterAddition, PendingChosenCounterAdditionStage,
     PendingCounterMove, PendingResolution, PendingResolutionBranch, PendingResolutionBranchStage,
     PendingResolutionPresentation, PendingTargetedPlayerChoiceStage, ProgramValue,
-    ResolutionContinuation, StackItem, StackTarget, StagedTrigger, StagedTriggerGroup,
-    TargetedPlayerControlCohort, TriggerContext, TriggerObjectRef,
+    ResolutionContinuation, ResolutionFacts, StackItem, StackTarget, StagedTrigger,
+    StagedTriggerGroup, TargetedPlayerControlCohort, TriggerContext, TriggerObjectRef,
 };
 use crate::Zone;
 use crate::{GameEngine, ObjectId, PlayerId};
@@ -172,7 +172,7 @@ pub(super) fn move_one_counter_between_targets(
     }
 
     let stack = ParkedStackResolution::new(cx.top.clone())
-        .with_previous_result(cx.previous_effect_result.clone());
+        .with_previous_result(cx.resume_previous_result.cloned().unwrap_or_default());
     let prompt = "Choose a counter to move.".to_string();
     cx.engine.state.pending_resolution = Some(PendingResolution {
         resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
@@ -544,24 +544,27 @@ pub(super) fn choose_permanents(
     let departed_target_choice = targeted_player.is_some() && !targeted_player_live;
     let max = max.min(candidates.len() as u32);
     if min == max && candidates.len() == min as usize && !departed_target_choice {
-        cx.effect_result.produced_objects = candidates
-            .iter()
-            .map(|oid| TriggerObjectRef {
-                object_id: *oid,
-                zone_change_generation: cx
-                    .engine
-                    .state
-                    .zone_change_generation
-                    .get(oid)
-                    .copied()
-                    .unwrap_or(0),
-                controller_at_event: cx
-                    .engine
-                    .characteristics(*oid)
-                    .map(|characteristics| characteristics.controller)
-                    .unwrap_or(deciding_player),
-            })
-            .collect();
+        cx.effect_result
+            .set(crate::state::ProgramValue::PermanentSelection(
+                candidates
+                    .iter()
+                    .map(|oid| TriggerObjectRef {
+                        object_id: *oid,
+                        zone_change_generation: cx
+                            .engine
+                            .state
+                            .zone_change_generation
+                            .get(oid)
+                            .copied()
+                            .unwrap_or(0),
+                        controller_at_event: cx
+                            .engine
+                            .characteristics(*oid)
+                            .map(|characteristics| characteristics.controller)
+                            .unwrap_or(deciding_player),
+                    })
+                    .collect(),
+            ));
         return Ok(EffectOutcome::Continue);
     }
 
@@ -673,7 +676,7 @@ pub(super) fn choose_proliferated_permanents(
 ) -> Result<EffectOutcome, EngineError> {
     let Some(tricerules_card_model::primitives::ResultType::ProliferatedPermanentCohort {
         cardinality,
-    }) = cx.previous_effect_result.input_result_type.as_ref()
+    }) = cx.previous_effect_result.admitted_type()
     else {
         return Err(EngineError::ProgramInvariant(
             "Proliferate choice is missing its typed cohort input",
@@ -685,7 +688,12 @@ pub(super) fn choose_proliferated_permanents(
         ));
     }
     let Some(ProgramValue::ProliferatedPermanentCohort(cohort)) =
-        cx.previous_effect_result.program_value.as_ref()
+        cx.previous_effect_result.value(|value| {
+            matches!(
+                value,
+                crate::state::ProgramValue::ProliferatedPermanentCohort(_)
+            )
+        })
     else {
         return Err(EngineError::ProgramInvariant(
             "Proliferate choice input is not its sealed receipt cohort",
@@ -728,8 +736,8 @@ pub(super) fn choose_proliferated_permanents(
     candidates.sort_unstable();
 
     if candidates.is_empty() {
-        cx.effect_result.program_value =
-            Some(ProgramValue::ProliferatedPermanentSelection(Vec::new()));
+        cx.effect_result
+            .set(ProgramValue::ProliferatedPermanentSelection(Vec::new()));
         return Ok(EffectOutcome::Continue);
     }
 
@@ -943,7 +951,7 @@ pub(super) fn may_behold(
                 cx.parked_stack()
             } else {
                 ParkedStackResolution::new(cx.top.clone())
-                    .with_previous_result(cx.previous_effect_result.clone())
+                    .with_previous_result(cx.resume_previous_result.cloned().unwrap_or_default())
             },
             candidate_generations,
             hand_candidates,
@@ -1022,7 +1030,7 @@ pub(in crate::engine) fn resolution_branch_is_live(
 pub(in crate::engine) fn resolution_branch_is_selectable(
     engine: &crate::engine::GameEngine,
     top: &StackItem,
-    previous_result: &crate::state::EffectResult,
+    previous_result: &dyn ResolutionFacts,
     deciding_player: i32,
     original_chooser: i32,
     branch: &ResolutionBranchDef,
@@ -1046,7 +1054,7 @@ pub(in crate::engine) fn resolution_branch_is_selectable(
 pub(in crate::engine) fn direct_draw_effect_is_selectable(
     engine: &GameEngine,
     top: &StackItem,
-    previous_result: &crate::state::EffectResult,
+    previous_result: &dyn ResolutionFacts,
     effects: &[SpellEffectKind],
 ) -> Option<bool> {
     let [effect] = effects else {
@@ -1096,7 +1104,7 @@ pub(in crate::engine) fn direct_draw_effect_is_selectable(
 fn branch_draw_recipients(
     engine: &GameEngine,
     top: &StackItem,
-    previous_result: &crate::state::EffectResult,
+    previous_result: &dyn ResolutionFacts,
     who: PlayerRecipient,
 ) -> Vec<PlayerId> {
     let targets = top
@@ -1140,7 +1148,12 @@ fn branch_draw_recipients(
             })
             .into_iter()
             .collect(),
-        PlayerRecipient::ProgramInputPlayer => match previous_result.program_value.as_ref() {
+        PlayerRecipient::ProgramInputPlayer => match previous_result.value(|value| {
+            matches!(
+                value,
+                crate::state::ProgramValue::TargetedSpellController(_)
+            )
+        }) {
             Some(crate::state::ProgramValue::TargetedSpellController(Some(player))) => {
                 vec![*player]
             }
@@ -1251,7 +1264,7 @@ fn branch_draw_recipients(
 fn previous_result_receipt_matches(
     engine: &crate::engine::GameEngine,
     top: &StackItem,
-    previous_result: &crate::state::EffectResult,
+    previous_result: &dyn ResolutionFacts,
     condition: &tricerules_card_model::primitives::ResolutionReceiptCondition,
 ) -> bool {
     use tricerules_card_model::primitives::ResolutionReceiptCondition;
@@ -1263,7 +1276,7 @@ fn previous_result_receipt_matches(
             else {
                 return false;
             };
-            previous_result.counter_placements.iter().any(|receipt| {
+            previous_result.counter_placements().iter().any(|receipt| {
                 receipt.counter == *counter
                     && receipt.count > 0
                     && receipt.object.object_id == object_id
@@ -1276,10 +1289,7 @@ fn previous_result_receipt_matches(
             else {
                 return false;
             };
-            previous_result.sacrificed_objects.iter().any(|receipt| {
-                receipt.object_id == object_id
-                    && receipt.zone_change_generation == zone_change_generation
-            })
+            previous_result.was_sacrificed(object_id, zone_change_generation, top.controller)
         }
     }
 }
@@ -1287,10 +1297,10 @@ fn previous_result_receipt_matches(
 pub(in crate::engine) fn card_result_count(
     engine: &crate::engine::GameEngine,
     top: &StackItem,
-    previous_result: &crate::state::EffectResult,
+    previous_result: &dyn ResolutionFacts,
     filter: &tricerules_card_model::primitives::CardResultFilter,
 ) -> u32 {
-    if let Some(receipt) = previous_result.program_discard_result.as_ref() {
+    if let Some(receipt) = previous_result.discard_result() {
         return program_discard_result_count(&engine.state, top.controller, receipt, filter, None);
     }
     card_result_count_from_cohorts(
@@ -1305,11 +1315,11 @@ pub(in crate::engine) fn card_result_count(
 pub(in crate::engine) fn card_result_count_for_player(
     engine: &crate::engine::GameEngine,
     top: &StackItem,
-    previous_result: &crate::state::EffectResult,
+    previous_result: &dyn ResolutionFacts,
     filter: &tricerules_card_model::primitives::CardResultFilter,
     player: crate::state::PlayerId,
 ) -> u32 {
-    if let Some(receipt) = previous_result.program_discard_result.as_ref() {
+    if let Some(receipt) = previous_result.discard_result() {
         return program_discard_result_count(
             &engine.state,
             top.controller,
@@ -1332,10 +1342,10 @@ pub(in crate::engine) fn card_result_count_for_player(
 pub(in crate::engine) fn card_result_maximum(
     engine: &crate::engine::GameEngine,
     top: &StackItem,
-    previous_result: &crate::state::EffectResult,
+    previous_result: &dyn ResolutionFacts,
     filter: &tricerules_card_model::primitives::CardResultFilter,
 ) -> u32 {
-    if let Some(receipt) = previous_result.program_discard_result.as_ref() {
+    if let Some(receipt) = previous_result.discard_result() {
         return program_discard_result_maximum(&engine.state, top.controller, receipt, filter);
     }
     card_result_maximum_from_cohorts(
@@ -1351,7 +1361,7 @@ fn card_result_maximum_from_cohorts(
     state: &crate::state::GameState,
     controller: i32,
     payment_result: &crate::state::CardResultCohort,
-    previous_result: &crate::state::EffectResult,
+    previous_result: &dyn ResolutionFacts,
     filter: &tricerules_card_model::primitives::CardResultFilter,
 ) -> u32 {
     let mut counts = std::collections::BTreeMap::<i32, u32>::new();
@@ -1434,7 +1444,7 @@ fn program_discard_result_maximum(
 pub(in crate::engine) fn card_result_characteristic_sum(
     engine: &crate::engine::GameEngine,
     top: &StackItem,
-    previous_result: &crate::state::EffectResult,
+    previous_result: &dyn ResolutionFacts,
     filter: &tricerules_card_model::primitives::CardResultFilter,
     characteristic: BattlefieldQuantityCharacteristic,
 ) -> i64 {
@@ -1512,7 +1522,7 @@ enum CommittedMovementEvidence {
     },
 }
 
-/// Validate and project the exact typed Program input before EffectResult drops the raw
+/// Validate and project the exact typed Program input before OperationResults drops the raw
 /// ProgramValue variant. A present empty CardResultCohort is valid; an absent or differently
 /// typed runtime value remains an invariant error instead of becoming an empty sum.
 pub(super) fn validate_program_card_result_characteristic_sum_input(
@@ -1752,7 +1762,7 @@ fn card_result_count_from_cohorts(
     state: &crate::state::GameState,
     controller: i32,
     payment_result: &crate::state::CardResultCohort,
-    previous_result: &crate::state::EffectResult,
+    previous_result: &dyn ResolutionFacts,
     filter: &tricerules_card_model::primitives::CardResultFilter,
 ) -> u32 {
     matching_card_result_entries(state, controller, payment_result, previous_result, filter)
@@ -1764,13 +1774,15 @@ fn matching_card_result_entries<'a>(
     state: &'a crate::state::GameState,
     controller: i32,
     payment_result: &'a crate::state::CardResultCohort,
-    previous_result: &'a crate::state::EffectResult,
+    previous_result: &'a dyn ResolutionFacts,
     filter: &'a tricerules_card_model::primitives::CardResultFilter,
 ) -> impl Iterator<Item = &'a crate::state::CardResultEntry> + 'a {
     let cards = match filter.source {
-        tricerules_card_model::primitives::CardResultSource::Payment => &payment_result.cards,
+        tricerules_card_model::primitives::CardResultSource::Payment => {
+            payment_result.cards.as_slice()
+        }
         tricerules_card_model::primitives::CardResultSource::PreviousEffect => {
-            &previous_result.cards
+            previous_result.card_entries()
         }
     };
     let mut seen = std::collections::BTreeSet::new();
@@ -1884,7 +1896,7 @@ fn park_resolution_branches_for(
         },
         continuation: ResolutionContinuation::AuthoredBranch {
             stack: ParkedStackResolution::new(cx.top.clone())
-                .with_previous_result(cx.previous_effect_result.clone()),
+                .with_previous_result(cx.resume_previous_result.cloned().unwrap_or_default()),
             branch: PendingResolutionBranch {
                 optional,
                 chooser,
@@ -2532,7 +2544,7 @@ mod result_count_tests {
         let land = CardTypeFilter::Land;
         let discard = CardResultAction::Discard;
         let first = entry(4, 100, 1, discard, land);
-        let previous: crate::state::EffectResult = CardResultCohort {
+        let previous: crate::state::OperationResults = CardResultCohort {
             cards: vec![
                 first.clone(),
                 first,
@@ -2584,7 +2596,7 @@ mod result_count_tests {
                 &engine.state,
                 4,
                 &CardResultCohort::default(),
-                &crate::state::EffectResult::default(),
+                &crate::state::OperationResults::default(),
                 &filter
             ),
             0
@@ -2602,7 +2614,7 @@ mod result_count_tests {
             true,
         )
         .unwrap();
-        let previous_result: crate::state::EffectResult = CardResultCohort {
+        let previous_result: crate::state::OperationResults = CardResultCohort {
             cards: vec![
                 CardResultEntry {
                     action: CardResultAction::Discard,
@@ -2772,7 +2784,7 @@ mod result_count_tests {
             &valid_cohort,
         )
         .is_ok());
-        let previous_result: crate::state::EffectResult = CardResultCohort {
+        let previous_result: crate::state::OperationResults = CardResultCohort {
             cards: vec![valid_receipt],
             program_discard_result: None,
         }
@@ -2847,7 +2859,7 @@ mod result_count_tests {
             },
         };
         let value = cohort_value(vec![receipt.clone()]);
-        let previous_result: crate::state::EffectResult = CardResultCohort {
+        let previous_result: crate::state::OperationResults = CardResultCohort {
             cards: vec![receipt],
             program_discard_result: None,
         }
@@ -3140,7 +3152,7 @@ mod result_count_tests {
             },
         };
         let value = cohort_value(vec![receipt.clone()]);
-        let previous_result: crate::state::EffectResult = CardResultCohort {
+        let previous_result: crate::state::OperationResults = CardResultCohort {
             cards: vec![receipt],
             program_discard_result: None,
         }
