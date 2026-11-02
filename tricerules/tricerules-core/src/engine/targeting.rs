@@ -2037,6 +2037,7 @@ fn validate_effect_targets(
         | SpellEffectKind::ChooseLinkedExiledCard { .. }
         | SpellEffectKind::PlayLinkedExiledCard { .. }
         | SpellEffectKind::LookChooseBattlefield { .. }
+        | SpellEffectKind::LookTopCardOptionalToHand { .. }
         | SpellEffectKind::Hideaway { .. }
         | SpellEffectKind::LookChooseToHand { .. }
         | SpellEffectKind::Scry { .. }

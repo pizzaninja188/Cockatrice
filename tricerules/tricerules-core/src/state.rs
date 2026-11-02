@@ -1812,12 +1812,20 @@ pub enum PendingLibraryLookStage {
         looked_at: Vec<ObjectId>,
         linked_exile_key: LinkedExileKey,
     },
+    /// The unselected cards either retain the legacy bottom policy or stay in place for a
+    /// one-card optional top look.
     ChooseToHand {
         looked_at: Vec<ObjectId>,
-        bottom_order: LibraryBottomOrder,
+        remainder: PendingHandLookRemainderDisposition,
         reveal: bool,
     },
     OrderBottom,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) enum PendingHandLookRemainderDisposition {
+    Bottom(LibraryBottomOrder),
+    KeepPosition { filter: ZoneCardFilter },
 }
 
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]

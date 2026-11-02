@@ -115,6 +115,9 @@ pub(super) fn execute_effect(
             max_selected,
             remainder,
         } => zones::look_choose_battlefield(cx, count, filter, max_selected, remainder)?,
+        effect @ SpellEffectKind::LookTopCardOptionalToHand { .. } => {
+            zones::look_top_card_optional_to_hand(cx, effect)?
+        }
         SpellEffectKind::ChaosWarp => chaos_warp::chaos_warp(cx)?,
         // No card admits this instruction until its simultaneous movement and
         // end-to-end pair publication have passed the remaining capability gates.

@@ -7045,8 +7045,112 @@ pub(super) fn look_choose_to_hand(
                 .collect(),
             stage: PendingLibraryLookStage::ChooseToHand {
                 looked_at: looked,
-                bottom_order,
+                remainder: crate::state::PendingHandLookRemainderDisposition::Bottom(bottom_order),
                 reveal,
+            },
+        },
+    });
+    Ok(EffectOutcome::Suspended)
+}
+
+/// Look privately at exactly the top card and offer its optional public reveal into hand.
+pub(super) fn look_top_card_optional_to_hand(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::LookTopCardOptionalToHand { filter } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let parked_stack = cx.parked_stack();
+    let engine = &mut *cx.engine;
+    let controller = cx.controller;
+    let Some(idx) = engine.state.player_idx(controller) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let Some(top) = engine.state.players[idx].library.front().copied() else {
+        cx.events.push(ev_log(format!(
+            "P{controller} looks at an empty library ({}).",
+            cx.spell_label
+        )));
+        return Ok(EffectOutcome::Continue);
+    };
+
+    let looked = vec![top];
+    let selectable = zone_card_matches_filter(&engine.state, engine.registry, top, Some(&filter));
+    let legal = selectable.then_some(top).into_iter().collect::<Vec<_>>();
+    let (candidate_card_ids, candidate_names) = candidate_identities(engine, &looked);
+    let max = if selectable { 1 } else { 0 };
+    let prompt = if selectable {
+        "Look at the top card. You may reveal it and put it into your hand.".to_string()
+    } else {
+        "Look at the top card.".to_string()
+    };
+    cx.events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                resolution_prompt_id: 0,
+                accepted_permanent_selections: Vec::new(),
+                variable_mana_contribution: false,
+                candidate_token_identities: Vec::new(),
+                candidate_player_ids: Vec::new(),
+                deciding_player_id: controller,
+                source_object_id: cx.top.id,
+                prompt_text: prompt.clone(),
+                choice_kind: custom::ChoiceKind::LibraryLook as i32,
+                candidate_object_ids: looked.clone(),
+                candidate_card_ids,
+                candidate_names: candidate_names.clone(),
+                min: 0,
+                max,
+                ordered: false,
+                unique_names: false,
+                candidate_server_card_ids: Vec::new(),
+                resolution_branches: Vec::new(),
+                mana_cost: String::new(),
+                generic_mana_cost: 0,
+                payment_currently_legal: false,
+                candidate_selectable: vec![selectable],
+                public_reveal: None,
+                candidate_source_zones: Vec::new(),
+                combat_defender_options: Vec::new(),
+                waterbend: false,
+                selection_slots: Vec::new(),
+                replacement_options: Vec::new(),
+                selection_alternatives: Vec::new(),
+            },
+        )),
+    });
+    cx.events.push(ev_log(format!(
+        "P{controller} privately looks at the top card of their library ({}).",
+        cx.spell_label
+    )));
+    cx.events.push(ev_log_private(
+        format!("P{controller} looks at {}.", candidate_names.join(", ")),
+        controller,
+    ));
+    engine.state.pending_resolution = Some(PendingResolution {
+        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
+        resolution_prompt_semantics: None,
+        deciding_player: controller,
+        presentation: PendingResolutionPresentation {
+            source_object_id: cx.top.id,
+            candidates: legal,
+            min: 0,
+            max,
+            ordered: false,
+            unique_names: false,
+            prompt,
+            choice_kind: custom::ChoiceKind::LibraryLook,
+        },
+        continuation: ResolutionContinuation::LibraryLook {
+            stack: parked_stack,
+            candidates: super::super::library_choices::capture(engine, &looked),
+            stage: PendingLibraryLookStage::ChooseToHand {
+                looked_at: looked,
+                remainder: crate::state::PendingHandLookRemainderDisposition::KeepPosition {
+                    filter,
+                },
+                reveal: true,
             },
         },
     });

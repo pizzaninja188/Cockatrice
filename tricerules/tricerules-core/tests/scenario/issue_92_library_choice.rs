@@ -1359,3 +1359,1012 @@ fn brightwood_rejects_noncreatures_and_random_order_is_replay_deterministic() {
         "same seed and command log reproduce the random order"
     );
 }
+
+/// Synthetic-only phase A fixture: an optional private top-card pick followed by the existing
+/// life-gain tail, so the test also proves a declined choice resumes the parked program once.
+fn narset_phase_a_fixture() -> String {
+    r#"(
+      id: "narset_phase_a_private_look_fixture",
+      name: "Narset Phase A Private Look Fixture",
+      face_id: "narset_phase_a_private_look_fixture",
+      mana_cost: "{0}", types: ["Instant"],
+      spell_program: Some((body: (steps: [
+        (id: "private_look", bind: [], input: None,
+         kind: Perform(LookTopCardOptionalToHand(
+            filter: (card_type: Some(Nonland), excluded_card_types: [Creature]),
+         ))),
+        (id: "tail_life", bind: [], input: None,
+         kind: Perform(GainLife(amount: 7))),
+      ], yields: []))),
+    )"#
+    .to_string()
+}
+
+fn narset_phase_a_engine(seed: u64) -> GameEngine {
+    let card_id = "narset_phase_a_private_look_fixture";
+    let fixture = narset_phase_a_fixture();
+    let registry = Box::leak(Box::new(
+        tricerules_cards::CardRegistry::from_chunks_and_tokens(
+            &[
+                fixture.as_str(),
+                include_str!("../../../tricerules-cards/data/opt.ron"),
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+                include_str!("../../../tricerules-cards/data/mountain.ron"),
+            ],
+            &[],
+        )
+        .expect("the synthetic Narset phase A fixture and its library cards are admitted"),
+    ));
+    let mut engine = GameEngine::new(
+        registry,
+        seed,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck_with("forest", &[card_id]),
+            vec!["island".into(); 20],
+        ]),
+        true,
+    )
+    .expect("the synthetic Narset phase A engine starts");
+    advance_to_main1_from_game_start(&mut engine);
+    ensure_in_hand(&mut engine, 0, card_id);
+    engine
+}
+
+fn narset_phase_a_library_identity_snapshot(engine: &GameEngine, player: usize) -> Vec<(u32, u64)> {
+    engine.state.players[player]
+        .library
+        .iter()
+        .map(|&object_id| {
+            assert!(
+                engine.state.objects.contains_key(&object_id),
+                "library object {object_id} must exist before reading its generation"
+            );
+            (
+                object_id,
+                engine
+                    .state
+                    .zone_change_generation
+                    .get(&object_id)
+                    .copied()
+                    .unwrap_or_default(),
+            )
+        })
+        .collect()
+}
+
+fn assert_narset_phase_a_no_public_library_identity(batch: &RuledEventBatch) {
+    use tricerules_proto::ruled::v1::ruled_event::Ev;
+
+    for event in &batch.events {
+        match &event.ev {
+            Some(Ev::CardsRevealed(_)) => panic!("the optional top-card look stays private"),
+            Some(Ev::Log(log)) if log.visible_to_player_id.is_none() => {
+                for name in ["Opt", "Grizzly Bears", "Island", "Forest", "Mountain"] {
+                    assert!(
+                        !log.text.contains(name),
+                        "public library identity leak: {}",
+                        log.text
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+#[test]
+fn narset_phase_a_eligible_decline_keeps_full_library_order_and_identity() {
+    let card = "narset_phase_a_private_look_fixture";
+    let mut engine = narset_phase_a_engine(92701);
+    let top = seat_on_top(
+        &mut engine,
+        0,
+        &["opt", "grizzly_bears", "island", "forest", "mountain"],
+    );
+    let library_before_cast = narset_phase_a_library_identity_snapshot(&engine, 0);
+    let life_before = engine.state.players[0].life;
+    let batch = cast_instant_and_resolve(&mut engine, 0, card, ManaGift::default());
+    let choice = find_resolution_choice(&batch).expect("the optional top-card choice is offered");
+    assert_eq!(choice.deciding_player_id, 0);
+    assert_eq!((choice.min, choice.max), (0, 1));
+    assert_eq!(choice.candidate_object_ids, vec![top[0]]);
+    assert_eq!(choice.candidate_selectable, [true]);
+    assert_narset_phase_a_no_public_library_identity(&batch);
+    assert_eq!(
+        engine.state.players[0].life, life_before,
+        "the tail is still parked"
+    );
+    assert!(engine.state.pending_resolution.is_some());
+    assert!(
+        engine.state.stack.is_empty(),
+        "the resolving item is parked in the continuation"
+    );
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("library-look continuation");
+    let ResolutionContinuation::LibraryLook {
+        stack,
+        stage: PendingLibraryLookStage::ChooseToHand { .. },
+        ..
+    } = &pending.continuation
+    else {
+        panic!("the eligible top card is awaiting the hand choice");
+    };
+    assert_eq!(stack.item.card_id, card);
+    assert_eq!(stack.item.controller, 0);
+    assert_eq!(stack.item.id, choice.source_object_id);
+    assert_eq!(
+        narset_phase_a_library_identity_snapshot(&engine, 0),
+        library_before_cast,
+        "parking the choice preserves the complete library order and every object's generation"
+    );
+
+    let hand_at_choice: std::collections::BTreeSet<_> =
+        engine.state.players[0].hand.iter().copied().collect();
+    let cards_drawn_at_choice = engine.state.turn_history.current.player(0).cards_drawn;
+
+    let batch = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
+        .expect("decline the optional eligible-card choice");
+    assert_narset_phase_a_no_public_library_identity(&batch);
+    assert_eq!(
+        narset_phase_a_library_identity_snapshot(&engine, 0),
+        library_before_cast,
+        "declining preserves the complete library order and every object's generation"
+    );
+    let hand_after: std::collections::BTreeSet<_> =
+        engine.state.players[0].hand.iter().copied().collect();
+    assert_eq!(
+        hand_after, hand_at_choice,
+        "declining preserves hand membership"
+    );
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        cards_drawn_at_choice,
+        "taking the looked-at card to hand is not a draw"
+    );
+    assert!(find_resolution_choice(&batch).is_none());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(
+        engine.state.players[0].life,
+        life_before + 7,
+        "the tail resolves once"
+    );
+}
+
+#[derive(Clone, Copy)]
+enum NarsetPhaseAProfileFilter {
+    NonlandNoncreature,
+    Creature,
+}
+
+fn narset_phase_a_profile_fixture(filter: NarsetPhaseAProfileFilter) -> String {
+    let filter = match filter {
+        NarsetPhaseAProfileFilter::NonlandNoncreature => {
+            "(card_type: Some(Nonland), excluded_card_types: [Creature])"
+        }
+        NarsetPhaseAProfileFilter::Creature => {
+            "(card_type: Some(Creature), excluded_card_types: [])"
+        }
+    };
+    format!(
+        r#"(
+          id: "narset_phase_a_behavior_fixture",
+          name: "Narset Phase A Behavior Fixture",
+          face_id: "narset_phase_a_behavior_fixture",
+          mana_cost: "{{0}}", types: ["Instant"],
+          spell_program: Some((body: (steps: [
+            (id: "private_look", bind: [], input: None,
+             kind: Perform(LookTopCardOptionalToHand(
+                filter: {filter},
+             ))),
+            (id: "tail_life", bind: [], input: None,
+             kind: Perform(GainLife(amount: 7))),
+          ], yields: []))),
+        )"#
+    )
+}
+
+fn narset_phase_a_profile_engine(seed: u64, filter: NarsetPhaseAProfileFilter) -> GameEngine {
+    let card_id = "narset_phase_a_behavior_fixture";
+    let fixture = narset_phase_a_profile_fixture(filter);
+    let registry = Box::leak(Box::new(
+        tricerules_cards::CardRegistry::from_chunks_and_tokens(
+            &[
+                fixture.as_str(),
+                include_str!("../../../tricerules-cards/data/opt.ron"),
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+                include_str!("../../../tricerules-cards/data/mountain.ron"),
+            ],
+            &[],
+        )
+        .expect("the synthetic phase A profile and its library cards are admitted"),
+    ));
+    let mut engine = GameEngine::new(
+        registry,
+        seed,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck_with("forest", &[card_id]),
+            vec!["island".into(); 20],
+        ]),
+        true,
+    )
+    .expect("the synthetic phase A profile engine starts");
+    advance_to_main1_from_game_start(&mut engine);
+    ensure_in_hand(&mut engine, 0, card_id);
+    engine
+}
+
+fn assert_narset_phase_a_parked_choice(engine: &GameEngine, source_object_id: u32) {
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("library-look continuation");
+    let ResolutionContinuation::LibraryLook {
+        stack,
+        stage: PendingLibraryLookStage::ChooseToHand { .. },
+        ..
+    } = &pending.continuation
+    else {
+        panic!("the top card is awaiting the hand choice");
+    };
+    assert_eq!(stack.item.card_id, "narset_phase_a_behavior_fixture");
+    assert_eq!(stack.item.controller, 0);
+    assert_eq!(stack.item.id, source_object_id);
+    assert!(
+        engine.state.stack.is_empty(),
+        "the resolving item is parked in the continuation"
+    );
+}
+
+fn assert_narset_phase_a_no_public_unlooked_identity(batch: &RuledEventBatch) {
+    use tricerules_proto::ruled::v1::ruled_event::Ev;
+
+    for event in &batch.events {
+        if let Some(Ev::Log(log)) = &event.ev {
+            if log.visible_to_player_id.is_none() {
+                for name in ["Grizzly Bears", "Island", "Forest", "Mountain"] {
+                    assert!(
+                        !log.text.contains(name),
+                        "public unlooked library identity leak: {}",
+                        log.text
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn narset_phase_a_accept_reveals_exact_top_and_puts_it_into_hand_without_draw() {
+    use tricerules_proto::ruled::v1::ruled_event::Ev;
+
+    let card_id = "narset_phase_a_behavior_fixture";
+    let mut engine =
+        narset_phase_a_profile_engine(92702, NarsetPhaseAProfileFilter::NonlandNoncreature);
+    let top = seat_on_top(
+        &mut engine,
+        0,
+        &["opt", "grizzly_bears", "island", "forest", "mountain"],
+    );
+    let library_before_cast = narset_phase_a_library_identity_snapshot(&engine, 0);
+    assert_eq!(library_before_cast[0].0, top[0]);
+    let life_before = engine.state.players[0].life;
+    let cards_drawn_before_cast = engine.state.turn_history.current.player(0).cards_drawn;
+
+    let batch = cast_instant_and_resolve(&mut engine, 0, card_id, ManaGift::default());
+    let choice = find_resolution_choice(&batch).expect("the optional top-card choice is offered");
+    assert_eq!(choice.deciding_player_id, 0);
+    assert_eq!(choice.choice_kind(), ChoiceKind::LibraryLook);
+    assert_eq!((choice.min, choice.max), (0, 1));
+    assert_eq!(choice.candidate_object_ids, vec![top[0]]);
+    assert_eq!(choice.candidate_selectable, [true]);
+    assert!(choice.public_reveal.is_none());
+    assert_narset_phase_a_no_public_library_identity(&batch);
+    assert_eq!(
+        narset_phase_a_library_identity_snapshot(&engine, 0),
+        library_before_cast,
+        "parking the choice preserves library order and generations"
+    );
+    assert_eq!(
+        engine.state.players[0].life, life_before,
+        "the tail is still parked"
+    );
+    assert_narset_phase_a_parked_choice(&engine, choice.source_object_id);
+
+    let hand_at_choice: std::collections::BTreeSet<_> =
+        engine.state.players[0].hand.iter().copied().collect();
+    let cards_drawn_at_choice = engine.state.turn_history.current.player(0).cards_drawn;
+    assert_eq!(cards_drawn_at_choice, cards_drawn_before_cast);
+
+    let accepted = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![top[0]]))
+        .expect("choose the exact eligible top card");
+    let reveals: Vec<_> = accepted
+        .events
+        .iter()
+        .filter_map(|event| match &event.ev {
+            Some(Ev::CardsRevealed(reveal)) => Some(reveal),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(reveals.len(), 1, "acceptance reveals exactly one card");
+    assert_eq!(reveals[0].cards.len(), 1);
+    assert_eq!(reveals[0].cards[0].object_id, top[0]);
+    assert_eq!(reveals[0].cards[0].card_name, "Opt");
+    assert!(!reveals[0].reveal_id.is_empty());
+    assert_narset_phase_a_no_public_unlooked_identity(&accepted);
+
+    assert_eq!(engine.state.objects[&top[0]].zone, Zone::Hand);
+    assert_eq!(
+        engine.state.zone_change_generation.get(&top[0]).copied(),
+        Some(library_before_cast[0].1 + 1),
+        "moving the selected object to hand advances its generation once"
+    );
+    assert_eq!(
+        narset_phase_a_library_identity_snapshot(&engine, 0),
+        library_before_cast[1..].to_vec(),
+        "only the selected top object leaves; all other identities, generations, and order remain"
+    );
+    let mut expected_hand = hand_at_choice.clone();
+    assert!(expected_hand.insert(top[0]));
+    let hand_after: std::collections::BTreeSet<_> =
+        engine.state.players[0].hand.iter().copied().collect();
+    assert_eq!(
+        hand_after, expected_hand,
+        "only the selected object joins hand"
+    );
+    assert_eq!(hand_after.len(), hand_at_choice.len() + 1);
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        cards_drawn_at_choice,
+        "taking the looked-at card to hand is not a draw"
+    );
+    assert!(find_resolution_choice(&accepted).is_none());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(
+        engine.state.players[0].life,
+        life_before + 7,
+        "the tail resolves once"
+    );
+}
+
+fn assert_narset_phase_a_nonmatching_top(
+    seed: u64,
+    filter: NarsetPhaseAProfileFilter,
+    top_cards: &[&str],
+) {
+    let card_id = "narset_phase_a_behavior_fixture";
+    let mut engine = narset_phase_a_profile_engine(seed, filter);
+    let top = seat_on_top(&mut engine, 0, top_cards);
+    let library_before_cast = narset_phase_a_library_identity_snapshot(&engine, 0);
+    let life_before = engine.state.players[0].life;
+    let cards_drawn_before_cast = engine.state.turn_history.current.player(0).cards_drawn;
+    let batch = cast_instant_and_resolve(&mut engine, 0, card_id, ManaGift::default());
+    let choice =
+        find_resolution_choice(&batch).expect("a nonempty library still shows its top image");
+    assert_eq!(choice.deciding_player_id, 0);
+    assert_eq!(choice.choice_kind(), ChoiceKind::LibraryLook);
+    assert_eq!((choice.min, choice.max), (0, 0));
+    assert_eq!(choice.candidate_object_ids, vec![top[0]]);
+    assert_eq!(choice.candidate_selectable, [false]);
+    assert!(choice.public_reveal.is_none());
+    assert_narset_phase_a_no_public_library_identity(&batch);
+    assert_eq!(
+        narset_phase_a_library_identity_snapshot(&engine, 0),
+        library_before_cast,
+        "parking the ineligible top preserves library order and generations"
+    );
+    assert_eq!(
+        engine.state.players[0].life, life_before,
+        "the tail is still parked"
+    );
+    assert_narset_phase_a_parked_choice(&engine, choice.source_object_id);
+
+    let hand_at_choice: std::collections::BTreeSet<_> =
+        engine.state.players[0].hand.iter().copied().collect();
+    let cards_drawn_at_choice = engine.state.turn_history.current.player(0).cards_drawn;
+    assert_eq!(cards_drawn_at_choice, cards_drawn_before_cast);
+    let completed = engine
+        .apply_scenario_command(0, &submit_resolution_choice(vec![]))
+        .expect("complete the zero-card optional choice");
+    assert_narset_phase_a_no_public_library_identity(&completed);
+    assert_eq!(
+        narset_phase_a_library_identity_snapshot(&engine, 0),
+        library_before_cast,
+        "declining the ineligible top preserves library order and generations"
+    );
+    let hand_after: std::collections::BTreeSet<_> =
+        engine.state.players[0].hand.iter().copied().collect();
+    assert_eq!(hand_after, hand_at_choice, "no card joins hand");
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        cards_drawn_at_choice,
+        "the private look does not draw"
+    );
+    assert!(find_resolution_choice(&completed).is_none());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(
+        engine.state.players[0].life,
+        life_before + 7,
+        "the tail resolves once"
+    );
+}
+
+fn assert_narset_phase_a_empty_library(filter: NarsetPhaseAProfileFilter, seed: u64) {
+    let card_id = "narset_phase_a_behavior_fixture";
+    let mut engine = narset_phase_a_profile_engine(seed, filter);
+    let emptied: Vec<_> = engine.state.players[0].library.drain(..).collect();
+    for object_id in emptied {
+        engine.state.objects.remove(&object_id);
+        engine.state.zone_change_generation.remove(&object_id);
+    }
+    assert!(engine.state.players[0].library.is_empty());
+    let life_before = engine.state.players[0].life;
+    let cards_drawn_before = engine.state.turn_history.current.player(0).cards_drawn;
+
+    let batch = cast_instant_and_resolve(&mut engine, 0, card_id, ManaGift::default());
+    assert!(
+        find_resolution_choice(&batch).is_none(),
+        "empty library offers no choice"
+    );
+    assert_narset_phase_a_no_public_library_identity(&batch);
+    assert!(engine.state.players[0].library.is_empty());
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        cards_drawn_before,
+        "empty-library completion does not draw"
+    );
+    assert!(
+        engine.state.players.iter().all(|player| !player.has_lost),
+        "an empty library does not cause a loss without a draw"
+    );
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(
+        engine.state.players[0].life,
+        life_before + 7,
+        "the tail resolves once"
+    );
+}
+
+#[test]
+fn narset_phase_a_nonmatching_and_empty_are_private_and_preserve_position() {
+    assert_narset_phase_a_nonmatching_top(
+        92703,
+        NarsetPhaseAProfileFilter::NonlandNoncreature,
+        &["grizzly_bears", "opt", "island", "forest", "mountain"],
+    );
+    assert_narset_phase_a_nonmatching_top(
+        92704,
+        NarsetPhaseAProfileFilter::NonlandNoncreature,
+        &["island", "opt", "grizzly_bears", "forest", "mountain"],
+    );
+    assert_narset_phase_a_nonmatching_top(
+        92705,
+        NarsetPhaseAProfileFilter::Creature,
+        &["opt", "grizzly_bears", "island", "forest", "mountain"],
+    );
+    assert_narset_phase_a_empty_library(NarsetPhaseAProfileFilter::NonlandNoncreature, 92706);
+    assert_narset_phase_a_empty_library(NarsetPhaseAProfileFilter::Creature, 92707);
+}
+
+fn narset_phase_a_prompt_id(engine: &GameEngine, choice: &ResolutionChoiceRequired) -> u64 {
+    let pending_prompt_id = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("published library-look choice is pending")
+        .resolution_prompt_id
+        .get();
+    assert_ne!(choice.resolution_prompt_id, 0);
+    assert_eq!(choice.resolution_prompt_id, pending_prompt_id);
+    pending_prompt_id
+}
+
+fn narset_phase_a_choice_with_prompt(prompt_id: u64, chosen: Vec<u32>) -> RuledCommand {
+    use tricerules_proto::ruled::v1::ruled_command::Cmd;
+
+    let mut command = submit_resolution_choice(chosen);
+    let Some(Cmd::SubmitResolutionChoice(answer)) = command.cmd.as_mut() else {
+        unreachable!();
+    };
+    answer.resolution_prompt_id = prompt_id;
+    command
+}
+
+fn assert_narset_phase_a_rejected_answer_is_atomic(
+    engine: &mut GameEngine,
+    actor: i32,
+    command: &RuledCommand,
+    expected_pending_prompt_id: u64,
+    submitted_prompt_id: u64,
+) {
+    use tricerules_proto::ruled::v1::ruled_command::Cmd;
+
+    let state_diagnostics_before = serde_json::to_value(&engine.state).unwrap();
+    let command_index_before = engine.state.command_index;
+    let pending_prompt_id_before = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the rejected answer starts from a pending choice")
+        .resolution_prompt_id
+        .get();
+    assert_eq!(pending_prompt_id_before, expected_pending_prompt_id);
+    let Some(Cmd::SubmitResolutionChoice(answer)) = command.cmd.as_ref() else {
+        panic!("the rejected command is a resolution choice");
+    };
+    assert_eq!(answer.resolution_prompt_id, submitted_prompt_id);
+    assert_ne!(answer.resolution_prompt_id, 0);
+
+    assert!(engine.apply_command(actor, command).is_err());
+
+    assert_eq!(
+        serde_json::to_value(&engine.state).unwrap(),
+        state_diagnostics_before,
+        "rejected choice preserves serialized engine state"
+    );
+    assert_eq!(engine.state.command_index, command_index_before);
+    let pending_prompt_id_after = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("rejected choice retains its pending continuation")
+        .resolution_prompt_id
+        .get();
+    assert_eq!(pending_prompt_id_after, pending_prompt_id_before);
+}
+
+#[test]
+fn narset_phase_a_invalid_and_stale_answers_are_atomic() {
+    let card_id = "narset_phase_a_behavior_fixture";
+    let mut engine =
+        narset_phase_a_profile_engine(92708, NarsetPhaseAProfileFilter::NonlandNoncreature);
+    let first_top = seat_on_top(
+        &mut engine,
+        0,
+        &["opt", "grizzly_bears", "island", "forest", "mountain"],
+    );
+    let first_batch = cast_instant_and_resolve(&mut engine, 0, card_id, ManaGift::default());
+    let first_choice =
+        find_resolution_choice(&first_batch).expect("the first eligible top card is offered");
+    let first_prompt_id = narset_phase_a_prompt_id(&engine, &first_choice);
+
+    let wrong_actor = narset_phase_a_choice_with_prompt(first_prompt_id, vec![first_top[0]]);
+    assert_narset_phase_a_rejected_answer_is_atomic(
+        &mut engine,
+        1,
+        &wrong_actor,
+        first_prompt_id,
+        first_prompt_id,
+    );
+    let duplicate_oid =
+        narset_phase_a_choice_with_prompt(first_prompt_id, vec![first_top[0], first_top[0]]);
+    assert_narset_phase_a_rejected_answer_is_atomic(
+        &mut engine,
+        0,
+        &duplicate_oid,
+        first_prompt_id,
+        first_prompt_id,
+    );
+    let wrong_oid = narset_phase_a_choice_with_prompt(first_prompt_id, vec![first_top[1]]);
+    assert_narset_phase_a_rejected_answer_is_atomic(
+        &mut engine,
+        0,
+        &wrong_oid,
+        first_prompt_id,
+        first_prompt_id,
+    );
+
+    let life_before_first_accept = engine.state.players[0].life;
+    engine
+        .apply_command(
+            0,
+            &narset_phase_a_choice_with_prompt(first_prompt_id, vec![first_top[0]]),
+        )
+        .expect("the current exact candidate remains selectable after rejected answers");
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(engine.state.players[0].life, life_before_first_accept + 7);
+
+    let second_source = inject_library_card(&mut engine, 0, card_id);
+    assert_eq!(relocate_to_hand(&mut engine, 0, card_id), second_source);
+    let second_top = seat_on_top(
+        &mut engine,
+        0,
+        &["opt", "grizzly_bears", "island", "forest", "mountain"],
+    );
+    let second_batch = cast_instant_and_resolve(&mut engine, 0, card_id, ManaGift::default());
+    let second_choice =
+        find_resolution_choice(&second_batch).expect("the second eligible top card is offered");
+    let second_prompt_id = narset_phase_a_prompt_id(&engine, &second_choice);
+    assert_ne!(
+        second_prompt_id, first_prompt_id,
+        "new offer receives a new prompt ID"
+    );
+
+    let stale_prompt = narset_phase_a_choice_with_prompt(first_prompt_id, vec![second_top[0]]);
+    assert_narset_phase_a_rejected_answer_is_atomic(
+        &mut engine,
+        0,
+        &stale_prompt,
+        second_prompt_id,
+        first_prompt_id,
+    );
+    let life_before_second_accept = engine.state.players[0].life;
+    engine
+        .apply_command(
+            0,
+            &narset_phase_a_choice_with_prompt(second_prompt_id, vec![second_top[0]]),
+        )
+        .expect("the current prompt remains usable after the stale answer");
+    assert!(engine.state.pending_resolution.is_none());
+    assert_eq!(engine.state.players[0].life, life_before_second_accept + 7);
+
+    let mut stale_generation_engine =
+        narset_phase_a_profile_engine(92709, NarsetPhaseAProfileFilter::NonlandNoncreature);
+    let generation_life_before = stale_generation_engine.state.players[0].life;
+    let generation_top = seat_on_top(
+        &mut stale_generation_engine,
+        0,
+        &["opt", "grizzly_bears", "island", "forest", "mountain"],
+    );
+    let generation_batch = cast_instant_and_resolve(
+        &mut stale_generation_engine,
+        0,
+        card_id,
+        ManaGift::default(),
+    );
+    let generation_choice = find_resolution_choice(&generation_batch)
+        .expect("the generation-bound top card is offered");
+    let generation_prompt_id =
+        narset_phase_a_prompt_id(&stale_generation_engine, &generation_choice);
+    let original_generation = stale_generation_engine
+        .state
+        .zone_change_generation
+        .get(&generation_top[0])
+        .copied();
+    *stale_generation_engine
+        .state
+        .zone_change_generation
+        .entry(generation_top[0])
+        .or_default() = original_generation.unwrap_or_default() + 1;
+    let stale_generation =
+        narset_phase_a_choice_with_prompt(generation_prompt_id, vec![generation_top[0]]);
+    assert_narset_phase_a_rejected_answer_is_atomic(
+        &mut stale_generation_engine,
+        0,
+        &stale_generation,
+        generation_prompt_id,
+        generation_prompt_id,
+    );
+    match original_generation {
+        Some(generation) => {
+            stale_generation_engine
+                .state
+                .zone_change_generation
+                .insert(generation_top[0], generation);
+        }
+        None => {
+            stale_generation_engine
+                .state
+                .zone_change_generation
+                .remove(&generation_top[0]);
+        }
+    }
+    stale_generation_engine
+        .apply_command(
+            0,
+            &narset_phase_a_choice_with_prompt(generation_prompt_id, vec![generation_top[0]]),
+        )
+        .expect("restoring the prepared object generation permits the exact current choice");
+    assert!(stale_generation_engine.state.pending_resolution.is_none());
+    assert!(stale_generation_engine.state.stack.is_empty());
+    assert_eq!(
+        stale_generation_engine.state.players[0].life,
+        generation_life_before + 7
+    );
+
+    let mut ineligible_engine =
+        narset_phase_a_profile_engine(92710, NarsetPhaseAProfileFilter::Creature);
+    let ineligible_life_before = ineligible_engine.state.players[0].life;
+    let ineligible_top = seat_on_top(
+        &mut ineligible_engine,
+        0,
+        &["opt", "grizzly_bears", "island", "forest", "mountain"],
+    );
+    let ineligible_batch =
+        cast_instant_and_resolve(&mut ineligible_engine, 0, card_id, ManaGift::default());
+    let ineligible_choice = find_resolution_choice(&ineligible_batch)
+        .expect("the ineligible top card still has a private candidate image");
+    assert_eq!((ineligible_choice.min, ineligible_choice.max), (0, 0));
+    assert_eq!(
+        ineligible_choice.candidate_object_ids,
+        vec![ineligible_top[0]]
+    );
+    assert_eq!(ineligible_choice.candidate_selectable, [false]);
+    let ineligible_prompt_id = narset_phase_a_prompt_id(&ineligible_engine, &ineligible_choice);
+    let ineligible_answer =
+        narset_phase_a_choice_with_prompt(ineligible_prompt_id, vec![ineligible_top[0]]);
+    assert_narset_phase_a_rejected_answer_is_atomic(
+        &mut ineligible_engine,
+        0,
+        &ineligible_answer,
+        ineligible_prompt_id,
+        ineligible_prompt_id,
+    );
+    ineligible_engine
+        .apply_command(
+            0,
+            &narset_phase_a_choice_with_prompt(ineligible_prompt_id, vec![]),
+        )
+        .expect("declining the zero-card prompt completes the parked tail");
+    assert!(ineligible_engine.state.pending_resolution.is_none());
+    assert!(ineligible_engine.state.stack.is_empty());
+    assert_eq!(
+        ineligible_engine.state.players[0].life,
+        ineligible_life_before + 7
+    );
+}
+
+fn narset_phase_a_activated_fixture() -> String {
+    r#"(
+      id: "narset_phase_a_activated_fixture",
+      name: "Narset Phase A Activated Fixture",
+      face_id: "narset_phase_a_activated_fixture",
+      mana_cost: "{0}", types: ["Artifact"],
+      activated_abilities: [(
+        ability_id: "activated_01", presentation: Fallback,
+        costs: [],
+        effect: [
+          LookTopCardOptionalToHand(
+            filter: (card_type: Some(Creature), excluded_card_types: []),
+          ),
+          GainLife(amount: 7),
+        ],
+      )],
+    )"#
+    .to_string()
+}
+
+fn narset_phase_a_activated_engine(seed: u64) -> GameEngine {
+    let card_id = "narset_phase_a_activated_fixture";
+    let fixture = narset_phase_a_activated_fixture();
+    let registry = Box::leak(Box::new(
+        tricerules_cards::CardRegistry::from_chunks_and_tokens(
+            &[
+                fixture.as_str(),
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+                include_str!("../../../tricerules-cards/data/mountain.ron"),
+            ],
+            &[],
+        )
+        .expect("the activated effect-list fixture and its library cards are admitted"),
+    ));
+    GameEngine::new(
+        registry,
+        seed,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck_with("forest", &[card_id]),
+            vec!["island".into(); 20],
+        ]),
+        true,
+    )
+    .expect("the synthetic activated effect-list engine starts")
+}
+
+#[test]
+fn narset_phase_a_activated_effect_list_creature_accepts_without_draw() {
+    use tricerules_proto::ruled::v1::ruled_event::Ev;
+
+    let card_id = "narset_phase_a_activated_fixture";
+    let mut engine = narset_phase_a_activated_engine(92711);
+    advance_to_main1_from_game_start(&mut engine);
+    let source = relocate_to_battlefield(&mut engine, 0, card_id, false);
+    let source_generation = engine
+        .state
+        .zone_change_generation
+        .get(&source)
+        .copied()
+        .unwrap_or_default();
+    let top = seat_on_top(
+        &mut engine,
+        0,
+        &["grizzly_bears", "island", "forest", "mountain"],
+    );
+    let library_before = narset_phase_a_library_identity_snapshot(&engine, 0);
+    let life_before = engine.state.players[0].life;
+    let cards_drawn_before = engine.state.turn_history.current.player(0).cards_drawn;
+
+    let activation = crate::helpers::authoring_actions::activation(&mut engine, 0, source, 0)
+        .expect("the current engine offer includes the activated library-look ability");
+    engine
+        .apply_scenario_command(0, &activation)
+        .expect("activate from the current offered command");
+    let first_pass = engine.state.priority_player_id();
+    engine
+        .apply_scenario_command(first_pass, &pass())
+        .expect("the first priority holder passes");
+    let second_pass = engine.state.priority_player_id();
+    let batch = engine
+        .apply_scenario_command(second_pass, &pass())
+        .expect("the second priority holder passes and the ability resolves");
+    let choice = find_resolution_choice(&batch).expect("the ability offers the creature top card");
+    assert_eq!(choice.deciding_player_id, 0);
+    assert_eq!(choice.choice_kind(), ChoiceKind::LibraryLook);
+    assert_eq!((choice.min, choice.max), (0, 1));
+    assert_eq!(choice.candidate_object_ids, vec![top[0]]);
+    assert_eq!(choice.candidate_selectable, [true]);
+    assert!(choice.public_reveal.is_none());
+    assert!(batch
+        .events
+        .iter()
+        .all(|event| !matches!(&event.ev, Some(Ev::CardsRevealed(_)))));
+    assert_eq!(engine.state.players[0].life, life_before);
+    assert_eq!(
+        narset_phase_a_library_identity_snapshot(&engine, 0),
+        library_before
+    );
+    {
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("the activated ability is parked at its private look");
+        assert_eq!(
+            pending.presentation.source_object_id,
+            choice.source_object_id
+        );
+        let ResolutionContinuation::LibraryLook {
+            stack,
+            stage: PendingLibraryLookStage::ChooseToHand { .. },
+            ..
+        } = &pending.continuation
+        else {
+            panic!("the activated top card is awaiting the hand choice");
+        };
+        assert_eq!(stack.item.id, choice.source_object_id);
+        assert_ne!(
+            stack.item.id, source,
+            "the virtual stack item differs from its source"
+        );
+        assert_eq!(stack.item.source_permanent_id, Some(source));
+        assert_eq!(stack.item.source_zone_change, source_generation);
+        assert_eq!(stack.item.controller, 0);
+        assert_eq!(stack.item.card_id, card_id);
+    }
+    assert!(engine.state.stack.is_empty());
+    let hand_at_choice: std::collections::BTreeSet<_> =
+        engine.state.players[0].hand.iter().copied().collect();
+    let cards_drawn_at_choice = engine.state.turn_history.current.player(0).cards_drawn;
+    assert_eq!(cards_drawn_at_choice, cards_drawn_before);
+
+    let prompt_id = narset_phase_a_prompt_id(&engine, &choice);
+    let accepted = engine
+        .apply_command(
+            0,
+            &narset_phase_a_choice_with_prompt(prompt_id, vec![top[0]]),
+        )
+        .expect("choose the exact Grizzly Bears candidate");
+    let reveals: Vec<_> = accepted
+        .events
+        .iter()
+        .filter_map(|event| match &event.ev {
+            Some(Ev::CardsRevealed(reveal)) => Some(reveal),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(reveals.len(), 1);
+    assert_eq!(reveals[0].cards.len(), 1);
+    assert_eq!(reveals[0].cards[0].object_id, top[0]);
+    assert_eq!(reveals[0].cards[0].card_name, "Grizzly Bears");
+    assert!(!reveals[0].reveal_id.is_empty());
+    assert_eq!(engine.state.objects[&top[0]].zone, Zone::Hand);
+    assert_eq!(
+        engine.state.zone_change_generation.get(&top[0]).copied(),
+        Some(library_before[0].1 + 1)
+    );
+    assert_eq!(
+        narset_phase_a_library_identity_snapshot(&engine, 0),
+        library_before[1..].to_vec()
+    );
+    let mut expected_hand = hand_at_choice;
+    assert!(expected_hand.insert(top[0]));
+    let hand_after: std::collections::BTreeSet<_> =
+        engine.state.players[0].hand.iter().copied().collect();
+    assert_eq!(hand_after, expected_hand);
+    assert_eq!(
+        engine.state.turn_history.current.player(0).cards_drawn,
+        cards_drawn_at_choice
+    );
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(engine.state.players[0].life, life_before + 7);
+}
+
+#[test]
+fn narset_phase_a_model_profiles_keep_program_spell_only() {
+    let spell_program = r#"(
+      id: "narset_phase_a_model_spell_program",
+      name: "Narset Phase A Model Spell Program",
+      face_id: "narset_phase_a_model_spell_program",
+      mana_cost: "{0}", types: ["Instant"],
+      spell_program: Some((body: (steps: [
+        (id: "private_look", bind: [], input: None,
+         kind: Perform(LookTopCardOptionalToHand(
+            filter: (card_type: Some(Creature), excluded_card_types: []),
+         ))),
+      ], yields: []))),
+    )"#;
+    let spell_registry =
+        tricerules_cards::CardRegistry::from_chunks_and_tokens(&[spell_program], &[])
+            .expect("LookTopCardOptionalToHand is valid in a spell CardProgram");
+    assert!(spell_registry
+        .get("narset_phase_a_model_spell_program")
+        .is_some());
+
+    let activated_effect_list = r#"(
+      id: "narset_phase_a_model_activated_effects",
+      name: "Narset Phase A Model Activated Effects",
+      face_id: "narset_phase_a_model_activated_effects",
+      mana_cost: "{0}", types: ["Artifact"],
+      activated_abilities: [(
+        ability_id: "activated_01", presentation: Fallback, costs: [],
+        effect: [
+          LookTopCardOptionalToHand(
+            filter: (card_type: Some(Creature), excluded_card_types: []),
+          ),
+          GainLife(amount: 7),
+        ],
+      )],
+    )"#;
+    let activated_registry =
+        tricerules_cards::CardRegistry::from_chunks_and_tokens(&[activated_effect_list], &[])
+            .expect("the ordinary activated effect list admits this operation");
+    assert!(activated_registry
+        .get("narset_phase_a_model_activated_effects")
+        .is_some());
+
+    let activated_program = r#"(
+      id: "narset_phase_a_model_activated_program",
+      name: "Narset Phase A Model Activated Program",
+      face_id: "narset_phase_a_model_activated_program",
+      mana_cost: "{0}", types: ["Artifact"],
+      activated_abilities: [(
+        ability_id: "activated_01", presentation: Fallback, costs: [], effect: [],
+        program: Some((body: (steps: [
+          (id: "private_look", bind: [], input: None,
+           kind: Perform(LookTopCardOptionalToHand(
+              filter: (card_type: Some(Creature), excluded_card_types: []),
+           ))),
+        ], yields: []))),
+      )],
+    )"#;
+    match tricerules_cards::CardRegistry::from_chunks_and_tokens(&[activated_program], &[]) {
+        Err(tricerules_card_model::registry::RegistryError::InvalidCard { id, reason }) => {
+            assert_eq!(id, "narset_phase_a_model_activated_program");
+            assert!(reason.contains("LookTopCardOptionalToHand"), "{reason}");
+            assert!(reason.contains("spell-only"), "{reason}");
+        }
+        Err(other) => panic!("expected semantic InvalidCard, not parse error: {other:?}"),
+        Ok(_) => panic!("LookTopCardOptionalToHand was admitted in an activated CardProgram"),
+    }
+}

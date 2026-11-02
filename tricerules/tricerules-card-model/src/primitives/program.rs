@@ -5156,6 +5156,17 @@ fn validate_and_result_types(
             }
             Ok(Vec::new())
         }
+        SpellEffectKind::LookTopCardOptionalToHand { .. } => {
+            effect.validate(context)?;
+            if context != EffectContext::Spell {
+                return Err(
+                    "LookTopCardOptionalToHand in a CardProgram is spell-only".into(),
+                );
+            }
+            // This fixed one-card optional look has no typed output. Its exact top-card identity,
+            // filter, and private choice are owned by the resolution continuation.
+            Ok(Vec::new())
+        }
         SpellEffectKind::LookChooseToHand {
             filter,
             min,

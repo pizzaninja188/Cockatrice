@@ -602,12 +602,40 @@ impl GameEngine {
 
         let PendingLibraryLookStage::ChooseToHand {
             looked_at,
-            bottom_order,
+            remainder,
             reveal,
         } = stage
         else {
             unreachable!("order-bottom returned above")
         };
+        if let crate::state::PendingHandLookRemainderDisposition::KeepPosition { filter } =
+            &remainder
+        {
+            let exact_top = looked_at.len() == 1
+                && matches!(
+                    &pending.continuation,
+                    ResolutionContinuation::LibraryLook { candidates, .. }
+                        if candidates.len() == 1
+                            && candidates[0].0 == looked_at[0]
+                )
+                && self.state.players[idx].library.front() == looked_at.first()
+                && stack.item.controller == controller;
+            let valid_choice = chosen.is_empty()
+                || (chosen.len() == 1
+                    && chosen[0] == looked_at[0]
+                    && zone_card_matches_filter(
+                        &self.state,
+                        self.registry,
+                        chosen[0],
+                        Some(filter),
+                    ));
+            if !exact_top || !valid_choice {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "stale optional top-library hand look or choice",
+                ));
+            }
+        }
         let mut remaining: Vec<ObjectId> = looked_at
             .iter()
             .copied()
@@ -623,6 +651,17 @@ impl GameEngine {
             ));
         }
         super::super::library_choices::put_into_hand(self, controller, chosen, reveal, &mut ev)?;
+
+        if matches!(
+            &remainder,
+            crate::state::PendingHandLookRemainderDisposition::KeepPosition { .. }
+        ) {
+            return self.complete_parked_stack_with_previous(stack, EffectResult::default(), ev);
+        }
+        let crate::state::PendingHandLookRemainderDisposition::Bottom(bottom_order) = remainder
+        else {
+            unreachable!("keep-position remainder returned above")
+        };
 
         if bottom_order == LibraryBottomOrder::Random {
             shuffle_object_ids_for_current_command(&self.state, controller, &mut remaining);

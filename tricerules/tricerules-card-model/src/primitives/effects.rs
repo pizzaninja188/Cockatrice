@@ -1348,6 +1348,13 @@ pub enum SpellEffectKind {
         max_selected: u32,
         remainder: LibraryLookRemainderPolicy,
     },
+    /// Look privately at exactly the top library card. If it matches `filter`, its controller
+    /// may reveal that card and put it into their hand; otherwise it remains in its current
+    /// library position. Narset Transcendent (noncreature, nonland) and Domri Rade (creature)
+    /// share this bounded optional hand look with different filters.
+    LookTopCardOptionalToHand {
+        filter: ZoneCardFilter,
+    },
     /// CR 702.75 / 406.3: look at the top `count`, exile one face down, and put the rest on the
     /// bottom in a random order. Mosswort Bridge and Smuggler's Buggy use the same linked entry.
     Hideaway {
@@ -4215,6 +4222,7 @@ impl SpellEffectKind {
             | SpellEffectKind::RevealUntilArtifact
             | SpellEffectKind::ManifestDread
             | SpellEffectKind::LookChooseBattlefield { .. }
+            | SpellEffectKind::LookTopCardOptionalToHand { .. }
             | SpellEffectKind::Hideaway { .. }
             | SpellEffectKind::PutPermanentFromHand { .. }
             | SpellEffectKind::LookChooseToHand { .. }
@@ -7056,6 +7064,7 @@ impl SpellEffectKind {
                 }
                 filter.as_ref().map_or(Ok(()), ZoneCardFilter::validate)
             }
+            SpellEffectKind::LookTopCardOptionalToHand { filter } => filter.validate(),
             SpellEffectKind::ChooseCard { filter, .. } => filter.validate(),
             // CR 701.18: scry is legal on spells and on abilities alike (scry lands, Sensei's
             // Divining Top-style activations). Reject a useless literal zero; a dynamic amount
