@@ -44,6 +44,36 @@ impl CounterDemand {
 }
 
 impl GameEngine {
+    /// Preserve ordinary cost affordability's existing inventory domain. Transaction validation
+    /// uses `live_counter_inventory`, which intentionally excludes phased objects and zero slots.
+    fn ordinary_counter_inventory(&self) -> CounterInventory {
+        let mut slots = BTreeMap::new();
+        for player in &self.state.players {
+            for &object_id in &player.battlefield {
+                let Some(object) = self.state.objects.get(&object_id) else {
+                    continue;
+                };
+                let zone_change_generation = self
+                    .state
+                    .zone_change_generation
+                    .get(&object_id)
+                    .copied()
+                    .unwrap_or(0);
+                for (&kind, &count) in &object.counters {
+                    slots.insert(
+                        CounterInventoryKey {
+                            object_id,
+                            zone_change_generation,
+                            kind,
+                        },
+                        count,
+                    );
+                }
+            }
+        }
+        CounterInventory { slots }
+    }
+
     pub(super) fn live_counter_inventory(&self) -> CounterInventory {
         let mut slots = BTreeMap::new();
         for (&object_id, object) in &self.state.objects {
@@ -528,20 +558,18 @@ impl GameEngine {
             return false;
         };
         let player = object.controller;
-        let mut remaining = self
-            .state
-            .players
-            .iter()
-            .flat_map(|state| state.battlefield.iter().copied())
-            .filter_map(|oid| self.state.objects.get(&oid).map(|object| (oid, object)))
-            .flat_map(|(oid, object)| {
-                object
-                    .counters
-                    .iter()
-                    .map(move |(&kind, &count)| ((oid, kind), count))
-            })
-            .collect::<BTreeMap<_, _>>();
-        let mut demands = Vec::<(u32, Vec<(ObjectId, CounterKind)>)>::new();
+        let inventory = self.ordinary_counter_inventory();
+        let counter_inventory_key = |object_id, kind| CounterInventoryKey {
+            object_id,
+            zone_change_generation: self
+                .state
+                .zone_change_generation
+                .get(&object_id)
+                .copied()
+                .unwrap_or(0),
+            kind,
+        };
+        let mut demands = Vec::<CounterDemand>::new();
         for cost in costs {
             match cost {
                 AbilityCost::RemoveCountersFromPermanents { .. } => return false,
@@ -549,7 +577,10 @@ impl GameEngine {
                     counter: Some(kind),
                     count,
                     payment_source: CounterRemovalPaymentSource::Source,
-                } => demands.push((*count, vec![(source, *kind)])),
+                } => demands.push(CounterDemand::Whole {
+                    count: *count,
+                    candidates: vec![counter_inventory_key(source, *kind)],
+                }),
                 AbilityCost::RemoveCounters {
                     counter: None,
                     count,
@@ -559,9 +590,12 @@ impl GameEngine {
                         .counters
                         .keys()
                         .copied()
-                        .map(|kind| (source, kind))
+                        .map(|kind| counter_inventory_key(source, kind))
                         .collect();
-                    demands.push((*count, candidates));
+                    demands.push(CounterDemand::Whole {
+                        count: *count,
+                        candidates,
+                    });
                 }
                 AbilityCost::RemoveCounters {
                     counter: Some(kind),
@@ -576,9 +610,12 @@ impl GameEngine {
                         .filter(|&oid| {
                             self.counter_payment_permanent_matches(player, source, oid, filter)
                         })
-                        .map(|oid| (oid, *kind))
+                        .map(|oid| counter_inventory_key(oid, *kind))
                         .collect();
-                    demands.push((*count, candidates));
+                    demands.push(CounterDemand::Whole {
+                        count: *count,
+                        candidates,
+                    });
                 }
                 AbilityCost::RemoveCounters {
                     counter: None,
@@ -591,7 +628,10 @@ impl GameEngine {
                         return false;
                     };
                     if delta < 0 {
-                        demands.push((delta.unsigned_abs(), vec![(source, CounterKind::Loyalty)]));
+                        demands.push(CounterDemand::Whole {
+                            count: delta.unsigned_abs(),
+                            candidates: vec![counter_inventory_key(source, CounterKind::Loyalty)],
+                        });
                     }
                 }
                 AbilityCost::LoyaltyX => {
@@ -603,31 +643,19 @@ impl GameEngine {
                 _ => continue,
             }
         }
-        demands.sort_by_key(|(_, candidates)| candidates.len());
-        counter_assignment_exists(&demands, 0, &mut remaining)
-    }
-}
-
-fn counter_assignment_exists(
-    demands: &[(u32, Vec<(ObjectId, CounterKind)>)],
-    index: usize,
-    remaining: &mut BTreeMap<(ObjectId, CounterKind), u32>,
-) -> bool {
-    let Some((count, candidates)) = demands.get(index) else {
-        return true;
-    };
-    for candidate in candidates {
-        let available = remaining.get(candidate).copied().unwrap_or(0);
-        if available < *count {
-            continue;
+        if demands.iter().any(|demand| {
+            matches!(
+                demand,
+                CounterDemand::Whole {
+                    count: 0,
+                    candidates
+                } if candidates.is_empty()
+            )
+        }) {
+            return false;
         }
-        remaining.insert(*candidate, available - count);
-        if counter_assignment_exists(demands, index + 1, remaining) {
-            return true;
-        }
-        remaining.insert(*candidate, available);
+        counter_demands_payable(&inventory, &demands)
     }
-    false
 }
 
 #[cfg(test)]
@@ -991,5 +1019,139 @@ mod aggregate_counter_tests {
             )
             .iter()
             .any(|candidate| candidate.object_id == stolen_artifact));
+    }
+
+    #[test]
+    fn ordinary_counter_costs_preserve_legacy_zero_demand_candidate_rules() {
+        let decks = (0..2).map(|_| vec!["forest".into(); 40]).collect();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            602_424,
+            &[0, 1],
+            20,
+            Some(decks),
+            true,
+        )
+        .expect("ordinary counter cost fixture");
+        let source = battlefield_card(&mut engine, 0, "brambleback_brute");
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .unwrap()
+            .counters
+            .clear();
+
+        let source_any_kind_zero = [AbilityCost::RemoveCounters {
+            counter: None,
+            count: 0,
+            payment_source: CounterRemovalPaymentSource::Source,
+        }];
+        assert!(
+            !engine.counter_costs_payable(source, &source_any_kind_zero),
+            "a zero Whole demand with no candidates remains rejected"
+        );
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .unwrap()
+            .counters
+            .insert(CounterKind::Charge, 0);
+        assert!(
+            engine.counter_costs_payable(source, &source_any_kind_zero),
+            "a stored zero-valued counter kind still supplies a legacy candidate"
+        );
+
+        let selected_empty = [AbilityCost::RemoveCounters {
+            counter: Some(CounterKind::Charge),
+            count: 0,
+            payment_source: CounterRemovalPaymentSource::SelectedPermanent(Box::new(
+                TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::You,
+                    owner: TargetOwner::You,
+                    excluded_objects: vec![tricerules_card_model::TargetObjectExclusion::Source],
+                    ..TargetFilter::default()
+                },
+            )),
+        }];
+        assert!(
+            !engine.counter_costs_payable(source, &selected_empty),
+            "a selected-permanent zero Whole demand with no candidates remains rejected"
+        );
+    }
+
+    #[test]
+    fn ordinary_counter_costs_keep_historical_phased_inventory_and_any_kind_rejection() {
+        let decks = (0..2).map(|_| vec!["forest".into(); 40]).collect();
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            602_425,
+            &[0, 1],
+            20,
+            Some(decks),
+            true,
+        )
+        .expect("ordinary counter inventory fixture");
+        let source = battlefield_card(&mut engine, 0, "brambleback_brute");
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .unwrap()
+            .add_counters(CounterKind::Charge, 1, 0);
+        engine.state.objects.get_mut(&source).unwrap().phase_status =
+            Some(crate::state::PhasedOutStatus {
+                phase_out_under: 0,
+                phase_in_due_after_departed_turn: false,
+                phase_in_with: None,
+                direct_attachment_snapshot: None,
+            });
+
+        let key = CounterInventoryKey {
+            object_id: source,
+            zone_change_generation: engine.state.zone_change_generation[&source],
+            kind: CounterKind::Charge,
+        };
+        assert_eq!(
+            engine.live_counter_inventory().capacity(key),
+            0,
+            "transaction validation keeps phased objects out of live inventory"
+        );
+        let source_cost = [AbilityCost::RemoveCounters {
+            counter: Some(CounterKind::Charge),
+            count: 1,
+            payment_source: CounterRemovalPaymentSource::Source,
+        }];
+        assert!(
+            engine.counter_costs_payable(source, &source_cost),
+            "ordinary source affordability retains its historical battlefield-vector inventory"
+        );
+
+        let bearer = battlefield_card(&mut engine, 0, "grizzly_bears");
+        engine.state.objects.get_mut(&bearer).unwrap().add_counters(
+            CounterKind::PlusOnePlusOne,
+            1,
+            0,
+        );
+        let filter = TargetFilter {
+            kind: TargetKind::Creature,
+            controller: TargetController::You,
+            owner: TargetOwner::You,
+            excluded_objects: vec![tricerules_card_model::TargetObjectExclusion::Source],
+            ..TargetFilter::default()
+        };
+        assert!(engine.counter_payment_permanent_matches(0, source, bearer, &filter));
+
+        let selected_any_kind = [AbilityCost::RemoveCounters {
+            counter: None,
+            count: 1,
+            payment_source: CounterRemovalPaymentSource::SelectedPermanent(Box::new(filter)),
+        }];
+        assert!(
+            !engine.counter_costs_payable(source, &selected_any_kind),
+            "selected-permanent any-kind costs remain outside ordinary admission"
+        );
     }
 }
