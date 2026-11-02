@@ -2900,6 +2900,28 @@ pub(crate) enum EntryCounterSource {
     },
 }
 
+/// One replacement operation recorded after an entry-counter history baseline was captured.
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) enum EntryCounterReplacementReceipt {
+    Battlefield {
+        instance: crate::engine::replacement::CounterReplacementInstance,
+    },
+    Compleated {
+        identity: crate::engine::replacement::CompleatedReplacementIdentity,
+        removed_loyalty: u32,
+    },
+}
+
+/// Frozen row baseline and the ordered replacements applied after that baseline.
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct EntryCounterPlacementHistory {
+    #[serde(serialize_with = "serialize_entry_counter_map_as_ordered_pairs")]
+    pub(crate) baseline_counters: BTreeMap<CounterKind, u32>,
+    pub(crate) baseline_battlefield_receipts:
+        Vec<crate::engine::replacement::CounterReplacementInstance>,
+    pub(crate) receipts: Vec<EntryCounterReplacementReceipt>,
+}
+
 /// One independent counter-placement instruction on a proposed battlefield entry. Keeping the
 /// bag, actor, and source separate preserves replacement order between same-kind instructions.
 #[derive(serde::Serialize, Debug, Clone)]
@@ -2910,6 +2932,7 @@ pub(crate) struct EntryCounterPlacement {
     pub(crate) source: EntryCounterSource,
     pub(crate) read_ahead_entry: bool,
     pub(crate) applied_replacements: Vec<crate::engine::replacement::CounterReplacementInstance>,
+    pub(crate) history: Option<EntryCounterPlacementHistory>,
 }
 
 /// Actual WUBRG mana debited for one cast. Colorless mana, life and nonmana payments
@@ -3085,6 +3108,9 @@ pub struct BattlefieldEntryEvent {
     /// Public accepted snapshots retained only while this entry instruction is pending.
     pub entry_reveal_receipts: Vec<tricerules_proto::ruled::v1::CardsRevealed>,
     pub mana_colors_spent_to_cast: ManaColorsSpent,
+    /// Phyrexian symbols paid with life for this entering spell; zero on non-cast entry paths.
+    /// This counts symbols, not life points.
+    pub(crate) phyrexian_symbols_paid_with_life: u32,
     pub object_id: ObjectId,
     /// CR 616.1 decider: current controller, or owner when the object has no controller.
     pub deciding_player: PlayerId,
@@ -3512,6 +3538,9 @@ impl SpellCastMethod {
 pub struct StackItem {
     /// Own committed cast payment; uncast spell copies explicitly carry an empty receipt.
     pub mana_colors_spent_to_cast: ManaColorsSpent,
+    /// Phyrexian symbols paid with life for this StackItem's own committed cast.
+    /// This counts symbols, not life points; uncast copies and abilities carry zero.
+    pub(crate) phyrexian_symbols_paid_with_life: u32,
     pub id: ObjectId,
     pub controller: PlayerId,
     pub card_id: String,

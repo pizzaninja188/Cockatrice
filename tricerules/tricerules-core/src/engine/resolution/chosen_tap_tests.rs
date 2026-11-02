@@ -45,6 +45,7 @@ fn land_filter() -> TargetFilter {
 
 fn test_stack_item() -> StackItem {
     StackItem {
+        phyrexian_symbols_paid_with_life: 0,
         prototyped: false,
         mana_colors_spent_to_cast: Default::default(),
         id: u32::MAX,

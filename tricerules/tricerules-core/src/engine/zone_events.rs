@@ -1519,6 +1519,7 @@ mod timestamp_order_tests {
         controller: PlayerId,
     ) -> BattlefieldEntryEvent {
         BattlefieldEntryEvent {
+            phyrexian_symbols_paid_with_life: 0,
             entry_reveal_receipts: Vec::new(),
             mana_colors_spent_to_cast: Default::default(),
             prepared: false,

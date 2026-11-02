@@ -97,6 +97,7 @@ fn resolve_with_source_and_target(
         })
         .collect::<Vec<_>>();
     let top = StackItem {
+        phyrexian_symbols_paid_with_life: 0,
         prototyped: false,
         mana_colors_spent_to_cast: Default::default(),
         id: u32::MAX,

@@ -861,6 +861,7 @@ pub(super) fn copy_triggering_activated_ability(
     copy.controller = cx.controller;
     copy.is_copy = true;
     copy.mana_colors_spent_to_cast = Default::default();
+    copy.phyrexian_symbols_paid_with_life = 0;
     copy.cast_condition_results.clear();
     copy.cast_occurrence = None;
     copy.cast_by = None;
@@ -1047,6 +1048,7 @@ pub(super) fn copy_target_spell(
                 .stack_presentations
                 .insert(copy_id, copy_presentation.clone());
             let copy_template = StackItem {
+                phyrexian_symbols_paid_with_life: 0,
                 mana_colors_spent_to_cast: Default::default(),
                 id: copy_id,
                 controller,
@@ -1268,5 +1270,166 @@ mod cast_color_tests {
             }
         }
         assert!(engine.state.stack.is_empty());
+    }
+
+    /// Internal executor coverage: no registered card currently copies permanent spells.
+    #[test]
+    fn compleated_history_uncast_copy_factory_clears_payment() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            2_026_110_204,
+            &[0, 1],
+            20,
+            Some(vec![
+                vec!["phyrexian_metamorph".into(); 20],
+                vec!["island".into(); 20],
+            ]),
+            true,
+        )
+        .expect("registered Metamorph copy executor fixture");
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.priority_idx = 0;
+
+        let candidate_id = engine.state.next_object_id;
+        engine.state.next_object_id += 1;
+        let candidate_definition = engine
+            .registry
+            .get("grizzly_bears")
+            .expect("registered creature copy source");
+        engine.state.objects.insert(
+            candidate_id,
+            new_object_from_card(
+                candidate_id,
+                1,
+                &candidate_definition.id,
+                Zone::Battlefield,
+                candidate_definition.primary_face(),
+            ),
+        );
+        engine.state.players[1].battlefield.push(candidate_id);
+        engine.state.zone_change_generation.insert(candidate_id, 1);
+
+        engine.state.players[0].mana_pool.colorless = 3;
+        engine
+            .apply_scenario_command(
+                0,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
+                        cast_method: rv1::CastMethod::Normal as i32,
+                        source: Some(rv1::CastSource {
+                            location: Some(rv1::cast_source::Location::HandIndex(0)),
+                            ..Default::default()
+                        }),
+                        flex_payments: vec![rv1::FlexPipPayment {
+                            pip_index: 1,
+                            pay_life: true,
+                        }],
+                        ..Default::default()
+                    })),
+                },
+            )
+            .expect("pay one actual Metamorph Phyrexian symbol with two life");
+        let original = engine.state.stack.last().unwrap().clone();
+        assert!(original.cast_occurrence.is_some());
+        assert_eq!(engine.state.players[0].life, 18);
+        let original_value = crate::diagnostic_json::to_value(&original)
+            .expect("serialize actual Metamorph stack item");
+        assert_eq!(
+            original_value["phyrexian_symbols_paid_with_life"].as_u64(),
+            Some(1)
+        );
+
+        let mut events = Vec::new();
+        let mut result = EffectResult::default();
+        let prior = EffectResult::default();
+        let targets = [original.id];
+        let mut cx = EffectCx {
+            engine: &mut engine,
+            events: &mut events,
+            targets: &targets,
+            targets_by_role: &[],
+            target_receipts: &[],
+            target_role_group_indices: &[],
+            top: &original,
+            controller: 0,
+            affected_player: 0,
+            spell_label: "internal Compleated copy fixture",
+            previous_effect_result: &prior,
+            effect_result: &mut result,
+            effect_index: 0,
+            resume_previous_result: None,
+            program_state: None,
+        };
+        copy_target_spell(
+            &mut cx,
+            SpellEffectKind::CopyTargetSpell {
+                count: 1,
+                spell_filter: Default::default(),
+            },
+        )
+        .expect("production uncast spell copy factory");
+
+        let copy = engine
+            .state
+            .stack
+            .last()
+            .expect("uncast spell copy on stack");
+        let copy_id = copy.id;
+        assert_ne!(copy_id, original.id);
+        assert!(copy.is_copy);
+        assert!(copy.cast_occurrence.is_none());
+        let copy_value =
+            crate::diagnostic_json::to_value(copy).expect("serialize actual uncast Metamorph copy");
+        assert_eq!(
+            copy_value["phyrexian_symbols_paid_with_life"].as_u64(),
+            Some(0)
+        );
+        let original_after_copy = engine
+            .state
+            .stack
+            .iter()
+            .find(|item| item.id == original.id)
+            .expect("original cast remains below the copy");
+        let original_after_copy_value = crate::diagnostic_json::to_value(original_after_copy)
+            .expect("serialize original after uncast copy creation");
+        assert_eq!(
+            original_after_copy_value["phyrexian_symbols_paid_with_life"].as_u64(),
+            Some(1)
+        );
+
+        for _ in 0..2 {
+            let actor = engine.state.priority_player_id();
+            engine
+                .apply_scenario_command(
+                    actor,
+                    &rv1::RuledCommand {
+                        cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+                    },
+                )
+                .expect("resolve the copied permanent until its entry prompt");
+        }
+        assert_eq!(engine.state.players[0].life, 18);
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("copied Metamorph parks for its entry copy choice");
+        assert_eq!(
+            pending.presentation.choice_kind,
+            rv1::ChoiceKind::CopySource
+        );
+        assert!(pending.presentation.candidates.contains(&candidate_id));
+        let copied_entry_value = match engine.state.pending_replacement_event.as_ref() {
+            Some(crate::engine::replacement::PendingReplacementEvent::BattlefieldEntry(entry)) => {
+                crate::diagnostic_json::to_value(&entry.event)
+                    .expect("serialize uncast copy's parked battlefield entry")
+            }
+            _ => panic!("uncast permanent copy should park a battlefield entry"),
+        };
+        assert_eq!(
+            copied_entry_value["phyrexian_symbols_paid_with_life"].as_u64(),
+            Some(0)
+        );
     }
 }

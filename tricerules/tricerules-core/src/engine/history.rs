@@ -3670,6 +3670,7 @@ mod tests {
         e.state.objects.get_mut(&grave).unwrap().controller = 0;
         let virtual_id = e.state.next_object_id;
         e.state.stack.push(StackItem {
+            phyrexian_symbols_paid_with_life: 0,
             prototyped: false,
             mana_colors_spent_to_cast: Default::default(),
             id: virtual_id,

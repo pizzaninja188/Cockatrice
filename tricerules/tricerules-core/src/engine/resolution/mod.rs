@@ -1711,6 +1711,7 @@ impl GameEngine {
                 match self.begin_battlefield_entry(
                     top.clone(),
                     BattlefieldEntryEvent {
+                        phyrexian_symbols_paid_with_life: top.phyrexian_symbols_paid_with_life,
                         entry_reveal_receipts: Vec::new(),
                         mana_colors_spent_to_cast: top.mana_colors_spent_to_cast,
                         prepared: false,
@@ -2688,6 +2689,7 @@ impl GameEngine {
                 return Ok(true);
             }
             let entry = BattlefieldEntryEvent {
+                phyrexian_symbols_paid_with_life: 0,
                 entry_reveal_receipts: Vec::new(),
                 mana_colors_spent_to_cast: Default::default(),
                 prepared: false,
@@ -2809,6 +2811,10 @@ impl GameEngine {
         let Some(mut suspended_resolution) = suspended_resolution else {
             return Ok(false);
         };
+        self.guard_suspended_observer_entry_counter_payload(
+            &suspended_resolution,
+            suspended_replacement_event.as_ref(),
+        )?;
         // Returning from a nested observer choice restores the saved operation, but creates a
         // new externally answerable offer. Keep the exact private projection only as a source for
         // re-publication after its current continuation and generation bindings are revalidated.
@@ -3675,6 +3681,7 @@ impl GameEngine {
             .map(|object| object.card_id.clone())
             .unwrap_or_default();
         StackItem {
+            phyrexian_symbols_paid_with_life: 0,
             mana_colors_spent_to_cast: Default::default(),
             id: object_id,
             controller,
@@ -3866,6 +3873,7 @@ impl GameEngine {
                 };
                 entries.push(TokenBattlefieldEntry {
                     event: BattlefieldEntryEvent {
+                        phyrexian_symbols_paid_with_life: 0,
                         entry_reveal_receipts: Vec::new(),
                         mana_colors_spent_to_cast: Default::default(),
                         prepared: false,
@@ -5250,6 +5258,7 @@ mod attached_subject_tests {
 
     fn triggered_item(source: ObjectId, generation: u64) -> StackItem {
         StackItem {
+            phyrexian_symbols_paid_with_life: 0,
             prototyped: false,
             mana_colors_spent_to_cast: Default::default(),
             id: source + 10_000,
@@ -14973,6 +14982,7 @@ mod source_keyword_tests {
 
     fn ability_item(source: ObjectId, generation: u64) -> StackItem {
         StackItem {
+            phyrexian_symbols_paid_with_life: 0,
             prototyped: false,
             mana_colors_spent_to_cast: Default::default(),
             id: source + 1,
@@ -15011,6 +15021,7 @@ mod source_keyword_tests {
 
     fn deathtouch_spell_item(chosen_x: u32) -> StackItem {
         StackItem {
+            phyrexian_symbols_paid_with_life: 0,
             prototyped: false,
             mana_colors_spent_to_cast: Default::default(),
             id: u32::MAX,

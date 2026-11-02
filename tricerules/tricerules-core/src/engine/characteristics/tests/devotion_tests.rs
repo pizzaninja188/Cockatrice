@@ -999,6 +999,7 @@ fn devotion_projected_entry_excludes_own_pip_and_uses_destination_controller() {
     let support = insert_fixture(&mut engine, 1, "devotion_support", Zone::Battlefield);
     copy_cost(&mut engine, support, "{G}{G}{G}{G}", false);
     let event = BattlefieldEntryEvent {
+        phyrexian_symbols_paid_with_life: 0,
         object_id: god,
         deciding_player: 1,
         destination_controller: 1,

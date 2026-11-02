@@ -514,7 +514,12 @@ fn carth_retains_an_applied_replacement_when_its_owner_leaves_during_cost_choice
         .as_array()
         .unwrap()
         .iter()
-        .map(|entry| entry["replacement"]["source_object_id"].as_u64().unwrap() as u32)
+        .map(|entry| {
+            assert_eq!(entry["replacement"]["variant"], "Battlefield");
+            entry["replacement"]["value"]["instance"]["source_object_id"]
+                .as_u64()
+                .unwrap() as u32
+        })
         .collect();
     assert_eq!(
         remaining,

@@ -156,6 +156,8 @@ pub(in crate::engine) fn solve_flex_with_required_spend(
 pub(in crate::engine) struct ManaPaymentPlan {
     pub(in crate::engine) remaining: PoolVec,
     pub(in crate::engine) life_cost: u32,
+    /// Count of symbols paid with life, not life points.
+    pub(in crate::engine) phyrexian_symbols_paid_with_life: u32,
     pub(in crate::engine) restricted_spent: Vec<(u32, ManaAmount)>,
     /// The exact debit needs a currently live as-though permission, even if another allocation
     /// from the same pool would pay the cost without it.
@@ -418,6 +420,7 @@ pub(in crate::engine) fn plan_mana_payment_with_any_color(
     let mut need_color: PoolVec = [0; 6];
     let mut need_generic = extra_generic;
     let mut life_cost = 0u32;
+    let mut phyrexian_symbols_paid_with_life = 0u32;
     let mut flex: Vec<FlexPip> = Vec::new();
     for (i, pip) in cost.pips.iter().enumerate() {
         match pip {
@@ -434,6 +437,7 @@ pub(in crate::engine) fn plan_mana_payment_with_any_color(
             ManaSymbol::Phyrexian(c) => {
                 if life_pips.contains(&i) {
                     life_cost += 2;
+                    phyrexian_symbols_paid_with_life += 1;
                 } else {
                     flex.push(FlexPip::Color(*c));
                 }
@@ -579,6 +583,7 @@ pub(in crate::engine) fn plan_mana_payment_with_any_color(
     Ok(ManaPaymentPlan {
         remaining,
         life_cost,
+        phyrexian_symbols_paid_with_life,
         restricted_spent,
         requires_any_color: false,
         expected_pool: unrestricted,

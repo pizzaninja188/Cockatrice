@@ -805,4 +805,220 @@ mod tests {
         engine.prepare_permanent(clone);
         assert!(!engine.state.prepared_permanents.contains_key(&clone));
     }
+
+    const COMPLEATED_HISTORY_PREPARATION_FIXTURE: &str = r#"(
+        id: "compleated_history_fixture_inset",
+        name: "Compleated History Fixture // Inset",
+        layout: Preparation,
+        faces: [
+            (
+                face_id: "compleated_history_fixture",
+                name: "Compleated History Fixture",
+                mana_cost: "{B/P}",
+                types: ["Creature"],
+                power: 2,
+                toughness: 2,
+                static_abilities: [(
+                    ability_id: "static_01",
+                    presentation: Fallback,
+                    definition: EntersPrepared,
+                )],
+            ),
+            (
+                face_id: "compleated_history_inset",
+                name: "Compleated History Inset",
+                mana_cost: "{G/P}{G/P}",
+                types: ["Sorcery"],
+                spell_effect: [GainLife(amount: 1)],
+            ),
+        ],
+    )"#;
+
+    fn compleated_history_prepared_fixture(
+        pay_base_with_life: bool,
+    ) -> (GameEngine, ObjectId, ObjectId, u64, u64) {
+        let registry = Box::leak(Box::new(
+            tricerules_card_model::CardRegistry::from_chunks_and_tokens(
+                &[COMPLEATED_HISTORY_PREPARATION_FIXTURE],
+                &[],
+            )
+            .expect("isolated unadmitted Preparation fixture registry"),
+        ));
+        let mut engine = GameEngine::new(
+            registry,
+            2_026_110_203,
+            &[0, 1],
+            20,
+            Some(vec![vec!["compleated_history_fixture_inset".into(); 20]; 2]),
+            true,
+        )
+        .expect("nonempty isolated Preparation fixture decks");
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.priority_idx = 0;
+
+        let base_id = engine.state.next_object_id;
+        engine.state.next_object_id += 1;
+        let definition = engine
+            .registry
+            .get("compleated_history_fixture_inset")
+            .expect("fixture Preparation definition");
+        engine.state.objects.insert(
+            base_id,
+            new_object_from_card(
+                base_id,
+                0,
+                &definition.id,
+                Zone::Hand,
+                definition.primary_face(),
+            ),
+        );
+        engine.state.players[0].hand.push(base_id);
+        let base_hand_slot = engine.state.players[0]
+            .hand
+            .iter()
+            .position(|object_id| *object_id == base_id)
+            .expect("manual base fixture object is in hand") as u32;
+        if !pay_base_with_life {
+            engine.state.players[0].mana_pool.black = 1;
+        }
+        engine
+            .apply_scenario_command(
+                0,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
+                        cast_method: rv1::CastMethod::Normal as i32,
+                        source: Some(rv1::CastSource {
+                            location: Some(rv1::cast_source::Location::HandIndex(base_hand_slot)),
+                            ..Default::default()
+                        }),
+                        flex_payments: if pay_base_with_life {
+                            vec![rv1::FlexPipPayment {
+                                pip_index: 0,
+                                pay_life: true,
+                            }]
+                        } else {
+                            Vec::new()
+                        },
+                        ..Default::default()
+                    })),
+                },
+            )
+            .expect("cast the isolated Preparation base through normal casting");
+        let base_stack = engine.state.stack.last().expect("actual base stack item");
+        let base_value = crate::diagnostic_json::to_value(base_stack)
+            .expect("serialize actual base cast history");
+        assert_eq!(
+            base_value["phyrexian_symbols_paid_with_life"].as_u64(),
+            if pay_base_with_life { Some(1) } else { Some(0) }
+        );
+        assert_eq!(
+            engine.state.players[0].life,
+            if pay_base_with_life { 18 } else { 20 }
+        );
+
+        for _ in 0..2 {
+            let actor = engine.state.priority_player_id();
+            engine
+                .apply_scenario_command(
+                    actor,
+                    &rv1::RuledCommand {
+                        cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+                    },
+                )
+                .expect("resolve the actual Preparation base");
+        }
+        assert_eq!(engine.state.objects[&base_id].zone, Zone::Battlefield);
+        let copy_id = engine.state.prepared_permanents[&base_id]
+            .active_exile_copy
+            .expect("actual base entry creates its prepared exile copy")
+            .object_id;
+        assert_eq!(engine.state.objects[&copy_id].zone, Zone::Exile);
+        let copy_generation = engine.state.zone_change_generation[&copy_id];
+        let permission = engine
+            .state
+            .active_exile_play_permissions
+            .iter()
+            .find(|permission| permission.object_id == copy_id)
+            .expect("generated exile copy has its real cast permission")
+            .clone();
+        assert_eq!(
+            engine.exile_permission_controller(&permission),
+            Some(0),
+            "the generated copy's permission is current for its controller"
+        );
+        (
+            engine,
+            base_id,
+            copy_id,
+            permission.group_id,
+            copy_generation,
+        )
+    }
+
+    #[test]
+    fn compleated_history_actual_prepared_cast_copy_uses_own_payment() {
+        for (base_life, inset_life, expected_inset_symbols) in [(true, false, 0), (false, true, 2)]
+        {
+            let (mut engine, base_id, copy_id, permission_id, copy_generation) =
+                compleated_history_prepared_fixture(base_life);
+            let permission = engine
+                .state
+                .active_exile_play_permissions
+                .iter()
+                .find(|permission| {
+                    permission.object_id == copy_id && permission.group_id == permission_id
+                })
+                .expect("the exact generated copy permission remains current")
+                .clone();
+            assert_eq!(engine.exile_permission_controller(&permission), Some(0));
+            let life_before_inset = engine.state.players[0].life;
+            if !inset_life {
+                engine.state.players[0].mana_pool.green = 2;
+            }
+            let green_before_inset = engine.state.players[0].mana_pool.green;
+            let cast = rv1::CastSpell {
+                cast_method: rv1::CastMethod::Normal as i32,
+                casting_permission_id: Some(permission_id),
+                face_index: 1,
+                source: Some(rv1::CastSource {
+                    expected_zone_change_generation: Some(copy_generation),
+                    location: Some(rv1::cast_source::Location::ExileObjectId(copy_id)),
+                }),
+                flex_payments: [0, 1]
+                    .into_iter()
+                    .map(|pip_index| rv1::FlexPipPayment {
+                        pip_index,
+                        pay_life: inset_life,
+                    })
+                    .collect(),
+                ..Default::default()
+            };
+            engine
+                .cast_spell(0, &cast)
+                .expect("real permitted cast of the prepared face");
+            let inset_stack = engine.state.stack.last().expect("actual inset stack item");
+            assert_eq!(inset_stack.id, copy_id);
+            assert!(inset_stack.is_copy);
+            assert!(inset_stack.cast_occurrence.is_some());
+            let inset_value = crate::diagnostic_json::to_value(inset_stack)
+                .expect("serialize actual permitted inset cast history");
+            assert_eq!(
+                inset_value["phyrexian_symbols_paid_with_life"].as_u64(),
+                Some(expected_inset_symbols)
+            );
+            assert_eq!(
+                engine.state.players[0].life,
+                life_before_inset - (if inset_life { 4 } else { 0 }),
+                "two paid Phyrexian symbols cost four life points"
+            );
+            assert_eq!(
+                green_before_inset - engine.state.players[0].mana_pool.green,
+                if inset_life { 0 } else { 2 },
+                "the inset cast actually debits two green mana or two life-paid symbols"
+            );
+            assert_eq!(engine.state.objects[&base_id].zone, Zone::Battlefield);
+            assert_eq!(engine.state.objects[&copy_id].zone, Zone::Stack);
+        }
+    }
 }

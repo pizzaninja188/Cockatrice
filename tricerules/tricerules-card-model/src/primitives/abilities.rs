@@ -2946,6 +2946,10 @@ pub enum StaticAbilityDef {
     AsEntersChooseCreatureType {
         link_id: AbilityLinkId,
     },
+    /// CR 702.150a: Vraska, Betrayal's Sting and Nissa, Ascended Animist share this entry ability.
+    /// The number of Phyrexian symbols paid with life comes from committed cast history, not an
+    /// authored parameter.
+    Compleated,
     /// CR 614.1d: modify a proposed battlefield-entry event rather than tapping the permanent
     /// after it enters. Intrinsic examples include Diregraf Ghoul and the gainland cycle;
     /// `Permanents` is the global Orb of Dreams form.

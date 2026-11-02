@@ -3178,6 +3178,7 @@ mod tests {
         chosen_x: u32,
     ) -> StackItem {
         StackItem {
+            phyrexian_symbols_paid_with_life: 0,
             prototyped: false,
             mana_colors_spent_to_cast: Default::default(),
             id,

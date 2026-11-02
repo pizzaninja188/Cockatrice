@@ -1794,6 +1794,7 @@ impl GameEngine {
             object.prototyped = command.prototyped;
         }
         self.state.stack.push(StackItem {
+            phyrexian_symbols_paid_with_life: payment.phyrexian_symbols_paid_with_life,
             mana_colors_spent_to_cast: payment.mana_colors_spent,
             id: oid,
             controller: player,
@@ -3111,6 +3112,7 @@ impl GameEngine {
             },
         );
         self.state.stack.push(StackItem {
+            phyrexian_symbols_paid_with_life: 0,
             mana_colors_spent_to_cast: Default::default(),
             id: virtual_id,
             controller: player,
@@ -4435,6 +4437,7 @@ impl GameEngine {
         let mut batch = RuledEventBatch::default();
         batch.events.extend(face_down_exile_reveal_events);
         let item = StackItem {
+            phyrexian_symbols_paid_with_life: 0,
             mana_colors_spent_to_cast: Default::default(),
             id: oid,
             controller: player,
@@ -4480,6 +4483,7 @@ impl GameEngine {
         let entry_progress = match self.begin_battlefield_entry(
             item,
             BattlefieldEntryEvent {
+                phyrexian_symbols_paid_with_life: 0,
                 entry_reveal_receipts: Vec::new(),
                 mana_colors_spent_to_cast: Default::default(),
                 prepared: false,

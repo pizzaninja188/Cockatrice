@@ -154,6 +154,8 @@ pub(in crate::engine) struct CostPaymentReceipt {
     pub(in crate::engine) sacrificed: Vec<SacrificeSnapshot>,
     pub(in crate::engine) paid_card_costs: Vec<PaidCardCost>,
     pub(in crate::engine) life_paid: u32,
+    /// Count of symbols paid with life, not life points.
+    pub(in crate::engine) phyrexian_symbols_paid_with_life: u32,
     pub(in crate::engine) mana_spent: u64,
     pub(in crate::engine) mana_colors_spent: crate::state::ManaColorsSpent,
     pub(in crate::engine) expend_triggers: Vec<crate::engine::triggers::CollectedTrigger>,
@@ -567,6 +569,17 @@ impl PreparedPaymentCosts {
         life: u32,
         as_any_color: bool,
     ) -> Result<CostTransactionPlan, EngineError> {
+        let phyrexian_symbols_paid_with_life = self
+            .flex_payments
+            .iter()
+            .filter(|payment| {
+                payment.pay_life
+                    && matches!(
+                        self.mana.pips.get(payment.pip_index as usize),
+                        Some(ManaSymbol::Phyrexian(_))
+                    )
+            })
+            .count() as u32;
         let mut mana = super::mana::plan_exact_mana_payment(
             state,
             self.transaction.player_idx,
@@ -575,6 +588,7 @@ impl PreparedPaymentCosts {
             &self.eligible_restricted_mana,
             life,
         )?;
+        mana.phyrexian_symbols_paid_with_life = phyrexian_symbols_paid_with_life;
         if as_any_color {
             self.set_any_color_dependency(&mut mana, Some(selection))?;
         }
@@ -2411,6 +2425,7 @@ impl GameEngine {
             sacrificed: vec![],
             paid_card_costs: vec![],
             life_paid: 0,
+            phyrexian_symbols_paid_with_life: 0,
             mana_spent: 0,
             mana_colors_spent: Default::default(),
             expend_triggers: vec![],
@@ -2531,6 +2546,8 @@ impl GameEngine {
                     payment.mana_spent += spent;
                     payment.mana_colors_spent.union(mana.colors_spent());
                     payment.life_paid += mana.life_cost;
+                    payment.phyrexian_symbols_paid_with_life +=
+                        mana.phyrexian_symbols_paid_with_life;
                     payment
                         .restricted_mana_spent
                         .extend(mana.restricted_spent.iter().copied());
@@ -6935,5 +6952,445 @@ mod convoke_transaction_tests {
         );
         assert_eq!(committed.sacrificed.len(), 1);
         assert_eq!(engine.state.objects[&bear].zone, Zone::Graveyard);
+    }
+}
+
+#[cfg(test)]
+mod compleated_history_tests {
+    use super::*;
+
+    // These bounded prepared-payment fixtures use the stated Vraska and Nissa mana costs.
+    // They exercise payment plumbing only; they do not admit or cast those cards.
+    fn payment_engine(seed: u64, life: i32) -> GameEngine {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            seed,
+            &[0, 1],
+            20,
+            None,
+            true,
+        )
+        .expect("payment fixture engine");
+        engine.state.players[0].life = life;
+        engine.state.players[0].mana_pool.black = 6;
+        engine.state.players[0].mana_pool.green = 7;
+        engine
+    }
+
+    fn current_source(engine: &GameEngine) -> (ObjectId, rv1::CostObjectRef) {
+        let object_id = *engine.state.players[0]
+            .hand
+            .first()
+            .expect("the fixture has a real card object in hand");
+        let source = engine.payment_object_ref(object_id);
+        assert_eq!(source.object_id, object_id);
+        assert_eq!(
+            source.zone_change_generation,
+            engine
+                .state
+                .zone_change_generation
+                .get(&object_id)
+                .copied()
+                .unwrap_or_default()
+        );
+        (object_id, source)
+    }
+
+    fn prepared_spell_cost(
+        mana_cost: &str,
+        flex_payments: &[rv1::FlexPipPayment],
+        non_mana_life: u32,
+    ) -> PreparedPaymentCosts {
+        let mut debits = Vec::new();
+        if non_mana_life > 0 {
+            debits.push(CostDebit::Life {
+                amount: non_mana_life,
+            });
+        }
+        PreparedPaymentCosts {
+            waterbend_limit: None,
+            transaction: CostTransactionPlan {
+                purpose: CostPurpose::Spell,
+                player: 0,
+                player_idx: 0,
+                debits,
+                cast_cost_receipts: vec![],
+            },
+            mana: ManaCost::parse(mana_cost).expect("source-backed mana cost fixture"),
+            x_value: 0,
+            extra_generic: 0,
+            generic_reduction: 0,
+            flex_payments: flex_payments.to_vec(),
+            restricted_mana: vec![],
+            eligible_restricted_mana: vec![],
+        }
+    }
+
+    fn assert_ordinary_payment(
+        seed: u64,
+        life: i32,
+        mana_cost: &str,
+        flex_payments: &[rv1::FlexPipPayment],
+        non_mana_life: u32,
+        expected_life_paid: u32,
+        expected_phyrexian_symbols_paid_with_life: u32,
+    ) {
+        let mut engine = payment_engine(seed, life);
+        let (source_id, source) = current_source(&engine);
+        assert_eq!(source.object_id, source_id);
+        let prepared = prepared_spell_cost(mana_cost, flex_payments, non_mana_life);
+        let before_preparation = engine
+            .diagnostic_snapshot()
+            .expect("diagnostic snapshot before ordinary preparation");
+        let plan = prepared
+            .finish_with_any_color(&engine.state, false)
+            .expect("ordinary prepared payment plan");
+        assert_eq!(
+            engine
+                .diagnostic_snapshot()
+                .expect("diagnostic snapshot after ordinary preparation"),
+            before_preparation,
+            "preparing payment does not change life or committed history"
+        );
+
+        let receipt = engine
+            .commit_cost_transaction(plan)
+            .expect("commit ordinary prepared payment");
+        assert_eq!(receipt.life_paid, expected_life_paid);
+        assert_eq!(
+            receipt.phyrexian_symbols_paid_with_life,
+            expected_phyrexian_symbols_paid_with_life
+        );
+        assert_eq!(
+            engine.state.players[0].life,
+            life - expected_life_paid as i32
+        );
+    }
+
+    fn assert_explicit_payment(
+        seed: u64,
+        mana_cost: &str,
+        flex_payments: &[rv1::FlexPipPayment],
+        exact_mana: rv1::PaymentMana,
+        non_mana_life: u32,
+        expected_life_paid: u32,
+        expected_phyrexian_symbols_paid_with_life: u32,
+    ) {
+        let mut engine = payment_engine(seed, 20);
+        let (source_id, source) = current_source(&engine);
+        let prepared = prepared_spell_cost(mana_cost, flex_payments, non_mana_life);
+        let before_preparation = engine
+            .diagnostic_snapshot()
+            .expect("diagnostic snapshot before explicit preparation");
+        let selection = rv1::PaymentSelection {
+            expected_state_revision: engine.state.command_index,
+            source: Some(source),
+            mana: Some(exact_mana),
+            ..Default::default()
+        };
+        assert_eq!(
+            selection.expected_state_revision,
+            engine.state.command_index
+        );
+        let phyrexian_life = engine
+            .validate_explicit_payment(0, source_id, false, &prepared, &selection)
+            .expect("current explicit payment selection");
+        assert_eq!(phyrexian_life, expected_life_paid - non_mana_life);
+        let plan = prepared
+            .finish_explicit_with_any_color(&engine.state, &selection, phyrexian_life, false)
+            .expect("finish explicit payment with validated life amount");
+        assert_eq!(
+            engine
+                .diagnostic_snapshot()
+                .expect("diagnostic snapshot after explicit preparation"),
+            before_preparation,
+            "validating and preparing payment does not change life or committed history"
+        );
+
+        let receipt = engine
+            .commit_cost_transaction(plan)
+            .expect("commit explicit prepared payment");
+        assert_eq!(receipt.life_paid, expected_life_paid);
+        assert_eq!(
+            receipt.phyrexian_symbols_paid_with_life,
+            expected_phyrexian_symbols_paid_with_life
+        );
+        assert_eq!(engine.state.players[0].life, 20 - expected_life_paid as i32);
+    }
+
+    #[test]
+    fn compleated_receipt_ordinary_payment_counts_symbols_not_total_life() {
+        // Vraska: one {B/P} symbol paid with 2 life plus a separate 2-life cost is 4 life,
+        // while only one symbol was paid with life.
+        assert_ordinary_payment(
+            2_026_110_201,
+            20,
+            "{4}{B}{B/P}",
+            &[rv1::FlexPipPayment {
+                pip_index: 2,
+                pay_life: true,
+            }],
+            2,
+            4,
+            1,
+        );
+
+        // An explicit false selector pays the Phyrexian symbol with mana.
+        assert_ordinary_payment(
+            2_026_110_202,
+            20,
+            "{4}{B}{B/P}",
+            &[rv1::FlexPipPayment {
+                pip_index: 2,
+                pay_life: false,
+            }],
+            0,
+            0,
+            0,
+        );
+
+        // A non-Phyrexian life debit changes total life paid but contributes no symbols.
+        assert_ordinary_payment(2_026_110_203, 20, "{0}", &[], 2, 2, 0);
+
+        // Nissa: exact false selectors pay both Phyrexian symbols with mana.
+        assert_ordinary_payment(
+            2_026_110_209,
+            20,
+            "{3}{G}{G}{G/P}{G/P}",
+            &[
+                rv1::FlexPipPayment {
+                    pip_index: 3,
+                    pay_life: false,
+                },
+                rv1::FlexPipPayment {
+                    pip_index: 4,
+                    pay_life: false,
+                },
+            ],
+            0,
+            0,
+            0,
+        );
+        assert_ordinary_payment(
+            2_026_110_210,
+            20,
+            "{3}{G}{G}{G/P}{G/P}",
+            &[
+                rv1::FlexPipPayment {
+                    pip_index: 3,
+                    pay_life: true,
+                },
+                rv1::FlexPipPayment {
+                    pip_index: 4,
+                    pay_life: false,
+                },
+            ],
+            0,
+            2,
+            1,
+        );
+        assert_ordinary_payment(
+            2_026_110_211,
+            20,
+            "{3}{G}{G}{G/P}{G/P}",
+            &[
+                rv1::FlexPipPayment {
+                    pip_index: 3,
+                    pay_life: true,
+                },
+                rv1::FlexPipPayment {
+                    pip_index: 4,
+                    pay_life: true,
+                },
+            ],
+            0,
+            4,
+            2,
+        );
+    }
+
+    #[test]
+    fn compleated_receipt_explicit_payment_counts_locked_symbols_not_total_life() {
+        // Vraska: the validated Phyrexian life amount is separate from its nonmana life cost.
+        assert_explicit_payment(
+            2_026_110_204,
+            "{4}{B}{B/P}",
+            &[rv1::FlexPipPayment {
+                pip_index: 2,
+                pay_life: true,
+            }],
+            rv1::PaymentMana {
+                b: 5,
+                ..Default::default()
+            },
+            2,
+            4,
+            1,
+        );
+        assert_explicit_payment(
+            2_026_110_205,
+            "{4}{B}{B/P}",
+            &[rv1::FlexPipPayment {
+                pip_index: 2,
+                pay_life: false,
+            }],
+            rv1::PaymentMana {
+                b: 6,
+                ..Default::default()
+            },
+            0,
+            0,
+            0,
+        );
+        assert_explicit_payment(
+            2_026_110_206,
+            "{0}",
+            &[],
+            rv1::PaymentMana::default(),
+            2,
+            2,
+            0,
+        );
+
+        // Nissa: explicit false selectors ensure count-by-list-length cannot pass.
+        assert_explicit_payment(
+            2_026_110_212,
+            "{3}{G}{G}{G/P}{G/P}",
+            &[
+                rv1::FlexPipPayment {
+                    pip_index: 3,
+                    pay_life: false,
+                },
+                rv1::FlexPipPayment {
+                    pip_index: 4,
+                    pay_life: false,
+                },
+            ],
+            rv1::PaymentMana {
+                g: 7,
+                ..Default::default()
+            },
+            0,
+            0,
+            0,
+        );
+        assert_explicit_payment(
+            2_026_110_213,
+            "{3}{G}{G}{G/P}{G/P}",
+            &[
+                rv1::FlexPipPayment {
+                    pip_index: 3,
+                    pay_life: true,
+                },
+                rv1::FlexPipPayment {
+                    pip_index: 4,
+                    pay_life: false,
+                },
+            ],
+            rv1::PaymentMana {
+                g: 6,
+                ..Default::default()
+            },
+            0,
+            2,
+            1,
+        );
+        assert_explicit_payment(
+            2_026_110_214,
+            "{3}{G}{G}{G/P}{G/P}",
+            &[
+                rv1::FlexPipPayment {
+                    pip_index: 3,
+                    pay_life: true,
+                },
+                rv1::FlexPipPayment {
+                    pip_index: 4,
+                    pay_life: true,
+                },
+            ],
+            rv1::PaymentMana {
+                g: 5,
+                ..Default::default()
+            },
+            0,
+            4,
+            2,
+        );
+    }
+
+    #[test]
+    fn compleated_receipt_rejected_commit_is_atomic_and_retry_uses_final_choices() {
+        let mut insufficient = payment_engine(2_026_110_207, 20);
+        let (source_id, source) = current_source(&insufficient);
+        assert_eq!(source.object_id, source_id);
+        let prepared = prepared_spell_cost(
+            "{4}{B}{B/P}",
+            &[rv1::FlexPipPayment {
+                pip_index: 2,
+                pay_life: true,
+            }],
+            2,
+        );
+        let before_preparation = insufficient
+            .diagnostic_snapshot()
+            .expect("diagnostic snapshot before atomicity preparation");
+        let plan = prepared
+            .finish_with_any_color(&insufficient.state, false)
+            .expect("prepared four-life payment");
+        assert_eq!(
+            insufficient
+                .diagnostic_snapshot()
+                .expect("diagnostic snapshot after atomicity preparation"),
+            before_preparation,
+            "preparation changes neither life nor committed history"
+        );
+
+        // Deliberately stale the captured life debit after preparation, then snapshot that state.
+        insufficient.state.players[0].life = 3;
+        let before_rejected_commit = insufficient
+            .diagnostic_snapshot()
+            .expect("diagnostic snapshot after making the plan insufficient");
+        assert!(insufficient.commit_cost_transaction(plan).is_err());
+        assert_eq!(
+            insufficient
+                .diagnostic_snapshot()
+                .expect("diagnostic snapshot after rejected commit"),
+            before_rejected_commit,
+            "a rejected transaction leaves the full prepared-fixture state unchanged"
+        );
+
+        // A fresh ordinary retry pays the Phyrexian pip with mana; only the separate life cost
+        // is recorded, so the symbol count remains zero.
+        let (retry_source_id, retry_source) = current_source(&insufficient);
+        assert_eq!(retry_source.object_id, retry_source_id);
+        let mana_retry = prepared_spell_cost(
+            "{4}{B}{B/P}",
+            &[rv1::FlexPipPayment {
+                pip_index: 2,
+                pay_life: false,
+            }],
+            2,
+        )
+        .finish_with_any_color(&insufficient.state, false)
+        .expect("fresh mana-paid retry plan");
+        let mana_retry_receipt = insufficient
+            .commit_cost_transaction(mana_retry)
+            .expect("commit fresh mana-paid retry");
+        assert_eq!(mana_retry_receipt.life_paid, 2);
+        assert_eq!(mana_retry_receipt.phyrexian_symbols_paid_with_life, 0);
+
+        // A separate fresh fixture retries with the final life choice and records one symbol once.
+        assert_ordinary_payment(
+            2_026_110_208,
+            20,
+            "{4}{B}{B/P}",
+            &[rv1::FlexPipPayment {
+                pip_index: 2,
+                pay_life: true,
+            }],
+            2,
+            4,
+            1,
+        );
     }
 }

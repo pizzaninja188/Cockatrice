@@ -3961,6 +3961,7 @@ fn validate_class_level_bars(
                     | StaticAbilityDef::EntersWithChosenBasicLandType { .. }
                     | StaticAbilityDef::AsEntersChooseOpponent { .. }
                     | StaticAbilityDef::AsEntersChooseCreatureType { .. }
+                    | StaticAbilityDef::Compleated
                     | StaticAbilityDef::EntersTapped { .. }
                     | StaticAbilityDef::EntersWithCounters { .. }
                     | StaticAbilityDef::SpellCannotBeCountered

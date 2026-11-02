@@ -34,6 +34,7 @@ fn entry_counter_instruction(
             source,
             read_ahead_entry: false,
             applied_replacements: Vec::new(),
+            history: None,
         }]
     };
     (counter_bag, placements)
@@ -4389,6 +4390,7 @@ pub(in crate::engine) fn plain_return_entry(
     destination_controller: PlayerId,
 ) -> BattlefieldEntryEvent {
     BattlefieldEntryEvent {
+        phyrexian_symbols_paid_with_life: 0,
         entry_reveal_receipts: Vec::new(),
         mana_colors_spent_to_cast: Default::default(),
         prepared: false,
@@ -4603,6 +4605,7 @@ pub(super) fn move_graveyard_cards(
         let entries = targets
             .into_iter()
             .map(|oid| BattlefieldEntryEvent {
+                phyrexian_symbols_paid_with_life: 0,
                 entry_reveal_receipts: Vec::new(),
                 mana_colors_spent_to_cast: Default::default(),
                 prepared: false,
@@ -4972,6 +4975,7 @@ pub(super) fn return_triggered_card(
     match cx.engine.begin_battlefield_entry(
         cx.top.clone(),
         BattlefieldEntryEvent {
+            phyrexian_symbols_paid_with_life: 0,
             entry_reveal_receipts: Vec::new(),
             mana_colors_spent_to_cast: Default::default(),
             prepared: false,
@@ -5080,6 +5084,7 @@ pub(super) fn put_ability_source_onto_battlefield_tapped_and_attacking(
     match cx.engine.begin_battlefield_entry(
         cx.top.clone(),
         BattlefieldEntryEvent {
+            phyrexian_symbols_paid_with_life: 0,
             entry_reveal_receipts: Vec::new(),
             mana_colors_spent_to_cast: Default::default(),
             prepared: false,
@@ -5175,6 +5180,7 @@ pub(super) fn put_ability_source_onto_battlefield(
     match cx.engine.begin_battlefield_entry(
         cx.top.clone(),
         BattlefieldEntryEvent {
+            phyrexian_symbols_paid_with_life: 0,
             entry_reveal_receipts: Vec::new(),
             mana_colors_spent_to_cast: Default::default(),
             prepared: false,
@@ -5330,6 +5336,7 @@ pub(super) fn exile_source_then_return_transformed(
     match cx.engine.begin_battlefield_entry(
         cx.top.clone(),
         BattlefieldEntryEvent {
+            phyrexian_symbols_paid_with_life: 0,
             entry_reveal_receipts: Vec::new(),
             mana_colors_spent_to_cast: Default::default(),
             prepared: false,
@@ -6685,6 +6692,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
         match engine.begin_battlefield_entry(
             cx.top.clone(),
             BattlefieldEntryEvent {
+                phyrexian_symbols_paid_with_life: 0,
                 entry_reveal_receipts: Vec::new(),
                 mana_colors_spent_to_cast: Default::default(),
                 prepared: false,
@@ -9653,6 +9661,7 @@ mod tests {
 
     fn linked_exile_test_item(occurrence: crate::state::LinkedExileOccurrence) -> StackItem {
         StackItem {
+            phyrexian_symbols_paid_with_life: 0,
             prototyped: false,
             mana_colors_spent_to_cast: Default::default(),
             id: 90_100,

@@ -390,7 +390,8 @@ fn ring_doubled_counter_replacements_resume_program_and_enter_32_tokens_once() {
     let replacement_sources = applications
         .iter()
         .map(|application| {
-            application["replacement"]["source_object_id"]
+            assert_eq!(application["replacement"]["variant"], "Battlefield");
+            application["replacement"]["value"]["instance"]["source_object_id"]
                 .as_u64()
                 .unwrap() as u32
         })

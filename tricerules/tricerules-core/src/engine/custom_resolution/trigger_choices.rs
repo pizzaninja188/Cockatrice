@@ -246,6 +246,7 @@ impl GameEngine {
                 .extend(chosen_modes.iter().map(|mode| mode.mode_id.clone()));
         }
         self.state.stack.push(StackItem {
+            phyrexian_symbols_paid_with_life: 0,
             mana_colors_spent_to_cast: Default::default(),
             id: virtual_id,
             controller,

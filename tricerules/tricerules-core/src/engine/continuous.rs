@@ -1064,6 +1064,9 @@ impl GameEngine {
                     // CR 614.12 entry replacements are evaluated against the proposed event in
                     // `engine::replacement`; there is no post-entry continuous effect to emit.
                 }
+                StaticAbilityDef::Compleated => {
+                    // CR 702.150a describes an entry-only ability, not a persistent layer effect.
+                }
                 StaticAbilityDef::EntersWithCounters { .. } => {
                     // CR 614.1c / 122.6 entry replacements are evaluated against the proposed
                     // event in `engine::replacement`; there is no post-entry effect to emit.

@@ -1,5 +1,8 @@
 use super::*;
-use crate::engine::replacement::{CounterPlacementRecipient, PendingReplacementEvent};
+use crate::engine::replacement::{
+    CounterPlacementApplication, CounterPlacementRecipient, CounterPlacementReplacement,
+    CounterReplacementInstance, PendingReplacementEvent,
+};
 use crate::engine::ScenarioCommandExt;
 use tricerules_card_model::primitives::CounterKind;
 use tricerules_card_model::{AbilityDefinitionId, AbilityId, CardFaceId, ProgramOwnerId};
@@ -33,6 +36,24 @@ fn identity(
             face_id: CardFaceId::new("front").unwrap(),
             ability_path: vec![AbilityId::new(occurrence).unwrap()],
         },
+    }
+}
+
+fn battlefield_instance(application: &CounterPlacementApplication) -> &CounterReplacementInstance {
+    match &application.replacement {
+        CounterPlacementReplacement::Battlefield {
+            instance,
+            member_event_indices,
+            source_controller,
+        } => {
+            assert_eq!(member_event_indices.len(), 1);
+            assert_eq!(member_event_indices[0], application.event_index);
+            assert!(source_controller.is_none());
+            instance
+        }
+        CounterPlacementReplacement::Compleated { .. } => {
+            panic!("Proliferate counter replacement must be a battlefield operation")
+        }
     }
 }
 
@@ -674,6 +695,7 @@ fn returned_source_incarnation_doubles_unstarted_sibling_without_replaying_first
 
 fn local_legacy_proliferate_item(source: ObjectId, generation: u64) -> crate::state::StackItem {
     let mut item = crate::state::StackItem {
+        phyrexian_symbols_paid_with_life: 0,
         prototyped: false,
         mana_colors_spent_to_cast: Default::default(),
         id: source + 10_000,
@@ -2407,17 +2429,19 @@ fn saved_proliferate_outer_and_nested_work_survives_actor_departure_under_observ
         first_counter_batch
             .applications
             .iter()
-            .map(|application| application.replacement.source_object_id)
+            .map(|application| battlefield_instance(application).source_object_id)
             .collect::<BTreeSet<_>>(),
         BTreeSet::from([first_season, second_season])
     );
     assert!(first_counter_batch.applications.iter().any(|application| {
-        application.replacement.source_object_id == first_season
-            && application.replacement.source_zone_change_generation == first_season_generation
+        battlefield_instance(application).source_object_id == first_season
+            && battlefield_instance(application).source_zone_change_generation
+                == first_season_generation
     }));
     assert!(first_counter_batch.applications.iter().any(|application| {
-        application.replacement.source_object_id == second_season
-            && application.replacement.source_zone_change_generation == second_season_generation
+        battlefield_instance(application).source_object_id == second_season
+            && battlefield_instance(application).source_zone_change_generation
+                == second_season_generation
     }));
 
     let first_order_answer = engine
@@ -2532,7 +2556,7 @@ fn saved_proliferate_outer_and_nested_work_survives_actor_departure_under_observ
             counter_batch
                 .applications
                 .iter()
-                .map(|application| application.replacement.source_object_id)
+                .map(|application| battlefield_instance(application).source_object_id)
                 .collect::<BTreeSet<_>>(),
             BTreeSet::from([first_season, second_season])
         );
@@ -2957,17 +2981,19 @@ fn saved_nested_proliferate_recipient_retirement_finishes_leaf_before_remaining_
             batch
                 .applications
                 .iter()
-                .map(|application| application.replacement.source_object_id)
+                .map(|application| battlefield_instance(application).source_object_id)
                 .collect::<BTreeSet<_>>(),
             BTreeSet::from([first_season, second_season])
         );
         assert!(batch.applications.iter().any(|application| {
-            application.replacement.source_object_id == first_season
-                && application.replacement.source_zone_change_generation == first_season_generation
+            battlefield_instance(application).source_object_id == first_season
+                && battlefield_instance(application).source_zone_change_generation
+                    == first_season_generation
         }));
         assert!(batch.applications.iter().any(|application| {
-            application.replacement.source_object_id == second_season
-                && application.replacement.source_zone_change_generation == second_season_generation
+            battlefield_instance(application).source_object_id == second_season
+                && battlefield_instance(application).source_zone_change_generation
+                    == second_season_generation
         }));
         let event = &batch.events[batch.event_index];
         assert_eq!(event.actor, 0);
@@ -3471,17 +3497,19 @@ fn flat_gambit_saved_row(registry: &'static CardRegistry) {
             counter_batch
                 .applications
                 .iter()
-                .map(|application| application.replacement.source_object_id)
+                .map(|application| battlefield_instance(application).source_object_id)
                 .collect::<BTreeSet<_>>(),
             BTreeSet::from([first_season, second_season])
         );
         assert!(counter_batch.applications.iter().any(|application| {
-            application.replacement.source_object_id == first_season
-                && application.replacement.source_zone_change_generation == first_season_generation
+            battlefield_instance(application).source_object_id == first_season
+                && battlefield_instance(application).source_zone_change_generation
+                    == first_season_generation
         }));
         assert!(counter_batch.applications.iter().any(|application| {
-            application.replacement.source_object_id == second_season
-                && application.replacement.source_zone_change_generation == second_season_generation
+            battlefield_instance(application).source_object_id == second_season
+                && battlefield_instance(application).source_zone_change_generation
+                    == second_season_generation
         }));
         (
             format!("{stack:?}"),
@@ -3609,17 +3637,19 @@ fn flat_gambit_saved_row(registry: &'static CardRegistry) {
             counter_batch
                 .applications
                 .iter()
-                .map(|application| application.replacement.source_object_id)
+                .map(|application| battlefield_instance(application).source_object_id)
                 .collect::<BTreeSet<_>>(),
             BTreeSet::from([first_season, second_season])
         );
         assert!(counter_batch.applications.iter().any(|application| {
-            application.replacement.source_object_id == first_season
-                && application.replacement.source_zone_change_generation == first_season_generation
+            battlefield_instance(application).source_object_id == first_season
+                && battlefield_instance(application).source_zone_change_generation
+                    == first_season_generation
         }));
         assert!(counter_batch.applications.iter().any(|application| {
-            application.replacement.source_object_id == second_season
-                && application.replacement.source_zone_change_generation == second_season_generation
+            battlefield_instance(application).source_object_id == second_season
+                && battlefield_instance(application).source_zone_change_generation
+                    == second_season_generation
         }));
         let event = &counter_batch.events[counter_batch.event_index];
         assert_eq!(event.actor, 0);
@@ -4040,7 +4070,7 @@ fn flat_second_counter_batch_survives_actor_departure_in_active_and_saved_routes
             counter_batch
                 .applications
                 .iter()
-                .map(|application| application.replacement.source_object_id)
+                .map(|application| battlefield_instance(application).source_object_id)
                 .collect::<BTreeSet<_>>(),
             BTreeSet::from([first_season, second_season])
         );
@@ -4171,17 +4201,19 @@ fn flat_second_counter_batch_survives_actor_departure_in_active_and_saved_routes
             counter_batch
                 .applications
                 .iter()
-                .map(|application| application.replacement.source_object_id)
+                .map(|application| battlefield_instance(application).source_object_id)
                 .collect::<BTreeSet<_>>(),
             BTreeSet::from([first_season, second_season])
         );
         assert!(counter_batch.applications.iter().any(|application| {
-            application.replacement.source_object_id == first_season
-                && application.replacement.source_zone_change_generation == first_season_generation
+            battlefield_instance(application).source_object_id == first_season
+                && battlefield_instance(application).source_zone_change_generation
+                    == first_season_generation
         }));
         assert!(counter_batch.applications.iter().any(|application| {
-            application.replacement.source_object_id == second_season
-                && application.replacement.source_zone_change_generation == second_season_generation
+            battlefield_instance(application).source_object_id == second_season
+                && battlefield_instance(application).source_zone_change_generation
+                    == second_season_generation
         }));
         let event = &counter_batch.events[counter_batch.event_index];
         assert_eq!(event.actor, 0);
@@ -4504,17 +4536,19 @@ fn ripples_second_counter_batch_keeps_first_child_receipt_after_actor_concedes()
             batch
                 .applications
                 .iter()
-                .map(|application| application.replacement.source_object_id)
+                .map(|application| battlefield_instance(application).source_object_id)
                 .collect::<BTreeSet<_>>(),
             BTreeSet::from([first_season, second_season])
         );
         assert!(batch.applications.iter().any(|application| {
-            application.replacement.source_object_id == first_season
-                && application.replacement.source_zone_change_generation == first_season_generation
+            battlefield_instance(application).source_object_id == first_season
+                && battlefield_instance(application).source_zone_change_generation
+                    == first_season_generation
         }));
         assert!(batch.applications.iter().any(|application| {
-            application.replacement.source_object_id == second_season
-                && application.replacement.source_zone_change_generation == second_season_generation
+            battlefield_instance(application).source_object_id == second_season
+                && battlefield_instance(application).source_zone_change_generation
+                    == second_season_generation
         }));
         let event = &batch.events[batch.event_index];
         assert_eq!(event.actor, 0);

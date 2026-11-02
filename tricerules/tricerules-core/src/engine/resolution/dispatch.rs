@@ -526,6 +526,7 @@ mod extra_turn_effect_tests {
             .get("magistrates_scepter")
             .expect("actual Scepter definition");
         let copied_ability = StackItem {
+            phyrexian_symbols_paid_with_life: 0,
             mana_colors_spent_to_cast: Default::default(),
             id: 500,
             controller: 30,

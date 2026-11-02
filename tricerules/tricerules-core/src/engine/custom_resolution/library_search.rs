@@ -100,6 +100,7 @@ impl GameEngine {
             match self.begin_battlefield_entry(
                 stack.item.clone(),
                 BattlefieldEntryEvent {
+                    phyrexian_symbols_paid_with_life: 0,
                     entry_reveal_receipts: Vec::new(),
                     mana_colors_spent_to_cast: Default::default(),
                     prepared: false,
@@ -1254,6 +1255,7 @@ impl GameEngine {
             } => {
                 stack.previous_result = previous_result;
                 let entry = BattlefieldEntryEvent {
+                    phyrexian_symbols_paid_with_life: 0,
                     entry_reveal_receipts: Vec::new(),
                     mana_colors_spent_to_cast: Default::default(),
                     prepared: false,
@@ -1707,6 +1709,7 @@ self.state.pending_resolution = Some(PendingResolution {
                         let entries = chosen
                             .iter()
                             .map(|&oid| BattlefieldEntryEvent {
+                                phyrexian_symbols_paid_with_life: 0,
                                 entry_reveal_receipts: Vec::new(),
                                 mana_colors_spent_to_cast: Default::default(),
                                 prepared: false,
@@ -2172,6 +2175,7 @@ mod tests {
 
     fn test_stack_item() -> StackItem {
         StackItem {
+            phyrexian_symbols_paid_with_life: 0,
             prototyped: false,
             mana_colors_spent_to_cast: Default::default(),
             id: 90_001,

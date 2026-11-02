@@ -1446,6 +1446,7 @@ mod delayed_trigger_tests {
 
     fn delayed_spell_item() -> StackItem {
         StackItem {
+            phyrexian_symbols_paid_with_life: 0,
             mana_colors_spent_to_cast: Default::default(),
             id: 900_001,
             controller: 0,

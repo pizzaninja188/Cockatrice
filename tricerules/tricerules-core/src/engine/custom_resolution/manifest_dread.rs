@@ -95,6 +95,7 @@ impl GameEngine {
 
         let mut events = Vec::new();
         let entry = BattlefieldEntryEvent {
+            phyrexian_symbols_paid_with_life: 0,
             entry_reveal_receipts: Vec::new(),
             mana_colors_spent_to_cast: Default::default(),
             prepared: false,

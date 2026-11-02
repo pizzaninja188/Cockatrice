@@ -153,6 +153,7 @@ mod source_sacrifice_receipt_tests {
             .copied()
             .unwrap_or(0);
         let top = StackItem {
+            phyrexian_symbols_paid_with_life: 0,
             prototyped: false,
             mana_colors_spent_to_cast: Default::default(),
             id: 701_212,

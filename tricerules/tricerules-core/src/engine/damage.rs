@@ -10,7 +10,7 @@ use super::*;
 
 type PreparedPreventionCounterPlacement = (
     super::replacement::PendingCounterPlacementBatch,
-    Vec<(super::replacement::CounterReplacementInstance, String)>,
+    Vec<(super::replacement::CounterPlacementReplacement, String)>,
 );
 
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
@@ -255,7 +255,7 @@ enum DamageBatchProgress {
         batch: PendingDamageBatch,
         damage_event_index: usize,
         counter_batch: super::replacement::PendingCounterPlacementBatch,
-        candidates: Vec<(super::replacement::CounterReplacementInstance, String)>,
+        candidates: Vec<(super::replacement::CounterPlacementReplacement, String)>,
     },
 }
 
@@ -1023,7 +1023,7 @@ impl GameEngine {
         damage_batch: PendingDamageBatch,
         damage_event_index: usize,
         counter_batch: super::replacement::PendingCounterPlacementBatch,
-        candidates: Vec<(super::replacement::CounterReplacementInstance, String)>,
+        candidates: Vec<(super::replacement::CounterPlacementReplacement, String)>,
         events: &mut Vec<rv1::RuledEvent>,
     ) {
         let completion = crate::state::CounterPlacementCompletion::DamageReplacement {
@@ -4392,6 +4392,7 @@ mod tests {
 
     fn source_item(source: ObjectId, generation: u64) -> StackItem {
         StackItem {
+            phyrexian_symbols_paid_with_life: 0,
             prototyped: false,
             mana_colors_spent_to_cast: Default::default(),
             id: source,

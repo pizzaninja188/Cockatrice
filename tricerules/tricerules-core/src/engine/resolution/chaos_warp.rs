@@ -343,6 +343,7 @@ impl GameEngine {
             return Ok(Some(stack));
         }
         let entry = BattlefieldEntryEvent {
+            phyrexian_symbols_paid_with_life: 0,
             entry_reveal_receipts: vec![receipt],
             mana_colors_spent_to_cast: Default::default(),
             prepared: false,
