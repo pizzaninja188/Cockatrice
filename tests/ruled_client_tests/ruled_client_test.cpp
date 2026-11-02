@@ -647,6 +647,24 @@ std::optional<ruled::v1::PendingAbilityActivation> prepareAcceptedAggregateCount
     return accepted;
 }
 
+ruled::v1::PendingAbilityActivation localPaymentSnapshot(quint64 transactionId, quint64 revision)
+{
+    ruled::v1::PendingAbilityActivation snapshot;
+    snapshot.set_transaction_id(transactionId);
+    snapshot.set_revision(revision);
+    snapshot.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT);
+    return snapshot;
+}
+
+ruled::v1::PendingAbilityActivation localWaitingActivationSnapshot(quint64 transactionId, quint64 revision)
+{
+    ruled::v1::PendingAbilityActivation snapshot;
+    snapshot.set_transaction_id(transactionId);
+    snapshot.set_revision(revision);
+    snapshot.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_CHOOSE_OPPONENT);
+    return snapshot;
+}
+
 bool sameAggregateCounterRows(const QVector<RuledPendingCounterContribution> &left,
                               const QVector<RuledPendingCounterContribution> &right)
 {
@@ -3262,7 +3280,7 @@ TEST(RuledActivatedAbilityModeTest, SubmittedActivationSurvivesReplacementOfTheL
 
     PendingActivatedAbility ability;
     ability.valid = true;
-    ability.stage = PendingActivatedAbility::Stage::CommitPending;
+    ASSERT_TRUE(ability.beginCommit());
     ability.permanentOid = sourceOid;
     ability.abilityIndex = abilityIndex;
     ability.expectedZoneChangeGeneration = sourceGeneration;
@@ -3274,15 +3292,16 @@ TEST(RuledActivatedAbilityModeTest, SubmittedActivationSurvivesReplacementOfTheL
     pending.set_source_object_id(sourceOid);
     pending.set_source_zone_change_generation(sourceGeneration);
     pending.set_ability_index(abilityIndex);
+    pending.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT);
     state.pendingAbilityActivation = pending;
-    ability.engineTransactionId = 81;
+    ability.applyEngineSnapshot(*state.pendingAbilityActivation);
     EXPECT_TRUE(ruledPendingAbilitySourceStillCurrent(state, ability));
 
     state.pendingAbilityActivation->set_transaction_id(82);
     EXPECT_FALSE(ruledPendingAbilitySourceStillCurrent(state, ability));
 
     state.pendingAbilityActivation->set_transaction_id(81);
-    ability.stage = PendingActivatedAbility::Stage::Paying;
+    ability.applyEngineSnapshot(*state.pendingAbilityActivation);
     EXPECT_TRUE(ruledPendingAbilitySourceStillCurrent(state, ability));
 }
 
@@ -3321,7 +3340,6 @@ TEST(RuledActivatedAbilityModeTest, ChangedTargetGenerationInvalidatesTheCapture
     capturedMode.targets.groups[0].validPermanentGenerations.insert(targetOid, capturedGeneration);
     PendingActivatedAbility ability;
     ability.valid = true;
-    ability.stage = PendingActivatedAbility::Stage::Announcing;
     ability.waitingForTarget = false;
     ability.targetingCostApplied = true;
     ability.permanentOid = sourceOid;
@@ -3659,12 +3677,10 @@ TEST(RuledPendingTargetTest, EngineOwnedActivationSurvivesSuppressedOrdinaryOffe
     engine.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT);
     PendingActivatedAbility ability;
     ability.valid = true;
-    ability.engineTransactionId = 91;
-    ability.engineRevision = 3;
-    ability.stage = PendingActivatedAbility::Stage::Paying;
     ability.permanentOid = 30;
     ability.expectedZoneChangeGeneration = 4;
     ability.abilityIndex = 1;
+    ability.applyEngineSnapshot(*state.pendingAbilityActivation);
     ability.selectedTargets.append(PendingActivatedAbility::Target{});
     ability.selectedTargets.last().ref.set_object_id(40);
     EXPECT_TRUE(ruledPendingAbilitySourceStillCurrent(state, ability));
@@ -3679,7 +3695,7 @@ TEST(RuledPendingTargetTest, WaitingActivationCannotAutoSubmitAnEmptyLocalCost)
     PendingActivatedAbility ability;
     ability.valid = true;
     ability.chosenOpponentTargets = true;
-    ability.stage = PendingActivatedAbility::Stage::Waiting;
+    ability.applyEngineSnapshot(localWaitingActivationSnapshot(91, 3));
     EXPECT_EQ(readyRuledPendingPaymentAction({}, ability), RuledPendingPaymentAction::None);
 }
 
@@ -3728,7 +3744,6 @@ TEST(RuledPendingTargetTest, RejectedNonModalActivationRetriesOnlyWhenRetargetin
     const auto pendingWithTarget = [&](quint32 targetOid) {
         PendingActivatedAbility ability;
         ability.valid = true;
-        ability.stage = PendingActivatedAbility::Stage::Announcing;
         ability.permanentOid = sourceOid;
         ability.expectedZoneChangeGeneration = 7;
         ability.abilityIndex = abilityIndex;
@@ -3753,7 +3768,6 @@ TEST(RuledPendingTargetTest, RejectedNonModalActivationRetriesOnlyWhenRetargetin
 
     PendingActivatedAbility targetless;
     targetless.valid = true;
-    targetless.stage = PendingActivatedAbility::Stage::Announcing;
     EXPECT_TRUE(ruledRejectedActivationCanRetry(targetless));
 }
 
@@ -3901,21 +3915,25 @@ TEST(RuledPendingTargetTest, ActivationCancelRaceInitializesPaymentWithoutDroppi
     engine.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET);
     PendingActivatedAbility local;
     ruledApplyActivationView(local, engine);
-    local.stage = PendingActivatedAbility::Stage::CancelPending;
+    ASSERT_TRUE(local.beginCancel());
     engine.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT);
     engine.set_locked_total_cost("3");
     ruledApplyActivationView(local, engine);
-    EXPECT_EQ(local.stage, PendingActivatedAbility::Stage::CancelPending);
+    EXPECT_EQ(local.stage(), PendingActivatedAbility::Stage::CancelPending);
     EXPECT_EQ(local.remainingCost.value(QChar('X')), 3);
-    local.stage = PendingActivatedAbility::Stage::Paying;
+    local.rejectCancel();
     local.remainingCost[QChar('X')] = 1;
-    for (const auto stage :
-         {PendingActivatedAbility::Stage::CommitPending, PendingActivatedAbility::Stage::CancelPending}) {
-        local.stage = stage;
-        ruledApplyActivationView(local, engine);
-        EXPECT_EQ(local.stage, stage);
-        EXPECT_EQ(local.remainingCost.value(QChar('X')), 1);
-    }
+    auto commitPending = local;
+    ASSERT_TRUE(commitPending.beginCommit());
+    ruledApplyActivationView(commitPending, engine);
+    EXPECT_EQ(commitPending.stage(), PendingActivatedAbility::Stage::CommitPending);
+    EXPECT_EQ(commitPending.remainingCost.value(QChar('X')), 1);
+
+    auto cancelPending = local;
+    ASSERT_TRUE(cancelPending.beginCancel());
+    ruledApplyActivationView(cancelPending, engine);
+    EXPECT_EQ(cancelPending.stage(), PendingActivatedAbility::Stage::CancelPending);
+    EXPECT_EQ(cancelPending.remainingCost.value(QChar('X')), 1);
 }
 
 TEST_F(RuledClientTest, AggregateActivationReconnectRestoresPrivateGroupAndFixedPipsAfterSourceLoss)
@@ -4026,38 +4044,37 @@ TEST_F(RuledClientTest, AggregateActivationReconnectRestoresPrivateGroupAndFixed
         }
     };
 
-    const auto expectRestoredPayment = [&](const PendingActivatedAbility &local,
-                                           const ruled::v1::PendingAbilityActivation &engine,
-                                           const QVector<RuledPendingCounterContribution> &expectedRows,
-                                           quint64 expectedDraftId) {
-        EXPECT_EQ(local.engineTransactionId, engine.transaction_id());
-        EXPECT_EQ(local.engineRevision, engine.revision());
-        EXPECT_EQ(local.permanentOid, sourceOid);
-        EXPECT_EQ(local.expectedZoneChangeGeneration, sourceGeneration);
-        EXPECT_EQ(local.abilityIndex, abilityIndex);
-        EXPECT_EQ(local.abilityText, QString::fromStdString(engine.source_description()));
-        EXPECT_EQ(local.draftId, expectedDraftId);
-        EXPECT_TRUE(local.enginePaymentInitialized);
-        EXPECT_TRUE(local.waitingForMana);
-        EXPECT_FALSE(local.waitingForCost);
-        EXPECT_TRUE(local.costChoices.isEmpty());
-        EXPECT_TRUE(local.costSelections.isEmpty());
-        EXPECT_TRUE(local.selectedTargets.isEmpty());
-        EXPECT_FALSE(local.needsTarget);
-        EXPECT_FALSE(local.chosenOpponentTargets);
-        EXPECT_FALSE(local.waitingForTarget);
-        EXPECT_TRUE(local.remainingCost.isEmpty());
-        EXPECT_TRUE(local.flexPips.isEmpty());
-        EXPECT_TRUE(local.lifePipIndices.isEmpty());
-        EXPECT_EQ(local.engineLockedCostLabel, QString::fromStdString(engine.locked_total_cost()));
-        expectRestoredRows(local, expectedRows);
+    const auto expectRestoredPayment =
+        [&](const PendingActivatedAbility &local, const ruled::v1::PendingAbilityActivation &engine,
+            const QVector<RuledPendingCounterContribution> &expectedRows, quint64 expectedDraftId) {
+            EXPECT_EQ(local.transactionId(), engine.transaction_id());
+            EXPECT_EQ(local.revision(), engine.revision());
+            EXPECT_EQ(local.permanentOid, sourceOid);
+            EXPECT_EQ(local.expectedZoneChangeGeneration, sourceGeneration);
+            EXPECT_EQ(local.abilityIndex, abilityIndex);
+            EXPECT_EQ(local.abilityText, QString::fromStdString(engine.source_description()));
+            EXPECT_EQ(local.draftId, expectedDraftId);
+            EXPECT_TRUE(local.hasInitializedPayment());
+            EXPECT_TRUE(local.waitingForMana);
+            EXPECT_FALSE(local.waitingForCost);
+            EXPECT_TRUE(local.costChoices.isEmpty());
+            EXPECT_TRUE(local.costSelections.isEmpty());
+            EXPECT_TRUE(local.selectedTargets.isEmpty());
+            EXPECT_FALSE(local.needsTarget);
+            EXPECT_FALSE(local.chosenOpponentTargets);
+            EXPECT_FALSE(local.waitingForTarget);
+            EXPECT_TRUE(local.remainingCost.isEmpty());
+            EXPECT_TRUE(local.flexPips.isEmpty());
+            EXPECT_TRUE(local.lifePipIndices.isEmpty());
+            EXPECT_EQ(local.engineLockedCostLabel, QString::fromStdString(engine.locked_total_cost()));
+            expectRestoredRows(local, expectedRows);
 
-        EXPECT_EQ(local.fixedFlexPayments.size(), engine.flex_payments_size());
-        for (int i = 0; i < engine.flex_payments_size() && i < local.fixedFlexPayments.size(); ++i) {
-            EXPECT_EQ(local.fixedFlexPayments.at(i).pip_index(), engine.flex_payments(i).pip_index());
-            EXPECT_EQ(local.fixedFlexPayments.at(i).pay_life(), engine.flex_payments(i).pay_life());
-        }
-    };
+            EXPECT_EQ(local.fixedFlexPayments.size(), engine.flex_payments_size());
+            for (int i = 0; i < engine.flex_payments_size() && i < local.fixedFlexPayments.size(); ++i) {
+                EXPECT_EQ(local.fixedFlexPayments.at(i).pip_index(), engine.flex_payments(i).pip_index());
+                EXPECT_EQ(local.fixedFlexPayments.at(i).pay_life(), engine.flex_payments(i).pay_life());
+            }
+        };
 
     auto mixedView = makeAcceptedView(91, 1, mixedLockedCost, false, true);
     ASSERT_EQ(mixedView.cost_selections_size(), 1);
@@ -4073,7 +4090,6 @@ TEST_F(RuledClientTest, AggregateActivationReconnectRestoresPrivateGroupAndFixed
 
     PendingActivatedAbility local;
     local.valid = true;
-    local.stage = PendingActivatedAbility::Stage::Announcing;
     local.permanentOid = sourceOid;
     local.expectedZoneChangeGeneration = sourceGeneration;
     local.sourceZone = ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD;
@@ -4117,7 +4133,7 @@ TEST_F(RuledClientTest, AggregateActivationReconnectRestoresPrivateGroupAndFixed
     }
 
     ruledApplyActivationView(local, mixedView);
-    EXPECT_EQ(local.stage, PendingActivatedAbility::Stage::Paying);
+    EXPECT_EQ(local.stage(), PendingActivatedAbility::Stage::Paying);
     expectRestoredPayment(local, mixedView, labeledRows(acceptedRows, matchingOfferLabels), draftId);
 
     auto refreshedView = mixedView;
@@ -4133,18 +4149,19 @@ TEST_F(RuledClientTest, AggregateActivationReconnectRestoresPrivateGroupAndFixed
         auto sameTransaction = local;
         sameTransaction.costChoices.clear();
         sameTransaction.costSelections.clear();
-        sameTransaction.stage = stage;
+        const bool submitting = stage == PendingActivatedAbility::Stage::CommitPending ? sameTransaction.beginCommit()
+                                                                                       : sameTransaction.beginCancel();
+        ASSERT_TRUE(submitting);
         ruledApplyActivationView(sameTransaction, refreshedView);
-        EXPECT_EQ(sameTransaction.stage, stage);
+        EXPECT_EQ(sameTransaction.stage(), stage);
         expectRestoredPayment(sameTransaction, refreshedView, refreshedRows, draftId);
     }
 
     auto stagedPayment = local;
-    stagedPayment.stage = PendingActivatedAbility::Stage::Paying;
     const QMap<QChar, int> stagedRemainingCost = {{QChar('U'), 1}};
     stagedPayment.remainingCost = stagedRemainingCost;
     ruledApplyActivationView(stagedPayment, refreshedView);
-    EXPECT_EQ(stagedPayment.stage, PendingActivatedAbility::Stage::Paying);
+    EXPECT_EQ(stagedPayment.stage(), PendingActivatedAbility::Stage::Paying);
     EXPECT_EQ(stagedPayment.remainingCost, stagedRemainingCost);
 
     auto bothLifeView = makeAcceptedView(92, 1, bothLifeLockedCost, true, true);
@@ -4172,7 +4189,7 @@ TEST_F(RuledClientTest, AggregateActivationReconnectRestoresPrivateGroupAndFixed
     EXPECT_TRUE(state->abilityCostChoices(sourceOid, abilityIndex).isEmpty());
 
     ruledApplyActivationView(freshReconnect, bothLifeView);
-    EXPECT_EQ(freshReconnect.stage, PendingActivatedAbility::Stage::Paying);
+    EXPECT_EQ(freshReconnect.stage(), PendingActivatedAbility::Stage::Paying);
     expectRestoredPayment(freshReconnect, bothLifeView, acceptedRows, draftId + 1);
 }
 
@@ -5397,8 +5414,8 @@ TEST_F(RuledClientTest, CounterGroupBeginRechecksEngineNonManaPayability)
     ASSERT_TRUE(ruledStageCounterContributions(ownedDraft, 1, 901, 13, aggregateAcceptedCounterRows()));
     ASSERT_TRUE(ruledConfirmCounterContributions(ownedDraft));
     EXPECT_FALSE(owner.prepareCounterGroupBegin(*state, kLocalPlayer, aggregatePhiPayments(ownedDraft)).has_value());
-    EXPECT_FALSE(ownedDraft.ownedCounterGroupBegin.has_value());
-    EXPECT_EQ(ownedDraft.stage, PendingActivatedAbility::Stage::Announcing);
+    EXPECT_EQ(ownedDraft.ownedBegin(), nullptr);
+    EXPECT_EQ(ownedDraft.stage(), PendingActivatedAbility::Stage::Announcing);
     EXPECT_FALSE(state->pendingAbilityActivation.has_value());
     EXPECT_FALSE(ruledCounterQuantityContext(*state, ownedDraft, 1, 901, 13, QStringLiteral("eligible permanent"))
                      .has_value());
@@ -5662,9 +5679,8 @@ TEST_F(RuledClientTest, AggregateCounterModalResultRevalidatesCurrentOfferAndPen
         "the local source generation changed");
     rejectAfterPendingChange([](PendingActivatedAbility &pending) { ++pending.abilityIndex; },
                              "the activated ability slot changed");
-    rejectAfterPendingChange([](PendingActivatedAbility &pending) {
-        pending.stage = PendingActivatedAbility::Stage::BeginPending;
-    }, "the ability left the unaccepted announcing stage");
+    rejectAfterPendingChange([](PendingActivatedAbility &pending) { pending.beginOrdinaryAnnouncement(); },
+                             "the ability left the unaccepted announcing stage");
     rejectAfterPendingChange([](PendingActivatedAbility &pending) { ++pending.nextCostChoice; },
                              "the active cost position changed");
 
@@ -6072,7 +6088,7 @@ TEST_F(RuledClientTest, AggregateCounterQuantityContextReservesOtherGroupsAndUse
     auto baseline = makeAggregateCounterDraft(*state);
     ASSERT_TRUE(ruledCounterQuantityContext(*state, baseline, 1, 901, 13, QStringLiteral("Live source")).has_value());
     auto staleStage = baseline;
-    staleStage.stage = PendingActivatedAbility::Stage::Paying;
+    staleStage.applyEngineSnapshot(localPaymentSnapshot(91, 1));
     EXPECT_FALSE(ruledCounterQuantityContext(*state, staleStage, 1, 901, 13, QStringLiteral("Stale stage"))
                      .has_value());
     auto malformedRows = baseline;
@@ -6583,9 +6599,9 @@ TEST_F(RuledClientTest, AggregateActivationOwnedBeginWaitsForAckAndMatchingSnaps
         EXPECT_EQ(pending.draftId, captured.draftId);
         EXPECT_EQ(pending.permanentOid, captured.announcement.source_object_id());
         EXPECT_NE(current.reserved_object_id(), pending.permanentOid);
-        EXPECT_EQ(pending.engineTransactionId, current.transaction_id());
-        EXPECT_EQ(pending.stage, PendingActivatedAbility::Stage::Paying);
-        EXPECT_TRUE(pending.enginePaymentInitialized);
+        EXPECT_EQ(pending.transactionId(), current.transaction_id());
+        EXPECT_EQ(pending.stage(), PendingActivatedAbility::Stage::Paying);
+        EXPECT_TRUE(pending.hasInitializedPayment());
         EXPECT_TRUE(pending.waitingForMana);
         EXPECT_FALSE(pending.waitingForCost);
         EXPECT_FALSE(pending.waitingForTarget);
@@ -6597,7 +6613,7 @@ TEST_F(RuledClientTest, AggregateActivationOwnedBeginWaitsForAckAndMatchingSnaps
         EXPECT_TRUE(pending.flexPips.isEmpty());
         EXPECT_TRUE(pending.lifePipIndices.isEmpty());
         EXPECT_EQ(pending.engineLockedCostLabel, QString::fromStdString(current.locked_total_cost()));
-        EXPECT_FALSE(pending.ownedCounterGroupBegin.has_value());
+        EXPECT_EQ(pending.ownedBegin(), nullptr);
 
         int expectedRowCount = 0;
         for (const auto &selection : captured.announcement.cost_selections())
@@ -6640,7 +6656,7 @@ TEST_F(RuledClientTest, AggregateActivationOwnedBeginWaitsForAckAndMatchingSnaps
     EXPECT_FALSE(snapshotFirstCapture->announcement.flex_payments(0).pay_life());
     EXPECT_EQ(snapshotFirstCapture->announcement.flex_payments(1).pip_index(), 1u);
     EXPECT_TRUE(snapshotFirstCapture->announcement.flex_payments(1).pay_life());
-    EXPECT_EQ(snapshotFirstOwner.ability.stage, PendingActivatedAbility::Stage::BeginPending);
+    EXPECT_EQ(snapshotFirstOwner.ability.stage(), PendingActivatedAbility::Stage::BeginPending);
     EXPECT_FALSE(snapshotFirstOwner.ability.waitingForCost);
     EXPECT_FALSE(snapshotFirstOwner.ability.waitingForMana);
     ASSERT_EQ(snapshotFirstOwner.ability.fixedFlexPayments.size(), 2);
@@ -6659,11 +6675,11 @@ TEST_F(RuledClientTest, AggregateActivationOwnedBeginWaitsForAckAndMatchingSnaps
 
     const auto snapshotFirstUpdate = snapshotFirstOwner.reconcileCounterGroupBegin(&snapshotFirstView);
     EXPECT_EQ(snapshotFirstUpdate, RuledOwnedCounterGroupBeginUpdate::Waiting);
-    EXPECT_EQ(snapshotFirstOwner.ability.stage, PendingActivatedAbility::Stage::BeginPending);
-    EXPECT_EQ(snapshotFirstOwner.ability.engineTransactionId, 0u);
-    EXPECT_FALSE(snapshotFirstOwner.ability.enginePaymentInitialized);
+    EXPECT_EQ(snapshotFirstOwner.ability.stage(), PendingActivatedAbility::Stage::BeginPending);
+    EXPECT_EQ(snapshotFirstOwner.ability.transactionId(), 0u);
+    EXPECT_FALSE(snapshotFirstOwner.ability.hasInitializedPayment());
     EXPECT_FALSE(snapshotFirstOwner.ability.waitingForMana);
-    EXPECT_TRUE(snapshotFirstOwner.ability.ownedCounterGroupBegin.has_value());
+    EXPECT_NE(snapshotFirstOwner.ability.ownedBegin(), nullptr);
     EXPECT_EQ(readyRuledPendingPaymentAction({}, snapshotFirstOwner.ability), RuledPendingPaymentAction::None);
 
     const auto snapshotFirstAck = snapshotFirstOwner.acknowledgeCounterGroupBegin(
@@ -6677,19 +6693,18 @@ TEST_F(RuledClientTest, AggregateActivationOwnedBeginWaitsForAckAndMatchingSnaps
     RuledPendingCast ackFirstOwner;
     const auto ackFirstCapture = prepareOwnedBegin(ackFirstOwner);
     ASSERT_TRUE(ackFirstCapture.has_value());
-    EXPECT_EQ(ackFirstOwner.ability.stage, PendingActivatedAbility::Stage::BeginPending);
+    EXPECT_EQ(ackFirstOwner.ability.stage(), PendingActivatedAbility::Stage::BeginPending);
     EXPECT_FALSE(ackFirstOwner.ability.waitingForMana);
     EXPECT_FALSE(ackFirstOwner.ability.waitingForCost);
 
     const auto ackFirstUpdate = ackFirstOwner.acknowledgeCounterGroupBegin(*ackFirstCapture, true, nullptr);
     EXPECT_EQ(ackFirstUpdate, RuledOwnedCounterGroupBeginUpdate::Waiting);
-    EXPECT_EQ(ackFirstOwner.ability.stage, PendingActivatedAbility::Stage::BeginPending);
-    EXPECT_EQ(ackFirstOwner.ability.engineTransactionId, 0u);
-    EXPECT_FALSE(ackFirstOwner.ability.enginePaymentInitialized);
+    EXPECT_EQ(ackFirstOwner.ability.stage(), PendingActivatedAbility::Stage::BeginPending);
+    EXPECT_EQ(ackFirstOwner.ability.transactionId(), 0u);
+    EXPECT_FALSE(ackFirstOwner.ability.hasInitializedPayment());
     EXPECT_FALSE(ackFirstOwner.ability.waitingForMana);
-    EXPECT_TRUE(ackFirstOwner.ability.ownedCounterGroupBegin.has_value());
-    if (ackFirstOwner.ability.ownedCounterGroupBegin)
-        EXPECT_TRUE(ackFirstOwner.ability.ownedCounterGroupBegin->acknowledged);
+    ASSERT_NE(ackFirstOwner.ability.ownedBegin(), nullptr);
+    EXPECT_TRUE(ackFirstOwner.ability.ownedBegin()->acknowledged);
 
     auto ackFirstView = makePaymentSnapshot(*ackFirstCapture, 92);
     ASSERT_NE(ackFirstView.transaction_id(), 0u);
@@ -6723,24 +6738,24 @@ TEST_F(RuledClientTest, AggregateActivationOwnedBeginPreparationIsSingleAndRequi
     auto payments = stageConfirmedDraft(owner);
     ASSERT_EQ(payments.size(), 2);
     EXPECT_FALSE(owner.prepareCounterGroupBegin(*state, -1, payments).has_value());
-    EXPECT_EQ(owner.ability.stage, PendingActivatedAbility::Stage::Announcing);
-    EXPECT_FALSE(owner.ability.ownedCounterGroupBegin.has_value());
+    EXPECT_EQ(owner.ability.stage(), PendingActivatedAbility::Stage::Announcing);
+    EXPECT_EQ(owner.ability.ownedBegin(), nullptr);
 
     const auto captured = owner.prepareCounterGroupBegin(*state, kLocalPlayer, payments);
     ASSERT_TRUE(captured.has_value());
     EXPECT_NE(captured->draftId, 0u);
-    EXPECT_EQ(owner.ability.stage, PendingActivatedAbility::Stage::BeginPending);
+    EXPECT_EQ(owner.ability.stage(), PendingActivatedAbility::Stage::BeginPending);
     EXPECT_FALSE(owner.ability.waitingForMana);
     EXPECT_FALSE(owner.prepareCounterGroupBegin(*state, kLocalPlayer, payments).has_value());
-    ASSERT_TRUE(owner.ability.ownedCounterGroupBegin.has_value());
+    ASSERT_NE(owner.ability.ownedBegin(), nullptr);
 
     RuledPendingCast blockedOwner;
     const auto blockedPayments = stageConfirmedDraft(blockedOwner);
     ASSERT_EQ(blockedPayments.size(), 2);
     state->pendingAbilityActivation = makeOwnedAggregateCounterPaymentSnapshot(*captured, 91);
     EXPECT_FALSE(blockedOwner.prepareCounterGroupBegin(*state, kLocalPlayer, blockedPayments).has_value());
-    EXPECT_EQ(blockedOwner.ability.stage, PendingActivatedAbility::Stage::Announcing);
-    EXPECT_FALSE(blockedOwner.ability.ownedCounterGroupBegin.has_value());
+    EXPECT_EQ(blockedOwner.ability.stage(), PendingActivatedAbility::Stage::Announcing);
+    EXPECT_EQ(blockedOwner.ability.ownedBegin(), nullptr);
 }
 
 TEST_F(RuledClientTest, AggregateActivationOwnedBeginRejectsMalformedSnapshotsWithoutLatching)
@@ -6756,17 +6771,17 @@ TEST_F(RuledClientTest, AggregateActivationOwnedBeginRejectsMalformedSnapshotsWi
         auto malformed = makeOwnedAggregateCounterPaymentSnapshot(*captured, 91);
         mutate(malformed);
         EXPECT_EQ(owner.reconcileCounterGroupBegin(&malformed), RuledOwnedCounterGroupBeginUpdate::Waiting);
-        ASSERT_TRUE(owner.ability.ownedCounterGroupBegin.has_value());
-        EXPECT_EQ(owner.ability.stage, PendingActivatedAbility::Stage::BeginPending);
-        EXPECT_EQ(owner.ability.engineTransactionId, 0u);
-        EXPECT_FALSE(owner.ability.enginePaymentInitialized);
+        ASSERT_NE(owner.ability.ownedBegin(), nullptr);
+        EXPECT_EQ(owner.ability.stage(), PendingActivatedAbility::Stage::BeginPending);
+        EXPECT_EQ(owner.ability.transactionId(), 0u);
+        EXPECT_FALSE(owner.ability.hasInitializedPayment());
         EXPECT_FALSE(owner.ability.waitingForMana);
-        EXPECT_EQ(owner.ability.ownedCounterGroupBegin->matchedTransactionId, 0u);
+        EXPECT_EQ(owner.ability.ownedBegin()->matchedTransactionId, 0u);
 
         const auto matching = makeOwnedAggregateCounterPaymentSnapshot(*captured, 91);
         EXPECT_EQ(owner.acknowledgeCounterGroupBegin(*captured, true, &matching),
                   RuledOwnedCounterGroupBeginUpdate::Accepted);
-        EXPECT_EQ(owner.ability.engineTransactionId, 91u);
+        EXPECT_EQ(owner.ability.transactionId(), 91u);
     };
 
     expectRejected("wrong actor", [](auto &current) { current.set_actor_player_id(kOpponent); });
@@ -6857,20 +6872,20 @@ TEST_F(RuledClientTest, AggregateActivationOwnedBeginLatchesFirstMatchingTransac
     auto transactionA = makeOwnedAggregateCounterPaymentSnapshot(*captured, 91);
     auto transactionB = makeOwnedAggregateCounterPaymentSnapshot(*captured, 92);
     EXPECT_EQ(owner.reconcileCounterGroupBegin(&transactionA), RuledOwnedCounterGroupBeginUpdate::Waiting);
-    ASSERT_TRUE(owner.ability.ownedCounterGroupBegin.has_value());
-    EXPECT_EQ(owner.ability.ownedCounterGroupBegin->matchedTransactionId, 91u);
+    ASSERT_NE(owner.ability.ownedBegin(), nullptr);
+    EXPECT_EQ(owner.ability.ownedBegin()->matchedTransactionId, 91u);
     EXPECT_EQ(owner.reconcileCounterGroupBegin(nullptr), RuledOwnedCounterGroupBeginUpdate::Waiting);
-    EXPECT_EQ(owner.ability.ownedCounterGroupBegin->matchedTransactionId, 91u);
+    EXPECT_EQ(owner.ability.ownedBegin()->matchedTransactionId, 91u);
     EXPECT_EQ(owner.reconcileCounterGroupBegin(&transactionB), RuledOwnedCounterGroupBeginUpdate::Waiting);
-    EXPECT_EQ(owner.ability.engineTransactionId, 0u);
-    EXPECT_EQ(owner.ability.ownedCounterGroupBegin->matchedTransactionId, 91u);
+    EXPECT_EQ(owner.ability.transactionId(), 0u);
+    EXPECT_EQ(owner.ability.ownedBegin()->matchedTransactionId, 91u);
     EXPECT_EQ(owner.acknowledgeCounterGroupBegin(*captured, true, &transactionB),
               RuledOwnedCounterGroupBeginUpdate::Waiting);
-    EXPECT_TRUE(owner.ability.ownedCounterGroupBegin->acknowledged);
-    EXPECT_EQ(owner.ability.ownedCounterGroupBegin->matchedTransactionId, 91u);
+    EXPECT_TRUE(owner.ability.ownedBegin()->acknowledged);
+    EXPECT_EQ(owner.ability.ownedBegin()->matchedTransactionId, 91u);
     EXPECT_EQ(owner.reconcileCounterGroupBegin(&transactionA), RuledOwnedCounterGroupBeginUpdate::Accepted);
-    EXPECT_EQ(owner.ability.engineTransactionId, 91u);
-    EXPECT_NE(owner.ability.engineTransactionId, transactionB.transaction_id());
+    EXPECT_EQ(owner.ability.transactionId(), 91u);
+    EXPECT_NE(owner.ability.transactionId(), transactionB.transaction_id());
 }
 
 TEST_F(RuledClientTest, AggregateActivationOwnedBeginRejectRenewsTokenAndPreservesChoices)
@@ -6890,10 +6905,10 @@ TEST_F(RuledClientTest, AggregateActivationOwnedBeginRejectRenewsTokenAndPreserv
     const auto matchingSnapshot = makeOwnedAggregateCounterPaymentSnapshot(*rejectedCapture, 91);
 
     EXPECT_EQ(owner.reconcileCounterGroupBegin(&matchingSnapshot), RuledOwnedCounterGroupBeginUpdate::Waiting);
-    ASSERT_TRUE(owner.ability.ownedCounterGroupBegin.has_value());
-    EXPECT_EQ(owner.ability.ownedCounterGroupBegin->matchedTransactionId, 91u);
-    EXPECT_EQ(owner.ability.engineTransactionId, 0u);
-    EXPECT_FALSE(owner.ability.enginePaymentInitialized);
+    ASSERT_NE(owner.ability.ownedBegin(), nullptr);
+    EXPECT_EQ(owner.ability.ownedBegin()->matchedTransactionId, 91u);
+    EXPECT_EQ(owner.ability.transactionId(), 0u);
+    EXPECT_FALSE(owner.ability.hasInitializedPayment());
     EXPECT_EQ(owner.acknowledgeCounterGroupBegin(*rejectedCapture, false, &matchingSnapshot),
               RuledOwnedCounterGroupBeginUpdate::Rejected);
     EXPECT_TRUE(owner.ability.valid);
@@ -6913,10 +6928,10 @@ TEST_F(RuledClientTest, AggregateActivationOwnedBeginRejectRenewsTokenAndPreserv
         EXPECT_EQ(owner.ability.counterGroupContributions.at(i).count, originalRows.at(i).count);
     }
     EXPECT_TRUE(owner.ability.counterGroupConfirmed);
-    EXPECT_FALSE(owner.ability.ownedCounterGroupBegin.has_value());
-    EXPECT_EQ(owner.ability.stage, PendingActivatedAbility::Stage::Announcing);
-    EXPECT_EQ(owner.ability.engineTransactionId, 0u);
-    EXPECT_FALSE(owner.ability.enginePaymentInitialized);
+    EXPECT_EQ(owner.ability.ownedBegin(), nullptr);
+    EXPECT_EQ(owner.ability.stage(), PendingActivatedAbility::Stage::Announcing);
+    EXPECT_EQ(owner.ability.transactionId(), 0u);
+    EXPECT_FALSE(owner.ability.hasInitializedPayment());
     EXPECT_FALSE(owner.ability.waitingForMana);
     ASSERT_EQ(owner.ability.fixedFlexPayments.size(), originalFlexPayments.size());
     for (int i = 0; i < originalFlexPayments.size(); ++i) {
@@ -6929,14 +6944,14 @@ TEST_F(RuledClientTest, AggregateActivationOwnedBeginRejectRenewsTokenAndPreserv
     EXPECT_NE(retryCapture->draftId, rejectedCapture->draftId);
     EXPECT_EQ(owner.acknowledgeCounterGroupBegin(*rejectedCapture, true, &matchingSnapshot),
               RuledOwnedCounterGroupBeginUpdate::Ignored);
-    EXPECT_EQ(owner.ability.stage, PendingActivatedAbility::Stage::BeginPending);
-    ASSERT_TRUE(owner.ability.ownedCounterGroupBegin.has_value());
-    EXPECT_FALSE(owner.ability.ownedCounterGroupBegin->acknowledged);
+    EXPECT_EQ(owner.ability.stage(), PendingActivatedAbility::Stage::BeginPending);
+    ASSERT_NE(owner.ability.ownedBegin(), nullptr);
+    EXPECT_FALSE(owner.ability.ownedBegin()->acknowledged);
 
     auto retrySnapshot = makeOwnedAggregateCounterPaymentSnapshot(*retryCapture, 92);
     EXPECT_EQ(owner.acknowledgeCounterGroupBegin(*retryCapture, true, &retrySnapshot),
               RuledOwnedCounterGroupBeginUpdate::Accepted);
-    EXPECT_EQ(owner.ability.engineTransactionId, retrySnapshot.transaction_id());
+    EXPECT_EQ(owner.ability.transactionId(), retrySnapshot.transaction_id());
 }
 
 TEST_F(RuledClientTest, AggregateActivationOwnedBeginIgnoresStaleCallbacksAndWholeOwnerCopies)
@@ -6947,16 +6962,16 @@ TEST_F(RuledClientTest, AggregateActivationOwnedBeginIgnoresStaleCallbacksAndWho
     ASSERT_TRUE(captured.has_value());
 
     RuledPendingCast copiedOwner = original;
-    ASSERT_TRUE(copiedOwner.ability.ownedCounterGroupBegin.has_value());
+    ASSERT_NE(copiedOwner.ability.ownedBegin(), nullptr);
     auto capturedWithTransientFields = *captured;
     capturedWithTransientFields.acknowledged = true;
     capturedWithTransientFields.matchedTransactionId = 777;
     auto snapshot = makeOwnedAggregateCounterPaymentSnapshot(capturedWithTransientFields, 91);
     EXPECT_EQ(copiedOwner.acknowledgeCounterGroupBegin(capturedWithTransientFields, true, nullptr),
               RuledOwnedCounterGroupBeginUpdate::Waiting);
-    ASSERT_TRUE(copiedOwner.ability.ownedCounterGroupBegin.has_value());
-    EXPECT_TRUE(copiedOwner.ability.ownedCounterGroupBegin->acknowledged);
-    EXPECT_EQ(copiedOwner.ability.ownedCounterGroupBegin->matchedTransactionId, 0u);
+    ASSERT_NE(copiedOwner.ability.ownedBegin(), nullptr);
+    EXPECT_TRUE(copiedOwner.ability.ownedBegin()->acknowledged);
+    EXPECT_EQ(copiedOwner.ability.ownedBegin()->matchedTransactionId, 0u);
     EXPECT_EQ(copiedOwner.acknowledgeCounterGroupBegin(*captured, true, &snapshot),
               RuledOwnedCounterGroupBeginUpdate::Ignored);
     EXPECT_EQ(copiedOwner.acknowledgeCounterGroupBegin(*captured, false, &snapshot),
@@ -6966,12 +6981,12 @@ TEST_F(RuledClientTest, AggregateActivationOwnedBeginIgnoresStaleCallbacksAndWho
         alteredCapture.announcement.expected_zone_change_generation() + 1);
     EXPECT_EQ(original.acknowledgeCounterGroupBegin(alteredCapture, false, &snapshot),
               RuledOwnedCounterGroupBeginUpdate::Ignored);
-    ASSERT_TRUE(original.ability.ownedCounterGroupBegin.has_value());
-    EXPECT_FALSE(original.ability.ownedCounterGroupBegin->acknowledged);
+    ASSERT_NE(original.ability.ownedBegin(), nullptr);
+    EXPECT_FALSE(original.ability.ownedBegin()->acknowledged);
     EXPECT_EQ(copiedOwner.reconcileCounterGroupBegin(&snapshot), RuledOwnedCounterGroupBeginUpdate::Accepted);
-    EXPECT_EQ(copiedOwner.ability.engineTransactionId, 91u);
-    EXPECT_EQ(original.ability.stage, PendingActivatedAbility::Stage::BeginPending);
-    EXPECT_TRUE(original.ability.ownedCounterGroupBegin.has_value());
+    EXPECT_EQ(copiedOwner.ability.transactionId(), 91u);
+    EXPECT_EQ(original.ability.stage(), PendingActivatedAbility::Stage::BeginPending);
+    EXPECT_NE(original.ability.ownedBegin(), nullptr);
 
     const auto expectOldCallbacksIgnored = [&](const char *caseName, const auto &invalidate) {
         SCOPED_TRACE(caseName);
@@ -6987,8 +7002,8 @@ TEST_F(RuledClientTest, AggregateActivationOwnedBeginIgnoresStaleCallbacksAndWho
                   RuledOwnedCounterGroupBeginUpdate::Ignored);
         EXPECT_EQ(owner.reconcileCounterGroupBegin(&oldSnapshot), RuledOwnedCounterGroupBeginUpdate::Ignored);
         EXPECT_NE(owner.ability.draftId, oldDraftId);
-        EXPECT_FALSE(owner.ability.ownedCounterGroupBegin.has_value());
-        EXPECT_EQ(owner.ability.engineTransactionId, 0u);
+        EXPECT_EQ(owner.ability.ownedBegin(), nullptr);
+        EXPECT_EQ(owner.ability.transactionId(), 0u);
     };
     expectOldCallbacksIgnored("clearAbility", [](RuledPendingCast &owner) {
         owner.clearAbility();
@@ -7022,13 +7037,13 @@ TEST_F(RuledClientTest, AggregateActivationOwnedBeginSessionResetPreventsOldCall
               RuledOwnedCounterGroupBeginUpdate::Ignored);
     EXPECT_EQ(owner.acknowledgeCounterGroupBegin(*oldCapture, false, &newSnapshot),
               RuledOwnedCounterGroupBeginUpdate::Ignored);
-    ASSERT_TRUE(owner.ability.ownedCounterGroupBegin.has_value());
-    EXPECT_EQ(owner.ability.ownedCounterGroupBegin->draftId, newCapture->draftId);
-    EXPECT_FALSE(owner.ability.ownedCounterGroupBegin->acknowledged);
-    EXPECT_EQ(owner.ability.engineTransactionId, 0u);
+    ASSERT_NE(owner.ability.ownedBegin(), nullptr);
+    EXPECT_EQ(owner.ability.ownedBegin()->draftId, newCapture->draftId);
+    EXPECT_FALSE(owner.ability.ownedBegin()->acknowledged);
+    EXPECT_EQ(owner.ability.transactionId(), 0u);
     EXPECT_EQ(owner.acknowledgeCounterGroupBegin(*newCapture, true, &newSnapshot),
               RuledOwnedCounterGroupBeginUpdate::Accepted);
-    EXPECT_EQ(owner.ability.engineTransactionId, 92u);
+    EXPECT_EQ(owner.ability.transactionId(), 92u);
 }
 
 TEST_F(RuledClientTest, AggregateActivationOwnedBeginAcceptsReorderedReceiptAndPreservesSubmittingRefresh)
@@ -7049,24 +7064,26 @@ TEST_F(RuledClientTest, AggregateActivationOwnedBeginAcceptsReorderedReceiptAndP
 
     EXPECT_EQ(owner.reconcileCounterGroupBegin(&snapshot), RuledOwnedCounterGroupBeginUpdate::Waiting);
     EXPECT_EQ(owner.acknowledgeCounterGroupBegin(*captured, true, &snapshot), RuledOwnedCounterGroupBeginUpdate::Accepted);
-    EXPECT_EQ(owner.ability.engineTransactionId, 91u);
+    EXPECT_EQ(owner.ability.transactionId(), 91u);
     EXPECT_EQ(owner.ability.permanentOid, captured->announcement.source_object_id());
 
-    owner.ability.stage = PendingActivatedAbility::Stage::CommitPending;
+    ASSERT_TRUE(owner.ability.beginCommit());
     owner.ability.remainingCost.insert(QLatin1Char('B'), 1);
-    const auto revisionBeforeRefresh = owner.ability.engineRevision;
+    const auto revisionBeforeRefresh = owner.ability.revision();
     EXPECT_EQ(owner.reconcileCounterGroupBegin(&snapshot), RuledOwnedCounterGroupBeginUpdate::Ignored);
-    EXPECT_EQ(owner.ability.stage, PendingActivatedAbility::Stage::CommitPending);
+    EXPECT_EQ(owner.ability.stage(), PendingActivatedAbility::Stage::CommitPending);
     EXPECT_EQ(owner.ability.remainingCost.value(QLatin1Char('B')), 1);
-    EXPECT_EQ(owner.ability.engineRevision, revisionBeforeRefresh);
+    EXPECT_EQ(owner.ability.revision(), revisionBeforeRefresh);
 
     snapshot.set_revision(snapshot.revision() + 1);
     ruledApplyActivationView(owner.ability, snapshot);
-    EXPECT_EQ(owner.ability.stage, PendingActivatedAbility::Stage::CommitPending);
+    EXPECT_EQ(owner.ability.stage(), PendingActivatedAbility::Stage::CommitPending);
     EXPECT_EQ(owner.ability.remainingCost.value(QLatin1Char('B')), 1);
-    owner.ability.stage = PendingActivatedAbility::Stage::CancelPending;
-    ruledApplyActivationView(owner.ability, snapshot);
-    EXPECT_EQ(owner.ability.stage, PendingActivatedAbility::Stage::CancelPending);
+    auto cancelOwner = owner;
+    cancelOwner.ability.rejectCommit(false);
+    ASSERT_TRUE(cancelOwner.ability.beginCancel());
+    ruledApplyActivationView(cancelOwner.ability, snapshot);
+    EXPECT_EQ(cancelOwner.ability.stage(), PendingActivatedAbility::Stage::CancelPending);
 }
 
 TEST_F(RuledClientTest, AggregateActivationOwnedBeginAcceptsZeroContributorGeneration)
@@ -7094,7 +7111,7 @@ TEST_F(RuledClientTest, AggregateActivationOwnedBeginAcceptsZeroContributorGener
     auto snapshot = makeOwnedAggregateCounterPaymentSnapshot(*captured, 91);
     EXPECT_EQ(owner.acknowledgeCounterGroupBegin(*captured, true, &snapshot),
               RuledOwnedCounterGroupBeginUpdate::Accepted);
-    EXPECT_EQ(owner.ability.engineTransactionId, 91u);
+    EXPECT_EQ(owner.ability.transactionId(), 91u);
 }
 
 TEST_F(RuledClientTest, AggregateCounterPaymentRetryMatchesAcceptedReceiptAndSurvivesSourceReplacement)
@@ -7113,7 +7130,7 @@ TEST_F(RuledClientTest, AggregateCounterPaymentRetryMatchesAcceptedReceiptAndSur
     ASSERT_EQ(owner.acknowledgeCounterGroupBegin(*captured, true, &accepted),
               RuledOwnedCounterGroupBeginUpdate::Accepted);
     state->pendingAbilityActivation = accepted;
-    owner.ability.counterGroupPaymentFailed = true;
+    ASSERT_TRUE(owner.ability.markPaymentFailed());
     state->payment.begin(true);
 
     ruled::v1::RuledCommand failedCommit;
@@ -7135,7 +7152,7 @@ TEST_F(RuledClientTest, AggregateCounterPaymentRetryMatchesAcceptedReceiptAndSur
     const auto acceptedFlex = owner.ability.fixedFlexPayments;
 
     ASSERT_TRUE(ruledRetryCounterGroupPayment(*state, owner.ability, kLocalPlayer, 91, 0));
-    EXPECT_FALSE(owner.ability.counterGroupPaymentFailed);
+    EXPECT_FALSE(owner.ability.paymentFailed());
     EXPECT_EQ(state->pendingAbilityActivation->SerializeAsString(), acceptedProjection);
     EXPECT_EQ(owner.ability.permanentOid, captured->announcement.source_object_id());
     EXPECT_EQ(owner.ability.expectedZoneChangeGeneration, captured->announcement.expected_zone_change_generation());
@@ -7214,7 +7231,7 @@ TEST_F(RuledClientTest, AggregateCounterPaymentRetryRejectsStaleOrMalformedState
         ASSERT_EQ(owner.acknowledgeCounterGroupBegin(*captured, true, &accepted),
                   RuledOwnedCounterGroupBeginUpdate::Accepted);
         state->pendingAbilityActivation = accepted;
-        owner.ability.counterGroupPaymentFailed = true;
+        ASSERT_TRUE(owner.ability.markPaymentFailed());
         state->payment.begin(true);
 
         int requestedActor = kLocalPlayer;
@@ -7252,10 +7269,10 @@ TEST_F(RuledClientTest, AggregateCounterPaymentRetryRejectsStaleOrMalformedState
                 state->payment.submitting = true;
                 break;
             case Rejection::MissingFailureLatch:
-                owner.ability.counterGroupPaymentFailed = false;
+                ASSERT_TRUE(owner.ability.retryPayment());
                 break;
             case Rejection::WrongLocalStage:
-                owner.ability.stage = PendingActivatedAbility::Stage::Announcing;
+                ASSERT_TRUE(owner.ability.beginCancel());
                 break;
             case Rejection::LocalRowMismatch:
                 ++owner.ability.counterGroupContributions.front().count;
@@ -7283,7 +7300,7 @@ TEST_F(RuledClientTest, AggregateCounterPaymentRetryRejectsStaleOrMalformedState
                 break;
         }
 
-        const bool latchBefore = owner.ability.counterGroupPaymentFailed;
+        const bool latchBefore = owner.ability.paymentFailed();
         const auto rowsBefore = owner.ability.counterGroupContributions;
         const auto flexBefore = owner.ability.fixedFlexPayments;
         const auto paymentSelectionBefore = state->payment.selection.SerializeAsString();
@@ -7297,7 +7314,7 @@ TEST_F(RuledClientTest, AggregateCounterPaymentRetryRejectsStaleOrMalformedState
 
         EXPECT_FALSE(ruledRetryCounterGroupPayment(*state, owner.ability, requestedActor,
                                                    requestedTransaction, requestedRevision));
-        EXPECT_EQ(owner.ability.counterGroupPaymentFailed, latchBefore);
+        EXPECT_EQ(owner.ability.paymentFailed(), latchBefore);
         EXPECT_EQ(owner.ability.counterGroupContributions.size(), rowsBefore.size());
         EXPECT_EQ(owner.ability.fixedFlexPayments.size(), flexBefore.size());
         EXPECT_EQ(state->payment.selection.SerializeAsString(), paymentSelectionBefore);
@@ -7324,7 +7341,7 @@ TEST_F(RuledClientTest, AggregateCounterPaymentRetryDoesNotRearmSanitizedPayment
     ASSERT_EQ(owner.acknowledgeCounterGroupBegin(*captured, true, &accepted),
               RuledOwnedCounterGroupBeginUpdate::Accepted);
     state->pendingAbilityActivation = accepted;
-    owner.ability.counterGroupPaymentFailed = true;
+    ASSERT_TRUE(owner.ability.markPaymentFailed());
     state->payment.begin(true);
 
     ruled::v1::RuledCommand commit;
@@ -7389,7 +7406,7 @@ TEST_F(RuledClientTest, AggregateCounterCancelRequiresExactAcceptedProjectionBut
     ASSERT_TRUE(cancel->has_cancel_ability_activation());
     EXPECT_EQ(cancel->cancel_ability_activation().transaction_id(), 91u);
     EXPECT_EQ(cancel->cancel_ability_activation().expected_revision(), 7u);
-    EXPECT_EQ(owner.ability.stage, PendingActivatedAbility::Stage::CancelPending);
+    EXPECT_EQ(owner.ability.stage(), PendingActivatedAbility::Stage::CancelPending);
     EXPECT_EQ(owner.ability.permanentOid, kUnsupportedCostSourceOid);
     EXPECT_EQ(owner.ability.expectedZoneChangeGeneration, 0u);
     EXPECT_EQ(owner.ability.abilityIndex, kUnsupportedCostAbilityIndex);
@@ -7440,7 +7457,7 @@ TEST_F(RuledClientTest, AggregateCounterCancelRequiresExactAcceptedProjectionBut
                 state->pendingAbilityActivation->set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_CHOOSE_OPPONENT);
                 break;
             case Rejection::WrongLocalStage:
-                rejectedOwner.ability.stage = PendingActivatedAbility::Stage::CommitPending;
+                ASSERT_TRUE(rejectedOwner.ability.beginCommit());
                 break;
             case Rejection::EngineLock:
                 ASSERT_TRUE(state->beginEngineCommand());
@@ -7457,9 +7474,9 @@ TEST_F(RuledClientTest, AggregateCounterCancelRequiresExactAcceptedProjectionBut
                 break;
         }
 
-        const auto localStageBefore = rejectedOwner.ability.stage;
-        const auto localTransactionBefore = rejectedOwner.ability.engineTransactionId;
-        const auto localRevisionBefore = rejectedOwner.ability.engineRevision;
+        const auto localStageBefore = rejectedOwner.ability.stage();
+        const auto localTransactionBefore = rejectedOwner.ability.transactionId();
+        const auto localRevisionBefore = rejectedOwner.ability.revision();
         const auto localRowsBefore = rejectedOwner.ability.counterGroupContributions;
         const auto localFlexBefore = rejectedOwner.ability.fixedFlexPayments;
         const auto engineBefore = state->pendingAbilityActivation->SerializeAsString();
@@ -7471,9 +7488,9 @@ TEST_F(RuledClientTest, AggregateCounterCancelRequiresExactAcceptedProjectionBut
         const bool nestedChoiceBefore = state->pendingChoice.has_value();
 
         EXPECT_FALSE(ruledCancelCounterGroupPayment(*state, rejectedOwner.ability, actorPlayerId).has_value());
-        EXPECT_EQ(rejectedOwner.ability.stage, localStageBefore);
-        EXPECT_EQ(rejectedOwner.ability.engineTransactionId, localTransactionBefore);
-        EXPECT_EQ(rejectedOwner.ability.engineRevision, localRevisionBefore);
+        EXPECT_EQ(rejectedOwner.ability.stage(), localStageBefore);
+        EXPECT_EQ(rejectedOwner.ability.transactionId(), localTransactionBefore);
+        EXPECT_EQ(rejectedOwner.ability.revision(), localRevisionBefore);
         EXPECT_TRUE(sameAggregateCounterRows(rejectedOwner.ability.counterGroupContributions, localRowsBefore));
         EXPECT_TRUE(sameAggregateFlexPayments(rejectedOwner.ability.fixedFlexPayments, localFlexBefore));
         EXPECT_EQ(state->pendingAbilityActivation->SerializeAsString(), engineBefore);
@@ -7509,7 +7526,7 @@ TEST_F(RuledClientTest, AggregateCounterPreviewFailureRecordsOnlyCurrentCorrelat
     const auto stagedSelection = state->payment.selection.SerializeAsString();
 
     EXPECT_TRUE(ruledRecordCounterGroupPreviewFailure(*state, owner.ability, kLocalPlayer, &rejected));
-    EXPECT_TRUE(owner.ability.counterGroupPaymentFailed);
+    EXPECT_TRUE(owner.ability.paymentFailed());
     EXPECT_TRUE(state->payment.active);
     EXPECT_FALSE(state->payment.pending);
     EXPECT_FALSE(state->payment.submitting);
@@ -7547,15 +7564,15 @@ TEST_F(RuledClientTest, AggregateCounterPreviewFailureRecordsOnlyCurrentCorrelat
 
         const auto localRowsBefore = staleOwner.ability.counterGroupContributions;
         const auto localFlexBefore = staleOwner.ability.fixedFlexPayments;
-        const auto localStageBefore = staleOwner.ability.stage;
+        const auto localStageBefore = staleOwner.ability.stage();
         const auto outerBefore = state->pendingAbilityActivation->SerializeAsString();
         const auto selectionBefore = state->payment.selection.SerializeAsString();
         const auto viewBefore = state->payment.view.SerializeAsString();
         const auto paymentTransactionBefore = state->payment.transaction();
 
         EXPECT_FALSE(ruledRecordCounterGroupPreviewFailure(*state, staleOwner.ability, kLocalPlayer, &staleReply));
-        EXPECT_FALSE(staleOwner.ability.counterGroupPaymentFailed);
-        EXPECT_EQ(staleOwner.ability.stage, localStageBefore);
+        EXPECT_FALSE(staleOwner.ability.paymentFailed());
+        EXPECT_EQ(staleOwner.ability.stage(), localStageBefore);
         EXPECT_TRUE(sameAggregateCounterRows(staleOwner.ability.counterGroupContributions, localRowsBefore));
         EXPECT_TRUE(sameAggregateFlexPayments(staleOwner.ability.fixedFlexPayments, localFlexBefore));
         EXPECT_EQ(state->pendingAbilityActivation->SerializeAsString(), outerBefore);
@@ -7619,7 +7636,7 @@ TEST_F(RuledClientTest, AggregateCounterPreviewFailureRecordsOnlyCurrentCorrelat
             EXPECT_GT(currentQuery.revision(), earlierQuery.revision());
         }
         EXPECT_FALSE(ruledRecordCounterGroupPreviewFailure(*state, replyOwner.ability, kLocalPlayer, &staleReply));
-        EXPECT_FALSE(replyOwner.ability.counterGroupPaymentFailed);
+        EXPECT_FALSE(replyOwner.ability.paymentFailed());
         EXPECT_TRUE(state->payment.active);
         EXPECT_TRUE(state->payment.pending);
         EXPECT_FALSE(state->payment.submitting);
@@ -7656,13 +7673,98 @@ TEST_F(RuledClientTest, AggregateCounterPreviewFailureRecordsOnlyCurrentCorrelat
     const auto observedSelection = state->payment.selection.SerializeAsString();
 
     EXPECT_TRUE(ruledRecordCounterGroupPreviewFailure(*state, observedOwner.ability, kLocalPlayer, nullptr));
-    EXPECT_TRUE(observedOwner.ability.counterGroupPaymentFailed);
+    EXPECT_TRUE(observedOwner.ability.paymentFailed());
     EXPECT_FALSE(state->payment.pending);
     EXPECT_EQ(state->pendingAbilityActivation->SerializeAsString(), observedProjection);
     EXPECT_EQ(state->payment.view.SerializeAsString(), observedView);
     EXPECT_EQ(state->payment.selection.SerializeAsString(), observedSelection);
     EXPECT_TRUE(state->isEngineCommandPending());
     EXPECT_TRUE(state->pendingChoice.has_value());
+}
+
+TEST_F(RuledClientTest, AggregateCounterCancelRejectedSnapshotPreservesFailedPaymentUntilRetry)
+{
+    state->payment.clear();
+    applyRaw(aggregateCounterOfferBatch());
+    RuledPendingCast owner;
+    auto accepted = prepareAcceptedAggregateCounterPayment(owner, *state, 91, 7);
+    ASSERT_TRUE(accepted.has_value());
+    state->pendingAbilityActivation = *accepted;
+    ruledApplyActivationView(owner.ability, *state->pendingAbilityActivation);
+    ASSERT_TRUE(owner.ability.hasInitializedPayment());
+    ASSERT_TRUE(owner.ability.counterGroupConfirmed);
+
+    state->payment.begin(true);
+    ASSERT_TRUE(state->payment.stageMana(QLatin1Char('B')));
+    ruled::v1::RuledCommand commit;
+    commit.mutable_commit_ability_activation()->set_transaction_id(91);
+    commit.mutable_commit_ability_activation()->set_expected_revision(7);
+    const auto failedQuery = state->payment.requestAction(commit);
+    ruled::v1::PaymentPreview failedReply;
+    failedReply.set_transaction_id(failedQuery.transaction_id());
+    failedReply.set_revision(failedQuery.revision());
+    failedReply.set_error("The accepted payment preview was rejected.");
+    ASSERT_TRUE(ruledRecordCounterGroupPreviewFailure(*state, owner.ability, kLocalPlayer, &failedReply));
+    ASSERT_TRUE(owner.ability.paymentFailed());
+
+    const auto acceptedProjection = state->pendingAbilityActivation->SerializeAsString();
+    const auto acceptedRows = owner.ability.counterGroupContributions;
+    const auto acceptedFlex = owner.ability.fixedFlexPayments;
+    const auto paymentSelection = state->payment.selection.SerializeAsString();
+    const auto paymentView = state->payment.view.SerializeAsString();
+    const auto paymentTransaction = state->payment.transaction();
+    ASSERT_TRUE(state->payment.active);
+    ASSERT_FALSE(state->payment.pending);
+    ASSERT_FALSE(state->payment.submitting);
+
+    const auto cancel = ruledCancelCounterGroupPayment(*state, owner.ability, kLocalPlayer);
+    ASSERT_TRUE(cancel.has_value());
+    ASSERT_TRUE(cancel->has_cancel_ability_activation());
+    EXPECT_EQ(cancel->cancel_ability_activation().transaction_id(), 91u);
+    EXPECT_EQ(cancel->cancel_ability_activation().expected_revision(), 7u);
+    EXPECT_EQ(owner.ability.stage(), PendingActivatedAbility::Stage::CancelPending);
+    EXPECT_FALSE(owner.ability.paymentFailed());
+    EXPECT_FALSE(ruledRetryCounterGroupPayment(*state, owner.ability, kLocalPlayer, 91, 7));
+    EXPECT_FALSE(ruledInvalidateCounterGroupPaymentForRefresh(*state, owner.ability, kLocalPlayer));
+
+    ruledApplyActivationView(owner.ability, *state->pendingAbilityActivation);
+    EXPECT_EQ(owner.ability.stage(), PendingActivatedAbility::Stage::CancelPending);
+    EXPECT_FALSE(owner.ability.paymentFailed());
+    EXPECT_FALSE(ruledRetryCounterGroupPayment(*state, owner.ability, kLocalPlayer, 91, 7));
+    EXPECT_FALSE(ruledInvalidateCounterGroupPaymentForRefresh(*state, owner.ability, kLocalPlayer));
+    EXPECT_EQ(owner.ability.transactionId(), 91u);
+    EXPECT_EQ(owner.ability.revision(), 7u);
+    EXPECT_TRUE(sameAggregateCounterRows(owner.ability.counterGroupContributions, acceptedRows));
+    EXPECT_TRUE(sameAggregateFlexPayments(owner.ability.fixedFlexPayments, acceptedFlex));
+    EXPECT_EQ(state->pendingAbilityActivation->SerializeAsString(), acceptedProjection);
+    EXPECT_EQ(state->payment.selection.SerializeAsString(), paymentSelection);
+    EXPECT_EQ(state->payment.view.SerializeAsString(), paymentView);
+    EXPECT_EQ(state->payment.transaction(), paymentTransaction);
+    EXPECT_TRUE(state->payment.active);
+    EXPECT_FALSE(state->payment.pending);
+    EXPECT_FALSE(state->payment.submitting);
+
+    owner.ability.rejectCancel(); // The negative cancel ACK transition used by RuledPaymentUi.
+    ruledApplyActivationView(owner.ability, *state->pendingAbilityActivation);
+    EXPECT_EQ(owner.ability.stage(), PendingActivatedAbility::Stage::Paying);
+    EXPECT_TRUE(owner.ability.paymentFailed());
+    EXPECT_EQ(owner.ability.transactionId(), 91u);
+    EXPECT_EQ(owner.ability.revision(), 7u);
+    EXPECT_TRUE(sameAggregateCounterRows(owner.ability.counterGroupContributions, acceptedRows));
+    EXPECT_TRUE(sameAggregateFlexPayments(owner.ability.fixedFlexPayments, acceptedFlex));
+    EXPECT_EQ(state->pendingAbilityActivation->SerializeAsString(), acceptedProjection);
+    EXPECT_FALSE(ruledInvalidateCounterGroupPaymentForRefresh(*state, owner.ability, kLocalPlayer));
+    EXPECT_EQ(state->payment.selection.SerializeAsString(), paymentSelection);
+    EXPECT_EQ(state->payment.view.SerializeAsString(), paymentView);
+    EXPECT_EQ(state->payment.transaction(), paymentTransaction);
+    EXPECT_TRUE(state->payment.active);
+    EXPECT_FALSE(state->payment.pending);
+    EXPECT_FALSE(state->payment.submitting);
+    EXPECT_EQ(state->payment.nextPreviewAction(true), RuledPayment::PreviewAction::None);
+
+    EXPECT_TRUE(ruledRetryCounterGroupPayment(*state, owner.ability, kLocalPlayer, 91, 7));
+    EXPECT_FALSE(owner.ability.paymentFailed());
+    EXPECT_TRUE(state->payment.pending); // Only an explicit Retry requests a fresh preview.
 }
 
 TEST_F(RuledClientTest, AggregateCounterRefreshPreservesFailedPaymentAndInvalidatesOrdinaryPendingPreview)
@@ -7687,13 +7789,13 @@ TEST_F(RuledClientTest, AggregateCounterRefreshPreservesFailedPaymentAndInvalida
     failedReply.set_error("Payment preview failed before the accepted activation could continue.");
     const auto failedSelection = state->payment.selection.SerializeAsString();
     ASSERT_TRUE(ruledRecordCounterGroupPreviewFailure(*state, failedOwner.ability, kLocalPlayer, &failedReply));
-    ASSERT_TRUE(failedOwner.ability.counterGroupPaymentFailed);
+    ASSERT_TRUE(failedOwner.ability.paymentFailed());
 
     const auto failedView = state->payment.view.SerializeAsString();
     const auto failedError = state->payment.view.error();
     const auto paymentTransaction = state->payment.transaction();
     EXPECT_FALSE(ruledInvalidateCounterGroupPaymentForRefresh(*state, failedOwner.ability, kLocalPlayer));
-    EXPECT_TRUE(failedOwner.ability.counterGroupPaymentFailed);
+    EXPECT_TRUE(failedOwner.ability.paymentFailed());
     EXPECT_TRUE(state->payment.active);
     EXPECT_FALSE(state->payment.pending);
     EXPECT_FALSE(state->payment.submitting);
@@ -7704,7 +7806,7 @@ TEST_F(RuledClientTest, AggregateCounterRefreshPreservesFailedPaymentAndInvalida
     EXPECT_EQ(state->pendingAbilityActivation->SerializeAsString(), acceptedProjection);
 
     ASSERT_TRUE(ruledRetryCounterGroupPayment(*state, failedOwner.ability, kLocalPlayer, 91, 7));
-    EXPECT_FALSE(failedOwner.ability.counterGroupPaymentFailed);
+    EXPECT_FALSE(failedOwner.ability.paymentFailed());
     EXPECT_TRUE(state->payment.active);
     EXPECT_TRUE(state->payment.pending);
     EXPECT_FALSE(state->payment.submitting);
@@ -7727,7 +7829,7 @@ TEST_F(RuledClientTest, AggregateCounterRefreshPreservesFailedPaymentAndInvalida
     const auto ordinaryProjection = state->pendingAbilityActivation->SerializeAsString();
 
     EXPECT_TRUE(ruledInvalidateCounterGroupPaymentForRefresh(*state, ordinaryOwner.ability, kLocalPlayer));
-    EXPECT_FALSE(ordinaryOwner.ability.counterGroupPaymentFailed);
+    EXPECT_FALSE(ordinaryOwner.ability.paymentFailed());
     EXPECT_TRUE(state->payment.active);
     EXPECT_TRUE(state->payment.pending);
     EXPECT_FALSE(state->payment.submitting);
@@ -7779,7 +7881,7 @@ TEST_F(RuledClientTest, AggregateCounterFlexibleChoiceRequiresTheCapturedPromptC
                                              captured.counterGroupContributions));
         EXPECT_TRUE(owner.ability.counterGroupConfirmed);
         EXPECT_EQ(owner.ability.draftId, captured.draftId);
-        EXPECT_EQ(owner.ability.stage, PendingActivatedAbility::Stage::Announcing);
+        EXPECT_EQ(owner.ability.stage(), PendingActivatedAbility::Stage::Announcing);
     }
 
     applyRaw(aggregateCounterOfferBatch());
@@ -7904,19 +8006,19 @@ TEST_F(RuledClientTest, AggregateCounterFlexibleChoiceRequiresTheCapturedPromptC
 
         const auto currentRows = owner.ability.counterGroupContributions;
         const auto currentFixed = owner.ability.fixedFlexPayments;
-        const auto currentStage = owner.ability.stage;
+        const auto currentStage = owner.ability.stage();
         const auto currentDraftId = owner.ability.draftId;
         const auto currentConfirmed = owner.ability.counterGroupConfirmed;
         EXPECT_FALSE(owner.applyCounterGroupFlexibleChoiceAfterPrompt(*state, captured, staleResult));
         EXPECT_TRUE(sameAggregateCounterRows(owner.ability.counterGroupContributions, currentRows));
         EXPECT_TRUE(sameAggregateFlexPayments(owner.ability.fixedFlexPayments, currentFixed));
-        EXPECT_EQ(owner.ability.stage, currentStage);
+        EXPECT_EQ(owner.ability.stage(), currentStage);
         EXPECT_EQ(owner.ability.draftId, currentDraftId);
         EXPECT_EQ(owner.ability.counterGroupConfirmed, currentConfirmed);
         EXPECT_FALSE(owner.applyCounterGroupFlexibleChoiceAfterPrompt(*state, captured, cancelResult));
         EXPECT_TRUE(sameAggregateCounterRows(owner.ability.counterGroupContributions, currentRows));
         EXPECT_TRUE(sameAggregateFlexPayments(owner.ability.fixedFlexPayments, currentFixed));
-        EXPECT_EQ(owner.ability.stage, currentStage);
+        EXPECT_EQ(owner.ability.stage(), currentStage);
         EXPECT_EQ(owner.ability.draftId, currentDraftId);
         EXPECT_EQ(owner.ability.counterGroupConfirmed, currentConfirmed);
     }
@@ -8537,9 +8639,9 @@ TEST_F(RuledClientTest, AggregateCounterLiveReconcilePreservesOwnedAndAcceptedTr
     RuledPendingCast ownedOwner;
     const auto ownedCapture = prepareTwoGroupBegin(ownedOwner);
     ASSERT_TRUE(ownedCapture.has_value());
-    ASSERT_TRUE(ownedOwner.ability.ownedCounterGroupBegin.has_value());
+    ASSERT_NE(ownedOwner.ability.ownedBegin(), nullptr);
     const auto ownedDraftId = ownedOwner.ability.draftId;
-    const auto ownedAnnouncement = ownedOwner.ability.ownedCounterGroupBegin->announcement.SerializeAsString();
+    const auto ownedAnnouncement = ownedOwner.ability.ownedBegin()->announcement.SerializeAsString();
     const auto ownedRows = ownedOwner.ability.counterGroupContributions;
     const auto ownedFlex = ownedOwner.ability.fixedFlexPayments;
     const auto ownedSourceId = ownedOwner.ability.permanentOid;
@@ -8559,11 +8661,11 @@ TEST_F(RuledClientTest, AggregateCounterLiveReconcilePreservesOwnedAndAcceptedTr
     EXPECT_TRUE(state->abilityCostChoices(kUnsupportedCostSourceOid, kUnsupportedCostAbilityIndex).isEmpty());
 
     EXPECT_TRUE(ownedOwner.reconcileAbilityCosts(*state, kLocalPlayer));
-    EXPECT_TRUE(ownedOwner.ability.ownedCounterGroupBegin.has_value());
-    EXPECT_EQ(ownedOwner.ability.stage, PendingActivatedAbility::Stage::BeginPending);
+    EXPECT_NE(ownedOwner.ability.ownedBegin(), nullptr);
+    EXPECT_EQ(ownedOwner.ability.stage(), PendingActivatedAbility::Stage::BeginPending);
     EXPECT_EQ(ownedOwner.ability.draftId, ownedDraftId);
-    EXPECT_EQ(ownedOwner.ability.ownedCounterGroupBegin->draftId, ownedDraftId);
-    EXPECT_EQ(ownedOwner.ability.ownedCounterGroupBegin->announcement.SerializeAsString(), ownedAnnouncement);
+    EXPECT_EQ(ownedOwner.ability.ownedBegin()->draftId, ownedDraftId);
+    EXPECT_EQ(ownedOwner.ability.ownedBegin()->announcement.SerializeAsString(), ownedAnnouncement);
     EXPECT_TRUE(sameRows(ownedOwner.ability.counterGroupContributions, ownedRows));
     EXPECT_TRUE(sameFlexPayments(ownedOwner.ability.fixedFlexPayments, ownedFlex));
     EXPECT_EQ(ownedOwner.ability.permanentOid, ownedSourceId);
@@ -8574,9 +8676,9 @@ TEST_F(RuledClientTest, AggregateCounterLiveReconcilePreservesOwnedAndAcceptedTr
 
     // A begin already sent to the host has a short source-removal gap before its engine echo.
     RuledPendingCast submittedGap = ownedOwner;
-    submittedGap.ability.ownedCounterGroupBegin.reset();
+    submittedGap.ability.beginOrdinaryAnnouncement();
     EXPECT_TRUE(submittedGap.reconcileAbilityCosts(*state, kLocalPlayer));
-    EXPECT_EQ(submittedGap.ability.stage, PendingActivatedAbility::Stage::BeginPending);
+    EXPECT_EQ(submittedGap.ability.stage(), PendingActivatedAbility::Stage::BeginPending);
     EXPECT_EQ(submittedGap.ability.permanentOid, ownedSourceId);
     EXPECT_TRUE(sameRows(submittedGap.ability.counterGroupContributions, ownedRows));
     EXPECT_TRUE(sameFlexPayments(submittedGap.ability.fixedFlexPayments, ownedFlex));
@@ -8593,14 +8695,14 @@ TEST_F(RuledClientTest, AggregateCounterLiveReconcilePreservesOwnedAndAcceptedTr
         accepted.set_locked_total_cost("3");
         ASSERT_EQ(acceptedOwner.acknowledgeCounterGroupBegin(*acceptedCapture, true, &accepted),
                   RuledOwnedCounterGroupBeginUpdate::Accepted);
-        ASSERT_EQ(acceptedOwner.ability.stage, PendingActivatedAbility::Stage::Paying);
-        ASSERT_EQ(acceptedOwner.ability.engineTransactionId, 91u);
+        ASSERT_EQ(acceptedOwner.ability.stage(), PendingActivatedAbility::Stage::Paying);
+        ASSERT_EQ(acceptedOwner.ability.transactionId(), 91u);
         acceptedOwner.ability.remainingCost.insert(QLatin1Char('X'), 3); // Distinguishable local payment staging.
         ASSERT_EQ(acceptedOwner.ability.remainingCost.value(QLatin1Char('X')), 3);
         ASSERT_EQ(acceptedOwner.ability.counterGroupContributions.size(), 3);
         ASSERT_EQ(acceptedOwner.ability.fixedFlexPayments.size(), 2);
         ASSERT_TRUE(acceptedOwner.ability.counterGroupConfirmed);
-        ASSERT_TRUE(acceptedOwner.ability.enginePaymentInitialized);
+        ASSERT_TRUE(acceptedOwner.ability.hasInitializedPayment());
 
         auto refreshedBatch = aggregateCounterTwoGroupOfferBatch();
         refreshedBatch.mutable_events(0)
@@ -8644,7 +8746,7 @@ TEST_F(RuledClientTest, AggregateCounterLiveReconcilePreservesOwnedAndAcceptedTr
         const auto acceptedSourceZone = acceptedOwner.ability.sourceZone;
         const auto acceptedAbilityIndex = acceptedOwner.ability.abilityIndex;
         const auto acceptedDraftId = acceptedOwner.ability.draftId;
-        const auto acceptedRevision = acceptedOwner.ability.engineRevision;
+        const auto acceptedRevision = acceptedOwner.ability.revision();
         const auto acceptedAbilityText = acceptedOwner.ability.abilityText;
         const auto acceptedNextCostChoice = acceptedOwner.ability.nextCostChoice;
         const auto acceptedWaitingForMana = acceptedOwner.ability.waitingForMana;
@@ -8654,27 +8756,31 @@ TEST_F(RuledClientTest, AggregateCounterLiveReconcilePreservesOwnedAndAcceptedTr
         for (const auto stage : {PendingActivatedAbility::Stage::Paying,
                                  PendingActivatedAbility::Stage::CommitPending,
                                  PendingActivatedAbility::Stage::CancelPending}) {
-            acceptedOwner.ability.stage = stage;
-            EXPECT_TRUE(acceptedOwner.reconcileAbilityCosts(*state, kLocalPlayer));
-            EXPECT_EQ(acceptedOwner.ability.stage, stage);
-            EXPECT_EQ(acceptedOwner.ability.engineTransactionId, 91u);
-            EXPECT_EQ(acceptedOwner.ability.engineRevision, acceptedRevision);
-            EXPECT_EQ(acceptedOwner.ability.permanentOid, acceptedSourceId);
-            EXPECT_EQ(acceptedOwner.ability.expectedZoneChangeGeneration, acceptedSourceGeneration);
-            EXPECT_EQ(acceptedOwner.ability.sourceZone, acceptedSourceZone);
-            EXPECT_EQ(acceptedOwner.ability.abilityIndex, acceptedAbilityIndex);
-            EXPECT_EQ(acceptedOwner.ability.draftId, acceptedDraftId);
-            EXPECT_EQ(acceptedOwner.ability.abilityText, acceptedAbilityText);
-            EXPECT_EQ(acceptedOwner.ability.nextCostChoice, acceptedNextCostChoice);
-            EXPECT_EQ(acceptedOwner.ability.waitingForMana, acceptedWaitingForMana);
-            EXPECT_TRUE(sameRows(acceptedOwner.ability.counterGroupContributions, acceptedRows));
-            EXPECT_TRUE(sameFlexPayments(acceptedOwner.ability.fixedFlexPayments, acceptedFlex));
-            EXPECT_TRUE(acceptedOwner.ability.counterGroupConfirmed);
-            EXPECT_TRUE(acceptedOwner.ability.enginePaymentInitialized);
-            EXPECT_EQ(acceptedOwner.ability.remainingCost, acceptedRemaining);
-            EXPECT_EQ(acceptedOwner.ability.engineLockedCostLabel, acceptedLockedCost);
-            EXPECT_TRUE(acceptedOwner.ability.costChoices.isEmpty());
-            EXPECT_TRUE(acceptedOwner.ability.costSelections.isEmpty());
+            auto stagedOwner = acceptedOwner;
+            if (stage == PendingActivatedAbility::Stage::CommitPending)
+                ASSERT_TRUE(stagedOwner.ability.beginCommit());
+            else if (stage == PendingActivatedAbility::Stage::CancelPending)
+                ASSERT_TRUE(stagedOwner.ability.beginCancel());
+            EXPECT_TRUE(stagedOwner.reconcileAbilityCosts(*state, kLocalPlayer));
+            EXPECT_EQ(stagedOwner.ability.stage(), stage);
+            EXPECT_EQ(stagedOwner.ability.transactionId(), 91u);
+            EXPECT_EQ(stagedOwner.ability.revision(), acceptedRevision);
+            EXPECT_EQ(stagedOwner.ability.permanentOid, acceptedSourceId);
+            EXPECT_EQ(stagedOwner.ability.expectedZoneChangeGeneration, acceptedSourceGeneration);
+            EXPECT_EQ(stagedOwner.ability.sourceZone, acceptedSourceZone);
+            EXPECT_EQ(stagedOwner.ability.abilityIndex, acceptedAbilityIndex);
+            EXPECT_EQ(stagedOwner.ability.draftId, acceptedDraftId);
+            EXPECT_EQ(stagedOwner.ability.abilityText, acceptedAbilityText);
+            EXPECT_EQ(stagedOwner.ability.nextCostChoice, acceptedNextCostChoice);
+            EXPECT_EQ(stagedOwner.ability.waitingForMana, acceptedWaitingForMana);
+            EXPECT_TRUE(sameRows(stagedOwner.ability.counterGroupContributions, acceptedRows));
+            EXPECT_TRUE(sameFlexPayments(stagedOwner.ability.fixedFlexPayments, acceptedFlex));
+            EXPECT_TRUE(stagedOwner.ability.counterGroupConfirmed);
+            EXPECT_TRUE(stagedOwner.ability.hasInitializedPayment());
+            EXPECT_EQ(stagedOwner.ability.remainingCost, acceptedRemaining);
+            EXPECT_EQ(stagedOwner.ability.engineLockedCostLabel, acceptedLockedCost);
+            EXPECT_TRUE(stagedOwner.ability.costChoices.isEmpty());
+            EXPECT_TRUE(stagedOwner.ability.costSelections.isEmpty());
             ASSERT_TRUE(state->pendingAbilityActivation.has_value());
             EXPECT_EQ(state->pendingAbilityActivation->SerializeAsString(), pendingProjection);
         }
@@ -8766,9 +8872,10 @@ TEST_F(RuledClientTest, UnsupportedLiveOffersPreserveSubmittedAndMatchingAccepte
     draft.remainingCost.insert(QChar('G'), 2);
     EXPECT_FALSE(ruledPendingAbilitySourceStillCurrent(*state, draft));
 
-    draft.stage = PendingActivatedAbility::Stage::BeginPending;
+    draft.beginOrdinaryAnnouncement();
     EXPECT_TRUE(ruledPendingAbilitySourceStillCurrent(*state, draft));
-    draft.stage = PendingActivatedAbility::Stage::CommitPending;
+    draft.rejectBegin();
+    ASSERT_TRUE(draft.beginCommit());
     EXPECT_TRUE(ruledPendingAbilitySourceStillCurrent(*state, draft));
 
     auto &accepted = state->pendingAbilityActivation.emplace();
@@ -8776,10 +8883,10 @@ TEST_F(RuledClientTest, UnsupportedLiveOffersPreserveSubmittedAndMatchingAccepte
     accepted.set_source_object_id(kUnsupportedCostSourceOid);
     accepted.set_source_zone_change_generation(kUnsupportedCostSourceGeneration);
     accepted.set_ability_index(kUnsupportedCostAbilityIndex);
-    draft.engineTransactionId = 91;
-    draft.stage = PendingActivatedAbility::Stage::Paying;
+    accepted.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT);
+    draft.applyEngineSnapshot(accepted);
     EXPECT_TRUE(ruledPendingAbilitySourceStillCurrent(*state, draft));
-    draft.stage = PendingActivatedAbility::Stage::CommitPending;
+    ASSERT_TRUE(draft.beginCommit());
     EXPECT_TRUE(ruledPendingAbilitySourceStillCurrent(*state, draft));
 
     accepted.set_transaction_id(92);
@@ -8796,8 +8903,7 @@ TEST_F(RuledClientTest, UnsupportedLiveOffersPreserveSubmittedAndMatchingAccepte
     accepted.set_ability_index(kUnsupportedCostAbilityIndex);
     EXPECT_TRUE(ruledPendingAbilitySourceStillCurrent(*state, draft));
 
-    draft.engineTransactionId = 0;
-    draft.stage = PendingActivatedAbility::Stage::Announcing;
+    draft.resetLifecycle();
     draft.permanentAction = true;
     draft.permanentActionKind = ruled::v1::PERMANENT_ACTION_KIND_TURN_FACE_UP;
     EXPECT_TRUE(ruledPendingAbilitySourceStillCurrent(*state, draft));
@@ -8827,8 +8933,8 @@ TEST_F(RuledClientTest, UnknownCounterCapabilitiesRemainFailClosedAcrossPendingO
             accepted.set_source_object_id(kUnsupportedCostSourceOid);
             accepted.set_source_zone_change_generation(kUnsupportedCostSourceGeneration);
             accepted.set_ability_index(kUnsupportedCostAbilityIndex);
-            draft.engineTransactionId = 91;
-            draft.stage = PendingActivatedAbility::Stage::Paying;
+            accepted.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT);
+            draft.applyEngineSnapshot(accepted);
         }
         host.sentCommands.clear();
         ruledDispatchPendingAbilityCostOperation(

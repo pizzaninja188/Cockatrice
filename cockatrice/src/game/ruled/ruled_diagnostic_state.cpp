@@ -557,10 +557,10 @@ QJsonValue value(const PendingActivatedAbility &v)
         targets.append(entry);
     }
     result.insert("selectedTargets", targets);
-    result.insert("stage", static_cast<int>(v.stage));
-    result.insert("engineTransactionId", value(v.engineTransactionId));
-    result.insert("engineRevision", value(v.engineRevision));
-    result.insert("enginePaymentInitialized", value(v.enginePaymentInitialized));
+    result.insert("stage", static_cast<int>(v.stage()));
+    result.insert("engineTransactionId", value(v.transactionId()));
+    result.insert("engineRevision", value(v.revision()));
+    result.insert("enginePaymentInitialized", value(v.hasInitializedPayment()));
     result.insert("waitingForCost", value(v.waitingForCost));
     result.insert("deferredReturnTappedCreature", value(v.deferredReturnTappedCreature));
     result.insert("waitingForReturnTappedCreatureCandidate", value(v.waitingForReturnTappedCreatureCandidate));

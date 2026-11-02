@@ -26,6 +26,7 @@
 #include <limits>
 #include <numeric>
 #include <optional>
+#include <variant>
 
 class QWidget;
 class CardItem;
@@ -100,6 +101,332 @@ enum class RuledOwnedCounterGroupBeginUpdate
     Waiting,
     Accepted,
     Rejected,
+};
+
+/// The local activation's transaction phase. Each phase stores only the data valid for that
+/// phase, so a tentative owned Begin transaction cannot be mistaken for an accepted engine one.
+class RuledActivationLifecycle
+{
+public:
+    // Keep the legacy numeric values used by diagnostic snapshots.
+    enum class Stage
+    {
+        Announcing,
+        BeginPending,
+        Waiting,
+        Paying,
+        CommitPending,
+        CancelPending,
+    };
+
+    [[nodiscard]] Stage stage() const
+    {
+        if (std::holds_alternative<Announcing>(phase_))
+            return Stage::Announcing;
+        if (std::holds_alternative<BeginPending>(phase_))
+            return Stage::BeginPending;
+        if (std::holds_alternative<Waiting>(phase_))
+            return Stage::Waiting;
+        if (std::holds_alternative<Paying>(phase_) || std::holds_alternative<PaymentFailed>(phase_))
+            return Stage::Paying;
+        if (std::holds_alternative<CommitPending>(phase_))
+            return Stage::CommitPending;
+        return Stage::CancelPending;
+    }
+
+    [[nodiscard]] quint64 transactionId() const
+    {
+        if (const auto *phase = std::get_if<Waiting>(&phase_))
+            return phase->transactionId;
+        if (const auto *phase = std::get_if<Paying>(&phase_))
+            return phase->transactionId;
+        if (const auto *phase = std::get_if<PaymentFailed>(&phase_))
+            return phase->transactionId;
+        if (const auto *phase = std::get_if<CommitPending>(&phase_))
+            return phase->transactionId;
+        if (const auto *phase = std::get_if<CancelPending>(&phase_))
+            return phase->transactionId;
+        return 0;
+    }
+
+    [[nodiscard]] quint64 revision() const
+    {
+        if (const auto *phase = std::get_if<Waiting>(&phase_))
+            return phase->revision;
+        if (const auto *phase = std::get_if<Paying>(&phase_))
+            return phase->revision;
+        if (const auto *phase = std::get_if<PaymentFailed>(&phase_))
+            return phase->revision;
+        if (const auto *phase = std::get_if<CommitPending>(&phase_))
+            return phase->revision;
+        if (const auto *phase = std::get_if<CancelPending>(&phase_))
+            return phase->revision;
+        return 0;
+    }
+
+    [[nodiscard]] bool hasInitializedPayment() const
+    {
+        if (const auto *phase = std::get_if<Waiting>(&phase_))
+            return phase->paymentInitialized;
+        if (std::holds_alternative<Paying>(phase_) || std::holds_alternative<PaymentFailed>(phase_))
+            return true;
+        if (const auto *phase = std::get_if<CommitPending>(&phase_))
+            return phase->paymentInitialized;
+        if (const auto *phase = std::get_if<CancelPending>(&phase_))
+            return phase->paymentInitialized;
+        return false;
+    }
+
+    [[nodiscard]] bool paymentFailed() const
+    {
+        return std::holds_alternative<PaymentFailed>(phase_);
+    }
+
+    [[nodiscard]] const RuledOwnedCounterGroupBegin *ownedBegin() const
+    {
+        const auto *phase = std::get_if<BeginPending>(&phase_);
+        return phase && phase->owned ? &*phase->owned : nullptr;
+    }
+
+    [[nodiscard]] bool isSubmissionPending() const
+    {
+        return std::holds_alternative<CommitPending>(phase_) || std::holds_alternative<CancelPending>(phase_);
+    }
+
+    void beginOrdinaryAnnouncement()
+    {
+        phase_ = BeginPending{};
+    }
+
+    [[nodiscard]] bool beginOwnedAnnouncement(const RuledOwnedCounterGroupBegin &owned)
+    {
+        if (stage() != Stage::Announcing || owned.draftId == 0)
+            return false;
+        phase_ = BeginPending{owned};
+        return true;
+    }
+
+    /// Record only the first matching transaction while an owned Begin awaits its command ACK.
+    /// The transaction becomes authoritative only after both signals have arrived.
+    [[nodiscard]] RuledOwnedCounterGroupBeginUpdate
+    observeOwnedSnapshot(const ruled::v1::PendingAbilityActivation *matchingSnapshot)
+    {
+        auto *phase = std::get_if<BeginPending>(&phase_);
+        if (!phase || !phase->owned)
+            return RuledOwnedCounterGroupBeginUpdate::Ignored;
+        if (!matchingSnapshot || matchingSnapshot->transaction_id() == 0)
+            return RuledOwnedCounterGroupBeginUpdate::Waiting;
+
+        auto &owned = *phase->owned;
+        const quint64 transaction = matchingSnapshot->transaction_id();
+        if (owned.matchedTransactionId == 0)
+            owned.matchedTransactionId = transaction;
+        else if (owned.matchedTransactionId != transaction)
+            return RuledOwnedCounterGroupBeginUpdate::Waiting;
+        if (!owned.acknowledged)
+            return RuledOwnedCounterGroupBeginUpdate::Waiting;
+
+        phase_ = Waiting{transaction, matchingSnapshot->revision(), false};
+        return RuledOwnedCounterGroupBeginUpdate::Accepted;
+    }
+
+    [[nodiscard]] RuledOwnedCounterGroupBeginUpdate acknowledgeOwned(const RuledOwnedCounterGroupBegin &captured,
+                                                                     bool accepted)
+    {
+        auto *phase = std::get_if<BeginPending>(&phase_);
+        if (!phase || !phase->owned || !sameOwnedCapture(*phase->owned, captured))
+            return RuledOwnedCounterGroupBeginUpdate::Ignored;
+        if (!accepted) {
+            if (phase->owned->acknowledged)
+                return RuledOwnedCounterGroupBeginUpdate::Ignored;
+            phase_ = Announcing{};
+            return RuledOwnedCounterGroupBeginUpdate::Rejected;
+        }
+        if (phase->owned->acknowledged)
+            return RuledOwnedCounterGroupBeginUpdate::Ignored;
+        phase->owned->acknowledged = true;
+        return RuledOwnedCounterGroupBeginUpdate::Waiting;
+    }
+
+    void rejectBegin()
+    {
+        if (std::holds_alternative<BeginPending>(phase_))
+            phase_ = Announcing{};
+    }
+
+    /// Applies one accepted engine snapshot and returns true exactly when payment needs its
+    /// first local initialization. Failed payment and pending submissions survive refreshes.
+    [[nodiscard]] bool applyEngineSnapshot(const ruled::v1::PendingAbilityActivation &engine)
+    {
+        if (engine.transaction_id() == 0)
+            return false;
+        if (const auto *begin = std::get_if<BeginPending>(&phase_); begin && begin->owned)
+            return false;
+
+        const quint64 transaction = engine.transaction_id();
+        const bool sameTransaction = transactionId() == transaction;
+        const bool wasInitialized = sameTransaction && hasInitializedPayment();
+        const bool paying = engine.stage() == ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT;
+
+        if (sameTransaction && paymentFailed()) {
+            phase_ = PaymentFailed{transaction, engine.revision()};
+            return false;
+        }
+        if (sameTransaction && isSubmissionPending()) {
+            const quint64 updatedRevision = engine.revision();
+            if (stage() == Stage::CommitPending)
+                phase_ = CommitPending{transaction, updatedRevision, wasInitialized || paying};
+            else {
+                const auto *cancel = std::get_if<CancelPending>(&phase_);
+                const auto origin = cancel ? cancel->origin : CancelPending::Origin::Waiting;
+                phase_ = CancelPending{transaction, updatedRevision, wasInitialized || paying, origin};
+            }
+            return paying && !wasInitialized;
+        }
+        if (paying) {
+            phase_ = Paying{transaction, engine.revision()};
+            return !wasInitialized;
+        }
+        phase_ = Waiting{transaction, engine.revision(), wasInitialized};
+        return false;
+    }
+
+    [[nodiscard]] bool beginCommit()
+    {
+        if (std::holds_alternative<Announcing>(phase_)) {
+            phase_ = CommitPending{0, 0, false};
+            return true;
+        }
+        if (std::holds_alternative<BeginPending>(phase_) || std::holds_alternative<PaymentFailed>(phase_) ||
+            isSubmissionPending() || transactionId() == 0) {
+            return false;
+        }
+        phase_ = CommitPending{transactionId(), revision(), hasInitializedPayment()};
+        return true;
+    }
+
+    [[nodiscard]] bool beginCancel()
+    {
+        if (transactionId() == 0 || std::holds_alternative<BeginPending>(phase_) || isSubmissionPending())
+            return false;
+        const auto origin = paymentFailed() ? CancelPending::Origin::FailedPayment : CancelPending::Origin::Waiting;
+        phase_ = CancelPending{transactionId(), revision(), hasInitializedPayment(), origin};
+        return true;
+    }
+
+    void rejectCommit(bool retryableCounterGroup)
+    {
+        const auto *phase = std::get_if<CommitPending>(&phase_);
+        if (!phase)
+            return;
+        const auto transaction = phase->transactionId;
+        const auto revision = phase->revision;
+        if (transaction == 0)
+            phase_ = Announcing{};
+        else if (retryableCounterGroup)
+            phase_ = PaymentFailed{transaction, revision};
+        else
+            phase_ = Paying{transaction, revision};
+    }
+
+    void rejectCancel()
+    {
+        if (const auto *phase = std::get_if<CancelPending>(&phase_)) {
+            const auto transaction = phase->transactionId;
+            const auto revision = phase->revision;
+            const auto paymentInitialized = phase->paymentInitialized;
+            const auto origin = phase->origin;
+            if (origin == CancelPending::Origin::FailedPayment)
+                phase_ = PaymentFailed{transaction, revision};
+            else
+                phase_ = Waiting{transaction, revision, paymentInitialized};
+        }
+    }
+
+    [[nodiscard]] bool markPaymentFailed()
+    {
+        if (std::holds_alternative<PaymentFailed>(phase_))
+            return true;
+        if (const auto *phase = std::get_if<Paying>(&phase_)) {
+            phase_ = PaymentFailed{phase->transactionId, phase->revision};
+            return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] bool retryPayment()
+    {
+        if (const auto *phase = std::get_if<PaymentFailed>(&phase_)) {
+            phase_ = Paying{phase->transactionId, phase->revision};
+            return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] bool manualEdit()
+    {
+        return retryPayment();
+    }
+
+    void reset()
+    {
+        phase_ = Announcing{};
+    }
+
+private:
+    struct Announcing
+    {
+    };
+    struct BeginPending
+    {
+        std::optional<RuledOwnedCounterGroupBegin> owned;
+    };
+    struct Waiting
+    {
+        quint64 transactionId = 0;
+        quint64 revision = 0;
+        bool paymentInitialized = false;
+    };
+    struct Paying
+    {
+        quint64 transactionId = 0;
+        quint64 revision = 0;
+    };
+    struct PaymentFailed
+    {
+        quint64 transactionId = 0;
+        quint64 revision = 0;
+    };
+    struct CommitPending
+    {
+        quint64 transactionId = 0;
+        quint64 revision = 0;
+        bool paymentInitialized = false;
+    };
+    struct CancelPending
+    {
+        enum class Origin
+        {
+            Waiting,
+            FailedPayment,
+        };
+
+        quint64 transactionId = 0;
+        quint64 revision = 0;
+        bool paymentInitialized = false;
+        Origin origin = Origin::Waiting;
+    };
+
+    [[nodiscard]] static bool sameOwnedCapture(const RuledOwnedCounterGroupBegin &current,
+                                               const RuledOwnedCounterGroupBegin &captured)
+    {
+        return captured.draftId != 0 && current.draftId == captured.draftId &&
+               current.actorPlayerId == captured.actorPlayerId &&
+               current.announcement.SerializeAsString() == captured.announcement.SerializeAsString();
+    }
+
+    std::variant<Announcing, BeginPending, Waiting, Paying, PaymentFailed, CommitPending, CancelPending> phase_ =
+        Announcing{};
 };
 
 inline bool ruledCounterSelectionStillLegal(const RuledPendingCostSelection &selection, const RuledCostChoice &choice)
@@ -192,20 +519,8 @@ struct RuledPendingCastCostSelection
 
 struct PendingActivatedAbility
 {
-    enum class Stage
-    {
-        Announcing,
-        BeginPending,
-        Waiting,
-        Paying,
-        CommitPending,
-        CancelPending
-    };
-    Stage stage = Stage::Announcing;
-    quint64 engineTransactionId = 0;
-    quint64 engineRevision = 0;
+    using Stage = RuledActivationLifecycle::Stage;
     bool chosenOpponentTargets = false;
-    bool enginePaymentInitialized = false;
     bool valid = false;
     bool permanentAction = false;
     ruled::v1::PermanentActionKind permanentActionKind = ruled::v1::PERMANENT_ACTION_KIND_UNSPECIFIED;
@@ -248,8 +563,94 @@ struct PendingActivatedAbility
     quint64 draftId = 0;
     QVector<ruled::v1::FlexPipPayment> fixedFlexPayments;
     QString engineLockedCostLabel;
-    bool counterGroupPaymentFailed = false;
-    std::optional<RuledOwnedCounterGroupBegin> ownedCounterGroupBegin;
+
+    [[nodiscard]] Stage stage() const
+    {
+        return lifecycle_.stage();
+    }
+    [[nodiscard]] quint64 transactionId() const
+    {
+        return lifecycle_.transactionId();
+    }
+    [[nodiscard]] quint64 revision() const
+    {
+        return lifecycle_.revision();
+    }
+    [[nodiscard]] bool hasInitializedPayment() const
+    {
+        return lifecycle_.hasInitializedPayment();
+    }
+    [[nodiscard]] bool paymentFailed() const
+    {
+        return lifecycle_.paymentFailed();
+    }
+    [[nodiscard]] const RuledOwnedCounterGroupBegin *ownedBegin() const
+    {
+        return lifecycle_.ownedBegin();
+    }
+    [[nodiscard]] bool isSubmissionPending() const
+    {
+        return lifecycle_.isSubmissionPending();
+    }
+
+    void beginOrdinaryAnnouncement()
+    {
+        lifecycle_.beginOrdinaryAnnouncement();
+    }
+    [[nodiscard]] bool beginOwnedAnnouncement(const RuledOwnedCounterGroupBegin &owned)
+    {
+        return lifecycle_.beginOwnedAnnouncement(owned);
+    }
+    [[nodiscard]] RuledOwnedCounterGroupBeginUpdate
+    observeOwnedSnapshot(const ruled::v1::PendingAbilityActivation *matchingSnapshot)
+    {
+        return lifecycle_.observeOwnedSnapshot(matchingSnapshot);
+    }
+    [[nodiscard]] RuledOwnedCounterGroupBeginUpdate acknowledgeOwned(const RuledOwnedCounterGroupBegin &captured,
+                                                                     bool accepted)
+    {
+        return lifecycle_.acknowledgeOwned(captured, accepted);
+    }
+    void rejectBegin()
+    {
+        lifecycle_.rejectBegin();
+    }
+    [[nodiscard]] bool applyEngineSnapshot(const ruled::v1::PendingAbilityActivation &engine)
+    {
+        return lifecycle_.applyEngineSnapshot(engine);
+    }
+    [[nodiscard]] bool beginCommit()
+    {
+        return lifecycle_.beginCommit();
+    }
+    [[nodiscard]] bool beginCancel()
+    {
+        return lifecycle_.beginCancel();
+    }
+    void rejectCommit(bool retryableCounterGroup)
+    {
+        lifecycle_.rejectCommit(retryableCounterGroup);
+    }
+    void rejectCancel()
+    {
+        lifecycle_.rejectCancel();
+    }
+    [[nodiscard]] bool markPaymentFailed()
+    {
+        return lifecycle_.markPaymentFailed();
+    }
+    [[nodiscard]] bool retryPayment()
+    {
+        return lifecycle_.retryPayment();
+    }
+    [[nodiscard]] bool manualEdit()
+    {
+        return lifecycle_.manualEdit();
+    }
+    void resetLifecycle()
+    {
+        lifecycle_.reset();
+    }
 
     /// Shared activation identity and selected target payload; payment cohorts are appended by the host.
     void writeActivationHeader(ruled::v1::ActivateAbility &command) const
@@ -277,6 +678,9 @@ struct PendingActivatedAbility
             *command.add_targets() = target.ref;
         }
     }
+
+private:
+    RuledActivationLifecycle lifecycle_;
 };
 
 [[nodiscard]] bool ruledStageCounterContributions(
@@ -516,12 +920,12 @@ template <typename PendingPayment>
 {
     // The engine owns a submitted announcement or commit even when its live ability/grant is no
     // longer published. Each stage survives the short gap before its authoritative reply arrives.
-    if (pending.stage == PendingActivatedAbility::Stage::BeginPending ||
-        (pending.stage == PendingActivatedAbility::Stage::CommitPending && pending.engineTransactionId == 0))
+    if (pending.stage() == PendingActivatedAbility::Stage::BeginPending ||
+        (pending.stage() == PendingActivatedAbility::Stage::CommitPending && pending.transactionId() == 0))
         return true;
-    if (pending.engineTransactionId != 0) {
+    if (pending.transactionId() != 0) {
         return state.pendingAbilityActivation &&
-               state.pendingAbilityActivation->transaction_id() == pending.engineTransactionId &&
+               state.pendingAbilityActivation->transaction_id() == pending.transactionId() &&
                state.pendingAbilityActivation->source_object_id() == pending.permanentOid &&
                state.pendingAbilityActivation->source_zone_change_generation() ==
                    pending.expectedZoneChangeGeneration &&
@@ -568,7 +972,7 @@ inline void ruledDispatchPendingAbilityCostOperation(const RuledClientState &sta
                                                                 const PendingActivatedAbility &pending)
 {
     if (!pending.valid || pending.permanentAction || pending.permanentOid == 0 || pending.abilityIndex < 0 ||
-        pending.engineTransactionId != 0 || !pending.loyaltyXChoice || !pending.loyaltyXChoice->isValid()) {
+        pending.transactionId() != 0 || !pending.loyaltyXChoice || !pending.loyaltyXChoice->isValid()) {
         return false;
     }
     if (state.abilitySourceZone(pending.permanentOid) != pending.sourceZone ||
@@ -1448,14 +1852,14 @@ ruledAdvancePendingActivatedTargetGroup(PendingActivatedAbility &ability,
             }
         }
     }
-    if (ability.valid && ability.selectedMode && ability.engineTransactionId == 0 &&
-        ability.stage == PendingActivatedAbility::Stage::Announcing &&
+    if (ability.valid && ability.selectedMode && ability.transactionId() == 0 &&
+        ability.stage() == PendingActivatedAbility::Stage::Announcing &&
         !ruledPendingAbilitySourceStillCurrent(state, ability)) {
         ability.restartAfterTargetInvalidation = true;
         return true;
     }
-    if (ability.valid && ability.engineTransactionId == 0 &&
-        ability.stage == PendingActivatedAbility::Stage::Announcing && !ability.selectedTargets.isEmpty()) {
+    if (ability.valid && ability.transactionId() == 0 &&
+        ability.stage() == PendingActivatedAbility::Stage::Announcing && !ability.selectedTargets.isEmpty()) {
         const auto dataValue = currentRuledPendingAbilityTargetData(ability, state);
         if (!dataValue) {
             if (ability.selectedMode) {
@@ -1538,13 +1942,12 @@ ruledAdvancePendingActivatedTargetGroup(PendingActivatedAbility &ability,
 [[nodiscard]] inline RuledPendingPaymentAction readyRuledPendingPaymentAction(const PendingRuledSpellCast &spell,
                                                                               const PendingActivatedAbility &ability)
 {
-    if (ability.ownedCounterGroupBegin) {
+    if (ability.ownedBegin()) {
         return RuledPendingPaymentAction::None;
     }
-    if (ability.counterGroupConfirmed || ability.counterGroupPaymentFailed ||
-        std::any_of(ability.costChoices.cbegin(), ability.costChoices.cend(), [](const auto &choice) {
-            return choice.counterRemovalGroup.has_value();
-        })) {
+    if (ability.counterGroupConfirmed || ability.paymentFailed() ||
+        std::any_of(ability.costChoices.cbegin(), ability.costChoices.cend(),
+                    [](const auto &choice) { return choice.counterRemovalGroup.has_value(); })) {
         // Group costs begin through the owned counter-group transaction and pay through the
         // authoritative shared payment model. They never use direct-activation readiness.
         return RuledPendingPaymentAction::None;
@@ -1562,7 +1965,7 @@ ruledAdvancePendingActivatedTargetGroup(PendingActivatedAbility &ability,
         return RuledPendingPaymentAction::CastSpell;
     }
     if (ability.valid && !ability.waitingForTarget && !ability.waitingForCost &&
-        (!ability.chosenOpponentTargets || ability.stage == PendingActivatedAbility::Stage::Paying) &&
+        (!ability.chosenOpponentTargets || ability.stage() == PendingActivatedAbility::Stage::Paying) &&
         costIsPaid(ability.remainingCost, ability.flexPips)) {
         return RuledPendingPaymentAction::ActivateAbility;
     }
@@ -1688,6 +2091,7 @@ public:
     [[nodiscard]] bool resolutionChoiceBlocksSpell(const RuledClientState &state) const;
     PendingRuledSpellCast &beginSpell();
     PendingActivatedAbility &beginAbility();
+    [[nodiscard]] bool rejectOrdinaryAbilityBegin(quint64 capturedDraftId);
     [[nodiscard]] std::optional<RuledOwnedCounterGroupBegin> prepareCounterGroupBegin(
         const RuledClientState &state,
         int actorPlayerId,

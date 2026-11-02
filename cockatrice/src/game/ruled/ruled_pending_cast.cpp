@@ -271,18 +271,17 @@ bool sameCounterGroupPromptContext(const RuledClientState &state,
                                    const PendingActivatedAbility &captured)
 {
     if (captured.draftId == 0 || captured.draftId != current.draftId || !captured.valid || !current.valid ||
-        captured.stage != PendingActivatedAbility::Stage::Announcing ||
-        current.stage != PendingActivatedAbility::Stage::Announcing || captured.engineTransactionId != 0 ||
-        current.engineTransactionId != 0 || captured.enginePaymentInitialized || current.enginePaymentInitialized ||
-        captured.ownedCounterGroupBegin || current.ownedCounterGroupBegin || !captured.counterGroupConfirmed ||
+        captured.stage() != PendingActivatedAbility::Stage::Announcing ||
+        current.stage() != PendingActivatedAbility::Stage::Announcing || captured.transactionId() != 0 ||
+        current.transactionId() != 0 || captured.hasInitializedPayment() || current.hasInitializedPayment() ||
+        captured.ownedBegin() || current.ownedBegin() || !captured.counterGroupConfirmed ||
         !current.counterGroupConfirmed || captured.permanentAction || current.permanentAction ||
         captured.permanentOid == 0 || captured.permanentOid != current.permanentOid ||
         captured.expectedZoneChangeGeneration != current.expectedZoneChangeGeneration ||
         !isKnownAbilitySourceZone(captured.sourceZone) || captured.sourceZone != current.sourceZone ||
-        captured.abilityIndex < 0 ||
-        captured.abilityIndex != current.abilityIndex || captured.engineRevision != current.engineRevision ||
-        captured.manaOptionIndex != current.manaOptionIndex || captured.xValue != current.xValue ||
-        captured.manaSplitFirstColorCount != current.manaSplitFirstColorCount ||
+        captured.abilityIndex < 0 || captured.abilityIndex != current.abilityIndex ||
+        captured.revision() != current.revision() || captured.manaOptionIndex != current.manaOptionIndex ||
+        captured.xValue != current.xValue || captured.manaSplitFirstColorCount != current.manaSplitFirstColorCount ||
         captured.castingPermissionId != current.castingPermissionId || captured.selectedMode || current.selectedMode ||
         !captured.selectedTargets.isEmpty() || !current.selectedTargets.isEmpty() || captured.needsTarget ||
         current.needsTarget || captured.waitingForTarget || current.waitingForTarget ||
@@ -411,8 +410,8 @@ bool validCounterContributionRows(const QVector<RuledCostChoice> &choices,
 bool validCurrentCounterGroupDraftSource(const RuledClientState &state,
                                          const PendingActivatedAbility &pending)
 {
-    if (!pending.valid || pending.stage != PendingActivatedAbility::Stage::Announcing ||
-        pending.engineTransactionId != 0 || pending.enginePaymentInitialized || pending.permanentAction ||
+    if (!pending.valid || pending.stage() != PendingActivatedAbility::Stage::Announcing ||
+        pending.transactionId() != 0 || pending.hasInitializedPayment() || pending.permanentAction ||
         pending.permanentOid == 0 || pending.abilityIndex < 0 || !isKnownAbilitySourceZone(pending.sourceZone) ||
         state.abilitySourceZone(pending.permanentOid) != pending.sourceZone ||
         state.abilitySourceGeneration(pending.permanentOid) != pending.expectedZoneChangeGeneration ||
@@ -718,8 +717,8 @@ bool ruledStageCounterContributions(PendingActivatedAbility &pending,
                                     quint64 zoneChangeGeneration,
                                     const QVector<RuledPendingCounterContribution> &replacementRows)
 {
-    if (!pending.valid || pending.stage != PendingActivatedAbility::Stage::Announcing ||
-        pending.engineTransactionId != 0 || pending.permanentAction || costIndex < 0 || objectId == 0) {
+    if (!pending.valid || pending.stage() != PendingActivatedAbility::Stage::Announcing ||
+        pending.transactionId() != 0 || pending.permanentAction || costIndex < 0 || objectId == 0) {
         return false;
     }
     if (replacementRows.isEmpty()) {
@@ -782,8 +781,8 @@ bool ruledStageCounterContributions(PendingActivatedAbility &pending,
 bool ruledReconcileCounterContributions(PendingActivatedAbility &pending,
                                         const QVector<RuledCostChoice> &currentChoices)
 {
-    if (!pending.valid || pending.stage != PendingActivatedAbility::Stage::Announcing ||
-        pending.engineTransactionId != 0 || pending.permanentAction) {
+    if (!pending.valid || pending.stage() != PendingActivatedAbility::Stage::Announcing ||
+        pending.transactionId() != 0 || pending.permanentAction) {
         return false;
     }
 
@@ -837,8 +836,8 @@ bool ruledReconcileCounterContributions(PendingActivatedAbility &pending,
 
 bool ruledConfirmCounterContributions(PendingActivatedAbility &pending)
 {
-    if (!pending.valid || pending.stage != PendingActivatedAbility::Stage::Announcing ||
-        pending.engineTransactionId != 0 || pending.permanentAction ||
+    if (!pending.valid || pending.stage() != PendingActivatedAbility::Stage::Announcing ||
+        pending.transactionId() != 0 || pending.permanentAction ||
         !validCounterContributionRows(pending.costChoices, pending.counterGroupContributions, true, true)) {
         pending.counterGroupConfirmed = false;
         return false;
@@ -852,13 +851,14 @@ std::optional<ruled::v1::BeginAbilityActivation> ruledBuildCounterGroupBegin(
     const PendingActivatedAbility &pending,
     const QVector<ruled::v1::FlexPipPayment> &flexPayments)
 {
-    if (!pending.valid || pending.stage != PendingActivatedAbility::Stage::Announcing ||
-        pending.engineTransactionId != 0 || pending.permanentAction || !pending.counterGroupConfirmed ||
-        pending.permanentOid == 0 || pending.abilityIndex < 0 || pending.selectedMode || !pending.selectedTargets.isEmpty() ||
-        pending.needsTarget || pending.waitingForTarget || pending.chosenOpponentTargets ||
-        pending.deferredReturnTappedCreature || pending.waitingForReturnTappedCreatureCandidate ||
-        pending.xValue != 0 || pending.manaOptionIndex != 0 || pending.manaSplitFirstColorCount != 0 ||
-        pending.castingPermissionId != 0 || pending.loyaltyXChoice || !pending.costSelections.isEmpty()) {
+    if (!pending.valid || pending.stage() != PendingActivatedAbility::Stage::Announcing ||
+        pending.transactionId() != 0 || pending.permanentAction || !pending.counterGroupConfirmed ||
+        pending.permanentOid == 0 || pending.abilityIndex < 0 || pending.selectedMode ||
+        !pending.selectedTargets.isEmpty() || pending.needsTarget || pending.waitingForTarget ||
+        pending.chosenOpponentTargets || pending.deferredReturnTappedCreature ||
+        pending.waitingForReturnTappedCreatureCandidate || pending.xValue != 0 || pending.manaOptionIndex != 0 ||
+        pending.manaSplitFirstColorCount != 0 || pending.castingPermissionId != 0 || pending.loyaltyXChoice ||
+        !pending.costSelections.isEmpty()) {
         return std::nullopt;
     }
 
@@ -975,6 +975,16 @@ PendingActivatedAbility &RuledPendingCast::beginAbility()
     return ability;
 }
 
+bool RuledPendingCast::rejectOrdinaryAbilityBegin(quint64 capturedDraftId)
+{
+    if (!ability.valid || capturedDraftId == 0 || ability.draftId != capturedDraftId || ability.ownedBegin() ||
+        ability.stage() != PendingActivatedAbility::Stage::BeginPending) {
+        return false;
+    }
+    ability.rejectBegin();
+    return true;
+}
+
 bool RuledPendingCast::stageCounterContributionsAfterPrompt(
     const RuledClientState &state,
     const PendingActivatedAbility &capturedPending,
@@ -986,13 +996,11 @@ bool RuledPendingCast::stageCounterContributionsAfterPrompt(
     const auto &pending = ability;
     if (capturedPending.draftId == 0 || pending.draftId == 0 || capturedPending.draftId != pending.draftId ||
         !capturedPending.valid || !pending.valid ||
-        capturedPending.stage != PendingActivatedAbility::Stage::Announcing ||
-        pending.stage != PendingActivatedAbility::Stage::Announcing ||
-        capturedPending.engineTransactionId != 0 || pending.engineTransactionId != 0 ||
-        capturedPending.enginePaymentInitialized || pending.enginePaymentInitialized || capturedPending.permanentAction ||
-        pending.permanentAction ||
-        capturedPending.permanentOid == 0 || pending.permanentOid != capturedPending.permanentOid ||
-        pending.sourceZone != capturedPending.sourceZone ||
+        capturedPending.stage() != PendingActivatedAbility::Stage::Announcing ||
+        pending.stage() != PendingActivatedAbility::Stage::Announcing || capturedPending.transactionId() != 0 ||
+        pending.transactionId() != 0 || capturedPending.hasInitializedPayment() || pending.hasInitializedPayment() ||
+        capturedPending.permanentAction || pending.permanentAction || capturedPending.permanentOid == 0 ||
+        pending.permanentOid != capturedPending.permanentOid || pending.sourceZone != capturedPending.sourceZone ||
         pending.expectedZoneChangeGeneration != capturedPending.expectedZoneChangeGeneration ||
         pending.abilityIndex < 0 || pending.abilityIndex != capturedPending.abilityIndex ||
         !capturedPending.waitingForCost || !pending.waitingForCost ||
@@ -1072,9 +1080,9 @@ bool RuledPendingCast::selectCounterGroupAfterPrompt(const RuledClientState &sta
     auto &pending = ability;
     if (costIndex < 0 || objectId == 0 || capturedPending.draftId == 0 || pending.draftId == 0 ||
         capturedPending.draftId != pending.draftId || !capturedPending.valid || !pending.valid ||
-        capturedPending.stage != PendingActivatedAbility::Stage::Announcing ||
-        pending.stage != PendingActivatedAbility::Stage::Announcing || capturedPending.engineTransactionId != 0 ||
-        pending.engineTransactionId != 0 || capturedPending.enginePaymentInitialized || pending.enginePaymentInitialized ||
+        capturedPending.stage() != PendingActivatedAbility::Stage::Announcing ||
+        pending.stage() != PendingActivatedAbility::Stage::Announcing || capturedPending.transactionId() != 0 ||
+        pending.transactionId() != 0 || capturedPending.hasInitializedPayment() || pending.hasInitializedPayment() ||
         capturedPending.permanentAction || pending.permanentAction || !capturedPending.waitingForCost ||
         !pending.waitingForCost || capturedPending.permanentOid != pending.permanentOid ||
         capturedPending.sourceZone != pending.sourceZone ||

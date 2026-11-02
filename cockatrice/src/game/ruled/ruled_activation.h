@@ -74,23 +74,20 @@ ruledActivationChoice(const RuledClientState &state, int localPlayerId, quint64 
 inline void ruledApplyActivationView(PendingActivatedAbility &local,
                                      const ruled::v1::PendingAbilityActivation &engine)
 {
-    const bool same = local.engineTransactionId == engine.transaction_id();
-    const bool submitting = same && (local.stage == PendingActivatedAbility::Stage::CommitPending ||
-                                      local.stage == PendingActivatedAbility::Stage::CancelPending);
-    const bool wasPaying = same && local.enginePaymentInitialized;
+    const bool same = local.transactionId() == engine.transaction_id();
+    const bool wasPaying = same && local.hasInitializedPayment();
     const bool wasWaitingForCost = same && local.waitingForCost;
     const bool wasWaitingForReturnCandidate = same && local.waitingForReturnTappedCreatureCandidate;
     const auto previousCostSelections = same ? local.costSelections : QVector<RuledPendingCostSelection>{};
     const auto previousCounterGroupContributions = local.counterGroupContributions;
     const auto previousCostChoices = local.costChoices;
+    const bool initializePayment = local.applyEngineSnapshot(engine);
     const bool previousSourceMatches = local.valid && local.permanentOid == engine.source_object_id() &&
                                        local.expectedZoneChangeGeneration == engine.source_zone_change_generation() &&
                                        local.sourceZone == engine.source_zone() &&
                                        local.abilityIndex == static_cast<int>(engine.ability_index());
     local.valid = true;
     local.chosenOpponentTargets = true;
-    local.engineTransactionId = engine.transaction_id();
-    local.engineRevision = engine.revision();
     local.permanentOid = engine.source_object_id();
     local.expectedZoneChangeGeneration = engine.source_zone_change_generation();
     local.abilityIndex = static_cast<int>(engine.ability_index());
@@ -115,8 +112,6 @@ inline void ruledApplyActivationView(PendingActivatedAbility &local,
         paying && std::any_of(engine.cost_selections().begin(), engine.cost_selections().end(), [](const auto &selection) {
             return selection.has_counter_removal_group();
         });
-    if (!submitting)
-        local.stage = paying ? PendingActivatedAbility::Stage::Paying : PendingActivatedAbility::Stage::Waiting;
     local.waitingForMana = paying;
     local.waitingForReturnTappedCreatureCandidate = wasWaitingForReturnCandidate;
     if (acceptedCounterGroup) {
@@ -190,8 +185,7 @@ inline void ruledApplyActivationView(PendingActivatedAbility &local,
         local.deferredReturnTappedCreature = false;
         local.flexPips.clear();
         local.lifePipIndices.clear();
-        if (!wasPaying) {
-            local.enginePaymentInitialized = true;
+        if (initializePayment) {
             local.remainingCost.clear();
             local.targetingCostApplied = true;
         }
@@ -227,13 +221,12 @@ inline void ruledApplyActivationView(PendingActivatedAbility &local,
         if (wasWaitingForCost && !hasSelection && choice.candidateIds.isEmpty())
             local.waitingForReturnTappedCreatureCandidate = true;
         local.waitingForMana = paying && !local.waitingForCost;
-    } else if (paying && !wasPaying) {
+    } else if (paying && initializePayment) {
         local.costChoices.clear();
         local.costSelections.clear();
         local.nextCostChoice = 0;
     }
-    if (paying && !wasPaying) {
-        local.enginePaymentInitialized = true;
+    if (paying && initializePayment) {
         local.remainingCost = RuledPendingCast::parseSimpleManaCost(QString::fromStdString(engine.locked_total_cost()));
         local.flexPips = RuledPendingCast::parseFlexPips(QString::fromStdString(engine.locked_total_cost()));
         local.targetingCostApplied = true;

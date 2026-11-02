@@ -106,14 +106,14 @@ bool matchesAcceptedCounterGroupPayment(const RuledClientState &state,
                                         quint64 expectedRevision)
 {
     if (actorPlayerId < 0 || expectedTransactionId == 0 || !local.valid ||
-        local.stage != PendingActivatedAbility::Stage::Paying || !local.counterGroupConfirmed ||
-        !local.enginePaymentInitialized || local.ownedCounterGroupBegin || local.permanentAction ||
-        local.waitingForCost || local.waitingForTarget || local.needsTarget || local.chosenOpponentTargets ||
-        local.selectedMode || !local.selectedTargets.isEmpty() || local.deferredReturnTappedCreature ||
+        local.stage() != PendingActivatedAbility::Stage::Paying || !local.counterGroupConfirmed ||
+        !local.hasInitializedPayment() || local.ownedBegin() || local.permanentAction || local.waitingForCost ||
+        local.waitingForTarget || local.needsTarget || local.chosenOpponentTargets || local.selectedMode ||
+        !local.selectedTargets.isEmpty() || local.deferredReturnTappedCreature ||
         local.waitingForReturnTappedCreatureCandidate || local.restartAfterTargetInvalidation ||
         !local.costChoices.isEmpty() || !local.costSelections.isEmpty() || local.permanentOid == 0 ||
-        local.abilityIndex < 0 || local.engineTransactionId != expectedTransactionId ||
-        local.engineRevision != expectedRevision || !state.pendingAbilityActivation) {
+        local.abilityIndex < 0 || local.transactionId() != expectedTransactionId ||
+        local.revision() != expectedRevision || !state.pendingAbilityActivation) {
         return false;
     }
 
@@ -166,15 +166,15 @@ bool matchesOwnedCounterGroupBeginSnapshot(const RuledOwnedCounterGroupBegin &ow
 
 bool currentOwnedCounterGroupBeginMatches(const PendingActivatedAbility &pending)
 {
-    if (!pending.ownedCounterGroupBegin || !pending.valid || pending.draftId == 0 ||
-        pending.ownedCounterGroupBegin->draftId != pending.draftId ||
-        pending.stage != PendingActivatedAbility::Stage::BeginPending || pending.engineTransactionId != 0 ||
-        pending.enginePaymentInitialized || pending.permanentAction || pending.waitingForCost ||
+    const auto *ownedBegin = pending.ownedBegin();
+    if (!ownedBegin || !pending.valid || pending.draftId == 0 || ownedBegin->draftId != pending.draftId ||
+        pending.stage() != PendingActivatedAbility::Stage::BeginPending || pending.transactionId() != 0 ||
+        pending.hasInitializedPayment() || pending.permanentAction || pending.waitingForCost ||
         pending.waitingForTarget || pending.waitingForMana) {
         return false;
     }
 
-    const auto &owned = *pending.ownedCounterGroupBegin;
+    const auto &owned = *ownedBegin;
     const auto &announcement = owned.announcement;
     return owned.actorPlayerId >= 0 && announcement.source_object_id() != 0 && !announcement.has_own_target() &&
            !announcement.has_opponent_player_id() && pending.permanentOid == announcement.source_object_id() &&
@@ -183,14 +183,6 @@ bool currentOwnedCounterGroupBeginMatches(const PendingActivatedAbility &pending
            static_cast<quint32>(pending.abilityIndex) == announcement.ability_index() &&
            !pending.selectedMode && pending.selectedTargets.isEmpty() && !pending.needsTarget &&
            !pending.waitingForTarget && !pending.chosenOpponentTargets;
-}
-
-bool sameOwnedCounterGroupBeginCapture(const RuledOwnedCounterGroupBegin &current,
-                                       const RuledOwnedCounterGroupBegin &captured)
-{
-    return captured.draftId != 0 && current.draftId == captured.draftId &&
-           current.actorPlayerId == captured.actorPlayerId &&
-           current.announcement.SerializeAsString() == captured.announcement.SerializeAsString();
 }
 
 bool hasCounterGroupChoice(const QVector<RuledCostChoice> &choices)
@@ -216,7 +208,6 @@ bool validCounterGroupOfferSet(const QVector<RuledCostChoice> &choices)
         }
         PendingActivatedAbility probe;
         probe.valid = true;
-        probe.stage = PendingActivatedAbility::Stage::Announcing;
         probe.costChoices = choices;
         const auto &candidate = choice.counterRemovalGroup->candidates.front();
         const auto &option = candidate.options.front();
@@ -271,12 +262,13 @@ bool ruledRetryCounterGroupPayment(RuledClientState &state,
 {
     if (actorPlayerId < 0 || expectedTransactionId == 0 || state.isEngineCommandPending() ||
         ruledActivationNestedChoice(state) || !state.payment.active || state.payment.pending ||
-        state.payment.submitting || !local.counterGroupPaymentFailed ||
+        state.payment.submitting || !local.paymentFailed() ||
         !matchesAcceptedCounterGroupPayment(state, local, actorPlayerId, expectedTransactionId, expectedRevision)) {
         return false;
     }
 
-    local.counterGroupPaymentFailed = false;
+    if (!local.retryPayment())
+        return false;
     state.payment.invalidate();
     return true;
 }
@@ -284,17 +276,18 @@ bool ruledRetryCounterGroupPayment(RuledClientState &state,
 std::optional<ruled::v1::RuledCommand>
 ruledCancelCounterGroupPayment(RuledClientState &state, PendingActivatedAbility &local, int actorPlayerId)
 {
+    const quint64 transactionId = local.transactionId();
+    const quint64 revision = local.revision();
     if (actorPlayerId < 0 || state.isEngineCommandPending() || ruledActivationNestedChoice(state) ||
-        !matchesAcceptedCounterGroupPayment(
-            state, local, actorPlayerId, local.engineTransactionId, local.engineRevision)) {
+        !matchesAcceptedCounterGroupPayment(state, local, actorPlayerId, transactionId, revision) ||
+        !local.beginCancel()) {
         return std::nullopt;
     }
 
     ruled::v1::RuledCommand command;
     auto *cancel = command.mutable_cancel_ability_activation();
-    cancel->set_transaction_id(local.engineTransactionId);
-    cancel->set_expected_revision(local.engineRevision);
-    local.stage = PendingActivatedAbility::Stage::CancelPending;
+    cancel->set_transaction_id(transactionId);
+    cancel->set_expected_revision(revision);
     return command;
 }
 
@@ -303,8 +296,7 @@ bool ruledRecordCounterGroupPreviewFailure(RuledClientState &state,
                                            int actorPlayerId,
                                            const ruled::v1::PaymentPreview *rejectedReply)
 {
-    if (!matchesAcceptedCounterGroupPayment(
-            state, local, actorPlayerId, local.engineTransactionId, local.engineRevision)) {
+    if (!matchesAcceptedCounterGroupPayment(state, local, actorPlayerId, local.transactionId(), local.revision())) {
         return false;
     }
 
@@ -317,17 +309,15 @@ bool ruledRecordCounterGroupPreviewFailure(RuledClientState &state,
         return false;
     }
 
-    local.counterGroupPaymentFailed = true;
-    return true;
+    return local.markPaymentFailed();
 }
 
 bool ruledInvalidateCounterGroupPaymentForRefresh(RuledClientState &state,
                                                   const PendingActivatedAbility &local,
                                                   int actorPlayerId)
 {
-    if (!matchesAcceptedCounterGroupPayment(
-            state, local, actorPlayerId, local.engineTransactionId, local.engineRevision) ||
-        !state.payment.active || state.payment.submitting || local.counterGroupPaymentFailed) {
+    if (!matchesAcceptedCounterGroupPayment(state, local, actorPlayerId, local.transactionId(), local.revision()) ||
+        !state.payment.active || state.payment.submitting || local.paymentFailed()) {
         return false;
     }
 
@@ -341,10 +331,9 @@ std::optional<RuledOwnedCounterGroupBegin> RuledPendingCast::prepareCounterGroup
     const QVector<ruled::v1::FlexPipPayment> &flexPayments)
 {
     auto &pending = ability;
-    if (actorPlayerId < 0 ||
-        state.pendingAbilityActivation || pending.draftId == 0 || !pending.valid ||
-        pending.stage != PendingActivatedAbility::Stage::Announcing || pending.engineTransactionId != 0 ||
-        pending.enginePaymentInitialized || pending.permanentAction || pending.ownedCounterGroupBegin) {
+    if (actorPlayerId < 0 || state.pendingAbilityActivation || pending.draftId == 0 || !pending.valid ||
+        pending.stage() != PendingActivatedAbility::Stage::Announcing || pending.transactionId() != 0 ||
+        pending.hasInitializedPayment() || pending.permanentAction || pending.ownedBegin()) {
         return std::nullopt;
     }
 
@@ -357,12 +346,12 @@ std::optional<RuledOwnedCounterGroupBegin> RuledPendingCast::prepareCounterGroup
     owned.draftId = pending.draftId;
     owned.actorPlayerId = actorPlayerId;
     owned.announcement = *announcement;
+    if (!pending.beginOwnedAnnouncement(owned))
+        return std::nullopt;
     pending.fixedFlexPayments.clear();
     for (const auto &payment : announcement->flex_payments()) {
         pending.fixedFlexPayments.append(payment);
     }
-    pending.ownedCounterGroupBegin = owned;
-    pending.stage = PendingActivatedAbility::Stage::BeginPending;
     pending.waitingForCost = false;
     pending.waitingForTarget = false;
     pending.waitingForMana = false;
@@ -372,32 +361,21 @@ std::optional<RuledOwnedCounterGroupBegin> RuledPendingCast::prepareCounterGroup
 RuledOwnedCounterGroupBeginUpdate
 RuledPendingCast::reconcileCounterGroupBegin(const ruled::v1::PendingAbilityActivation *currentPending)
 {
-    if (!ability.ownedCounterGroupBegin) {
+    if (!ability.ownedBegin()) {
         return RuledOwnedCounterGroupBeginUpdate::Ignored;
     }
     if (!currentOwnedCounterGroupBeginMatches(ability)) {
         return RuledOwnedCounterGroupBeginUpdate::Ignored;
     }
-    if (!currentPending) {
-        return RuledOwnedCounterGroupBeginUpdate::Waiting;
-    }
+    const auto *owned = ability.ownedBegin();
+    const auto *matchingSnapshot =
+        currentPending && matchesOwnedCounterGroupBeginSnapshot(*owned, *currentPending) ? currentPending : nullptr;
+    const auto update = ability.observeOwnedSnapshot(matchingSnapshot);
+    if (update != RuledOwnedCounterGroupBeginUpdate::Accepted)
+        return update;
 
-    auto &owned = *ability.ownedCounterGroupBegin;
-    if (!matchesOwnedCounterGroupBeginSnapshot(owned, *currentPending)) {
-        return RuledOwnedCounterGroupBeginUpdate::Waiting;
-    }
-    if (owned.matchedTransactionId == 0) {
-        owned.matchedTransactionId = currentPending->transaction_id();
-    } else if (owned.matchedTransactionId != currentPending->transaction_id()) {
-        return RuledOwnedCounterGroupBeginUpdate::Waiting;
-    }
-    if (!owned.acknowledged) {
-        return RuledOwnedCounterGroupBeginUpdate::Waiting;
-    }
-
-    ruledApplyActivationView(ability, *currentPending);
-    ability.ownedCounterGroupBegin.reset();
-    return RuledOwnedCounterGroupBeginUpdate::Accepted;
+    ruledApplyActivationView(ability, *matchingSnapshot);
+    return update;
 }
 
 RuledOwnedCounterGroupBeginUpdate RuledPendingCast::acknowledgeCounterGroupBegin(
@@ -405,34 +383,24 @@ RuledOwnedCounterGroupBeginUpdate RuledPendingCast::acknowledgeCounterGroupBegin
     bool accepted,
     const ruled::v1::PendingAbilityActivation *currentPending)
 {
-    if (!ability.ownedCounterGroupBegin || !currentOwnedCounterGroupBeginMatches(ability) ||
-        !sameOwnedCounterGroupBeginCapture(*ability.ownedCounterGroupBegin, captured)) {
+    const auto *owned = ability.ownedBegin();
+    if (!owned || !currentOwnedCounterGroupBeginMatches(ability)) {
         return RuledOwnedCounterGroupBeginUpdate::Ignored;
     }
-    if (!accepted) {
-        if (ability.ownedCounterGroupBegin->acknowledged) {
-            return RuledOwnedCounterGroupBeginUpdate::Ignored;
-        }
-
-        PendingActivatedAbility retained = ability;
-        retained.fixedFlexPayments.clear();
-        for (const auto &payment : retained.ownedCounterGroupBegin->announcement.flex_payments()) {
-            retained.fixedFlexPayments.append(payment);
-        }
-        const auto &fresh = beginAbility();
-        const quint64 freshDraftId = fresh.draftId;
-        ability = retained;
-        ability.draftId = freshDraftId;
-        ability.ownedCounterGroupBegin.reset();
-        ability.stage = PendingActivatedAbility::Stage::Announcing;
+    QVector<ruled::v1::FlexPipPayment> retainedFlexPayments;
+    for (const auto &payment : owned->announcement.flex_payments())
+        retainedFlexPayments.append(payment);
+    const auto update = ability.acknowledgeOwned(captured, accepted);
+    if (update == RuledOwnedCounterGroupBeginUpdate::Rejected) {
+        ability.fixedFlexPayments = retainedFlexPayments;
+        if (++nextAbilityDraftId == 0)
+            ++nextAbilityDraftId;
+        ability.draftId = nextAbilityDraftId;
         ability.waitingForMana = false;
         return RuledOwnedCounterGroupBeginUpdate::Rejected;
     }
-
-    if (ability.ownedCounterGroupBegin->acknowledged) {
-        return RuledOwnedCounterGroupBeginUpdate::Ignored;
-    }
-    ability.ownedCounterGroupBegin->acknowledged = true;
+    if (update != RuledOwnedCounterGroupBeginUpdate::Waiting)
+        return update;
     return reconcileCounterGroupBegin(currentPending);
 }
 
@@ -909,10 +877,10 @@ bool RuledPendingCast::reconcileSpellCosts(const RuledClientState &state, int lo
 bool RuledPendingCast::reconcileAbilityCosts(const RuledClientState &state, int localPlayerId)
 {
     if (ability.valid) {
-        if (ability.ownedCounterGroupBegin) {
+        if (ability.ownedBegin()) {
             return true;
         }
-        if (ability.stage == PendingActivatedAbility::Stage::BeginPending || ability.engineTransactionId != 0)
+        if (ability.stage() == PendingActivatedAbility::Stage::BeginPending || ability.transactionId() != 0)
             return ruledPendingAbilitySourceStillCurrent(state, ability);
         const bool sourceStillCurrent = ruledPendingAbilitySourceStillCurrent(state, ability);
         const auto latest = ability.permanentAction
@@ -1096,9 +1064,8 @@ bool RuledPendingCast::isAwaitingRuledAbilityCostSelection() const
 
 bool RuledPendingCast::isAwaitingRuledCounterGroupSelection() const
 {
-    return isAwaitingRuledAbilityCostSelection() &&
-           ability.stage == PendingActivatedAbility::Stage::Announcing && !ability.ownedCounterGroupBegin &&
-           hasCounterGroupChoice(ability.costChoices);
+    return isAwaitingRuledAbilityCostSelection() && ability.stage() == PendingActivatedAbility::Stage::Announcing &&
+           !ability.ownedBegin() && hasCounterGroupChoice(ability.costChoices);
 }
 
 bool RuledPendingCast::ruledCounterGroupSelectionConfirmable() const

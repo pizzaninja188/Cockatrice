@@ -960,8 +960,8 @@ bool RuledPaymentUi::completeActivateAbility()
 {
     auto &pending = actions->pendingActivatedAbility;
     if (hasCounterGroupOffers(pending) || pending.counterGroupConfirmed) {
-        if (pending.ownedCounterGroupBegin || pending.engineTransactionId != 0 ||
-            pending.stage != PendingActivatedAbility::Stage::Announcing || !pending.counterGroupConfirmed ||
+        if (pending.ownedBegin() || pending.transactionId() != 0 ||
+            pending.stage() != PendingActivatedAbility::Stage::Announcing || !pending.counterGroupConfirmed ||
             RuledActions::gameplayInputLocked(actions->player->getGame())) {
             return false;
         }
@@ -1316,8 +1316,8 @@ void RuledPaymentUi::continuePendingActivatedAbilityAfterChoice()
         return;
     }
     if (hasCounterGroupOffers(pending)) {
-        if (pending.ownedCounterGroupBegin || pending.stage != PendingActivatedAbility::Stage::Announcing ||
-            pending.engineTransactionId != 0) {
+        if (pending.ownedBegin() || pending.stage() != PendingActivatedAbility::Stage::Announcing ||
+            pending.transactionId() != 0) {
             return;
         }
         if (!pending.counterGroupConfirmed) {
@@ -1386,7 +1386,7 @@ void RuledPaymentUi::continuePendingActivatedAbilityAfterChoice()
         *state, pending, [this]() { cancelPendingActivatedAbility(); }, [this, state]() {
             auto &pending = actions->pendingActivatedAbility;
             if (pending.chosenOpponentTargets) {
-                if (pending.stage == PendingActivatedAbility::Stage::Announcing)
+                if (pending.stage() == PendingActivatedAbility::Stage::Announcing)
                     beginAbilityActivation();
                 else
                     startOrRefresh();
@@ -1608,7 +1608,7 @@ void RuledPaymentUi::cancelPendingActivatedAbility()
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     auto &local = actions->pendingActivatedAbility;
     const int actorPlayerId = actions->player->getPlayerInfo()->getId();
-    if (local.counterGroupPaymentFailed || (local.counterGroupConfirmed && local.enginePaymentInitialized)) {
+    if (local.paymentFailed() || (local.counterGroupConfirmed && local.hasInitializedPayment())) {
         auto command = ruledCancelCounterGroupPayment(*state, local, actorPlayerId);
         if (!command) {
             return;
@@ -1617,10 +1617,10 @@ void RuledPaymentUi::cancelPendingActivatedAbility()
         RuledActions::sendRuledCommandExpectingAck(
             actions->player->getGame(), *command, [this, transaction](bool accepted) {
                 auto &current = actions->pendingActivatedAbility;
-                if (!current.valid || current.engineTransactionId != transaction)
+                if (!current.valid || current.transactionId() != transaction)
                     return;
                 if (!accepted) {
-                    current.stage = PendingActivatedAbility::Stage::Waiting;
+                    current.rejectCancel();
                     reconcileEnginePendingAbilityActivation();
                     startOrRefresh();
                 } else {
@@ -1641,14 +1641,15 @@ void RuledPaymentUi::cancelPendingActivatedAbility()
         command.mutable_cancel_ability_activation()->set_transaction_id(engine.transaction_id());
         command.mutable_cancel_ability_activation()->set_expected_revision(engine.revision());
         const auto transaction = engine.transaction_id();
-        actions->pendingActivatedAbility.stage = PendingActivatedAbility::Stage::CancelPending;
+        if (!actions->pendingActivatedAbility.beginCancel())
+            return;
         RuledActions::sendRuledCommandExpectingAck(
             actions->player->getGame(), command, [this, transaction](bool accepted) {
                 auto &local = actions->pendingActivatedAbility;
-                if (!local.valid || local.engineTransactionId != transaction)
+                if (!local.valid || local.transactionId() != transaction)
                     return;
                 if (!accepted) {
-                    local.stage = PendingActivatedAbility::Stage::Waiting;
+                    local.rejectCancel();
                     reconcileEnginePendingAbilityActivation();
                     startOrRefresh();
                 } else {
@@ -1660,7 +1661,7 @@ void RuledPaymentUi::cancelPendingActivatedAbility()
             });
         return;
     }
-    if (actions->pendingActivatedAbility.stage == PendingActivatedAbility::Stage::BeginPending)
+    if (actions->pendingActivatedAbility.stage() == PendingActivatedAbility::Stage::BeginPending)
         return;
     if (!actions->pendingActivatedAbility.valid) {
         return;
@@ -1925,8 +1926,8 @@ QSet<quint32> RuledPaymentUi::eligibleRestrictedManaForPendingAbility() const
     if (!state || !actions->pendingActivatedAbility.valid) {
         return {};
     }
-    if (actions->pendingActivatedAbility.engineTransactionId != 0 && state->pendingAbilityActivation &&
-        state->pendingAbilityActivation->transaction_id() == actions->pendingActivatedAbility.engineTransactionId) {
+    if (actions->pendingActivatedAbility.transactionId() != 0 && state->pendingAbilityActivation &&
+        state->pendingAbilityActivation->transaction_id() == actions->pendingActivatedAbility.transactionId()) {
         QSet<quint32> eligible;
         for (const auto id : state->pendingAbilityActivation->eligible_restricted_mana_group_ids())
             eligible.insert(id);
@@ -2130,7 +2131,7 @@ void RuledPaymentUi::cancelRuledCounterGroupSelection()
 {
     const auto &ability = actions->pendingActivatedAbility;
     if (actions->isAwaitingRuledCounterGroupSelection() || hasCounterGroupOffers(ability) ||
-        ability.counterGroupConfirmed || ability.counterGroupPaymentFailed) {
+        ability.counterGroupConfirmed || ability.paymentFailed()) {
         cancelPendingActivatedAbility();
     }
 }

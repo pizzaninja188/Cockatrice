@@ -44,14 +44,14 @@ bool isAcceptedCounterGroupPayment(const RuledClientState *state,
                                    const PendingActivatedAbility &ability,
                                    int actorPlayerId)
 {
-    if (!state || !ability.valid || ability.ownedCounterGroupBegin || !ability.counterGroupConfirmed ||
-        !ability.enginePaymentInitialized || ability.engineTransactionId == 0 || actorPlayerId < 0 ||
-        ability.stage != PendingActivatedAbility::Stage::Paying || ability.counterGroupContributions.isEmpty() ||
+    if (!state || !ability.valid || ability.ownedBegin() || !ability.counterGroupConfirmed ||
+        !ability.hasInitializedPayment() || ability.transactionId() == 0 || actorPlayerId < 0 ||
+        ability.stage() != PendingActivatedAbility::Stage::Paying || ability.counterGroupContributions.isEmpty() ||
         !state->pendingAbilityActivation) {
         return false;
     }
     const auto &activation = *state->pendingAbilityActivation;
-    return activation.transaction_id() == ability.engineTransactionId && activation.actor_player_id() == actorPlayerId &&
+    return activation.transaction_id() == ability.transactionId() && activation.actor_player_id() == actorPlayerId &&
            activation.deciding_player_id() == actorPlayerId &&
            activation.stage() == ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT && hasCounterGroupPayment(activation) &&
            ruledActivationCanPay(*state, actorPlayerId);
@@ -61,7 +61,7 @@ bool isUnacceptedCounterGroupActivation(const RuledClientState *state,
                                         const PendingActivatedAbility &ability,
                                         int actorPlayerId)
 {
-    if (ability.ownedCounterGroupBegin) {
+    if (ability.ownedBegin()) {
         return true;
     }
     if (!hasCounterGroupOffers(ability) && !ability.counterGroupConfirmed) {
@@ -305,10 +305,10 @@ void RuledPaymentUi::reconcileEnginePendingAbilityActivation()
     const auto &engine = state->pendingAbilityActivation;
     for (int i = suspendedPayments.size() - 1; i >= 0; --i) {
         auto &frame = suspendedPayments[i];
-        if (!frame.ability || frame.ability->engineTransactionId == 0)
+        if (!frame.ability || frame.ability->transactionId() == 0)
             continue;
         if (!engine || engine->actor_player_id() != actor ||
-            engine->transaction_id() != frame.ability->engineTransactionId) {
+            engine->transaction_id() != frame.ability->transactionId()) {
             restoreOptimisticManaCounters(frame.payment.takeAllOptimisticManaCounterIds());
             suspendedPayments.removeAt(i);
         } else {
@@ -316,7 +316,7 @@ void RuledPaymentUi::reconcileEnginePendingAbilityActivation()
             return;
         }
     }
-    if (local.ownedCounterGroupBegin) {
+    if (local.ownedBegin()) {
         const auto update = actions->ruledPendingCast->reconcileCounterGroupBegin(
             engine ? &*engine : nullptr);
         if (update != RuledOwnedCounterGroupBeginUpdate::Accepted) {
@@ -326,7 +326,7 @@ void RuledPaymentUi::reconcileEnginePendingAbilityActivation()
         }
     }
     if (!engine || engine->actor_player_id() != actor) {
-        if (local.valid && local.engineTransactionId != 0) {
+        if (local.valid && local.transactionId() != 0) {
             actions->ruledPendingCast->clearAbility();
             clear();
             emit actions->ruledActivatedAbilityTargetPendingChanged(false, {});
@@ -334,10 +334,10 @@ void RuledPaymentUi::reconcileEnginePendingAbilityActivation()
         }
         return;
     }
-    if (local.valid && local.engineTransactionId == 0 && local.stage != PendingActivatedAbility::Stage::BeginPending)
+    if (local.valid && local.transactionId() == 0 && local.stage() != PendingActivatedAbility::Stage::BeginPending)
         return; // An inner mana ability owns this local draft while the outer payment is parked.
-    if (!local.valid || (local.engineTransactionId != engine->transaction_id() &&
-                         local.stage != PendingActivatedAbility::Stage::BeginPending)) {
+    if (!local.valid || (local.transactionId() != engine->transaction_id() &&
+                         local.stage() != PendingActivatedAbility::Stage::BeginPending)) {
         clear();
         actions->ruledPendingCast->beginAbility();
         local.cardName = QString::fromStdString(engine->source_description());
@@ -352,12 +352,11 @@ bool RuledPaymentUi::beginAbilityActivation()
 {
     auto &local = actions->pendingActivatedAbility;
     if (hasCounterGroupOffers(local)) {
-        if (local.ownedCounterGroupBegin) {
+        if (local.ownedBegin()) {
             return true;
         }
         if (!local.valid || !local.counterGroupConfirmed || local.waitingForCost || local.waitingForTarget ||
-            local.waitingForMana ||
-            local.stage != PendingActivatedAbility::Stage::Announcing ||
+            local.waitingForMana || local.stage() != PendingActivatedAbility::Stage::Announcing ||
             RuledActions::gameplayInputLocked(actions->player->getGame())) {
             return false;
         }
@@ -386,7 +385,7 @@ bool RuledPaymentUi::beginAbilityActivation()
                 const auto update = actions->ruledPendingCast->acknowledgeCounterGroupBegin(captured, accepted, current);
                 if (update == RuledOwnedCounterGroupBeginUpdate::Rejected) {
                     auto &retry = actions->pendingActivatedAbility;
-                    if (retry.valid && retry.stage == PendingActivatedAbility::Stage::Announcing &&
+                    if (retry.valid && retry.stage() == PendingActivatedAbility::Stage::Announcing &&
                         hasCounterGroupOffers(retry)) {
                         retry.waitingForCost = true;
                         retry.waitingForMana = false;
@@ -412,7 +411,7 @@ bool RuledPaymentUi::beginAbilityActivation()
     }
     const bool handReturn = local.deferredReturnTappedCreature &&
                             local.sourceZone == ruled::v1::ABILITY_SOURCE_ZONE_HAND;
-    if (!local.valid || !local.chosenOpponentTargets || local.stage != PendingActivatedAbility::Stage::Announcing ||
+    if (!local.valid || !local.chosenOpponentTargets || local.stage() != PendingActivatedAbility::Stage::Announcing ||
         (handReturn ? !local.selectedTargets.isEmpty()
                     : (local.selectedTargets.size() != 1 || local.selectedTargets.first().ref.group_index() != 0)) ||
         RuledActions::gameplayInputLocked(actions->player->getGame()))
@@ -429,7 +428,7 @@ bool RuledPaymentUi::beginAbilityActivation()
         begin->mutable_own_target()->set_group_index(target.ref.group_index());
         begin->mutable_own_target()->set_zone_change_generation(target.zoneChangeGeneration);
     }
-    local.stage = PendingActivatedAbility::Stage::BeginPending;
+    local.beginOrdinaryAnnouncement();
     const auto source = local.permanentOid;
     const auto generation = local.expectedZoneChangeGeneration;
     const auto slot = local.abilityIndex;
@@ -444,8 +443,8 @@ bool RuledPaymentUi::beginAbilityActivation()
             if (accepted) {
                 reconcileEnginePendingAbilityActivation();
                 startOrRefresh();
-            } else if (current.stage == PendingActivatedAbility::Stage::BeginPending) {
-                current.stage = PendingActivatedAbility::Stage::Announcing;
+            } else if (current.stage() == PendingActivatedAbility::Stage::BeginPending &&
+                       actions->ruledPendingCast->rejectOrdinaryAbilityBegin(draftId)) {
                 if (current.deferredReturnTappedCreature) {
                     actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
                         PlayerActions::tr("Urban Retreat's activation could not start. Refresh the game state and try again."));
@@ -485,7 +484,7 @@ RuledPaymentUi::Context RuledPaymentUi::context() const
     const auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     const auto &ability = actions->pendingActivatedAbility;
     if (ability.valid) {
-        if (ability.ownedCounterGroupBegin) {
+        if (ability.ownedBegin()) {
             return Context::None;
         }
         if (hasCounterGroupOffers(ability) || ability.counterGroupConfirmed) {
@@ -494,8 +493,8 @@ RuledPaymentUi::Context RuledPaymentUi::context() const
                        : Context::None;
         }
         if (ability.chosenOpponentTargets)
-            return ability.stage == PendingActivatedAbility::Stage::Paying && state->pendingAbilityActivation &&
-                           state->pendingAbilityActivation->transaction_id() == ability.engineTransactionId &&
+            return ability.stage() == PendingActivatedAbility::Stage::Paying && state->pendingAbilityActivation &&
+                           state->pendingAbilityActivation->transaction_id() == ability.transactionId() &&
                            !ability.waitingForCost && !ability.waitingForTarget &&
                            ruledActivationCanPay(*state, actions->player->getPlayerInfo()->getId())
                        ? Context::Ability
@@ -526,8 +525,8 @@ bool RuledPaymentUi::canRetryCounterGroupPayment() const
     const auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     const auto &ability = actions->pendingActivatedAbility;
     if (!state || !state->pendingAbilityActivation || !ability.valid || !ability.counterGroupConfirmed ||
-        !ability.counterGroupPaymentFailed || ability.ownedCounterGroupBegin || !ability.enginePaymentInitialized ||
-        ability.stage != PendingActivatedAbility::Stage::Paying || ability.engineTransactionId == 0 ||
+        !ability.paymentFailed() || ability.ownedBegin() || !ability.hasInitializedPayment() ||
+        ability.stage() != PendingActivatedAbility::Stage::Paying || ability.transactionId() == 0 ||
         state->isEngineCommandPending() || ruledActivationNestedChoice(*state) || !state->payment.active ||
         state->payment.pending || state->payment.submitting) {
         return false;
@@ -538,7 +537,7 @@ bool RuledPaymentUi::canRetryCounterGroupPayment() const
     return localPlayerId >= 0 && activation.actor_player_id() == localPlayerId &&
            activation.deciding_player_id() == localPlayerId &&
            activation.stage() == ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT &&
-           activation.transaction_id() == ability.engineTransactionId && activation.revision() == ability.engineRevision &&
+           activation.transaction_id() == ability.transactionId() && activation.revision() == ability.revision() &&
            hasCounterGroupPayment(activation);
 }
 
@@ -591,13 +590,13 @@ bool RuledPaymentUi::startOrRefresh()
     const int localPlayerId = actions->player->getPlayerInfo()->getId();
     auto &ability = actions->pendingActivatedAbility;
     auto &model = state->payment;
-    if (ability.counterGroupPaymentFailed) {
+    if (ability.paymentFailed()) {
         if (ruledInvalidateCounterGroupPaymentForRefresh(*state, ability, localPlayerId)) {
             schedule();
         }
         return true;
     }
-    const bool acceptedGroupCandidate = ability.counterGroupConfirmed && ability.enginePaymentInitialized;
+    const bool acceptedGroupCandidate = ability.counterGroupConfirmed && ability.hasInitializedPayment();
     if (acceptedGroupCandidate && model.active) {
         if (ruledInvalidateCounterGroupPaymentForRefresh(*state, ability, localPlayerId)) {
             schedule();
@@ -696,7 +695,7 @@ void RuledPaymentUi::query()
     auto *game = actions->player->getGame();
     auto *state = game->getGameEventHandler()->ruled();
     const auto &ability = actions->pendingActivatedAbility;
-    if (!state || ability.counterGroupPaymentFailed ||
+    if (!state || ability.paymentFailed() ||
         isUnacceptedCounterGroupActivation(state, ability, actions->player->getPlayerInfo()->getId())) {
         return;
     }
@@ -726,8 +725,8 @@ void RuledPaymentUi::query()
         ruled::v1::PaymentPreview failure;
         failure.set_transaction_id(transaction);
         failure.set_revision(revision);
-        const bool groupedCandidate = ability.counterGroupPaymentFailed ||
-                                      (ability.counterGroupConfirmed && ability.enginePaymentInitialized);
+        const bool groupedCandidate =
+            ability.paymentFailed() || (ability.counterGroupConfirmed && ability.hasInitializedPayment());
         failure.set_error(groupedCandidate ? "Payment preview was rejected. Retry or cancel this activation."
                                            : "Payment preview was rejected. Cancel and try again.");
         if (groupedCandidate) {
@@ -758,8 +757,8 @@ void RuledPaymentUi::received()
         return;
     auto &ability = actions->pendingActivatedAbility;
     auto &model = currentState->payment;
-    const bool groupedCandidate = ability.counterGroupPaymentFailed ||
-                                  (ability.counterGroupConfirmed && ability.enginePaymentInitialized);
+    const bool groupedCandidate =
+        ability.paymentFailed() || (ability.counterGroupConfirmed && ability.hasInitializedPayment());
     if (groupedCandidate && !model.view.valid()) {
         if (ruledRecordCounterGroupPreviewFailure(*currentState, ability,
                                                   actions->player->getPlayerInfo()->getId())) {
@@ -777,7 +776,7 @@ void RuledPaymentUi::received()
     changed();
     if (model.pending || model.submitting || !model.view.valid())
         return;
-    if (ability.counterGroupPaymentFailed) {
+    if (ability.paymentFailed()) {
         return;
     }
     if (model.view.selection_changed())
@@ -826,12 +825,16 @@ void RuledPaymentUi::received()
             startOrRefresh();
             return;
         }
+        if (submittingContext == Context::Ability && actions->pendingActivatedAbility.valid &&
+            !actions->pendingActivatedAbility.beginCommit()) {
+            model.submitting = false;
+            schedule();
+            return;
+        }
         model.writePayment(*command);
         const auto transaction = model.transaction();
         if (submittingContext == Context::Spell && actions->pendingRuledSpellCast.valid)
             actions->pendingRuledSpellCast.stage = PendingRuledSpellCast::Stage::CommitPending;
-        if (submittingContext == Context::Ability && actions->pendingActivatedAbility.valid)
-            actions->pendingActivatedAbility.stage = PendingActivatedAbility::Stage::CommitPending;
         RuledActions::sendRuledCommandExpectingAck(
             game, *command, [this, transaction, submittingContext](bool accepted) {
                 auto &current = actions->player->getGame()->getGameEventHandler()->ruled()->payment;
@@ -864,12 +867,10 @@ void RuledPaymentUi::received()
                         auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
                         if (!state)
                             return;
-                        if (ability.counterGroupConfirmed && ability.enginePaymentInitialized) {
-                            ability.stage = PendingActivatedAbility::Stage::Paying;
-                        }
-                        if (ability.counterGroupPaymentFailed ||
-                            (ability.counterGroupConfirmed && ability.enginePaymentInitialized)) {
-                            ability.counterGroupPaymentFailed = true;
+                        const bool retryableCounterGroup =
+                            ability.counterGroupConfirmed && ability.hasInitializedPayment();
+                        ability.rejectCommit(retryableCounterGroup);
+                        if (retryableCounterGroup) {
                             current.submitting = false;
                             current.view.set_error(
                                 "Payment commit was rejected. Retry or cancel this activation.");
@@ -877,13 +878,11 @@ void RuledPaymentUi::received()
                             return;
                         }
                         if (ability.chosenOpponentTargets) {
-                            ability.stage = PendingActivatedAbility::Stage::Paying;
                             if (!ruledPendingAbilitySourceStillCurrent(*state, ability)) {
                                 cancelPendingActivatedAbility();
                                 return;
                             }
                         } else {
-                            ability.stage = PendingActivatedAbility::Stage::Announcing;
                             if (!ruledPendingAbilitySourceStillCurrent(*state, ability)) {
                                 cancelPendingActivatedAbility();
                                 return;
@@ -932,9 +931,9 @@ void RuledPaymentUi::noteManualAcceptedCounterGroupPaymentEdit()
 {
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     auto &ability = actions->pendingActivatedAbility;
-    if (ability.counterGroupPaymentFailed &&
+    if (ability.paymentFailed() &&
         isAcceptedCounterGroupPayment(state, ability, actions->player->getPlayerInfo()->getId())) {
-        ability.counterGroupPaymentFailed = false;
+        ability.manualEdit();
     }
 }
 
@@ -953,7 +952,7 @@ bool RuledPaymentUi::autoPayMana(const QString &name, int amount, quint32 groupI
                suspendedPayments.last().ability) {
         recipientAbility = &*suspendedPayments.last().ability;
     }
-    if (recipientAbility && recipientAbility->counterGroupPaymentFailed) {
+    if (recipientAbility && recipientAbility->paymentFailed()) {
         return true;
     }
     if (!applicable() && suspendedPayments.isEmpty())
@@ -1128,7 +1127,7 @@ QString RuledPaymentUi::prompt() const
         const QString lockedLabel = ability.engineLockedCostLabel.isEmpty()
                                         ? QObject::tr("unavailable")
                                         : ability.engineLockedCostLabel;
-        if (ability.counterGroupPaymentFailed) {
+        if (ability.paymentFailed()) {
             text = QObject::tr("%1\nLocked cost: %2\nPreview remaining: %3\nPayment did not complete. Confirm to retry or cancel this activation.")
                        .arg(description)
                        .arg(lockedLabel)
@@ -1260,8 +1259,8 @@ void RuledPaymentUi::resumeAfterManaAbility()
         emit actions->ruledAbilityActivationPendingChanged(true);
     }
     const auto &restoredAbility = actions->pendingActivatedAbility;
-    if (!restoredAbility.counterGroupPaymentFailed &&
-        !(restoredAbility.counterGroupConfirmed && restoredAbility.enginePaymentInitialized)) {
+    if (!restoredAbility.paymentFailed() &&
+        !(restoredAbility.counterGroupConfirmed && restoredAbility.hasInitializedPayment())) {
         state->payment.invalidate();
     }
     startOrRefresh();
@@ -1287,12 +1286,12 @@ void RuledPaymentUi::paint(CardItem *card, QPainter *painter)
         return;
     const auto &ability = localPlayer->getPlayerActions()->pendingActivatedAbility;
     const int localActorId = localPlayer->getPlayerInfo()->getId();
-    const bool acceptedGroup = ability.valid && ability.counterGroupConfirmed && ability.enginePaymentInitialized &&
-                              ability.engineTransactionId != 0 && state->pendingAbilityActivation &&
-                              state->pendingAbilityActivation->transaction_id() == ability.engineTransactionId &&
-                              state->pendingAbilityActivation->actor_player_id() == localActorId &&
-                              hasCounterGroupPayment(*state->pendingAbilityActivation);
-    const bool draftGroup = ability.valid && ability.stage == PendingActivatedAbility::Stage::Announcing &&
+    const bool acceptedGroup = ability.valid && ability.counterGroupConfirmed && ability.hasInitializedPayment() &&
+                               ability.transactionId() != 0 && state->pendingAbilityActivation &&
+                               state->pendingAbilityActivation->transaction_id() == ability.transactionId() &&
+                               state->pendingAbilityActivation->actor_player_id() == localActorId &&
+                               hasCounterGroupPayment(*state->pendingAbilityActivation);
+    const bool draftGroup = ability.valid && ability.stage() == PendingActivatedAbility::Stage::Announcing &&
                             hasCounterGroupOffers(ability);
     if (oid != 0 && (acceptedGroup || draftGroup)) {
         QStringList contributionLabels;
@@ -1523,7 +1522,7 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildActivationCommand(Pl
         return std::nullopt;
     }
     ruled::v1::RuledCommand cmd;
-    if (pendingActivatedAbility.ownedCounterGroupBegin) {
+    if (pendingActivatedAbility.ownedBegin()) {
         return std::nullopt;
     }
     if (hasCounterGroupOffers(pendingActivatedAbility) || pendingActivatedAbility.counterGroupConfirmed) {
@@ -1533,18 +1532,18 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildActivationCommand(Pl
             return std::nullopt;
         }
         auto *commit = cmd.mutable_commit_ability_activation();
-        commit->set_transaction_id(pendingActivatedAbility.engineTransactionId);
-        commit->set_expected_revision(pendingActivatedAbility.engineRevision);
+        commit->set_transaction_id(pendingActivatedAbility.transactionId());
+        commit->set_expected_revision(pendingActivatedAbility.revision());
         return cmd; // The accepted group and original indexed Phi choices are immutable in this Commit.
     }
     if (pendingActivatedAbility.chosenOpponentTargets) {
-        if (pendingActivatedAbility.stage != PendingActivatedAbility::Stage::Paying ||
+        if (pendingActivatedAbility.stage() != PendingActivatedAbility::Stage::Paying ||
             !ruledActivationCanPay(*state, player->getPlayerInfo()->getId()) ||
-            state->pendingAbilityActivation->transaction_id() != pendingActivatedAbility.engineTransactionId)
+            state->pendingAbilityActivation->transaction_id() != pendingActivatedAbility.transactionId())
             return std::nullopt;
         auto *commit = cmd.mutable_commit_ability_activation();
-        commit->set_transaction_id(pendingActivatedAbility.engineTransactionId);
-        commit->set_expected_revision(pendingActivatedAbility.engineRevision);
+        commit->set_transaction_id(pendingActivatedAbility.transactionId());
+        commit->set_expected_revision(pendingActivatedAbility.revision());
         if (const auto selected = ruledReturnTappedCreatureSelection(pendingActivatedAbility))
             *commit->mutable_return_tapped_creature() = *selected;
         return cmd; // Shared RuledPayment appends the authoritative payment selection.
