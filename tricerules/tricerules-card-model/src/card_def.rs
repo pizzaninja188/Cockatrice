@@ -142,10 +142,10 @@ impl ModalDef {
             if mode
                 .effects
                 .iter()
-                .any(SpellEffectKind::contains_kaya_schema_feature)
+                .any(SpellEffectKind::contains_nonmodal_ability_effect)
             {
                 return Err(
-                    "Kaya schema effects are not admitted in modal ability or spell modes".into(),
+                    "Nonmodal ability-only effects are not admitted in modal ability or spell modes".into(),
                 );
             }
             if mode.program.is_none() {

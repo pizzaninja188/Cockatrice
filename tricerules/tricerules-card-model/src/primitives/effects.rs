@@ -3915,7 +3915,7 @@ impl SpellEffectKind {
         }
     }
 
-    fn is_kaya_schema_feature(effect: &Self) -> bool {
+    fn requires_nonmodal_ability_frame(effect: &Self) -> bool {
         matches!(
             effect,
             Self::EachOpponentMayScry { .. }
@@ -3927,12 +3927,12 @@ impl SpellEffectKind {
         )
     }
 
-    pub(crate) fn contains_kaya_schema_feature(&self) -> bool {
-        self.contains_legacy_flat_signature(Self::is_kaya_schema_feature)
+    pub(crate) fn contains_nonmodal_ability_effect(&self) -> bool {
+        self.contains_legacy_flat_signature(Self::requires_nonmodal_ability_frame)
     }
 
-    fn is_direct_kaya_schema_feature(&self) -> bool {
-        Self::is_kaya_schema_feature(self)
+    fn is_nonmodal_ability_effect(&self) -> bool {
+        Self::requires_nonmodal_ability_frame(self)
     }
 
     pub(crate) fn contains_memory_jar_leaf(&self) -> bool {
@@ -4576,13 +4576,14 @@ impl SpellEffectKind {
         }
         if effects
             .iter()
-            .any(SpellEffectKind::contains_kaya_schema_feature)
+            .any(SpellEffectKind::contains_nonmodal_ability_effect)
             && effects.iter().any(|effect| {
-                effect.contains_kaya_schema_feature() && !effect.is_direct_kaya_schema_feature()
+                effect.contains_nonmodal_ability_effect() && !effect.is_nonmodal_ability_effect()
             })
         {
             return Err(
-                "Kaya schema effects are supported only as direct legacy ability effects".into(),
+                "Nonmodal ability-only effects are supported only as direct legacy ability effects"
+                    .into(),
             );
         }
         if effects.iter().any(Self::contains_chain_veil_permission)
@@ -4787,9 +4788,10 @@ impl SpellEffectKind {
     /// Validation entry used only after an activated modal owner has established that this is a
     /// direct legacy mode effect. Nested effects still go through ordinary `validate` calls.
     pub(crate) fn validate_activated_modal_mode_effect(&self) -> Result<(), String> {
-        if self.contains_kaya_schema_feature() {
+        if self.contains_nonmodal_ability_effect() {
             return Err(
-                "Kaya schema effects are not admitted in activated modal ability frames".into(),
+                "Nonmodal ability-only effects are not admitted in activated modal ability frames"
+                    .into(),
             );
         }
         match self {

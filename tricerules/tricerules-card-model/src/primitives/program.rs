@@ -571,24 +571,25 @@ pub struct CompiledProgram {
     pub slots: Vec<CompiledSlot>,
 }
 
-fn block_contains_kaya_schema_feature(block: &AuthoredBlock) -> bool {
+fn block_contains_nonmodal_ability_effect(block: &AuthoredBlock) -> bool {
     block
         .steps
         .iter()
         .any(|instruction| match &instruction.kind {
-            InstructionKind::Perform(effect) => effect.contains_kaya_schema_feature(),
+            InstructionKind::Perform(effect) => effect.contains_nonmodal_ability_effect(),
             InstructionKind::If { yes, no, .. } | InstructionKind::IfResult { yes, no, .. } => {
-                block_contains_kaya_schema_feature(yes) || block_contains_kaya_schema_feature(no)
+                block_contains_nonmodal_ability_effect(yes)
+                    || block_contains_nonmodal_ability_effect(no)
             }
             InstructionKind::Choose {
                 branches,
                 otherwise,
                 ..
             } => {
-                block_contains_kaya_schema_feature(otherwise)
+                block_contains_nonmodal_ability_effect(otherwise)
                     || branches
                         .iter()
-                        .any(|branch| block_contains_kaya_schema_feature(&branch.body))
+                        .any(|branch| block_contains_nonmodal_ability_effect(&branch.body))
             }
             InstructionKind::ImportCastPayment | InstructionKind::DrawCountChoice { .. } => false,
         })
@@ -668,9 +669,9 @@ impl CompiledProgram {
         cast_cost_groups: &[CastCostGroupDef],
         cast_payment_profile: Option<ProgramCastPaymentProfile>,
     ) -> Result<Self, String> {
-        if block_contains_kaya_schema_feature(&program.body) {
+        if block_contains_nonmodal_ability_effect(&program.body) {
             return Err(
-                "Kaya schema effects are supported only in direct legacy ability effect lists"
+                "Nonmodal ability-only effects are supported only in direct legacy ability effect lists"
                     .into(),
             );
         }
@@ -2292,59 +2293,16 @@ impl Compiler<'_> {
                             "ProgramInputCount is supported only by direct typed Count Program inputs".into(),
                         );
                     }
-                    let input =
-                        compile_input(effect, instruction.input.as_deref(), &names, &self.slots)?;
                     let authored_effect = effect;
-                    let lowered_effect = if authored_effect.contains_bound_card_result_count() {
-                        let mut lowered = authored_effect.as_ref().clone();
-                        lower_bound_card_result_count(&mut lowered, input, &self.slots)?;
-                        Some(Box::new(lowered))
-                    } else {
-                        None
-                    };
-                    let effect = lowered_effect.as_ref().unwrap_or(authored_effect);
-                    validate_search_result_input(
-                        effect.as_ref(),
-                        input,
+                    let (input, lowered_effect) = compile_operation_input(
+                        effect,
+                        instruction.input.as_deref(),
+                        &names,
+                        &self.slots,
+                        &steps,
                         &self.search_result_slots,
-                        &self.slots,
                     )?;
-                    validate_program_gain_life_result_count_input(
-                        effect.as_ref(),
-                        input,
-                        &self.slots,
-                    )?;
-                    validate_program_draw_result_count_input(effect.as_ref(), input, &self.slots)?;
-                    validate_program_card_result_characteristic_sum_input(
-                        effect.as_ref(),
-                        input,
-                        &self.slots,
-                    )?;
-                    validate_program_revealed_card_mana_value_input(
-                        effect.as_ref(),
-                        input,
-                        &steps,
-                        &self.slots,
-                    )?;
-                    validate_return_to_owners_hand_input(effect.as_ref(), input, &self.slots)?;
-                    validate_tap_chosen_permanents_input(
-                        effect.as_ref(),
-                        input,
-                        &steps,
-                        &self.slots,
-                    )?;
-                    validate_proliferated_choice_input(
-                        effect.as_ref(),
-                        input,
-                        &steps,
-                        &self.slots,
-                    )?;
-                    validate_proliferated_phase_out_input(
-                        effect.as_ref(),
-                        input,
-                        &steps,
-                        &self.slots,
-                    )?;
+                    let effect = lowered_effect.as_ref().unwrap_or(effect);
                     if operation_needs_affected_player(effect) {
                         self.required_inputs
                             .insert(ProgramRequiredInput::TriggerAffectedPlayer);
@@ -4149,14 +4107,88 @@ fn is_generic_program_input_count_consumer(effect: &EffectOp) -> bool {
     )
 }
 
+/// Resolve, lower and validate one operation's explicit result dependency. Cross-instruction
+/// target-schema checks follow compilation because they need the complete owner's bindings.
+fn compile_operation_input(
+    effect: &EffectOp,
+    input: Option<&str>,
+    names: &HashMap<String, ResultSlotId>,
+    slots: &[CompiledSlot],
+    steps: &[CompiledInstruction],
+    search_result_slots: &HashSet<ResultSlotId>,
+) -> Result<(Option<ResultSlotId>, Option<Box<EffectOp>>), String> {
+    let input = compile_input(effect, input, names, slots)?;
+    let lowered = if effect.contains_bound_card_result_count() {
+        let mut lowered = effect.clone();
+        lower_bound_card_result_count(&mut lowered, input, slots)?;
+        Some(Box::new(lowered))
+    } else {
+        None
+    };
+    let effect = lowered.as_deref().unwrap_or(effect);
+    match effect {
+        effect
+            if is_search_result_behold_consumer(effect)
+                || is_search_result_untap_consumer(effect) =>
+        {
+            validate_search_result_input(effect, input, search_result_slots, slots)?
+        }
+        effect if previous_effect_card_result_characteristic_sum_filter(effect).is_some() => {
+            validate_program_card_result_characteristic_sum_input(effect, input, slots)?
+        }
+        EffectOp::GainLife { .. } => {
+            validate_program_gain_life_result_count_input(effect, input, slots)?
+        }
+        EffectOp::Draw { .. } => validate_program_draw_result_count_input(effect, input, slots)?,
+        EffectOp::LoseLife { .. } => {
+            validate_program_revealed_card_mana_value_input(effect, input, steps, slots)?
+        }
+        EffectOp::ReturnToOwnersHand { .. } => {
+            validate_return_to_owners_hand_input(effect, input, slots)?
+        }
+        EffectOp::TapChosenPermanents => {
+            validate_tap_chosen_permanents_input(effect, input, steps, slots)?
+        }
+        EffectOp::ChooseProliferatedPermanents => {
+            validate_proliferated_choice_input(effect, input, steps, slots)?
+        }
+        EffectOp::PhaseOut { .. } => {
+            validate_proliferated_phase_out_input(effect, input, steps, slots)?
+        }
+        _ => {}
+    }
+    Ok((input, lowered))
+}
+
+/// Resolve and check an operation's named input in one operation-family dispatch.
+/// Producer and target-schema checks remain separate: they need the lowered effect and
+/// surrounding compiled instructions rather than only a slot's static type.
+/// Resolve and check an operation's named input in one operation-family dispatch.
+/// Producer and target-schema checks remain separate: they need the lowered effect and
+/// surrounding compiled instructions rather than only a slot's static type.
 fn compile_input(
     effect: &EffectOp,
     input: Option<&str>,
     names: &HashMap<String, ResultSlotId>,
     slots: &[CompiledSlot],
 ) -> Result<Option<ResultSlotId>, String> {
-    let token_copy_batch_consumer = is_token_copy_batch_consumer(effect);
-    let expected = match effect {
+    let require = |accepts: &dyn Fn(&ResultType) -> bool| {
+        let name = input.ok_or("instruction requires an explicitly bound input result")?;
+        let slot = names
+            .get(name)
+            .copied()
+            .ok_or_else(|| format!("input result '{name}' is not in scope"))?;
+        let actual = slots
+            .get(slot.0 as usize)
+            .ok_or_else(|| format!("input result '{name}' is unknown"))?;
+        if !accepts(&actual.result_type) {
+            return Err(format!(
+                "input result '{name}' has the wrong type for this instruction"
+            ));
+        }
+        Ok(Some(slot))
+    };
+    match effect {
         EffectOp::CreateTokens {
             who: PlayerRecipient::ProgramInputPlayer,
             ..
@@ -4164,345 +4196,269 @@ fn compile_input(
         | EffectOp::CreateDelayedTrigger {
             affected_player: Some(PlayerRecipient::ProgramInputPlayer),
             ..
-        } => Some("TargetedSpellController"),
-        EffectOp::UntapChosenPermanents | EffectOp::TapChosenPermanents => {
-            Some("PermanentSelection")
-        }
-        EffectOp::ChooseProliferatedPermanents => Some("ProliferatedPermanentCohort"),
-        EffectOp::PhaseOut {
-            subject: EffectSubject::PreviousEffectObjects,
-        } => Some("ProliferatedPermanentSelection"),
-        EffectOp::Untap {
-            subject: EffectSubject::PreviousEffectObject,
-        } => Some("PermanentSelection"),
-        effect if is_search_result_behold_consumer(effect) => Some("PermanentSelection"),
-        EffectOp::GrantKeywords {
-            subject: EffectSubject::PreviousEffectObject,
-            ..
-        } => Some("PermanentSelection"),
-        EffectOp::ReturnToOwnersHand {
-            subject: EffectSubject::PreviousEffectObject,
-        } => Some("PermanentSelection"),
-        EffectOp::AttachEquipment {
-            equipment: EffectSubject::Source,
-            creature: EffectSubject::PreviousEffectObject,
-        } => Some("ManifestedPermanent"),
-        EffectOp::AttachEquipment {
-            equipment: EffectSubject::Source,
-            creature: EffectSubject::PreviousEffectObjects,
-        }
-        | EffectOp::AttachEquipment {
-            equipment: EffectSubject::PreviousEffectObject,
-            creature: EffectSubject::Chosen(_),
-        } => Some("PermanentSelection"),
-        EffectOp::PutSelectedHandCardsOnLibraryTop => Some("HandSelection"),
-        EffectOp::RemoveAllAbilities {
-            subject: EffectSubject::PreviousEffectObject,
-            duration: ResolvingEffectDuration::WhileSourceOnBattlefield,
-        } => Some("CounteredAbilitySource"),
+        } => require(&|actual| matches!(actual, ResultType::TargetedSpellController)),
         EffectOp::ChooseCard {
             source: ChooseCardSource::CardResultCohort { .. },
             ..
-        } => Some("CardResultCohort"),
-        EffectOp::LoseLife {
-            amount: LifeAmount::RevealedCardManaValue,
-            who: PlayerRecipient::EachOpponent,
-        } => Some("RevealedCardReceipt"),
+        } => require(&|actual| {
+            matches!(
+                actual,
+                ResultType::CardResultCohort {
+                    action: CardResultAction::Mill,
+                    ..
+                }
+            )
+        }),
         effect if previous_effect_card_result_characteristic_sum_filter(effect).is_some() => {
-            Some("CardResultCohort")
+            require(&|actual| {
+                let filter = previous_effect_card_result_characteristic_sum_filter(effect)
+                    .expect("matched previous-effect characteristic sum");
+                match actual {
+                    ResultType::CardResultCohort { action, .. }
+                    | ResultType::TargetCardResultCohort { action, .. } => *action == filter.action,
+                    _ => false,
+                }
+            })
         }
         EffectOp::GainLife { amount, .. } if amount.card_result_filter().is_some() => {
-            Some("CardResultCohort")
+            require(&|actual| {
+                matches!(
+                    actual,
+                    ResultType::CardResultCohort {
+                        action: CardResultAction::Mill,
+                        ..
+                    } | ResultType::TargetCardResultCohort {
+                        action: CardResultAction::Discard,
+                        ..
+                    }
+                )
+            })
         }
         EffectOp::GainLife { amount, .. } if amount.uses_bound_card_result_count() => {
-            Some("bound card-result cohort")
+            require(&|actual| {
+                matches!(
+                    actual,
+                    ResultType::CardResultCohort { .. }
+                        | ResultType::TargetCardResultCohort { .. }
+                        | ResultType::LinkedExileCardResultCohort { .. }
+                        | ResultType::CastPaymentCohort { .. }
+                        | ResultType::DiscardResult { .. }
+                )
+            })
+        }
+        EffectOp::Draw { count, .. } if count.card_result_filter().is_some() => {
+            require(&|actual| matches!(actual, ResultType::DiscardResult { .. }))
+        }
+        EffectOp::Draw { count, .. } if count.uses_bound_card_result_count() => {
+            require(&|actual| matches!(actual, ResultType::DiscardResult { .. }))
         }
         EffectOp::DamagePlayer {
             amount: Amount::Count(CountExpression::ProgramInputCount),
             who: PlayerRecipient::Controller,
+        } => {
+            require(&|actual| matches!(actual, ResultType::Count(CountResultKind::RevealedPrefix)))
         }
-        | EffectOp::Draw {
+        EffectOp::Draw {
             who: PlayerRecipient::EachPlayer,
             count: Amount::Count(CountExpression::ProgramInputCount),
-        } => Some("Count"),
-        effect if is_generic_program_input_count_consumer(effect) => Some("Count"),
-        EffectOp::Draw { count, .. } if count.card_result_filter().is_some() => {
-            Some("DiscardResult")
+        } => require(&|actual| {
+            matches!(
+                actual,
+                ResultType::Count(CountResultKind::JoinForcesManaPaid)
+            )
+        }),
+        effect if is_generic_program_input_count_consumer(effect) => {
+            require(&|actual| matches!(actual, ResultType::Count(_)))
         }
-        EffectOp::Draw { count, .. } if count.uses_bound_card_result_count() => {
-            Some("bound DiscardResult")
+        EffectOp::RevealCohort => {
+            require(&|actual| matches!(actual, ResultType::FoundLibraryCohort))
         }
-        EffectOp::RevealCohort => Some("FoundLibraryCohort"),
-        EffectOp::ChooseCohortPartition { .. } => Some("RevealedLibraryCohort"),
-        EffectOp::MoveCohortPartition { .. } => Some("CardPartition"),
-        EffectOp::ReturnOtherLinkedExiledCards { .. } => Some("TriggerObjectLinkedExileReceipt"),
-        _ if is_exiled_object_delayed_consumer(effect) => Some("ExiledObject"),
+        EffectOp::ChooseCohortPartition { .. } => {
+            require(&|actual| matches!(actual, ResultType::RevealedLibraryCohort))
+        }
+        EffectOp::LoseLife {
+            amount: LifeAmount::RevealedCardManaValue,
+            who: PlayerRecipient::EachOpponent,
+        } => require(&|actual| matches!(actual, ResultType::RevealedCardReceipt)),
+        EffectOp::MoveCohortPartition { .. } => {
+            require(&|actual| matches!(actual, ResultType::CardPartition))
+        }
+        EffectOp::ReturnOtherLinkedExiledCards {
+            producer_ability_id,
+            linked_exile_id,
+        } => require(&|actual| {
+            matches!(
+                actual,
+                ResultType::TriggerObjectLinkedExileReceipt {
+                    producer_ability_id: receipt_producer,
+                    linked_exile_id: receipt_link,
+                    cardinality: Cardinality {
+                        min: 0,
+                        max: Some(1),
+                    },
+                } if receipt_producer == producer_ability_id
+                    && receipt_link == linked_exile_id
+            )
+        }),
+        _ if is_exiled_object_delayed_consumer(effect) => require(&|actual| {
+            matches!(
+                actual,
+                ResultType::ExiledObject {
+                    cardinality: Cardinality {
+                        min: 0,
+                        max: Some(1),
+                    },
+                }
+            )
+        }),
+        EffectOp::RemoveAllAbilities {
+            subject: EffectSubject::PreviousEffectObject,
+            duration: ResolvingEffectDuration::WhileSourceOnBattlefield,
+        } => require(&|actual| {
+            matches!(
+                actual,
+                ResultType::CounteredAbilitySource {
+                    cardinality: Cardinality {
+                        min: 0,
+                        max: Some(1),
+                    },
+                }
+            )
+        }),
+        EffectOp::AttachEquipment {
+            equipment: EffectSubject::Source,
+            creature: EffectSubject::PreviousEffectObject,
+        } => require(&|actual| {
+            matches!(
+                actual,
+                ResultType::ManifestedPermanent {
+                    cardinality: Cardinality {
+                        min: 0,
+                        max: Some(1),
+                    },
+                }
+            )
+        }),
+        EffectOp::AttachEquipment {
+            equipment: EffectSubject::Source,
+            creature: EffectSubject::PreviousEffectObjects,
+        } => require(&|actual| {
+            matches!(
+                actual,
+                ResultType::CreatedTokenBatch {
+                    cardinality: Cardinality { min: 0, max: None },
+                }
+            )
+        }),
+        EffectOp::AttachEquipment {
+            equipment: EffectSubject::PreviousEffectObject,
+            creature: EffectSubject::Chosen(_),
+        } => require(&|actual| {
+            matches!(
+                actual,
+                ResultType::PermanentSelection {
+                    chooser: PlayerRecipient::Controller,
+                    filter,
+                    cardinality: Cardinality {
+                        min: 0,
+                        max: Some(1),
+                    },
+                } if is_equipment_attach_filter(filter)
+            )
+        }),
+        EffectOp::GrantKeywords {
+            subject: EffectSubject::PreviousEffectObject,
+            ..
+        } => require(&|actual| {
+            matches!(
+                actual,
+                ResultType::PermanentSelection {
+                    cardinality: Cardinality {
+                        min: 0,
+                        max: Some(1),
+                    },
+                    ..
+                }
+            )
+        }),
         EffectOp::CreateReflexiveTrigger { .. }
             if is_counter_placement_reflexive_consumer(effect) =>
         {
-            Some("CounterPlacementReceipt")
+            require(&|actual| {
+                let counter = counter_placement_reflexive_counter(effect)
+                    .expect("counter-placement consumer has a source counter condition");
+                matches!(
+                    actual,
+                    ResultType::CounterPlacementReceipt {
+                        counter: actual_counter,
+                        object: super::ConditionObjectRef::Source,
+                        cardinality: Cardinality {
+                            min: 0,
+                            max: Some(1),
+                        },
+                    }
+                    if *actual_counter == counter
+                )
+            })
         }
         EffectOp::CreateReflexiveTrigger { .. }
             if is_source_sacrifice_reflexive_consumer(effect) =>
         {
-            Some("CardResultCohort")
-        }
-        _ if token_copy_batch_consumer => Some("TokenCopyBatch"),
-        _ => None,
-    };
-    match (expected, input) {
-        (None, None) => Ok(None),
-        (None, Some(_)) => Err("instruction does not accept an input result".into()),
-        (Some(_), None) => Err("instruction requires an explicitly bound input result".into()),
-        (Some(expected), Some(name)) => {
-            let slot = names
-                .get(name)
-                .copied()
-                .ok_or_else(|| format!("input result '{name}' is not in scope"))?;
-            let actual = slots
-                .get(slot.0 as usize)
-                .ok_or_else(|| format!("input result '{name}' is unknown"))?;
-            let matches = match effect {
-                EffectOp::CreateTokens {
-                    who: PlayerRecipient::ProgramInputPlayer,
-                    ..
-                }
-                | EffectOp::CreateDelayedTrigger {
-                    affected_player: Some(PlayerRecipient::ProgramInputPlayer),
-                    ..
-                } => matches!(actual.result_type, ResultType::TargetedSpellController),
-                EffectOp::ChooseCard {
-                    source: ChooseCardSource::CardResultCohort { .. },
-                    ..
-                } => matches!(
-                    actual.result_type,
+            require(&|actual| {
+                matches!(
+                    actual,
                     ResultType::CardResultCohort {
-                        action: CardResultAction::Mill,
-                        ..
-                    }
-                ),
-                effect
-                    if previous_effect_card_result_characteristic_sum_filter(effect).is_some() =>
-                {
-                    let filter = previous_effect_card_result_characteristic_sum_filter(effect)
-                        .expect("matched previous-effect characteristic sum");
-                    match &actual.result_type {
-                        ResultType::CardResultCohort { action, .. }
-                        | ResultType::TargetCardResultCohort { action, .. } => {
-                            *action == filter.action
-                        }
-                        _ => false,
-                    }
-                }
-                EffectOp::GainLife { amount, .. } if amount.card_result_filter().is_some() => {
-                    matches!(
-                        actual.result_type,
-                        ResultType::CardResultCohort {
-                            action: CardResultAction::Mill,
-                            ..
-                        } | ResultType::TargetCardResultCohort {
-                            action: CardResultAction::Discard,
-                            ..
-                        }
-                    )
-                }
-                EffectOp::GainLife { amount, .. } if amount.uses_bound_card_result_count() => {
-                    matches!(
-                        actual.result_type,
-                        ResultType::CardResultCohort { .. }
-                            | ResultType::TargetCardResultCohort { .. }
-                            | ResultType::LinkedExileCardResultCohort { .. }
-                            | ResultType::CastPaymentCohort { .. }
-                            | ResultType::DiscardResult { .. }
-                    )
-                }
-                EffectOp::Draw { count, .. } if count.card_result_filter().is_some() => {
-                    matches!(actual.result_type, ResultType::DiscardResult { .. })
-                }
-                EffectOp::Draw { count, .. } if count.uses_bound_card_result_count() => {
-                    matches!(actual.result_type, ResultType::DiscardResult { .. })
-                }
-                EffectOp::DamagePlayer {
-                    amount: Amount::Count(CountExpression::ProgramInputCount),
-                    who: PlayerRecipient::Controller,
-                } => matches!(
-                    actual.result_type,
-                    ResultType::Count(CountResultKind::RevealedPrefix)
-                ),
-                EffectOp::Draw {
-                    who: PlayerRecipient::EachPlayer,
-                    count: Amount::Count(CountExpression::ProgramInputCount),
-                } => matches!(
-                    actual.result_type,
-                    ResultType::Count(CountResultKind::JoinForcesManaPaid)
-                ),
-                effect if is_generic_program_input_count_consumer(effect) => {
-                    matches!(actual.result_type, ResultType::Count(_))
-                }
-                EffectOp::RevealCohort => {
-                    matches!(actual.result_type, ResultType::FoundLibraryCohort)
-                }
-                EffectOp::ChooseCohortPartition { .. } => {
-                    matches!(actual.result_type, ResultType::RevealedLibraryCohort)
-                }
-                EffectOp::LoseLife {
-                    amount: LifeAmount::RevealedCardManaValue,
-                    who: PlayerRecipient::EachOpponent,
-                } => matches!(actual.result_type, ResultType::RevealedCardReceipt),
-                EffectOp::MoveCohortPartition { .. } => {
-                    matches!(actual.result_type, ResultType::CardPartition)
-                }
-                EffectOp::ReturnOtherLinkedExiledCards {
-                    producer_ability_id,
-                    linked_exile_id,
-                } => matches!(
-                    &actual.result_type,
-                    ResultType::TriggerObjectLinkedExileReceipt {
-                        producer_ability_id: receipt_producer,
-                        linked_exile_id: receipt_link,
-                        cardinality: Cardinality {
-                            min: 0,
-                            max: Some(1),
-                        },
-                    } if receipt_producer == producer_ability_id
-                        && receipt_link == linked_exile_id
-                ),
-                _ if is_exiled_object_delayed_consumer(effect) => {
-                    matches!(
-                        actual.result_type,
-                        ResultType::ExiledObject {
-                            cardinality: Cardinality {
-                                min: 0,
-                                max: Some(1),
-                            },
-                        }
-                    )
-                }
-                EffectOp::RemoveAllAbilities {
-                    subject: EffectSubject::PreviousEffectObject,
-                    duration: ResolvingEffectDuration::WhileSourceOnBattlefield,
-                } => matches!(
-                    &actual.result_type,
-                    ResultType::CounteredAbilitySource {
+                        action: CardResultAction::Sacrifice,
+                        who: PlayerRecipient::Controller,
                         cardinality: Cardinality {
                             min: 0,
                             max: Some(1),
                         },
                     }
-                ),
-                EffectOp::AttachEquipment {
-                    equipment: EffectSubject::Source,
-                    creature: EffectSubject::PreviousEffectObject,
-                } => matches!(
-                    actual.result_type,
-                    ResultType::ManifestedPermanent {
-                        cardinality: Cardinality {
-                            min: 0,
-                            max: Some(1),
-                        },
-                    }
-                ),
-                EffectOp::AttachEquipment {
-                    equipment: EffectSubject::Source,
-                    creature: EffectSubject::PreviousEffectObjects,
-                } => matches!(
-                    &actual.result_type,
-                    ResultType::CreatedTokenBatch {
-                        cardinality: Cardinality { min: 0, max: None },
-                    }
-                ),
-                EffectOp::AttachEquipment {
-                    equipment: EffectSubject::PreviousEffectObject,
-                    creature: EffectSubject::Chosen(_),
-                } => matches!(
-                    &actual.result_type,
-                    ResultType::PermanentSelection {
-                        chooser: PlayerRecipient::Controller,
-                        filter,
-                        cardinality: Cardinality {
-                            min: 0,
-                            max: Some(1),
-                        },
-                    } if is_equipment_attach_filter(filter)
-                ),
-                EffectOp::GrantKeywords {
-                    subject: EffectSubject::PreviousEffectObject,
-                    ..
-                } => matches!(
-                    actual.result_type,
-                    ResultType::PermanentSelection {
-                        cardinality: Cardinality {
-                            min: 0,
-                            max: Some(1),
-                        },
-                        ..
-                    }
-                ),
-                EffectOp::CreateReflexiveTrigger { .. }
-                    if is_counter_placement_reflexive_consumer(effect) =>
-                {
-                    let counter = counter_placement_reflexive_counter(effect)
-                        .expect("counter-placement consumer has a source counter condition");
-                    matches!(
-                        &actual.result_type,
-                        ResultType::CounterPlacementReceipt {
-                            counter: actual_counter,
-                            object: super::ConditionObjectRef::Source,
-                            cardinality: Cardinality {
-                                min: 0,
-                                max: Some(1),
-                            },
-                        }
-                        if *actual_counter == counter
-                    )
+                )
+            })
+        }
+        EffectOp::ChooseProliferatedPermanents => require(&|actual| {
+            matches!(
+                actual,
+                ResultType::ProliferatedPermanentCohort {
+                    cardinality: Cardinality { min: 0, max: None },
                 }
-                EffectOp::CreateReflexiveTrigger { .. }
-                    if is_source_sacrifice_reflexive_consumer(effect) =>
-                {
-                    matches!(
-                        actual.result_type,
-                        ResultType::CardResultCohort {
-                            action: CardResultAction::Sacrifice,
-                            who: PlayerRecipient::Controller,
-                            cardinality: Cardinality {
-                                min: 0,
-                                max: Some(1),
-                            },
-                        }
-                    )
+            )
+        }),
+        EffectOp::PhaseOut {
+            subject: EffectSubject::PreviousEffectObjects,
+        } => require(&|actual| {
+            matches!(
+                actual,
+                ResultType::ProliferatedPermanentSelection {
+                    cardinality: Cardinality { min: 0, max: None },
                 }
-                EffectOp::ChooseProliferatedPermanents => matches!(
-                    &actual.result_type,
-                    ResultType::ProliferatedPermanentCohort {
-                        cardinality: Cardinality { min: 0, max: None },
-                    }
-                ),
-                EffectOp::PhaseOut {
-                    subject: EffectSubject::PreviousEffectObjects,
-                } => matches!(
-                    &actual.result_type,
-                    ResultType::ProliferatedPermanentSelection {
-                        cardinality: Cardinality { min: 0, max: None },
-                    }
-                ),
-                _ if token_copy_batch_consumer => {
-                    matches!(actual.result_type, ResultType::TokenCopyBatch)
-                }
-                _ => matches!(
-                    (&actual.result_type, expected),
-                    (ResultType::PermanentSelection { .. }, "PermanentSelection")
-                        | (
-                            ResultType::HandSelection { ordered: true, .. },
-                            "HandSelection"
-                        )
-                ),
-            };
-            if !matches {
-                return Err(format!(
-                    "input result '{name}' has the wrong type for this instruction"
-                ));
+            )
+        }),
+        _ if is_token_copy_batch_consumer(effect) => {
+            require(&|actual| matches!(actual, ResultType::TokenCopyBatch))
+        }
+        EffectOp::UntapChosenPermanents
+        | EffectOp::TapChosenPermanents
+        | EffectOp::Untap {
+            subject: EffectSubject::PreviousEffectObject,
+        }
+        | EffectOp::ReturnToOwnersHand {
+            subject: EffectSubject::PreviousEffectObject,
+        } => require(&|actual| matches!(actual, ResultType::PermanentSelection { .. })),
+        effect if is_search_result_behold_consumer(effect) => {
+            require(&|actual| matches!(actual, ResultType::PermanentSelection { .. }))
+        }
+        EffectOp::PutSelectedHandCardsOnLibraryTop => {
+            require(&|actual| matches!(actual, ResultType::HandSelection { ordered: true, .. }))
+        }
+        _ => {
+            if input.is_none() {
+                Ok(None)
+            } else {
+                Err("instruction does not accept an input result".into())
             }
-            Ok(Some(slot))
         }
     }
 }
