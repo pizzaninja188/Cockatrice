@@ -395,6 +395,52 @@ impl GameEngine {
         Ok(self.eligible_restricted_mana_for_spell(prepared.idx, &face))
     }
 
+    pub(super) fn spell_cast_permitted_by_emblems(
+        &self,
+        caster: PlayerId,
+        face: &CardFace,
+    ) -> bool {
+        face.is_creature
+            || !self.state.static_emblems.iter().any(|emblem| {
+                self.state.are_opponents(caster, emblem.controller)
+                    && emblem.effects.iter().any(|effect| {
+                        matches!(
+                            effect,
+                            StaticEmblemEffect::OpponentsCantCastNoncreatureSpells
+                        )
+                    })
+            })
+    }
+
+    pub(super) fn validate_pending_spell_cast_emblem_prohibition(
+        &self,
+        pending: &crate::state::PendingSpellCastState,
+    ) -> Result<(), EngineError> {
+        let prepared = &self
+            .pending_spell_cast_internal
+            .as_ref()
+            .ok_or(EngineError::Illegal("missing locked spell cost"))?
+            .prepared;
+        let face = self
+            .registry
+            .get(&prepared.card_id)
+            .and_then(|definition| definition.face(pending.announcement.face_index as usize))
+            .ok_or(EngineError::Illegal("locked spell face is unavailable"))?;
+        let face = if pending.announcement.prototyped {
+            face.prototyped_face()
+                .ok_or(EngineError::Illegal("locked spell has no Prototype mode"))?
+        } else {
+            (*face).clone()
+        };
+        if self.spell_cast_permitted_by_emblems(pending.caster, &face) {
+            Ok(())
+        } else {
+            Err(EngineError::Illegal(
+                "an emblem prohibits this opponent from casting noncreature spells",
+            ))
+        }
+    }
+
     pub(super) fn begin_spell_cast(
         &mut self,
         player: PlayerId,
@@ -598,6 +644,7 @@ impl GameEngine {
         {
             return Err(EngineError::Illegal("reserved spell source changed"));
         }
+        self.validate_pending_spell_cast_emblem_prohibition(state)?;
         let internal = self
             .pending_spell_cast_internal
             .clone()
@@ -1158,6 +1205,11 @@ impl GameEngine {
         } else {
             (*face).clone()
         };
+        if !self.spell_cast_permitted_by_emblems(player, &characteristic_face) {
+            return Err(EngineError::Illegal(
+                "an emblem prohibits this opponent from casting noncreature spells",
+            ));
+        }
         if !self.legendary_spell_cast_allowed(player, face) {
             return Err(EngineError::Illegal(
                 "legendary spell requires a legendary creature or planeswalker",

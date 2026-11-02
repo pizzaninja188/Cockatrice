@@ -261,6 +261,7 @@ impl GameEngine {
                 if pending.caster != player || pending.transaction_id != command.transaction_id {
                     return Err(EngineError::Illegal("stale spell-cast transaction"));
                 }
+                self.validate_pending_spell_cast_emblem_prohibition(pending)?;
                 let internal = self
                     .pending_spell_cast_internal
                     .as_ref()

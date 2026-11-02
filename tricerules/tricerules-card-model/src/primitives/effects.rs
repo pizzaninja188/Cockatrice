@@ -72,6 +72,8 @@ pub enum StaticEmblemEffect {
     /// activate planeswalker loyalty abilities at instant timing. The permission lives on the
     /// controller-owned command-zone emblem marker.
     PlaneswalkerLoyaltyInstantTiming,
+    /// Narset Transcendent's emblem prevents opponents from casting noncreature spells.
+    OpponentsCantCastNoncreatureSpells,
 }
 /// A kind of counter that can sit on a permanent or player (CR 122.1). `Ord` is required so
 /// [`crate`] consumers can store counters in a `BTreeMap` for deterministic iteration/serialization.
@@ -5261,6 +5263,7 @@ impl SpellEffectKind {
                     }
                     StaticEmblemEffect::PreventAllButOneDamageToYouAndYourPlaneswalkers => {}
                     StaticEmblemEffect::PlaneswalkerLoyaltyInstantTiming => {}
+                    StaticEmblemEffect::OpponentsCantCastNoncreatureSpells => {}
                 }
             }
         }

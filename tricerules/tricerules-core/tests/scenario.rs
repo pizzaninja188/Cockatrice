@@ -1329,3 +1329,6 @@ mod draw_discard_tail;
 
 #[path = "scenario/deck_coverage_narset_rebound_capability.rs"]
 mod deck_coverage_narset_rebound_capability;
+
+#[path = "scenario/deck_coverage_narset_emblem_capability.rs"]
+mod deck_coverage_narset_emblem_capability;

@@ -2408,6 +2408,9 @@ fn hand_prototype_variant(
     action: &rv1::LegalHandAction,
 ) -> Option<rv1::LegalHandAction> {
     let prototype_face = face.prototyped_face()?;
+    if !eng.spell_cast_permitted_by_emblems(pid, &prototype_face) {
+        return None;
+    }
     let mut prototype = action.clone();
     prototype.prototyped = true;
     if prototype.cast_method == rv1::CastMethod::Normal as i32 {
@@ -2430,6 +2433,9 @@ fn zone_prototype_variant(
     maximum_mana_value: Option<u32>,
 ) -> Option<rv1::LegalZoneCastAction> {
     let prototype_face = face.prototyped_face()?;
+    if !eng.spell_cast_permitted_by_emblems(pid, &prototype_face) {
+        return None;
+    }
     if maximum_mana_value.is_some_and(|maximum| prototype_face.mana_cost.mana_value() > maximum) {
         return None;
     }
@@ -2586,6 +2592,13 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
             if combat_decl_lock {
                 continue;
             }
+            let face_cast_permitted = eng.spell_cast_permitted_by_emblems(pid, face);
+            let prototype_cast_permitted = face.prototyped_face().is_some_and(|prototype_face| {
+                eng.spell_cast_permitted_by_emblems(pid, &prototype_face)
+            });
+            if !face_cast_permitted && !prototype_cast_permitted {
+                continue;
+            }
             let cost_choices = legal_spell_cost_choices(eng, pid, oid, card_id, face, None);
             let cast_ok = eng.legendary_spell_cast_allowed(pid, face)
                 && face_cast_timing_available(face, &cost_choices, instant_ok, sorcery_ok);
@@ -2716,7 +2729,9 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                 }
                 cast_actions.extend(sneak);
                 for cast_action in cast_actions {
-                    actions.push(cast_action.clone());
+                    if face_cast_permitted {
+                        actions.push(cast_action.clone());
+                    }
                     if let Some(prototype) =
                         hand_prototype_variant(eng, pid, player_index, oid, face, &cast_action)
                     {
@@ -2768,6 +2783,13 @@ pub(super) fn legal_zone_cast_actions(
         };
         for (face_index, face) in definition.faces_iter().enumerate() {
             if face.is_land {
+                continue;
+            }
+            let face_cast_permitted = eng.spell_cast_permitted_by_emblems(pid, face);
+            let prototype_cast_permitted = face.prototyped_face().is_some_and(|prototype_face| {
+                eng.spell_cast_permitted_by_emblems(pid, &prototype_face)
+            });
+            if !face_cast_permitted && !prototype_cast_permitted {
                 continue;
             }
             let methods = [
@@ -2907,7 +2929,9 @@ pub(super) fn legal_zone_cast_actions(
                         continue;
                     }
                 }
-                actions.push(action.clone());
+                if face_cast_permitted {
+                    actions.push(action.clone());
+                }
                 if let Some(prototype) =
                     zone_prototype_variant(eng, pid, player_index, oid, face, &action, None)
                 {
@@ -2958,6 +2982,9 @@ pub(super) fn legal_zone_cast_actions(
             let Some(face) = definition.face(face_index) else {
                 continue;
             };
+            if face.is_land {
+                continue;
+            }
             let normal_within_mana_value = permission
                 .max_face_mana_value
                 .is_none_or(|maximum| face.mana_cost.mana_value() <= maximum);
@@ -2966,10 +2993,13 @@ pub(super) fn legal_zone_cast_actions(
                     .max_face_mana_value
                     .is_none_or(|maximum| prototype.mana_cost.mana_value() <= maximum)
             });
-            if !normal_within_mana_value && !prototype_within_mana_value {
-                continue;
-            }
-            if face.is_land {
+            let normal_cast_permitted =
+                normal_within_mana_value && eng.spell_cast_permitted_by_emblems(pid, face);
+            let prototype_cast_permitted = face.prototyped_face().is_some_and(|prototype_face| {
+                prototype_within_mana_value
+                    && eng.spell_cast_permitted_by_emblems(pid, &prototype_face)
+            });
+            if !normal_cast_permitted && !prototype_cast_permitted {
                 continue;
             }
             let cost_choices =
@@ -3135,7 +3165,7 @@ pub(super) fn legal_zone_cast_actions(
                     continue;
                 }
             }
-            if normal_within_mana_value {
+            if normal_cast_permitted {
                 actions.push(action.clone());
             }
             if let Some(prototype) = zone_prototype_variant(
@@ -3217,6 +3247,13 @@ fn legal_library_top_face_cast_actions(
     face_index: usize,
     face: &CardFace,
 ) -> Vec<rv1::LegalZoneCastAction> {
+    let face_cast_permitted = eng.spell_cast_permitted_by_emblems(pid, face);
+    let prototype_cast_permitted = face
+        .prototyped_face()
+        .is_some_and(|prototype_face| eng.spell_cast_permitted_by_emblems(pid, &prototype_face));
+    if !face_cast_permitted && !prototype_cast_permitted {
+        return Vec::new();
+    }
     let cost_choices = legal_spell_cost_choices(
         eng,
         pid,
@@ -3360,7 +3397,10 @@ fn legal_library_top_face_cast_actions(
             return Vec::new();
         }
     }
-    let mut actions = vec![action.clone()];
+    let mut actions = Vec::new();
+    if face_cast_permitted {
+        actions.push(action.clone());
+    }
     if let Some(prototype) =
         zone_prototype_variant(eng, pid, player_index, object_id, face, &action, None)
     {
@@ -3734,7 +3774,7 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
                             v.push(format!("Play land {name} (hand idx {i})"));
                         }
                     }
-                } else if !combat_decl_lock {
+                } else if !combat_decl_lock && eng.spell_cast_permitted_by_emblems(pid, face) {
                     let costs = legal_spell_cost_choices(eng, pid, oid, cid, face, None);
                     let cast_ok = eng.legendary_spell_cast_allowed(pid, face)
                         && face_cast_timing_available(face, &costs, instant_ok, sorcery_ok);
