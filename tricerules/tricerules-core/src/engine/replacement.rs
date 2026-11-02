@@ -6110,6 +6110,7 @@ impl GameEngine {
                     Zone::Graveyard,
                     None,
                 )?;
+                self.clear_rebound_grant_for_stack_item(&stack.item);
                 self.complete_parked_resolution(stack.item, Some(0), events)
             }
             BattlefieldEntryCompletion::ResolutionEffect { .. } if stack.program.is_some() => {

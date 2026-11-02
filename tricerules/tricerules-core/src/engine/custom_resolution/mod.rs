@@ -1134,6 +1134,12 @@ impl GameEngine {
                 return Err(EngineError::Illegal("unknown resolution choice decision"));
             }
         };
+        if matches!(
+            pending.continuation,
+            ResolutionContinuation::StackExitReplacement { .. }
+        ) {
+            return self.finish_stack_exit_replacement_choice(pending, answer, decision);
+        }
         if self.copy_target_choice_pending(&pending) {
             return self.finish_copy_target_occurrence_choice(pending, answer);
         }
@@ -1528,6 +1534,11 @@ impl GameEngine {
         }
 
         match &pending.continuation {
+            ResolutionContinuation::StackExitReplacement { .. } => {
+                unreachable!(
+                    "terminal stack-exit replacement handled before object-choice validation"
+                )
+            }
             ResolutionContinuation::OptionalTriggeredAbility { .. } => {
                 unreachable!("optional triggered ability choice handled above")
             }
@@ -3712,7 +3723,11 @@ impl GameEngine {
                 previous_result,
                 &mut ev,
             )?;
-            if progress == super::resolution::ResolutionProgress::GameEnded {
+            if matches!(
+                progress,
+                super::resolution::ResolutionProgress::Parked
+                    | super::resolution::ResolutionProgress::GameEnded
+            ) {
                 return Ok(finish_with_events(self, ev));
             }
         }
@@ -3805,7 +3820,11 @@ impl GameEngine {
             operation_result,
             &mut ev,
         )?;
-        if progress == super::resolution::ResolutionProgress::GameEnded {
+        if matches!(
+            progress,
+            super::resolution::ResolutionProgress::Parked
+                | super::resolution::ResolutionProgress::GameEnded
+        ) {
             return Ok(finish_with_events(self, ev));
         }
         if self.state.pending_resolution.is_none() {

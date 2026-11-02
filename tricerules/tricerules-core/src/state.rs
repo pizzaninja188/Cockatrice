@@ -1901,6 +1901,12 @@ pub(crate) struct SearchLibraryCommanderChoice {
 #[derive(serde::Serialize, Debug, Clone)]
 #[allow(private_interfaces)] // The Teferi cohort is engine-private even though continuations are inspectable.
 pub enum ResolutionContinuation {
+    /// A terminal, already-completed spell resolution waiting only for its stack-exit replacement
+    /// order. This handler commits the saved exit and never resumes the authored instruction.
+    StackExitReplacement {
+        stack: ParkedStackResolution,
+        transaction: PendingStackExit,
+    },
     /// The targets of a targeted triggered ability were chosen as it went on the stack; this
     /// resolution-time choice decides whether its optional effects happen.
     OptionalTriggeredAbility {
@@ -2457,6 +2463,7 @@ pub(crate) struct ActivationCostCounterDebit {
 impl ResolutionContinuation {
     pub fn stack(&self) -> Option<&ParkedStackResolution> {
         match self {
+            Self::StackExitReplacement { stack, .. } => Some(stack),
             Self::OptionalTriggeredAbility { stack, .. } => Some(stack),
             Self::DrawReplacement { stack } => stack.as_ref(),
             Self::DiscardReplacement { stack }
@@ -2535,6 +2542,7 @@ impl ResolutionContinuation {
 
     pub fn stack_mut(&mut self) -> Option<&mut ParkedStackResolution> {
         match self {
+            Self::StackExitReplacement { stack, .. } => Some(stack),
             Self::OptionalTriggeredAbility { stack, .. } => Some(stack),
             Self::DrawReplacement { stack } => stack.as_mut(),
             Self::DiscardReplacement { stack }
@@ -2937,6 +2945,16 @@ where
     serializer.collect_seq(counters.iter())
 }
 
+fn serialize_hand_cast_holders_as_ordered_pairs<S>(
+    holders: &BTreeMap<(ObjectId, Option<u64>), PlayerId>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.collect_seq(holders.iter())
+}
+
 #[cfg(test)]
 mod entry_counter_serialization_tests {
     use super::*;
@@ -2971,6 +2989,93 @@ mod entry_counter_serialization_tests {
         assert_eq!(
             encoded,
             serde_json::to_value(&probe).expect("stable encoding")
+        );
+    }
+}
+
+#[cfg(test)]
+mod hand_cast_holder_serialization_tests {
+    use super::*;
+
+    #[derive(serde::Serialize)]
+    struct Probe {
+        #[serde(serialize_with = "serialize_hand_cast_holders_as_ordered_pairs")]
+        holders: BTreeMap<(ObjectId, Option<u64>), PlayerId>,
+    }
+
+    #[test]
+    fn hand_cast_holders_keep_typed_keys_in_deterministic_ordered_pairs() {
+        let inserted = [
+            ((7, None), 1),
+            ((7, Some(0)), 2),
+            ((7, Some(17)), 3),
+            ((9, Some(u64::MAX)), 4),
+        ];
+        let holders = BTreeMap::from(inserted);
+        let mut reverse_inserted_holders = BTreeMap::new();
+        for (key, holder) in inserted.iter().rev().copied() {
+            reverse_inserted_holders.insert(key, holder);
+        }
+        let probe = Probe { holders };
+        let reverse_inserted_probe = Probe {
+            holders: reverse_inserted_holders,
+        };
+
+        let expected_json = serde_json::json!({
+            "holders": [
+                [[7, null], 1],
+                [[7, 0], 2],
+                [[7, 17], 3],
+                [[9, u64::MAX], 4],
+            ]
+        });
+        let encoded = serde_json::to_value(&probe).expect("hand cast holders serialize");
+        let reverse_encoded =
+            serde_json::to_value(&reverse_inserted_probe).expect("reverse insertion serializes");
+        assert_eq!(encoded, expected_json);
+        assert_eq!(reverse_encoded, expected_json);
+        assert!(encoded["holders"][0][0][0].is_number());
+        assert!(encoded["holders"][0][0][1].is_null());
+        assert_eq!(encoded["holders"][1][0][1], serde_json::json!(0));
+        assert!(encoded["holders"][3][0][1].is_number());
+        assert!(encoded["holders"][3][1].is_number());
+
+        let expected_diagnostic_json = serde_json::json!({
+            "_type": "Probe",
+            "holders": [
+                [[7, null], 1],
+                [[7, "0"], 2],
+                [[7, "17"], 3],
+                [[9, u64::MAX.to_string()], 4],
+            ]
+        });
+        let diagnostic_encoded = crate::diagnostic_json::to_value(&probe)
+            .expect("hand cast holders serialize for diagnostics");
+        let reverse_diagnostic_encoded = crate::diagnostic_json::to_value(&reverse_inserted_probe)
+            .expect("reverse insertion serializes for diagnostics");
+        assert_eq!(diagnostic_encoded, expected_diagnostic_json);
+        assert_eq!(reverse_diagnostic_encoded, expected_diagnostic_json);
+        assert!(diagnostic_encoded["holders"][0][0][0].is_number());
+        assert!(diagnostic_encoded["holders"][0][0][1].is_null());
+        assert_eq!(
+            diagnostic_encoded["holders"][1][0][1],
+            serde_json::json!("0")
+        );
+        assert!(diagnostic_encoded["holders"][3][0][1].is_string());
+        assert!(diagnostic_encoded["holders"][3][1].is_number());
+
+        let empty_probe = Probe {
+            holders: BTreeMap::new(),
+        };
+        assert_eq!(
+            serde_json::to_value(&empty_probe).expect("empty hand cast holders serialize")
+                ["holders"],
+            serde_json::json!([])
+        );
+        assert_eq!(
+            crate::diagnostic_json::to_value(&empty_probe)
+                .expect("empty hand cast holders serialize for diagnostics")["holders"],
+            serde_json::json!([])
         );
     }
 }
@@ -3696,6 +3801,62 @@ pub struct DelayedTriggerPayload {
     pub ability: TriggeredAbilityDef,
 }
 
+/// One scheduled Rebound opportunity retained after its successful resolving spell is exiled.
+/// The source and exiled card are separate exact incarnations under CR 400.7; controller and
+/// printed-face display data are frozen while the resolving spell still exists.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct ScheduledRebound {
+    pub(crate) exiled: TriggerObjectRef,
+    pub(crate) source: TriggerObjectRef,
+    pub(crate) controller: PlayerId,
+    pub(crate) card_id: String,
+    pub(crate) card_name: String,
+    pub(crate) source_face_index: usize,
+    pub(crate) presentation: Option<tricerules_proto::ruled::v1::PresentationRef>,
+}
+
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StackExitReason {
+    Resolved,
+    DidNotResolve,
+}
+
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StackExitTail {
+    ExitOnly,
+    ResolveLogAndGraveyardSeat,
+}
+
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StackExitReplacementKind {
+    Rebound,
+    Adventure,
+    Omen,
+}
+
+/// A checked application handle bound to one exact current stack incarnation and typed exit.
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct StackExitReplacementApplication {
+    pub(crate) application_id: u32,
+    pub(crate) source: TriggerObjectRef,
+    pub(crate) kind: StackExitReplacementKind,
+    pub(crate) presentation: ReplacementSourcePresentation,
+}
+
+/// Exact metadata needed to commit one terminal stack exit after its replacement order is chosen.
+/// The parked stack cursor/program remains separately owned by ResolutionContinuation.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct PendingStackExit {
+    pub(crate) stack: StackObjectRef,
+    pub(crate) controller: PlayerId,
+    pub(crate) physical_owner: Option<PlayerId>,
+    pub(crate) exit: StackExitReason,
+    pub(crate) spell_label: String,
+    pub(crate) tail: StackExitTail,
+    pub(crate) offered_applications: Vec<StackExitReplacementApplication>,
+    pub(crate) selected_option: Option<StackExitReplacementKind>,
+}
+
 /// A closed set of event patterns observed after their underlying state transition commits.
 /// Object events compare both ObjectId and zone-change generation (CR 400.7).
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
@@ -4067,10 +4228,16 @@ pub struct GameState {
     pub prepare_spell_sources: BTreeMap<ObjectId, TriggerObjectRef>,
     /// Event-time spell choices for delayed copy triggers, keyed by the trigger's unique id.
     pub captured_spell_copies: BTreeMap<ObjectId, StackItem>,
-    /// Internal CR 702.87 grant foundation, keyed by the exact committed cast occurrence.
+    /// Internal CR 702.88 grant foundation, keyed by the exact committed cast occurrence.
     /// Keeping it in engine state makes diagnostic snapshots reflect active grants; stack-item
     /// copy snapshots do not include this separate state set.
     pub(crate) rebound_spell_grants: BTreeSet<(ObjectId, Option<u64>)>,
+    /// Actual holder of each committed physical cast that began in a hand, keyed by its exact
+    /// stack incarnation. Copies and spell snapshots do not carry this noncopiable provenance.
+    #[serde(serialize_with = "serialize_hand_cast_holders_as_ordered_pairs")]
+    pub(crate) hand_cast_holders: BTreeMap<(ObjectId, Option<u64>), PlayerId>,
+    /// C1 foundation records for Rebound replacement exits; a later upkeep consumer owns them.
+    pub(crate) scheduled_rebounds: Vec<ScheduledRebound>,
     /// One receipt for each activation-observing trigger, keyed by the trigger's virtual id.
     pub(crate) captured_activated_abilities: BTreeMap<ObjectId, CapturedActivatedAbility>,
     /// CR 406.6 / 607.2a source-incarnation links to exact objects exiled by the paired ability.

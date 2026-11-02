@@ -1679,6 +1679,7 @@ impl GameEngine {
         let mut target_triggers = pending.proposal_triggers.clone();
         let crime_events = pending.crime_events.clone();
         let origin = pending_state.original_zone;
+        let original_holder = pending_state.original_holder;
         let prepare_source = self.state.prepare_spell_sources.get(&oid).cloned();
         let payment_plan = self.prepare_cost_transaction_commit(payment_plan)?;
         let payment = self.commit_prevalidated_cost_transaction(payment_plan, None)?;
@@ -1887,6 +1888,14 @@ impl GameEngine {
             })),
         });
         let fact = self.record_spell_cast(player, oid, origin, mana_value, mana_spent);
+        if origin == Zone::Hand && prepare_source.is_none() {
+            if let Some(generation) = fact.occurrence.zone_change_generation {
+                self.state.hand_cast_holders.insert(
+                    (fact.occurrence.object_id, Some(generation)),
+                    original_holder,
+                );
+            }
+        }
         target_triggers
             .extend(self.collect_mana_spending_triggers(&fact, &payment.restricted_mana_spent));
         self.record_committed_events(&crime_events);

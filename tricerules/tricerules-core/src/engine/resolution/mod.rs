@@ -89,6 +89,7 @@ mod mana_value_limit_tests;
 mod mass;
 mod memory_jar;
 mod misc;
+mod stack_exit;
 #[cfg(test)]
 mod target_receipt_action_tests;
 pub(in crate::engine) use misc::attach_equipment_ids;
@@ -706,6 +707,7 @@ impl GameEngine {
                 })),
             });
         }
+        self.clear_rebound_grant_for_stack_item(item);
     }
 
     pub(in crate::engine) fn grant_exile_play_permission(
@@ -1763,6 +1765,7 @@ impl GameEngine {
                             Zone::Graveyard,
                             None,
                         )?;
+                        self.clear_rebound_grant_for_stack_item(&top);
                     }
                     super::replacement::BattlefieldEntryProgress::Ready(entry) => {
                         let entry = *entry;
@@ -1807,6 +1810,7 @@ impl GameEngine {
                     Zone::Graveyard
                 };
                 move_object_to_zone(&mut self.state, self.registry, top.id, zone, None)?;
+                self.clear_rebound_grant_for_stack_item(&top);
             }
             if adventure_resolves_to_exile
                 && !defer_authored_nonpermanent_exit
@@ -1865,8 +1869,14 @@ impl GameEngine {
                 events.push(ev_log(format!(
                     "{spell_label} does nothing (its \"if\" condition is no longer true, CR 603.4)."
                 )));
-                self.finish_deferred_stack_exit(&top, DeferredStackExit::DidNotResolve, events)?;
-                return Ok(ResolutionProgress::Completed);
+                let progress = self.finish_deferred_stack_exit_with_context(
+                    ParkedStackResolution::new(top.clone()),
+                    DeferredStackExit::DidNotResolve,
+                    crate::state::StackExitTail::ExitOnly,
+                    spell_label.clone(),
+                    events,
+                )?;
+                return Ok(progress);
             }
         }
 
@@ -1883,8 +1893,14 @@ impl GameEngine {
                         .all(|entry| entry.targets.is_empty())));
         if fizzle {
             events.push(ev_log(format!("{spell_label} fizzles (no legal targets).")));
-            self.finish_deferred_stack_exit(&top, DeferredStackExit::DidNotResolve, events)?;
-            return Ok(ResolutionProgress::Completed);
+            let progress = self.finish_deferred_stack_exit_with_context(
+                ParkedStackResolution::new(top.clone()),
+                DeferredStackExit::DidNotResolve,
+                crate::state::StackExitTail::ExitOnly,
+                spell_label.clone(),
+                events,
+            )?;
+            return Ok(progress);
         }
 
         // CR 603.5: a targeted triggered ability chooses targets as it is put on the stack, then
@@ -1909,8 +1925,14 @@ impl GameEngine {
                 events.push(ev_log(format!(
                     "{spell_label} has no legal optional draw under the current draw limit."
                 )));
-                self.finish_deferred_stack_exit(&top, DeferredStackExit::Resolved, events)?;
-                return Ok(ResolutionProgress::Completed);
+                let progress = self.finish_deferred_stack_exit_with_context(
+                    ParkedStackResolution::new(top.clone()),
+                    DeferredStackExit::Resolved,
+                    crate::state::StackExitTail::ExitOnly,
+                    spell_label.clone(),
+                    events,
+                )?;
+                return Ok(progress);
             }
             return Ok(self.park_optional_triggered_ability_choice(top, &spell_label, events));
         }
@@ -1940,10 +1962,14 @@ impl GameEngine {
                         "P{} declines the optional resolution choice.",
                         top.controller
                     )));
-                    self.finish_deferred_stack_exit(&top, DeferredStackExit::Resolved, events)?;
-                    events.push(ev_log(format!("{spell_label} resolves.")));
-                    seat_resolved_spell_last_in_graveyard(&mut self.state, top.id);
-                    return Ok(ResolutionProgress::Completed);
+                    let progress = self.finish_deferred_stack_exit_with_context(
+                        ParkedStackResolution::new(top.clone()),
+                        DeferredStackExit::Resolved,
+                        crate::state::StackExitTail::ResolveLogAndGraveyardSeat,
+                        spell_label.clone(),
+                        events,
+                    )?;
+                    return Ok(progress);
                 }
 
                 return Ok(self.park_optional_triggered_ability_choice(top, &spell_label, events));
@@ -1991,134 +2017,22 @@ impl GameEngine {
         ResolutionProgress::Parked
     }
 
-    /// Complete a stack exit deferred until the data-driven effect list finishes. This keeps an
-    /// instant or sorcery visible on the physical stack throughout any resolution-time choice.
-    /// Permanent spells retain their specialized entry path and make this a no-op after they
-    /// have already moved.
+    /// Compatibility hook for focused engine fixtures. Product callers pass their full parked
+    /// cursor and completion tail through `finish_deferred_stack_exit_with_context`.
+    #[cfg(test)]
     pub(super) fn finish_deferred_stack_exit(
         &mut self,
         top: &StackItem,
         exit: DeferredStackExit,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<(), EngineError> {
-        let has_stack_item = self.state.stack.iter().any(|item| item.id == top.id);
-        let has_stack_object = self
-            .state
-            .objects
-            .get(&top.id)
-            .is_some_and(|object| object.zone == Zone::Stack);
-        let is_omen_spell = self
-            .registry
-            .get(&top.card_id)
-            .is_some_and(|definition| definition.layout == Layout::Omen && top.face_index == 1);
-        // A spell copy has neither a backing object nor a second stack entry after
-        // `resolve_top_of_stack` pops it. Omen copies still need the typed Library resolution
-        // event and their controller's deterministic shuffle, so they are the sole no-object
-        // deferred exit with a Library destination. Ordinary abilities/copies retire here too.
-        let has_deferred_exit = has_stack_item
-            || has_stack_object
-            || top.ability_text.is_some()
-            || (top.is_copy && !self.state.objects.contains_key(&top.id));
-        // This is the final-exit hook; clear the exact cast even if a resolving effect already
-        // moved its physical object before the deferred-exit check.
-        self.clear_rebound_grant_for_stack_item(top);
-        if !has_deferred_exit {
-            return Ok(());
-        }
-
-        self.state.stack.retain(|item| item.id != top.id);
-        if let Some(key) = top.trigger_context.memory_jar_cohort {
-            self.state.memory_jar_cohorts.remove(&key);
-        }
-        self.state.captured_activated_abilities.remove(&top.id);
-        let released_state_trigger = self
-            .state
-            .millennium_calendar_state_trigger_stack_keys
-            .remove(&top.id)
-            .is_some();
-        let is_resolved_omen = exit == DeferredStackExit::Resolved && is_omen_spell;
-        let is_resolved_adventure = exit == DeferredStackExit::Resolved
-            && top.ability_text.is_none()
-            && self.registry.get(&top.card_id).is_some_and(|definition| {
-                definition.layout == Layout::Adventure && top.face_index == 1
-            });
-        // A resolving copy has no GameObject to move, but an explicit self-exile instruction
-        // still determines how its StackResolved event reports the copy leaving the stack.
-        let is_resolved_self_exiling_copy = exit == DeferredStackExit::Resolved
-            && top.is_copy
-            && self
-                .build_resolution_effects(top)
-                .0
-                .iter()
-                .any(|entry| matches!(entry.effect, SpellEffectKind::ExileResolvingSpell));
-        let physical_owner = (!top.is_copy)
-            .then(|| self.state.objects.get(&top.id).map(|object| object.owner))
-            .flatten();
-        let shuffle_player = physical_owner.unwrap_or(top.controller);
-        let destination = if is_resolved_omen {
-            rv1::StackResolveDestination::Library
-        } else if top.cast_method.exiles_on_leave_stack()
-            || is_resolved_adventure
-            || is_resolved_self_exiling_copy
-        {
-            rv1::StackResolveDestination::Exile
-        } else {
-            rv1::StackResolveDestination::Graveyard
-        };
-        events.push(rv1::RuledEvent {
-            ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
-                object_id: top.id,
-                destination: destination as i32,
-                owner_player_id: physical_owner,
-            })),
-        });
-        if has_stack_object {
-            move_object_to_zone(
-                &mut self.state,
-                self.registry,
-                top.id,
-                if is_resolved_omen {
-                    Zone::Library
-                } else if top.cast_method.exiles_on_leave_stack() || is_resolved_adventure {
-                    Zone::Exile
-                } else {
-                    Zone::Graveyard
-                },
-                None,
-            )?;
-            if is_resolved_adventure {
-                self.grant_adventure_play_permission(top)?;
-            }
-        }
-        if is_resolved_omen {
-            shuffle_player_library_for_current_command(&mut self.state, shuffle_player);
-            events.push(ev_log(format!(
-                "P{} shuffles the resolving Omen into P{}'s library.",
-                top.controller, shuffle_player
-            )));
-        }
-        if released_state_trigger {
-            self.check_millennium_calendar_state_triggers();
-        }
-        Ok(())
-    }
-
-    fn grant_adventure_play_permission(&mut self, top: &StackItem) -> Result<(), EngineError> {
-        let source_label = self
-            .registry
-            .get(&top.card_id)
-            .map(|definition| definition.name.clone())
-            .unwrap_or_else(|| "Adventure".to_string());
-        self.grant_exile_play_permission(
-            top.controller,
-            top.id,
-            &source_label,
-            crate::state::ExilePlayPermissionGrant::printed(
-                ExilePlayPermissionScope::CastFace(0),
-                false,
-            ),
-        )?;
-        Ok(())
+    ) -> Result<ResolutionProgress, EngineError> {
+        self.finish_deferred_stack_exit_with_context(
+            ParkedStackResolution::new(top.clone()),
+            exit,
+            crate::state::StackExitTail::ExitOnly,
+            String::new(),
+            events,
+        )
     }
 
     /// Rebuild a stack item's primitive effect list and display label.
@@ -2376,6 +2290,9 @@ impl GameEngine {
         if self.state.is_terminal() {
             return Ok(ResolutionProgress::GameEnded);
         }
+        let completed_effect_index = u32::try_from(resolution_effects.len()).map_err(|_| {
+            EngineError::ProgramInvariant("completed effect-list cursor exceeds its stored index")
+        })?;
         let controller = top.controller;
         for (index, entry) in resolution_effects.into_iter().enumerate().skip(start) {
             let ResolutionEffect {
@@ -2516,12 +2433,18 @@ impl GameEngine {
             }
             previous_effect_result = effect_result;
         }
-        self.finish_deferred_stack_exit(top, DeferredStackExit::Resolved, events)?;
-        events.push(ev_log(format!("{spell_label} resolves.")));
-        // CR 608.2m: the spell lands in its owner's graveyard *after* its effects, so it sits
-        // beneath anything those effects put there (e.g. a self-targeted Tome Scour's five cards).
-        seat_resolved_spell_last_in_graveyard(&mut self.state, top.id);
-        Ok(ResolutionProgress::Completed)
+        self.finish_deferred_stack_exit_with_context(
+            ParkedStackResolution {
+                item: top.clone(),
+                resume_effect_index: Some(completed_effect_index),
+                previous_result: previous_effect_result,
+                program: None,
+            },
+            DeferredStackExit::Resolved,
+            crate::state::StackExitTail::ResolveLogAndGraveyardSeat,
+            spell_label.to_string(),
+            events,
+        )
     }
 
     /// Complete CR 610.3 paired one-shot work discovered by a committed zone transition. This is
@@ -3058,6 +2981,9 @@ impl GameEngine {
                     .as_ref()
                     .map(|pending| &pending.continuation)
                 {
+                    Some(ResolutionContinuation::StackExitReplacement { .. }) => {
+                        self.stack_exit_replacement_choice_event()
+                    }
                     Some(ResolutionContinuation::ProliferateReplacement { .. }) => {
                         self.proliferate_replacement_choice_event()
                     }

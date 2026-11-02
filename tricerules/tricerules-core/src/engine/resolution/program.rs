@@ -1000,10 +1000,18 @@ impl GameEngine {
                 }
 
                 let label = self.build_resolution_effects(top).1;
-                self.finish_deferred_stack_exit(top, DeferredStackExit::Resolved, events)?;
-                events.push(ev_log(format!("{label} resolves.")));
-                seat_resolved_spell_last_in_graveyard(&mut self.state, top.id);
-                return Ok(ResolutionProgress::Completed);
+                return self.finish_deferred_stack_exit_with_context(
+                    ParkedStackResolution {
+                        item: top.clone(),
+                        resume_effect_index: None,
+                        previous_result: previous_result.clone(),
+                        program: Some(program_state),
+                    },
+                    DeferredStackExit::Resolved,
+                    crate::state::StackExitTail::ResolveLogAndGraveyardSeat,
+                    label,
+                    events,
+                );
             }
 
             let instruction = &block.steps[instruction_index];

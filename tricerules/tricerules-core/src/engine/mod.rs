@@ -1912,6 +1912,8 @@ impl GameEngine {
             prepare_spell_sources: Default::default(),
             captured_spell_copies: Default::default(),
             rebound_spell_grants: BTreeSet::new(),
+            hand_cast_holders: BTreeMap::new(),
+            scheduled_rebounds: Vec::new(),
             captured_activated_abilities: Default::default(),
             linked_exile_records: Default::default(),
             pending_linked_exile_play: None,

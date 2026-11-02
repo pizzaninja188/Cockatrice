@@ -122,6 +122,9 @@ impl GameEngine {
             self.state
                 .rebound_spell_grants
                 .remove(&(occurrence.object_id, occurrence.zone_change_generation));
+            self.state
+                .hand_cast_holders
+                .remove(&(occurrence.object_id, occurrence.zone_change_generation));
         }
     }
 }
