@@ -612,7 +612,7 @@ bool PlayerActions::tryRuledLandPlayFaceMenu(CardItem *card)
                              faces.at(sel).zoneChangeGeneration, resolutionPromptId);
 }
 
-bool PlayerActions::tryRuledOpeningBottomCard(CardItem *card)
+bool PlayerActions::tryRuledOpeningHandCard(CardItem *card)
 {
     if (!card || !RuledActions::isRuledGame(player->getGame())) {
         return false;
@@ -627,9 +627,15 @@ bool PlayerActions::tryRuledOpeningBottomCard(CardItem *card)
         return false;
     }
     RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
-    if (!handler || handler->getOpeningUiKind() != RuledClientState::RuledOpeningUiKind::BottomLibrary) {
+    if (!handler) {
         return false;
     }
+    if (handler->getOpeningUiKind() == RuledClientState::RuledOpeningUiKind::HandActions) {
+        handler->selectOpeningHandCard(player->getPlayerInfo()->getId(), card->getId());
+        return true;
+    }
+    if (handler->getOpeningUiKind() != RuledClientState::RuledOpeningUiKind::BottomLibrary)
+        return false;
     const int ruledHandIndex =
         RuledActions::resolveHandActionIndex(handler, ruled::v1::HAND_ACTION_OPENING_BOTTOM, card);
     if (ruledHandIndex < 0 || !handler->isHandActionLegal(ruled::v1::HAND_ACTION_OPENING_BOTTOM, ruledHandIndex)) {

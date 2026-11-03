@@ -397,6 +397,11 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
                 }
             }
         }
+        if (zone && zone->getName() == ZoneNames::HAND && owner && owner->getPlayerInfo()->getLocal()) {
+            const int order = ruledHandler->openingHandSelectionOrder(owner->getPlayerInfo()->getId(), getId());
+            if (order > 0)
+                paintNumberEllipse(order, 14, QColor(128, 0, 255), -1, 1, painter);
+        }
         // Resolution pick (Brainstorm hand, Gifts Ungiven deck search, Gifts Ungiven opponent popup):
         // number selected cards in click order using cyan.
         // Gate on the pick's own zone before touching the id: candidate ids are only unique
@@ -966,7 +971,7 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
                 return;
             }
             if (stationaryLeft && owner->getPlayerInfo()->getLocal() && actions && zone &&
-                zone->getName() == ZoneNames::HAND && actions->tryRuledOpeningBottomCard(this)) {
+                zone->getName() == ZoneNames::HAND && actions->tryRuledOpeningHandCard(this)) {
                 update();
                 AbstractCardItem::mouseReleaseEvent(event);
                 return;

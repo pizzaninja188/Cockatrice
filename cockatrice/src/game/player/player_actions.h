@@ -209,7 +209,7 @@ public:
     [[nodiscard]] bool isRuledCounterGroupPaymentRetryable() const;
     bool retryRuledCounterGroupPayment(quint64 transactionId, quint64 revision);
     bool tryToggleRuledCleanupDiscard(CardItem *card);
-    bool tryRuledOpeningBottomCard(CardItem *card);
+    bool tryRuledOpeningHandCard(CardItem *card);
     bool tryRuledResolutionHandPickCard(CardItem *card);
     /// CR 603.3b: click a card in the trigger-ordering popup to put that ability on the stack next.
     bool tryRuledTriggerOrderCard(CardItem *card);

@@ -76,6 +76,7 @@ public:
         OpeningChooseFirst,
         OpeningMulligan,
         OpeningBottom,
+        OpeningHandActions,
     };
 
     Q_ENUM(PromptMode)
@@ -134,6 +135,7 @@ public:
         std::optional<bool> costSelectionConfirmable = std::nullopt;
         /// AbilityAnnouncement only: allow explicit retry of the current accepted payment preview.
         bool activationPaymentRetryable = false;
+        bool openingHandConfirmable = false;
     };
 
     /// Independent async inputs that all mean "mid-cast / mid-activation" and OR into
@@ -218,6 +220,8 @@ signals:
     void ruledOpeningMulliganRedrawRequested();
     void ruledOpeningBottomCancelRequested();
     void ruledOpeningBottomDoneRequested();
+    void ruledOpeningHandCancelRequested();
+    void ruledOpeningHandDoneRequested();
     void undoLandTapRequested();
     void ruledResolutionHandPickConfirmRequested();
     void ruledCostSelectionConfirmRequested();

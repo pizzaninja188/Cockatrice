@@ -3234,13 +3234,27 @@ fn opening_actions(eng: &GameEngine, pid: PlayerId) -> Option<rv1::OpeningAction
         actions.stage = rv1::OpeningStage::ChooseStartingPlayer as i32;
         actions.deciding_player_id = op.chooser;
         if pid == op.chooser {
-            actions.eligible_starting_player_ids = eng.state.players.iter().map(|p| p.id).collect();
+            actions.eligible_starting_player_ids = eng
+                .state
+                .players
+                .iter()
+                .filter(|p| !p.has_lost)
+                .map(|p| p.id)
+                .collect();
         }
     } else if let Some((actor, remaining)) = op.bottom {
         actions.stage = rv1::OpeningStage::Bottom as i32;
         actions.deciding_player_id = actor;
         if pid == actor {
             actions.bottom_cards_remaining = remaining;
+        }
+    } else if let Some(window) = &op.hand_window {
+        actions.stage = rv1::OpeningStage::HandActions as i32;
+        actions.deciding_player_id = window.actor;
+        if pid == window.actor && eng.state.pending_resolution.is_none() {
+            actions.gemstone_caverns = eng.opening_gemstone_cards(pid);
+            actions.exile_candidates = eng.opening_hand_cards(pid);
+            actions.can_finish_hand_actions = true;
         }
     } else if let Some(actor) = op.mulligan_actor {
         actions.stage = rv1::OpeningStage::Mulligan as i32;
@@ -3252,6 +3266,13 @@ fn opening_actions(eng: &GameEngine, pid: PlayerId) -> Option<rv1::OpeningAction
 }
 
 fn opening_legal_labels(eng: &GameEngine, pid: PlayerId, op: &OpeningSequence) -> Vec<String> {
+    if let Some(window) = &op.hand_window {
+        return vec![if window.actor == pid {
+            "Take an opening-hand action or finish.".into()
+        } else {
+            "Wait: another player is taking opening-hand actions.".into()
+        }];
+    }
     if op.starting_player.is_none() {
         if pid == op.chooser {
             return vec![

@@ -3,6 +3,8 @@
 #[path = "../common/mod.rs"]
 mod common;
 
+#[path = "../deck_coverage_gemstone_caverns.rs"]
+mod deck_coverage_gemstone_caverns;
 #[path = "../deck_coverage_tamiyo_field_researcher.rs"]
 mod deck_coverage_tamiyo_field_researcher;
 

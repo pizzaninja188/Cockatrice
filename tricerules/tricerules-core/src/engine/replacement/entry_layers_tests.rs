@@ -7151,7 +7151,7 @@ fn compleated_grouped_entry_identity_invalidations_reject_atomically_for_single_
     let mut unchanged_events = Vec::new();
     assert!(
         !unchanged_engine
-            .refresh_exact_return_entry_counters(&mut unchanged_events)
+            .refresh_single_entry_counters(&mut unchanged_events)
             .expect("unchanged exact-return entry refresh is valid"),
         "unchanged grouped identities retain their current offer"
     );
@@ -7258,7 +7258,7 @@ fn compleated_grouped_entry_identity_invalidations_reject_atomically_for_single_
         let mut events = Vec::new();
         assert!(
             matches!(
-                engine.refresh_exact_return_entry_counters(&mut events),
+                engine.refresh_single_entry_counters(&mut events),
                 Err(EngineError::Illegal(_))
             ),
             "direct refresh rejects {} before changing the parked operation",

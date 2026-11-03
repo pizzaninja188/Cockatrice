@@ -212,7 +212,7 @@ impl GameEngine {
 
     /// Reconcile a single entry-counter transaction without restarting already-applied
     /// replacements. This also runs when an independent observer restores the saved prompt.
-    pub(in crate::engine) fn refresh_exact_return_entry_counters(
+    pub(in crate::engine) fn refresh_single_entry_counters(
         &mut self,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
@@ -223,10 +223,11 @@ impl GameEngine {
             return Ok(false);
         };
         self.guard_suspended_observer_entry_counter_payload(&pending, Some(&replacement))?;
-        let Some(observed) = self.begun_exact_owner_exile_return(&pending, Some(&replacement))
-        else {
+        let observed = self.begun_exact_owner_exile_return(&pending, Some(&replacement));
+        let opening = self.state.opening.is_some() && self.pending_opening_hand_entry().is_some();
+        if observed.is_none() && !opening {
             return Ok(false);
-        };
+        }
         let ResolutionContinuation::EntryCounterReplacement { resume } = &pending.continuation
         else {
             return Ok(false);
@@ -242,11 +243,17 @@ impl GameEngine {
         let PendingReplacementEvent::Counters(mut batch) = replacement else {
             return Ok(false);
         };
+        if opening {
+            self.validate_pending_opening_hand_entry()?;
+            self.validate_entry_counter_replacement_payload(&pending, resume, &batch)?;
+        }
         let stack = stack.clone();
         let mut event = (**event).clone();
         let completion = completion.clone();
         let owner = event.destination_controller;
-        if !self.exact_owner_return_entrant_is_current(observed, owner) {
+        if observed
+            .is_some_and(|observed| !self.exact_owner_return_entrant_is_current(observed, owner))
+        {
             self.state.pending_resolution = None;
             self.state.pending_replacement_event = None;
             // A newer incarnation must never receive this old entry's provisional copy state.

@@ -1,0 +1,31 @@
+// Oracle c0adbddc-b070-4c5f-afe0-0474c72a9251; pinned local Oracle bulk.
+// Official EOE release notes and CR 103.6/103.6a govern the opening procedure.
+// The shared conditional mana output replaces {C} with one W/U/B/R/G, never adds to it.
+(
+  id: "gemstone_caverns",
+  name: "Gemstone Caverns",
+  face_id: "gemstone_caverns",
+  supertypes: ["Legendary"],
+  types: ["Land"],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: GemstoneCavernsOpening,
+    ),
+  ],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(
+        options: [(c: 1)],
+        conditional: Some((
+          condition: SourceCounterCount(counter: Luck, min: Some(1)),
+          options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)],
+        )),
+      )],
+    ),
+  ],
+)

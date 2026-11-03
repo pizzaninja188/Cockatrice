@@ -1,8 +1,15 @@
 use super::events::{ev_log, ev_phase, ev_priority_changed};
 use super::legal_actions::fill_legal;
+use super::replacement::{
+    append_entry_counter_placement, BattlefieldEntryProgress, PendingReplacementEvent,
+};
 use super::resolution::{deal_opening_card, move_object_to_zone, permanent_moved_event};
 use super::*;
 use crate::state::next_unresolved_from;
+use crate::state::{
+    BattlefieldEntryCompletion, BattlefieldEntryEvent, EntryCounterReplacementResume,
+    EntryCounterSource,
+};
 
 pub(crate) fn shuffle_player_library(state: &mut GameState, player_idx: usize, mix: u64) {
     let mut rng = rand::rngs::StdRng::seed_from_u64(mix);
@@ -79,6 +86,20 @@ impl GameEngine {
             .next_in_game_player_idx(index)
             .ok_or(EngineError::Illegal("no player in game"))?;
         let next_player = self.state.players[next].id;
+        // Retire this pregame transaction before handing the window to another seat.
+        // Its entry/counter choices have committed neither the source nor the exile move.
+        let abandoned = self
+            .pending_opening_hand_entry()
+            .and_then(|(event, completion)| {
+                matches!(completion,BattlefieldEntryCompletion::OpeningHandAction {actor,source,..}
+                if *actor==player && event.object_id==source.object_id)
+                .then(|| event.clone())
+            });
+        if let Some(event) = abandoned {
+            self.restore_abandoned_battlefield_entry(&event)?;
+            self.state.pending_resolution = None;
+            self.state.pending_replacement_event = None;
+        }
         let Some(opening) = self.state.opening.as_mut() else {
             return Ok(());
         };
@@ -93,6 +114,13 @@ impl GameEngine {
             opening.starting_player = Some(next_player);
             self.state.starting_player_idx = next;
             self.state.active_player_idx = next;
+        }
+        if let Some(window) = opening.hand_window.as_mut() {
+            window.finished[index] = true;
+            if window.actor == player {
+                Self::opening_advance_hand_window(self, next, events)?;
+            }
+            return Ok(());
         }
         if opening.mulligan_actor == Some(player)
             || opening
@@ -112,6 +140,11 @@ impl GameEngine {
         cmd: &rv1::RuledCommand,
     ) -> Result<RuledEventBatch, EngineError> {
         use rv1::ruled_command::Cmd;
+        if self.state.pending_resolution.is_some() {
+            return Err(EngineError::Illegal(
+                "finish the opening entry choice first",
+            ));
+        }
         let mut events = Vec::new();
         match cmd.cmd.as_ref() {
             Some(Cmd::ChooseStartingPlayer(ch)) => {
@@ -133,6 +166,9 @@ impl GameEngine {
                 self.state
                     .player_idx(sp)
                     .ok_or(EngineError::UnknownPlayer(sp))?;
+                if self.state.players[self.state.player_idx(sp).unwrap()].has_lost {
+                    return Err(EngineError::Illegal("starting player has left the game"));
+                }
                 {
                     let op = self
                         .state
@@ -140,6 +176,7 @@ impl GameEngine {
                         .as_mut()
                         .ok_or(EngineError::Illegal("opening"))?;
                     op.starting_player = Some(sp);
+                    op.original_starting_player = Some(sp);
                     op.mulligan_actor = Some(sp);
                 }
                 let sp_idx = self.state.player_idx(sp).unwrap();
@@ -239,7 +276,10 @@ impl GameEngine {
                             events,
                             legal_by_player: Default::default(),
                         };
-                        self.apply_sbas(&mut b.events)?;
+                        if self.state.opening.is_none() {
+                            self.apply_sbas(&mut b.events)?;
+                            self.flush_staged_triggers(&mut b.events);
+                        }
                         fill_legal(&mut b, self);
                         return Ok(b);
                     }
@@ -299,19 +339,386 @@ impl GameEngine {
                     Self::opening_pick_next_or_finish(self, idx, &mut events)?;
                 }
             }
+            Some(Cmd::FinishOpeningHandActions(_)) => {
+                let index = self.state.player_idx(player).unwrap();
+                let window = self
+                    .state
+                    .opening
+                    .as_mut()
+                    .and_then(|op| op.hand_window.as_mut())
+                    .ok_or(EngineError::Illegal("not taking opening-hand actions"))?;
+                if window.actor != player {
+                    return Err(EngineError::Illegal("not your opening-hand actions"));
+                }
+                window.finished[index] = true;
+                Self::opening_advance_hand_window(
+                    self,
+                    (index + 1) % self.state.players.len(),
+                    &mut events,
+                )?;
+            }
+            Some(Cmd::BeginWithGemstoneCaverns(command)) => {
+                let reference = |value: &rv1::CostObjectRef| TriggerObjectRef {
+                    object_id: value.object_id,
+                    zone_change_generation: value.zone_change_generation,
+                    controller_at_event: player,
+                };
+                let source = reference(
+                    command
+                        .source
+                        .as_ref()
+                        .ok_or(EngineError::Illegal("missing opening source"))?,
+                );
+                let exile = command.exile.as_ref().map(reference);
+                self.validate_opening_hand_entry(player, source, exile)?;
+                let card_id = self.state.objects[&source.object_id].card_id.clone();
+                let item = StackItem {
+                    source_zone_change: source.zone_change_generation,
+                    ..StackItem::entry_context(
+                        source.object_id,
+                        player,
+                        card_id,
+                        "opening-hand action",
+                    )
+                };
+                let mut event = BattlefieldEntryEvent::new(
+                    source.object_id,
+                    player,
+                    self.player_life_snapshot(),
+                );
+                // Presentation of the accepted public proposed entry, not a CR 103.6b reveal
+                // instruction. Only this source is announced; the later exile choice stays private.
+                if let Some(mut reveal) = super::reveals::reveal_choice(
+                    &self.state,
+                    self.registry,
+                    &[source.object_id],
+                    source.object_id,
+                    "Gemstone Caverns opening action",
+                ) {
+                    reveal.reveal_id = format!(
+                        "opening:{}:{}:{}",
+                        source.object_id, source.zone_change_generation, self.state.command_index
+                    );
+                    events.push(rv1::RuledEvent {
+                        ev: Some(rv1::ruled_event::Ev::CardsRevealed(reveal.clone())),
+                    });
+                    event.entry_reveal_receipts.push(reveal);
+                }
+                append_entry_counter_placement(
+                    &mut event,
+                    player,
+                    [(CounterKind::Luck, 1)],
+                    EntryCounterSource::OpeningHandAction {
+                        source_object_id: source.object_id,
+                        source_zone_change_generation: source.zone_change_generation,
+                    },
+                    false,
+                );
+                match self.begin_battlefield_entry(
+                    item,
+                    event,
+                    BattlefieldEntryCompletion::OpeningHandAction {
+                        actor: player,
+                        source,
+                        exile,
+                    },
+                    &mut events,
+                )? {
+                    BattlefieldEntryProgress::Parked => {}
+                    BattlefieldEntryProgress::Ready(event) => {
+                        self.commit_opening_hand_entry(player, source, exile, *event, &mut events)?
+                    }
+                    BattlefieldEntryProgress::Skipped(event) => {
+                        self.restore_skipped_battlefield_entry(&event)?;
+                        self.continue_opening_hand_actions(player, &mut events)?;
+                    }
+                }
+            }
             _ => return Err(EngineError::Illegal("illegal command during opening")),
         }
-        events.push(self.ev_zone_view_sync_tracked());
-        let mut b = RuledEventBatch {
+        let b = RuledEventBatch {
             payment_preview: None,
             resolution_prompt_state: None,
             replace_stack_presentation: false,
             events,
             legal_by_player: Default::default(),
         };
-        self.apply_sbas(&mut b.events)?;
-        fill_legal(&mut b, self);
-        Ok(b)
+        self.settle_command_batch(b)
+    }
+
+    pub(super) fn pending_opening_hand_entry(
+        &self,
+    ) -> Option<(&BattlefieldEntryEvent, &BattlefieldEntryCompletion)> {
+        if let Some(PendingReplacementEvent::BattlefieldEntry(entry)) =
+            &self.state.pending_replacement_event
+        {
+            if matches!(
+                entry.completion,
+                BattlefieldEntryCompletion::OpeningHandAction { .. }
+            ) {
+                return Some((&entry.event, &entry.completion));
+            }
+        }
+        if let Some(ResolutionContinuation::EntryCounterReplacement { resume }) = self
+            .state
+            .pending_resolution
+            .as_ref()
+            .map(|pending| &pending.continuation)
+        {
+            if let EntryCounterReplacementResume::Single {
+                event, completion, ..
+            } = resume.as_ref()
+            {
+                if matches!(
+                    completion,
+                    BattlefieldEntryCompletion::OpeningHandAction { .. }
+                ) {
+                    return Some((event, completion));
+                }
+            }
+        }
+        None
+    }
+
+    pub(super) fn validate_pending_opening_hand_entry(&self) -> Result<(), EngineError> {
+        let (_, completion) = self
+            .pending_opening_hand_entry()
+            .ok_or(EngineError::Illegal("no opening entry continuation"))?;
+        let BattlefieldEntryCompletion::OpeningHandAction {
+            actor,
+            source,
+            exile,
+        } = completion
+        else {
+            unreachable!()
+        };
+        self.validate_opening_hand_entry(*actor, *source, *exile)
+    }
+
+    fn validate_opening_hand_entry(
+        &self,
+        actor: PlayerId,
+        source: TriggerObjectRef,
+        exile: Option<TriggerObjectRef>,
+    ) -> Result<(), EngineError> {
+        let window = self
+            .state
+            .opening
+            .as_ref()
+            .and_then(|opening| opening.hand_window.as_ref())
+            .ok_or(EngineError::Illegal("not taking opening-hand actions"))?;
+        if window.actor != actor
+            || self
+                .state
+                .player_idx(actor)
+                .is_none_or(|index| self.state.players[index].has_lost)
+        {
+            return Err(EngineError::Illegal("not your opening-hand actions"));
+        }
+        let current = |reference: TriggerObjectRef| {
+            self.opening_hand_cards(actor).iter().any(|card| {
+                card.object.as_ref().is_some_and(|object| {
+                    object.object_id == reference.object_id
+                        && object.zone_change_generation == reference.zone_change_generation
+                })
+            })
+        };
+        if !current(source)
+            || !self.opening_gemstone_cards(actor).iter().any(|card| {
+                card.object
+                    .as_ref()
+                    .is_some_and(|object| object.object_id == source.object_id)
+            })
+        {
+            return Err(EngineError::Illegal(
+                "opening source is stale or ineligible",
+            ));
+        }
+        let has_other = self.opening_hand_cards(actor).iter().any(|card| {
+            card.object
+                .as_ref()
+                .is_some_and(|object| object.object_id != source.object_id)
+        });
+        if has_other != exile.is_some()
+            || exile.is_some_and(|reference| {
+                reference.object_id == source.object_id || !current(reference)
+            })
+        {
+            return Err(EngineError::Illegal(
+                "choose an exact other hand card to exile if available",
+            ));
+        }
+        Ok(())
+    }
+
+    pub(super) fn commit_opening_hand_entry(
+        &mut self,
+        actor: PlayerId,
+        source: TriggerObjectRef,
+        exile: Option<TriggerObjectRef>,
+        event: BattlefieldEntryEvent,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        self.validate_opening_hand_entry(actor, source, exile)?;
+        if event.object_id != source.object_id || event.destination_controller != actor {
+            return Err(EngineError::Illegal("opening entry identity mismatch"));
+        }
+        self.commit_battlefield_entry(event, None, events)?;
+        events.push(permanent_moved_event(
+            &self.state,
+            source.object_id,
+            actor,
+            rv1::permanent_moved::Destination::Battlefield,
+        ));
+        if let Some(reference) = exile {
+            move_object_to_zone(
+                &mut self.state,
+                self.registry,
+                reference.object_id,
+                Zone::Exile,
+                None,
+            )?;
+            events.push(permanent_moved_event(
+                &self.state,
+                reference.object_id,
+                actor,
+                rv1::permanent_moved::Destination::Exile,
+            ));
+        }
+        events.push(ev_log(format!(
+            "P{actor} begins the game with Gemstone Caverns on the battlefield."
+        )));
+        self.continue_opening_hand_actions(actor, events)
+    }
+
+    pub(super) fn continue_opening_hand_actions(
+        &mut self,
+        actor: PlayerId,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let index = self
+            .state
+            .player_idx(actor)
+            .ok_or(EngineError::UnknownPlayer(actor))?;
+        Self::opening_advance_hand_window(self, index, events)
+    }
+
+    pub(super) fn opening_hand_cards(&self, player: PlayerId) -> Vec<rv1::OpeningHandCard> {
+        let Some(index) = self.state.player_idx(player) else {
+            return vec![];
+        };
+        if self.state.players[index].has_lost {
+            return vec![];
+        }
+        self.state.players[index]
+            .hand
+            .iter()
+            .enumerate()
+            .filter_map(|(slot, &id)| {
+                let object = self.state.objects.get(&id)?;
+                (object.zone == Zone::Hand && object.owner == player).then(|| {
+                    rv1::OpeningHandCard {
+                        hand_index: slot as u32,
+                        object: Some(self.payment_object_ref(id)),
+                    }
+                })
+            })
+            .collect()
+    }
+
+    pub(super) fn opening_gemstone_cards(&self, player: PlayerId) -> Vec<rv1::OpeningHandCard> {
+        let Some(opening) = &self.state.opening else {
+            return vec![];
+        };
+        if opening.original_starting_player.is_none()
+            || opening.original_starting_player == Some(player)
+        {
+            return vec![];
+        }
+        self.opening_hand_cards(player)
+            .into_iter()
+            .filter(|card| {
+                card.object
+                    .as_ref()
+                    .and_then(|reference| self.state.objects.get(&reference.object_id))
+                    .and_then(|object| self.registry.get(&object.card_id))
+                    .is_some_and(|definition| {
+                        definition
+                            .primary_face()
+                            .static_abilities
+                            .iter()
+                            .any(|ability| {
+                                matches!(
+                                    ability.definition,
+                                    StaticAbilityDef::GemstoneCavernsOpening
+                                )
+                            })
+                    })
+            })
+            .collect()
+    }
+
+    fn opening_advance_hand_window(
+        eng: &mut GameEngine,
+        start_index: usize,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let count = eng.state.players.len();
+        for offset in 0..count {
+            let index = (start_index + offset) % count;
+            let player = eng.state.players[index].id;
+            let finished = eng
+                .state
+                .opening
+                .as_ref()
+                .and_then(|op| op.hand_window.as_ref())
+                .ok_or(EngineError::Illegal("no opening-hand window"))?
+                .finished[index];
+            if finished {
+                continue;
+            }
+            if eng.opening_gemstone_cards(player).is_empty() {
+                eng.state
+                    .opening
+                    .as_mut()
+                    .unwrap()
+                    .hand_window
+                    .as_mut()
+                    .unwrap()
+                    .finished[index] = true;
+                continue;
+            }
+            eng.state
+                .opening
+                .as_mut()
+                .unwrap()
+                .hand_window
+                .as_mut()
+                .unwrap()
+                .actor = player;
+            eng.state.priority_idx = index;
+            // The existing opening phase covers all pre-turn procedures. The structured
+            // OpeningActions stage distinguishes these actions from mulligan/bottoming.
+            events.push(ev_phase(eng, rv1::PhaseId::OpeningMulligan));
+            events.push(ev_priority_changed(eng));
+            return Ok(());
+        }
+        let starting = eng
+            .state
+            .opening
+            .take()
+            .unwrap()
+            .starting_player
+            .ok_or(EngineError::Illegal("opening has no first live player"))?;
+        let index = eng.state.player_idx(starting).unwrap();
+        eng.state.active_player_idx = index;
+        eng.state.priority_idx = index;
+        eng.state.starting_player_idx = index;
+        eng.state.turn_step = TurnStep::Upkeep;
+        eng.state.turn = 1;
+        events.push(ev_phase(eng, rv1::PhaseId::Upkeep));
+        events.push(ev_priority_changed(eng));
+        Ok(())
     }
 
     /// After a mulligan (redraw): offer the next unresolved player a decision —
@@ -354,19 +761,20 @@ impl GameEngine {
             op.resolved.iter().all(|&r| r)
         };
         if done {
-            let sp = {
-                let op = eng.state.opening.take().unwrap();
-                op.starting_player.ok_or(EngineError::Illegal("opening?"))?
-            };
-            let sp_idx = eng.state.player_idx(sp).unwrap();
-            eng.state.active_player_idx = sp_idx;
-            eng.state.priority_idx = sp_idx;
-            eng.state.starting_player_idx = sp_idx;
-            eng.state.turn_step = TurnStep::Upkeep;
-            eng.state.turn = 1;
-            events.push(ev_phase(eng, rv1::PhaseId::Upkeep));
-            events.push(ev_priority_changed(eng));
-            return Ok(());
+            let original = eng
+                .state
+                .opening
+                .as_ref()
+                .unwrap()
+                .original_starting_player
+                .ok_or(EngineError::Illegal("missing original starting player"))?;
+            let index = eng.state.player_idx(original).unwrap();
+            eng.state.opening.as_mut().unwrap().hand_window =
+                Some(crate::state::OpeningHandWindow {
+                    actor: original,
+                    finished: vec![false; eng.state.players.len()],
+                });
+            return Self::opening_advance_hand_window(eng, index, events);
         }
         {
             let op = eng.state.opening.as_mut().unwrap();

@@ -419,6 +419,10 @@ void TabGame::connectToGameEventHandler()
                 game->getGameEventHandler()->ruled(), &RuledClientState::openingBottomCancel);
         connect(gamePromptWidget, &GamePromptWidget::ruledOpeningBottomDoneRequested,
                 game->getGameEventHandler()->ruled(), &RuledClientState::openingBottomDone);
+        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningHandCancelRequested,
+                game->getGameEventHandler()->ruled(), &RuledClientState::openingHandCancel);
+        connect(gamePromptWidget, &GamePromptWidget::ruledOpeningHandDoneRequested,
+                game->getGameEventHandler()->ruled(), &RuledClientState::openingHandDone);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::openingBottomUiChanged, this,
                 [this](int, int) { refreshRuledPromptState(); });
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::resolutionHandPickUiChanged, this,
@@ -949,6 +953,11 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.mode = PromptMode::OpeningBottom;
         state.required = h->openingBottomRequiredCount();
         state.selected = h->openingBottomSelectedCount();
+    } else if (opening == OpeningKind::HandActions) {
+        state.mode = PromptMode::OpeningHandActions;
+        state.selected = h->openingGemstoneSelected >= 0 ? 1 : 0;
+        state.openingHandConfirmable = h->openingHandConfirmable();
+        state.text = h->openingHandPromptText();
     } else if (h->localPlayerMustCleanupDiscard()) {
         state.mode = PromptMode::CleanupDiscard;
         state.required = h->cleanupDiscardRequiredCount();

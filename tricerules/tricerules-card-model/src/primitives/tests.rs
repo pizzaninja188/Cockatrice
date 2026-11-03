@@ -23034,3 +23034,30 @@ fn tamiyo_hand_cast_emblem_is_a_closed_static_permission() {
         "no player/zone/cost knobs broaden the fixed hand permission"
     );
 }
+
+#[test]
+fn gemstone_opening_profile_is_closed_and_requires_a_legendary_land() {
+    let source = r#"(id:"synthetic_caverns",name:"Synthetic Caverns",face_id:"synthetic_caverns",
+        supertypes:["Legendary"],types:["Land"],static_abilities:[(
+            ability_id:"opening",presentation:Fallback,definition:GemstoneCavernsOpening)])"#;
+    crate::CardRegistry::from_chunks_and_tokens(&[source], &[])
+        .expect("closed Gemstone Caverns opening profile is supported");
+    for invalid in [
+        source.replace("types:[\"Land\"]", "types:[\"Artifact\"]"),
+        source.replace("supertypes:[\"Legendary\"]", "supertypes:[]"),
+        source.replace(
+            "GemstoneCavernsOpening",
+            "GemstoneCavernsOpening(counter: Charge)",
+        ),
+    ] {
+        assert!(crate::CardRegistry::from_chunks_and_tokens(&[&invalid], &[]).is_err());
+    }
+}
+
+#[test]
+fn gemstone_luck_counter_has_its_own_round_trip_and_display_label() {
+    let luck: super::CounterKind = ron::from_str("Luck").expect("luck is a named counter kind");
+    assert_eq!(luck.label(), "luck");
+    assert_eq!(ron::to_string(&luck).unwrap(), "Luck");
+    assert!(luck.validate().is_ok());
+}

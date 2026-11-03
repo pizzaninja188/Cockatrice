@@ -1,0 +1,47 @@
+{
+  "format_version": 1,
+  "oracle_id": "c0adbddc-b070-4c5f-afe0-0474c72a9251",
+  "spans": [
+    {
+      "face_id": "gemstone_caverns",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "gemstone_caverns",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "deck_registry::deck_coverage_gemstone_caverns::gemstone_caverns_exact_identity_opening_profile_and_conditional_mana",
+      "covers": "Exact Oracle identity, Legendary Land, closed opening profile, tap-only unrestricted C versus WUBRG conditional mana and both source lines."
+    },
+    {
+      "test": "scenario deck_coverage_gemstone_caverns::gemstone_actual_ordinary_land_play_has_no_luck_and_only_colorless",
+      "covers": "gemstone actual ordinary land play has no luck and only colorless"
+    },
+    {
+      "test": "scenario deck_coverage_gemstone_caverns::gemstone_actual_luck_threshold_produces_each_color_once_without_colorless_or_scaling",
+      "covers": "gemstone actual luck threshold produces each color once without colorless or scaling"
+    },
+    {
+      "test": "scenario deck_coverage_gemstone_caverns::gemstone_actual_removing_last_luck_restores_only_colorless",
+      "covers": "gemstone actual removing last luck restores only colorless"
+    },
+    {
+      "test": "scenario deck_coverage_gemstone_caverns::gemstone_actual_opening_uses_printed_profile_and_exact_exile_then_finishes",
+      "covers": "gemstone actual opening uses printed profile and exact exile then finishes"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

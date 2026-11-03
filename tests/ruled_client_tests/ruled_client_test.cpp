@@ -18935,6 +18935,98 @@ TEST_F(RuledClientTest, ChoicesForAnotherPlayerNeverPromptUs)
 // Opening sequence commands
 // ---------------------------------------------------------------------------------------
 
+TEST_F(RuledClientTest, GemstoneOpeningStageProvidesItsOwnPromptInsteadOfBottoming)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *opening = (*batch.mutable_legal_by_player())[kLocalPlayer].mutable_opening();
+    opening->set_stage(ruled::v1::OPENING_STAGE_HAND_ACTIONS);
+    opening->set_deciding_player_id(kLocalPlayer);
+    opening->set_can_finish_hand_actions(true);
+    auto *source = opening->add_gemstone_caverns();
+    source->set_hand_index(2);
+    source->mutable_object()->set_object_id(801);
+    source->mutable_object()->set_zone_change_generation(7);
+    apply(batch);
+    EXPECT_NE(state->getOpeningUiKind(), RuledClientState::RuledOpeningUiKind::None);
+    EXPECT_NE(state->getOpeningUiKind(), RuledClientState::RuledOpeningUiKind::BottomLibrary);
+    EXPECT_EQ(state->openingBottomRequiredCount(), 0);
+}
+
+TEST_F(RuledClientTest, GemstoneOpeningUsesExactPhysicalBindingsAndClearsSelectionsOnRefresh)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *opening = (*batch.mutable_legal_by_player())[kLocalPlayer].mutable_opening();
+    opening->set_stage(ruled::v1::OPENING_STAGE_HAND_ACTIONS);
+    opening->set_deciding_player_id(kLocalPlayer);
+    opening->set_can_finish_hand_actions(true);
+    auto *source = opening->add_gemstone_caverns();
+    source->set_hand_index(2);
+    source->mutable_object()->set_object_id(801);
+    source->mutable_object()->set_zone_change_generation(7);
+    opening->add_exile_candidates()->CopyFrom(*source);
+    auto *exile = opening->add_exile_candidates();
+    exile->set_hand_index(4);
+    exile->mutable_object()->set_object_id(802);
+    exile->mutable_object()->set_zone_change_generation(11);
+    auto *map = batch.add_events()->mutable_hand_slot_map();
+    for (auto [serverId, slot] : {std::pair{90,2}, std::pair{91,4}}) {
+        auto *entry = map->add_entries();
+        entry->set_player_id(kLocalPlayer); entry->set_server_card_id(serverId); entry->set_hand_index(slot);
+    }
+    apply(batch);
+    state->selectOpeningHandCard(kOpponent,90);
+    state->selectOpeningHandCard(kLocalPlayer,2); // visual position is never an identity fallback
+    EXPECT_EQ(state->openingGemstoneSelected,-1);
+    state->selectOpeningHandCard(kLocalPlayer,90);
+    EXPECT_EQ(state->openingHandSelectionOrder(kLocalPlayer,90),1);
+    EXPECT_FALSE(state->openingHandConfirmable());
+    state->openingHandDone();
+    EXPECT_TRUE(host.sentCommands.empty());
+    state->selectOpeningHandCard(kLocalPlayer,91);
+    EXPECT_EQ(state->openingHandSelectionOrder(kLocalPlayer,91),2);
+    ASSERT_TRUE(state->openingHandConfirmable());
+    state->openingHandDone();
+    state->openingHandDone();
+    ASSERT_EQ(host.sentCommands.size(),1);
+    const auto &command = host.sentCommands[0].begin_with_gemstone_caverns();
+    EXPECT_EQ(command.source().SerializeAsString(),source->object().SerializeAsString());
+    EXPECT_EQ(command.exile().SerializeAsString(),exile->object().SerializeAsString());
+    host.answerPendingAck(false);
+    EXPECT_TRUE(state->openingHandConfirmable());
+    apply(batch);
+    EXPECT_EQ(state->openingGemstoneSelected,-1);
+    EXPECT_EQ(state->openingExileSelected,-1);
+    state->openingHandDone();
+    ASSERT_EQ(host.sentCommands.size(),2);
+    EXPECT_TRUE(host.sentCommands[1].has_finish_opening_hand_actions());
+}
+
+TEST_F(RuledClientTest, GemstoneOpeningSoleCardNeedsNoExileAndOtherSeatsReceiveNoAction)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *opening = (*batch.mutable_legal_by_player())[kLocalPlayer].mutable_opening();
+    opening->set_stage(ruled::v1::OPENING_STAGE_HAND_ACTIONS);
+    opening->set_deciding_player_id(kLocalPlayer);
+    opening->set_can_finish_hand_actions(true);
+    auto *source=opening->add_gemstone_caverns();
+    source->set_hand_index(0); source->mutable_object()->set_object_id(901);
+    source->mutable_object()->set_zone_change_generation(2);
+    opening->add_exile_candidates()->CopyFrom(*source);
+    auto *map=batch.add_events()->mutable_hand_slot_map()->add_entries();
+    map->set_player_id(kLocalPlayer); map->set_server_card_id(51); map->set_hand_index(0);
+    apply(batch);
+    state->selectOpeningHandCard(kLocalPlayer,51);
+    state->openingHandDone();
+    ASSERT_EQ(host.sentCommands.size(),1);
+    EXPECT_TRUE(host.sentCommands[0].has_begin_with_gemstone_caverns());
+    EXPECT_FALSE(host.sentCommands[0].begin_with_gemstone_caverns().has_exile());
+    opening->set_deciding_player_id(kOpponent);
+    apply(batch);
+    EXPECT_EQ(state->getOpeningUiKind(),RuledClientState::RuledOpeningUiKind::None);
+    EXPECT_TRUE(state->openingGemstoneCards.isEmpty());
+    EXPECT_EQ(state->choiceWaitingPlayerId,kOpponent);
+}
+
 TEST_F(RuledClientTest, OpeningBottomSendsIndicesAdjustedForPriorRemovals)
 {
     ruled::v1::RuledEventBatch batch;

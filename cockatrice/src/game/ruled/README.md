@@ -42,7 +42,10 @@ Reach it with `game->getGameEventHandler()->ruled()`.
 Holds: legal hand actions per `HandActionKind`, engine targeting tables (by hand slot/face and by
 ability), the identity maps (§ ARCHITECTURE identity glossary), combat staging and confirmed
 combat state, stack order and annotations, the single pending player choice, the caster-private
-engine `PendingSpellCast`, and the opening (choose-first / mulligan / bottom) state.
+engine `PendingSpellCast`, and the opening (choose-first / mulligan / bottom / hand actions) state.
+`ruled_opening_hand.cpp` stages Gemstone Caverns and its distinct exile choice from exact engine
+offers. Physical clicks resolve through the hand-slot map; Begin/Finish submit those references,
+and every new legal snapshot clears the local selection. The prompt owns no card legality.
 
 Members are public on purpose — this is a shared view model, and an accessor pair per field would
 be noise. The `[[nodiscard]]` query methods are the read API consumers should prefer.

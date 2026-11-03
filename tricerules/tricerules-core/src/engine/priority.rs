@@ -1428,7 +1428,7 @@ impl GameEngine {
         self.refresh_chaos_warp_departure(events)?;
         self.refresh_entry_timestamp_departure(&departed_objects, events)?;
         self.refresh_observer_aura_departure(events)?;
-        self.refresh_exact_return_entry_counters(events)?;
+        self.refresh_single_entry_counters(events)?;
         self.refresh_participating_entry_departure(&departed_objects, events)?;
         self.refresh_entry_opponent_departure(&departed_objects, events)?;
         self.refresh_entry_creature_type_departure(&departed_objects, events)?;

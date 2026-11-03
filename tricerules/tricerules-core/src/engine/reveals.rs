@@ -142,6 +142,20 @@ pub(super) fn active_reveals(eng: &GameEngine) -> Vec<rv1::CardsRevealed> {
         return Vec::new();
     }
     let mut reveals = Vec::new();
+    // Opening entries may park first on entry replacements and then on counter replacements.
+    // The immutable accepted source receipt remains public through both forms; the other hand
+    // card chosen for the later exile instruction remains private until its actual zone move.
+    if matches!(
+        eng.state
+            .pending_resolution
+            .as_ref()
+            .map(|pending| &pending.continuation),
+        Some(ResolutionContinuation::EntryCounterReplacement { .. })
+    ) {
+        if let Some((event, _)) = eng.pending_opening_hand_entry() {
+            reveals.extend(event.entry_reveal_receipts.iter().cloned());
+        }
+    }
     reveals.extend(eng.draw_action_reveal());
     // The selected hand cards are public only after all players have committed. Keep every
     // immutable owner receipt through destination choices, including an observer interruption.

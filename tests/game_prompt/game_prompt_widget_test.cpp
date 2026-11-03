@@ -1234,6 +1234,33 @@ TEST_F(GamePromptWidgetTest, OpeningBottomDoneAppearsOnlyOnAnExactSelection)
     EXPECT_FALSE(btn("openingBottomDoneButton")->isHidden());
 }
 
+TEST_F(GamePromptWidgetTest, GemstoneOpeningButtonsConfirmSourceAndExileOrFinish)
+{
+    GamePromptWidget::RuledPromptState prompt;
+    prompt.mode=PromptMode::OpeningHandActions;
+    prompt.text="Choose Gemstone Caverns or finish.";
+    prompt.openingHandConfirmable=true;
+    widget->setLocalPlayerHasPriority(true);
+    widget->setRuledPromptState(prompt);
+    EXPECT_TRUE(btn("passPriorityButton")->isHidden());
+    EXPECT_FALSE(btn("openingBottomDoneButton")->isHidden());
+    EXPECT_EQ(btn("openingBottomDoneButton")->text(),"Finish");
+    QSignalSpy done(widget.get(),&GamePromptWidget::ruledOpeningHandDoneRequested);
+    btn("openingBottomDoneButton")->click();
+    EXPECT_EQ(done.count(),1);
+    prompt.selected=1; prompt.openingHandConfirmable=false;
+    widget->setRuledPromptState(prompt);
+    EXPECT_TRUE(btn("openingBottomDoneButton")->isHidden());
+    EXPECT_FALSE(btn("openingBottomCancelButton")->isHidden());
+    prompt.openingHandConfirmable=true;
+    widget->setRuledPromptState(prompt);
+    EXPECT_EQ(btn("openingBottomDoneButton")->text(),"Begin");
+    EXPECT_FALSE(btn("openingBottomDoneButton")->isHidden());
+    QSignalSpy cancel(widget.get(),&GamePromptWidget::ruledOpeningHandCancelRequested);
+    btn("openingBottomCancelButton")->click();
+    EXPECT_EQ(cancel.count(),1);
+}
+
 TEST_F(GamePromptWidgetTest, OpeningMulliganButtonsUseEnginePermissions)
 {
     GamePromptWidget::RuledPromptState prompt;

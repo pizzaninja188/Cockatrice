@@ -1213,6 +1213,10 @@ impl GameEngine {
     /// the leading run of triggers sharing a controller, which is what makes the per-player prompts
     /// fall out as successive rounds with no extra bookkeeping.
     pub(super) fn flush_staged_triggers(&mut self, events: &mut Vec<rv1::RuledEvent>) {
+        // CR 103.6 / 117.5: opening-hand actions finish before the first priority/SBA boundary.
+        if self.state.opening.is_some() {
+            return;
+        }
         loop {
             // A parked resolution outranks: its spell is still resolving, and its triggers wait for
             // the next time a player would receive priority (CR 603.3). A parked *target* choice

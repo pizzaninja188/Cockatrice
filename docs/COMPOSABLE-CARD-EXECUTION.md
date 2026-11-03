@@ -289,6 +289,30 @@ Rebound observer. The emblem persists after Tamiyo leaves; draw replacements fin
 creation. Omniscience demonstrates the same hand-casting mechanic, but its battlefield permission
 provider and complete card are not admitted by this emblem-only implementation.
 
+`GemstoneCavernsOpening` is a closed Legendary Land profile for Gemstone Caverns' fixed
+opening-hand entry, luck counter, and following exile instruction. The post-mulligan window
+begins only after every keep and bottoming action; its immutable chosen starter controls
+eligibility even if that player leaves. Live seats act in turn order and may use successive
+copies or finish (CR 103.1, 103.6/103.6a). A source and, when available, one distinct other hand
+card carry exact ObjectId/generation receipts. The shared battlefield-entry and counter planner
+runs before entry commits, then the other card is exiled face up. Parked entry/counter choices
+retain the receipts and accepted replacement history; departure retires the actor's transaction
+or refreshes surviving replacement offers. The announced source has a public presentation receipt
+while parked; this is presentation of the proposed entry, not a CR 103.6b reveal instruction.
+The distinct exile choice stays private until its move. No priority, mana ability, land-play quota,
+or cast occurs during opening actions. Legend SBAs and waiting triggers run before the first
+upkeep priority (CR 117.5, 704.5j; official Time Spiral Remastered notes).
+
+The new `Luck` counter reuses `SourceCounterCount` and `ProduceMana` conditional output, as Leafkin
+Druid already does for its creature threshold. Without luck Caverns offers only C; with one or
+more luck it offers exactly one of W/U/B/R/G, replacing C without scaling or commander-color
+restriction. Ordinary land play and a new battlefield incarnation grant no luck. The sole-kept-card
+entry without an available exile is an Oracle instruction-order/CR 609.3 inference. The specialized
+profile does not admit Leyline opening effects or another card. Private protocol offers and client
+hand clicks use the current hand-slot map plus the offered generation-bound references; reconnect
+restores both the opening stage and a parked replacement prompt. Automated captures and headless
+two-client transport checks are distinct from deferred hands-on GUI acceptance.
+
 The bounded 2026-10-19 Scalestorm Summoner port admits one finite `ProgramIf` condition:
 `MaximumPower` among the ability controller's creatures, with a positive `min`, no `max`, default
 remaining filter fields, and no observed-object exclusion. It migrates only `triggered_01` from the

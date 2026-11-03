@@ -168,12 +168,18 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     connect(openingBottomCancelButton, &QPushButton::clicked, this, [this]() {
         if (effectiveMode() == PromptMode::CostSelection) {
             emit ruledCostSelectionCancelRequested();
+        } else if (effectiveMode() == PromptMode::OpeningHandActions) {
+            emit ruledOpeningHandCancelRequested();
         } else {
             emit ruledOpeningBottomCancelRequested();
         }
     });
-    connect(openingBottomDoneButton, &QPushButton::clicked,
-            this, &GamePromptWidget::ruledOpeningBottomDoneRequested);
+    connect(openingBottomDoneButton, &QPushButton::clicked, this, [this]() {
+        if (effectiveMode() == PromptMode::OpeningHandActions)
+            emit ruledOpeningHandDoneRequested();
+        else
+            emit ruledOpeningBottomDoneRequested();
+    });
 
     resolutionHandPickConfirmButton = new QPushButton(this);
     resolutionHandPickConfirmButton->setObjectName("resolutionHandPickConfirmButton");
@@ -407,6 +413,7 @@ GamePromptWidget::PromptMode GamePromptWidget::effectiveMode() const
         case PromptMode::OpeningChooseFirst:
         case PromptMode::OpeningMulligan:
         case PromptMode::OpeningBottom:
+        case PromptMode::OpeningHandActions:
         case PromptMode::CleanupDiscard:
             return promptState.mode;
         default:
@@ -525,6 +532,9 @@ void GamePromptWidget::applyPromptStateText()
         }
         case PromptMode::OpeningBottom:
             setPromptText(tr("Put %1 card(s) to the bottom of your library.").arg(promptState.required));
+            return;
+        case PromptMode::OpeningHandActions:
+            setPromptText(promptState.text);
             return;
         case PromptMode::ClickChoice:
         case PromptMode::ResolutionPick:
@@ -853,9 +863,13 @@ void GamePromptWidget::updateCombatButtonsVisibility()
     openingKeepButton->setVisible(mode == PromptMode::OpeningMulligan && promptState.openingCanKeep);
     openingMulliganButton->setVisible(mode == PromptMode::OpeningMulligan && promptState.openingCanRedraw);
     openingBottomCancelButton->setVisible((mode == PromptMode::OpeningBottom && promptState.selected >= 1) ||
+                                          (mode == PromptMode::OpeningHandActions && promptState.selected >= 1) ||
                                           (mode == PromptMode::CostSelection && promptState.canCancel));
-    openingBottomDoneButton->setVisible(mode == PromptMode::OpeningBottom && promptState.required > 0 &&
-                                        promptState.selected == promptState.required);
+    openingBottomDoneButton->setText(mode == PromptMode::OpeningHandActions
+        ? (promptState.selected ? tr("Begin") : tr("Finish")) : tr("Done"));
+    openingBottomDoneButton->setVisible((mode == PromptMode::OpeningBottom && promptState.required > 0 &&
+                                        promptState.selected == promptState.required) ||
+                                       (mode == PromptMode::OpeningHandActions && promptState.openingHandConfirmable));
     const bool activationPaymentRetryMode = mode == PromptMode::AbilityAnnouncement && promptState.activationPayment &&
                                             promptState.activationPaymentRetryable;
     resolutionHandPickConfirmButton->setText(activationPaymentRetryMode ? tr("Retry") : tr("Confirm"));

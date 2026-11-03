@@ -1627,6 +1627,7 @@ impl GameEngine {
                     ));
                 }
                 StaticAbilityDef::DuplicantImprint { .. } => {}
+                StaticAbilityDef::GemstoneCavernsOpening => {}
             }
             for effect in &mut self.state.continuous_effects[static_start..] {
                 if effect.trigger_grant_origin.is_none() {

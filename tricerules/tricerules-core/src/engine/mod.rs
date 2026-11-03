@@ -231,6 +231,8 @@ mod multikicker_tests;
 #[cfg(test)]
 mod hand_free_cast_tests;
 mod opening;
+#[cfg(test)]
+mod opening_gemstone_tests;
 mod payment;
 mod phasing;
 mod preparation;
@@ -1888,10 +1890,12 @@ impl GameEngine {
             Some(OpeningSequence {
                 chooser,
                 starting_player: None,
+                original_starting_player: None,
                 mulligan_actor: None,
                 bottom: None,
                 mulligans_taken: vec![0; player_ids.len()],
                 resolved: vec![false; player_ids.len()],
+                hand_window: None,
             })
         };
         let chooser_idx = opening
@@ -2648,7 +2652,8 @@ impl GameEngine {
         debug_assert!(
             self.state.staged_trigger_groups.is_empty()
                 || self.state.blocking_choice().is_some()
-                || self.state.pending_spell_cast.is_some(),
+                || self.state.pending_spell_cast.is_some()
+                || self.state.opening.is_some(),
             "triggers left staged with nothing blocking them"
         );
         result
@@ -2928,6 +2933,11 @@ impl GameEngine {
             ));
         }
         if self.state.opening.is_some() {
+            if let Some(Cmd::SubmitResolutionChoice(choice)) = cmd.cmd.as_ref() {
+                self.validate_pending_opening_hand_entry()?;
+                let batch = self.submit_resolution_choice(player, choice)?;
+                return self.settle_command_batch(batch);
+            }
             return self.apply_opening_command(player, cmd);
         }
         let mana_ability_damage_choice_is_pending = self
@@ -3161,7 +3171,10 @@ impl GameEngine {
             Some(Cmd::Mulligan(_)) => {
                 return Err(EngineError::Illegal("mulligan only during opening"));
             }
-            Some(Cmd::ChooseStartingPlayer(_)) | Some(Cmd::PutOpeningHandOnBottom(_)) => {
+            Some(Cmd::ChooseStartingPlayer(_))
+            | Some(Cmd::PutOpeningHandOnBottom(_))
+            | Some(Cmd::BeginWithGemstoneCaverns(_))
+            | Some(Cmd::FinishOpeningHandActions(_)) => {
                 return Err(EngineError::Illegal("opening-only command"));
             }
             Some(Cmd::Concede(_)) => self.concede_batch(player),
@@ -3279,7 +3292,8 @@ impl GameEngine {
         // cards and the choice prompt. Spell payment is another incomplete rules transaction: a
         // mana ability can lower life to 0 during payment, but CR 601.2h must finish before SBAs
         // eliminate that caster or change priority.
-        if self.state.pending_resolution.is_none()
+        if self.state.opening.is_none()
+            && self.state.pending_resolution.is_none()
             && self.state.pending_spell_cast.is_none()
             && self.state.pending_attack_declaration.is_none()
             && self.state.pending_ability_activation.is_none()

@@ -117,6 +117,16 @@ fn entry_counter_sources_match(
 ) -> bool {
     match (proposed, placement) {
         (
+            Some(EntryCounterSource::OpeningHandAction {
+                source_object_id: proposed_object,
+                source_zone_change_generation: proposed_generation,
+            }),
+            EntryCounterSource::OpeningHandAction {
+                source_object_id: placement_object,
+                source_zone_change_generation: placement_generation,
+            },
+        ) => proposed_object == placement_object && proposed_generation == placement_generation,
+        (
             Some(EntryCounterSource::EntryReplacement(proposed)),
             EntryCounterSource::EntryReplacement(placement),
         ) => proposed == placement,
@@ -2239,7 +2249,7 @@ impl GameEngine {
             })
     }
 
-    fn restore_abandoned_battlefield_entry(
+    pub(super) fn restore_abandoned_battlefield_entry(
         &mut self,
         event: &BattlefieldEntryEvent,
     ) -> Result<(), EngineError> {
@@ -2753,6 +2763,10 @@ impl GameEngine {
     ) -> Result<RuledEventBatch, EngineError> {
         self.restore_skipped_battlefield_entry(&event)?;
         match completion {
+            BattlefieldEntryCompletion::OpeningHandAction { actor, .. } => {
+                self.continue_opening_hand_actions(actor, &mut events)?;
+                Ok(finish_with_events(self, events))
+            }
             BattlefieldEntryCompletion::PermanentSpell { .. } => {
                 let owner = self
                     .state
@@ -4195,6 +4209,14 @@ impl GameEngine {
             event
         };
         match completion {
+            BattlefieldEntryCompletion::OpeningHandAction {
+                actor,
+                source,
+                exile,
+            } => {
+                self.commit_opening_hand_entry(actor, source, exile, event, &mut events)?;
+                Ok(finish_with_events(self, events))
+            }
             BattlefieldEntryCompletion::LandPlay {
                 player,
                 land_name,

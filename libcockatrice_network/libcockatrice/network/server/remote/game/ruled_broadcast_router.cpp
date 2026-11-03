@@ -276,6 +276,10 @@ void RuledBroadcastRouter::enqueuePendingResolutionChoiceForParticipant(Server_A
     auto *batch = snapshot.mutable_batch();
     if (opening) {
         batch->CopyFrom(pendingOpeningState);
+        // CR 103.6 actions can park on entry/counter replacements before the first turn.
+        // Restore the opening cursor and the still-active choice together.
+        if (pendingResolutionChoice)
+            batch->add_events()->mutable_resolution_choice_required()->CopyFrom(*pendingResolutionChoice);
     } else if (casting) {
         batch->CopyFrom(pendingAnnouncementState);
         if (pendingResolutionChoice && pendingResolutionChoice->choice_kind() != ruled::v1::CHOICE_KIND_SPECIAL_CAST) {

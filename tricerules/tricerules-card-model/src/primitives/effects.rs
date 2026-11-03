@@ -117,6 +117,8 @@ pub enum CounterKind {
     /// Named time counters used by The Millennium Calendar and suspend cards such as Riftwing
     /// Cloudskate (CR 702.62). The name carries no additional behavior by itself.
     Time,
+    /// Gemstone Caverns' ordinary named counter; its mana ability interprets the count.
+    Luck,
 }
 
 impl CounterKind {
@@ -140,6 +142,7 @@ impl CounterKind {
             CounterKind::Night => "night".into(),
             CounterKind::Doom => "doom".into(),
             CounterKind::Time => "time".into(),
+            CounterKind::Luck => "luck".into(),
         }
     }
 

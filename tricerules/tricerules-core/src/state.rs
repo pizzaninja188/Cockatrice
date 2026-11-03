@@ -3038,6 +3038,10 @@ pub enum EntryReplacementEffectId {
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) enum EntryCounterSource {
     EntryReplacement(EntryReplacementEffectId),
+    OpeningHandAction {
+        source_object_id: ObjectId,
+        source_zone_change_generation: u64,
+    },
     ResolutionEffect {
         stack_object_id: ObjectId,
         stack_zone_change_generation: u64,
@@ -3502,6 +3506,11 @@ pub(crate) struct LibrarySearchEntryProgress {
 
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) enum BattlefieldEntryCompletion {
+    OpeningHandAction {
+        actor: PlayerId,
+        source: TriggerObjectRef,
+        exile: Option<TriggerObjectRef>,
+    },
     LandPlay {
         player: PlayerId,
         land_name: String,
@@ -3939,6 +3948,9 @@ pub struct OpeningSequence {
     pub chooser: PlayerId,
     /// Set once the chooser commits; that player takes the first turn.
     pub starting_player: Option<PlayerId>,
+    /// CR 103.1 identity, retained even if the chosen player leaves. The mutable field above
+    /// remains the operational first-live-turn cursor; Caverns eligibility uses this value.
+    pub original_starting_player: Option<PlayerId>,
     /// Who must keep/mulligan or bottom cards next.
     pub mulligan_actor: Option<PlayerId>,
     /// During bottom step: (player, cards still to place on bottom).
@@ -3947,6 +3959,14 @@ pub struct OpeningSequence {
     pub mulligans_taken: Vec<u32>,
     /// Opening fully finished for each seat (indexed by `players` vec index, one entry per seat).
     pub resolved: Vec<bool>,
+    /// CR 103.6 window after every keep/bottom decision has finished.
+    pub hand_window: Option<OpeningHandWindow>,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub struct OpeningHandWindow {
+    pub actor: PlayerId,
+    pub finished: Vec<bool>,
 }
 
 /// The next seat that has not finished its opening, scanning forward in seat order from `start_idx`

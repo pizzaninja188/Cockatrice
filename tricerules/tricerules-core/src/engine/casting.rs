@@ -3345,6 +3345,10 @@ impl GameEngine {
         ability_index: usize,
         ability: &tricerules_card_model::ActivatedAbilityDef,
     ) -> bool {
+        // Opening-hand procedures do not grant priority or a mana-payment opportunity.
+        if self.state.opening.is_some() {
+            return false;
+        }
         let Some(object) = self.state.objects.get(&permanent_id) else {
             return false;
         };

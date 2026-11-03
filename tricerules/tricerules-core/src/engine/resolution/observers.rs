@@ -395,7 +395,7 @@ impl GameEngine {
                     .map(|pending| &pending.continuation),
                 Some(ResolutionContinuation::EntryCounterReplacement { .. })
             ) {
-                if self.refresh_exact_return_entry_counters(events)? {
+                if self.refresh_single_entry_counters(events)? {
                     return Ok(true);
                 }
             } else {

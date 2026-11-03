@@ -671,6 +671,7 @@ public:
         ChooseFirst,
         MulliganChoice,
         BottomLibrary,
+        HandActions,
     };
 
     /// Which zone the pending pick operates on.
@@ -945,6 +946,13 @@ public:
     int openingBottomRemaining = 0;
     bool openingCanKeep = false;
     bool openingCanRedraw = false;
+    QMap<int, ruled::v1::CostObjectRef> openingGemstoneCards;
+    QMap<int, ruled::v1::CostObjectRef> openingExileCards;
+    int openingGemstoneSelected = -1;
+    int openingExileSelected = -1;
+    bool openingCanFinishHandActions = false;
+    bool openingHandSubmitted = false;
+    quint64 openingHandOfferEpoch = 0;
     ruled::v1::PhaseId lastEnginePhaseId = ruled::v1::PHASE_ID_UNSPECIFIED;
 
     // -----------------------------------------------------------------------------------
@@ -2262,6 +2270,11 @@ public:
     [[nodiscard]] int openingBottomClickOrderFor(int handIndex) const;
     void toggleOpeningBottomHandIndex(int ruledHandIndex);
     void clearOpeningBottomSelection(bool emitUiChange = true);
+    void resetOpeningHandActionState();
+    void selectOpeningHandCard(int ownerPlayerId, int serverCardId);
+    [[nodiscard]] int openingHandSelectionOrder(int ownerPlayerId, int serverCardId) const;
+    [[nodiscard]] QString openingHandPromptText() const;
+    [[nodiscard]] bool openingHandConfirmable() const;
 
 public slots:
     void openingPickFirstSeat(int seatId);
@@ -2269,6 +2282,8 @@ public slots:
     void openingMulliganRedraw();
     void openingBottomCancel();
     void openingBottomDone();
+    void openingHandCancel();
+    void openingHandDone();
 
 public:
     // -----------------------------------------------------------------------------------

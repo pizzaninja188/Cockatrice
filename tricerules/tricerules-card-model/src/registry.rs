@@ -1219,6 +1219,18 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 reason,
             })?;
         let ability = &identified.definition;
+        if matches!(ability, StaticAbilityDef::GemstoneCavernsOpening)
+            && (!face.is_land
+                || !face
+                    .supertypes
+                    .iter()
+                    .any(|supertype| supertype == "Legendary"))
+        {
+            return Err(RegistryError::InvalidCard {
+                id: card.id.clone(),
+                reason: "GemstoneCavernsOpening requires a legendary land face".into(),
+            });
+        }
         if matches!(
             ability,
             StaticAbilityDef::SourceLoyaltyAbilitiesAtInstantTiming

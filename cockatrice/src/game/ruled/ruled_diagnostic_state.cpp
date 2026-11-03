@@ -28,6 +28,10 @@ QJsonObject RuledClientState::diagnosticSnapshot() const
     FIELD(openingBottomRemaining);
     FIELD(openingCanKeep);
     FIELD(openingCanRedraw);
+    FIELD(openingGemstoneSelected);
+    FIELD(openingExileSelected);
+    FIELD(openingCanFinishHandActions);
+    FIELD(openingHandSubmitted);
     FIELD(cleanupDiscardSelectedIndices);
     FIELD(openingBottomSelectedIndices);
     FIELD(ownerCardIdToEngineOid);
@@ -123,7 +127,7 @@ QJsonObject RuledClientState::diagnosticSnapshot() const
     const char *combat[] = {
         "None", "DeclareAttackers", "DeclareBlockers", "AssignCombatDamage", "FirstStrikeDamage", "CombatDamage"};
     result.insert("currentCombatPhase", combat[static_cast<int>(currentCombatPhase)]);
-    const char *opening[] = {"None", "ChooseFirst", "MulliganChoice", "BottomLibrary"};
+    const char *opening[] = {"None", "ChooseFirst", "MulliganChoice", "BottomLibrary", "HandActions"};
     result.insert("openingUiKind", opening[static_cast<int>(openingUiKind)]);
     result.insert("payment", payment.diagnosticSnapshot());
     QJsonValue pending;

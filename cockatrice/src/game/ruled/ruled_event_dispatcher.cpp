@@ -782,6 +782,7 @@ void RuledEventDispatcher::resetPerBatchLegalActions()
     state->permanentActionsByOid.clear();
     state->openingBottomSelectedIndices.clear();
     state->openingPickSeatIds.clear();
+    state->resetOpeningHandActionState();
     state->openingUiKind = RuledOpeningUiKind::None;
     state->openingMulliganCount = 0;
     state->openingBottomRemaining = 0;
@@ -2879,6 +2880,7 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
         abilities[abilityIndex] = parseAbilityInfo(ability, presentationResolver);
     }
 
+    state->resetOpeningHandActionState();
     state->openingUiKind = RuledOpeningUiKind::None;
     state->openingPickSeatIds.clear();
     state->openingBottomSelectedIndices.clear();
@@ -2903,6 +2905,18 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
                 state->openingCanRedraw = localActor && opening.can_redraw();
                 if (state->openingCanKeep || state->openingCanRedraw)
                     state->openingUiKind = RuledOpeningUiKind::MulliganChoice;
+                break;
+            case ruled::v1::OPENING_STAGE_HAND_ACTIONS:
+                if (localActor && opening.can_finish_hand_actions()) {
+                    state->openingUiKind = RuledOpeningUiKind::HandActions;
+                    state->openingCanFinishHandActions = true;
+                    for (const auto &card : opening.gemstone_caverns())
+                        if (card.has_object() && card.object().object_id())
+                            state->openingGemstoneCards.insert(static_cast<int>(card.hand_index()), card.object());
+                    for (const auto &card : opening.exile_candidates())
+                        if (card.has_object() && card.object().object_id())
+                            state->openingExileCards.insert(static_cast<int>(card.hand_index()), card.object());
+                }
                 break;
             case ruled::v1::OPENING_STAGE_BOTTOM:
                 if (localActor && opening.bottom_cards_remaining() > 0 &&
@@ -2967,6 +2981,7 @@ void RuledEventDispatcher::applyNoLegalActions(bool preserveCombatCapabilities)
     state->pendingAttackDeclaration.reset();
     state->openingBottomSelectedIndices.clear();
     state->openingPickSeatIds.clear();
+    state->resetOpeningHandActionState();
     state->openingUiKind = RuledOpeningUiKind::None;
     state->openingMulliganCount = 0;
     state->openingBottomRemaining = 0;

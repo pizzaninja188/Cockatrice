@@ -2821,6 +2821,10 @@ pub enum LibraryDrawReplacement {
 /// do not use the stack, unlike triggered and activated abilities.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StaticAbilityDef {
+    /// Gemstone Caverns' closed CR 103.6 opening-hand action: a nonstarting player may
+    /// put this legendary land onto the battlefield with a luck counter, then exile a card.
+    /// Other opening-hand cards have different sequences and are not admitted by this profile.
+    GemstoneCavernsOpening,
     /// Ashiok, Dream Render: an opponent's spell or ability cannot cause that same opponent
     /// to search their own library. Searching another player's library is unaffected.
     OpponentsCannotCauseOwnLibrarySearch,

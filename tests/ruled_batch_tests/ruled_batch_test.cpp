@@ -10588,6 +10588,80 @@ TEST_F(RuledBatchTest, DiscardReplacementChoicesAndTopDeckOrderStayPrivateToTheO
     }
 }
 
+TEST_F(RuledBatchTest, GemstoneOpeningReconnectRestoresParkedReplacementAndPublicSource)
+{
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *batch=response.mutable_batch();
+    for (auto *player : {p1,p2}) {
+        auto *opening=(*batch->mutable_legal_by_player())[player->getPlayerId()].mutable_opening();
+        opening->set_stage(ruled::v1::OPENING_STAGE_HAND_ACTIONS);
+        opening->set_deciding_player_id(p1->getPlayerId());
+    }
+    auto *choice=batch->add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(p1->getPlayerId());
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT);
+    choice->set_source_object_id(801);
+    choice->set_prompt_text("Choose a replacement for Gemstone Caverns.");
+    choice->add_candidate_object_ids(55);
+    auto *reveal=batch->add_events()->mutable_active_public_reveal_snapshot()->add_reveals();
+    reveal->set_reveal_id("opening:801:7:4"); reveal->set_source_object_id(801);
+    reveal->set_source_zone_change_generation(7); reveal->set_zone_owner_player_id(p1->getPlayerId());
+    reveal->set_source_zone(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND);
+    auto *card=reveal->add_cards(); card->set_object_id(801); card->set_zone_change_generation(7);
+    card->set_card_id("gemstone_caverns"); card->set_card_name("Gemstone Caverns");
+    updatePendingResolutionChoiceCache(response);
+    for (auto *recipient : {p1,p2}) {
+        ResponseContainer reconnect(-1);
+        game->createGameJoinedEvent(recipient,reconnect,true);
+        const auto *container=dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+        ASSERT_NE(container,nullptr);
+        ruled::v1::RuledEventBatch restored;
+        ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+        const auto *pending=onlyResolutionChoice(restored);
+        ASSERT_NE(pending,nullptr) << "an opening stage must not hide its parked replacement choice";
+        EXPECT_EQ(pending->deciding_player_id(),p1->getPlayerId());
+        // Replacement application IDs are public; private hand offers remain recipient-only.
+        EXPECT_EQ(pending->candidate_object_ids_size(),1);
+        ASSERT_EQ(restored.legal_by_player_size(),1);
+        EXPECT_EQ(restored.legal_by_player().at(recipient->getPlayerId()).opening().stage(),ruled::v1::OPENING_STAGE_HAND_ACTIONS);
+        EXPECT_TRUE(std::any_of(restored.events().begin(),restored.events().end(),[](const auto &event) {
+            return event.has_active_public_reveal_snapshot() && event.active_public_reveal_snapshot().reveals_size()==1;
+        }));
+    }
+}
+
+TEST_F(RuledBatchTest, GemstoneOpeningPrivateReferencesRoundTripThroughPresentationIdentity)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *opening=(*batch.mutable_legal_by_player())[p1->getPlayerId()].mutable_opening();
+    opening->set_stage(ruled::v1::OPENING_STAGE_HAND_ACTIONS);
+    opening->set_deciding_player_id(p1->getPlayerId()); opening->set_can_finish_hand_actions(true);
+    auto *source=opening->add_gemstone_caverns(); source->set_hand_index(2);
+    source->mutable_object()->set_object_id(801); source->mutable_object()->set_zone_change_generation(7);
+    opening->add_exile_candidates()->CopyFrom(*source);
+    auto *exile=opening->add_exile_candidates(); exile->set_hand_index(4);
+    exile->mutable_object()->set_object_id(802); exile->mutable_object()->set_zone_change_generation(11);
+    ASSERT_TRUE(prepareIdentityBatch(batch));
+    const auto owner=redactFor(batch,p1);
+    const auto other=redactFor(batch,p2);
+    EXPECT_TRUE(other.legal_by_player().empty());
+    const auto &offer=owner.legal_by_player().at(p1->getPlayerId()).opening();
+    ASSERT_EQ(offer.gemstone_caverns_size(),1);
+    ASSERT_EQ(offer.exile_candidates_size(),2);
+    EXPECT_EQ(offer.gemstone_caverns(0).hand_index(),2u);
+    ruled::v1::RuledCommand command;
+    command.mutable_begin_with_gemstone_caverns()->mutable_source()->CopyFrom(offer.gemstone_caverns(0).object());
+    command.mutable_begin_with_gemstone_caverns()->mutable_exile()->CopyFrom(offer.exile_candidates(1).object());
+    auto unauthorized=command;
+    EXPECT_FALSE(canonicalizeClientCommand(p2->getPlayerId(),unauthorized));
+    ASSERT_TRUE(canonicalizeClientCommand(p1->getPlayerId(),command));
+    EXPECT_EQ(command.begin_with_gemstone_caverns().source().object_id(),801u);
+    EXPECT_EQ(command.begin_with_gemstone_caverns().source().zone_change_generation(),7u);
+    EXPECT_EQ(command.begin_with_gemstone_caverns().exile().object_id(),802u);
+    EXPECT_EQ(command.begin_with_gemstone_caverns().exile().zone_change_generation(),11u);
+}
+
 TEST_F(RuledBatchTest, OpeningReconnectRestoresRemainingQuotaAndClearsOnCompletion)
 {
     ruled::v1::IpcResponse response;

@@ -498,6 +498,9 @@ pub fn reconstruct(capture: &Capture, options: &ReplayOptions) -> Result<ReplayR
 
 #[cfg(test)]
 mod tests {
+    mod gemstone_normal {
+        include!("replay_gemstone_normal.rs");
+    }
     mod tamiyo_normal {
         include!("replay_tamiyo_normal.rs");
     }

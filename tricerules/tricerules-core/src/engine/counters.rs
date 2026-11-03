@@ -441,6 +441,7 @@ pub(super) fn counter_option_id(kind: CounterKind) -> u32 {
         CounterKind::Night => 13,
         CounterKind::Doom => 14,
         CounterKind::Time => 15,
+        CounterKind::Luck => 16,
         CounterKind::Keyword(keyword) => 256 + keyword as u32,
     }
 }
