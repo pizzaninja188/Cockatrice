@@ -277,6 +277,15 @@ impl GameEngine {
         pending: PendingResolution,
         chosen: &[ObjectId],
     ) -> Result<RuledEventBatch, EngineError> {
+        if matches!(
+            &pending.continuation,
+            ResolutionContinuation::LibraryLook {
+                stage: PendingLibraryLookStage::HandGraveyard(_),
+                ..
+            }
+        ) {
+            return self.finish_hand_graveyard_partition(pending, chosen);
+        }
         let controller = pending.deciding_player;
         let Some(idx) = self.state.player_idx(controller) else {
             self.state.pending_resolution = Some(pending);

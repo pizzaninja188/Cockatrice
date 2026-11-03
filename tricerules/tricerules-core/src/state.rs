@@ -1882,6 +1882,8 @@ pub(crate) struct PendingEachOpponentScry {
 #[derive(serde::Serialize, Debug, Clone)]
 #[allow(private_interfaces)]
 pub enum PendingLibraryLookStage {
+    /// One private partition; every original card stays in Library until both choices finish.
+    HandGraveyard(PendingHandGraveyardPartition),
     ChooseBattlefield {
         filter: CardTypeFilter,
         max_selected: u32,
@@ -1903,6 +1905,21 @@ pub enum PendingLibraryLookStage {
         reveal: bool,
     },
     OrderBottom,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct PendingHandGraveyardPartition {
+    pub(crate) owner: PlayerId,
+    pub(crate) count: u32,
+    pub(crate) cohort: Vec<HandGraveyardLibraryRef>,
+    pub(crate) selected_hand: Option<ObjectId>,
+}
+
+#[derive(serde::Serialize, Debug, Clone, Copy)]
+pub(crate) struct HandGraveyardLibraryRef {
+    pub(crate) object_id: ObjectId,
+    pub(crate) generation: u64,
+    pub(crate) library_position: u32,
 }
 
 #[derive(serde::Serialize, Debug, Clone)]

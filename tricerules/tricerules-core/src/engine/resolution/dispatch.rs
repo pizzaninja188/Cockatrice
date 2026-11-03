@@ -127,6 +127,9 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::LookChooseToHand { .. } => {
             zones::look_choose_to_hand(cx, effect)?
         }
+        SpellEffectKind::LookChooseOneToHandRestToGraveyard { count } => {
+            library_hand_graveyard::begin(cx, count)?
+        }
         effect @ SpellEffectKind::Hideaway { .. } => zones::hideaway(cx, effect)?,
         effect @ SpellEffectKind::PumpTarget { .. } => pump_counters::pump_target(cx, effect)?,
         effect @ SpellEffectKind::SetBasePowerToughness { .. } => {

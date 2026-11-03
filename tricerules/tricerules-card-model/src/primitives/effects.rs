@@ -1389,6 +1389,12 @@ pub enum SpellEffectKind {
         reveal: bool,
         bottom_order: LibraryBottomOrder,
     },
+    /// Professor Onyx and Ransack the Lab privately look at a fixed top-library cohort,
+    /// put exactly one available card into hand, and order the rest into the graveyard.
+    /// This instruction is admitted in flat spell/ability lists only.
+    LookChooseOneToHandRestToGraveyard {
+        count: u32,
+    },
     /// CR 701.8: destroy `subject`. Chosen subjects are CR 115 targets; source, attachment, and
     /// trigger-object subjects are untargeted rules references. Murder and Royal Assassin use
     /// chosen subjects, while Cracked Skull uses the damage event's trigger object.
@@ -4287,6 +4293,7 @@ impl SpellEffectKind {
             | SpellEffectKind::Hideaway { .. }
             | SpellEffectKind::PutPermanentFromHand { .. }
             | SpellEffectKind::LookChooseToHand { .. }
+            | SpellEffectKind::LookChooseOneToHandRestToGraveyard { .. }
             | SpellEffectKind::TapAll { .. }
             | SpellEffectKind::TapChosenPermanents
             | SpellEffectKind::UntapAll { .. }
@@ -7153,6 +7160,13 @@ impl SpellEffectKind {
                     );
                 }
                 filter.as_ref().map_or(Ok(()), ZoneCardFilter::validate)
+            }
+            SpellEffectKind::LookChooseOneToHandRestToGraveyard { count } => {
+                if *count == 0 {
+                    Err("LookChooseOneToHandRestToGraveyard requires a positive count".into())
+                } else {
+                    Ok(())
+                }
             }
             SpellEffectKind::LookTopCardOptionalToHand { filter } => filter.validate(),
             SpellEffectKind::ChooseCard { filter, .. } => filter.validate(),

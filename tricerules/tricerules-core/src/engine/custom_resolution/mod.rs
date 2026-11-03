@@ -426,6 +426,15 @@ impl GameEngine {
         if pending.resolution_prompt_id.get() != 0 {
             return Ok(false);
         }
+        if matches!(
+            &pending.continuation,
+            ResolutionContinuation::LibraryLook {
+                stage: PendingLibraryLookStage::HandGraveyard(_),
+                ..
+            }
+        ) {
+            self.validate_hand_graveyard_partition(pending)?;
+        }
         let Some(snapshot) = pending.resolution_prompt_semantics.as_ref() else {
             return Ok(false);
         };
@@ -1489,6 +1498,26 @@ impl GameEngine {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
                 "discard choice contains unrelated answer fields",
+            ));
+        }
+        if matches!(
+            &pending.continuation,
+            ResolutionContinuation::LibraryLook {
+                stage: PendingLibraryLookStage::HandGraveyard(_),
+                ..
+            }
+        ) && (answer.decision != rv1::ResolutionChoiceDecision::Unspecified as i32
+            || !answer.chosen_player_ids.is_empty()
+            || answer.selected_branch_index != 0
+            || answer.cast_spell.is_some()
+            || answer.chosen_combat_defender.is_some()
+            || answer.payment.is_some()
+            || !answer.restricted_mana.is_empty()
+            || answer.spell_cast_announcement.is_some())
+        {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "library partition contains unrelated answer fields",
             ));
         }
         let chosen = answer.chosen_object_ids.as_slice();

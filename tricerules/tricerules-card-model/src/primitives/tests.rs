@@ -1888,6 +1888,41 @@ fn linked_exile_copy_program_admits_generic_pair_and_count_two() {
 }
 
 #[test]
+fn library_hand_graveyard_partition_is_typed_and_rejects_zero_count() {
+    let effect: super::SpellEffectKind =
+        ron::from_str("LookChooseOneToHandRestToGraveyard(count: 3)")
+            .expect("Onyx and Ransack need the closed private partition instruction");
+    assert!(effect.validate(super::EffectContext::Spell).is_ok());
+    assert!(effect.validate(super::EffectContext::Ability).is_ok());
+    assert!(effect.target_filters().is_empty());
+    let zero: super::SpellEffectKind =
+        ron::from_str("LookChooseOneToHandRestToGraveyard(count: 0)").unwrap();
+    assert!(zero.validate(super::EffectContext::Spell).is_err());
+    assert!(zero.validate(super::EffectContext::Ability).is_err());
+}
+
+#[test]
+fn library_hand_graveyard_partition_stays_out_of_program_and_conditional_admission() {
+    let source = r#"(
+        id: "partition_program", name: "Partition Program", face_id: "partition_program",
+        types: ["Sorcery"], spell_effect: [],
+        spell_program: Some((body: (steps: [
+            (id: "look", kind: Perform(LookChooseOneToHandRestToGraveyard(count: 3)))
+        ], yields: []), target_bindings: []))
+    )"#;
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[source], &[]).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("not in the resolution-program operation whitelist"),
+        "{error}"
+    );
+    let effect: super::SpellEffectKind =
+        ron::from_str("LookChooseOneToHandRestToGraveyard(count: 3)").unwrap();
+    assert!(!effect.supports_conditional_instruction());
+}
+
+#[test]
 fn poison_up_to_nine_requires_an_explicit_player_target() {
     let effect: super::SpellEffectKind =
         ron::from_str("PoisonTargetUpToNine(target: (kind: AnyPlayer))")

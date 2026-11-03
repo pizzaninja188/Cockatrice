@@ -6584,7 +6584,7 @@ fn library_look_candidates(
     Some((looked, selectable))
 }
 
-fn publish_library_look(
+pub(super) fn publish_library_look(
     cx: &mut EffectCx<'_>,
     looked: &[ObjectId],
     selectable: Vec<bool>,

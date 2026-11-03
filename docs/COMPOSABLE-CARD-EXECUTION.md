@@ -214,6 +214,17 @@ cards to hand is not drawing (CR 121.5); the owner orders cards placed together 
 order prompt. The existing private `LIBRARY_LOOK` flow and physical candidate binding are reused;
 filtered, revealed, optional, random-bottom, and ability-owned forms remain on the legacy effect-list
 path. This adds no card admission or protocol or client change (CR 608.2c, 608.2h).
+`LookChooseOneToHandRestToGraveyard { count }` supports Professor Onyx and Ransack the Lab's
+fixed private look sentence on flat spell/ability effect lists. The complete top cohort retains
+its ObjectIds, generations and original library positions until the controller chooses one card
+for hand and orders the rest into the graveyard, oldest first (last selected is on top, CR 404.3).
+The complete partition commits in one observed zone-move batch. This is neither drawing nor
+milling; it does not reveal the hand selection. Empty and short libraries do as much as possible.
+The original tail and previous result survive both private stages and observer restoration;
+departure retires a vanished library owner's hidden cohort without delegation. Programs and
+conditional instructions do not admit this operation. This capability adds no card registration
+or protocol/client contract (CR 400.7, 608.2c/m, 701.20e, 704.4).
+
 The bounded 2026-10-19 Scalestorm Summoner port admits one finite `ProgramIf` condition:
 `MaximumPower` among the ability controller's creatures, with a positive `min`, no `max`, default
 remaining filter fields, and no observed-object exclusion. It migrates only `triggered_01` from the

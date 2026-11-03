@@ -3,6 +3,9 @@ use super::*;
 #[path = "activation_tests/poison_difference.rs"]
 mod poison_difference;
 
+#[path = "activation_tests/library_hand_graveyard.rs"]
+mod library_hand_graveyard;
+
 const OPPONENT_CHOICE_LAND: &str = r#"(
     id: "opponent_choice_land", name: "Opponent Choice Land",
     face_id: "opponent_choice_land", types: ["Land"],

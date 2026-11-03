@@ -327,6 +327,24 @@ impl GameEngine {
             &suspended_resolution,
             suspended_replacement_event.as_ref(),
         )?;
+        if let ResolutionContinuation::LibraryLook {
+            stage: PendingLibraryLookStage::HandGraveyard(partition),
+            ..
+        } = &suspended_resolution.continuation
+        {
+            if self
+                .state
+                .player_idx(partition.owner)
+                .is_some_and(|index| !self.state.players[index].has_lost)
+            {
+                self.validate_hand_graveyard_partition(&suspended_resolution)
+                    .map_err(|_| {
+                        EngineError::ProgramInvariant(
+                            "saved hand/graveyard library partition is stale",
+                        )
+                    })?;
+            }
+        }
         // Returning from a nested observer choice restores the saved operation, but creates a
         // new externally answerable offer. Keep the exact private projection only as a source for
         // re-publication after its current continuation and generation bindings are revalidated.
@@ -334,6 +352,9 @@ impl GameEngine {
         suspended_resolution.resolution_prompt_id = crate::state::ResolutionPromptId::UNASSIGNED;
         self.state.pending_resolution = Some(suspended_resolution);
         self.state.pending_replacement_event = suspended_replacement_event;
+        if self.refresh_hand_graveyard_partition(events)? {
+            return Ok(true);
+        }
         if self.refresh_parent_copy_targets_after_departure(events)? {
             return Ok(true);
         }
