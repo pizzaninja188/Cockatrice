@@ -15,6 +15,7 @@ use super::*;
 mod counter_placement;
 #[cfg(test)]
 mod entry_layers_tests;
+mod poison_difference;
 use crate::state::{
     ChosenCreatureTypeRecord, ChosenOpponentRecord, CounterPlacementReceipt, EntryCounterPlacement,
     EntryCounterPlacementHistory, EntryCounterReplacementReceipt, EntryCounterSource,
@@ -6548,6 +6549,7 @@ mod tests {
             affected: AffectedScope::Single(globe),
             kind: ContinuousEffectKind::Layer4SetTypeLine(
                 tricerules_card_model::TypeLineReplacement {
+                    artifact_types: Vec::new(),
                     card_types: vec![PermanentTypeFilter::Land],
                     creature_types: Vec::new(),
                     land_types: vec![BasicLandType::Forest],

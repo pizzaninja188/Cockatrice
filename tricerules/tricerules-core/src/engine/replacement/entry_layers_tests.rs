@@ -2225,6 +2225,7 @@ fn land_scope(controller: tricerules_card_model::primitives::TargetController) -
 
 fn land() -> tricerules_card_model::TypeLineReplacement {
     tricerules_card_model::TypeLineReplacement {
+        artifact_types: Vec::new(),
         card_types: vec![PermanentTypeFilter::Land],
         creature_types: Vec::new(),
         land_types: Vec::new(),

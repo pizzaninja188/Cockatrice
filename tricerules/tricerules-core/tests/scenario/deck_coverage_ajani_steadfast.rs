@@ -1264,6 +1264,7 @@ fn ajani_emblem_uses_current_planeswalker_type_and_control() {
         &mut engine,
         bear,
         ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            artifact_types: Vec::new(),
             card_types: vec![
                 PermanentTypeFilter::Creature,
                 PermanentTypeFilter::Planeswalker,

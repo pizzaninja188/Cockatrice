@@ -1072,6 +1072,7 @@ fn carth_does_not_modify_a_loyalty_ability_on_a_nonplaneswalker_source() {
         source_id: None,
         affected: AffectedScope::Single(source),
         kind: ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            artifact_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Artifact],
             creature_types: vec![],
             land_types: vec![],

@@ -1790,6 +1790,11 @@ pub enum SpellEffectKind {
         amount: u32,
         target: TargetFilter,
     },
+    /// Vraska's fixed-nine poison difference. The count is snapshotted at resolution and
+    /// routed through counter replacements; it is neither assignment nor proliferation.
+    PoisonTargetUpToNine {
+        target: TargetFilter,
+    },
     EachOpponentLosesLifeYouGainEqual {
         amount: u32,
     },
@@ -4196,6 +4201,7 @@ impl SpellEffectKind {
             | SpellEffectKind::GainControl { target, .. }
             | SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
+            | SpellEffectKind::PoisonTargetUpToNine { target }
             | SpellEffectKind::TargetPlayerDraws { target, .. }
             | SpellEffectKind::DrainTarget { target, .. }
             | SpellEffectKind::MillTargetPlayer { target, .. }
@@ -4779,6 +4785,9 @@ impl SpellEffectKind {
     /// `context` distinguishes spells from abilities so source-bound subjects are
     /// rejected where they make no sense.
     pub fn validate(&self, context: EffectContext) -> Result<(), String> {
+        if matches!(self, Self::PoisonTargetUpToNine { .. }) {
+            return Err("PoisonTargetUpToNine requires a direct nonmodal activated ability".into());
+        }
         if self.contains_engine_created_rebound_cast() {
             return Err(
                 "CastReboundedCard is reserved for an engine-created delayed Rebound trigger"
@@ -4800,6 +4809,14 @@ impl SpellEffectKind {
 
     /// Admission used only for a direct effect item in a nonmodal activated legacy effect list.
     pub(crate) fn validate_direct_activated_legacy_effect(&self) -> Result<(), String> {
+        if let Self::PoisonTargetUpToNine { target } = self {
+            target.validate_target_constraints()?;
+            return if target.is_player() {
+                Ok(())
+            } else {
+                Err("PoisonTargetUpToNine requires a player target".into())
+            };
+        }
         if let Self::EquipPlaneswalker { target } = self {
             let expected = TargetFilter {
                 kind: super::TargetKind::AnyPermanent,
@@ -6305,6 +6322,7 @@ impl SpellEffectKind {
             } => Err("ChooseHandCards supports only discard or exile actions".into()),
             SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
+            | SpellEffectKind::PoisonTargetUpToNine { target }
             | SpellEffectKind::DrainTarget { target, .. }
             | SpellEffectKind::MillTargetPlayer { target, .. }
             | SpellEffectKind::ChooseHandCards { target, .. } => {

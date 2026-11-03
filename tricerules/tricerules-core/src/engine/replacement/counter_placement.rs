@@ -936,6 +936,7 @@ impl GameEngine {
         completion: &crate::state::CounterPlacementCompletion,
         parked_stack: Option<&ParkedStackResolution>,
     ) -> Result<(), EngineError> {
+        self.validate_poison_difference_completion(events, completion, parked_stack)?;
         let crate::state::CounterPlacementCompletion::DoubleYourCounters {
             stack_id,
             mode_id,
@@ -3057,6 +3058,10 @@ impl GameEngine {
                 (
                     CounterPlacementRecipient::Object { .. },
                     crate::state::CounterPlacementCompletion::DoubleYourCounters { .. },
+                )
+                | (
+                    CounterPlacementRecipient::Object { .. },
+                    crate::state::CounterPlacementCompletion::PoisonTargetUpToNine { .. },
                 ) => {
                     return Err(EngineError::Illegal(
                         "DoubleYourCounters cannot place counters on a permanent",
@@ -3118,6 +3123,10 @@ impl GameEngine {
                 (
                     CounterPlacementRecipient::Player { .. },
                     crate::state::CounterPlacementCompletion::DoubleYourCounters { .. },
+                )
+                | (
+                    CounterPlacementRecipient::Player { .. },
+                    crate::state::CounterPlacementCompletion::PoisonTargetUpToNine { .. },
                 ) => {}
                 (
                     CounterPlacementRecipient::Player { .. },
@@ -3540,7 +3549,10 @@ impl GameEngine {
         };
         let begun_self_counter =
             self.begun_self_counter_placement(&original_pending, Some(&original_replacement));
+        let begun_poison =
+            self.begun_poison_difference(&original_pending, Some(&original_replacement));
         let begun_flat = begun_self_counter
+            || begun_poison
             || self
                 .begun_combined_counter_placement(&original_pending, Some(&original_replacement))
             || self.begun_wolf_counter_placement(&original_pending, Some(&original_replacement))
@@ -3561,6 +3573,13 @@ impl GameEngine {
                 completion:
                     completion @ crate::state::CounterPlacementCompletion::DoubleYourCounters { .. },
             } => (stack.clone(), completion.clone()),
+            ResolutionContinuation::CounterReplacement {
+                stack: Some(stack),
+                completion:
+                    completion @ crate::state::CounterPlacementCompletion::PoisonTargetUpToNine {
+                        ..
+                    },
+            } if begun_poison => (stack.clone(), completion.clone()),
             _ => return Ok(()),
         };
         let PendingReplacementEvent::Counters(batch) = &original_replacement else {

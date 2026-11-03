@@ -202,6 +202,7 @@ fn ghalta_reads_current_control_types_pumps_and_counters_before_announcement() {
         &mut engine,
         stolen,
         ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            artifact_types: Vec::new(),
             land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Artifact],
             creature_types: vec![],

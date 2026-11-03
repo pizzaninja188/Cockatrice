@@ -4637,6 +4637,7 @@ mod cast_snapshot_tests {
             affected: AffectedScope::Single(qualifier),
             kind: ContinuousEffectKind::Layer4SetTypeLine(
                 tricerules_card_model::TypeLineReplacement {
+                    artifact_types: Vec::new(),
                     card_types: vec![tricerules_card_model::PermanentTypeFilter::Artifact],
                     creature_types: vec![],
                     land_types: vec![],
@@ -6606,6 +6607,7 @@ mod cast_snapshot_tests {
             affected: AffectedScope::Single(source),
             kind: ContinuousEffectKind::Layer4SetTypeLine(
                 tricerules_card_model::TypeLineReplacement {
+                    artifact_types: Vec::new(),
                     card_types: vec![PermanentTypeFilter::Artifact],
                     creature_types: Vec::new(),
                     land_types: Vec::new(),

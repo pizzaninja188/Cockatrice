@@ -107,6 +107,13 @@ impl GameEngine {
             }
         }
         if let (Some(current), Some(intrinsic)) = (characteristics, face) {
+            // A converted physical card keeps its Oracle name. Publish its effective Treasure
+            // type through the existing public annotations rather than client display data.
+            if current.has_type("Treasure")
+                && (object.face_down || !intrinsic.types.iter().any(|kind| kind == "Treasure"))
+            {
+                labels.push(format!("Types: {}", current.types.join(", ")));
+            }
             if current.is_creature() {
                 let printed_all_creature_types = !object.face_down
                     && intrinsic

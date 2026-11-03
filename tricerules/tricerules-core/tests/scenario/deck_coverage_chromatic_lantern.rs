@@ -839,6 +839,7 @@ fn lantern_recipient_scope_loss_rejects_the_old_slot_and_restoration_reuses_it()
             controller: ControllerReference::Fixed(1),
         },
         ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            artifact_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Artifact],
             creature_types: vec![],
             land_types: vec![],

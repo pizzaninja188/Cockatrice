@@ -487,6 +487,7 @@ fn gardens_rechecks_artifact_type_when_the_ability_resolves() {
         source_id: None,
         affected: AffectedScope::Single(signet),
         kind: ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            artifact_types: Vec::new(),
             land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Land],
             creature_types: Vec::new(),

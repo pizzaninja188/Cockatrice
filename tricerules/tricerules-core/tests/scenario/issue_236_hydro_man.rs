@@ -236,6 +236,7 @@ fn issue_236_blue_spell_pump_rechecks_that_hydro_man_is_a_creature() {
         source_id: None,
         affected: AffectedScope::Single(hydro),
         kind: ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            artifact_types: Vec::new(),
             land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Land],
             creature_types: vec![],

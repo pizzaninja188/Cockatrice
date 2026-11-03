@@ -3,6 +3,9 @@
 #[path = "../common/mod.rs"]
 mod common;
 
+#[path = "../deck_coverage_vraska_betrayals_sting.rs"]
+mod deck_coverage_vraska_betrayals_sting;
+
 #[path = "../deck_coverage_ajani_steadfast.rs"]
 mod deck_coverage_ajani_steadfast;
 #[path = "../deck_coverage_alhammarrets_archive.rs"]

@@ -982,6 +982,7 @@ fn devotion_independent_creature_addition_respects_timestamps_and_earlier_text_r
         .push(early_layer_type_effect(
             AffectedScope::Single(god),
             ContinuousEffectKind::Layer4SetTypeLine(tricerules_card_model::TypeLineReplacement {
+                artifact_types: Vec::new(),
                 card_types: vec![PermanentTypeFilter::Land],
                 land_types: vec![BasicLandType::Forest],
                 creature_types: vec![],

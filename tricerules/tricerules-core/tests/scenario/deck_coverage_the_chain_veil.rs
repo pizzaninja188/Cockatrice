@@ -379,6 +379,7 @@ fn veil_history_uses_the_sources_derived_type_before_costs_and_survives_sacrific
         source_id: None,
         affected: AffectedScope::Single(source),
         kind: ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            artifact_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Artifact],
             creature_types: vec![],
             land_types: vec![],

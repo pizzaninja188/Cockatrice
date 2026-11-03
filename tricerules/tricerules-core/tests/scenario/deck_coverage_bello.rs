@@ -143,6 +143,7 @@ fn bello_respects_layer_four_scope_changes_that_precede_its_effect() {
         source_id: None,
         affected: AffectedScope::Single(artifact),
         kind: ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            artifact_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Land],
             creature_types: Vec::new(),
             land_types: Vec::new(),

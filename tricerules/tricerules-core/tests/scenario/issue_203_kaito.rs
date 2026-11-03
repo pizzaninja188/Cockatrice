@@ -172,6 +172,7 @@ fn animated_planeswalker_can_activate_loyalty_abilities() {
         source_id: None,
         affected: AffectedScope::Single(jace),
         kind: ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            artifact_types: Vec::new(),
             land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Creature],
             creature_types: vec!["Ninja".into()],

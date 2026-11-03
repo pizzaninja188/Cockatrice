@@ -476,6 +476,7 @@ fn winning_draw_static_uses_copied_face_and_current_control_or_suppression() {
                 affected: AffectedScope::Single(source),
                 kind: if mode == 2 {
                     ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
+                        artifact_types: Vec::new(),
                         card_types: vec![tricerules_cards::PermanentTypeFilter::Land],
                         creature_types: Vec::new(),
                         land_types: vec![BasicLandType::Forest],

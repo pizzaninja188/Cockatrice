@@ -3175,6 +3175,7 @@ mod static_permanent_keyword_grant_tests {
             // The artifact first becomes a land; CR 305.7 subtype-only setting requires Land.
             kind: ContinuousEffectKind::Layer4SetTypeLine(
                 tricerules_card_model::TypeLineReplacement {
+                    artifact_types: Vec::new(),
                     card_types: vec![PermanentTypeFilter::Land],
                     creature_types: Vec::new(),
                     land_types: vec![BasicLandType::Forest],

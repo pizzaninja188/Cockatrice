@@ -153,6 +153,7 @@ fn replace_type_line(
         source_id: None,
         affected: AffectedScope::Single(object_id),
         kind: ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            artifact_types: Vec::new(),
             card_types,
             creature_types: Vec::new(),
             land_types: Vec::new(),

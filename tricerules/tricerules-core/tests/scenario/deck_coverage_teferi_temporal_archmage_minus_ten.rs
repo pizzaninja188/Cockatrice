@@ -890,6 +890,7 @@ fn teferi_emblem_uses_jaces_current_controller_and_planeswalker_type() {
         &mut engine,
         jace,
         ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            artifact_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Artifact],
             creature_types: vec![],
             land_types: vec![],

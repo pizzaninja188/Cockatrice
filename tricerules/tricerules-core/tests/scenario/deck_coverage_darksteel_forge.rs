@@ -306,6 +306,7 @@ fn forge_scope_follows_types_source_control_and_recipient_control() {
         &mut engine,
         ring,
         ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            artifact_types: Vec::new(),
             land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Enchantment],
             creature_types: vec![],
@@ -317,6 +318,7 @@ fn forge_scope_follows_types_source_control_and_recipient_control() {
         &mut engine,
         source,
         ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            artifact_types: Vec::new(),
             land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Enchantment],
             creature_types: vec![],

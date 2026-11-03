@@ -1888,6 +1888,43 @@ fn linked_exile_copy_program_admits_generic_pair_and_count_two() {
 }
 
 #[test]
+fn poison_up_to_nine_requires_an_explicit_player_target() {
+    let effect: super::SpellEffectKind =
+        ron::from_str("PoisonTargetUpToNine(target: (kind: AnyPlayer))")
+            .expect("Vraska poison instruction is typed");
+    assert!(effect.validate_direct_activated_legacy_effect().is_ok());
+    assert!(effect.validate(super::EffectContext::Ability).is_err());
+    assert!(effect.validate(super::EffectContext::Spell).is_err());
+    assert!(effect.validate_activated_modal_mode_effect().is_err());
+    assert_eq!(effect.target_filters().len(), 1);
+    let invalid: super::SpellEffectKind =
+        ron::from_str("PoisonTargetUpToNine(target: (kind: Creature))").unwrap();
+    assert!(invalid.validate_direct_activated_legacy_effect().is_err());
+}
+
+#[test]
+fn treasure_type_replacement_preserves_subtype_and_rejects_invalid_shapes() {
+    let valid: super::TypeLineReplacement =
+        ron::from_str("(card_types: [Artifact], artifact_types: [Treasure])").unwrap();
+    assert!(valid.validate().is_ok());
+    assert!(
+        ron::to_string(&valid).unwrap().contains("Treasure"),
+        "the Treasure subtype must survive the typed replacement"
+    );
+    for invalid in [
+        "(card_types: [Creature], artifact_types: [Treasure])",
+        "(card_types: [Artifact], artifact_types: [Treasure, Treasure])",
+    ] {
+        let replacement: super::TypeLineReplacement = ron::from_str(invalid).unwrap();
+        assert!(replacement.validate().is_err(), "{invalid}");
+    }
+    assert!(ron::from_str::<super::TypeLineReplacement>(
+        "(card_types: [Artifact], artifact_types: [NotAnArtifactSubtype])"
+    )
+    .is_err());
+}
+
+#[test]
 fn land_type_additions_and_replacements_validate_distinct_subtype_rules() {
     let forest: super::TypeLineAddition = ron::from_str("(land_types: [Forest])").unwrap();
     assert!(

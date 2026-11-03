@@ -928,6 +928,7 @@ fn face_down_basic_land_suppression_and_current_control_scope_draw_replacements(
         } else {
             let kind = if mode == 1 {
                 ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
+                    artifact_types: Vec::new(),
                     card_types: vec![tricerules_cards::PermanentTypeFilter::Land],
                     creature_types: Vec::new(),
                     land_types: vec![BasicLandType::Forest],

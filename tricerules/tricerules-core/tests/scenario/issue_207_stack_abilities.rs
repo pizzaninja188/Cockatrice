@@ -17,6 +17,7 @@ fn set_source_type_to_land(engine: &mut GameEngine, object_id: u32) {
         source_id: None,
         affected: AffectedScope::Single(object_id),
         kind: ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            artifact_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Land],
             creature_types: Vec::new(),
             land_types: Vec::new(),
@@ -288,6 +289,7 @@ fn issue_207_global_prohibition_uses_live_effective_source_at_counter_resolution
                 source_id: None,
                 affected: AffectedScope::Single(protection),
                 kind: ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+                    artifact_types: Vec::new(),
                     card_types: vec![PermanentTypeFilter::Land],
                     creature_types: Vec::new(),
                     land_types: vec![tricerules_cards::primitives::BasicLandType::Forest],

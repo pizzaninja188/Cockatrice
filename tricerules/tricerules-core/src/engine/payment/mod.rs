@@ -1180,6 +1180,7 @@ mod spell_cost_filter_tests {
             source_id: None,
             affected: AffectedScope::Single(spell_oid),
             kind: ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+                artifact_types: Vec::new(),
                 land_types: Vec::new(),
                 card_types: vec![PermanentTypeFilter::Artifact],
                 creature_types: vec![],

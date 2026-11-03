@@ -767,6 +767,7 @@ fn garruk_wolf_trigger_checks_live_recipient_type_subtype_and_controller() {
         &mut engine,
         loses_type,
         ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            artifact_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Artifact],
             creature_types: vec![],
             land_types: vec![],
@@ -1488,6 +1489,7 @@ fn garruk_emblem_tracks_current_control_type_and_layer_six_order() {
         &mut engine,
         own,
         ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            artifact_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Artifact],
             creature_types: vec![],
             land_types: vec![],

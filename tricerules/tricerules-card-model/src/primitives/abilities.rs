@@ -1612,12 +1612,28 @@ impl TypeLineAddition {
     }
 }
 
+/// Artifact subtype replacements needed by Vraska and Minimus Containment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TypeLineArtifactSubtype {
+    Treasure,
+}
+
+impl TypeLineArtifactSubtype {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Treasure => "Treasure",
+        }
+    }
+}
+
 /// A replacement CR 205.1a type-line change. Supertypes remain separate and are preserved;
 /// every card type and subtype in the ordinary `types` snapshot is replaced by these values.
 /// Witness Protection and Frogify exercise this shape.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TypeLineReplacement {
     pub card_types: Vec<PermanentTypeFilter>,
+    #[serde(default)]
+    pub artifact_types: Vec<TypeLineArtifactSubtype>,
     #[serde(default)]
     pub creature_types: Vec<String>,
     #[serde(default)]
@@ -1644,6 +1660,21 @@ impl TypeLineReplacement {
         }
         if !self.land_types.is_empty() && !self.card_types.contains(&PermanentTypeFilter::Land) {
             return Err("type-line replacement land types require the Land card type".into());
+        }
+        if !self.artifact_types.is_empty()
+            && !self.card_types.contains(&PermanentTypeFilter::Artifact)
+        {
+            return Err(
+                "type-line replacement artifact types require the Artifact card type".into(),
+            );
+        }
+        if self
+            .artifact_types
+            .iter()
+            .enumerate()
+            .any(|(index, value)| self.artifact_types[..index].contains(value))
+        {
+            return Err("type-line replacement repeats an artifact type".into());
         }
         Ok(())
     }

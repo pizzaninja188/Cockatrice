@@ -779,6 +779,7 @@ fn kyoshi_pre_trigger_invalid_source_still_creates_tokens_without_attachment_or_
                     &mut engine,
                     equipment,
                     ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+                        artifact_types: Vec::new(),
                         card_types: vec![PermanentTypeFilter::Artifact],
                         creature_types: Vec::new(),
                         land_types: Vec::new(),

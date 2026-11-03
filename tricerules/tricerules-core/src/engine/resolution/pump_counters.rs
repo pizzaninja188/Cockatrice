@@ -1,5 +1,70 @@
 use super::*;
 
+pub(super) fn poison_target_up_to_nine(
+    cx: &mut EffectCx<'_>,
+) -> Result<EffectOutcome, EngineError> {
+    let Some(&target_id) = cx
+        .targets_by_role
+        .first()
+        .and_then(|targets| targets.first())
+    else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let receipt = cx
+        .target_receipt_in_role(target_id, 0)
+        .ok_or(EngineError::Illegal("poison player receipt is missing"))?;
+    if receipt.kind != rv1::TargetRefKind::Player as i32
+        || receipt.zone_change_generation.is_some()
+        || !cx.target_is_current_in_role(target_id, 0)
+    {
+        return Err(EngineError::Illegal(
+            "poison target must be a current player receipt",
+        ));
+    }
+    let target_player = target_id as PlayerId;
+    let index = cx
+        .engine
+        .state
+        .player_idx(target_player)
+        .ok_or(EngineError::Illegal("poison target is missing"))?;
+    let poison_before = cx.engine.state.players[index]
+        .counters
+        .get(&CounterKind::Poison)
+        .copied()
+        .unwrap_or(0);
+    if poison_before >= 9 {
+        return Ok(EffectOutcome::Continue);
+    }
+    let proposal = cx
+        .engine
+        .proposed_player_counter_placement(
+            cx.controller,
+            target_player,
+            [(CounterKind::Poison, 9 - poison_before)],
+            super::super::continuous::CounterPlacementOrigin::Effect,
+        )
+        .ok_or(EngineError::Illegal("poison recipient became unavailable"))?;
+    let completion = crate::state::CounterPlacementCompletion::PoisonTargetUpToNine {
+        stack_id: cx.top.id,
+        leaf_index: cx.effect_index,
+        controller: cx.controller,
+        target_player,
+        poison_before,
+    };
+    *cx.effect_result = cx.resume_previous_result.cloned().unwrap_or_default();
+    let mut stack = cx.parked_stack();
+    stack.set_flat_tail(cx.effect_index.checked_add(1), cx.effect_result.clone());
+    if cx
+        .engine
+        .begin_counter_placement_batch(vec![proposal], stack, completion, cx.events)?
+        .is_some()
+    {
+        Ok(EffectOutcome::Continue)
+    } else {
+        Ok(EffectOutcome::Suspended)
+    }
+}
+
 fn resolve_counter_placements(
     cx: &mut EffectCx<'_>,
     placements: Vec<super::super::replacement::ProposedCounterPlacement>,

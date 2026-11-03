@@ -6197,6 +6197,7 @@ mod luxior_model_contract_tests {
         {
             *add_types = crate::primitives::TypeLineAddition::default();
             *set_types = Some(Box::new(crate::primitives::TypeLineReplacement {
+                artifact_types: Vec::new(),
                 card_types: vec![crate::primitives::PermanentTypeFilter::Creature],
                 creature_types: Vec::new(),
                 land_types: Vec::new(),

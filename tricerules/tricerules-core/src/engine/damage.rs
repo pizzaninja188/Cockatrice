@@ -4460,6 +4460,7 @@ mod tests {
             affected: AffectedScope::Single(source),
             kind: ContinuousEffectKind::Layer4SetTypeLine(
                 tricerules_card_model::TypeLineReplacement {
+                    artifact_types: Vec::new(),
                     card_types: vec![PermanentTypeFilter::Land],
                     creature_types: Vec::new(),
                     land_types: vec![BasicLandType::Forest],

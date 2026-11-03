@@ -169,6 +169,7 @@ fn early_layer_board_characteristics_stays_bounded() {
         add_effect(
             AffectedScope::Single(oid),
             ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+                artifact_types: Vec::new(),
                 card_types: vec![PermanentTypeFilter::Land],
                 creature_types: Vec::new(),
                 land_types: Vec::new(),

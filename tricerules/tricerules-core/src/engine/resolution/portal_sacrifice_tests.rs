@@ -197,6 +197,7 @@ fn remove_permanent_types(engine: &mut GameEngine, permanent: ObjectId) {
         affected: AffectedScope::Single(permanent),
         kind: ContinuousEffectKind::Layer4SetTypeLine(
             tricerules_card_model::primitives::TypeLineReplacement {
+                artifact_types: Vec::new(),
                 card_types: Vec::new(),
                 creature_types: Vec::new(),
                 land_types: Vec::new(),

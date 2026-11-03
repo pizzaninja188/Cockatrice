@@ -277,6 +277,7 @@ fn make_source_non_equipment(engine: &mut GameEngine, luxior: u32) -> Continuous
         engine,
         luxior,
         ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            artifact_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Artifact],
             creature_types: Vec::new(),
             land_types: Vec::new(),

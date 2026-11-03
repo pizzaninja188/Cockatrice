@@ -164,6 +164,7 @@ fn clock_uses_nonconsecutive_multiplayer_controllers_and_current_types() {
         &mut engine,
         clock,
         ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            artifact_types: Vec::new(),
             land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Enchantment],
             creature_types: vec![],
@@ -352,6 +353,7 @@ fn clock_face_down_basic_land_and_ability_suppression_disable_only_current_sourc
                 clock,
                 ContinuousEffectKind::Layer4SetTypeLine(
                     tricerules_card_model::TypeLineReplacement {
+                        artifact_types: Vec::new(),
                         card_types: vec![tricerules_card_model::PermanentTypeFilter::Land],
                         creature_types: Vec::new(),
                         land_types: vec![tricerules_card_model::BasicLandType::Forest],

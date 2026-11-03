@@ -413,6 +413,7 @@ fn myr_battlesphere_noncreature_source_retains_bonus_for_same_incarnation_until_
         &mut engine,
         source,
         ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            artifact_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Artifact],
             creature_types: vec![],
             land_types: vec![],

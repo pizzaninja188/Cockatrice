@@ -1375,3 +1375,20 @@ fn narset_transcendent_cast_and_loyalty_abilities_have_complete_fixtures() {
         );
     }
 }
+
+#[test]
+fn vraska_betrayals_sting_cast_and_loyalty_abilities_have_complete_fixtures() {
+    for ability in [None, Some(0), Some(1), Some(2)] {
+        let case = Case {
+            card: "vraska,_betrayals_sting".into(),
+            face: 0,
+            ability,
+        };
+        assert_eq!(
+            evaluate(&case).expect("evaluate actual Vraska fixture"),
+            Outcome::Exercised,
+            "{}",
+            case.key()
+        );
+    }
+}

@@ -158,6 +158,7 @@ fn metalwork_uses_derived_types_control_copy_and_battlefield_x_mana_value() {
         &mut e,
         ring,
         ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            artifact_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Artifact, PermanentTypeFilter::Creature],
             creature_types: vec![],
             land_types: vec![],
@@ -169,6 +170,7 @@ fn metalwork_uses_derived_types_control_copy_and_battlefield_x_mana_value() {
         &mut e,
         creature,
         ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            artifact_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Artifact],
             creature_types: vec![],
             land_types: vec![],
@@ -191,6 +193,7 @@ fn metalwork_uses_derived_types_control_copy_and_battlefield_x_mana_value() {
         &mut e,
         token,
         ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            artifact_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Artifact],
             creature_types: vec![],
             land_types: vec![],

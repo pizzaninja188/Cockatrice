@@ -498,6 +498,9 @@ pub fn reconstruct(capture: &Capture, options: &ReplayOptions) -> Result<ReplayR
 
 #[cfg(test)]
 mod tests {
+    mod vraska_normal {
+        include!("replay_vraska_normal.rs");
+    }
     use super::*;
     use crate::{EngineSession, ENGINE_BUILD};
     use prost::Message;

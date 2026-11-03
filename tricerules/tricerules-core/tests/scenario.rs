@@ -5,6 +5,9 @@
 //! binary). The `#[path]` attributes keep every submodule under `tests/scenario/` while
 //! preserving a single `scenario` test binary.
 
+#[path = "scenario/deck_coverage_vraska_betrayals_sting.rs"]
+mod deck_coverage_vraska_betrayals_sting;
+
 #[path = "scenario/deck_coverage_devotion_gods.rs"]
 mod deck_coverage_devotion_gods;
 

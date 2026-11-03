@@ -391,6 +391,7 @@ fn oath_permission_tracks_source_suppression_controller_and_current_walker_type(
         &mut engine,
         jace,
         ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            artifact_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Artifact],
             creature_types: vec![],
             land_types: vec![],

@@ -103,6 +103,12 @@ pub(super) fn apply_type_line_replacement(
         .extend(replacement.creature_types.iter().cloned());
     characteristics.types.extend(
         replacement
+            .artifact_types
+            .iter()
+            .map(|subtype| subtype.as_str().to_owned()),
+    );
+    characteristics.types.extend(
+        replacement
             .land_types
             .iter()
             .map(|land_type| land_type.as_str().to_string()),
@@ -2966,6 +2972,48 @@ impl GameEngine {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn treasure_type_replacement_reaches_derived_and_early_layer_views() {
+        let mut engine = GameEngine::new_with_default_decks(
+            tricerules_cards::registry::global(),
+            305_150,
+            &[0, 1],
+            20,
+        )
+        .unwrap();
+        let oid = insert_fixture(&mut engine, 0, "llanowar_elves", Zone::Battlefield);
+        let replacement =
+            ron::from_str("(card_types: [Artifact], artifact_types: [Treasure])").unwrap();
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(oid),
+            kind: ContinuousEffectKind::Layer4SetTypeLine(replacement),
+            condition: None,
+            duration: EffectDuration::Indefinite,
+            timestamp: 1,
+        });
+        let result = engine.characteristics(oid).unwrap();
+        assert_eq!(result.types, ["Artifact", "Treasure"]);
+        assert!(!result.is_creature());
+        assert!(!result.has_type("Elf"));
+        assert_eq!(result.controller, 0);
+        let view = engine.ev_zone_view_sync();
+        let Some(rv1::ruled_event::Ev::ZoneView(view)) = view.ev else {
+            panic!("zone view");
+        };
+        let public = view
+            .per_player
+            .iter()
+            .flat_map(|player| &player.battlefield_objects)
+            .find(|object| object.object_id == oid)
+            .unwrap();
+        assert!(public
+            .rules_annotation_labels
+            .iter()
+            .any(|label| label == "Types: Artifact, Treasure"));
+    }
+
     use super::*;
     use tricerules_card_model::{CharacteristicDefiningAbility, TypeLineAddition};
 
@@ -3270,6 +3318,7 @@ mod tests {
             affected: AffectedScope::Single(copy),
             kind: ContinuousEffectKind::Layer4SetTypeLine(
                 tricerules_card_model::TypeLineReplacement {
+                    artifact_types: Vec::new(),
                     card_types: vec![PermanentTypeFilter::Artifact],
                     creature_types: Vec::new(),
                     land_types: Vec::new(),
@@ -3611,6 +3660,7 @@ mod tests {
                     AffectedScope::Single(oid),
                     ContinuousEffectKind::Layer4SetTypeLine(
                         tricerules_card_model::TypeLineReplacement {
+                            artifact_types: Vec::new(),
                             card_types: vec![PermanentTypeFilter::Land],
                             creature_types: Vec::new(),
                             land_types: Vec::new(),
@@ -3648,6 +3698,7 @@ mod tests {
                     early_layer_type_scope(PermanentTypeFilter::Artifact),
                     ContinuousEffectKind::Layer4SetTypeLine(
                         tricerules_card_model::TypeLineReplacement {
+                            artifact_types: Vec::new(),
                             card_types: vec![PermanentTypeFilter::Land],
                             creature_types: Vec::new(),
                             land_types: Vec::new(),
@@ -3659,6 +3710,7 @@ mod tests {
                     early_layer_type_scope(PermanentTypeFilter::Land),
                     ContinuousEffectKind::Layer4SetTypeLine(
                         tricerules_card_model::TypeLineReplacement {
+                            artifact_types: Vec::new(),
                             card_types: vec![PermanentTypeFilter::Artifact],
                             creature_types: Vec::new(),
                             land_types: Vec::new(),
@@ -3850,6 +3902,7 @@ mod tests {
                     AffectedScope::Single(source),
                     ContinuousEffectKind::Layer4SetTypeLine(
                         tricerules_card_model::TypeLineReplacement {
+                            artifact_types: Vec::new(),
                             card_types: vec![PermanentTypeFilter::Land],
                             creature_types: Vec::new(),
                             land_types: vec![BasicLandType::Forest],
@@ -3882,6 +3935,7 @@ mod tests {
                 early_layer_type_scope(PermanentTypeFilter::Land),
                 ContinuousEffectKind::Layer4SetTypeLine(
                     tricerules_card_model::TypeLineReplacement {
+                        artifact_types: Vec::new(),
                         card_types: vec![PermanentTypeFilter::Artifact],
                         creature_types: Vec::new(),
                         land_types: Vec::new(),
@@ -3893,6 +3947,7 @@ mod tests {
                 early_layer_type_scope(PermanentTypeFilter::Artifact),
                 ContinuousEffectKind::Layer4SetTypeLine(
                     tricerules_card_model::TypeLineReplacement {
+                        artifact_types: Vec::new(),
                         card_types: vec![PermanentTypeFilter::Land],
                         creature_types: Vec::new(),
                         land_types: Vec::new(),
@@ -4008,6 +4063,7 @@ mod tests {
                 AffectedScope::Single(c),
                 ContinuousEffectKind::Layer4SetTypeLine(
                     tricerules_card_model::TypeLineReplacement {
+                        artifact_types: Vec::new(),
                         card_types: vec![PermanentTypeFilter::Land],
                         creature_types: Vec::new(),
                         land_types: Vec::new(),
@@ -4087,6 +4143,7 @@ mod tests {
                     AffectedScope::Single(oid),
                     ContinuousEffectKind::Layer4SetTypeLine(
                         tricerules_card_model::TypeLineReplacement {
+                            artifact_types: Vec::new(),
                             card_types: vec![PermanentTypeFilter::Land],
                             creature_types: Vec::new(),
                             land_types: vec![BasicLandType::Forest],
@@ -4162,6 +4219,7 @@ mod tests {
                 AffectedScope::Single(source),
                 ContinuousEffectKind::Layer4SetTypeLine(
                     tricerules_card_model::TypeLineReplacement {
+                        artifact_types: Vec::new(),
                         card_types: vec![PermanentTypeFilter::Land],
                         creature_types: Vec::new(),
                         land_types: vec![BasicLandType::Forest],
@@ -4198,6 +4256,7 @@ mod tests {
                     AffectedScope::Single(oid),
                     ContinuousEffectKind::Layer4SetTypeLine(
                         tricerules_card_model::TypeLineReplacement {
+                            artifact_types: Vec::new(),
                             card_types: vec![PermanentTypeFilter::Land],
                             creature_types: Vec::new(),
                             land_types: vec![BasicLandType::Forest],
@@ -4260,6 +4319,7 @@ mod tests {
                     AffectedScope::Single(creature),
                     ContinuousEffectKind::Layer4SetTypeLine(
                         tricerules_card_model::TypeLineReplacement {
+                            artifact_types: Vec::new(),
                             card_types: vec![PermanentTypeFilter::Land],
                             creature_types: Vec::new(),
                             land_types: Vec::new(),
@@ -4278,6 +4338,7 @@ mod tests {
                     AffectedScope::Single(source),
                     ContinuousEffectKind::Layer4SetTypeLine(
                         tricerules_card_model::TypeLineReplacement {
+                            artifact_types: Vec::new(),
                             card_types: vec![PermanentTypeFilter::Land],
                             creature_types: Vec::new(),
                             land_types: vec![BasicLandType::Swamp],

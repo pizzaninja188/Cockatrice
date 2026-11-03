@@ -1,0 +1,71 @@
+{
+  "format_version": 1,
+  "oracle_id": "05d09c55-f551-4cb4-a8d2-4811dccc848d",
+  "spans": [
+    {
+      "face_id": "vraska_betrayals_sting",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "vraska_betrayals_sting",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "vraska_betrayals_sting",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    },
+    {
+      "face_id": "vraska_betrayals_sting",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/activated_abilities/2"
+      ]
+    }
+  ],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "deck_registry::deck_coverage_vraska_betrayals_sting::vraska_exact_identity_and_all_three_loyalty_abilities",
+      "covers": "Exact Oracle identity, cost, six loyalty, Compleated, all ability costs/lines/effects, shared creature target, five-color Treasure child ability, and mandatory any-player poison target."
+    },
+    {
+      "test": "scenario deck_coverage_vraska_betrayals_sting::vraska_actual_cast_records_phyrexian_payment_and_both_season_orders",
+      "covers": "Prepared actual casts prove mana-paid six, life-paid four, mana value six, and Doubling Season outcomes twelve/eight/ten with actor rejection while entry is parked."
+    },
+    {
+      "test": "scenario deck_coverage_vraska_betrayals_sting::vraska_zero_draws_and_loses_life_once_before_both_tekuthal_proliferations",
+      "covers": "Actual zero ability draws one and loses one life once before both Tekuthal leaves, with wrong-actor atomic rejection, exact loyalty increments, and poison reaching ten and loss."
+    },
+    {
+      "test": "scenario deck_coverage_vraska_betrayals_sting::vraska_minus_two_keeps_the_exact_permanent_and_grants_all_five_treasure_mana_options",
+      "covers": "Actual -2 preserves ObjectId/generation, legendary supertype and counters, removes creature status and Flying/old ability, grants all five mana options despite summoning sickness, survives Vraska departure, and sacrifices the exact card to its owner including foreign ownership."
+    },
+    {
+      "test": "scenario deck_coverage_vraska_betrayals_sting::vraska_conversion_expires_on_reentry_and_rejects_a_stale_creature_target",
+      "covers": "Actual converted creature loses the effect on zone change; leaving and returning before -2 resolves preserves the new creature incarnation."
+    },
+    {
+      "test": "scenario deck_coverage_vraska_betrayals_sting::vraska_actual_ultimate_targets_any_player_after_source_sacrifices_all_loyalty",
+      "covers": "Actual -9 pays nine loyalty, source enters graveyard, resolves for self and two different opponents at zero/eight/nine poison, and finishes without a pending continuation."
+    },
+    {
+      "test": "scenario deck_coverage_vraska_betrayals_sting::vraska_rejects_insufficient_loyalty_wrong_controller_and_noncreature_targets_atomically",
+      "covers": "Rejected wrong actor, noncreature -2 target, and insufficient -9 loyalty preserve the full diagnostic state."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

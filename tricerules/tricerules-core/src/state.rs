@@ -2418,6 +2418,14 @@ pub enum SpecialCastCompletion {
 /// Typed work that remains after a shared counter-placement replacement batch finishes.
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) enum CounterPlacementCompletion {
+    /// Vraska's original player-counter proposal, bound to its resolving flat instruction.
+    PoisonTargetUpToNine {
+        stack_id: ObjectId,
+        leaf_index: u32,
+        controller: PlayerId,
+        target_player: PlayerId,
+        poison_before: u32,
+    },
     StackEffect {
         spell_label: String,
     },

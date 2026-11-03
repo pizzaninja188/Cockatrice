@@ -530,6 +530,7 @@ fn sword_host_stops_being_creature_and_stale_equip_cannot_attach() {
     let host = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     equip(&mut e, sword, host);
     let replacement = tricerules_cards::TypeLineReplacement {
+        artifact_types: Vec::new(),
         card_types: vec![tricerules_cards::PermanentTypeFilter::Artifact],
         creature_types: vec![],
         land_types: vec![],
