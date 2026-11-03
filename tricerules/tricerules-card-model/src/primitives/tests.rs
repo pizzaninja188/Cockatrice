@@ -1948,6 +1948,42 @@ fn magecraft_trigger_is_typed_without_cast_only_spell_context() {
 }
 
 #[test]
+fn greatest_power_sacrifice_is_a_closed_one_creature_restriction() {
+    let source = "ChooseAndSacrifice(players: EachOpponent, count: 1, filter: (kind: Creature), restriction: GreatestPower)";
+    let effect: super::SpellEffectKind = ron::from_str(source)
+        .expect("Onyx and Crackling Doom need the greatest-power sacrifice restriction");
+    assert!(effect.validate(super::EffectContext::Ability).is_ok());
+    assert!(effect.validate(super::EffectContext::Spell).is_ok());
+    assert!(
+        ron::to_string(&effect).unwrap().contains("GreatestPower"),
+        "the parser must retain the new restriction"
+    );
+    for invalid in [
+        source.replace("count: 1", "count: 2"),
+        source.replace(
+            "kind: Creature",
+            "kind: AnyPermanent, permanent_types: [Artifact]",
+        ),
+        source.replace(
+            "kind: Creature",
+            "kind: Creature, required_subtypes: [\"Elf\"]",
+        ),
+    ] {
+        let effect: super::SpellEffectKind = ron::from_str(&invalid).unwrap();
+        assert!(effect.validate(super::EffectContext::Ability).is_err());
+    }
+    let legacy: super::SpellEffectKind = ron::from_str(
+        "ChooseAndSacrifice(players: EachOpponent, count: 1, filter: (kind: Creature))",
+    )
+    .unwrap();
+    assert!(legacy.validate(super::EffectContext::Ability).is_ok());
+    assert!(
+        !ron::to_string(&legacy).unwrap().contains("restriction"),
+        "ordinary sacrifice keeps its existing canonical projection"
+    );
+}
+
+#[test]
 fn poison_up_to_nine_requires_an_explicit_player_target() {
     let effect: super::SpellEffectKind =
         ron::from_str("PoisonTargetUpToNine(target: (kind: AnyPlayer))")

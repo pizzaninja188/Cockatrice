@@ -1,5 +1,6 @@
 //! CR 404.3: arrange actual simultaneous graveyard arrivals before resuming resolution.
 use super::*;
+use tricerules_card_model::primitives::SacrificeRestriction;
 
 #[derive(serde::Serialize, Debug, Clone)]
 pub(super) struct SacrificeDeparture {
@@ -135,6 +136,7 @@ impl GameEngine {
         player: PlayerId,
         filter: &tricerules_card_model::primitives::TargetFilter,
         excluded: &HashSet<ObjectId>,
+        restriction: SacrificeRestriction,
     ) -> Vec<(ObjectId, u64)> {
         let Some(index) = self.state.player_idx(player) else {
             return Vec::new();
@@ -144,29 +146,39 @@ impl GameEngine {
             .iter()
             .copied()
             .filter(|oid| !excluded.contains(oid))
-            .filter(|oid| {
-                self.characteristics(*oid).is_some_and(|characteristics| {
-                    characteristics.controller == player
-                        && super::targeting::object_matches_mass_filter(self, *oid, filter)
-                })
-            })
-            .map(|oid| {
-                (
+            .filter_map(|oid| {
+                let characteristics = self.characteristics(oid)?;
+                if characteristics.controller != player
+                    || !super::targeting::object_matches_mass_filter(self, oid, filter)
+                {
+                    return None;
+                }
+                Some((
                     oid,
                     self.state
                         .zone_change_generation
                         .get(&oid)
                         .copied()
                         .unwrap_or(0),
-                )
+                    characteristics.signed_power.unwrap_or(0),
+                ))
             })
             .collect::<Vec<_>>();
-        candidates.sort_unstable_by_key(|(oid, _)| *oid);
+        if restriction == SacrificeRestriction::GreatestPower {
+            // CR 208.5 / 608.2d: compare current signed power. A zero initializer would
+            // incorrectly discard an all-negative cohort; missing power itself is zero.
+            let greatest = candidates.iter().map(|candidate| candidate.2).max();
+            candidates.retain(|candidate| Some(candidate.2) == greatest);
+        }
+        candidates.sort_unstable_by_key(|(oid, _, _)| *oid);
         candidates
+            .into_iter()
+            .map(|(oid, generation, _)| (oid, generation))
+            .collect()
     }
 
-    /// Auto-select every forced slot in APNAP order, stopping at the next player with a real
-    /// choice. Each candidate set is refreshed only after a player departure has changed control.
+    /// Auto-select forced slots in APNAP order, stopping at the next real choice. Refresh only
+    /// unanswered rows; accepted identities retain the action-possibility checks below.
     pub(super) fn advance_player_set_sacrifice_choices(
         &self,
         sacrifice: &mut crate::state::PendingPlayerSetSacrifice,
@@ -178,6 +190,8 @@ impl GameEngine {
             .filter(|player| !player.has_lost)
             .map(|player| player.id)
             .collect();
+        // Accepted choices were legal when announced (CR 101.4 / 608.2d-e). Retire vanished or
+        // no-longer-sacrificable identities, but do not reopen their relative power ranking.
         sacrifice.accepted.retain(|selection| {
             live_players.contains(&selection.player)
                 && self
@@ -218,6 +232,7 @@ impl GameEngine {
                 choice.player,
                 &sacrifice.filter,
                 &excluded,
+                sacrifice.restriction,
             );
             choice.required = sacrifice
                 .count
@@ -281,11 +296,18 @@ impl GameEngine {
             choice.required,
             choice.required,
         );
-        let prompt = format!(
-            "P{}: {} to sacrifice.",
-            choice.player,
-            selection_prompt.trim_end_matches('.')
-        );
+        let prompt = if sacrifice.restriction == SacrificeRestriction::GreatestPower {
+            format!(
+                "P{}: Choose a creature with greatest power to sacrifice.",
+                choice.player
+            )
+        } else {
+            format!(
+                "P{}: {} to sacrifice.",
+                choice.player,
+                selection_prompt.trim_end_matches('.')
+            )
+        };
         let accepted_permanent_selections = sacrifice
             .accepted
             .iter()
@@ -350,9 +372,25 @@ impl GameEngine {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal("player-set sacrifice chooser missing"));
         };
+        let current_greatest =
+            (sacrifice.restriction == SacrificeRestriction::GreatestPower).then(|| {
+                self.current_player_sacrifice_candidates(
+                    choice.player,
+                    &sacrifice.filter,
+                    &HashSet::new(),
+                    sacrifice.restriction,
+                )
+            });
         let legal = choice.player == pending.deciding_player
             && chosen.len() == choice.required as usize
             && chosen.iter().all(|object_id| {
+                if current_greatest.as_ref().is_some_and(|candidates| {
+                    !candidates
+                        .iter()
+                        .any(|(candidate, _)| candidate == object_id)
+                }) {
+                    return false;
+                }
                 let Some(generation) =
                     choice
                         .candidate_generations

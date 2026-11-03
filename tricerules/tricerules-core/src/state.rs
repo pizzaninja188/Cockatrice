@@ -2911,7 +2911,7 @@ pub struct PendingPlayerSetDiscard {
 }
 
 /// One APNAP slot in a public choose-and-sacrifice instruction. Candidate generations are frozen
-/// before any player answers; all selected permanents remain on the battlefield until the full
+/// before that player answers; all selected permanents remain on the battlefield until the full
 /// player set has chosen.
 #[derive(serde::Serialize, Debug, Clone)]
 pub struct PendingPlayerSacrificeChoice {
@@ -2936,6 +2936,7 @@ pub struct PendingPlayerSetSacrifice {
     pub accepted: Vec<AcceptedPermanentSelection>,
     pub count: u32,
     pub filter: TargetFilter,
+    pub restriction: tricerules_card_model::primitives::SacrificeRestriction,
 }
 
 /// Original player-set subject and the selected live player who answers any remaining choices.

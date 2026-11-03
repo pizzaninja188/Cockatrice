@@ -9,6 +9,9 @@ mod library_hand_graveyard;
 #[path = "activation_tests/magecraft.rs"]
 mod magecraft;
 
+#[path = "activation_tests/greatest_power_sacrifice.rs"]
+mod greatest_power_sacrifice;
+
 const OPPONENT_CHOICE_LAND: &str = r#"(
     id: "opponent_choice_land", name: "Opponent Choice Land",
     face_id: "opponent_choice_land", types: ["Land"],

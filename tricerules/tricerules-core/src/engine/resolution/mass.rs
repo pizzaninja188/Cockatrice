@@ -413,6 +413,7 @@ pub(super) fn choose_and_sacrifice(
         players,
         count,
         filter,
+        restriction,
     } = effect
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
@@ -431,8 +432,9 @@ pub(super) fn choose_and_sacrifice(
         accepted: Vec::new(),
         count,
         filter,
+        restriction,
     };
-    let stack = ParkedStackResolution::dedicated(cx.top.clone());
+    let stack = cx.parked_stack();
     if cx
         .engine
         .advance_player_set_sacrifice_choices(&mut sacrifice)

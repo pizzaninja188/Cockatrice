@@ -184,6 +184,20 @@ pub enum PermanentSacrificeScope {
     NonlandPermanents,
 }
 
+/// The bounded relative-power clause shared by Professor Onyx and Crackling Doom.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum SacrificeRestriction {
+    #[default]
+    None,
+    GreatestPower,
+}
+
+impl SacrificeRestriction {
+    fn is_none(&self) -> bool {
+        *self == Self::None
+    }
+}
+
 /// The permanent affected by an effect that can either refer to its own source or target a
 /// chosen permanent. `Source` is auto-bound and does not target in the CR 115 sense;
 /// `Chosen` carries the filter for a genuine chosen target.
@@ -2424,6 +2438,8 @@ pub enum SpellEffectKind {
         count: u32,
         #[serde(default = "TargetFilter::default_creature")]
         filter: TargetFilter,
+        #[serde(default, skip_serializing_if = "SacrificeRestriction::is_none")]
+        restriction: SacrificeRestriction,
     },
     /// Each affected player chooses one permanent for each listed type, then the unchosen
     /// in-scope permanents are sacrificed simultaneously. Liliana, Dreadhorde General uses
@@ -6464,6 +6480,7 @@ impl SpellEffectKind {
                 players,
                 count,
                 filter,
+                restriction,
             } => {
                 filter.validate_characteristic_constraints()?;
                 if !matches!(
@@ -6476,6 +6493,11 @@ impl SpellEffectKind {
                 }
                 if *count == 0 {
                     return Err("ChooseAndSacrifice.count must be positive".into());
+                }
+                if *restriction == SacrificeRestriction::GreatestPower
+                    && (*count != 1 || *filter != TargetFilter::default_creature())
+                {
+                    return Err("GreatestPower sacrifice requires count 1 and the unrestricted Creature filter".into());
                 }
                 if !filter.is_permanent_only() {
                     return Err("ChooseAndSacrifice.filter must select permanents".into());

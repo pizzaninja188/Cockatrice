@@ -235,6 +235,17 @@ Copied cards outside the stack do not use this event; a card copy actually cast 
 ordinary cast event (CR 603.2c, 707.10). This adds capability only, without card registration or a
 protocol/client change.
 
+`ChooseAndSacrifice` has an optional `GreatestPower` restriction for Professor Onyx and Crackling
+Doom. It initially admits only count one with the unrestricted Creature filter. Each unanswered
+player chooses among their current signed-power maxima, including ties, counters, continuous
+effects and tokens; all-negative cohorts retain the least-negative power (CR 208.5). An accepted
+identity remains chosen through unrelated rank drift, while ordinary generation, battlefield,
+control and base-filter checks can retire an identity that can no longer be sacrificed. This
+follows the APNAP choice timing and preserved-prefix contract (CR 101.4, 608.2d–e). All selected
+objects use the existing simultaneous sacrifice and owner graveyard-ordering funnel (CR 701.21a,
+404.3). These choices are untargeted. The default restriction preserves ordinary sacrifice
+behavior and canonical card projections. This capability adds no card or protocol/client change.
+
 The bounded 2026-10-19 Scalestorm Summoner port admits one finite `ProgramIf` condition:
 `MaximumPower` among the ability controller's creatures, with a positive `min`, no `max`, default
 remaining filter fields, and no observed-object exclusion. It migrates only `triggered_01` from the
