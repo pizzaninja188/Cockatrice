@@ -172,6 +172,7 @@ void ObservedState::observeRuledEvent(const ruled::v1::RuledEvent &ev, const std
              rcr.candidate_player_ids_size() > 0 ||
              (rcr.choice_kind() == ruled::v1::CHOICE_KIND_TARGET_OBJECTS && rcr.min() == 0 && rcr.max() == 1) ||
              (rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH && rcr.min() == 0) ||
+             rcr.choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST ||
              rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANA_PAYMENT ||
              rcr.choice_kind() == ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH ||
              rcr.choice_kind() == ruled::v1::CHOICE_KIND_ATTACKING_TOKEN_DEFENDER)) {

@@ -85,16 +85,26 @@ RuledPaymentUi::RuledPaymentUi(PlayerActions *value) : actions(value)
             !state->isPendingChoiceCandidate(RuledClientState::ChoiceKind::SpecialCast, oid))
             return;
 
+        const auto sourceBinding = state->specialCastSourceForObject(oid);
+        if (!sourceBinding)
+            return;
+        const auto source = sourceBinding->source;
+        const int sourceIndex = sourceBinding->sourceIndex;
         struct SpecialOffer
         {
             RuledFaceOption face;
             bool isLand = false;
         };
         QVector<SpecialOffer> options;
-        for (const auto &face : state->zoneActionFaceOptions(oid, RuledCastSource::Exile))
+        const auto castFaces = source == RuledCastSource::Hand
+            ? state->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, sourceIndex)
+            : state->zoneActionFaceOptions(oid, source);
+        for (const auto &face : castFaces)
             options.append({face, false});
-        for (const auto &face : state->zoneLandFaceOptions(oid, RuledCastSource::Exile))
-            options.append({face, true});
+        if (source == RuledCastSource::Exile) {
+            for (const auto &face : state->zoneLandFaceOptions(oid, source))
+                options.append({face, true});
+        }
         std::sort(options.begin(), options.end(), [](const SpecialOffer &left, const SpecialOffer &right) {
             return std::tie(left.face.faceIndex, left.isLand) < std::tie(right.face.faceIndex, right.isLand);
         });
@@ -108,7 +118,7 @@ RuledPaymentUi::RuledPaymentUi(PlayerActions *value) : actions(value)
             selected = options.constFirst();
         } else {
             QMenu menu(actions->player->getGame()->getTab());
-            menu.setTitle(PlayerActions::tr("Choose how to play the exiled card"));
+            menu.setTitle(PlayerActions::tr("Choose how to play the card"));
             QVector<QAction *> actionsByOption;
             actionsByOption.reserve(options.size());
             for (const auto &option : options) {
@@ -128,10 +138,13 @@ RuledPaymentUi::RuledPaymentUi(PlayerActions *value) : actions(value)
             state->pendingChoice->resolutionPromptId != promptId ||
             !state->isPendingChoiceCandidate(RuledClientState::ChoiceKind::SpecialCast, oid))
             return;
+        const auto currentSource = state->specialCastSourceForObject(oid);
+        if (!currentSource || currentSource->source != source || currentSource->sourceIndex != sourceIndex)
+            return;
         const auto &offer = selected->face;
         if (!selected->isLand) {
-            beginRuledSpellCast(nullptr, static_cast<int>(oid), offer.faceIndex, offer.faceName, offer.manaCost,
-                                offer.genericCostReduction, RuledCastSource::Exile, offer.castMethod,
+            beginRuledSpellCast(nullptr, sourceIndex, offer.faceIndex, offer.faceName, offer.manaCost,
+                                offer.genericCostReduction, source, offer.castMethod,
                                 offer.castingPermissionId, offer.prototyped, promptId,
                                 offer.zoneChangeGeneration);
             return;

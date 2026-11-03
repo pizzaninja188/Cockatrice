@@ -742,6 +742,9 @@ public:
         bool mayDecline = false;
         /// Click-to-select candidates on the battlefield or player surface.
         QVector<quint32> candidateOids;
+          // Mixed-zone resolution casts retain engine OIDs; only Hand maps through current slots.
+          QHash<quint32, RuledCastSource> specialCastSourceByOid;
+          QHash<quint32, int> specialCastHandCardIds;
         QVector<quint32> selectedObjectOids;
         /// Keep a bounded permanent choice and its highlights until acknowledgement or replacement.
         bool permanentChoiceSubmitting = false;
@@ -1347,6 +1350,13 @@ public:
     /// CR 712: every playable face the engine offers for a given hand slot, sorted by face index.
     /// Size > 1 means a multi-face card whose side the player must choose.
     [[nodiscard]] QVector<RuledFaceOption> handActionFaceOptions(RuledHandActionKind kind, int handIndex) const;
+    struct SpecialCastSource
+    {
+        RuledCastSource source;
+        int sourceIndex; // Hand slot for Hand; engine ObjectId for public zones.
+    };
+    [[nodiscard]] std::optional<SpecialCastSource> specialCastSourceForObject(quint32 oid) const;
+    [[nodiscard]] quint32 specialCastObjectForSource(int sourceIndex, RuledCastSource source) const;
     /// True when this exact castable face needs a cast-time target (CastSpell).
     [[nodiscard]] bool handActionNeedsTarget(RuledHandActionKind kind, int handIndex, int faceIndex = 0) const;
     [[nodiscard]] bool isHandCastActionLegal(int slot,

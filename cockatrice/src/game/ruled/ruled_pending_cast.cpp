@@ -1387,7 +1387,9 @@ RuledPendingCast::submissionCommand(const ruled::v1::RuledCommand &command,
     const bool specialMethod = method == ruled::v1::CAST_METHOD_MADNESS ||
                                method == ruled::v1::CAST_METHOD_SIEGE_DEFEAT;
     const bool permissionMethod = method == ruled::v1::CAST_METHOD_PERMISSION;
-    if (!specialMethod && !permissionMethod)
+    const bool freeResolutionMethod = method == ruled::v1::CAST_METHOD_WITHOUT_MANA_COST &&
+                                      pendingSpell && pendingSpell->resolutionPromptId != 0;
+    if (!specialMethod && !permissionMethod && !freeResolutionMethod)
         return command;
 
     const bool permissionTargetsCurrentSpecialCast =
@@ -1414,18 +1416,21 @@ RuledPendingCast::submissionCommand(const ruled::v1::RuledCommand &command,
 
 bool RuledPendingCast::matchesSpecialCastOffer(const PendingRuledSpellCast &spell, const RuledClientState &state)
 {
-    return spell.valid && spell.resolutionPromptId != 0 && state.isCurrentResolutionPrompt(spell.resolutionPromptId) &&
-           state.pendingChoice.has_value() &&
-           state.pendingChoice->resolutionPromptId == spell.resolutionPromptId &&
-           spell.source == RuledCastSource::Exile &&
-           (spell.castMethod == ruled::v1::CAST_METHOD_MADNESS ||
-            spell.castMethod == ruled::v1::CAST_METHOD_SIEGE_DEFEAT ||
-            spell.castMethod == ruled::v1::CAST_METHOD_PERMISSION) &&
-           state.isPendingChoiceCandidate(RuledClientState::ChoiceKind::SpecialCast,
-                                          static_cast<quint32>(spell.handIndex)) &&
-           state.isZoneCastActionLegal(static_cast<quint32>(spell.handIndex), spell.faceIndex, spell.source,
-                                       spell.castMethod, spell.castingPermissionId, spell.sourceZoneChangeGeneration,
-                                       spell.prototyped);
+    if (!spell.valid || spell.resolutionPromptId == 0 || !state.isCurrentResolutionPrompt(spell.resolutionPromptId) ||
+        !state.pendingChoice || state.pendingChoice->resolutionPromptId != spell.resolutionPromptId ||
+        state.specialCastObjectForSource(spell.handIndex, spell.source) == 0)
+        return false;
+    const bool legacyMethod = spell.source == RuledCastSource::Exile &&
+        (spell.castMethod == ruled::v1::CAST_METHOD_MADNESS ||
+         spell.castMethod == ruled::v1::CAST_METHOD_SIEGE_DEFEAT ||
+         spell.castMethod == ruled::v1::CAST_METHOD_PERMISSION);
+    if (!legacyMethod && spell.castMethod != ruled::v1::CAST_METHOD_WITHOUT_MANA_COST)
+        return false;
+    return spell.source == RuledCastSource::Hand
+        ? state.isHandCastActionLegal(spell.handIndex, spell.faceIndex, spell.castMethod, spell.prototyped)
+        : state.isZoneCastActionLegal(static_cast<quint32>(spell.handIndex), spell.faceIndex, spell.source,
+                                     spell.castMethod, spell.castingPermissionId, spell.sourceZoneChangeGeneration,
+                                     spell.prototyped);
 }
 
 bool RuledPendingCast::resolutionChoiceBlocksSpell(const RuledClientState &state) const

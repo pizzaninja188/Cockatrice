@@ -247,6 +247,8 @@ pub(in crate::engine) struct PreparedSpellCast {
 pub(in crate::engine) struct PendingSpellCastInternal {
     pub(in crate::engine) prepared: PreparedSpellCast,
     original_object: GameObject,
+    /// Exact Kaya parent occurrence and the prompt accepted before child reservation.
+    legendary_parent: Option<(ObjectId, u64, u64)>,
     restored_permissions: Vec<(usize, ActiveExilePlayPermission)>,
     restored_discard_successors: Vec<((ObjectId, u64), u64)>,
     proposal_triggers: Vec<super::triggers::CollectedTrigger>,
@@ -436,7 +438,9 @@ impl GameEngine {
             .as_ref()
             .ok_or(EngineError::Illegal("missing locked spell cost"))?
             .prepared;
+        let legendary = self.validate_legendary_cast_parent(pending)?;
         if prepared.cast_method == SpellCastMethod::WithoutManaCost
+            && !legendary
             && !self.hand_without_mana_cost_permitted(pending.caster)
         {
             return Err(EngineError::Illegal(
@@ -463,6 +467,56 @@ impl GameEngine {
         }
     }
 
+    fn validate_legendary_cast_parent(
+        &self,
+        cast: &crate::state::PendingSpellCastState,
+    ) -> Result<bool, EngineError> {
+        let Some(internal) = self.pending_spell_cast_internal.as_ref() else {
+            return Ok(false);
+        };
+        let Some((id, generation, prompt)) = internal.legendary_parent else {
+            return Ok(false);
+        };
+        let valid_parent = self.state.pending_resolution.as_ref().is_some_and(|parent| {
+            parent.deciding_player == cast.caster
+                && parent.resolution_prompt_id.get() == 0
+                && prompt != 0
+                && matches!(&parent.continuation, ResolutionContinuation::LegendarySpellCast { stack, .. }
+                    if stack.item.id == id && stack.item.source_zone_change == generation)
+        });
+        let valid_face = self
+            .registry
+            .get(&internal.prepared.card_id)
+            .and_then(|d| d.face(cast.announcement.face_index as usize))
+            .is_some_and(|face| {
+                !face.is_land
+                    && face.supertypes.iter().any(|s| s == "Legendary")
+                    && self.legendary_spell_cast_allowed(cast.caster, face)
+                    && self.spell_cast_permitted_by_emblems(cast.caster, face)
+            });
+        let valid_origin = match cast.original_zone {
+            Zone::Hand | Zone::Graveyard => cast.original_holder == cast.caster,
+            Zone::Exile => self
+                .state
+                .objects
+                .get(&cast.reserved_object_id)
+                .is_some_and(|o| o.owner == cast.caster),
+            _ => false,
+        };
+        if !valid_parent
+            || !valid_face
+            || !valid_origin
+            || !cast.resolution_time_offer
+            || cast.announcement.cast_method != rv1::CastMethod::WithoutManaCost as i32
+            || cast.announcement.prototyped
+        {
+            return Err(EngineError::Illegal(
+                "legendary cast parent or spell became stale",
+            ));
+        }
+        Ok(true)
+    }
+
     pub(super) fn begin_spell_cast(
         &mut self,
         player: PlayerId,
@@ -485,6 +539,27 @@ impl GameEngine {
         }
         let cast = cast_from_announcement(announcement);
         let prepared = self.prepare_spell_cast(player, &cast)?;
+        let legendary_parent = if self.legendary_resolution_cast_for(player) {
+            let parent = self
+                .state
+                .pending_resolution
+                .as_ref()
+                .expect("legendary parent");
+            let ResolutionContinuation::LegendarySpellCast { stack, .. } = &parent.continuation
+            else {
+                unreachable!()
+            };
+            if parent.resolution_prompt_id.get() == 0 {
+                return Err(EngineError::Illegal("unpublished legendary offer"));
+            }
+            Some((
+                stack.item.id,
+                stack.item.source_zone_change,
+                parent.resolution_prompt_id.get(),
+            ))
+        } else {
+            None
+        };
         let oid = prepared.oid;
         let object = self
             .state
@@ -623,6 +698,7 @@ impl GameEngine {
         self.pending_spell_cast_internal = Some(PendingSpellCastInternal {
             prepared,
             original_object: object,
+            legendary_parent,
             restored_permissions,
             restored_discard_successors,
             proposal_triggers,
@@ -685,22 +761,28 @@ impl GameEngine {
                 .pending_resolution
                 .as_ref()
                 .ok_or(EngineError::Illegal("special cast resolution disappeared"))?;
-            let ResolutionContinuation::SpecialCast {
-                stack,
-                return_source_to_owner_hand_if_cast,
-                completion,
-                ..
-            } = &pending.continuation
-            else {
-                return Err(EngineError::Illegal("special cast resolution changed"));
-            };
-            Some((
-                stack.item.clone(),
-                stack.resume_effect_index(),
-                stack.previous_result().clone(),
-                *return_source_to_owner_hand_if_cast,
-                completion.clone(),
-            ))
+            match &pending.continuation {
+                ResolutionContinuation::SpecialCast {
+                    stack,
+                    return_source_to_owner_hand_if_cast,
+                    completion,
+                    ..
+                } => Some((
+                    stack.item.clone(),
+                    stack.resume_effect_index(),
+                    stack.previous_result().clone(),
+                    *return_source_to_owner_hand_if_cast,
+                    completion.clone(),
+                )),
+                ResolutionContinuation::LegendarySpellCast { stack, .. } => Some((
+                    stack.item.clone(),
+                    stack.resume_effect_index(),
+                    stack.previous_result().clone(),
+                    false,
+                    crate::state::SpecialCastCompletion::ResumeStack,
+                )),
+                _ => return Err(EngineError::Illegal("special cast resolution changed")),
+            }
         } else {
             None
         };
@@ -823,6 +905,7 @@ impl GameEngine {
             "P{player} cancels the spell-casting proposal."
         )));
         if state.resolution_time_offer {
+            self.refresh_legendary_cast_cohort();
             if let Some(event) = self.resolution_payment_choice_event() {
                 batch.events.push(event);
             }
@@ -995,7 +1078,8 @@ impl GameEngine {
     ) -> Result<PreparedSpellCast, EngineError> {
         let special_permission = self.special_cast_permission(player);
         let special_method = self.special_cast_method(player);
-        let special = special_permission.is_some();
+        let special = special_method.is_some();
+        let legendary = self.legendary_resolution_cast_for(player);
         let targets = command.targets.as_slice();
         let x_value = command.x_value;
         let flex_payments = command.flex_payments.as_slice();
@@ -1031,6 +1115,7 @@ impl GameEngine {
             .and_then(|source| source.location.as_ref())
             .ok_or(EngineError::Illegal("missing cast source"))?;
         if special
+            && !legendary
             && (special_method != Some(cast_method)
                 || !matches!(source, rv1::cast_source::Location::ExileObjectId(_)))
         {
@@ -1056,6 +1141,7 @@ impl GameEngine {
                     return Err(EngineError::Illegal("invalid hand cast method"));
                 }
                 if cast_method == SpellCastMethod::WithoutManaCost
+                    && !legendary
                     && !self.hand_without_mana_cost_permitted(player)
                 {
                     return Err(EngineError::Illegal(
@@ -1079,10 +1165,11 @@ impl GameEngine {
                 if !self.state.players[idx].graveyard.contains(source_oid) {
                     return Err(EngineError::Illegal("card is not in your graveyard"));
                 }
-                if !matches!(
+                if !(matches!(
                     cast_method,
                     SpellCastMethod::Flashback | SpellCastMethod::Harmonize
-                ) {
+                ) || legendary && cast_method == SpellCastMethod::WithoutManaCost)
+                {
                     return Err(EngineError::Illegal(
                         "graveyard casts require an alternative cast method",
                     ));
@@ -1090,83 +1177,87 @@ impl GameEngine {
                 (*source_oid, None)
             }
             rv1::cast_source::Location::ExileObjectId(source_oid) => {
-                let permission_id = command
-                    .casting_permission_id
-                    .ok_or(EngineError::Illegal("missing exile casting permission id"))?;
-                let object = self
-                    .state
-                    .objects
-                    .get(source_oid)
-                    .ok_or(EngineError::Illegal("unknown exile object"))?;
-                let generation = self
-                    .state
-                    .zone_change_generation
-                    .get(source_oid)
-                    .copied()
-                    .unwrap_or(0);
-                let permission = self
-                    .state
-                    .active_exile_play_permissions
-                    .iter()
-                    .filter(|_| !special)
-                    .chain(special_permission.iter())
-                    .find(|permission| {
-                        permission.group_id == permission_id
-                            && permission.object_id == *source_oid
-                            && self.exile_permission_controller(permission) == Some(player)
-                            && permission.zone_change_generation == generation
-                            && permission.available_on_turn(self.state.turn_instance)
-                            && match permission.scope {
-                                ExilePlayPermissionScope::CastFace(expected) => {
-                                    expected == face_index
+                if legendary {
+                    (*source_oid, None)
+                } else {
+                    let permission_id = command
+                        .casting_permission_id
+                        .ok_or(EngineError::Illegal("missing exile casting permission id"))?;
+                    let object = self
+                        .state
+                        .objects
+                        .get(source_oid)
+                        .ok_or(EngineError::Illegal("unknown exile object"))?;
+                    let generation = self
+                        .state
+                        .zone_change_generation
+                        .get(source_oid)
+                        .copied()
+                        .unwrap_or(0);
+                    let permission = self
+                        .state
+                        .active_exile_play_permissions
+                        .iter()
+                        .filter(|_| !special)
+                        .chain(special_permission.iter())
+                        .find(|permission| {
+                            permission.group_id == permission_id
+                                && permission.object_id == *source_oid
+                                && self.exile_permission_controller(permission) == Some(player)
+                                && permission.zone_change_generation == generation
+                                && permission.available_on_turn(self.state.turn_instance)
+                                && match permission.scope {
+                                    ExilePlayPermissionScope::CastFace(expected) => {
+                                        expected == face_index
+                                    }
+                                    ExilePlayPermissionScope::PlayCard
+                                    | ExilePlayPermissionScope::CastCard => true,
                                 }
-                                ExilePlayPermissionScope::PlayCard
-                                | ExilePlayPermissionScope::CastCard => true,
-                            }
-                    })
-                    .ok_or(EngineError::Illegal(
-                        "card has no cast-from-exile permission",
-                    ))?;
-                if permission.max_face_mana_value.is_some_and(|maximum| {
-                    self.registry
-                        .get(&object.card_id)
-                        .and_then(|definition| definition.face(face_index))
-                        .and_then(|face| {
-                            if command.prototyped {
-                                face.prototyped_face()
-                            } else {
-                                Some((*face).clone())
-                            }
                         })
-                        .is_none_or(|face| face.mana_cost.mana_value() > maximum)
-                }) {
-                    return Err(EngineError::Illegal(
-                        "spell face exceeds the cast permission's mana-value limit",
-                    ));
+                        .ok_or(EngineError::Illegal(
+                            "card has no cast-from-exile permission",
+                        ))?;
+                    if permission.max_face_mana_value.is_some_and(|maximum| {
+                        self.registry
+                            .get(&object.card_id)
+                            .and_then(|definition| definition.face(face_index))
+                            .and_then(|face| {
+                                if command.prototyped {
+                                    face.prototyped_face()
+                                } else {
+                                    Some((*face).clone())
+                                }
+                            })
+                            .is_none_or(|face| face.mana_cost.mana_value() > maximum)
+                    }) {
+                        return Err(EngineError::Illegal(
+                            "spell face exceeds the cast permission's mana-value limit",
+                        ));
+                    }
+                    let method_matches = special_method == Some(cast_method)
+                        || matches!(
+                            (&permission.cast_cost, cast_method),
+                            (
+                                crate::state::ExilePermissionCastCost::PrintedManaCost,
+                                SpellCastMethod::Normal
+                            ) | (
+                                crate::state::ExilePermissionCastCost::AlternativeManaCost(_),
+                                SpellCastMethod::Permission
+                            )
+                        );
+                    if !method_matches {
+                        return Err(EngineError::Illegal(
+                            "cast method does not match exile permission cost",
+                        ));
+                    }
+                    if object.zone != Zone::Exile {
+                        return Err(EngineError::Illegal("illegal cast from exile"));
+                    }
+                    (
+                        *source_oid,
+                        Some((permission.scope, permission.cast_cost.clone())),
+                    )
                 }
-                let method_matches = special_method == Some(cast_method)
-                    || matches!(
-                        (&permission.cast_cost, cast_method),
-                        (
-                            crate::state::ExilePermissionCastCost::PrintedManaCost,
-                            SpellCastMethod::Normal
-                        ) | (
-                            crate::state::ExilePermissionCastCost::AlternativeManaCost(_),
-                            SpellCastMethod::Permission
-                        )
-                    );
-                if !method_matches {
-                    return Err(EngineError::Illegal(
-                        "cast method does not match exile permission cost",
-                    ));
-                }
-                if object.zone != Zone::Exile {
-                    return Err(EngineError::Illegal("illegal cast from exile"));
-                }
-                (
-                    *source_oid,
-                    Some((permission.scope, permission.cast_cost.clone())),
-                )
             }
             rv1::cast_source::Location::LibraryObjectId(source_oid) => {
                 if special
@@ -1208,7 +1299,24 @@ impl GameEngine {
                 (*source_oid, None)
             }
         };
-        if !from_hand
+        if legendary
+            && (cast_method != SpellCastMethod::WithoutManaCost
+                || command.prototyped
+                || command.casting_permission_id.is_some()
+                || !self.legendary_cast_face_allowed(player, oid, face_index)
+                || !self.legendary_cast_candidate_is_current(player, oid))
+        {
+            return Err(EngineError::Illegal(
+                "spell does not match the current legendary resolution offer",
+            ));
+        }
+        if (!from_hand
+            || legendary
+                && command
+                    .source
+                    .as_ref()
+                    .and_then(|source| source.expected_zone_change_generation)
+                    .is_some())
             && command
                 .source
                 .as_ref()

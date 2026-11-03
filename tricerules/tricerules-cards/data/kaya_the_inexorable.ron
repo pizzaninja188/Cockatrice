@@ -1,0 +1,41 @@
+// Oracle 13a4f88b-6832-43a1-b4fa-c1ee60560bad; KHM 218 printing 166c0bd1-b59d-4644-832f-888a4ca3a0aa.
+// Official Kaldheim release notes: independent grants and reminder counter, one Spirit per
+// trigger; owned face-down exile requires inspection permission; additional costs remain, X=0.
+// CR 611.2a / 603.10a / 400.7e: indefinite grant, departure snapshot and exact immediate card.
+// CR 608.2g / 601.2 / 118.9: optional resolution cast, original source and free base cost only.
+(
+    id: "kaya_the_inexorable", name: "Kaya the Inexorable", face_id: "kaya_the_inexorable",
+    mana_cost: "{3}{W}{B}", supertypes: ["Legendary"], types: ["Planeswalker", "Kaya"], loyalty: 5,
+    activated_abilities: [(
+        ability_id: "activated_01", presentation: OracleLines([1]), costs: [Loyalty(1)],
+        effect: [
+            PutCounters(counter: Ghostform, count: 1, subject: Chosen((kind: Creature, token: Some(false)))),
+            GrantTriggeredAbility(duration: Indefinite, subject: Chosen((kind: Creature, token: Some(false))), ability: (
+                ability_id: "granted_01", presentation: OracleLines([1]),
+                trigger: WheneverPermanentLeavesBattlefield(controller: Controller, filter: (source_only: true),
+                    destination: OneOf([Graveyard, Exile])),
+                effect: [ReturnTriggeredCard(reference: TriggerObject, from: [Graveyard, Exile], destination: Hand),
+                    CreateTokens(token: "spirit_w_1_1_flying", count: 1)],
+            )),
+        ],
+        targeting: Some((groups: [(
+            min: 0, max: 1, prompt: "Choose up to one target nontoken creature", effect_indices: [0, 1],
+        )])),
+    ), (
+        ability_id: "activated_02", presentation: OracleLines([2]), costs: [Loyalty(-3)],
+        effect: [Exile(subject: Chosen((kind: AnyPermanent, excluded_permanent_types: [Land])))],
+        targeting: Some((groups: [(
+            min: 1, max: 1, prompt: "Choose target nonland permanent", effect_indices: [0],
+        )])),
+    ), (
+        ability_id: "activated_03", presentation: OracleLines([3]), costs: [Loyalty(-7)],
+        effect: [CreateTriggeredEmblem(
+            emblem_id: "kaya_the_inexorable_emblem", display_name: "Kaya the Inexorable Emblem",
+            ability: (
+                ability_id: "upkeep_01", presentation: OracleLines([3]),
+                trigger: AtBeginningOfUpkeep(player: Controller),
+                effect: [CastLegendarySpellFromHandGraveyardOrOwnedExile],
+            ),
+        )],
+    )],
+)

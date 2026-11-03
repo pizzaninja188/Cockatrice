@@ -10706,6 +10706,119 @@ TEST_F(RuledBatchTest, OpeningReconnectRestoresRemainingQuotaAndClearsOnCompleti
     expectReconnectRestoresFaceDownMap(finished, p1->getPlayerId());
 }
 
+TEST_F(RuledBatchTest, KayaMixedZoneSpecialCastProjectsPhysicalHandIdentityOnlyToDecider)
+{
+    seedCardCatalog({"Lightning Bolt"});
+    auto *hand = addCardToHand(p1, "Lightning Bolt");
+    auto *grave = addCardToGraveyard(p1, "Lightning Bolt");
+    auto *exile = addCardToExile(p1, "Lightning Bolt");
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    appendP1ZoneViewWithPrivateCards(seed, {{701u, "lightning_bolt"}}, {});
+    auto *view = seed.mutable_batch()->mutable_events(0)->mutable_zone_view()->mutable_per_player(0);
+    view->add_graveyard_object_ids(702u);
+    view->add_exile_object_ids(703u);
+    ASSERT_TRUE(callBatchApply(seed).zoneViewApplied);
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *choice = response.mutable_batch()->add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(p1->getPlayerId());
+    choice->set_source_object_id(900u);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_SPECIAL_CAST);
+    choice->set_prompt_text("You may cast a legendary spell from your hand, graveyard, or owned exile.");
+    choice->set_min(0);
+    choice->set_max(1);
+    for (const auto zone : {ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND,
+                           ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_GRAVEYARD,
+                           ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_EXILE}) {
+        choice->add_candidate_object_ids(701u + choice->candidate_object_ids_size());
+        choice->add_candidate_card_ids("lightning_bolt");
+        choice->add_candidate_names("Lightning Bolt");
+        choice->add_candidate_source_zones(zone);
+        choice->add_candidate_selectable(true);
+    }
+    auto *legal = &(*response.mutable_batch()->mutable_legal_by_player())[p1->getPlayerId()];
+    legal->add_hand_actions()->set_cast_method(ruled::v1::CAST_METHOD_WITHOUT_MANA_COST);
+    updatePendingResolutionChoiceCache(response);
+    const auto own = redactFor(response.batch(), p1);
+    const auto *ownChoice = onlyResolutionChoice(own);
+    ASSERT_NE(ownChoice, nullptr);
+    ASSERT_EQ(ownChoice->candidate_server_card_ids_size(), 3);
+    EXPECT_EQ(ownChoice->candidate_server_card_ids(0), hand->getId());
+    EXPECT_EQ(ownChoice->candidate_server_card_ids(1), grave->getId());
+    EXPECT_EQ(ownChoice->candidate_server_card_ids(2), exile->getId());
+    auto *spectator = new Server_Player(game, 3, userA, true, nullptr);
+    insertParticipant(3, spectator);
+    for (auto *recipient : {p2, spectator}) {
+    const auto other = redactFor(response.batch(), recipient);
+    const auto *otherChoice = onlyResolutionChoice(other);
+    ASSERT_NE(otherChoice, nullptr);
+    EXPECT_EQ(otherChoice->candidate_object_ids_size(), 0);
+    EXPECT_EQ(otherChoice->candidate_server_card_ids_size(), 0);
+    EXPECT_EQ(otherChoice->candidate_source_zones_size(), 0);
+    EXPECT_EQ(otherChoice->candidate_names_size(), 0);
+    EXPECT_EQ(otherChoice->min(), 0u);
+    EXPECT_EQ(otherChoice->max(), 1u);
+    EXPECT_TRUE(other.legal_by_player().empty());
+    auto empty = response.batch();
+    auto *emptyChoice = empty.mutable_events(0)->mutable_resolution_choice_required();
+    emptyChoice->clear_candidate_object_ids();
+    emptyChoice->clear_candidate_card_ids();
+    emptyChoice->clear_candidate_names();
+    emptyChoice->clear_candidate_source_zones();
+    emptyChoice->clear_candidate_selectable();
+    emptyChoice->clear_candidate_server_card_ids();
+    empty.clear_legal_by_player();
+    const auto emptyProjection = redactFor(empty, recipient);
+    ASSERT_NE(onlyResolutionChoice(emptyProjection), nullptr);
+    EXPECT_EQ(onlyResolutionChoice(emptyProjection)->SerializeAsString(), otherChoice->SerializeAsString())
+        << "Waiting observers cannot distinguish an empty private offer";
+    ResponseContainer observerReconnect(-1);
+    game->ruled()->enqueuePendingResolutionChoiceForParticipant(recipient, observerReconnect);
+    ASSERT_FALSE(observerReconnect.getPostResponseQueue().isEmpty());
+    const auto *observerContainer = dynamic_cast<const GameEventContainer *>(observerReconnect.getPostResponseQueue().last().second);
+    ASSERT_NE(observerContainer, nullptr);
+    ruled::v1::RuledEventBatch observerRestored;
+    ASSERT_TRUE(observerRestored.ParseFromString(observerContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+    const auto *observerChoice = onlyResolutionChoice(observerRestored);
+    ASSERT_NE(observerChoice, nullptr);
+    EXPECT_EQ(observerChoice->candidate_object_ids_size(), 0);
+    EXPECT_EQ(observerChoice->candidate_server_card_ids_size(), 0);
+    EXPECT_EQ(observerChoice->candidate_source_zones_size(), 0);
+    EXPECT_TRUE(observerRestored.legal_by_player().empty());
+    }
+    ResponseContainer reconnect(-1);
+    game->ruled()->enqueuePendingResolutionChoiceForParticipant(p1, reconnect);
+    ASSERT_FALSE(reconnect.getPostResponseQueue().isEmpty());
+    const auto *container = dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+    ASSERT_NE(container, nullptr);
+    ruled::v1::RuledEventBatch restored;
+    ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+    const auto *restoredChoice = onlyResolutionChoice(restored);
+    ASSERT_NE(restoredChoice, nullptr);
+    ASSERT_EQ(restoredChoice->candidate_server_card_ids_size(), 3);
+    EXPECT_EQ(restoredChoice->candidate_server_card_ids(0), hand->getId());
+    EXPECT_EQ(restoredChoice->candidate_source_zones(0), ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND);
+}
+
+TEST_F(RuledBatchTest, KayaReservedSpellBindsItsExactPhysicalCardBesideAnOlderDuplicate)
+{
+    seedCardCatalog({"Lightning Bolt"});
+    auto *older = addCardToStack(p1, "Lightning Bolt");
+    auto *reserved = addCardToStack(p1, "Lightning Bolt");
+    seedPendingCastVisualForTest(70, 702u, reserved, p1->getPlayerId(), p1->getPlayerId(),
+                                ZoneNames::EXILE, 0, 0, {});
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *pushed = response.mutable_batch()->add_events()->mutable_stack_pushed();
+    pushed->set_object_id(702u);
+    pushed->set_card_id("lightning_bolt");
+    pushed->set_description("Lightning Bolt");
+    callBatchApply(response);
+    EXPECT_NE(older->getId(), reserved->getId());
+    EXPECT_EQ(boundStackServerCardId(702u), reserved->getId());
+}
+
 TEST_F(RuledBatchTest, SpecialCastReconnectRestoresExactOfferAndRecipientLegalActions)
 {
     ruled::v1::IpcResponse seed;

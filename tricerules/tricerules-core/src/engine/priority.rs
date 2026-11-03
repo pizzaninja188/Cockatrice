@@ -617,6 +617,12 @@ impl GameEngine {
         let mut preserve = false;
         if let Some(pending) = self.state.pending_resolution.as_mut() {
             match &mut pending.continuation {
+                ResolutionContinuation::LegendarySpellCast { .. } => {
+                    // The optional child belongs to a parent that already began resolving.
+                    // Retire a departed caster after removing their reserved objects, then
+                    // finish this exact parent tail (CR 608.2m), even when its source left.
+                    preserve = true;
+                }
                 ResolutionContinuation::DrawReplacement { .. } => {
                     // CR 608.2m: this instruction has already begun resolving. Its frozen
                     // parent survives the physical spell/controller leaving; surviving draws

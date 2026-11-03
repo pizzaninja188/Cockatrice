@@ -501,6 +501,9 @@ mod tests {
     mod gemstone_normal {
         include!("replay_gemstone_normal.rs");
     }
+    mod kaya_inexorable_normal {
+        include!("replay_kaya_inexorable_normal.rs");
+    }
     mod tamiyo_normal {
         include!("replay_tamiyo_normal.rs");
     }

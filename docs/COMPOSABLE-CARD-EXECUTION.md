@@ -328,8 +328,31 @@ public-zone incarnation to its physical owner's hand (CR 113.8, 400.7e, 603.10a)
 distinct existing occurrence; multiple grants create multiple Spirits, even after the first return
 invalidates later returns. Counter removal, cleanup, Kaya's absence, and its owner's departure do
 not end the indefinite grant. Later ability loss can suppress it; copies and new incarnations do
-not inherit it (CR 707.2, 400.7). This is engine capability evidence with prepared consumers only;
-Kaya's complete card and its three-zone legendary casting emblem are not admitted here.
+not inherit it (CR 707.2, 400.7). Prepared consumers alone establish engine capability; complete
+Kaya admission additionally requires the three-zone casting emblem and actual-card evidence.
+
+`CastLegendarySpellFromHandGraveyardOrOwnedExile` supplies Kaya's closed optional one-spell
+upkeep operation. It admits no zone/filter/cost/duration parameters. Unlike the existing single
+exiled-card `SpecialCast`, its dedicated continuation offers current prospective legendary spell
+faces from the controller's hand/graveyard and owned exile. Legendary lands are excluded, legendary
+sorcery restrictions still apply, and ownership of face-down exile does not confer inspection.
+The optional parent always waits for the actor's private decision, including when no spell is
+eligible; an empty cohort offers only Decline. Opponents and spectators see the same generic waiting
+prompt, so public skip-versus-wait behavior does not disclose hidden-hand eligibility.
+It reuses the existing cast announcement/payment transaction and the existing library-top per-face legal offer
+construction: free base mana cost, X=0, normal targets/modes and required or optional additional costs.
+
+The private offered cohort binds ObjectId, generation, zone and current hand slot. HandIndex stays
+the existing transient private wire handle; public sources require supplied generations. A changed
+cohort retires the old prompt. Begin reserves the exact card on Stack without completing a cast;
+Cancel restores its original zone/holder/order/privacy and reissues the same parent opportunity.
+Commit revalidates the parent and reserved spell, completes one cast and resumes the parent before
+priority. A departed chooser retires this optional child while the begun parent tail still finishes.
+The existing protocol already carries mixed candidate zones, private prompt/transaction IDs and
+all three cast sources. Relay and client preserve each source zone and use the current physical
+hand-slot map; candidate names and payment remain exclusive to the deciding seat. Existing single
+exile cast profiles retain their behavior. Actual Kaya consumers and dev-disabled normal captures
+are separate from prepared engine/network fixtures and deferred hands-on GUI acceptance.
 
 The bounded 2026-10-19 Scalestorm Summoner port admits one finite `ProgramIf` condition:
 `MaximumPower` among the ability controller's creatures, with a positive `min`, no `max`, default

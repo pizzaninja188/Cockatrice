@@ -856,6 +856,22 @@ impl GameEngine {
                     .flatten()
                 }));
             }
+            if let GameEvent::PhaseBegan {
+                phase: rv1::PhaseId::Upkeep,
+                active_player,
+            } = event
+            {
+                event_triggers.extend(self.state.static_emblems.iter().filter_map(|emblem| {
+                    let captured = emblem.triggered_ability.as_ref()?;
+                    (emblem.controller == *active_player
+                        && captured.ability.trigger
+                            == TriggerCondition::AtBeginningOfUpkeep {
+                                player: CastTriggerPlayer::Controller,
+                            })
+                    .then(|| self.captured_emblem_trigger(emblem, TriggerContext::default()))
+                    .flatten()
+                }));
+            }
             if let GameEvent::BecameTapped { action, .. } = event {
                 event_triggers.retain(|trigger| {
                     !matches!(

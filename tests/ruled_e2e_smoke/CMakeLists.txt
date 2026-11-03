@@ -14,6 +14,7 @@ add_executable(ruled_e2e_smoke_test ${VERSION_STRING_CPP}
   ruled_e2e_opening_diagnostics_test.cpp
   ruled_e2e_casting_payments_test.cpp
   ruled_e2e_tamiyo_test.cpp
+  ruled_e2e_kaya_test.cpp
   ruled_e2e_gemstone_test.cpp
   ruled_e2e_arena_test.cpp
   ruled_e2e_token_copies_test.cpp

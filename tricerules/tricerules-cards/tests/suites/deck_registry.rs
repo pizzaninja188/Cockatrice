@@ -136,6 +136,8 @@ mod deck_coverage_vorinclex_monstrous_raider;
 mod deck_coverage_aetheric_amplifier;
 #[path = "../deck_coverage_innkeepers_talent.rs"]
 mod deck_coverage_innkeepers_talent;
+#[path = "../deck_coverage_kaya_the_inexorable.rs"]
+mod deck_coverage_kaya_the_inexorable;
 #[path = "../deck_coverage_metalwork_colossus.rs"]
 mod deck_coverage_metalwork_colossus;
 #[path = "../deck_coverage_mh3_mdfcs_registry.rs"]

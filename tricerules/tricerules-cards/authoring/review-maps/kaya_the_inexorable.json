@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "13a4f88b-6832-43a1-b4fa-c1ee60560bad",
+  "spans": [
+    {
+      "face_id": "kaya_the_inexorable",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "kaya_the_inexorable",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    },
+    {
+      "face_id": "kaya_the_inexorable",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/2"
+      ]
+    }
+  ],
+  "primitive_references": [],
+  "tokens": [
+    "spirit_w_1_1_flying"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "deck_registry::deck_coverage_kaya_the_inexorable::kaya_exact_identity_and_all_three_loyalty_abilities",
+      "covers": "Exact Oracle identity, mana/type/loyalty, all three costs and presentation lines, nontoken Ghostform/indefinite grant, nonland exile and closed upkeep cast emblem AST."
+    },
+    {
+      "test": "scenario deck_coverage_kaya_the_inexorable::kaya_actual_cast_enters_with_five_and_zero_target_plus_one_uses_loyalty_once",
+      "covers": "Actual 3WB cast, five loyalty, insufficient ultimate, optional zero target and one loyalty activation per turn."
+    },
+    {
+      "test": "scenario deck_coverage_kaya_the_inexorable::kaya_actual_plus_one_accepts_opponents_nontoken_and_its_controller_gets_the_spirit",
+      "covers": "Actual +1 rejects token/land, accepts opponent nontoken, places counter and grants exact death return plus Spirit to departing controller."
+    },
+    {
+      "test": "scenario deck_coverage_kaya_the_inexorable::kaya_actual_two_plus_ones_persist_across_cleanup_and_create_two_spirits_on_exile",
+      "covers": "Two actual +1 activations across real cleanup/turns, independent counter removal, Finality exile and one return/two Spirits."
+    },
+    {
+      "test": "scenario deck_coverage_kaya_the_inexorable::kaya_actual_minus_three_exiles_each_nonland_type_and_rejects_land_stale_actor_and_insufficient_loyalty",
+      "covers": "Actual -3 exiles creature/artifact/enchantment/planeswalker, rejects land/stale identity/wrong actor/insufficient loyalty atomically."
+    },
+    {
+      "test": "scenario deck_coverage_kaya_the_inexorable::kaya_actual_ultimate_survives_source_death_and_casts_exact_kaya_from_each_zone",
+      "covers": "Actual -7 source dies paying cost, emblem survives and offers exact Kaya free cast from hand/graveyard/owned exile; actual cleanup/upkeep and resolution."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

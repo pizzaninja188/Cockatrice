@@ -1344,5 +1344,7 @@ mod deck_coverage_narset_transcendent;
 #[path = "scenario/deck_coverage_narset_rebound_capability.rs"]
 mod deck_coverage_narset_rebound_capability;
 
+#[path = "scenario/deck_coverage_kaya_the_inexorable.rs"]
+mod deck_coverage_kaya_the_inexorable;
 #[path = "scenario/deck_coverage_narset_emblem_capability.rs"]
 mod deck_coverage_narset_emblem_capability;

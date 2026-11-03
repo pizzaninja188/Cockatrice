@@ -769,7 +769,9 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
             }
             const bool requiresSourceZones = rcr->choice_kind() == ruled::v1::CHOICE_KIND_ZONE_SEARCH ||
                                              rcr->choice_kind() == ruled::v1::CHOICE_KIND_GRAVEYARD_CARDS ||
-                                             rcr->choice_kind() == ruled::v1::CHOICE_KIND_BEHOLD;
+                                             rcr->choice_kind() == ruled::v1::CHOICE_KIND_BEHOLD ||
+                                             (rcr->choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST &&
+                                              rcr->candidate_source_zones_size() != 0);
             if (requiresSourceZones && (rcr->candidate_source_zones_size() != rcr->candidate_object_ids_size() ||
                                         rcr->candidate_card_ids_size() != rcr->candidate_object_ids_size() ||
                                         rcr->candidate_names_size() != rcr->candidate_object_ids_size())) {
@@ -807,17 +809,41 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
                     rcr->clear_candidate_selectable();
                     rcr->set_prompt_text("Opponent is making a resolution choice.");
                 }
+                const bool mixedSpecialCast = rcr->choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST &&
+                                              rcr->candidate_source_zones_size() != 0;
                 if (rcr->choice_kind() == ruled::v1::CHOICE_KIND_HAND_CARDS ||
-                    rcr->choice_kind() == ruled::v1::CHOICE_KIND_COST_OBJECTS) {
+                    rcr->choice_kind() == ruled::v1::CHOICE_KIND_COST_OBJECTS || mixedSpecialCast) {
                     // HandCards and CostObjects: populate physical ids so client card-click UI can
                     // match engine OIDs without inferring candidates from the visible battlefield.
                     const int deciderId = rcr->deciding_player_id();
                     auto *deciderPlayer = static_cast<Server_Player *>(game->getPlayers().value(deciderId));
                     if (deciderPlayer) {
+                        if (mixedSpecialCast)
+                            rcr->clear_candidate_server_card_ids();
                         for (int ci = 0; ci < rcr->candidate_object_ids_size(); ++ci) {
                             const quint32 oid = static_cast<quint32>(rcr->candidate_object_ids(ci));
                             Server_Card *sc =
                                 synchronizer->playerBinding(deciderId).findCardByEngineOid(deciderPlayer, oid);
+                            if (mixedSpecialCast &&
+                                rcr->candidate_source_zones(ci) == ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_GRAVEYARD)
+                                sc = synchronizer->playerBinding(deciderId).findGraveyardCardByEngineOid(deciderPlayer, oid);
+                            if (mixedSpecialCast &&
+                                rcr->candidate_source_zones(ci) == ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND &&
+                                sc && (!sc->getZone() || sc->getZone()->getName() != ZoneNames::HAND))
+                                sc = nullptr;
+                            // Owned exile can physically live in another seat's zone. Hand
+                            // candidates remain exclusive to the decider's current private map.
+                            if (!sc && mixedSpecialCast &&
+                                rcr->candidate_source_zones(ci) == ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_EXILE) {
+                                for (Server_AbstractPlayer *candidate : game->getPlayers()) {
+                                    auto *holder = dynamic_cast<Server_Player *>(candidate);
+                                    if (holder)
+                                        sc = synchronizer->playerBinding(holder->getPlayerId())
+                                                 .findExileCardByEngineOid(holder, oid);
+                                    if (sc)
+                                        break;
+                                }
+                            }
                             rcr->add_candidate_server_card_ids(sc ? sc->getId() : -1);
                         }
                     }

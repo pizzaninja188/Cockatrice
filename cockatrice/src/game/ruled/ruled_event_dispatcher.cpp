@@ -1783,10 +1783,21 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         rcr.selection_alternatives_size() == 0 && rcr.resolution_branches_size() == 0 &&
         rcr.combat_defender_options_size() == 0 && !rcr.waterbend() && !rcr.variable_mana_contribution() &&
         rcr.generic_mana_cost() == 0 && !rcr.payment_currently_legal() && rcr.mana_cost().empty();
+    const bool isEmptyOptionalSpecialCast =
+        rcr.choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST && rcr.candidate_object_ids_size() == 0 &&
+        rcr.min() == 0 && rcr.max() == 1 && !rcr.ordered() && !rcr.unique_names() &&
+        !rcr.has_public_reveal() && rcr.candidate_card_ids_size() == 0 && rcr.candidate_names_size() == 0 &&
+        rcr.candidate_server_card_ids_size() == 0 && rcr.candidate_selectable_size() == 0 &&
+        rcr.candidate_source_zones_size() == 0 && rcr.candidate_player_ids_size() == 0 &&
+        rcr.candidate_token_identities_size() == 0 && rcr.selection_slots_size() == 0 &&
+        rcr.replacement_options_size() == 0 && rcr.accepted_permanent_selections_size() == 0 &&
+        rcr.selection_alternatives_size() == 0 && rcr.resolution_branches_size() == 0 &&
+        rcr.combat_defender_options_size() == 0 && !rcr.waterbend() && !rcr.variable_mana_contribution() &&
+        rcr.generic_mana_cost() == 0 && !rcr.payment_currently_legal() && rcr.mana_cost().empty();
     const bool isOptionalTargetObjectsChoice =
         rcr.choice_kind() == ruled::v1::CHOICE_KIND_TARGET_OBJECTS && rcr.min() == 0 && rcr.max() == 1;
     if (rcr.candidate_object_ids_size() <= 0 && !isEmptyLibrarySearch && !isEmptyOptionalHandPick &&
-        !isOptionalTargetObjectsChoice) {
+        !isOptionalTargetObjectsChoice && !isEmptyOptionalSpecialCast) {
         return;
     }
 
@@ -1981,20 +1992,56 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     }
 
     if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST) {
-        if (rcr.candidate_object_ids_size() != 1) {
+        const int count = rcr.candidate_object_ids_size();
+        const bool mixedZones = rcr.candidate_source_zones_size() != 0;
+        if ((!mixedZones && count != 1 && !(count == 0 && rcr.min() == 0 && rcr.max() == 1)) ||
+            (mixedZones && (rcr.min() != 0 || rcr.max() != 1 ||
+                            rcr.candidate_source_zones_size() != count || rcr.candidate_names_size() != count ||
+                            rcr.candidate_server_card_ids_size() != count || rcr.candidate_selectable_size() != count))) {
             qWarning() << "Rejecting malformed special cast offer";
             return;
         }
         PendingChoice choice;
         choice.kind = ChoiceKind::SpecialCast;
         choice.promptText = QString::fromStdString(rcr.prompt_text());
-        choice.candidateOids.append(rcr.candidate_object_ids(0));
         choice.choiceOptions.append({0, tr("Decline"), true});
-        const QString actionLabel = choice.promptText.contains(QStringLiteral(" play "), Qt::CaseInsensitive)
-                                        ? tr("Play")
-                                        : tr("Cast");
-        choice.choiceOptions.append({1, actionLabel,
-                                    rcr.candidate_selectable_size() == 1 && rcr.candidate_selectable(0)});
+        QSet<quint32> seen;
+        for (int i = 0; i < count; ++i) {
+            const quint32 oid = rcr.candidate_object_ids(i);
+            if (seen.contains(oid))
+                return;
+            seen.insert(oid);
+            choice.candidateOids.append(oid);
+            QString label = choice.promptText.contains(QStringLiteral(" play "), Qt::CaseInsensitive)
+                                ? tr("Play") : tr("Cast");
+            if (mixedZones) {
+                RuledCastSource source;
+                QString zoneName;
+                switch (rcr.candidate_source_zones(i)) {
+                case ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND:
+                    if (rcr.candidate_server_card_ids(i) < 0)
+                        return;
+                    source = RuledCastSource::Hand;
+                    zoneName = tr("hand");
+                    choice.specialCastHandCardIds.insert(oid, rcr.candidate_server_card_ids(i));
+                    break;
+                case ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_GRAVEYARD:
+                    source = RuledCastSource::Graveyard;
+                    zoneName = tr("graveyard");
+                    break;
+                case ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_EXILE:
+                    source = RuledCastSource::Exile;
+                    zoneName = tr("exile");
+                    break;
+                default:
+                    return;
+                }
+                choice.specialCastSourceByOid.insert(oid, source);
+                label = tr("Cast %1 (%2)").arg(QString::fromStdString(rcr.candidate_names(i)), zoneName);
+            }
+            choice.choiceOptions.append({i + 1, label,
+                rcr.candidate_selectable_size() == count && rcr.candidate_selectable(i)});
+        }
         state->setPendingChoice(std::move(choice));
         ctx.matchingResolutionChoiceSeen = true;
         emit state->combatStateChanged();

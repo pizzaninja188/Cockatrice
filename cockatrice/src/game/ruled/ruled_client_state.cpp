@@ -203,13 +203,6 @@ void RuledClientState::emitGraveyardTargetsNeeded()
 // Legal hand actions
 // ---------------------------------------------------------------------------------------
 
-const RuledHandActionSet &RuledClientState::handActionSet(RuledHandActionKind kind) const
-{
-    static const RuledHandActionSet empty;
-    const auto it = handActions.constFind(kind);
-    return it == handActions.constEnd() ? empty : *it;
-}
-
 bool RuledClientState::isHandActionLegal(RuledHandActionKind kind, int handIndex) const
 {
     return handActionSet(kind).handIndices.contains(handIndex);
@@ -249,16 +242,6 @@ int RuledClientState::handActionIndexForCard(RuledHandActionKind kind,
         return -1;
     }
     return matching.first();
-}
-
-QVector<RuledFaceOption> RuledClientState::handActionFaceOptions(RuledHandActionKind kind, int handIndex) const
-{
-    QVector<RuledFaceOption> options = handActionSet(kind).faceOptionsByIndex.value(handIndex);
-    std::sort(options.begin(), options.end(), [](const RuledFaceOption &a, const RuledFaceOption &b) {
-        return std::tie(a.faceIndex, a.castMethod, a.prototyped) <
-               std::tie(b.faceIndex, b.castMethod, b.prototyped);
-    });
-    return options;
 }
 
 bool RuledClientState::handActionNeedsTarget(RuledHandActionKind kind, int handIndex, int faceIndex) const
@@ -973,7 +956,10 @@ void RuledClientState::submitPendingChoiceOption(int optionIndex)
     if (pendingChoice->kind == ChoiceKind::SpecialCast) {
         if (optionIndex != 0) {
             // Local targeting/payment can be cancelled without declining the engine offer.
-            emit specialCastRequested(pendingChoice->candidateOids.constFirst(), capturedPromptId);
+            const int candidateIndex = optionIndex - 1;
+            if (candidateIndex < 0 || candidateIndex >= pendingChoice->candidateOids.size())
+                return;
+            emit specialCastRequested(pendingChoice->candidateOids.at(candidateIndex), capturedPromptId);
             return;
         }
         const RuledPendingChoice restore = *pendingChoice;

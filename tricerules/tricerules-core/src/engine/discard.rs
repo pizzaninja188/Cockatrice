@@ -881,6 +881,9 @@ impl GameEngine {
         }
         match pending.continuation {
             ResolutionContinuation::SpecialCast { method, .. } => Some(method),
+            ResolutionContinuation::LegendarySpellCast { .. } => {
+                Some(SpellCastMethod::WithoutManaCost)
+            }
             _ => None,
         }
     }

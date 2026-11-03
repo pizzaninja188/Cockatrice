@@ -67,6 +67,12 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::CreateTriggeredEmblem { .. } => {
             pump_counters::create_triggered_emblem(cx, effect)?
         }
+        SpellEffectKind::CastLegendarySpellFromHandGraveyardOrOwnedExile => {
+            let stack = cx.parked_stack();
+            cx.engine
+                .begin_legendary_resolution_cast(cx.controller, stack, cx.events);
+            EffectOutcome::Suspended
+        }
         effect @ SpellEffectKind::ExileIfWouldDieThisTurn { .. } => {
             zones::exile_if_would_die_this_turn(cx, effect)?
         }

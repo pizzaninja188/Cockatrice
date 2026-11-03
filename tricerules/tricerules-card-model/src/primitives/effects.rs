@@ -1177,12 +1177,15 @@ pub enum SpellEffectKind {
         effects: Vec<StaticEmblemEffect>,
     },
     /// A persistent command-zone emblem carrying one event-triggered ability.
-    /// Admission is limited to the artifact-return and first-opponent-spell counter profiles.
+    /// Admission is limited to the artifact-return, first-opponent-spell counter and Kaya upkeep profiles.
     CreateTriggeredEmblem {
         emblem_id: String,
         display_name: String,
         ability: Box<TriggeredAbilityDef>,
     },
+    /// Kaya the Inexorable's optional, one-spell resolution-time cast. Its fixed three-zone,
+    /// legendary-spell and free-base-cost rules are specialized; this is not a lasting permission.
+    CastLegendarySpellFromHandGraveyardOrOwnedExile,
     DamageTarget {
         amount: Amount,
         target: TargetFilter,
@@ -4321,6 +4324,7 @@ impl SpellEffectKind {
             | SpellEffectKind::PutAbilitySourceOntoBattlefield
             | SpellEffectKind::CreateStaticEmblem { .. }
             | SpellEffectKind::CreateTriggeredEmblem { .. }
+            | SpellEffectKind::CastLegendarySpellFromHandGraveyardOrOwnedExile
             | SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { .. }
             | SpellEffectKind::Draw { .. }
             | SpellEffectKind::MemoryJarExileHands
@@ -5447,7 +5451,14 @@ impl SpellEffectKind {
                 ordinal: Some(1),
                 ordinal_scope: super::CastOrdinalScope::AllSpells,
             };
-            let supported_profile = (ability.trigger == expected_trigger && child_is_valid)
+            let kaya_upkeep = ability.trigger
+                == TriggerCondition::AtBeginningOfUpkeep {
+                    player: super::CastTriggerPlayer::Controller,
+                }
+                && ability.effect.as_slice()
+                    == [SpellEffectKind::CastLegendarySpellFromHandGraveyardOrOwnedExile];
+            let supported_profile = kaya_upkeep
+                || (ability.trigger == expected_trigger && child_is_valid)
                 || (ability.trigger == first_opponent_spell
                     && ability.effect.as_slice() == [SpellEffectKind::CounterTriggeringSpell]);
             if !supported_profile
@@ -5457,11 +5468,16 @@ impl SpellEffectKind {
                 || ability.triggers_only_once
                 || ability.max_triggers_per_turn.is_some()
             {
-                return Err("triggered emblem supports only the artifact-return and first-opponent-spell counter profiles".into());
+                return Err("triggered emblem supports only the artifact-return, first-opponent-spell counter and Kaya upkeep profiles".into());
             }
             for effect in &ability.effect {
                 effect.validate(EffectContext::Ability)?;
             }
+        }
+        if matches!(self, Self::CastLegendarySpellFromHandGraveyardOrOwnedExile)
+            && context != EffectContext::Ability
+        {
+            return Err("Kaya legendary casting requires an ability resolution".into());
         }
         for filter in self.target_filters() {
             filter.validate_target_constraints()?;

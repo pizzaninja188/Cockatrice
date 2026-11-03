@@ -2302,6 +2302,7 @@ pub(super) fn cast_face_count_for_source(
 }
 
 fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandAction> {
+    let legendary = eng.legendary_resolution_cast_for(pid);
     if let Some(opening) = &eng.state.opening {
         let Some((bottoming_player, _)) = opening.bottom else {
             return Vec::new();
@@ -2328,7 +2329,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
             })
             .collect();
     }
-    if eng.state.blocking_choice().is_some() {
+    if eng.state.blocking_choice().is_some() && !legendary {
         return Vec::new();
     }
     if eng.state.combat.as_ref().is_some_and(|combat| {
@@ -2338,14 +2339,15 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
     }) {
         return Vec::new();
     }
-    if eng.state.priority_player_id() != pid {
+    if eng.state.priority_player_id() != pid && !legendary {
         return Vec::new();
     }
 
     let Some(player_index) = eng.state.player_idx(pid) else {
         return Vec::new();
     };
-    if eng.state.turn_step == TurnStep::Cleanup && !eng.state.cleanup_priority_active {
+    if eng.state.turn_step == TurnStep::Cleanup && !eng.state.cleanup_priority_active && !legendary
+    {
         if eng.state.cleanup_discard_player == Some(pid)
             && eng.state.players[player_index].hand.len() > eng.maximum_hand_size(pid)
         {
@@ -2368,8 +2370,8 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
         return Vec::new();
     }
 
-    let instant_ok = instant_timing_step_allowed(&eng.state);
-    let sorcery_ok = sorcery_speed_available(&eng.state, pid);
+    let instant_ok = legendary || instant_timing_step_allowed(&eng.state);
+    let sorcery_ok = legendary || sorcery_speed_available(&eng.state, pid);
     let combat_decl_lock = priority_locked_for_combat_declaration(&eng.state);
     let mut actions = Vec::new();
     for (hand_index, &oid) in eng.state.players[player_index].hand.iter().enumerate() {
@@ -2381,6 +2383,9 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
         };
         for (face_index, face) in definition.faces_iter().enumerate() {
             if !definition.face_available_from_hand(face_index) {
+                continue;
+            }
+            if legendary && !eng.legendary_cast_face_allowed(pid, oid, face_index) {
                 continue;
             }
             if face.is_land {
@@ -2481,13 +2486,18 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                 });
                 let mut cast_actions = Vec::new();
                 if cast_ok {
-                    if face_cast_permitted && eng.hand_without_mana_cost_permitted(pid) {
+                    if face_cast_permitted
+                        && (legendary || eng.hand_without_mana_cost_permitted(pid))
+                    {
                         let mut without_mana_cost = action.clone();
                         without_mana_cost.cast_method = rv1::CastMethod::WithoutManaCost as i32;
                         without_mana_cost.cost = ManaCost::default().to_string();
                         // This alternative cost cannot combine with Prototype or another
                         // alternative method. Reuse the normal face's targets/additional costs.
                         actions.push(without_mana_cost);
+                    }
+                    if legendary {
+                        continue;
                     }
                     cast_actions.push(action);
                     cast_actions.extend(warp);
@@ -2513,6 +2523,9 @@ pub(super) fn legal_zone_cast_actions(
     eng: &GameEngine,
     pid: PlayerId,
 ) -> Vec<rv1::LegalZoneCastAction> {
+    if eng.legendary_resolution_cast_for(pid) {
+        return legal_legendary_zone_cast_actions(eng, pid);
+    }
     let special_permission = eng.special_cast_permission(pid);
     let special = special_permission.is_some();
     if !special
@@ -2875,12 +2888,6 @@ pub(super) fn legal_zone_cast_actions(
             let Some(definition) = eng.registry.get(&card_id) else {
                 return actions;
             };
-            let generation = eng
-                .state
-                .zone_change_generation
-                .get(&object_id)
-                .copied()
-                .unwrap_or(0);
             for (face_index, face) in definition.faces_iter().enumerate() {
                 if face.is_land
                     || !definition.face_available_from_hand(face_index)
@@ -2888,14 +2895,14 @@ pub(super) fn legal_zone_cast_actions(
                 {
                     continue;
                 }
-                actions.extend(legal_library_top_face_cast_actions(
+                actions.extend(legal_zone_face_cast_actions(
                     eng,
                     pid,
                     player_index,
                     object_id,
-                    generation,
                     face_index,
                     face,
+                    None,
                 ));
             }
         }
@@ -2903,19 +2910,27 @@ pub(super) fn legal_zone_cast_actions(
     actions
 }
 
-fn legal_library_top_face_cast_actions(
+fn legal_zone_face_cast_actions(
     eng: &GameEngine,
     pid: PlayerId,
     player_index: usize,
     object_id: ObjectId,
-    generation: u64,
     face_index: usize,
     face: &CardFace,
+    legendary_zone: Option<Zone>,
 ) -> Vec<rv1::LegalZoneCastAction> {
+    let generation = eng
+        .state
+        .zone_change_generation
+        .get(&object_id)
+        .copied()
+        .unwrap_or(0);
+    let legendary = legendary_zone.is_some();
     let face_cast_permitted = eng.spell_cast_permitted_by_emblems(pid, face);
-    let prototype_cast_permitted = face
-        .prototyped_face()
-        .is_some_and(|prototype_face| eng.spell_cast_permitted_by_emblems(pid, &prototype_face));
+    let prototype_cast_permitted = !legendary
+        && face.prototyped_face().is_some_and(|prototype_face| {
+            eng.spell_cast_permitted_by_emblems(pid, &prototype_face)
+        });
     if !face_cast_permitted && !prototype_cast_permitted {
         return Vec::new();
     }
@@ -2931,8 +2946,8 @@ fn legal_library_top_face_cast_actions(
         || !face_cast_timing_available(
             face,
             &cost_choices,
-            instant_timing_step_allowed(&eng.state),
-            sorcery_speed_available(&eng.state, pid),
+            legendary || instant_timing_step_allowed(&eng.state),
+            legendary || sorcery_speed_available(&eng.state, pid),
         )
         || !cost_choices.non_mana_costs_payable
     {
@@ -2947,7 +2962,12 @@ fn legal_library_top_face_cast_actions(
     )
     .has_targets();
     let mut action = rv1::LegalZoneCastAction {
-        source_zone: rv1::CastSourceZone::Library as i32,
+        source_zone: match legendary_zone {
+            Some(Zone::Graveyard) => rv1::CastSourceZone::Graveyard,
+            Some(Zone::Exile) => rv1::CastSourceZone::Exile,
+            None => rv1::CastSourceZone::Library,
+            _ => unreachable!("legendary hand casts use hand actions"),
+        } as i32,
         object_id,
         zone_change_generation: generation,
         card_name: face.name.clone(),
@@ -2956,7 +2976,11 @@ fn legal_library_top_face_cast_actions(
         min_modes: 0,
         max_modes: 0,
         modes: vec![],
-        cost: face.mana_cost.to_string(),
+        cost: if legendary {
+            ManaCost::default().to_string()
+        } else {
+            face.mana_cost.to_string()
+        },
         cost_choices: Some(cost_choices.clone()),
         eligible_restricted_mana_group_ids: eng
             .eligible_restricted_mana_for_spell(player_index, face),
@@ -2966,7 +2990,11 @@ fn legal_library_top_face_cast_actions(
             face,
             &face.cost_modifiers,
         ),
-        cast_method: rv1::CastMethod::Normal as i32,
+        cast_method: if legendary {
+            rv1::CastMethod::WithoutManaCost
+        } else {
+            rv1::CastMethod::Normal
+        } as i32,
         has_convoke: face.keywords.contains(&Keyword::Convoke),
         casting_permission_id: None,
         all_modes_cast_cost: None,
@@ -3021,10 +3049,12 @@ fn legal_library_top_face_cast_actions(
     if face_cast_permitted {
         actions.push(action.clone());
     }
-    if let Some(prototype) =
-        zone_prototype_variant(eng, pid, player_index, object_id, face, &action, None)
-    {
-        actions.push(prototype);
+    if !legendary {
+        if let Some(prototype) =
+            zone_prototype_variant(eng, pid, player_index, object_id, face, &action, None)
+        {
+            actions.push(prototype);
+        }
     }
     actions
 }
@@ -3439,6 +3469,82 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
         }
     }
     v
+}
+
+// Three-zone candidates stay typed internally; hand casts never masquerade as zone actions.
+pub(super) fn legendary_resolution_candidates(
+    eng: &GameEngine,
+    pid: PlayerId,
+) -> Vec<(ObjectId, Zone, String)> {
+    let Some(index) = eng.state.player_idx(pid) else {
+        return vec![];
+    };
+    let mut result: Vec<_> = legal_hand_actions(eng, pid)
+        .into_iter()
+        .map(|a| {
+            (
+                eng.state.players[index].hand[a.hand_index as usize],
+                Zone::Hand,
+                a.card_name,
+            )
+        })
+        .collect();
+    result.extend(
+        legal_legendary_zone_cast_actions(eng, pid)
+            .into_iter()
+            .map(|a| {
+                (
+                    a.object_id,
+                    if a.source_zone == rv1::CastSourceZone::Graveyard as i32 {
+                        Zone::Graveyard
+                    } else {
+                        Zone::Exile
+                    },
+                    a.card_name,
+                )
+            }),
+    );
+    result
+}
+fn legal_legendary_zone_cast_actions(
+    eng: &GameEngine,
+    pid: PlayerId,
+) -> Vec<rv1::LegalZoneCastAction> {
+    let Some(index) = eng.state.player_idx(pid) else {
+        return vec![];
+    };
+    if !eng.legendary_resolution_cast_for(pid) || eng.state.pending_spell_cast.is_some() {
+        return vec![];
+    }
+    let mut result = vec![];
+    // Offers and the captured private cohort must reproduce across fresh replay engines.
+    let mut objects: Vec<_> = eng.state.objects.values().collect();
+    objects.sort_unstable_by_key(|object| object.id);
+    for object in objects {
+        let Some(zone) = eng.legendary_cast_source_zone(pid, object.id) else {
+            continue;
+        };
+        if zone == Zone::Hand {
+            continue;
+        }
+        let Some(definition) = eng.registry.get(&object.card_id) else {
+            continue;
+        };
+        for (face_index, face) in definition.faces_iter().enumerate() {
+            if eng.legendary_cast_face_allowed(pid, object.id, face_index) {
+                result.extend(legal_zone_face_cast_actions(
+                    eng,
+                    pid,
+                    index,
+                    object.id,
+                    face_index,
+                    face,
+                    Some(zone),
+                ));
+            }
+        }
+    }
+    result
 }
 
 #[cfg(test)]

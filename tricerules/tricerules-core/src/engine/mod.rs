@@ -221,6 +221,9 @@ mod history;
 #[cfg(test)]
 mod issue_169_taps;
 mod legal_actions;
+mod legendary_cast;
+#[cfg(test)]
+mod legendary_resolution_cast_tests;
 mod library_choices;
 mod life_numeric;
 mod mana_spending;

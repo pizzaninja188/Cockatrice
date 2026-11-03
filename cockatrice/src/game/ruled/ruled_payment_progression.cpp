@@ -2210,8 +2210,8 @@ bool RuledPaymentUi::beginRuledSpellCast(CardItem *card,
                                          quint64 expectedSourceZoneChangeGeneration)
 {
     RuledClientState *const geh = actions->player->getGame()->getGameEventHandler()->ruled();
-    const bool isResolutionSpecialCast = source == RuledCastSource::Exile &&
-                                         isSpecialCastCandidate(geh, static_cast<quint32>(ruledHandIndex));
+    const quint32 specialCastOid = geh->specialCastObjectForSource(ruledHandIndex, source);
+    const bool isResolutionSpecialCast = specialCastOid != 0;
     if (isResolutionSpecialCast && resolutionPromptId == 0)
         return false;
     std::optional<quint64> expectedGeneration;
@@ -2280,17 +2280,19 @@ bool RuledPaymentUi::beginRuledSpellCast(CardItem *card,
     }
 
     if (resolutionPromptId != 0) {
-        if (source != RuledCastSource::Exile || !geh->isCurrentResolutionPrompt(resolutionPromptId) ||
+        if (specialCastOid == 0 || !geh->isCurrentResolutionPrompt(resolutionPromptId) ||
             !geh->pendingChoice.has_value() || geh->pendingChoice->resolutionPromptId != resolutionPromptId ||
             !geh->isPendingChoiceCandidate(RuledClientState::ChoiceKind::SpecialCast,
-                                           static_cast<quint32>(ruledHandIndex)))
+                                           specialCastOid))
             return false;
-        const auto currentOffers = geh->zoneActionFaceOptions(ruledHandIndex, source);
+        const auto currentOffers = source == RuledCastSource::Hand
+            ? geh->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, ruledHandIndex)
+            : geh->zoneActionFaceOptions(ruledHandIndex, source);
         const bool exactOfferStillLegal = std::any_of(
             currentOffers.cbegin(), currentOffers.cend(), [&](const auto &offer) {
                 return offer.faceIndex == faceIndex && offer.castMethod == castMethod &&
                        offer.castingPermissionId == castingPermissionId && offer.prototyped == prototyped &&
-                       offer.zoneChangeGeneration == expectedSourceZoneChangeGeneration;
+                       (source == RuledCastSource::Hand || offer.zoneChangeGeneration == expectedSourceZoneChangeGeneration);
             });
         if (!exactOfferStillLegal)
             return false;
@@ -3263,7 +3265,7 @@ bool RuledPaymentUi::startPublicZoneCast(PlayerActions *actions, CardItem *card,
     const auto source =
         card->getZone()->getName() == ZoneNames::EXILE ? RuledCastSource::Exile : RuledCastSource::Graveyard;
     const quint32 oid = RuledActions::resolvePublicZoneObjectId(state, card);
-    const bool hasSpecialOffer = source == RuledCastSource::Exile && isSpecialCastCandidate(state, oid);
+    const bool hasSpecialOffer = state->specialCastObjectForSource(static_cast<int>(oid), source) != 0;
     const quint64 promptId = hasSpecialOffer ? captureSpecialCastPromptId(state, oid) : 0;
     if (hasSpecialOffer && promptId == 0)
         return true;
@@ -3305,7 +3307,7 @@ bool RuledPaymentUi::tryStartRuledSpellCast(CardItem *card)
         if (objectId == 0 || !geh->isZoneActionLegal(objectId, source)) {
             return false;
         }
-        const bool hasSpecialOffer = source == RuledCastSource::Exile && isSpecialCastCandidate(geh, objectId);
+        const bool hasSpecialOffer = geh->specialCastObjectForSource(static_cast<int>(objectId), source) != 0;
         const quint64 promptId = hasSpecialOffer ? captureSpecialCastPromptId(geh, objectId) : 0;
         if (hasSpecialOffer && promptId == 0)
             return true;
@@ -3385,8 +3387,7 @@ bool RuledPaymentUi::tryRuledSpellCastFaceMenu(CardItem *card)
         return false;
     }
     const quint32 sourceOid = static_cast<quint32>(sourceIndex);
-    const bool hasSpecialOffer = !fromHand && publicSource == RuledCastSource::Exile &&
-                                 isSpecialCastCandidate(geh, sourceOid);
+    const bool hasSpecialOffer = !fromHand && geh->specialCastObjectForSource(sourceIndex, publicSource) != 0;
     const quint64 promptId = hasSpecialOffer ? captureSpecialCastPromptId(geh, sourceOid) : 0;
     if (hasSpecialOffer && promptId == 0)
         return true;

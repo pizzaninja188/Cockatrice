@@ -14398,6 +14398,75 @@ TEST_F(RuledClientTest, PrivateDiscardOrderingUsesCardImagesAndClickOrder)
     EXPECT_EQ(answer.chosen_object_ids(1), 701u);
 }
 
+TEST_F(RuledClientTest, KayaMixedZoneSpecialCastKeepsEveryCandidateAndMapsHandIdentity)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_SPECIAL_CAST);
+    choice->set_prompt_text("You may cast a legendary spell.");
+    choice->set_min(0);
+    choice->set_max(1);
+    for (const auto zone : {ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND,
+                           ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_GRAVEYARD,
+                           ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_EXILE}) {
+        const auto index = choice->candidate_object_ids_size();
+        choice->add_candidate_object_ids(700 + index);
+        choice->add_candidate_names("Legendary Duplicate");
+        choice->add_candidate_card_ids("legendary_duplicate");
+        choice->add_candidate_server_card_ids(1000 + index);
+        choice->add_candidate_source_zones(zone);
+        choice->add_candidate_selectable(true);
+    }
+    auto *slot = batch.add_events()->mutable_hand_slot_map()->add_entries();
+    slot->set_player_id(kLocalPlayer);
+    slot->set_hand_index(2);
+    slot->set_server_card_id(1000);
+    auto *hand = (*batch.mutable_legal_by_player())[kLocalPlayer].add_hand_actions();
+    hand->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+    hand->set_hand_index(2);
+    hand->set_cast_method(ruled::v1::CAST_METHOD_WITHOUT_MANA_COST);
+    for (quint32 oid : {701u, 702u}) {
+        auto *offer = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_cast_actions();
+        offer->set_object_id(oid);
+        offer->set_source_zone(oid == 701 ? ruled::v1::CAST_SOURCE_ZONE_GRAVEYARD : ruled::v1::CAST_SOURCE_ZONE_EXILE);
+        offer->set_zone_change_generation(3);
+        offer->set_cast_method(ruled::v1::CAST_METHOD_WITHOUT_MANA_COST);
+    }
+    apply(batch);
+    ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast));
+    ASSERT_EQ(state->pendingChoice->candidateOids.size(), 3);
+    ASSERT_EQ(state->pendingChoiceOptions().size(), 4);
+    quint32 requested = 0;
+    QObject::connect(state, &RuledClientState::specialCastRequested, state,
+                     [&requested](quint32 oid) { requested = oid; });
+    state->submitPendingChoiceOption(2);
+    EXPECT_EQ(requested, 701u);
+    RuledPendingCast pending;
+    auto &spell = pending.beginSpell();
+    spell.handIndex = 2;
+    spell.source = RuledCastSource::Hand;
+    spell.castMethod = ruled::v1::CAST_METHOD_WITHOUT_MANA_COST;
+    spell.resolutionPromptId = state->resolutionPromptId;
+    EXPECT_TRUE(RuledPendingCast::matchesSpecialCastOffer(spell, *state));
+    ruled::v1::RuledCommand begin;
+    begin.mutable_begin_spell_cast()->mutable_announcement()->mutable_source()->set_hand_index(2);
+    begin.mutable_begin_spell_cast()->mutable_announcement()->set_cast_method(ruled::v1::CAST_METHOD_WITHOUT_MANA_COST);
+    const auto submission = RuledPendingCast::submissionCommand(begin, &spell, state);
+    ASSERT_TRUE(submission.has_value());
+    ASSERT_TRUE(submission->has_submit_resolution_choice());
+    EXPECT_EQ(submission->submit_resolution_choice().resolution_prompt_id(), state->resolutionPromptId);
+    EXPECT_EQ(submission->submit_resolution_choice().spell_cast_announcement().source().hand_index(), 2u);
+    spell.handIndex = 1;
+    EXPECT_FALSE(RuledPendingCast::matchesSpecialCastOffer(spell, *state));
+    spell.handIndex = 701;
+    spell.source = RuledCastSource::Graveyard;
+    spell.sourceZoneChangeGeneration = 3;
+    EXPECT_TRUE(RuledPendingCast::matchesSpecialCastOffer(spell, *state));
+    spell.sourceZoneChangeGeneration = 2;
+    EXPECT_FALSE(RuledPendingCast::matchesSpecialCastOffer(spell, *state));
+}
+
 TEST_F(RuledClientTest, MadnessPaymentDoesNotTreatItsOwnOfferAsABlockingChoice)
 {
     for (const auto method : {ruled::v1::CAST_METHOD_MADNESS, ruled::v1::CAST_METHOD_SIEGE_DEFEAT,
@@ -14503,6 +14572,29 @@ TEST_F(RuledClientTest, SpecialCastKeepsOfferWhileStagingAndOnlyDeclinesExplicit
     EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().decision(),
               ruled::v1::RESOLUTION_CHOICE_DECISION_DECLINE);
     EXPECT_FALSE(host.sentCommands[0].submit_resolution_choice().has_cast_spell());
+}
+
+TEST_F(RuledClientTest, KayaEmptySpecialCastWaitsForExplicitDecline)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_SPECIAL_CAST);
+    choice->set_min(0);
+    choice->set_max(1);
+    choice->set_prompt_text("You may cast a legendary spell.");
+    host.sentCommands.clear();
+    apply(batch);
+    ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast));
+    ASSERT_EQ(state->pendingChoiceOptions().size(), 1);
+    EXPECT_TRUE(host.sentCommands.empty()) << "No automatic decline reveals hidden eligibility";
+    QSignalSpy requested(state, &RuledClientState::specialCastRequested);
+    state->submitPendingChoiceOption(1);
+    EXPECT_EQ(requested.count(), 0);
+    EXPECT_TRUE(host.sentCommands.empty());
+    state->submitPendingChoiceOption(0);
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().decision(), ruled::v1::RESOLUTION_CHOICE_DECISION_DECLINE);
 }
 
 TEST_F(RuledClientTest, SpecialCastUsesEngineSelectabilityAndAlwaysAllowsDecline)

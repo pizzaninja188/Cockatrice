@@ -721,6 +721,29 @@ impl GameEngine {
             return Ok(false);
         };
         match pending.continuation.clone() {
+            ResolutionContinuation::LegendarySpellCast { stack, .. } => {
+                let live = self
+                    .state
+                    .player_idx(pending.deciding_player)
+                    .is_some_and(|index| !self.state.players[index].has_lost);
+                if live {
+                    self.state.pending_resolution = Some(pending);
+                    self.refresh_legendary_cast_cohort();
+                    if let Some(event) = self.legendary_resolution_choice_event() {
+                        events.push(event);
+                    }
+                    return Ok(false);
+                }
+                let (item, index, previous, _) = stack.into_parts();
+                let batch = self.complete_parked_resolution_with_previous(
+                    item,
+                    index,
+                    previous,
+                    Vec::new(),
+                )?;
+                events.extend(batch.events);
+                Ok(true)
+            }
             ResolutionContinuation::SpecialCastCommanderCleanup {
                 stack,
                 library_owner,
@@ -1395,6 +1418,12 @@ impl GameEngine {
         }
         if matches!(
             pending.continuation,
+            ResolutionContinuation::LegendarySpellCast { .. }
+        ) {
+            return self.finish_legendary_cast_choice(pending, answer, decision);
+        }
+        if matches!(
+            pending.continuation,
             ResolutionContinuation::SpecialCast { .. }
         ) {
             return self.finish_special_cast_choice(pending, answer, decision);
@@ -1755,7 +1784,8 @@ impl GameEngine {
             ResolutionContinuation::BattleProtector { .. } => {
                 self.finish_battle_protector_choice(pending, chosen[0] as PlayerId)
             }
-            ResolutionContinuation::SpecialCast { .. } => {
+            ResolutionContinuation::SpecialCast { .. }
+            | ResolutionContinuation::LegendarySpellCast { .. } => {
                 unreachable!("Siege-cast branch handled before object-choice validation")
             }
             ResolutionContinuation::AttackingTokenDefenders { .. } => {
@@ -2495,7 +2525,7 @@ impl GameEngine {
     /// The parent special-cast offer is suspended while its accepted child cast is being paid.
     /// Clearing only its publication identity makes a duplicate parent answer stale; cancellation
     /// republishes the same continuation as a fresh offer.
-    fn retire_resolution_prompt_during_child_cast(&mut self) {
+    pub(in crate::engine) fn retire_resolution_prompt_during_child_cast(&mut self) {
         if self
             .state
             .pending_spell_cast

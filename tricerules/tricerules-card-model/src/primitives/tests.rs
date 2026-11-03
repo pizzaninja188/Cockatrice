@@ -23105,3 +23105,27 @@ fn ghostform_indefinite_trigger_grant_preserves_default_end_of_turn_and_rejects_
         );
     }
 }
+
+#[test]
+fn kaya_legendary_cast_is_a_closed_upkeep_emblem_profile() {
+    let operation = "CastLegendarySpellFromHandGraveyardOrOwnedExile";
+    let effect: SpellEffectKind = ron::from_str(operation).expect("closed Kaya operation parses");
+    assert!(effect.validate(EffectContext::Ability).is_ok());
+    assert!(effect.validate(EffectContext::Spell).is_err());
+    assert!(ron::from_str::<SpellEffectKind>(&format!("{operation}(count:2)")).is_err());
+    let source = format!(
+        r#"CreateTriggeredEmblem(emblem_id:"kaya_emblem",display_name:"Kaya Emblem",
+        ability:(ability_id:"upkeep",presentation:Fallback,trigger:AtBeginningOfUpkeep(player:Controller),
+            effect:[{operation}]))"#
+    );
+    let emblem: SpellEffectKind = ron::from_str(&source).unwrap();
+    assert!(emblem.validate(EffectContext::Ability).is_ok());
+    for invalid in [
+        source.replace("player:Controller", "player:AnyPlayer"),
+        source.replace("effect:[", "may:true,effect:["),
+        source.replace(operation, &format!("{operation},GainLife(amount:1)")),
+    ] {
+        let effect: SpellEffectKind = ron::from_str(&invalid).unwrap();
+        assert!(effect.validate(EffectContext::Ability).is_err());
+    }
+}

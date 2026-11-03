@@ -12,6 +12,9 @@ impl GameEngine {
         {
             return None;
         }
+        if let Some(event) = self.legendary_resolution_choice_event() {
+            return Some(event);
+        }
         if let Some(pending) = self.state.pending_resolution.as_ref() {
             if let ResolutionContinuation::SpecialCast {
                 exiled, face_index, ..

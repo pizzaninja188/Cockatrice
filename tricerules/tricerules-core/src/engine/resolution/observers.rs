@@ -573,10 +573,15 @@ impl GameEngine {
         {
             return Ok(true);
         }
+        self.refresh_legendary_cast_cohort();
         if let Some(event) = self.special_cast_commander_choice_event() {
             events.push(event);
         } else if let Some(pending) = self.state.pending_resolution.as_ref() {
-            if let ResolutionContinuation::SpecialCast { .. } = &pending.continuation {
+            if matches!(
+                &pending.continuation,
+                ResolutionContinuation::SpecialCast { .. }
+                    | ResolutionContinuation::LegendarySpellCast { .. }
+            ) {
                 if let Some(event) = self.resolution_payment_choice_event() {
                     events.push(event);
                 }

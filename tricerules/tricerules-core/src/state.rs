@@ -2015,6 +2015,14 @@ pub(crate) struct CardChoiceCandidateRef {
     pub source_zone: Zone,
 }
 
+/// Private receipt behind Kaya's mixed-zone offer. Hand slots bind the exact publication;
+/// public sources carry their explicit generation on the wire.
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct LegendaryCastCandidate {
+    pub reference: CardChoiceCandidateRef,
+    pub hand_index: Option<u32>,
+}
+
 /// CR 903.9b interrupts a resultless library-to-hand program search until the declared
 /// commander’s owner chooses Command or Hand. Keep the exact physical incarnation inside the
 /// original SearchLibrary continuation so departure reconciliation retains the started search.
@@ -2417,6 +2425,12 @@ pub enum ResolutionContinuation {
         current_options: Vec<tricerules_proto::ruled::v1::CombatDefenderOption>,
         delayed_sacrifice: Option<DelayedTokenSacrificeTiming>,
     },
+    /// Kaya's one optional legendary spell during this exact resolving parent.
+    LegendarySpellCast {
+        stack: ParkedStackResolution,
+        candidates: Vec<LegendaryCastCandidate>,
+        undo_history_start: usize,
+    },
     SpecialCast {
         stack: ParkedStackResolution,
         exiled: TriggerObjectRef,
@@ -2647,7 +2661,7 @@ impl ResolutionContinuation {
             Self::BattlefieldCohortMove { pending } => Some(&pending.stack),
             Self::EquipmentReceiptAttach { attachment } => Some(&attachment.stack),
             Self::ManifestDreadGraveyardOrder { order } => Some(&order.stack),
-            Self::SpecialCast { stack, .. } => Some(stack),
+            Self::SpecialCast { stack, .. } | Self::LegendarySpellCast { stack, .. } => Some(stack),
             Self::CopyTargets { progress, .. } => {
                 Some(progress.parent.as_deref().unwrap_or(&progress.stack))
             }
@@ -2725,7 +2739,7 @@ impl ResolutionContinuation {
             Self::BattlefieldCohortMove { pending } => Some(&mut pending.stack),
             Self::EquipmentReceiptAttach { attachment } => Some(&mut attachment.stack),
             Self::ManifestDreadGraveyardOrder { order } => Some(&mut order.stack),
-            Self::SpecialCast { stack, .. } => Some(stack),
+            Self::SpecialCast { stack, .. } | Self::LegendarySpellCast { stack, .. } => Some(stack),
             Self::CopyTargets { progress, .. } => Some(
                 progress
                     .parent
@@ -2750,6 +2764,9 @@ impl ResolutionContinuation {
     pub fn mana_window_undo_start(&self) -> Option<usize> {
         match self {
             Self::SpecialCast {
+                undo_history_start, ..
+            }
+            | Self::LegendarySpellCast {
                 undo_history_start, ..
             } => Some(*undo_history_start),
             _ => self
