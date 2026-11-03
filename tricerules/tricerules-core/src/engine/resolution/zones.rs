@@ -617,6 +617,7 @@ pub(super) fn discard(
             choices,
             current: 0,
             selections,
+            completion: crate::state::DiscardCompletion::Ordinary,
         };
         let stack = cx.parked_stack();
         return match cx
@@ -639,6 +640,7 @@ pub(super) fn discard(
             choices,
             current: 0,
             selections: Vec::new(),
+            completion: crate::state::DiscardCompletion::Ordinary,
         },
     );
     Ok(EffectOutcome::Suspended)

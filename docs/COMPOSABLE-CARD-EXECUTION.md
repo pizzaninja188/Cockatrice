@@ -246,6 +246,21 @@ objects use the existing simultaneous sacrifice and owner graveyard-ordering fun
 404.3). These choices are untargeted. The default restriction preserves ordinary sacrifice
 behavior and canonical card projections. This capability adds no card or protocol/client change.
 
+`EachOpponentMayDiscardOrLoseLife { amount }` is a specialized direct ability round for Professor
+Onyx. Seven explicit leaves implement its ultimate; there is no loop or generic player-result
+framework. Original opponents privately choose zero or one exact hand card in APNAP order.
+Empty hands remain unpayable participants rather than skipping later opponents. After all
+choices, immutable receipts reveal every selected owner cohort before the shared simultaneous
+discard/replacement batch moves anything. A legal choice to pay remains paid independently of
+Library of Leng, madness, or actual discard receipts (CR 118.11–118.12). Only live declining or
+unpayable opponents then lose life. There is no intermediate priority or state-based check across
+the seven leaves (CR 608.2c, 704.4). The same captured parent/cursor and closed completion survive
+departure and observer suspension; departed hidden choices are retired without delegation.
+Current and saved replacement batches retain stable public reveal IDs until commit, with explicit
+empty active snapshots retiring them before the next round. Programs, modes and conditional
+wrappers remain unsupported. Onyx now composes this round with the three capabilities above;
+Archmage Emeritus, Ransack the Lab and Crackling Doom remain demonstration reuse, not admissions.
+
 The bounded 2026-10-19 Scalestorm Summoner port admits one finite `ProgramIf` condition:
 `MaximumPower` among the ability controller's creatures, with a positive `min`, no `max`, default
 remaining filter fields, and no observed-object exclusion. It migrates only `triggered_01` from the

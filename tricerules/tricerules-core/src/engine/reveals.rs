@@ -143,6 +143,30 @@ pub(super) fn active_reveals(eng: &GameEngine) -> Vec<rv1::CardsRevealed> {
     }
     let mut reveals = Vec::new();
     reveals.extend(eng.draw_action_reveal());
+    // The selected hand cards are public only after all players have committed. Keep every
+    // immutable owner receipt through destination choices, including an observer interruption.
+    for replacement in eng.state.pending_replacement_event.iter().chain(
+        eng.state
+            .pending_observer_return_batch
+            .iter()
+            .filter_map(|batch| batch.suspended_replacement_event.as_ref()),
+    ) {
+        if let super::replacement::PendingReplacementEvent::Discard(batch) = replacement {
+            if let crate::state::DiscardCompletion::OpponentRound(round) = &batch.completion {
+                reveals.extend(
+                    round
+                        .public_reveals
+                        .iter()
+                        .filter(|receipt| {
+                            eng.state
+                                .player_idx(receipt.zone_owner_player_id)
+                                .is_some_and(|index| !eng.state.players[index].has_lost)
+                        })
+                        .cloned(),
+                );
+            }
+        }
+    }
     if let Some(pending) = &eng.state.pending_resolution {
         let receipt = match &pending.continuation {
             ResolutionContinuation::ProgramCohortPartition { public_reveal, .. } => {

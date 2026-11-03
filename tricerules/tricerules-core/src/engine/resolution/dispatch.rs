@@ -80,6 +80,9 @@ pub(super) fn execute_effect(
             damage::damage_attacked_player_or_planeswalker(cx, effect)?
         }
         effect @ SpellEffectKind::Draw { .. } => zones::draw(cx, effect)?,
+        SpellEffectKind::EachOpponentMayDiscardOrLoseLife { amount } => {
+            opponent_discard::begin(cx, amount)?
+        }
         SpellEffectKind::TakeExtraTurns { count } => {
             cx.engine.schedule_extra_turns(cx.controller, count);
             EffectOutcome::Continue

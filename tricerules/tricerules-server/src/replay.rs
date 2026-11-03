@@ -498,6 +498,9 @@ pub fn reconstruct(capture: &Capture, options: &ReplayOptions) -> Result<ReplayR
 
 #[cfg(test)]
 mod tests {
+    mod professor_onyx_normal {
+        include!("replay_professor_onyx_normal.rs");
+    }
     mod vraska_normal {
         include!("replay_vraska_normal.rs");
     }

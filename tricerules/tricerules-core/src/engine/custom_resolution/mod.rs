@@ -66,6 +66,9 @@ pub(in crate::engine) fn can_preserve_player_set_discard_after_controller_depart
     stack: &ParkedStackResolution,
     discard: &PendingPlayerSetDiscard,
 ) -> bool {
+    if let crate::state::DiscardCompletion::OpponentRound(round) = &discard.completion {
+        return GameEngine::opponent_discard_frame_matches(stack, round);
+    }
     stack.item.ability_program_owner().is_some()
         && !discard.choices.is_empty()
         && discard

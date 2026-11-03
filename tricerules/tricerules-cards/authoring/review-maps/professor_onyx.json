@@ -1,0 +1,67 @@
+{
+  "format_version": 1,
+  "oracle_id": "9df2e909-ed13-456a-9636-7398732009a9",
+  "spans": [
+    {
+      "face_id": "professor_onyx",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "professor_onyx",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "professor_onyx",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    },
+    {
+      "face_id": "professor_onyx",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/activated_abilities/2"
+      ]
+    }
+  ],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "deck_registry::deck_coverage_professor_onyx::professor_onyx_exact_identity_and_all_four_abilities",
+      "covers": "Exact Oracle identity, six mana, five loyalty, Magecraft and all three loyalty costs, source lines and seven explicit ultimate rounds."
+    },
+    {
+      "test": "scenario deck_coverage_professor_onyx::professor_onyx_actual_cast_enters_with_five_and_plus_one_partitions_exact_top_three",
+      "covers": "Prepared actual cast and +1: five entry loyalty, one life loss, private exact three-card snapshot, hand selection and ordered graveyard remainder, atomic wrong actor."
+    },
+    {
+      "test": "scenario deck_coverage_professor_onyx::professor_onyx_actual_minus_three_stages_all_opponents_and_accepts_only_greatest_ties",
+      "covers": "Actual -3: highest-power ties only, all opponents choose before simultaneous sacrifice, two loyalty remaining."
+    },
+    {
+      "test": "scenario deck_coverage_professor_onyx::professor_onyx_actual_ultimate_runs_seven_rounds_after_paying_last_loyalty",
+      "covers": "Actual -8 removes source while paying, seven optional rounds, paid choice skips loss, nonpayer remains through final round, final state-based loss."
+    },
+    {
+      "test": "scenario deck_coverage_professor_onyx::professor_onyx_actual_magecraft_cast_and_copy_each_have_fixed_controller_gain",
+      "covers": "Actual Onyx observes Opt and Twincast casts plus committed Opt copy, each opponent loses two and controller gains fixed two per occurrence."
+    },
+    {
+      "test": "scenario deck_coverage_professor_onyx::professor_onyx_rejects_wrong_controller_and_insufficient_loyalty_atomically",
+      "covers": "Wrong controller and insufficient ultimate loyalty preserve the full diagnostic state."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

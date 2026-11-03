@@ -1984,6 +1984,41 @@ fn greatest_power_sacrifice_is_a_closed_one_creature_restriction() {
 }
 
 #[test]
+fn opponent_optional_discard_penalty_is_a_closed_direct_ability_round() {
+    let effect: super::SpellEffectKind =
+        ron::from_str("EachOpponentMayDiscardOrLoseLife(amount: 3)")
+            .expect("Onyx needs one typed simultaneous optional-discard round");
+    assert!(effect.validate(super::EffectContext::Ability).is_ok());
+    assert!(effect.validate(super::EffectContext::Spell).is_err());
+    assert!(effect.target_filters().is_empty());
+    assert!(!effect.supports_conditional_instruction());
+    let zero: super::SpellEffectKind =
+        ron::from_str("EachOpponentMayDiscardOrLoseLife(amount: 0)").unwrap();
+    assert!(zero.validate(super::EffectContext::Ability).is_err());
+    let excessive: super::SpellEffectKind =
+        ron::from_str("EachOpponentMayDiscardOrLoseLife(amount: 4294967295)").unwrap();
+    assert!(excessive.validate(super::EffectContext::Ability).is_err());
+    let source = r#"(id: "opponent_round_program", name: "Opponent Round Program", face_id: "opponent_round_program",
+        types: ["Artifact"], activated_abilities: [(ability_id: "round", presentation: Fallback, costs: [],
+            program: Some((body: (steps: [(id: "round", kind: Perform(EachOpponentMayDiscardOrLoseLife(amount: 3)))], yields: [])))
+        )])"#;
+    assert!(crate::CardRegistry::from_chunks_and_tokens(&[source], &[]).is_err());
+    let modal = r#"(id: "opponent_round_modal", name: "Opponent Round Modal", face_id: "opponent_round_modal",
+        types: ["Artifact"], activated_abilities: [(ability_id: "round", presentation: Fallback, costs: [], effect: [],
+            modal: Some((min_modes: 1, max_modes: 1, modes: [(mode_id: "round", presentation: Fallback,
+                effects: [EachOpponentMayDiscardOrLoseLife(amount: 3)]),
+                (mode_id: "gain", presentation: Fallback, effects: [GainLife(amount: 1)])]))
+        )])"#;
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[modal], &[]).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("direct ability round continuation"),
+        "{error}"
+    );
+}
+
+#[test]
 fn poison_up_to_nine_requires_an_explicit_player_target() {
     let effect: super::SpellEffectKind =
         ron::from_str("PoisonTargetUpToNine(target: (kind: AnyPlayer))")

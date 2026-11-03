@@ -128,6 +128,17 @@ impl GameEngine {
                     stage: PendingLibraryLookStage::HandGraveyard(_),
                     ..
                 } => is_departed(stack).then(|| stack.clone()),
+                _ if self.begun_opponent_discard_round(
+                    pending,
+                    self.state.pending_replacement_event.as_ref(),
+                ) =>
+                {
+                    pending
+                        .continuation
+                        .stack()
+                        .filter(|stack| is_departed(stack))
+                        .cloned()
+                }
                 _ => None,
             }
         });
@@ -254,6 +265,9 @@ impl GameEngine {
             .and_then(|batch| batch.suspended_resolution.as_ref().map(|pending|
                 (pending, batch.suspended_replacement_event.as_ref())))
             .and_then(|(pending, replacement)| {
+                if self.begun_opponent_discard_round(pending, replacement) {
+                    return None;
+                }
                 if is_begun_proliferate_observer_continuation(pending, replacement) {
                     // Keep the exact saved Proliferate action and its paired event together.
                     // A generic authored Program is discardable below, but these typed action
@@ -1398,7 +1412,7 @@ impl GameEngine {
         }
         if !observer_return_parked {
             self.reconcile_pending_player_set_discard_departure(events, false)?;
-            self.reconcile_memory_jar_discard_departure(events)?;
+            self.reconcile_begun_discard_departure(events)?;
             self.refresh_player_set_sacrifice_departure(events)?;
             self.refresh_type_choice_sacrifice_departure(events)?;
         }

@@ -1392,3 +1392,20 @@ fn vraska_betrayals_sting_cast_and_loyalty_abilities_have_complete_fixtures() {
         );
     }
 }
+
+#[test]
+fn professor_onyx_cast_and_loyalty_abilities_have_complete_fixtures() {
+    for ability in [None, Some(0), Some(1), Some(2)] {
+        let case = Case {
+            card: "professor_onyx".into(),
+            face: 0,
+            ability,
+        };
+        assert_eq!(
+            evaluate(&case).expect("evaluate actual Onyx fixture"),
+            Outcome::Exercised,
+            "{}",
+            case.key()
+        );
+    }
+}

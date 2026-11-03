@@ -135,6 +135,33 @@ pub(crate) struct PendingDiscardBatch {
     pub current: usize,
     pub revealed: bool,
     pub library_orders: BTreeMap<PlayerId, Vec<ObjectId>>,
+    pub completion: DiscardCompletion,
+}
+
+#[derive(serde::Serialize, Debug, Clone, Default)]
+pub(crate) enum DiscardCompletion {
+    #[default]
+    Ordinary,
+    OpponentRound(PendingOpponentDiscardRound),
+}
+
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum OpponentDiscardPayment {
+    Pending,
+    LegallyChosenToPay,
+    Declined,
+    Unpayable,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct PendingOpponentDiscardRound {
+    pub stack_id: ObjectId,
+    pub leaf_index: u32,
+    pub controller: PlayerId,
+    pub amount: u32,
+    pub occurrence: String,
+    pub outcomes: Vec<(PlayerId, OpponentDiscardPayment)>,
+    pub public_reveals: Vec<CardsRevealed>,
 }
 
 /// Event-time semantic discard facts, never inferred from the eventual destination.
@@ -2908,6 +2935,7 @@ pub struct PendingPlayerSetDiscard {
     pub choices: Vec<PendingPlayerDiscardChoice>,
     pub current: usize,
     pub selections: Vec<Vec<ObjectId>>,
+    pub(crate) completion: DiscardCompletion,
 }
 
 /// One APNAP slot in a public choose-and-sacrifice instruction. Candidate generations are frozen

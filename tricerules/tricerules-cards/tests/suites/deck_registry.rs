@@ -3,6 +3,8 @@
 #[path = "../common/mod.rs"]
 mod common;
 
+#[path = "../deck_coverage_professor_onyx.rs"]
+mod deck_coverage_professor_onyx;
 #[path = "../deck_coverage_vraska_betrayals_sting.rs"]
 mod deck_coverage_vraska_betrayals_sting;
 

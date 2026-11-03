@@ -327,6 +327,10 @@ impl GameEngine {
             &suspended_resolution,
             suspended_replacement_event.as_ref(),
         )?;
+        self.guard_saved_opponent_discard_round(
+            &suspended_resolution,
+            suspended_replacement_event.as_ref(),
+        )?;
         if let ResolutionContinuation::LibraryLook {
             stage: PendingLibraryLookStage::HandGraveyard(partition),
             ..
@@ -558,7 +562,7 @@ impl GameEngine {
         if self.reconcile_departed_target_hand_discard_program(events)? {
             return Ok(true);
         }
-        if self.reconcile_memory_jar_discard_departure(events)? {
+        if self.reconcile_begun_discard_departure(events)? {
             return Ok(true);
         }
         self.refresh_optional_triggered_ability_departure(events)?;

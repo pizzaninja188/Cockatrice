@@ -1,0 +1,32 @@
+// Oracle 9df2e909-ed13-456a-9636-7398732009a9; DSC 153 printing b8d8e608-6de4-4b90-aeb7-d060d1f44844.
+// Source/rulings: official Strixhaven release notes (2021-04-16).
+// CR 603.2c / 707.10: committed cast/copy occurrences; 101.4 / 608.2d: APNAP choices;
+// 118.11-118.12: legal payment choice independent of replacement destination;
+// 704.4: no intermediate state-based actions during seven explicit rounds.
+(
+    id: "professor_onyx", name: "Professor Onyx", face_id: "professor_onyx",
+    mana_cost: "{4}{B}{B}", supertypes: ["Legendary"],
+    types: ["Planeswalker", "Liliana"], loyalty: 5,
+    triggered_abilities: [(
+        ability_id: "triggered_01", presentation: OracleLines([1]),
+        trigger: WheneverPlayerCastsOrCopiesSpell(player: Controller, card_type: InstantOrSorcery),
+        effect: [LoseLife(amount: Fixed(2), who: EachOpponent), GainLife(amount: 2)],
+    )],
+    activated_abilities: [(
+        ability_id: "activated_01", presentation: OracleLines([2]), costs: [Loyalty(1)],
+        effect: [LoseLife(amount: Fixed(1)), LookChooseOneToHandRestToGraveyard(count: 3)],
+    ), (
+        ability_id: "activated_02", presentation: OracleLines([3]), costs: [Loyalty(-3)],
+        effect: [ChooseAndSacrifice(players: EachOpponent, count: 1,
+            filter: (kind: Creature), restriction: GreatestPower)],
+    ), (
+        ability_id: "activated_03", presentation: OracleLines([4]), costs: [Loyalty(-8)],
+        effect: [EachOpponentMayDiscardOrLoseLife(amount: 3),
+            EachOpponentMayDiscardOrLoseLife(amount: 3),
+            EachOpponentMayDiscardOrLoseLife(amount: 3),
+            EachOpponentMayDiscardOrLoseLife(amount: 3),
+            EachOpponentMayDiscardOrLoseLife(amount: 3),
+            EachOpponentMayDiscardOrLoseLife(amount: 3),
+            EachOpponentMayDiscardOrLoseLife(amount: 3)],
+    )],
+)

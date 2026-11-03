@@ -168,23 +168,39 @@ pub(super) fn lose_life(
         return Ok(EffectOutcome::Continue);
     }
     for player in recipients {
-        let Some(pi) = engine.state.player_idx(player) else {
-            continue;
-        };
-        crate::engine::history::commit_life_change(&mut engine.state, pi, -(amount as i32));
-        events.push(rv1::RuledEvent {
-            ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
-                player_id: player,
-                new_total: engine.state.players[pi].life,
-                delta: -(amount as i32),
-            })),
-        });
-        events.push(ev_log(format!(
-            "P{player} loses {amount} life ({spell_label})."
-        )));
+        apply_life_loss(engine, events, player, amount, spell_label)?;
     }
 
     Ok(EffectOutcome::Continue)
+}
+
+/// Shared fixed loss funnel for ordinary effects and resolution-time opponent-round settlement.
+pub(in crate::engine) fn apply_life_loss(
+    engine: &mut GameEngine,
+    events: &mut Vec<rv1::RuledEvent>,
+    player: PlayerId,
+    amount: u32,
+    reason: &str,
+) -> Result<(), EngineError> {
+    if amount == 0 {
+        return Ok(());
+    }
+    let Some(index) = engine.state.player_idx(player) else {
+        return Ok(());
+    };
+    let amount_signed =
+        i32::try_from(amount).map_err(|_| EngineError::LifeNumericRange("life loss amount"))?;
+    let delta = -amount_signed;
+    crate::engine::history::commit_life_change_checked(&mut engine.state, index, delta)?;
+    events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+            player_id: player,
+            new_total: engine.state.players[index].life,
+            delta,
+        })),
+    });
+    events.push(ev_log(format!("P{player} loses {amount} life ({reason}).")));
+    Ok(())
 }
 
 fn revealed_card_mana_value(previous: &dyn ResolutionFacts) -> Result<u32, EngineError> {

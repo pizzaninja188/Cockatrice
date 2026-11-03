@@ -12,6 +12,9 @@ mod magecraft;
 #[path = "activation_tests/greatest_power_sacrifice.rs"]
 mod greatest_power_sacrifice;
 
+#[path = "activation_tests/opponent_discard_round.rs"]
+mod opponent_discard_round;
+
 const OPPONENT_CHOICE_LAND: &str = r#"(
     id: "opponent_choice_land", name: "Opponent Choice Land",
     face_id: "opponent_choice_land", types: ["Land"],

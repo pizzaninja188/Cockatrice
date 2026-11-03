@@ -219,6 +219,16 @@ impl GameEngine {
             .get(discard.current)
             .expect("player-set discard current choice")
             .clone();
+        if matches!(
+            &discard.completion,
+            crate::state::DiscardCompletion::OpponentRound(_)
+        ) && !self.opponent_discard_choices_are_current(&discard)
+        {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "opponent discard hand cohort became stale",
+            ));
+        }
         let cause = choice.selection_cause(chosen);
         if cause.is_none()
             || (cause == Some(crate::state::DiscardCause::Cost)
@@ -235,6 +245,13 @@ impl GameEngine {
             ));
         }
         let valid = chosen.iter().all(|object_id| {
+            if matches!(
+                &discard.completion,
+                crate::state::DiscardCompletion::OpponentRound(_)
+            ) && !self.state.is_card_object(*object_id)
+            {
+                return false;
+            }
             let Some(object) = self.state.objects.get(object_id) else {
                 return false;
             };
@@ -276,6 +293,27 @@ impl GameEngine {
                 chosen.len()
             )));
         }
+        if let crate::state::DiscardCompletion::OpponentRound(round) = &mut discard.completion {
+            let Some((_, outcome)) = round
+                .outcomes
+                .iter_mut()
+                .find(|(player, _)| *player == choice.player)
+            else {
+                return Err(EngineError::ProgramInvariant(
+                    "opponent discard chooser has no round outcome",
+                ));
+            };
+            if *outcome != crate::state::OpponentDiscardPayment::Pending {
+                return Err(EngineError::ProgramInvariant(
+                    "opponent discard payment was already chosen",
+                ));
+            }
+            *outcome = if chosen.is_empty() {
+                crate::state::OpponentDiscardPayment::Declined
+            } else {
+                crate::state::OpponentDiscardPayment::LegallyChosenToPay
+            };
+        }
         discard.selections.push(chosen.to_vec());
         discard.current += 1;
         self.prune_departed_player_set_discard_rows(&mut discard)?;
@@ -291,6 +329,12 @@ impl GameEngine {
             ));
         }
 
+        if matches!(
+            &discard.completion,
+            crate::state::DiscardCompletion::OpponentRound(_)
+        ) {
+            return self.complete_opponent_discard_choices(stack, discard, events);
+        }
         let Some(result) = self.apply_player_set_discard(stack.clone(), &discard, &mut events)?
         else {
             return Ok(finish_with_events(self, events));
@@ -396,6 +440,15 @@ impl GameEngine {
         let stack = stack.clone();
         let mut discard = discard.clone();
         let changed = self.prune_departed_player_set_discard_rows(&mut discard)?;
+        if matches!(
+            &discard.completion,
+            crate::state::DiscardCompletion::OpponentRound(_)
+        ) && !self.opponent_discard_choices_are_current(&discard)
+        {
+            return Err(EngineError::ProgramInvariant(
+                "restored opponent discard hand cohort became stale",
+            ));
+        }
         if !changed && !force_reoffer {
             return Ok(false);
         }
@@ -408,6 +461,15 @@ impl GameEngine {
                 ));
             }
             self.state.pending_resolution = None;
+            if matches!(
+                &discard.completion,
+                crate::state::DiscardCompletion::OpponentRound(_)
+            ) {
+                let completed =
+                    self.complete_opponent_discard_choices(stack, discard, Vec::new())?;
+                events.extend(completed.events);
+                return Ok(true);
+            }
             let Some(result) = self.apply_player_set_discard(stack.clone(), &discard, events)?
             else {
                 return Ok(true);

@@ -1286,6 +1286,12 @@ pub enum SpellEffectKind {
         who: PlayerRecipient,
         quantity: DiscardQuantity,
     },
+    /// One simultaneous optional-discard/payment round of Professor Onyx's ultimate. Legal
+    /// choices to pay are distinct from semantic discard receipts. Seven explicit leaves form
+    /// Onyx's complete effect; this specialized operation adds no loop or per-player result API.
+    EachOpponentMayDiscardOrLoseLife {
+        amount: u32,
+    },
     /// Choose a bounded set of battlefield permanents during resolution without targeting.
     /// The result is engine-private and may be consumed by the immediately following effect.
     /// Final Showdown, Sakashima's Will, and Polymorphous Rush share this selection boundary.
@@ -3946,6 +3952,10 @@ impl SpellEffectKind {
         matches!(effect, Self::EachOpponentMayScry { .. })
     }
 
+    fn is_opponent_discard_round(effect: &Self) -> bool {
+        matches!(effect, Self::EachOpponentMayDiscardOrLoseLife { .. })
+    }
+
     fn is_exile_and_copy_snapshot(effect: &Self) -> bool {
         matches!(effect, Self::ExileTargetAndCopyUnlessAura { .. })
     }
@@ -3963,6 +3973,9 @@ impl SpellEffectKind {
     /// Each capability has its own admission boundary. They currently all need a direct
     /// ability frame, but adding support for one must not implicitly admit either other family.
     pub(crate) fn validate_capability_frame(&self, frame: &str) -> Result<(), String> {
+        if self.contains_legacy_flat_signature(Self::is_opponent_discard_round) {
+            return Err(format!("EachOpponentMayDiscardOrLoseLife requires its direct ability round continuation; unsupported in {frame}"));
+        }
         if self.contains_legacy_flat_signature(Self::is_optional_opponent_scry) {
             return Err(format!("EachOpponentMayScry requires its direct ability opponent-choice continuation; unsupported in {frame}"));
         }
@@ -3976,6 +3989,14 @@ impl SpellEffectKind {
     }
 
     fn validate_direct_capability_nesting(&self) -> Result<(), String> {
+        if !Self::is_opponent_discard_round(self)
+            && self.contains_legacy_flat_signature(Self::is_opponent_discard_round)
+        {
+            return Err(
+                "EachOpponentMayDiscardOrLoseLife cannot be nested inside a legacy effect wrapper"
+                    .into(),
+            );
+        }
         if !Self::is_optional_opponent_scry(self)
             && self.contains_legacy_flat_signature(Self::is_optional_opponent_scry)
         {
@@ -4283,6 +4304,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries { .. }
             | SpellEffectKind::ExileResolvingSpell
             | SpellEffectKind::Discard { .. }
+            | SpellEffectKind::EachOpponentMayDiscardOrLoseLife { .. }
             | SpellEffectKind::Blight { .. }
             | SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
             | SpellEffectKind::CounterTriggeringSpell
@@ -5716,6 +5738,11 @@ impl SpellEffectKind {
         if let SpellEffectKind::EachOpponentMayScry { count } = self {
             if context != EffectContext::Ability || *count != 1 {
                 return Err("EachOpponentMayScry is a direct ability effect with count 1".into());
+            }
+        }
+        if let SpellEffectKind::EachOpponentMayDiscardOrLoseLife { amount } = self {
+            if context != EffectContext::Ability || *amount == 0 || *amount > i32::MAX as u32 {
+                return Err("EachOpponentMayDiscardOrLoseLife requires a direct ability and a positive supported life amount".into());
             }
         }
         if let SpellEffectKind::ExileTargetAndCopyUnlessAura { subject } = self {

@@ -79,10 +79,9 @@ impl GameEngine {
         Ok(true)
     }
 
-    /// Preserve committed destination choices while removing only departed players' cards from
-    /// the uncommitted Memory Jar discard batch. The surviving cursor is republished through the
-    /// ordinary replacement path, which either asks the next owner or finishes the delayed tail.
-    pub(super) fn reconcile_memory_jar_discard_departure(
+    /// Preserve committed destination choices while removing departed rows from the begun
+    /// Memory Jar or opponent discard round. Retain the same parent cursor and completion.
+    pub(super) fn reconcile_begun_discard_departure(
         &mut self,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
@@ -92,7 +91,12 @@ impl GameEngine {
         let ResolutionContinuation::DiscardReplacement { stack } = &pending.continuation else {
             return Ok(false);
         };
-        if !is_memory_jar_discard_replacement(stack) {
+        if !is_memory_jar_discard_replacement(stack)
+            && !self.begun_opponent_discard_round(
+                pending,
+                self.state.pending_replacement_event.as_ref(),
+            )
+        {
             return Ok(false);
         }
         let stack = stack.clone();
@@ -100,7 +104,7 @@ impl GameEngine {
             self.state.pending_replacement_event.take()
         else {
             return Err(EngineError::ProgramInvariant(
-                "Memory Jar discard replacement lost its batch",
+                "begun discard replacement lost its batch",
             ));
         };
         let live_players: HashSet<_> = self
@@ -122,6 +126,14 @@ impl GameEngine {
         batch
             .library_orders
             .retain(|player, _| live_players.contains(player));
+        if let crate::state::DiscardCompletion::OpponentRound(round) = &mut batch.completion {
+            round
+                .outcomes
+                .retain(|(player, _)| live_players.contains(player));
+            round
+                .public_reveals
+                .retain(|reveal| live_players.contains(&reveal.zone_owner_player_id));
+        }
         self.state.pending_resolution = None;
         let resumed = self.continue_discard_batch(stack, *batch)?;
         events.extend(resumed.events);
@@ -367,6 +379,21 @@ impl GameEngine {
         selected: Vec<(PlayerId, ObjectId, DiscardCause)>,
         revealed: bool,
     ) -> Result<RuledEventBatch, EngineError> {
+        self.start_discard_replacements_with_completion(
+            stack,
+            selected,
+            revealed,
+            crate::state::DiscardCompletion::Ordinary,
+        )
+    }
+
+    pub(super) fn start_discard_replacements_with_completion(
+        &mut self,
+        stack: ParkedStackResolution,
+        selected: Vec<(PlayerId, ObjectId, DiscardCause)>,
+        revealed: bool,
+        completion: crate::state::DiscardCompletion,
+    ) -> Result<RuledEventBatch, EngineError> {
         let cards = selected
             .into_iter()
             .map(|(player, oid, cause)| ProposedDiscard {
@@ -392,16 +419,28 @@ impl GameEngine {
                 current: 0,
                 revealed,
                 library_orders: BTreeMap::new(),
+                completion,
             },
         )
     }
 
-    fn discard_batch_current(&self, batch: &PendingDiscardBatch) -> bool {
+    pub(super) fn discard_batch_current(&self, batch: &PendingDiscardBatch) -> bool {
         batch.cards.iter().all(|card| {
-            self.state
-                .objects
-                .get(&card.object.object_id)
-                .is_some_and(|obj| obj.zone == Zone::Hand && obj.owner == card.player)
+            let hand_membership = !matches!(
+                &batch.completion,
+                crate::state::DiscardCompletion::OpponentRound(_)
+            ) || (self.state.is_card_object(card.object.object_id)
+                && self.state.player_idx(card.player).is_some_and(|index| {
+                    self.state.players[index]
+                        .hand
+                        .contains(&card.object.object_id)
+                }));
+            hand_membership
+                && self
+                    .state
+                    .objects
+                    .get(&card.object.object_id)
+                    .is_some_and(|obj| obj.zone == Zone::Hand && obj.owner == card.player)
                 && self
                     .state
                     .zone_change_generation
@@ -484,6 +523,15 @@ impl GameEngine {
         stack: ParkedStackResolution,
         mut batch: PendingDiscardBatch,
     ) -> Result<RuledEventBatch, EngineError> {
+        if matches!(
+            &batch.completion,
+            crate::state::DiscardCompletion::OpponentRound(_)
+        ) && !self.discard_batch_current(&batch)
+        {
+            return Err(EngineError::ProgramInvariant(
+                "opponent discard batch became stale before reoffer",
+            ));
+        }
         while batch.current < batch.cards.len() {
             let card = &batch.cards[batch.current];
             if card.cause == DiscardCause::Effect
@@ -610,6 +658,19 @@ impl GameEngine {
                 batches: discard_batches,
                 cards: typed_cards,
             });
+        }
+        if let crate::state::DiscardCompletion::OpponentRound(round) = batch.completion {
+            let label = self
+                .registry
+                .get(&stack.item.card_id)
+                .map(|definition| definition.name.clone())
+                .unwrap_or_else(|| stack.item.card_id.clone());
+            self.settle_opponent_discard_round(&round, &label, &mut events)?;
+            return self.complete_parked_stack_with_previous(
+                stack,
+                OperationResults::default(),
+                events,
+            );
         }
         self.complete_parked_stack_with_previous(stack, result.into(), events)
     }

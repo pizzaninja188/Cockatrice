@@ -25,6 +25,7 @@ use instruction::{ResolvedInstruction, ResolvedTargets};
 mod choices;
 mod hand_library_return;
 mod library_hand_graveyard;
+mod opponent_discard;
 pub(super) use choices::{
     authored_resolution_branch_choice_event, authored_resolution_branch_has_selectable_option,
     direct_draw_effect_is_selectable, permanent_choice_prompt,
