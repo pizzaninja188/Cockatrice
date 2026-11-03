@@ -3833,30 +3833,56 @@ mod convoke_transaction_tests {
             );
             assert!(engine
                 .state
-                .last_known_copy_by_generation
-                .contains_key(&(oid, generations[i])));
+                .last_known_information
+                .copy_snapshot(&(oid, generations[i]))
+                .is_some());
         }
         for (i, &oid) in ids.iter().enumerate().skip(1) {
             let key = (oid, generations[i]);
             assert_eq!(
-                engine.state.last_known_pt_by_generation[&key],
+                *engine
+                    .state
+                    .last_known_information
+                    .power_toughness(&key)
+                    .unwrap(),
                 (Some(6), Some(6))
             );
             assert_eq!(
-                engine.state.last_known_colors_by_generation[&key],
+                *engine.state.last_known_information.colors(&key).unwrap(),
                 [tricerules_card_model::Color::Red]
             );
-            assert!(engine.state.last_known_types_by_generation[&key]
+            assert!(engine
+                .state
+                .last_known_information
+                .types(&key)
+                .unwrap()
                 .iter()
                 .any(|t| t == "Enchantment"));
-            assert!(engine.state.last_known_keywords_by_generation[&key].contains(&Keyword::Flying));
-            assert_eq!(engine.state.last_known_controller_by_generation[&key], 0);
-            assert!(engine.state.last_known_tapped_by_generation[&key]);
+            assert!(engine
+                .state
+                .last_known_information
+                .keywords(&key)
+                .unwrap()
+                .contains(&Keyword::Flying));
             assert_eq!(
-                engine.state.last_known_counters_by_generation[&key][&CounterKind::PlusOnePlusOne],
+                *engine
+                    .state
+                    .last_known_information
+                    .controller(&key)
+                    .unwrap(),
+                0
+            );
+            assert!(*engine.state.last_known_information.tapped(&key).unwrap());
+            assert_eq!(
+                engine.state.last_known_information.counters(&key).unwrap()
+                    [&CounterKind::PlusOnePlusOne],
                 1
             );
-            let attachment = engine.state.last_known_attached_object_by_generation[&key];
+            let attachment = *engine
+                .state
+                .last_known_information
+                .attached_object(&key)
+                .unwrap();
             assert_eq!(attachment.object_id, ids[0]);
             assert_eq!(attachment.zone_change_generation, generations[0]);
             assert_eq!(attachment.owner, engine.state.objects[&ids[0]].owner);
@@ -4928,7 +4954,12 @@ mod convoke_transaction_tests {
             ]))
             .unwrap();
         assert!(receipt.sacrificed[0].source.counters.is_empty());
-        assert!(engine.state.last_known_counters_by_generation[&(oid, generation)].is_empty());
+        assert!(engine
+            .state
+            .last_known_information
+            .counters(&(oid, generation))
+            .unwrap()
+            .is_empty());
         assert_eq!(engine.state.objects[&oid].zone, Zone::Graveyard);
     }
 

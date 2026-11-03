@@ -122,23 +122,35 @@ fn foreign_trigger_survives_source_owner_departure_with_source_qualities() {
         "controller 0's trigger survives owner 2"
     );
     assert_eq!(
-        engine
-            .state
-            .last_known_controller_by_generation
-            .get(&(source, 0)),
+        engine.state.last_known_information.controller(&(source, 0)),
         Some(&0)
     );
-    assert!(
-        engine.state.last_known_keywords_by_generation[&(source, 0)].contains(&Keyword::Lifelink)
-    );
-    assert!(
-        engine.state.last_known_keywords_by_generation[&(source, 0)].contains(&Keyword::Deathtouch)
-    );
+    assert!(engine
+        .state
+        .last_known_information
+        .keywords(&(source, 0))
+        .unwrap()
+        .contains(&Keyword::Lifelink));
+    assert!(engine
+        .state
+        .last_known_information
+        .keywords(&(source, 0))
+        .unwrap()
+        .contains(&Keyword::Deathtouch));
     assert_eq!(
-        engine.state.last_known_colors_by_generation[&(source, 0)],
+        *engine
+            .state
+            .last_known_information
+            .colors(&(source, 0))
+            .unwrap(),
         vec![Color::Blue]
     );
-    assert!(engine.state.last_known_types_by_generation[&(source, 0)].contains(&"Creature".into()));
+    assert!(engine
+        .state
+        .last_known_information
+        .types(&(source, 0))
+        .unwrap()
+        .contains(&"Creature".into()));
     pass_priority_round(&mut engine);
     assert_eq!(engine.state.players[0].life, 21);
     assert_eq!(engine.state.players[1].life, 19);

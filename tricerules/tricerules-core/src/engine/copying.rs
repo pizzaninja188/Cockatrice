@@ -177,8 +177,8 @@ pub(super) fn token_copy_snapshot_for_incarnation(
         return token_copy_snapshot_from(state, registry, object_id);
     }
     state
-        .last_known_copy_by_generation
-        .get(&(object_id, zone_change_generation))
+        .last_known_information
+        .copy_snapshot(&(object_id, zone_change_generation))
         .cloned()
 }
 
@@ -319,8 +319,8 @@ mod tests {
         engine.state.zone_change_generation.insert(object_id, 8);
         engine
             .state
-            .last_known_copy_by_generation
-            .insert((object_id, 7), snapshot("sol_ring"));
+            .last_known_information
+            .record_copy_snapshot((object_id, 7), snapshot("sol_ring"));
 
         let old_incarnation = observed_token_copy_snapshot(
             &engine.state,
@@ -348,7 +348,10 @@ mod tests {
         assert_eq!(current_incarnation.token_id, "mirrorworks");
         assert_eq!(current_incarnation.values.source_card_id, "mirrorworks");
 
-        engine.state.last_known_copy_by_generation.clear();
+        engine
+            .state
+            .last_known_information
+            .forget_copy_snapshot(&(object_id, 7));
         assert!(
             observed_token_copy_snapshot(
                 &engine.state,

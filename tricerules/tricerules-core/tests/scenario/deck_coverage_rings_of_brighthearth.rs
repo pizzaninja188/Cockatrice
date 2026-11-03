@@ -1011,7 +1011,11 @@ fn copy_welder_after_its_original_departure_returns(
             .expect("the owned artifact leaves and returns through the real zone-change path");
     }
     assert_eq!(
-        engine.state.last_known_controller_by_generation[&(departure, old_generation)],
+        *engine
+            .state
+            .last_known_information
+            .controller(&(departure, old_generation))
+            .unwrap(),
         1
     );
     assert_eq!(engine.state.objects[&departure].controller, 0);

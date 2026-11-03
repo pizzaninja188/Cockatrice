@@ -705,8 +705,8 @@ impl GameEngine {
                             let controller =
                                 departure.zone_change_generation.and_then(|generation| {
                                     self.state
-                                        .last_known_controller_by_generation
-                                        .get(&(departure.object_id, generation))
+                                        .last_known_information
+                                        .controller(&(departure.object_id, generation))
                                         .copied()
                                 });
                             let graveyard_owner = self

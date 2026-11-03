@@ -45,8 +45,8 @@ pub(super) fn attached_object_lki(
         })
     } else {
         state
-            .last_known_attached_object_by_generation
-            .get(&(source_id, source_generation))
+            .last_known_information
+            .attached_object(&(source_id, source_generation))
             .copied()
     }
 }
@@ -510,12 +510,12 @@ impl TargetSourceIdentity {
         }
         let colors = engine
             .state
-            .last_known_colors_by_generation
-            .get(&(self.object_id, generation))?;
+            .last_known_information
+            .colors(&(self.object_id, generation))?;
         let types = engine
             .state
-            .last_known_types_by_generation
-            .get(&(self.object_id, generation))?;
+            .last_known_information
+            .types(&(self.object_id, generation))?;
         Some(SourceQualities::from_values(colors, types))
     }
 
@@ -593,8 +593,8 @@ pub(super) fn trigger_object_mana_value(
     } else {
         engine
             .state
-            .last_known_mana_value_by_generation
-            .get(&(observed.object_id, observed.zone_change_generation))
+            .last_known_information
+            .mana_value(&(observed.object_id, observed.zone_change_generation))
             .copied()
     }
 }
@@ -4213,14 +4213,14 @@ mod tests {
             .copied()
             .unwrap_or(0);
         let source = TargetSourceIdentity::current(&engine, source_id);
-        engine.state.last_known_colors_by_generation.insert(
+        engine.state.last_known_information.record_colors(
             (source_id, generation),
             vec![tricerules_card_model::Color::Blue],
         );
         engine
             .state
-            .last_known_types_by_generation
-            .insert((source_id, generation), vec!["Artifact".into()]);
+            .last_known_information
+            .record_types((source_id, generation), vec!["Artifact".into()]);
         engine
             .state
             .objects

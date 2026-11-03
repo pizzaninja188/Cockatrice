@@ -759,14 +759,14 @@ impl GameEngine {
                 }
                 GameEvent::LeavesBattlefield { source } => {
                     if let Some(snapshot) = &source.copy_snapshot {
-                        self.state.last_known_copy_by_generation.insert(
+                        self.state.last_known_information.record_copy_snapshot(
                             (source.object_id, source.zone_change_generation),
                             snapshot.as_ref().clone(),
                         );
                     }
                     // All members of a simultaneous departure set were captured before any move.
                     // Restore that snapshot over the individual move's sequential bookkeeping.
-                    self.state.last_known_pt_by_generation.insert(
+                    self.state.last_known_information.record_power_toughness(
                         (source.object_id, source.zone_change_generation),
                         source.power_toughness,
                     );
@@ -1030,8 +1030,8 @@ impl GameEngine {
             .map(|object| &object.counters);
         live.or_else(|| {
             self.state
-                .last_known_counters_by_generation
-                .get(&(source, generation))
+                .last_known_information
+                .counters(&(source, generation))
         })
         .and_then(|bag| bag.get(&counter))
         .copied()
@@ -1462,8 +1462,8 @@ impl GameEngine {
                     .map(|object| &object.counters);
                 let counters = live.or_else(|| {
                     self.state
-                        .last_known_counters_by_generation
-                        .get(&(context.source_object_id, context.source_zone_change))
+                        .last_known_information
+                        .counters(&(context.source_object_id, context.source_zone_change))
                 });
                 let count =
                     counters.map_or(0, |bag| bag.values().copied().fold(0, u32::saturating_add));
@@ -1502,10 +1502,15 @@ impl GameEngine {
                     matches!(object, ConditionObjectRef::Source)
                         .then(|| {
                             self.state
-                                .last_known_tapped_by_generation
-                                .get(&(object_id, expected_generation))
+                                .last_known_information
+                                .tapped(&(object_id, expected_generation))
                                 .copied()
-                                .or_else(|| self.state.last_known_tapped.get(&object_id).copied())
+                                .or_else(|| {
+                                    self.state
+                                        .last_known_information
+                                        .latest_tapped(&object_id)
+                                        .copied()
+                                })
                         })
                         .flatten()
                 });
@@ -1547,8 +1552,8 @@ impl GameEngine {
                             .map(|characteristics| characteristics.mana_value)
                     } else {
                         self.state
-                            .last_known_mana_value_by_generation
-                            .get(&(object_id, expected_generation))
+                            .last_known_information
+                            .mana_value(&(object_id, expected_generation))
                             .copied()
                     }
                 })
@@ -1610,8 +1615,8 @@ impl GameEngine {
                         .map(|characteristics| characteristics.names)
                 } else {
                     self.state
-                        .last_known_names_by_generation
-                        .get(&(observed.object_id, observed.zone_change_generation))
+                        .last_known_information
+                        .names(&(observed.object_id, observed.zone_change_generation))
                         .cloned()
                 };
                 let Some(observed_names) = observed_names else {
@@ -2210,8 +2215,8 @@ impl GameEngine {
                 .unwrap_or((0, 0));
         }
         self.state
-            .last_known_pt_by_generation
-            .get(&(oid, zone_change_generation))
+            .last_known_information
+            .power_toughness(&(oid, zone_change_generation))
             .map(|(power, toughness)| (power.unwrap_or(0), toughness.unwrap_or(0)))
             .unwrap_or((0, 0))
     }
@@ -2232,8 +2237,8 @@ impl GameEngine {
         }
 
         self.state
-            .last_known_keywords_by_generation
-            .get(&(oid, zone_change_generation))
+            .last_known_information
+            .keywords(&(oid, zone_change_generation))
             .is_some_and(|keywords| keywords.contains(&keyword))
     }
 

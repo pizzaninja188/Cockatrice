@@ -1,6 +1,8 @@
 #[path = "state/operation_results.rs"]
 mod operation_results;
 pub(crate) use operation_results::{OperationInput, OperationResults, ResolutionFacts};
+mod last_known_information;
+pub use last_known_information::LastKnownInformation;
 mod mana_restrictions;
 pub use mana_restrictions::{ManaRestrictionGroup, ManaRestrictionGroups};
 
@@ -4125,45 +4127,9 @@ pub struct GameState {
     pub seed: u64,
     pub players: Vec<PlayerState>,
     pub objects: HashMap<ObjectId, GameObject>,
-    /// CR 608.2h / 113.7a last known information: the tap status each object had as it left the
-    /// battlefield, recorded in `move_object_to_zone` just before CR 400.7 resets it. A spell or
-    /// ability still on the stack that asks about a permanent which has since left uses this
-    /// rather than the reset value — Howling Mine's intervening-"if" is the first consumer
-    /// (bounced while untapped, the ability still resolves). Keyed by object, so a later LKI need
-    /// (P/T of a creature that died mid-resolution) joins it here rather than snapshotting ad hoc.
-    pub last_known_tapped: HashMap<ObjectId, bool>,
-    /// Last-known tap status keyed by the source object's generation, so an older trigger is not
-    /// confused by a later leave-and-return cycle using the same relay ObjectId.
-    pub last_known_tapped_by_generation: HashMap<(ObjectId, u64), bool>,
-    /// Last-known derived keywords keyed by source object and generation. Resolution uses this
-    /// after an ability's source leaves or returns, so the new object cannot retroactively change
-    /// whether damage from the old source had deathtouch (CR 702.2e).
-    pub last_known_keywords_by_generation: HashMap<(ObjectId, u64), Vec<Keyword>>,
-    /// Last-known derived colors and types for source-quality checks such as protection. These are
-    /// generation-scoped so a leave-and-return object cannot rewrite an older ability's source.
-    pub last_known_colors_by_generation: HashMap<(ObjectId, u64), Vec<Color>>,
-    pub last_known_types_by_generation: HashMap<(ObjectId, u64), Vec<String>>,
-    /// Last-known derived names keyed by object generation for event-bound intervening-if checks
-    /// after the observed permanent leaves or returns as a new object (CR 400.7, 608.2h).
-    pub last_known_names_by_generation: HashMap<(ObjectId, u64), Vec<String>>,
-    /// Last-known derived controller keyed by source object and generation. Resolving abilities
-    /// use this for source-controller wording after the source leaves the battlefield.
-    pub last_known_controller_by_generation: HashMap<(ObjectId, u64), PlayerId>,
-    /// Complete departure counter bags, keyed by the old incarnation (Drone / Ozolith).
-    pub(crate) last_known_counters_by_generation:
-        HashMap<(ObjectId, u64), BTreeMap<CounterKind, u32>>,
-    /// Signed departure P/T for source-relative quantities (CR 608.2h).
-    pub(crate) last_known_pt_by_generation: HashMap<(ObjectId, u64), (Option<i64>, Option<i64>)>,
-    /// Derived battlefield mana value before a zone change clears copied values and face state.
-    pub(crate) last_known_mana_value_by_generation: HashMap<(ObjectId, u64), u32>,
-    pub(crate) last_known_copy_by_generation: HashMap<(ObjectId, u64), TokenCopySnapshot>,
-    /// The object an Aura or Equipment source was attached to as that source last left the
-    /// battlefield, keyed by the source generation. The record carries exact target incarnation
-    /// and owner so an old ability can still identify the owner's library if the target leaves
-    /// before resolution, without affecting a card that returned under the same ObjectId
-    /// (CR 400.7, 608.2h, 701.24c).
-    pub(crate) last_known_attached_object_by_generation:
-        HashMap<(ObjectId, u64), AttachedObjectLki>,
+    /// Optional facts for exact departed or phased-out incarnations.
+    /// Narrow updates preserve qualities captured at different points of departure processing.
+    pub last_known_information: LastKnownInformation,
     /// Monotonic per-object generation incremented on every zone change. ObjectIds remain stable
     /// for relay compatibility, while this generation preserves CR 400.7 identity semantics for
     /// effects that resolve after a source leaves and returns.

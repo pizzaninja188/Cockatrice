@@ -5945,9 +5945,8 @@ impl GameEngine {
         for (oid, generation, mana_value) in &batch.origin_mana_values {
             if !self.state.objects.contains_key(oid) {
                 self.state
-                    .last_known_mana_value_by_generation
-                    .entry((*oid, *generation))
-                    .or_insert(*mana_value);
+                    .last_known_information
+                    .record_mana_value_if_absent((*oid, *generation), *mana_value);
             }
         }
         // A missing live-owner member remains in the frozen cohort so validation fails closed.

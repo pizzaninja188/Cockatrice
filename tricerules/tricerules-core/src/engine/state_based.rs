@@ -1877,8 +1877,8 @@ mod sba_tests {
         assert_eq!(
             engine
                 .state
-                .last_known_pt_by_generation
-                .get(&(source, source_generation)),
+                .last_known_information
+                .power_toughness(&(source, source_generation)),
             Some(&(Some(3), Some(4))),
             "the source leaves with the 3/4 characteristics it had before the anthem left"
         );

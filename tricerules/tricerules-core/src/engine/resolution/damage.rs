@@ -100,8 +100,8 @@ pub(super) fn creature_deals_damage_equal_to_power(
     } else {
         cx.engine
             .state
-            .last_known_controller_by_generation
-            .get(&(source, source_generation))
+            .last_known_information
+            .controller(&(source, source_generation))
             .copied()
     };
     let Some(controller) = controller else {
@@ -117,8 +117,8 @@ pub(super) fn creature_deals_damage_equal_to_power(
     } else {
         cx.engine
             .state
-            .last_known_names_by_generation
-            .get(&(source, source_generation))
+            .last_known_information
+            .names(&(source, source_generation))
             .and_then(|names| names.iter().find(|name| !name.is_empty()))
             .cloned()
             .unwrap_or_else(|| "Unknown source".to_string())
@@ -918,8 +918,8 @@ mod damage_source_tests {
             .unwrap_or(0);
         let old_power = engine
             .state
-            .last_known_pt_by_generation
-            .get(&(source, old_generation))
+            .last_known_information
+            .power_toughness(&(source, old_generation))
             .expect("old generation power is retained")
             .0;
         assert_eq!(old_power, Some(2));

@@ -1141,8 +1141,8 @@ fn branch_draw_recipients(
                 } else {
                     engine
                         .state
-                        .last_known_controller_by_generation
-                        .get(&(target.object_id, generation))
+                        .last_known_information
+                        .controller(&(target.object_id, generation))
                         .copied()
                 }
             })
@@ -1470,8 +1470,8 @@ pub(in crate::engine) fn card_result_characteristic_sum(
                             ..
                         }) => engine
                             .state
-                            .last_known_pt_by_generation
-                            .get(&(entry.object_id, input_generation))
+                            .last_known_information
+                            .power_toughness(&(entry.object_id, input_generation))
                             .and_then(|(power, _)| *power)
                             .unwrap_or(0),
                         // The fallible Program input projection rejects unsupported or
@@ -1626,8 +1626,8 @@ pub(super) fn validate_program_card_result_characteristic_sum_input(
                     } => {
                         if engine
                             .state
-                            .last_known_pt_by_generation
-                            .get(&(entry.object_id, input_generation))
+                            .last_known_information
+                            .power_toughness(&(entry.object_id, input_generation))
                             .is_none_or(|(power, _)| power.is_none())
                         {
                             return Err(EngineError::ProgramInvariant(
@@ -2866,16 +2866,16 @@ mod result_count_tests {
         .into();
         engine
             .state
-            .last_known_pt_by_generation
-            .insert((900, 1), (Some(4), Some(5)));
+            .last_known_information
+            .record_power_toughness((900, 1), (Some(4), Some(5)));
         engine
             .state
-            .last_known_pt_by_generation
-            .insert((900, 2), (Some(8), Some(9)));
+            .last_known_information
+            .record_power_toughness((900, 2), (Some(8), Some(9)));
         engine
             .state
-            .last_known_pt_by_generation
-            .insert((900, 5), (Some(11), Some(12)));
+            .last_known_information
+            .record_power_toughness((900, 5), (Some(11), Some(12)));
         engine.state.zone_change_generation.insert(900, 5);
 
         assert!(validate_program_card_result_characteristic_sum_input(
@@ -2915,7 +2915,10 @@ mod result_count_tests {
             "the sum uses LKI for the movement input generation"
         );
 
-        engine.state.last_known_pt_by_generation.remove(&(900, 1));
+        engine
+            .state
+            .last_known_information
+            .forget_power_toughness(&(900, 1));
         assert!(matches!(
             validate_program_card_result_characteristic_sum_input(
                 &engine,
@@ -3054,8 +3057,8 @@ mod result_count_tests {
         };
         engine
             .state
-            .last_known_pt_by_generation
-            .insert((902, 1), (Some(4), Some(5)));
+            .last_known_information
+            .record_power_toughness((902, 1), (Some(4), Some(5)));
         let public = cohort_value(vec![receipt.clone()]);
         assert!(validate_program_card_result_characteristic_sum_input(
             &engine,
@@ -3085,7 +3088,10 @@ mod result_count_tests {
             Err(EngineError::ProgramInvariant(_))
         ));
 
-        engine.state.last_known_pt_by_generation.remove(&(902, 1));
+        engine
+            .state
+            .last_known_information
+            .forget_power_toughness(&(902, 1));
         assert!(matches!(
             validate_program_card_result_characteristic_sum_input(
                 &engine,
@@ -3159,8 +3165,8 @@ mod result_count_tests {
         .into();
         engine
             .state
-            .last_known_pt_by_generation
-            .insert((901, 1), (Some(-1), Some(4)));
+            .last_known_information
+            .record_power_toughness((901, 1), (Some(-1), Some(4)));
 
         assert!(validate_program_card_result_characteristic_sum_input(
             &engine,

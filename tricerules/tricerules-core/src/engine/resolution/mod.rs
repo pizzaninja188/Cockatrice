@@ -1090,8 +1090,8 @@ fn player_recipients(cx: &EffectCx<'_>, who: PlayerRecipient) -> Vec<PlayerId> {
                     } else {
                         cx.engine
                             .state
-                            .last_known_controller_by_generation
-                            .get(&(target.object_id, generation))
+                            .last_known_information
+                            .controller(&(target.object_id, generation))
                             .copied()
                     }
                 })
@@ -1233,8 +1233,8 @@ fn source_controller(engine: &GameEngine, top: &StackItem) -> Option<PlayerId> {
     } else {
         engine
             .state
-            .last_known_controller_by_generation
-            .get(&(source_id, top.source_zone_change))
+            .last_known_information
+            .controller(&(source_id, top.source_zone_change))
             .copied()
     }
 }
@@ -1263,8 +1263,8 @@ fn trigger_object_controller(engine: &GameEngine, top: &StackItem) -> Option<Pla
         Some(
             engine
                 .state
-                .last_known_controller_by_generation
-                .get(&(
+                .last_known_information
+                .controller(&(
                     trigger_object.object_id,
                     trigger_object.zone_change_generation,
                 ))
@@ -4233,9 +4233,9 @@ pub(super) fn record_last_known_characteristics(
     characteristics: super::characteristics::Characteristics,
 ) {
     state
-        .last_known_mana_value_by_generation
-        .insert((oid, generation), characteristics.mana_value);
-    state.last_known_pt_by_generation.insert(
+        .last_known_information
+        .record_mana_value((oid, generation), characteristics.mana_value);
+    state.last_known_information.record_power_toughness(
         (oid, generation),
         (
             characteristics.signed_power,
@@ -4243,20 +4243,20 @@ pub(super) fn record_last_known_characteristics(
         ),
     );
     state
-        .last_known_controller_by_generation
-        .insert((oid, generation), characteristics.controller);
+        .last_known_information
+        .record_controller((oid, generation), characteristics.controller);
     state
-        .last_known_keywords_by_generation
-        .insert((oid, generation), characteristics.keywords);
+        .last_known_information
+        .record_keywords((oid, generation), characteristics.keywords);
     state
-        .last_known_colors_by_generation
-        .insert((oid, generation), characteristics.colors);
+        .last_known_information
+        .record_colors((oid, generation), characteristics.colors);
     state
-        .last_known_types_by_generation
-        .insert((oid, generation), characteristics.types);
+        .last_known_information
+        .record_types((oid, generation), characteristics.types);
     state
-        .last_known_names_by_generation
-        .insert((oid, generation), characteristics.names);
+        .last_known_information
+        .record_names((oid, generation), characteristics.names);
 }
 
 pub(super) struct PreparedZoneMove {
@@ -4493,8 +4493,8 @@ pub(super) fn commit_zone_move(
         });
         if let Some(snapshot) = copy {
             state
-                .last_known_copy_by_generation
-                .insert((oid, prior_generation), snapshot);
+                .last_known_information
+                .record_copy_snapshot((oid, prior_generation), snapshot);
         }
     }
     if leaving_battlefield {
@@ -4584,8 +4584,8 @@ pub(super) fn commit_zone_move(
     if leaving_battlefield {
         if let Some(attached_object) = last_known_attached_object {
             state
-                .last_known_attached_object_by_generation
-                .insert((oid, prior_generation), attached_object);
+                .last_known_information
+                .record_attached_object((oid, prior_generation), attached_object);
         }
         state
             .skip_next_untap
@@ -4619,8 +4619,8 @@ pub(super) fn commit_zone_move(
             let was_tapped = tapped;
             o.tapped = false;
             state
-                .last_known_counters_by_generation
-                .insert((oid, prior_generation), counters);
+                .last_known_information
+                .record_counters((oid, prior_generation), counters);
             o.counters.clear();
             o.counter_timestamps.clear();
             o.attached_to = None;
@@ -4643,9 +4643,11 @@ pub(super) fn commit_zone_move(
                 .unwrap_or(0)
                 .saturating_sub(1);
             state
-                .last_known_tapped_by_generation
-                .insert((oid, generation), was_tapped);
-            state.last_known_tapped.insert(oid, was_tapped);
+                .last_known_information
+                .record_tapped((oid, generation), was_tapped);
+            state
+                .last_known_information
+                .record_latest_tapped(oid, was_tapped);
         }
     }
     if let Some(characteristics) = last_known_characteristics {
@@ -11889,7 +11891,11 @@ mod attached_subject_tests {
             assert_eq!(engine.state.objects[&observer].counters, bag);
         }
         assert_eq!(
-            engine.state.last_known_counters_by_generation[&(departed, 0)],
+            *engine
+                .state
+                .last_known_information
+                .counters(&(departed, 0))
+                .unwrap(),
             bag
         );
         assert!(engine.state.objects[&departed].counters.is_empty());
@@ -15248,22 +15254,22 @@ mod source_keyword_tests {
 
         let key = (target, generation);
         assert_eq!(
-            engine.state.last_known_controller_by_generation.get(&key),
+            engine.state.last_known_information.controller(&key),
             Some(&before.controller),
             "the old generation retains its pre-phase control"
         );
         assert_eq!(
-            engine.state.last_known_types_by_generation.get(&key),
+            engine.state.last_known_information.types(&key),
             Some(&before.types),
             "the old generation retains its pre-phase types"
         );
         assert_eq!(
-            engine.state.last_known_keywords_by_generation.get(&key),
+            engine.state.last_known_information.keywords(&key),
             Some(&before.keywords),
             "the old generation retains its pre-phase keywords"
         );
         assert_eq!(
-            engine.state.last_known_pt_by_generation.get(&key),
+            engine.state.last_known_information.power_toughness(&key),
             Some(&(before.signed_power, before.signed_toughness)),
             "the old generation retains its pre-phase power and toughness"
         );
@@ -15457,31 +15463,31 @@ mod source_keyword_tests {
         assert_eq!(
             engine
                 .state
-                .last_known_pt_by_generation
-                .get(&(source, source_generation)),
+                .last_known_information
+                .power_toughness(&(source, source_generation)),
             Some(&(before.signed_power, before.signed_toughness))
         );
         assert_eq!(
             engine
                 .state
-                .last_known_controller_by_generation
-                .get(&(source, source_generation)),
+                .last_known_information
+                .controller(&(source, source_generation)),
             Some(&1),
             "source LKI uses the controller at phase-out, not ability controller 0"
         );
         assert_eq!(
             engine
                 .state
-                .last_known_types_by_generation
-                .get(&(source, source_generation)),
+                .last_known_information
+                .types(&(source, source_generation)),
             Some(&before.types),
             "the full pre-phase type line remains available to generation-scoped readers"
         );
         assert_eq!(
             engine
                 .state
-                .last_known_colors_by_generation
-                .get(&(source, source_generation)),
+                .last_known_information
+                .colors(&(source, source_generation)),
             Some(&before.colors),
             "the pre-phase color remains available to generation-scoped readers"
         );
@@ -15816,8 +15822,8 @@ mod source_keyword_tests {
             assert_eq!(
                 engine
                     .state
-                    .last_known_controller_by_generation
-                    .get(&(id, generation)),
+                    .last_known_information
+                    .controller(&(id, generation)),
                 Some(&characteristics.controller),
                 "every member's pre-phase controller is captured under its unchanged generation"
             );
@@ -16153,8 +16159,8 @@ mod source_keyword_tests {
             assert_eq!(
                 engine
                     .state
-                    .last_known_controller_by_generation
-                    .get(&(id, generation)),
+                    .last_known_information
+                    .controller(&(id, generation)),
                 Some(&characteristics.controller),
                 "the transitive Aura is included in the pre-phase LKI cohort"
             );

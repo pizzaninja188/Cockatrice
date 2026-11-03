@@ -542,7 +542,7 @@ impl GameEngine {
                                 && m.origin == Zone::Battlefield
                                 && m.destination != Zone::Battlefield
                         }) {
-                            self.state.last_known_counters_by_generation.insert(
+                            self.state.last_known_information.record_counters(
                                 (source.object_id, source.zone_change_generation),
                                 source.counters.clone(),
                             );

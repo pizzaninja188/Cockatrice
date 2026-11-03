@@ -144,8 +144,8 @@ pub(super) fn lose_life(
                     .and_then(|generation| {
                         engine
                             .state
-                            .last_known_mana_value_by_generation
-                            .get(&(*tid, generation))
+                            .last_known_information
+                            .mana_value(&(*tid, generation))
                             .copied()
                     })
                     .or_else(|| {

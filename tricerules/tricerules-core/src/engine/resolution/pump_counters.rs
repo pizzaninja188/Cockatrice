@@ -1591,7 +1591,7 @@ pub(super) fn change_counters(
                     .map(|r| (r.object_id, r.zone_change_generation)),
             };
             let counters = reference
-                .and_then(|r| cx.engine.state.last_known_counters_by_generation.get(&r))
+                .and_then(|r| cx.engine.state.last_known_information.counters(&r))
                 .cloned()
                 .unwrap_or_default();
             (subject, counters, false)

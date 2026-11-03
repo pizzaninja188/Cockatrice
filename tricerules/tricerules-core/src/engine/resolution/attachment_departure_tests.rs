@@ -131,8 +131,8 @@ fn prepared_state_clears_inbound_attachment_before_same_resolution_return() {
     assert_eq!(
         engine
             .state
-            .last_known_counters_by_generation
-            .get(&(creature, original_generation)),
+            .last_known_information
+            .counters(&(creature, original_generation)),
         Some(&BTreeMap::from([(CounterKind::MinusOneMinusOne, 1)]))
     );
     assert_eq!(engine.state.objects[&skullclamp].zone, Zone::Battlefield);

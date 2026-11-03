@@ -1154,8 +1154,8 @@ pub(super) fn token_copy_source_after_move(
     } else {
         engine
             .state
-            .last_known_types_by_generation
-            .get(&(object_id, zone_change_generation))?
+            .last_known_information
+            .types(&(object_id, zone_change_generation))?
             .clone()
     };
     let snapshot = super::copying::token_copy_snapshot_for_incarnation(
@@ -1907,8 +1907,8 @@ pub(super) fn shuffle_nonland_permanents_into_owners_libraries(
         } else {
             cx.engine
                 .state
-                .last_known_types_by_generation
-                .get(&(member.object_id, member.zone_change_generation))
+                .last_known_information
+                .types(&(member.object_id, member.zone_change_generation))
                 .is_some_and(|types| !types.iter().any(|kind| kind == "Land"))
         };
         if !is_nonland {
@@ -6079,8 +6079,8 @@ pub(super) fn explore(
             } else {
                 cx.engine
                     .state
-                    .last_known_controller_by_generation
-                    .get(&(object_id, zone_change_generation))
+                    .last_known_information
+                    .controller(&(object_id, zone_change_generation))
                     .copied()
             };
             let Some(controller_at_event) = controller_at_event else {

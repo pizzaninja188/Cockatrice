@@ -215,8 +215,10 @@ fn guardian_project_uses_the_departed_name_when_the_creature_is_exiled() {
 
     move_card_to_zone(&mut e, 0, "Grizzly Bears", DevZone::Exile);
     assert_eq!(
-        e.state.last_known_names_by_generation
-            [&(observed.object_id, observed.zone_change_generation)],
+        *e.state
+            .last_known_information
+            .names(&(observed.object_id, observed.zone_change_generation))
+            .unwrap(),
         vec!["Grizzly Bears"]
     );
     resolve_entire_stack_two_player(&mut e);
@@ -248,8 +250,10 @@ fn guardian_project_counts_the_observed_creature_in_its_graveyard() {
     move_card_to_zone(&mut e, 0, "Grizzly Bears", DevZone::Graveyard);
     assert_eq!(e.state.objects[&observed.object_id].zone, Zone::Graveyard);
     assert_eq!(
-        e.state.last_known_names_by_generation
-            [&(observed.object_id, observed.zone_change_generation)],
+        *e.state
+            .last_known_information
+            .names(&(observed.object_id, observed.zone_change_generation))
+            .unwrap(),
         vec!["Grizzly Bears"]
     );
     resolve_entire_stack_two_player(&mut e);
@@ -281,8 +285,10 @@ fn guardian_project_uses_the_departed_generation_name_after_a_creature_reenters(
     move_card_to_zone(&mut e, 0, "Grizzly Bears", DevZone::Exile);
     assert_eq!(e.state.objects[&observed.object_id].zone, Zone::Exile);
     assert_eq!(
-        e.state.last_known_names_by_generation
-            [&(observed.object_id, observed.zone_change_generation)],
+        *e.state
+            .last_known_information
+            .names(&(observed.object_id, observed.zone_change_generation))
+            .unwrap(),
         vec!["Grizzly Bears"]
     );
     let reentry_batch = move_card_to_zone(&mut e, 0, "Grizzly Bears", DevZone::Battlefield);
@@ -358,7 +364,10 @@ fn guardian_project_uses_a_copied_name_after_the_observed_card_leaves() {
     move_card_to_zone(&mut e, 0, "Clone", DevZone::Graveyard);
     assert_eq!(e.state.objects[&clone].zone, Zone::Graveyard);
     assert_eq!(
-        e.state.last_known_names_by_generation[&(clone, generation)],
+        *e.state
+            .last_known_information
+            .names(&(clone, generation))
+            .unwrap(),
         vec!["Grizzly Bears"]
     );
     inject_graveyard_card(&mut e, 0, "grizzly_bears");

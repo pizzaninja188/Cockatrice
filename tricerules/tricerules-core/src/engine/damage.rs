@@ -669,8 +669,8 @@ impl GameEngine {
             return controller;
         }
         self.state
-            .last_known_controller_by_generation
-            .get(&(event.source.object_id, generation))
+            .last_known_information
+            .controller(&(event.source.object_id, generation))
             .copied()
             .unwrap_or(event.source.controller)
     }

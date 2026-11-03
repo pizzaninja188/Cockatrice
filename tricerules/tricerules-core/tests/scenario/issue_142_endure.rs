@@ -453,8 +453,8 @@ fn old_endure_lki_uses_p1_after_the_same_card_returns_under_p0() {
     assert_eq!(
         engine
             .state
-            .last_known_controller_by_generation
-            .get(&(source, old_generation)),
+            .last_known_information
+            .controller(&(source, old_generation)),
         Some(&1),
         "the real zone change captures P1 as the old incarnation's LKI controller"
     );
@@ -557,6 +557,8 @@ fn endure_counter_child_replacement_parks_and_resumes_once() {
 
 #[test]
 fn leave_and_return_generation_forces_fallback_and_stale_counter_choice_is_restored() {
+    use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone};
+
     let mut engine = engine(142_040);
     let source = cast_endure_creature(&mut engine, "kin-tree_nurturer");
     pass_both_players(&mut engine);
@@ -566,15 +568,47 @@ fn leave_and_return_generation_forces_fallback_and_stale_counter_choice_is_resto
         .get(&source)
         .copied()
         .unwrap_or(0);
+    // Temporarily set aside the old offer to produce real departure LKI, then restore that
+    // exact stale offer. The new entry's trigger is outside this isolated choice fixture.
+    let parked = engine
+        .state
+        .pending_resolution
+        .take()
+        .expect("Endure offer");
+    let original_stack = engine.state.stack.clone();
+    engine.enable_dev_commands();
     engine
-        .state
-        .last_known_controller_by_generation
-        .insert((source, original_generation), 0);
-    *engine
-        .state
-        .zone_change_generation
-        .entry(source)
-        .or_insert(0) += 2;
+        .apply_scenario_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::DevCommand(DevCommand {
+                    target_player_id: 0,
+                    dev: Some(dev_command::Dev::MoveCard(DevMoveCard {
+                        card_name: "Kin-Tree Nurturer".into(),
+                        zone: DevZone::Exile as i32,
+                        ready: false,
+                    })),
+                })),
+            },
+        )
+        .expect("depart through the engine to capture controller LKI");
+    assert_eq!(
+        engine
+            .state
+            .last_known_information
+            .controller(&(source, original_generation)),
+        Some(&0)
+    );
+    assert_eq!(
+        move_ready_to_battlefield(&mut engine, 0, "kin-tree_nurturer"),
+        source
+    );
+    assert_eq!(
+        engine.state.zone_change_generation[&source],
+        original_generation + 2
+    );
+    engine.state.stack = original_stack;
+    engine.state.pending_resolution = Some(parked);
 
     assert!(engine.apply_scenario_command(0, &select_branch(0)).is_err());
     assert!(engine.state.pending_resolution.is_some());

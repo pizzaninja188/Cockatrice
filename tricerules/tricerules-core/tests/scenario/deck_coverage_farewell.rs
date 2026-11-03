@@ -259,11 +259,13 @@ fn farewell_freezes_current_type_cohort_anthem_lki_counters_and_attached_generat
         lki("last_known_pt_by_generation", bear, bear_generation),
         serde_json::json!(["5", "5"])
     );
-    assert!(
-        engine.state.last_known_types_by_generation[&(bear, bear_generation)]
-            .iter()
-            .any(|t| t == "Artifact")
-    );
+    assert!(engine
+        .state
+        .last_known_information
+        .types(&(bear, bear_generation))
+        .unwrap()
+        .iter()
+        .any(|t| t == "Artifact"));
     assert_eq!(
         lki("last_known_counters_by_generation", bear, bear_generation)["Quest"],
         2

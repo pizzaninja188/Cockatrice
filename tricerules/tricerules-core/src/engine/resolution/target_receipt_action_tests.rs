@@ -1672,8 +1672,8 @@ fn kaya_minus_three_prepared_state_fails_closed_when_exact_copy_lki_is_missing()
     .expect("return the physical card as a newer incarnation");
     engine
         .state
-        .last_known_copy_by_generation
-        .remove(&(target, old_generation));
+        .last_known_information
+        .forget_copy_snapshot(&(target, old_generation));
 
     let (_, _, result) = invoke_copy_action(
         &mut engine,
@@ -1704,12 +1704,16 @@ fn kaya_minus_three_prepared_state_uses_derived_aura_types_not_the_copy_face_fla
         None,
     )
     .expect("return the physical card as a newer incarnation");
-    engine.state.last_known_types_by_generation.insert(
+    engine.state.last_known_information.record_types(
         (target, old_generation),
         vec!["Creature".into(), "Aura".into()],
     );
     assert!(
-        !engine.state.last_known_copy_by_generation[&(target, old_generation)]
+        !engine
+            .state
+            .last_known_information
+            .copy_snapshot(&(target, old_generation))
+            .unwrap()
             .values
             .face
             .is_aura
