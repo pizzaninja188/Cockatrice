@@ -117,12 +117,7 @@ pub(super) fn populate(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineErr
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
                 resolution_prompt_id: 0,
-                variable_mana_contribution: false,
                 candidate_player_ids: Vec::new(),
-                waterbend: false,
-                selection_slots: Vec::new(),
-                replacement_options: Vec::new(),
-                selection_alternatives: Vec::new(),
                 deciding_player_id: cx.controller,
                 source_object_id: cx.top.id,
                 prompt_text: prompt.clone(),
@@ -443,13 +438,8 @@ pub(super) fn create_attacking_tokens(
             rv1::ResolutionChoiceRequired {
                 resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
-                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
-                waterbend: false,
-                selection_slots: Vec::new(),
-                replacement_options: Vec::new(),
-                selection_alternatives: Vec::new(),
                 deciding_player_id: controller,
                 source_object_id: item.id,
                 prompt_text: prompt.clone(),
@@ -462,14 +452,11 @@ pub(super) fn create_attacking_tokens(
                 candidate_names: Vec::new(),
                 candidate_server_card_ids: Vec::new(),
                 unique_names: false,
-                generic_mana_cost: 0,
-                payment_currently_legal: false,
-                resolution_branches: Vec::new(),
-                mana_cost: String::new(),
                 candidate_selectable: Vec::new(),
                 public_reveal: None,
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: options.clone(),
+                ..Default::default()
             },
         )),
     });

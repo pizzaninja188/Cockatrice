@@ -2239,7 +2239,6 @@ impl GameEngine {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
                     resolution_prompt_id: pending.resolution_prompt_id.get(),
-                    variable_mana_contribution: false,
                     deciding_player_id: pending.deciding_player,
                     source_object_id: pending.presentation.source_object_id,
                     prompt_text: pending.presentation.prompt.clone(),

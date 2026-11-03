@@ -342,7 +342,6 @@ pub(in crate::engine) fn linked_exile_choice_event(engine: &GameEngine) -> Optio
             rv1::ResolutionChoiceRequired {
                 resolution_prompt_id: pending.resolution_prompt_id.get(),
                 accepted_permanent_selections: Vec::new(),
-                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: pending.deciding_player,
@@ -357,18 +356,11 @@ pub(in crate::engine) fn linked_exile_choice_event(engine: &GameEngine) -> Optio
                 candidate_names,
                 candidate_server_card_ids: Vec::new(),
                 unique_names: false,
-                generic_mana_cost: 0,
-                payment_currently_legal: false,
                 resolution_branches,
-                mana_cost: String::new(),
                 candidate_selectable: Vec::new(),
                 public_reveal: None,
                 candidate_source_zones,
-                combat_defender_options: Vec::new(),
-                waterbend: false,
-                selection_slots: Vec::new(),
-                replacement_options: Vec::new(),
-                selection_alternatives: Vec::new(),
+                ..Default::default()
             },
         )),
     })

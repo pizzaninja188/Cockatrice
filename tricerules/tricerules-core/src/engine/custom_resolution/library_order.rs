@@ -216,7 +216,6 @@ impl GameEngine {
                 rv1::ResolutionChoiceRequired {
                     resolution_prompt_id: 0,
                     accepted_permanent_selections: Vec::new(),
-                    variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),
                     deciding_player_id: controller,
@@ -231,10 +230,6 @@ impl GameEngine {
                     ordered: true,
                     unique_names: false,
                     candidate_server_card_ids: Vec::new(),
-                    resolution_branches: Vec::new(),
-                    mana_cost: String::new(),
-                    generic_mana_cost: 0,
-                    payment_currently_legal: false,
                     candidate_selectable: match kind {
                         PendingLibraryPartitionKind::Scry => Vec::new(),
                         PendingLibraryPartitionKind::Surveil
@@ -242,11 +237,7 @@ impl GameEngine {
                     },
                     public_reveal: None,
                     candidate_source_zones: Vec::new(),
-                    combat_defender_options: Vec::new(),
-                    waterbend: false,
-                    selection_slots: Vec::new(),
-                    replacement_options: Vec::new(),
-                    selection_alternatives: Vec::new(),
+                    ..Default::default()
                 },
             )),
         });
@@ -699,7 +690,6 @@ impl GameEngine {
                 rv1::ResolutionChoiceRequired {
                     resolution_prompt_id: 0,
                     accepted_permanent_selections: Vec::new(),
-                    variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),
                     deciding_player_id: controller,
@@ -714,18 +704,10 @@ impl GameEngine {
                     ordered: true,
                     unique_names: false,
                     candidate_server_card_ids: Vec::new(),
-                    resolution_branches: Vec::new(),
-                    mana_cost: String::new(),
-                    generic_mana_cost: 0,
-                    payment_currently_legal: false,
                     candidate_selectable: vec![true; remaining.len()],
                     public_reveal: None,
                     candidate_source_zones: Vec::new(),
-                    combat_defender_options: Vec::new(),
-                    waterbend: false,
-                    selection_slots: Vec::new(),
-                    replacement_options: Vec::new(),
-                    selection_alternatives: Vec::new(),
+                    ..Default::default()
                 },
             )),
         });

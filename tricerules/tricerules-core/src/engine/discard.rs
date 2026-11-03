@@ -446,7 +446,6 @@ impl GameEngine {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
                     resolution_prompt_id: 0,
-                    variable_mana_contribution: false,
                     candidate_player_ids: Vec::new(),
                     deciding_player_id: player,
                     source_object_id: stack.item.id,

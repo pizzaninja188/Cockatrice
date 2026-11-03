@@ -102,7 +102,6 @@ pub(super) fn counter_target_spell(
                     rv1::ResolutionChoiceRequired {
                         resolution_prompt_id: 0,
                         accepted_permanent_selections: Vec::new(),
-                        variable_mana_contribution: false,
                         candidate_token_identities: Vec::new(),
                         candidate_player_ids: Vec::new(),
                         deciding_player_id: deciding_player,
@@ -117,18 +116,12 @@ pub(super) fn counter_target_spell(
                         candidate_names: Vec::new(),
                         candidate_server_card_ids: Vec::new(),
                         candidate_selectable: Vec::new(),
-                        resolution_branches: Vec::new(),
-                        mana_cost: String::new(),
                         unique_names: false,
                         generic_mana_cost,
                         payment_currently_legal,
                         public_reveal: None,
                         candidate_source_zones: Vec::new(),
-                        combat_defender_options: Vec::new(),
-                        waterbend: false,
-                        selection_slots: Vec::new(),
-                        replacement_options: Vec::new(),
-                        selection_alternatives: Vec::new(),
+                        ..Default::default()
                     },
                 )),
             });
@@ -454,7 +447,6 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
             let event = rv1::ResolutionChoiceRequired {
                 resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
-                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: deciding_player,
@@ -469,7 +461,6 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
                 candidate_names: Vec::new(),
                 candidate_server_card_ids: Vec::new(),
                 candidate_selectable: Vec::new(),
-                resolution_branches: Vec::new(),
                 mana_cost: payment_mana_cost.to_string(),
                 unique_names: false,
                 generic_mana_cost,
@@ -482,11 +473,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
                 },
                 public_reveal: None,
                 candidate_source_zones: Vec::new(),
-                combat_defender_options: Vec::new(),
-                waterbend: false,
-                selection_slots: Vec::new(),
-                replacement_options: Vec::new(),
-                selection_alternatives: Vec::new(),
+                ..Default::default()
             };
             (presentation, PendingWardPaymentStage::Mana(payment), event)
         }
@@ -541,7 +528,6 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
             let event = rv1::ResolutionChoiceRequired {
                 resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
-                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: deciding_player,
@@ -556,18 +542,10 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
                 candidate_names,
                 candidate_server_card_ids: Vec::new(),
                 candidate_selectable: Vec::new(),
-                resolution_branches: Vec::new(),
-                mana_cost: String::new(),
                 unique_names: false,
-                generic_mana_cost: 0,
-                payment_currently_legal: false,
                 public_reveal: None,
                 candidate_source_zones: Vec::new(),
-                combat_defender_options: Vec::new(),
-                waterbend: false,
-                selection_slots: Vec::new(),
-                replacement_options: Vec::new(),
-                selection_alternatives: Vec::new(),
+                ..Default::default()
             };
             (
                 presentation,

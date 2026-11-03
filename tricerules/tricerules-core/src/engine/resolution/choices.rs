@@ -597,7 +597,6 @@ pub(super) fn choose_permanents(
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
                     resolution_prompt_id: 0,
-                    variable_mana_contribution: false,
                     candidate_player_ids: Vec::new(),
                     deciding_player_id: deciding_player,
                     source_object_id: cx.top.id,
@@ -776,7 +775,6 @@ pub(super) fn choose_proliferated_permanents(
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
                 resolution_prompt_id: 0,
-                variable_mana_contribution: false,
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: cx.top.controller,
                 source_object_id: cx.top.id,
@@ -901,7 +899,6 @@ pub(super) fn may_behold(
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
                 resolution_prompt_id: 0,
-                variable_mana_contribution: false,
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: deciding_player,
                 source_object_id: cx.top.id,
@@ -2182,7 +2179,6 @@ pub(in crate::engine) fn authored_resolution_branch_choice_event(
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
                 resolution_prompt_id: 0,
-                variable_mana_contribution: false,
                 deciding_player_id: pending.deciding_player,
                 source_object_id: pending.presentation.source_object_id,
                 prompt_text: pending.presentation.prompt.clone(),
@@ -2321,7 +2317,6 @@ pub(in crate::engine) fn targeted_player_permanent_choice_event(
                 ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                     rv1::ResolutionChoiceRequired {
                         resolution_prompt_id: 0,
-                        variable_mana_contribution: false,
                         candidate_player_ids: Vec::new(),
                         deciding_player_id: pending.deciding_player,
                         source_object_id: pending.presentation.source_object_id,
@@ -2342,7 +2337,6 @@ pub(in crate::engine) fn targeted_player_permanent_choice_event(
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
                 resolution_prompt_id: 0,
-                variable_mana_contribution: false,
                 candidate_player_ids,
                 deciding_player_id: pending.deciding_player,
                 source_object_id: stack.item.id,

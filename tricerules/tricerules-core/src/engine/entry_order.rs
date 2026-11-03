@@ -141,7 +141,6 @@ impl GameEngine {
                 ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                     rv1::ResolutionChoiceRequired {
                         resolution_prompt_id: 0,
-                        variable_mana_contribution: false,
                         deciding_player_id: player,
                         source_object_id,
                         prompt_text: prompt.clone(),

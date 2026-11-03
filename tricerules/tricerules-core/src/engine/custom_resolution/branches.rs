@@ -83,7 +83,6 @@ impl GameEngine {
                     candidate_names: Vec::new(),
                     candidate_server_card_ids: Vec::new(),
                     candidate_selectable: Vec::new(),
-                    resolution_branches: Vec::new(),
                     unique_names: false,
                     generic_mana_cost: payment.generic_mana_cost,
                     payment_currently_legal: payment.variable_mana_contribution
@@ -101,12 +100,9 @@ impl GameEngine {
                     mana_cost: payment.mana_cost.to_string(),
                     public_reveal: None,
                     candidate_source_zones: Vec::new(),
-                    combat_defender_options: Vec::new(),
                     waterbend: payment.waterbend,
-                    selection_slots: Vec::new(),
-                    replacement_options: Vec::new(),
-                    selection_alternatives: Vec::new(),
                     variable_mana_contribution: payment.variable_mana_contribution,
+                    ..Default::default()
                 },
             )),
         })
@@ -2561,7 +2557,6 @@ impl GameEngine {
                         rv1::ResolutionChoiceRequired {
                             resolution_prompt_id: 0,
                             accepted_permanent_selections: Vec::new(),
-                            variable_mana_contribution: false,
                             candidate_token_identities: Vec::new(),
                             candidate_player_ids: Vec::new(),
                             deciding_player_id: pending.deciding_player,
@@ -2577,17 +2572,9 @@ impl GameEngine {
                             candidate_server_card_ids: Vec::new(),
                             candidate_selectable: Vec::new(),
                             unique_names: false,
-                            generic_mana_cost: 0,
-                            payment_currently_legal: false,
-                            resolution_branches: Vec::new(),
-                            mana_cost: String::new(),
                             public_reveal: None,
                             candidate_source_zones: Vec::new(),
-                            combat_defender_options: Vec::new(),
-                            waterbend: false,
-                            selection_slots: Vec::new(),
-                            replacement_options: Vec::new(),
-                            selection_alternatives: Vec::new(),
+                            ..Default::default()
                         },
                     )),
                 });

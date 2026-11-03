@@ -36,7 +36,6 @@ pub(super) fn blight(cx: &mut EffectCx<'_>, count: u32) -> Result<EffectOutcome,
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
                 resolution_prompt_id: 0,
-                variable_mana_contribution: false,
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: cx.controller,
                 source_object_id: cx.top.id,

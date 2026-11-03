@@ -1032,7 +1032,6 @@ impl GameEngine {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
                     resolution_prompt_id: 0,
-                    variable_mana_contribution: false,
                     deciding_player_id: event.destination_controller,
                     source_object_id: event.object_id,
                     prompt_text: "Choose a creature type as this permanent enters.".into(),
@@ -1128,7 +1127,6 @@ impl GameEngine {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
                     resolution_prompt_id: 0,
-                    variable_mana_contribution: false,
                     deciding_player_id: event.destination_controller,
                     source_object_id: event.object_id,
                     prompt_text: "Choose an opponent as this permanent enters.".into(),
@@ -1928,7 +1926,6 @@ impl GameEngine {
                 rv1::ResolutionChoiceRequired {
                     resolution_prompt_id: 0,
                     accepted_permanent_selections: Vec::new(),
-                    variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),
                     deciding_player_id: event.destination_controller,
@@ -1944,17 +1941,10 @@ impl GameEngine {
                     candidate_server_card_ids: Vec::new(),
                     candidate_selectable: Vec::new(),
                     unique_names: false,
-                    generic_mana_cost: 0,
-                    payment_currently_legal: false,
                     resolution_branches: options,
-                    mana_cost: String::new(),
                     public_reveal: None,
                     candidate_source_zones: Vec::new(),
-                    combat_defender_options: Vec::new(),
-                    waterbend: false,
-                    selection_slots: Vec::new(),
-                    replacement_options: Vec::new(),
-                    selection_alternatives: Vec::new(),
+                    ..Default::default()
                 },
             )),
         });
@@ -2063,7 +2053,6 @@ impl GameEngine {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
                     resolution_prompt_id: 0,
-                    variable_mana_contribution: false,
                     deciding_player_id: event.destination_controller,
                     source_object_id: event.object_id,
                     prompt_text: prompt.clone(),
@@ -2155,7 +2144,6 @@ impl GameEngine {
                 rv1::ResolutionChoiceRequired {
                     resolution_prompt_id: 0,
                     accepted_permanent_selections: Vec::new(),
-                    variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),
                     deciding_player_id: event.destination_controller,
@@ -2171,8 +2159,6 @@ impl GameEngine {
                     candidate_server_card_ids: Vec::new(),
                     candidate_selectable: Vec::new(),
                     unique_names: false,
-                    generic_mana_cost: 0,
-                    payment_currently_legal: false,
                     resolution_branches: vec![rv1::ResolutionBranchOption {
                         branch_index: 0,
                         label,
@@ -2182,14 +2168,9 @@ impl GameEngine {
                         search_zones: Vec::new(),
                         presentation: None,
                     }],
-                    mana_cost: String::new(),
                     public_reveal: None,
                     candidate_source_zones: Vec::new(),
-                    combat_defender_options: Vec::new(),
-                    waterbend: false,
-                    selection_slots: Vec::new(),
-                    replacement_options: Vec::new(),
-                    selection_alternatives: Vec::new(),
+                    ..Default::default()
                 },
             )),
         });
@@ -2251,7 +2232,6 @@ impl GameEngine {
                 rv1::ResolutionChoiceRequired {
                     resolution_prompt_id: 0,
                     accepted_permanent_selections: Vec::new(),
-                    variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),
                     deciding_player_id: event.destination_controller,
@@ -2267,17 +2247,10 @@ impl GameEngine {
                     candidate_server_card_ids: Vec::new(),
                     candidate_selectable: Vec::new(),
                     unique_names: false,
-                    generic_mana_cost: 0,
-                    payment_currently_legal: false,
                     resolution_branches: options,
-                    mana_cost: String::new(),
                     public_reveal: None,
                     candidate_source_zones: Vec::new(),
-                    combat_defender_options: Vec::new(),
-                    waterbend: false,
-                    selection_slots: Vec::new(),
-                    replacement_options: Vec::new(),
-                    selection_alternatives: Vec::new(),
+                    ..Default::default()
                 },
             )),
         });
@@ -2838,7 +2811,6 @@ impl GameEngine {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
                     resolution_prompt_id: 0,
-                    variable_mana_contribution: false,
                     deciding_player_id: event.destination_controller,
                     source_object_id: event.object_id,
                     prompt_text: prompt.clone(),
@@ -3152,7 +3124,6 @@ impl GameEngine {
                 rv1::ResolutionChoiceRequired {
                     resolution_prompt_id: 0,
                     accepted_permanent_selections: Vec::new(),
-                    variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),
                     // CR 109.5: "you" on an as-enters ability is its would-be controller,
@@ -3169,18 +3140,10 @@ impl GameEngine {
                     candidate_names,
                     candidate_server_card_ids: Vec::new(),
                     candidate_selectable: Vec::new(),
-                    resolution_branches: Vec::new(),
-                    mana_cost: String::new(),
                     unique_names: false,
-                    generic_mana_cost: 0,
-                    payment_currently_legal: false,
                     public_reveal: None,
                     candidate_source_zones: Vec::new(),
-                    combat_defender_options: Vec::new(),
-                    waterbend: false,
-                    selection_slots: Vec::new(),
-                    replacement_options: Vec::new(),
-                    selection_alternatives: Vec::new(),
+                    ..Default::default()
                 },
             )),
         });
@@ -3451,7 +3414,6 @@ impl GameEngine {
                                     rv1::ResolutionChoiceRequired {
                                         resolution_prompt_id: 0,
                                         accepted_permanent_selections: Vec::new(),
-                                        variable_mana_contribution: false,
                                         candidate_token_identities: Vec::new(),
                                         candidate_player_ids: Vec::new(),
                                         deciding_player_id: event.destination_controller,
@@ -3469,18 +3431,10 @@ impl GameEngine {
                                             .collect(),
                                         candidate_server_card_ids: Vec::new(),
                                         unique_names: false,
-                                        generic_mana_cost: 0,
-                                        payment_currently_legal: false,
-                                        resolution_branches: Vec::new(),
-                                        mana_cost: String::new(),
                                         candidate_selectable: Vec::new(),
                                         public_reveal: None,
                                         candidate_source_zones: Vec::new(),
-                                        combat_defender_options: Vec::new(),
-                                        waterbend: false,
-                                        selection_slots: Vec::new(),
-                                        replacement_options: Vec::new(),
-                                        selection_alternatives: Vec::new(),
+                                        ..Default::default()
                                     },
                                 )),
                             });
@@ -3647,7 +3601,6 @@ impl GameEngine {
                             rv1::ResolutionChoiceRequired {
                                 resolution_prompt_id: 0,
                                 accepted_permanent_selections: Vec::new(),
-                                variable_mana_contribution: false,
                                 candidate_token_identities: Vec::new(),
                                 candidate_player_ids: Vec::new(),
                                 deciding_player_id: event.deciding_player,
@@ -3662,18 +3615,11 @@ impl GameEngine {
                                 candidate_names,
                                 candidate_server_card_ids: Vec::new(),
                                 candidate_selectable: Vec::new(),
-                                resolution_branches: Vec::new(),
-                                mana_cost: String::new(),
                                 unique_names: false,
-                                generic_mana_cost: 0,
-                                payment_currently_legal: false,
                                 public_reveal: None,
                                 candidate_source_zones: Vec::new(),
-                                combat_defender_options: Vec::new(),
-                                waterbend: false,
-                                selection_slots: Vec::new(),
                                 replacement_options,
-                                selection_alternatives: Vec::new(),
+                                ..Default::default()
                             },
                         )),
                     });

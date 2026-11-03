@@ -725,7 +725,6 @@ pub(in crate::engine) fn park_player_set_discard_choice(
             rv1::ResolutionChoiceRequired {
                 resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
-                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: choice.player,
@@ -741,17 +740,10 @@ pub(in crate::engine) fn park_player_set_discard_choice(
                 unique_names: false,
                 candidate_server_card_ids: Vec::new(),
                 candidate_selectable: vec![true; candidates.len()],
-                resolution_branches: Vec::new(),
-                mana_cost: String::new(),
-                generic_mana_cost: 0,
-                payment_currently_legal: false,
                 public_reveal: None,
                 candidate_source_zones: Vec::new(),
-                combat_defender_options: Vec::new(),
-                waterbend: false,
-                selection_slots: Vec::new(),
-                replacement_options: Vec::new(),
                 selection_alternatives,
+                ..Default::default()
             },
         )),
     });
@@ -1473,7 +1465,6 @@ pub(in crate::engine) fn publish_owner_library_placement_choice(
             rv1::ResolutionChoiceRequired {
                 resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
-                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: owner,
@@ -1488,8 +1479,6 @@ pub(in crate::engine) fn publish_owner_library_placement_choice(
                 candidate_names: Vec::new(),
                 candidate_server_card_ids: Vec::new(),
                 unique_names: false,
-                generic_mana_cost: 0,
-                payment_currently_legal: false,
                 resolution_branches: vec![
                     rv1::ResolutionBranchOption {
                         branch_index: 0,
@@ -1514,15 +1503,10 @@ pub(in crate::engine) fn publish_owner_library_placement_choice(
                         presentation: None,
                     },
                 ],
-                mana_cost: String::new(),
                 candidate_selectable: Vec::new(),
                 public_reveal: None,
                 candidate_source_zones: Vec::new(),
-                combat_defender_options: Vec::new(),
-                waterbend: false,
-                selection_slots: Vec::new(),
-                replacement_options: Vec::new(),
-                selection_alternatives: Vec::new(),
+                ..Default::default()
             },
         )),
     });
@@ -2235,7 +2219,6 @@ fn choose_hand_cards_for_player(
             rv1::ResolutionChoiceRequired {
                 resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
-                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: deciding_player,
@@ -2251,10 +2234,6 @@ fn choose_hand_cards_for_player(
                 unique_names: false,
                 candidate_server_card_ids: Vec::new(),
                 candidate_selectable,
-                resolution_branches: Vec::new(),
-                mana_cost: String::new(),
-                generic_mana_cost: 0,
-                payment_currently_legal: false,
                 public_reveal: if visibility == HandChoiceVisibility::PublicReveal {
                     super::super::reveals::reveal_choice(
                         &engine.state,
@@ -2267,11 +2246,7 @@ fn choose_hand_cards_for_player(
                     None
                 },
                 candidate_source_zones: Vec::new(),
-                combat_defender_options: Vec::new(),
-                waterbend: false,
-                selection_slots: Vec::new(),
-                replacement_options: Vec::new(),
-                selection_alternatives: Vec::new(),
+                ..Default::default()
             },
         )),
     });
@@ -2711,7 +2686,6 @@ pub(super) fn target_player_sacrifices(
                         rv1::ResolutionChoiceRequired {
                             resolution_prompt_id: 0,
                             accepted_permanent_selections: Vec::new(),
-                            variable_mana_contribution: false,
                             candidate_token_identities: Vec::new(),
                             candidate_player_ids: Vec::new(),
                             deciding_player_id: pid,
@@ -2729,17 +2703,9 @@ pub(super) fn target_player_sacrifices(
                             unique_names: false,
                             candidate_server_card_ids: Vec::new(),
                             candidate_selectable: Vec::new(),
-                            resolution_branches: Vec::new(),
-                            mana_cost: String::new(),
-                            generic_mana_cost: 0,
-                            payment_currently_legal: false,
                             public_reveal: None,
                             candidate_source_zones: Vec::new(),
-                            combat_defender_options: Vec::new(),
-                            waterbend: false,
-                            selection_slots: Vec::new(),
-                            replacement_options: Vec::new(),
-                            selection_alternatives: Vec::new(),
+                            ..Default::default()
                         },
                     )),
                 });
@@ -3369,7 +3335,6 @@ fn choose_linked_exiled_card_action(
             rv1::ResolutionChoiceRequired {
                 resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
-                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: controller,
@@ -3384,21 +3349,13 @@ fn choose_linked_exiled_card_action(
                 candidate_names,
                 candidate_server_card_ids: Vec::new(),
                 unique_names: false,
-                generic_mana_cost: 0,
-                payment_currently_legal: false,
-                resolution_branches: Vec::new(),
-                mana_cost: String::new(),
                 candidate_selectable: Vec::new(),
                 public_reveal: None,
                 candidate_source_zones: vec![
                     rv1::ChoiceCandidateSourceZone::Exile as i32;
                     candidate_ids.len()
                 ],
-                combat_defender_options: Vec::new(),
-                waterbend: false,
-                selection_slots: Vec::new(),
-                replacement_options: Vec::new(),
-                selection_alternatives: Vec::new(),
+                ..Default::default()
             },
         )),
     });
@@ -3923,7 +3880,6 @@ impl GameEngine {
                     rv1::ResolutionChoiceRequired {
                         resolution_prompt_id: 0,
                         accepted_permanent_selections: Vec::new(),
-                        variable_mana_contribution: false,
                         candidate_token_identities: Vec::new(),
                         candidate_player_ids: Vec::new(),
                         deciding_player_id: chooser,
@@ -3938,21 +3894,13 @@ impl GameEngine {
                         candidate_names,
                         candidate_server_card_ids: Vec::new(),
                         unique_names: false,
-                        generic_mana_cost: 0,
-                        payment_currently_legal: false,
-                        resolution_branches: Vec::new(),
-                        mana_cost: String::new(),
                         candidate_selectable: Vec::new(),
                         public_reveal: None,
                         candidate_source_zones: vec![
                             rv1::ChoiceCandidateSourceZone::Exile as i32;
                             candidate_ids.len()
                         ],
-                        combat_defender_options: Vec::new(),
-                        waterbend: false,
-                        selection_slots: Vec::new(),
-                        replacement_options: Vec::new(),
-                        selection_alternatives: Vec::new(),
+                        ..Default::default()
                     },
                 )),
             });
@@ -4217,7 +4165,6 @@ pub(super) fn return_different_named_permanents_from_graveyard(
             rv1::ResolutionChoiceRequired {
                 resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
-                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: controller,
@@ -4232,21 +4179,13 @@ pub(super) fn return_different_named_permanents_from_graveyard(
                 candidate_names,
                 candidate_server_card_ids: Vec::new(),
                 unique_names: true,
-                generic_mana_cost: 0,
-                payment_currently_legal: false,
-                resolution_branches: Vec::new(),
-                mana_cost: String::new(),
                 candidate_selectable: Vec::new(),
                 public_reveal: None,
                 candidate_source_zones: vec![
                     rv1::ChoiceCandidateSourceZone::Graveyard as i32;
                     candidates.len()
                 ],
-                combat_defender_options: Vec::new(),
-                waterbend: false,
-                selection_slots: Vec::new(),
-                replacement_options: Vec::new(),
-                selection_alternatives: Vec::new(),
+                ..Default::default()
             },
         )),
     });
@@ -6159,7 +6098,6 @@ impl GameEngine {
                 rv1::ResolutionChoiceRequired {
                     resolution_prompt_id: 0,
                     accepted_permanent_selections: Vec::new(),
-                    variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),
                     deciding_player_id: controller,
@@ -6175,10 +6113,6 @@ impl GameEngine {
                     unique_names: false,
                     candidate_server_card_ids: Vec::new(),
                     candidate_selectable: vec![true],
-                    resolution_branches: Vec::new(),
-                    mana_cost: String::new(),
-                    generic_mana_cost: 0,
-                    payment_currently_legal: false,
                     public_reveal: super::super::reveals::reveal_choice(
                         &self.state,
                         self.registry,
@@ -6187,11 +6121,7 @@ impl GameEngine {
                         spell_label,
                     ),
                     candidate_source_zones: Vec::new(),
-                    combat_defender_options: Vec::new(),
-                    waterbend: false,
-                    selection_slots: Vec::new(),
-                    replacement_options: Vec::new(),
-                    selection_alternatives: Vec::new(),
+                    ..Default::default()
                 },
             )),
         });
@@ -6294,7 +6224,6 @@ pub(super) fn thassa_oracle(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engi
             rv1::ResolutionChoiceRequired {
                 resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
-                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: controller,
@@ -6310,17 +6239,9 @@ pub(super) fn thassa_oracle(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engi
                 unique_names: false,
                 candidate_server_card_ids: Vec::new(),
                 candidate_selectable: vec![true; looked.len()],
-                resolution_branches: Vec::new(),
-                mana_cost: String::new(),
-                generic_mana_cost: 0,
-                payment_currently_legal: false,
                 public_reveal: None,
                 candidate_source_zones: Vec::new(),
-                combat_defender_options: Vec::new(),
-                waterbend: false,
-                selection_slots: Vec::new(),
-                replacement_options: Vec::new(),
-                selection_alternatives: Vec::new(),
+                ..Default::default()
             },
         )),
     });
@@ -6445,7 +6366,6 @@ fn begin_library_partition(
             rv1::ResolutionChoiceRequired {
                 resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
-                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: controller,
@@ -6461,17 +6381,9 @@ fn begin_library_partition(
                 unique_names: false,
                 candidate_server_card_ids: Vec::new(),
                 candidate_selectable,
-                resolution_branches: Vec::new(),
-                mana_cost: String::new(),
-                generic_mana_cost: 0,
-                payment_currently_legal: false,
                 public_reveal: None,
                 candidate_source_zones: Vec::new(),
-                combat_defender_options: Vec::new(),
-                waterbend: false,
-                selection_slots: Vec::new(),
-                replacement_options: Vec::new(),
-                selection_alternatives: Vec::new(),
+                ..Default::default()
             },
         )),
     });
@@ -6645,7 +6557,6 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
             rv1::ResolutionChoiceRequired {
                 resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
-                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: controller,
@@ -6661,17 +6572,9 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 unique_names: false,
                 candidate_server_card_ids: Vec::new(),
                 candidate_selectable: Vec::new(),
-                resolution_branches: Vec::new(),
-                mana_cost: String::new(),
-                generic_mana_cost: 0,
-                payment_currently_legal: false,
                 public_reveal: None,
                 candidate_source_zones: Vec::new(),
-                combat_defender_options: Vec::new(),
-                waterbend: false,
-                selection_slots: Vec::new(),
-                replacement_options: Vec::new(),
-                selection_alternatives: Vec::new(),
+                ..Default::default()
             },
         )),
     });
@@ -6779,7 +6682,6 @@ pub(super) fn look_choose_battlefield(
             rv1::ResolutionChoiceRequired {
                 resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
-                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: controller,
@@ -6794,18 +6696,10 @@ pub(super) fn look_choose_battlefield(
                 ordered: false,
                 unique_names: false,
                 candidate_server_card_ids: Vec::new(),
-                resolution_branches: Vec::new(),
-                mana_cost: String::new(),
-                generic_mana_cost: 0,
-                payment_currently_legal: false,
                 candidate_selectable: selectable,
                 public_reveal: None,
                 candidate_source_zones: Vec::new(),
-                combat_defender_options: Vec::new(),
-                waterbend: false,
-                selection_slots: Vec::new(),
-                replacement_options: Vec::new(),
-                selection_alternatives: Vec::new(),
+                ..Default::default()
             },
         )),
     });
@@ -6921,7 +6815,6 @@ pub(super) fn look_choose_to_hand(
             rv1::ResolutionChoiceRequired {
                 resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
-                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: controller,
@@ -6936,18 +6829,10 @@ pub(super) fn look_choose_to_hand(
                 ordered: false,
                 unique_names: false,
                 candidate_server_card_ids: Vec::new(),
-                resolution_branches: Vec::new(),
-                mana_cost: String::new(),
-                generic_mana_cost: 0,
-                payment_currently_legal: false,
                 candidate_selectable: selectable,
                 public_reveal: None,
                 candidate_source_zones: Vec::new(),
-                combat_defender_options: Vec::new(),
-                waterbend: false,
-                selection_slots: Vec::new(),
-                replacement_options: Vec::new(),
-                selection_alternatives: Vec::new(),
+                ..Default::default()
             },
         )),
     });
@@ -7037,7 +6922,6 @@ pub(super) fn look_top_card_optional_to_hand(
             rv1::ResolutionChoiceRequired {
                 resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
-                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: controller,
@@ -7052,18 +6936,10 @@ pub(super) fn look_top_card_optional_to_hand(
                 ordered: false,
                 unique_names: false,
                 candidate_server_card_ids: Vec::new(),
-                resolution_branches: Vec::new(),
-                mana_cost: String::new(),
-                generic_mana_cost: 0,
-                payment_currently_legal: false,
                 candidate_selectable: vec![selectable],
                 public_reveal: None,
                 candidate_source_zones: Vec::new(),
-                combat_defender_options: Vec::new(),
-                waterbend: false,
-                selection_slots: Vec::new(),
-                replacement_options: Vec::new(),
-                selection_alternatives: Vec::new(),
+                ..Default::default()
             },
         )),
     });
@@ -7155,7 +7031,6 @@ pub(super) fn hideaway(
             rv1::ResolutionChoiceRequired {
                 resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
-                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: controller,
@@ -7170,18 +7045,10 @@ pub(super) fn hideaway(
                 ordered: false,
                 unique_names: false,
                 candidate_server_card_ids: Vec::new(),
-                resolution_branches: Vec::new(),
-                mana_cost: String::new(),
-                generic_mana_cost: 0,
-                payment_currently_legal: false,
                 candidate_selectable: vec![true; looked_at.len()],
                 public_reveal: None,
                 candidate_source_zones: Vec::new(),
-                combat_defender_options: Vec::new(),
-                waterbend: false,
-                selection_slots: Vec::new(),
-                replacement_options: Vec::new(),
-                selection_alternatives: Vec::new(),
+                ..Default::default()
             },
         )),
     });
@@ -7627,7 +7494,6 @@ pub(in crate::engine) fn park_zone_search_choice(
             rv1::ResolutionChoiceRequired {
                 resolution_prompt_id: 0,
                 accepted_permanent_selections: Vec::new(),
-                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: searcher,
@@ -7644,21 +7510,15 @@ pub(in crate::engine) fn park_zone_search_choice(
                     == Some(tricerules_card_model::primitives::SearchSelectionConstraint::DifferentNames),
                 candidate_server_card_ids: Vec::new(),
                 candidate_selectable: Vec::new(),
-                resolution_branches: Vec::new(),
-                mana_cost: String::new(),
-                generic_mana_cost: 0,
-                payment_currently_legal: false,
                 public_reveal: None,
                 candidate_source_zones: if multi_zone {
                     candidate_zones
                 } else {
                     Vec::new()
                 },
-                combat_defender_options: Vec::new(),
-                waterbend: false,
                 selection_slots,
-                replacement_options: Vec::new(),
                 selection_alternatives,
+                ..Default::default()
             },
         )),
     });
@@ -7786,7 +7646,6 @@ pub(in crate::engine) fn begin_search_request(
                     rv1::ResolutionChoiceRequired {
                         resolution_prompt_id: 0,
                         accepted_permanent_selections: Vec::new(),
-                        variable_mana_contribution: false,
                         candidate_token_identities: Vec::new(),
                         candidate_player_ids: Vec::new(),
                         deciding_player_id: searcher,
@@ -7801,18 +7660,11 @@ pub(in crate::engine) fn begin_search_request(
                         candidate_names: Vec::new(),
                         candidate_server_card_ids: Vec::new(),
                         unique_names: false,
-                        generic_mana_cost: 0,
-                        payment_currently_legal: false,
                         resolution_branches: branches,
-                        mana_cost: String::new(),
                         candidate_selectable: Vec::new(),
                         public_reveal: None,
                         candidate_source_zones: Vec::new(),
-                        combat_defender_options: Vec::new(),
-                        waterbend: false,
-                        selection_slots: Vec::new(),
-                        replacement_options: Vec::new(),
-                        selection_alternatives: Vec::new(),
+                        ..Default::default()
                     },
                 )),
             });
@@ -7965,7 +7817,6 @@ pub(super) fn search_library(
                 rv1::ResolutionChoiceRequired {
                     resolution_prompt_id: 0,
                     accepted_permanent_selections: Vec::new(),
-                    variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),
                     deciding_player_id: searcher,
@@ -7990,16 +7841,9 @@ pub(super) fn search_library(
                         search_zones: Vec::new(),
                         presentation: None,
                     }],
-                    mana_cost: String::new(),
-                    generic_mana_cost: 0,
-                    payment_currently_legal: false,
                     public_reveal: None,
                     candidate_source_zones: Vec::new(),
-                    combat_defender_options: Vec::new(),
-                    waterbend: false,
-                    selection_slots: Vec::new(),
-                    replacement_options: Vec::new(),
-                    selection_alternatives: Vec::new(),
+                    ..Default::default()
                 },
             )),
         });
