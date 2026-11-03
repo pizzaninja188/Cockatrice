@@ -1318,6 +1318,7 @@ mod cast_color_tests {
                         flex_payments: vec![rv1::FlexPipPayment {
                             pip_index: 1,
                             pay_life: true,
+                            mana_color: 0,
                         }],
                         ..Default::default()
                     })),

@@ -1298,6 +1298,7 @@ fn lattice_spends_actual_off_color_mana_for_hybrid_and_phyrexian_alternatives() 
             vec![FlexPipPayment {
                 pip_index: 0,
                 pay_life: true,
+                mana_color: 0,
             }]
         } else {
             vec![]

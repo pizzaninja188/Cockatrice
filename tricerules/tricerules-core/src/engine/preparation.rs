@@ -896,6 +896,7 @@ mod tests {
                             vec![rv1::FlexPipPayment {
                                 pip_index: 0,
                                 pay_life: true,
+                                mana_color: 0,
                             }]
                         } else {
                             Vec::new()
@@ -990,6 +991,7 @@ mod tests {
                     .map(|pip_index| rv1::FlexPipPayment {
                         pip_index,
                         pay_life: inset_life,
+                        mana_color: 0,
                     })
                     .collect(),
                 ..Default::default()

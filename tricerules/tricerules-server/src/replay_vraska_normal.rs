@@ -326,6 +326,7 @@ impl Pilot {
                         vec![FlexPipPayment {
                             pip_index: 2,
                             pay_life: true,
+                            mana_color: 0,
                         }]
                     } else {
                         Vec::new()

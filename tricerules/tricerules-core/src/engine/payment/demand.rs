@@ -79,6 +79,73 @@ impl Demand {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::engine) enum PhyrexianPayment {
+    Mana(ColorPip),
+    Life,
+}
+
+/// Resolve only declared Phyrexian branches against the active indexed cost. Ordinary
+/// mono-Phyrexian omission retains its legacy mana branch; hybrid Phyrexian is explicit.
+pub(in crate::engine) fn validated_phyrexian_choices(
+    cost: &ManaCost,
+    choices: &[rv1::FlexPipPayment],
+) -> Result<Vec<Option<PhyrexianPayment>>, EngineError> {
+    let mut selected = vec![None; cost.pips.len()];
+    for choice in choices {
+        let index = choice.pip_index as usize;
+        let Some(pip) = cost.pips.get(index) else {
+            return Err(EngineError::Illegal("invalid flexible pip selection"));
+        };
+        if selected[index].is_some() {
+            return Err(EngineError::Illegal("duplicate flexible pip selection"));
+        }
+        selected[index] = Some(match pip {
+            ManaSymbol::Phyrexian(color) if choice.mana_color == 0 => {
+                if choice.pay_life {
+                    PhyrexianPayment::Life
+                } else {
+                    PhyrexianPayment::Mana(*color)
+                }
+            }
+            ManaSymbol::HybridPhyrexian(_, _) if choice.pay_life && choice.mana_color == 0 => {
+                PhyrexianPayment::Life
+            }
+            ManaSymbol::HybridPhyrexian(a, b) if !choice.pay_life => {
+                let color = match rv1::ManaColor::try_from(choice.mana_color).ok() {
+                    Some(rv1::ManaColor::White) => ColorPip::W,
+                    Some(rv1::ManaColor::Blue) => ColorPip::U,
+                    Some(rv1::ManaColor::Black) => ColorPip::B,
+                    Some(rv1::ManaColor::Red) => ColorPip::R,
+                    Some(rv1::ManaColor::Green) => ColorPip::G,
+                    _ => return Err(EngineError::Illegal("invalid hybrid Phyrexian color")),
+                };
+                if color != *a && color != *b {
+                    return Err(EngineError::Illegal(
+                        "hybrid Phyrexian color is not a component",
+                    ));
+                }
+                PhyrexianPayment::Mana(color)
+            }
+            _ => return Err(EngineError::Illegal("invalid flexible pip selection")),
+        });
+    }
+    for (index, pip) in cost.pips.iter().enumerate() {
+        match pip {
+            ManaSymbol::HybridPhyrexian(_, _) if selected[index].is_none() => {
+                return Err(EngineError::Illegal(
+                    "hybrid Phyrexian pip needs an announced branch",
+                ));
+            }
+            ManaSymbol::Phyrexian(color) if selected[index].is_none() => {
+                selected[index] = Some(PhyrexianPayment::Mana(*color));
+            }
+            _ => {}
+        }
+    }
+    Ok(selected)
+}
+
 pub(in crate::engine) fn normalize(
     cost: &ManaCost,
     x: u32,
@@ -86,16 +153,7 @@ pub(in crate::engine) fn normalize(
     reduction: u32,
     life_pips: &[rv1::FlexPipPayment],
 ) -> Result<Vec<Demand>, EngineError> {
-    let mut life = HashSet::new();
-    for payment in life_pips {
-        if !matches!(
-            cost.pips.get(payment.pip_index as usize),
-            Some(ManaSymbol::Phyrexian(_))
-        ) || !life.insert(payment.pip_index as usize)
-        {
-            return Err(EngineError::Illegal("invalid flexible pip selection"));
-        }
-    }
+    let phyrexian = validated_phyrexian_choices(cost, life_pips)?;
     let mut demands = vec![Demand {
         amounts: [0, 0, 0, 0, 0, 0, increase],
         life: 0,
@@ -115,14 +173,12 @@ pub(in crate::engine) fn normalize(
                 (super::mana::color_index(*b), 1),
             ],
             ManaSymbol::MonoHybrid(n, c) => vec![(super::mana::color_index(*c), 1), (6, *n)],
-            ManaSymbol::Phyrexian(_)
-                if life_pips
-                    .iter()
-                    .any(|p| p.pip_index as usize == index && p.pay_life) =>
-            {
-                vec![(7, 2)]
+            ManaSymbol::Phyrexian(_) | ManaSymbol::HybridPhyrexian(_, _) => {
+                match phyrexian[index].expect("validated Phyrexian choice") {
+                    PhyrexianPayment::Life => vec![(7, 2)],
+                    PhyrexianPayment::Mana(color) => vec![(super::mana::color_index(color), 1)],
+                }
             }
-            ManaSymbol::Phyrexian(c) => vec![(super::mana::color_index(*c), 1)],
         };
         let mut next = std::collections::BTreeSet::new();
         for demand in demands {
@@ -173,6 +229,7 @@ mod tests {
             &[rv1::FlexPipPayment {
                 pip_index: 1,
                 pay_life: true,
+                mana_color: 0,
             }],
         )
         .expect("life selection");
@@ -185,7 +242,8 @@ mod tests {
             0,
             &[rv1::FlexPipPayment {
                 pip_index: 0,
-                pay_life: true
+                pay_life: true,
+                mana_color: 0,
             }]
         )
         .is_err());

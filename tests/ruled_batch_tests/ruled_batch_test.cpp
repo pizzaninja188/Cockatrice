@@ -1910,9 +1910,12 @@ TEST_F(RuledBatchTest, AggregateActivationAnnouncementsStayActorPrivateAcrossBro
         EXPECT_EQ(otherCharge.object().zone_change_generation(), opponentTargetGeneration);
         EXPECT_EQ(otherCharge.option_id(), 7u);
         EXPECT_EQ(otherCharge.count(), 1u);
-        ASSERT_EQ(pending.flex_payments_size(), 1);
+        ASSERT_EQ(pending.flex_payments_size(), 2);
         EXPECT_EQ(pending.flex_payments(0).pip_index(), 1u);
         EXPECT_TRUE(pending.flex_payments(0).pay_life());
+        EXPECT_EQ(pending.flex_payments(1).pip_index(), 2u);
+        EXPECT_FALSE(pending.flex_payments(1).pay_life());
+        EXPECT_EQ(pending.flex_payments(1).mana_color(), ruled::v1::MANA_COLOR_WHITE);
     };
     const auto expectNoActorAnnouncements = [](const ruled::v1::PendingAbilityActivation &pending) {
         EXPECT_EQ(pending.cost_selections_size(), 0);
@@ -1969,6 +1972,9 @@ TEST_F(RuledBatchTest, AggregateActivationAnnouncementsStayActorPrivateAcrossBro
                 auto *flex = pending->add_flex_payments();
                 flex->set_pip_index(1u);
                 flex->set_pay_life(true);
+                auto *hybrid = pending->add_flex_payments();
+                hybrid->set_pip_index(2u);
+                hybrid->set_mana_color(ruled::v1::MANA_COLOR_WHITE);
             }
             if (seat == p2 && includeTargetOffers) {
                 auto *candidate = pending->add_target_candidates();
@@ -12070,4 +12076,31 @@ TEST_F(RuledBatchTest, PublicMovementIdentityIsRestoredOnlyWhenEngineAuthorizesI
             EXPECT_FALSE(event.permanent_moved().object_id_publicly_observable());
         }
     }
+}
+
+TEST(RuledProtocolVisibilityTest, HybridPhyrexianColorHasAnAppendedPrivateTagAndOldMonoWireCompatibility)
+{
+    const auto *field = ruled::v1::FlexPipPayment::descriptor()->FindFieldByName("mana_color");
+    ASSERT_NE(field, nullptr);
+    EXPECT_EQ(field->number(), 3);
+    EXPECT_EQ(field->type(), google::protobuf::FieldDescriptor::TYPE_ENUM);
+    EXPECT_EQ(field->options().GetExtension(ruled::v1::field_visibility), ruled::v1::FIELD_VISIBILITY_PER_PLAYER);
+    ASSERT_NE(field->enum_type(), nullptr);
+    EXPECT_EQ(field->enum_type()->value_count(), 6);
+    EXPECT_EQ(field->enum_type()->FindValueByName("MANA_COLOR_WHITE")->number(), 1);
+    EXPECT_EQ(field->enum_type()->FindValueByName("MANA_COLOR_GREEN")->number(), 5);
+    const std::string oldBytes("\x08\x02\x10\x01", 4);
+    ruled::v1::FlexPipPayment mono;
+    ASSERT_TRUE(mono.ParseFromString(oldBytes));
+    EXPECT_EQ(mono.mana_color(), ruled::v1::MANA_COLOR_UNSPECIFIED);
+    EXPECT_TRUE(mono.pay_life());
+    EXPECT_EQ(mono.SerializeAsString(), oldBytes);
+    const std::string newBytes("\x08\x02\x18\x05", 4);
+    ruled::v1::FlexPipPayment hybrid;
+    ASSERT_TRUE(hybrid.ParseFromString(newBytes));
+    EXPECT_EQ(hybrid.mana_color(), ruled::v1::MANA_COLOR_GREEN);
+    EXPECT_FALSE(hybrid.pay_life());
+    EXPECT_EQ(hybrid.SerializeAsString(), newBytes);
+    clearRuledFieldsByVisibility(&hybrid, ruled::v1::FIELD_VISIBILITY_PER_PLAYER);
+    EXPECT_TRUE(hybrid.SerializeAsString().empty());
 }

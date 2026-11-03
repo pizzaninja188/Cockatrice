@@ -184,7 +184,7 @@ inline void ruledApplyActivationView(PendingActivatedAbility &local,
         local.needsTarget = false;
         local.deferredReturnTappedCreature = false;
         local.flexPips.clear();
-        local.lifePipIndices.clear();
+        local.flexPayments.clear();
         if (initializePayment) {
             local.remainingCost.clear();
             local.targetingCostApplied = true;
@@ -227,6 +227,10 @@ inline void ruledApplyActivationView(PendingActivatedAbility &local,
         local.nextCostChoice = 0;
     }
     if (paying && initializePayment) {
+        local.fixedFlexPayments.clear();
+        local.flexPayments.clear();
+        for (const auto &payment : engine.flex_payments())
+            local.flexPayments.append(payment);
         local.remainingCost = RuledPendingCast::parseSimpleManaCost(QString::fromStdString(engine.locked_total_cost()));
         local.flexPips = RuledPendingCast::parseFlexPips(QString::fromStdString(engine.locked_total_cost()));
         local.targetingCostApplied = true;

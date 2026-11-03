@@ -574,7 +574,7 @@ QJsonValue value(const PendingActivatedAbility &v)
     result.insert("waitingForMana", value(v.waitingForMana));
     result.insert("remainingCost", value(v.remainingCost));
     result.insert("flexPips", value(v.flexPips));
-    result.insert("lifePipIndices", value(v.lifePipIndices));
+    result.insert("flexPayments", value(v.flexPayments));
     result.insert("targetingCostApplied", value(v.targetingCostApplied));
     return result;
 }
@@ -650,7 +650,7 @@ QJsonValue value(const PendingRuledSpellCast &v)
     result.insert("castCostGenericReduction", value(v.castCostGenericReduction));
     result.insert("manaCostFinalized", value(v.manaCostFinalized));
     result.insert("flexPips", value(v.flexPips));
-    result.insert("lifePipIndices", value(v.lifePipIndices));
+    result.insert("flexPayments", value(v.flexPayments));
     result.insert("waitingForCost", value(v.waitingForCost));
     result.insert("costChoices", value(v.costChoices));
     result.insert("nextCostChoice", value(v.nextCostChoice));

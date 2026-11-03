@@ -517,12 +517,24 @@ message ManaSpendSelection {
   uint32 c = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
+// The selected colored branch of a hybrid Phyrexian pip; zero means no colored branch.
+enum ManaColor {
+  MANA_COLOR_UNSPECIFIED = 0;
+  MANA_COLOR_WHITE = 1;
+  MANA_COLOR_BLUE = 2;
+  MANA_COLOR_BLACK = 3;
+  MANA_COLOR_RED = 4;
+  MANA_COLOR_GREEN = 5;
+}
+
 // A payment decision for one flexible mana pip (CR 107.4d–f). Currently only Phyrexian pips
-// carry one (the pay-2-life vs pay-mana choice); hybrid/mono-hybrid mana is resolved by the
+// carry one; hybrid Phyrexian additionally requires an explicit color or life branch. Ordinary
+// hybrid/mono-hybrid mana is resolved by the
 // engine from the pool. Identified by the pip's position in the spell/ability mana cost.
 message FlexPipPayment {
   uint32 pip_index = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER]; // index into the cost's pip list
   bool pay_life = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];    // Phyrexian: pay 2 life instead of the colored mana
+  ManaColor mana_color = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER]; // Hybrid Phyrexian: exactly one component color, or zero with pay_life.
 }
 
 enum TargetRefKind {

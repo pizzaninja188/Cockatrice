@@ -58,11 +58,11 @@ std::optional<std::vector<CounterContributionReceipt>> counterGroupReceipt(const
 }
 
 template <typename FlexPayments>
-std::optional<std::map<quint32, bool>> flexPaymentReceipt(const FlexPayments &payments)
+std::optional<std::map<quint32, std::pair<bool, int>>> flexPaymentReceipt(const FlexPayments &payments)
 {
-    std::map<quint32, bool> result;
+    std::map<quint32, std::pair<bool, int>> result;
     for (const auto &payment : payments) {
-        if (!result.emplace(payment.pip_index(), payment.pay_life()).second) {
+        if (!result.emplace(payment.pip_index(), std::make_pair(payment.pay_life(), static_cast<int>(payment.mana_color()))).second) {
             return std::nullopt;
         }
     }
@@ -620,36 +620,60 @@ bool RuledPendingCast::flexPipMatchesColor(const RuledFlexPip &pip, QChar color)
     if (pip.colorA == c) {
         return true;
     }
-    // Only true two-color hybrid pips ({G/U}) accept their second color; mono-hybrid and
-    // Phyrexian pips have a single color (their other alternative is generic mana / life).
-    return !pip.phyrexian && pip.generic == 0 && !pip.colorB.isNull() && pip.colorB == c;
+    // Two-color hybrid and hybrid Phyrexian accept both component colors. A mono-hybrid
+    // or mono-Phyrexian pip has no second color; its other branch is generic mana or life.
+    return pip.generic == 0 && !pip.colorB.isNull() && pip.colorB == c;
 }
 
-void RuledPendingCast::applyFlexChoicesToCost(QMap<QChar, int> &fixed,
-                                              QVector<quint32> &lifePipIndices,
+bool RuledPendingCast::applyFlexChoicesToCost(QMap<QChar, int> &fixed,
+                                              QVector<ruled::v1::FlexPipPayment> &payments,
                                               QVector<RuledFlexPip> &flex,
-                                              const QVector<bool> &choiceIsAlternative)
+                                              const QVector<int> &choices)
 {
+    if (choices.size() != flex.size())
+        return false;
+    auto nextFixed = fixed;
+    auto nextPayments = payments;
+    QSet<quint32> seen;
+    for (const auto &payment : payments) {
+        if (seen.contains(payment.pip_index()))
+            return false;
+        seen.insert(payment.pip_index());
+    }
+    const auto add = [&nextFixed](QChar color, int count) {
+        const int current = nextFixed.value(color, 0);
+        if (current < 0 || count < 0 || current > std::numeric_limits<int>::max() - count)
+            return false;
+        nextFixed[color] = current + count;
+        return true;
+    };
     for (int i = 0; i < flex.size(); ++i) {
-        const RuledFlexPip &pip = flex[i];
-        const bool alternative = (i < choiceIsAlternative.size()) && choiceIsAlternative[i];
+        const auto &pip = flex.at(i);
+        if (seen.contains(pip.pipIndex))
+            return false;
+        seen.insert(pip.pipIndex);
+        const int choice = choices.at(i);
         if (pip.phyrexian) {
-            if (alternative) {
-                lifePipIndices.append(pip.pipIndex); // CR 107.4f: pay 2 life
-            } else {
-                fixed[pip.colorA.toUpper()] += 1;
-            }
-        } else if (pip.generic > 0) {
-            if (alternative) {
-                fixed[QChar('X')] += pip.generic; // CR 107.4e: N generic
-            } else {
-                fixed[pip.colorA.toUpper()] += 1;
-            }
+            const auto payment = flexPipPaymentForChoice(pip, choice);
+            if (!payment)
+                return false;
+            nextPayments.append(*payment);
+            if (!payment->pay_life() && !add(choice == 0 ? pip.colorA.toUpper() : pip.colorB.toUpper(), 1))
+                return false;
         } else {
-            fixed[(alternative ? pip.colorB : pip.colorA).toUpper()] += 1; // CR 107.4d
+            if (choice < 0 || choice > 1)
+                return false;
+            if (pip.generic > 0) {
+                if (!add(choice == 0 ? pip.colorA.toUpper() : QChar('X'), choice == 0 ? 1 : pip.generic))
+                    return false;
+            } else if (!add((choice == 0 ? pip.colorA : pip.colorB).toUpper(), 1))
+                return false;
         }
     }
+    fixed = std::move(nextFixed);
+    payments = std::move(nextPayments);
     flex.clear();
+    return true;
 }
 
 bool RuledPendingCast::applyManaPipToFlexibleCost(QMap<QChar, int> &fixed,
@@ -718,7 +742,8 @@ QString RuledPendingCast::formatRemainingCost(const QMap<QChar, int> &fixed, con
     QString out = formatSimpleManaCost(fixed);
     for (const RuledFlexPip &pip : flex) {
         if (pip.phyrexian) {
-            out += QStringLiteral("{%1/P}").arg(pip.colorA);
+            out += pip.colorB.isNull() ? QStringLiteral("{%1/P}").arg(pip.colorA)
+                                      : QStringLiteral("{%1/%2/P}").arg(pip.colorA).arg(pip.colorB);
         } else if (pip.generic > 0) {
             out += QStringLiteral("{%1/%2}").arg(pip.generic - pip.genericPaid).arg(pip.colorA);
         } else {

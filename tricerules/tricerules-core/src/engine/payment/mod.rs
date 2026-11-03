@@ -7,6 +7,8 @@
 pub(super) mod components;
 pub(super) mod convoke;
 pub(super) mod demand;
+#[cfg(test)]
+mod hybrid_phyrexian_tests;
 pub(super) mod mana;
 pub(super) mod transaction;
 pub(super) mod waterbend;
@@ -408,8 +410,16 @@ impl GameEngine {
         }
         apply_activated_mana_reduction(&reduced, 0, reduction)
             .map(|(mut cost, _)| {
-                cost.pips
-                    .retain(|symbol| !matches!(symbol, ManaSymbol::Generic(0)));
+                // The submitted branch indexes the retained active pip vector. Preserve
+                // zero placeholders for hybrid Phyrexian instead of renumbering its pip.
+                if !cost
+                    .pips
+                    .iter()
+                    .any(|pip| matches!(pip, ManaSymbol::HybridPhyrexian(_, _)))
+                {
+                    cost.pips
+                        .retain(|symbol| !matches!(symbol, ManaSymbol::Generic(0)));
+                }
                 cost.to_string()
             })
             .unwrap_or_else(|_| reduced.to_string())
@@ -1029,6 +1039,13 @@ impl GameEngine {
     }
 
     pub(super) fn can_pay_resolution_mana(&self, player: PlayerId, cost: &ManaCost) -> bool {
+        if cost
+            .pips
+            .iter()
+            .any(|pip| matches!(pip, ManaSymbol::HybridPhyrexian(_, _)))
+        {
+            return false; // The resolution choice has no branch selector.
+        }
         self.state.player_idx(player).is_some_and(|player_idx| {
             mana::plan_mana_payment_with_any_color(
                 &self.state,

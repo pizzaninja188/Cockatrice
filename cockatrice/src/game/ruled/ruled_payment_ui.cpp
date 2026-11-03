@@ -289,8 +289,7 @@ void RuledPaymentUi::reconcileEnginePendingSpellCast()
             rebuilt.selectedModes.append(std::move(selected));
         }
         for (const auto &flex : announcement.flex_payments())
-            if (flex.pay_life())
-                rebuilt.lifePipIndices.append(static_cast<quint32>(flex.pip_index()));
+            rebuilt.flexPayments.append(flex);
         rebuilt.remainingCost =
             RuledPendingCast::parseSimpleManaCost(QString::fromStdString(engine.locked_total_cost()));
         if (CardItem *card = RuledActions::findStackCardItemByEngineOid(
@@ -657,8 +656,11 @@ bool RuledPaymentUi::startOrRefresh()
                 lifeChoices.append(pip);
         if (!lifeChoices.isEmpty()) {
             const auto transaction = model.transaction();
+            const auto capturedSpell = actions->pendingRuledSpellCast;
+            const auto capturedAbility = actions->pendingActivatedAbility;
+            QPointer<PlayerActions> actionsGuard(actions);
             QScopedValueRollback<bool> guard(choosingLifePayment, true);
-            QVector<bool> alternatives;
+            QVector<int> alternatives;
             const bool accepted = promptFlexiblePipChoices(
                 nextContext == Context::Spell
                     ? RuledPendingCast::formatRemainingCost(actions->pendingRuledSpellCast.remainingCost,
@@ -668,7 +670,10 @@ bool RuledPaymentUi::startOrRefresh()
                 nextContext == Context::Spell ? actions->pendingRuledSpellCast.cardName
                                               : actions->pendingActivatedAbility.cardName,
                 lifeChoices, alternatives);
-            if (!applicable() || !model.active || model.transaction() != transaction)
+            if (!actionsGuard || !applicable() || !model.active || model.transaction() != transaction ||
+                (nextContext == Context::Spell
+                    ? !RuledPendingCast::sameSpellFlexiblePrompt(capturedSpell, actionsGuard->pendingRuledSpellCast)
+                    : !RuledPendingCast::sameAbilityFlexiblePrompt(capturedAbility, actionsGuard->pendingActivatedAbility)))
                 return true;
             if (!accepted) {
                 if (nextContext == Context::Spell)
@@ -677,12 +682,25 @@ bool RuledPaymentUi::startOrRefresh()
                     cancelPendingActivatedAbility();
                 return true;
             }
-            for (int i = 0; i < lifeChoices.size(); ++i)
-                if (alternatives.value(i)) {
-                    auto &indices = nextContext == Context::Spell ? actions->pendingRuledSpellCast.lifePipIndices
-                                                                  : actions->pendingActivatedAbility.lifePipIndices;
-                    indices.append(lifeChoices.at(i).pipIndex);
-                }
+            auto &fixed = nextContext == Context::Spell ? actions->pendingRuledSpellCast.remainingCost
+                                                        : actions->pendingActivatedAbility.remainingCost;
+            auto &payments = nextContext == Context::Spell ? actions->pendingRuledSpellCast.flexPayments
+                                                           : actions->pendingActivatedAbility.flexPayments;
+            auto chosenPips = lifeChoices;
+            if (!RuledPendingCast::applyFlexChoicesToCost(fixed, payments, chosenPips, alternatives)) {
+                if (nextContext == Context::Spell)
+                    cancelPendingRuledSpellCast();
+                else
+                    cancelPendingActivatedAbility();
+                return true;
+            }
+            auto &remaining = nextContext == Context::Spell ? actions->pendingRuledSpellCast.flexPips
+                                                            : actions->pendingActivatedAbility.flexPips;
+            remaining.erase(std::remove_if(remaining.begin(), remaining.end(), [&lifeChoices](const auto &pip) {
+                return std::any_of(lifeChoices.cbegin(), lifeChoices.cend(), [&pip](const auto &selected) {
+                    return selected.pipIndex == pip.pipIndex;
+                });
+            }), remaining.end());
         }
     }
     if (!model.submitting) {
@@ -1466,12 +1484,9 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildCommand(PlayerAction
             }
         }
     }
-    // CR 107.4f: Phyrexian pips the player chose to pay with life.
-    for (const quint32 pipIndex : pendingRuledSpellCast.lifePipIndices) {
-        auto *flex = cast->add_flex_payments();
-        flex->set_pip_index(pipIndex);
-        flex->set_pay_life(true);
-    }
+    // CR 107.4f: exact announced Phyrexian color/life branches.
+    for (const auto &payment : pendingRuledSpellCast.flexPayments)
+        *cast->add_flex_payments() = payment;
     for (const auto &selection : pendingRuledSpellCast.costSelections) {
         auto *costSelection = cast->add_cost_selections();
         costSelection->set_cost_index(static_cast<quint32>(selection.costIndex));
@@ -1575,12 +1590,9 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildActivationCommand(Pl
         aa = cmd.mutable_activate_ability();
         pendingActivatedAbility.writeActivationHeader(*aa);
     }
-    // CR 107.4f: Phyrexian pips the player chose to pay with life (via self-portrait click).
-    for (const quint32 pipIndex : pendingActivatedAbility.lifePipIndices) {
-        auto *flex = permanentAction ? permanentAction->add_flex_payments() : aa->add_flex_payments();
-        flex->set_pip_index(pipIndex);
-        flex->set_pay_life(true);
-    }
+    // CR 107.4f: exact announced Phyrexian color/life branches.
+    for (const auto &payment : pendingActivatedAbility.flexPayments)
+        *(permanentAction ? permanentAction->add_flex_payments() : aa->add_flex_payments()) = payment;
     for (const auto &selection : pendingActivatedAbility.costSelections) {
         if (!aa) {
             break;

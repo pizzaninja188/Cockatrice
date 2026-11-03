@@ -4065,7 +4065,7 @@ TEST_F(RuledClientTest, AggregateActivationReconnectRestoresPrivateGroupAndFixed
             EXPECT_FALSE(local.waitingForTarget);
             EXPECT_TRUE(local.remainingCost.isEmpty());
             EXPECT_TRUE(local.flexPips.isEmpty());
-            EXPECT_TRUE(local.lifePipIndices.isEmpty());
+            EXPECT_TRUE(local.flexPayments.isEmpty());
             EXPECT_EQ(local.engineLockedCostLabel, QString::fromStdString(engine.locked_total_cost()));
             expectRestoredRows(local, expectedRows);
 
@@ -4098,7 +4098,9 @@ TEST_F(RuledClientTest, AggregateActivationReconnectRestoresPrivateGroupAndFixed
     local.counterGroupContributions = acceptedRows;
     local.counterGroupConfirmed = true;
     local.remainingCost[QChar('X')] = 1;
-    local.lifePipIndices.append(2);
+    local.flexPayments.append(ruled::v1::FlexPipPayment{});
+    local.flexPayments.last().set_pip_index(2);
+    local.flexPayments.last().set_pay_life(true);
     RuledFlexPip firstLocalPip;
     firstLocalPip.pipIndex = 1;
     firstLocalPip.phyrexian = true;
@@ -4180,7 +4182,9 @@ TEST_F(RuledClientTest, AggregateActivationReconnectRestoresPrivateGroupAndFixed
     freshReconnect.fixedFlexPayments.last().set_pip_index(99);
     freshReconnect.engineLockedCostLabel = QStringLiteral("stale label");
     freshReconnect.remainingCost[QChar('X')] = 5;
-    freshReconnect.lifePipIndices.append(99);
+    freshReconnect.flexPayments.append(ruled::v1::FlexPipPayment{});
+    freshReconnect.flexPayments.last().set_pip_index(99);
+    freshReconnect.flexPayments.last().set_pay_life(true);
     RuledFlexPip stalePip;
     stalePip.pipIndex = 99;
     stalePip.phyrexian = true;
@@ -6611,7 +6615,7 @@ TEST_F(RuledClientTest, AggregateActivationOwnedBeginWaitsForAckAndMatchingSnaps
         EXPECT_TRUE(pending.costChoices.isEmpty());
         EXPECT_TRUE(pending.costSelections.isEmpty());
         EXPECT_TRUE(pending.flexPips.isEmpty());
-        EXPECT_TRUE(pending.lifePipIndices.isEmpty());
+        EXPECT_TRUE(pending.flexPayments.isEmpty());
         EXPECT_EQ(pending.engineLockedCostLabel, QString::fromStdString(current.locked_total_cost()));
         EXPECT_EQ(pending.ownedBegin(), nullptr);
 
@@ -20380,4 +20384,158 @@ TEST(RuledPrivateCardLookTest, EncodedHrefResolvesForPreviewAndKeepsRawHrefBehav
     EXPECT_EQ(resolvedName, QStringLiteral("Legacy Raw Name"));
     EXPECT_EQ(ruledResolveCardPreviewHref(QStringLiteral("card://ruled-private-look/%GG"), &resolvedName),
               RuledCardPreviewHrefKind::InvalidPrivateLookCard);
+}
+
+TEST_F(RuledClientTest, HybridPhyrexianParsesOneIndexedPipWithBothManaColorsAndLife)
+{
+    const auto pips = RuledPendingCast::parseFlexPips(QStringLiteral("{1}{G}{G/W/P}{W}"));
+    ASSERT_EQ(pips.size(), 1);
+    EXPECT_EQ(pips.front().pipIndex, 2u);
+    EXPECT_TRUE(pips.front().phyrexian);
+    EXPECT_EQ(pips.front().colorA, QChar('G'));
+    EXPECT_EQ(pips.front().colorB, QChar('W'));
+    EXPECT_TRUE(RuledPendingCast::flexPipMatchesColor(pips.front(), QChar('G')));
+    EXPECT_TRUE(RuledPendingCast::flexPipMatchesColor(pips.front(), QChar('W')));
+    EXPECT_FALSE(RuledPendingCast::flexPipMatchesColor(pips.front(), QChar('U')));
+    EXPECT_EQ(RuledPendingCast::formatRemainingCost({}, pips), QStringLiteral("{G/W/P}"));
+}
+
+TEST_F(RuledClientTest, HybridPhyrexianChoiceFixesOneManaColorOrLifeAndRejectsMalformedResultsAtomically)
+{
+    const auto original = RuledPendingCast::parseFlexPips(QStringLiteral("{G/W/P}"));
+    ASSERT_EQ(original.size(), 1);
+    for (int choice = 0; choice < 3; ++choice) {
+        auto pips = original;
+        QMap<QChar, int> cost;
+        QVector<ruled::v1::FlexPipPayment> payments;
+        ASSERT_TRUE(RuledPendingCast::applyFlexChoicesToCost(cost, payments, pips, {choice}));
+        EXPECT_TRUE(pips.isEmpty());
+        ASSERT_EQ(payments.size(), 1);
+        EXPECT_EQ(payments.front().pip_index(), 0u);
+        EXPECT_EQ(payments.front().pay_life(), choice == 2);
+        EXPECT_EQ(payments.front().mana_color(), choice == 0 ? ruled::v1::MANA_COLOR_GREEN :
+                  choice == 1 ? ruled::v1::MANA_COLOR_WHITE : ruled::v1::MANA_COLOR_UNSPECIFIED);
+        EXPECT_EQ(cost.value(QChar('G')), choice == 0 ? 1 : 0);
+        EXPECT_EQ(cost.value(QChar('W')), choice == 1 ? 1 : 0);
+        EXPECT_TRUE(RuledPendingCast::isFlexPaymentForPip(payments.front(), original.front()));
+    }
+    for (const QVector<int> choices : {QVector<int>{}, QVector<int>{-1}, QVector<int>{3}, QVector<int>{0, 1}}) {
+        auto pips = original;
+        QMap<QChar, int> cost{{QChar('X'), 2}};
+        QVector<ruled::v1::FlexPipPayment> payments;
+        EXPECT_FALSE(RuledPendingCast::applyFlexChoicesToCost(cost, payments, pips, choices));
+        EXPECT_EQ(cost, (QMap<QChar, int>{{QChar('X'), 2}}));
+        EXPECT_TRUE(payments.isEmpty());
+        ASSERT_EQ(pips.size(), 1);
+        EXPECT_EQ(pips.front().colorB, QChar('W'));
+    }
+    auto ordinary = RuledPendingCast::parseFlexPips(QStringLiteral("{G/U}{2/W}{B/P}"));
+    QMap<QChar, int> cost;
+    QVector<ruled::v1::FlexPipPayment> payments;
+    ASSERT_TRUE(RuledPendingCast::applyFlexChoicesToCost(cost, payments, ordinary, {1, 1, 0}));
+    ASSERT_EQ(payments.size(), 1) << "Only Phyrexian symbols have wire selectors";
+    EXPECT_EQ(payments.front().pip_index(), 2u);
+    EXPECT_FALSE(payments.front().pay_life());
+    EXPECT_EQ(payments.front().mana_color(), ruled::v1::MANA_COLOR_UNSPECIFIED);
+    EXPECT_EQ(cost.value(QChar('U')), 1);
+    EXPECT_EQ(cost.value(QChar('X')), 2);
+    EXPECT_EQ(cost.value(QChar('B')), 1);
+}
+
+TEST_F(RuledClientTest, HybridPhyrexianModalResultRequiresTheSameDraftSourceAndExactColorReceipt)
+{
+    RuledPendingCast owner;
+    auto &spell = owner.beginSpell();
+    spell.handIndex = 2;
+    spell.sourceZoneChangeGeneration = 4;
+    spell.flexPips = RuledPendingCast::parseFlexPips(QStringLiteral("{G/W/P}"));
+    const auto white = RuledPendingCast::flexPipPaymentForChoice(spell.flexPips.front(), 1);
+    ASSERT_TRUE(white.has_value());
+    spell.flexPayments = {*white};
+    const auto captured = spell;
+    EXPECT_TRUE(RuledPendingCast::sameSpellFlexiblePrompt(captured, spell));
+    spell.flexPayments.front().set_mana_color(ruled::v1::MANA_COLOR_GREEN);
+    EXPECT_FALSE(RuledPendingCast::sameSpellFlexiblePrompt(captured, spell));
+    spell = captured;
+    ++spell.sourceZoneChangeGeneration;
+    EXPECT_FALSE(RuledPendingCast::sameSpellFlexiblePrompt(captured, spell));
+    spell = captured;
+    ++spell.engineTransactionId;
+    EXPECT_FALSE(RuledPendingCast::sameSpellFlexiblePrompt(captured, spell));
+    spell = captured;
+    ++spell.draftId;
+    EXPECT_FALSE(RuledPendingCast::sameSpellFlexiblePrompt(captured, spell));
+
+    auto &ability = owner.beginAbility();
+    ability.permanentOid = 901;
+    ability.expectedZoneChangeGeneration = 13;
+    ability.flexPips = captured.flexPips;
+    ability.flexPayments = captured.flexPayments;
+    const auto capturedAbility = ability;
+    EXPECT_TRUE(RuledPendingCast::sameAbilityFlexiblePrompt(capturedAbility, ability));
+    ability.flexPayments.front().set_mana_color(ruled::v1::MANA_COLOR_GREEN);
+    EXPECT_FALSE(RuledPendingCast::sameAbilityFlexiblePrompt(capturedAbility, ability));
+    ability = capturedAbility;
+    ++ability.expectedZoneChangeGeneration;
+    EXPECT_FALSE(RuledPendingCast::sameAbilityFlexiblePrompt(capturedAbility, ability));
+}
+
+TEST_F(RuledClientTest, HybridPhyrexianOrdinaryActivationReconnectKeepsTheExactColorAndAggregateStorageSeparate)
+{
+    ruled::v1::PendingAbilityActivation engine;
+    engine.set_transaction_id(731);
+    engine.set_revision(8);
+    engine.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT);
+    engine.set_locked_total_cost("{W}");
+    auto *choice = engine.add_flex_payments();
+    choice->set_pip_index(2);
+    choice->set_mana_color(ruled::v1::MANA_COLOR_WHITE);
+    PendingActivatedAbility local;
+    ruledApplyActivationView(local, engine);
+    ASSERT_EQ(local.flexPayments.size(), 1);
+    EXPECT_EQ(local.flexPayments.front().pip_index(), 2u);
+    EXPECT_EQ(local.flexPayments.front().mana_color(), ruled::v1::MANA_COLOR_WHITE);
+    EXPECT_FALSE(local.flexPayments.front().pay_life());
+    EXPECT_TRUE(local.fixedFlexPayments.isEmpty());
+    EXPECT_EQ(local.remainingCost.value(QChar('W')), 1);
+}
+
+TEST_F(RuledClientTest, HybridPhyrexianAggregateOwnedSnapshotCannotSubstituteTheOtherManaColor)
+{
+    auto batch = aggregateCounterOfferBatch();
+    auto *ability = batch.mutable_events(0)->mutable_zone_view()->mutable_per_player(0)
+                        ->mutable_battlefield_objects(0)->mutable_activated_abilities(0);
+    ability->set_mana_cost("{G/W/P}{B/P}");
+    applyRaw(batch);
+    RuledPendingCast owner;
+    auto &draft = prepareOwnedAggregateCounterDraft(owner, *state);
+    ASSERT_EQ(draft.flexPips.size(), 2);
+    ASSERT_TRUE(ruledStageCounterContributions(draft, 1, 901, 13, aggregateAcceptedCounterRows()));
+    ASSERT_TRUE(ruledConfirmCounterContributions(draft));
+    draft.waitingForCost = false;
+    const auto white = RuledPendingCast::flexPipPaymentForChoice(draft.flexPips.front(), 1);
+    const auto life = RuledPendingCast::flexPipPaymentForChoice(draft.flexPips.back(), 1);
+    ASSERT_TRUE(white && life);
+    const QVector<ruled::v1::FlexPipPayment> payments{*white, *life};
+    const auto captured = owner.prepareCounterGroupBegin(*state, kLocalPlayer, payments);
+    ASSERT_TRUE(captured.has_value());
+    auto correct = makeOwnedAggregateCounterPaymentSnapshot(*captured, 731);
+    auto changed = correct;
+    changed.mutable_flex_payments(0)->set_mana_color(ruled::v1::MANA_COLOR_GREEN);
+    EXPECT_EQ(owner.acknowledgeCounterGroupBegin(*captured, true, &changed), RuledOwnedCounterGroupBeginUpdate::Waiting);
+    EXPECT_EQ(owner.ability.stage(), PendingActivatedAbility::Stage::BeginPending);
+    EXPECT_EQ(owner.reconcileCounterGroupBegin(&correct), RuledOwnedCounterGroupBeginUpdate::Accepted);
+    ASSERT_EQ(owner.ability.fixedFlexPayments.size(), 2);
+    EXPECT_EQ(owner.ability.fixedFlexPayments.front().mana_color(), ruled::v1::MANA_COLOR_WHITE);
+
+    RuledPendingCast modalOwner;
+    auto &modal = prepareOwnedAggregateCounterDraft(modalOwner, *state);
+    ASSERT_TRUE(ruledStageCounterContributions(modal, 1, 901, 13, aggregateAcceptedCounterRows()));
+    ASSERT_TRUE(ruledConfirmCounterContributions(modal));
+    modal.waitingForCost = false;
+    modal.fixedFlexPayments = payments;
+    const auto modalCapture = modal;
+    modal.fixedFlexPayments.front().set_mana_color(ruled::v1::MANA_COLOR_GREEN);
+    EXPECT_FALSE(modalOwner.applyCounterGroupFlexibleChoiceAfterPrompt(*state, modalCapture, payments));
+    EXPECT_EQ(modal.fixedFlexPayments.front().mana_color(), ruled::v1::MANA_COLOR_GREEN);
 }

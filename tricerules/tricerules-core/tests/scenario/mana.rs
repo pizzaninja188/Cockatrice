@@ -1276,6 +1276,7 @@ fn phyrexian_mutagenic_growth_paid_with_life() {
                 vec![FlexPipPayment {
                     pip_index: 0,
                     pay_life: true,
+                    mana_color: 0,
                 }],
             ),
         )

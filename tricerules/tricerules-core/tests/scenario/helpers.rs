@@ -191,6 +191,9 @@ fn exact_mana_from_cost(
             ManaSymbol::Hybrid(color, _) | ManaSymbol::Phyrexian(color) => {
                 add_color(&mut payment, *color)
             }
+            ManaSymbol::HybridPhyrexian(_, _) => {
+                panic!("hybrid Phyrexian payment needs an explicit announced branch and exact selection")
+            }
             ManaSymbol::X => {}
         }
     }

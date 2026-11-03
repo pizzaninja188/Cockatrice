@@ -75,6 +75,8 @@ pub enum ManaSymbol {
     MonoHybrid(u32, ColorPip),
     /// Phyrexian (`{B/P}`, CR 107.4f): pay one mana of the color OR 2 life.
     Phyrexian(ColorPip),
+    /// Hybrid Phyrexian (`{G/W/P}`, CR 107.4f): either component color OR 2 life.
+    HybridPhyrexian(ColorPip, ColorPip),
 }
 
 /// An ordered list of mana symbols (CR 107.4). Serializes as the canonical brace string so
@@ -86,8 +88,17 @@ pub struct ManaCost {
 }
 
 fn parse_symbol(token: &str) -> Result<ManaSymbol, String> {
-    // Slash forms (CR 107.4d–f): {G/U} hybrid, {2/W} mono-hybrid, {B/P} Phyrexian. Three-part
-    // forms ({G/U/P}) and snow ({S}) are not split here and fall through to the error below.
+    // Hybrid Phyrexian has three alternatives but remains one indexed mana symbol.
+    let parts: Vec<_> = token.split('/').collect();
+    if parts.len() == 3 {
+        let err = || format!("unsupported mana symbol {{{token}}}");
+        let a = ColorPip::parse(parts[0]).ok_or_else(err)?;
+        let b = ColorPip::parse(parts[1]).ok_or_else(err)?;
+        if parts[2] != "P" || a == b {
+            return Err(err());
+        }
+        return Ok(ManaSymbol::HybridPhyrexian(a, b));
+    }
     if let Some((a, b)) = token.split_once('/') {
         let err = || format!("unsupported mana symbol {{{token}}}");
         if b == "P" {
@@ -170,7 +181,7 @@ impl ManaCost {
     }
 
     /// Colors implied by the cost's colored pips (CR 202.2). Colorless/generic/X contribute none.
-    /// A hybrid pip contributes *both* of its colors regardless of how it is paid (CR 202.2b);
+    /// A hybrid pip contributes *both* of its colors regardless of how it is paid (CR 202.2d);
     /// mono-hybrid and Phyrexian pips contribute their single color (CR 202.2c).
     pub fn colors(&self) -> Vec<Color> {
         let mut out = Vec::new();
@@ -186,7 +197,7 @@ impl ManaCost {
                 ManaSymbol::B => push(Color::Black),
                 ManaSymbol::R => push(Color::Red),
                 ManaSymbol::G => push(Color::Green),
-                ManaSymbol::Hybrid(a, b) => {
+                ManaSymbol::Hybrid(a, b) | ManaSymbol::HybridPhyrexian(a, b) => {
                     push(a.color());
                     push(b.color());
                 }
@@ -222,6 +233,7 @@ impl fmt::Display for ManaSymbol {
             ManaSymbol::Hybrid(a, b) => write!(f, "{{{}/{}}}", a.letter(), b.letter()),
             ManaSymbol::MonoHybrid(n, c) => write!(f, "{{{n}/{}}}", c.letter()),
             ManaSymbol::Phyrexian(c) => write!(f, "{{{}/P}}", c.letter()),
+            ManaSymbol::HybridPhyrexian(a, b) => write!(f, "{{{}/{}/P}}", a.letter(), b.letter()),
         }
     }
 }
@@ -300,11 +312,28 @@ mod tests {
     }
 
     #[test]
+    fn ajani_and_tamiyo_hybrid_phyrexian_costs_roundtrip_with_both_colors_and_printed_mana_value() {
+        for (text, mana_value, colors) in [
+            ("{1}{G}{G/W/P}{W}", 4, vec![Color::Green, Color::White]),
+            ("{2}{G}{G/U/P}{U}", 5, vec![Color::Green, Color::Blue]),
+        ] {
+            let parsed = ManaCost::parse(text).expect("hybrid Phyrexian is a three-way symbol");
+            assert_eq!(parsed.to_string(), text);
+            assert_eq!(parsed.mana_value(), mana_value);
+            assert_eq!(parsed.colors(), colors);
+            let wire = ron::to_string(&parsed).unwrap();
+            assert_eq!(ron::from_str::<ManaCost>(&wire).unwrap(), parsed);
+        }
+    }
+
+    #[test]
     fn unsupported_symbol_errors_by_name() {
-        // Snow and three-part hybrid-Phyrexian are still rejected.
+        // Snow and malformed or noncolored hybrid Phyrexian forms remain unsupported.
         let err = ManaCost::parse("{S}").unwrap_err();
         assert!(err.contains("unsupported mana symbol"), "{err}");
-        assert!(ManaCost::parse("{G/U/P}").is_err());
+        for invalid in ["{G/U/P/P}", "{G/G/P}", "{C/W/P}", "{2/W/P}", "{G/W/X}"] {
+            assert!(ManaCost::parse(invalid).is_err(), "{invalid}");
+        }
     }
 
     #[test]

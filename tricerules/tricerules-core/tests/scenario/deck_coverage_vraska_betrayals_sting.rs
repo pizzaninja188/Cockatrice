@@ -116,6 +116,7 @@ fn vraska_actual_cast_records_phyrexian_payment_and_both_season_orders() {
             vec![rv1::FlexPipPayment {
                 pip_index: 2,
                 pay_life: life,
+                mana_color: 0,
             }],
         );
         engine.apply_scenario_command(17, &command).unwrap();

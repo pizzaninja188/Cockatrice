@@ -101,7 +101,7 @@ private:
     static bool promptFlexiblePipChoices(const QString &fullCost,
                                          const QString &cardName,
                                          const QVector<RuledFlexPip> &flex,
-                                         QVector<bool> &choiceIsAlternative);
+                                         QVector<int> &choices);
     bool promptForRuledSpellXIfNeeded();
     bool resolvePendingSpellFlexiblePips();
     bool resolvePendingAbilityFlexiblePips();

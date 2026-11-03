@@ -3638,10 +3638,12 @@ fn tekuthal_aggregate_payment_command_distribution_and_atomic_rejection() {
         rv1::FlexPipPayment {
             pip_index: 1,
             pay_life: true,
+            mana_color: 0,
         },
         rv1::FlexPipPayment {
             pip_index: 2,
             pay_life: true,
+            mana_color: 0,
         },
     ];
     let begin = RuledCommand {
@@ -4097,10 +4099,12 @@ fn tekuthal_aggregate_accepted_source_sacrifice_and_cancel_commands() {
         rv1::FlexPipPayment {
             pip_index: 1,
             pay_life: true,
+            mana_color: 0,
         },
         rv1::FlexPipPayment {
             pip_index: 2,
             pay_life: true,
+            mana_color: 0,
         },
     ];
     let begin_command = RuledCommand {
@@ -4571,10 +4575,12 @@ fn tekuthal_aggregate_payment_serialized_commands_replay_identically() {
         rv1::FlexPipPayment {
             pip_index: 1,
             pay_life: true,
+            mana_color: 0,
         },
         rv1::FlexPipPayment {
             pip_index: 2,
             pay_life: true,
+            mana_color: 0,
         },
     ];
     let begin_command = RuledCommand {
@@ -4931,10 +4937,12 @@ fn tekuthal_aggregate_four_nonconsecutive_seats_keep_payer_and_private_group() {
         rv1::FlexPipPayment {
             pip_index: 1,
             pay_life: true,
+            mana_color: 0,
         },
         rv1::FlexPipPayment {
             pip_index: 2,
             pay_life: true,
+            mana_color: 0,
         },
     ];
     let begin = RuledCommand {

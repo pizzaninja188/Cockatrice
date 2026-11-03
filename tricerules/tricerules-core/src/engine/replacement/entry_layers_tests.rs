@@ -3281,6 +3281,7 @@ fn compleated_history_metamorph_copy_pending(pay_life: bool) -> (GameEngine, Obj
                     flex_payments: vec![rv1::FlexPipPayment {
                         pip_index: 1,
                         pay_life,
+                        mana_color: 0,
                     }],
                     ..Default::default()
                 })),

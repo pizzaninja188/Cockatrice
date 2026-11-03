@@ -78,6 +78,7 @@ impl GameEngine {
                                 | ManaSymbol::C
                                 | ManaSymbol::Generic(_)
                                 | ManaSymbol::Phyrexian(_)
+                                | ManaSymbol::HybridPhyrexian(_, _)
                         )
                     }) {
                         // Check authored symbols before any reductions. Hybrid, mono-hybrid and X
@@ -119,30 +120,23 @@ impl GameEngine {
         mana: &ManaCost,
         choices: &[rv1::FlexPipPayment],
     ) -> Result<(), EngineError> {
+        super::payment::demand::validated_phyrexian_choices(mana, choices)?;
         let required = mana
             .pips
             .iter()
             .enumerate()
             .filter_map(|(index, symbol)| {
-                matches!(symbol, ManaSymbol::Phyrexian(_)).then_some(index as u32)
+                matches!(
+                    symbol,
+                    ManaSymbol::Phyrexian(_) | ManaSymbol::HybridPhyrexian(_, _)
+                )
+                .then_some(index as u32)
             })
             .collect::<std::collections::BTreeSet<_>>();
-        let mut supplied = std::collections::BTreeSet::new();
-        for choice in choices {
-            let Some(ManaSymbol::Phyrexian(_)) = usize::try_from(choice.pip_index)
-                .ok()
-                .and_then(|index| mana.pips.get(index))
-            else {
-                return Err(EngineError::Illegal(
-                    "aggregate Begin flex choice is not a fixed Phyrexian pip",
-                ));
-            };
-            if !supplied.insert(choice.pip_index) {
-                return Err(EngineError::Illegal(
-                    "duplicate aggregate Begin Phyrexian choice",
-                ));
-            }
-        }
+        let supplied = choices
+            .iter()
+            .map(|choice| choice.pip_index)
+            .collect::<std::collections::BTreeSet<_>>();
         if supplied != required {
             return Err(EngineError::Illegal(
                 "aggregate Begin must explicitly choose every Phyrexian pip",

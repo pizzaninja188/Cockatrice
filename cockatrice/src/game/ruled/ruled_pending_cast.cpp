@@ -210,7 +210,7 @@ bool validCounterContributionRows(const QVector<RuledCostChoice> &choices,
                                   bool requireOnlyGroups);
 
 using CounterGroupFlexPipReceipt = std::map<quint32, std::tuple<QChar, QChar, int, bool, int>>;
-using CounterGroupFlexPaymentReceipt = std::map<quint32, bool>;
+using CounterGroupFlexPaymentReceipt = std::map<quint32, std::pair<bool, int>>;
 
 std::optional<CounterGroupFlexPipReceipt> counterGroupFlexPipReceipt(const QVector<RuledFlexPip> &pips)
 {
@@ -230,7 +230,7 @@ counterGroupFlexPaymentReceipt(const QVector<ruled::v1::FlexPipPayment> &payment
 {
     CounterGroupFlexPaymentReceipt receipt;
     for (const auto &payment : payments) {
-        if (!receipt.emplace(payment.pip_index(), payment.pay_life()).second) {
+        if (!receipt.emplace(payment.pip_index(), std::make_pair(payment.pay_life(), static_cast<int>(payment.mana_color()))).second) {
             return std::nullopt;
         }
     }
@@ -250,20 +250,6 @@ bool sameCounterGroupFlexPayments(const QVector<ruled::v1::FlexPipPayment> &left
     const auto leftReceipt = counterGroupFlexPaymentReceipt(left);
     const auto rightReceipt = counterGroupFlexPaymentReceipt(right);
     return leftReceipt && rightReceipt && *leftReceipt == *rightReceipt;
-}
-
-bool sameCounterGroupPipIndices(const QVector<quint32> &left, const QVector<quint32> &right)
-{
-    if (left.size() != right.size()) {
-        return false;
-    }
-    auto sortedLeft = left;
-    auto sortedRight = right;
-    std::sort(sortedLeft.begin(), sortedLeft.end());
-    std::sort(sortedRight.begin(), sortedRight.end());
-    return std::adjacent_find(sortedLeft.cbegin(), sortedLeft.cend()) == sortedLeft.cend() &&
-           std::adjacent_find(sortedRight.cbegin(), sortedRight.cend()) == sortedRight.cend() &&
-           sortedLeft == sortedRight;
 }
 
 bool sameCounterGroupPromptContext(const RuledClientState &state,
@@ -298,7 +284,7 @@ bool sameCounterGroupPromptContext(const RuledClientState &state,
         !sameCounterGroupOffers(captured.costChoices, current.costChoices) ||
         !sameCounterGroupFlexPayments(captured.fixedFlexPayments, current.fixedFlexPayments) ||
         !sameCounterGroupFlexPips(captured.flexPips, current.flexPips) ||
-        !sameCounterGroupPipIndices(captured.lifePipIndices, current.lifePipIndices) ||
+        !sameCounterGroupFlexPayments(captured.flexPayments, current.flexPayments) ||
         !validCounterContributionRows(captured.costChoices, captured.counterGroupContributions, true, true) ||
         !validCounterContributionRows(current.costChoices, current.counterGroupContributions, true, true)) {
         return false;
@@ -616,7 +602,7 @@ QVector<RuledFlexPip> RuledPendingCast::parseFlexPips(const QString &manaCost)
 {
     // Walk the Scryfall brace groups in order so each pip's index matches the engine's
     // ManaCost pip order. Flexible pips (CR 107.4d–f) contain a slash: {G/U} hybrid,
-    // {2/W} mono-hybrid, {C/P} Phyrexian. Everything else just advances the index.
+    // {2/W} mono-hybrid, {B/P} Phyrexian and {G/W/P} hybrid Phyrexian.
     QVector<RuledFlexPip> out;
     const QString validColors = QStringLiteral("WUBRG");
     quint32 index = 0;
@@ -638,7 +624,15 @@ QVector<RuledFlexPip> RuledPendingCast::parseFlexPips(const QString &manaCost)
                 pip.pipIndex = index;
                 bool numeric = false;
                 const int leftNum = left.toInt(&numeric);
-                if (right == QLatin1String("P") && left.size() == 1 && validColors.contains(left)) {
+                const auto parts = token.toUpper().split('/');
+                if (parts.size() == 3 && parts.at(2) == QLatin1String("P") &&
+                    parts.at(0).size() == 1 && parts.at(1).size() == 1 && parts.at(0) != parts.at(1) &&
+                    validColors.contains(parts.at(0)) && validColors.contains(parts.at(1))) {
+                    pip.phyrexian = true;
+                    pip.colorA = parts.at(0).front();
+                    pip.colorB = parts.at(1).front();
+                    out.append(pip);
+                } else if (right == QLatin1String("P") && left.size() == 1 && validColors.contains(left)) {
                     pip.phyrexian = true;
                     pip.colorA = left.at(0);
                     out.append(pip);
@@ -652,7 +646,7 @@ QVector<RuledFlexPip> RuledPendingCast::parseFlexPips(const QString &manaCost)
                     pip.colorB = right.at(0);
                     out.append(pip);
                 }
-                // Unrecognized slash forms (e.g. {G/U/P}, {S}) are left for the engine to reject.
+                // Unrecognized slash forms are left for the engine to reject.
             }
             ++index;
             token.clear();
@@ -663,6 +657,70 @@ QVector<RuledFlexPip> RuledPendingCast::parseFlexPips(const QString &manaCost)
         }
     }
     return out;
+}
+
+std::optional<ruled::v1::FlexPipPayment> RuledPendingCast::flexPipPaymentForChoice(const RuledFlexPip &pip, int choice)
+{
+    const auto manaColor = [](QChar color) {
+        switch (color.toUpper().unicode()) {
+        case 'W': return ruled::v1::MANA_COLOR_WHITE;
+        case 'U': return ruled::v1::MANA_COLOR_BLUE;
+        case 'B': return ruled::v1::MANA_COLOR_BLACK;
+        case 'R': return ruled::v1::MANA_COLOR_RED;
+        case 'G': return ruled::v1::MANA_COLOR_GREEN;
+        default: return ruled::v1::MANA_COLOR_UNSPECIFIED;
+        }
+    };
+    if (!pip.phyrexian || manaColor(pip.colorA) == ruled::v1::MANA_COLOR_UNSPECIFIED || pip.genericPaid != 0)
+        return std::nullopt;
+    const bool hybrid = !pip.colorB.isNull();
+    if ((hybrid && (pip.colorA == pip.colorB || manaColor(pip.colorB) == ruled::v1::MANA_COLOR_UNSPECIFIED)) ||
+        choice < 0 || choice > (hybrid ? 2 : 1))
+        return std::nullopt;
+    ruled::v1::FlexPipPayment result;
+    result.set_pip_index(pip.pipIndex);
+    result.set_pay_life(choice == (hybrid ? 2 : 1));
+    if (hybrid && !result.pay_life())
+        result.set_mana_color(manaColor(choice == 0 ? pip.colorA : pip.colorB));
+    return result;
+}
+
+bool RuledPendingCast::isFlexPaymentForPip(const ruled::v1::FlexPipPayment &payment, const RuledFlexPip &pip)
+{
+    for (int choice = 0; choice <= (pip.colorB.isNull() ? 1 : 2); ++choice) {
+        const auto expected = flexPipPaymentForChoice(pip, choice);
+        if (expected && payment.pip_index() == expected->pip_index() && payment.pay_life() == expected->pay_life() &&
+            payment.mana_color() == expected->mana_color())
+            return true;
+    }
+    return false;
+}
+
+bool RuledPendingCast::sameSpellFlexiblePrompt(const PendingRuledSpellCast &captured, const PendingRuledSpellCast &current)
+{
+    return captured.valid && current.valid && captured.draftId != 0 && captured.draftId == current.draftId &&
+           captured.stage == current.stage && captured.engineTransactionId == current.engineTransactionId &&
+           captured.reservedObjectId == current.reservedObjectId && captured.handIndex == current.handIndex &&
+           captured.source == current.source && captured.sourceZoneChangeGeneration == current.sourceZoneChangeGeneration &&
+           captured.faceIndex == current.faceIndex && captured.castMethod == current.castMethod &&
+           captured.prototyped == current.prototyped && captured.castingPermissionId == current.castingPermissionId &&
+           captured.resolutionPromptId == current.resolutionPromptId && captured.xValue == current.xValue &&
+           captured.remainingCost == current.remainingCost && sameCounterGroupFlexPips(captured.flexPips, current.flexPips) &&
+           sameCounterGroupFlexPayments(captured.flexPayments, current.flexPayments);
+}
+
+bool RuledPendingCast::sameAbilityFlexiblePrompt(const PendingActivatedAbility &captured, const PendingActivatedAbility &current)
+{
+    return captured.valid && current.valid && captured.draftId != 0 && captured.draftId == current.draftId &&
+           captured.stage() == current.stage() && captured.transactionId() == current.transactionId() &&
+           captured.revision() == current.revision() && captured.permanentOid == current.permanentOid &&
+           captured.expectedZoneChangeGeneration == current.expectedZoneChangeGeneration && captured.sourceZone == current.sourceZone &&
+           captured.abilityIndex == current.abilityIndex && captured.permanentAction == current.permanentAction &&
+           captured.permanentActionKind == current.permanentActionKind && captured.permanentActionFaceIndex == current.permanentActionFaceIndex &&
+           captured.xValue == current.xValue && captured.manaOptionIndex == current.manaOptionIndex &&
+           captured.remainingCost == current.remainingCost && sameCounterGroupFlexPips(captured.flexPips, current.flexPips) &&
+           sameCounterGroupFlexPayments(captured.flexPayments, current.flexPayments) &&
+           sameCounterGroupFlexPayments(captured.fixedFlexPayments, current.fixedFlexPayments);
 }
 
 RuledPendingCast::RuledPendingCast() = default;
@@ -912,6 +970,11 @@ std::optional<ruled::v1::BeginAbilityActivation> ruledBuildCounterGroupBegin(
         if (!expectedPhiIndices.contains(payment.pip_index()) || suppliedPhiIndices.contains(payment.pip_index())) {
             return std::nullopt;
         }
+        const auto pip = std::find_if(currentFlexPips.cbegin(), currentFlexPips.cend(), [&payment](const auto &entry) {
+            return entry.pipIndex == payment.pip_index();
+        });
+        if (pip == currentFlexPips.cend() || !RuledPendingCast::isFlexPaymentForPip(payment, *pip))
+            return std::nullopt;
         suppliedPhiIndices.insert(payment.pip_index());
     }
     if (suppliedPhiIndices.size() != expectedPhiIndices.size()) {

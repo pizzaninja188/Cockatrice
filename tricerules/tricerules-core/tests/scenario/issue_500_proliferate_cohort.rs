@@ -406,6 +406,7 @@ fn tezzerets_gambit_draws_before_proliferating_and_accepts_phyrexian_life() {
                 vec![FlexPipPayment {
                     pip_index: 1,
                     pay_life: true,
+                    mana_color: 0,
                 }],
             ),
         )

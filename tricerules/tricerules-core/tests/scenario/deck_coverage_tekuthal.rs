@@ -336,10 +336,12 @@ fn flex_payments(payment: PhiPayment) -> Vec<rv1::FlexPipPayment> {
         rv1::FlexPipPayment {
             pip_index: 1,
             pay_life: payment.pay_life[0],
+            mana_color: 0,
         },
         rv1::FlexPipPayment {
             pip_index: 2,
             pay_life: payment.pay_life[1],
+            mana_color: 0,
         },
     ]
 }

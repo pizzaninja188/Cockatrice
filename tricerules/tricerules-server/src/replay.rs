@@ -1603,10 +1603,12 @@ mod tests {
             FlexPipPayment {
                 pip_index: 1,
                 pay_life: true,
+                mana_color: 0,
             },
             FlexPipPayment {
                 pip_index: 2,
                 pay_life: true,
+                mana_color: 0,
             },
         ];
         latest = tekuthal_normal_player_command(

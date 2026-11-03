@@ -73,10 +73,10 @@ bool supportedSchema()
             appendEnum(contract, file->enum_type(i));
         const QByteArray digest = QCryptographicHash::hash(
             QByteArray(contract.data(), static_cast<qsizetype>(contract.size())), QCryptographicHash::Sha256).toHex();
-        // Gemstone appends private opening offers/commands and OpeningStage::HAND_ACTIONS.
-        // OpeningHandCard.hand_index remains a hand slot; nested CostObjectRef uses the audited
-        // object/generation pair below in both outbound offers and inbound command receipts.
-        const QByteArray expected("5c66631acb726ded03781b55591727c60a97fd13fc72571e8b94a332ae325cff");
+        // Hybrid Phyrexian appends private FlexPipPayment.mana_color and its finite color enum.
+        // It is a payment branch, never an object/player/slot identity. Existing indexed pips,
+        // source references and recursive per-player projection retain their audited domains.
+        const QByteArray expected("c2e58005391af76e4749f0afa6f8635f7c3da4269307ae41be56a0fa027c1500");
         if (digest != expected)
             qCritical() << "ruled presentation schema needs an identity audit:" << digest;
         return digest == expected;

@@ -809,6 +809,7 @@ fn aggregate_phyrexian_life_choices(pay_life: [bool; 2]) -> Vec<rv1::FlexPipPaym
         .map(|(index, pay_life)| rv1::FlexPipPayment {
             pip_index: index as u32 + 1,
             pay_life,
+            mana_color: 0,
         })
         .collect()
 }
@@ -2501,10 +2502,12 @@ fn aggregate_counter_begin_locks_group_and_both_phyrexian_choices() {
             rv1::FlexPipPayment {
                 pip_index: 1,
                 pay_life: true,
+                mana_color: 0,
             },
             rv1::FlexPipPayment {
                 pip_index: 2,
                 pay_life: true,
+                mana_color: 0,
             },
         ],
         ..Default::default()
@@ -2604,10 +2607,12 @@ fn aggregate_counter_begin_combines_fixed_and_phyrexian_life_before_publishing()
             rv1::FlexPipPayment {
                 pip_index: 1,
                 pay_life: true,
+                mana_color: 0,
             },
             rv1::FlexPipPayment {
                 pip_index: 2,
                 pay_life: true,
+                mana_color: 0,
             },
         ],
         ..Default::default()
@@ -2784,12 +2789,14 @@ fn aggregate_counter_begin_locks_each_phyrexian_choice_and_rejects_malformed_lis
             .map(|(index, pay_life)| rv1::FlexPipPayment {
                 pip_index: index as u32 + 1,
                 pay_life,
+                mana_color: 0,
             })
             .collect::<Vec<_>>()
     };
     let missing = vec![rv1::FlexPipPayment {
         pip_index: 1,
         pay_life: true,
+        mana_color: 0,
     }];
     let malformed = [
         ("missing pip", missing),
@@ -2799,10 +2806,12 @@ fn aggregate_counter_begin_locks_each_phyrexian_choice_and_rejects_malformed_lis
                 rv1::FlexPipPayment {
                     pip_index: 1,
                     pay_life: true,
+                    mana_color: 0,
                 },
                 rv1::FlexPipPayment {
                     pip_index: 1,
                     pay_life: false,
+                    mana_color: 0,
                 },
             ],
         ),
@@ -2812,10 +2821,12 @@ fn aggregate_counter_begin_locks_each_phyrexian_choice_and_rejects_malformed_lis
                 rv1::FlexPipPayment {
                     pip_index: 0,
                     pay_life: true,
+                    mana_color: 0,
                 },
                 rv1::FlexPipPayment {
                     pip_index: 2,
                     pay_life: false,
+                    mana_color: 0,
                 },
             ],
         ),
@@ -2825,10 +2836,12 @@ fn aggregate_counter_begin_locks_each_phyrexian_choice_and_rejects_malformed_lis
                 rv1::FlexPipPayment {
                     pip_index: 1,
                     pay_life: true,
+                    mana_color: 0,
                 },
                 rv1::FlexPipPayment {
                     pip_index: 3,
                     pay_life: false,
+                    mana_color: 0,
                 },
             ],
         ),
@@ -3942,10 +3955,12 @@ fn aggregate_counter_accepted_begin_source_sacrifice_preview_commit_is_atomic() 
             rv1::FlexPipPayment {
                 pip_index: 1,
                 pay_life: true,
+                mana_color: 0,
             },
             rv1::FlexPipPayment {
                 pip_index: 2,
                 pay_life: true,
+                mana_color: 0,
             },
         ],
         ..Default::default()
@@ -5322,10 +5337,12 @@ fn aggregate_counter_unsupported_shapes_stay_unoffered_and_begin_atomic() {
                 rv1::FlexPipPayment {
                     pip_index: 1,
                     pay_life: true,
+                    mana_color: 0,
                 },
                 rv1::FlexPipPayment {
                     pip_index: 2,
                     pay_life: true,
+                    mana_color: 0,
                 },
             ]
         };
@@ -8673,6 +8690,7 @@ fn aggregate_counter_begin_payloads_reject_without_state_or_resource_change() {
             vec![rv1::FlexPipPayment {
                 pip_index: 1,
                 pay_life: true,
+                mana_color: 0,
             }],
         ),
     ];
@@ -8733,6 +8751,7 @@ fn synthetic_counter_group_announcements(
         vec![rv1::FlexPipPayment {
             pip_index: 1,
             pay_life: true,
+            mana_color: 0,
         }],
     )
 }

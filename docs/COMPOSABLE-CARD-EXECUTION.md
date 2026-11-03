@@ -354,6 +354,26 @@ hand-slot map; candidate names and payment remain exclusive to the deciding seat
 exile cast profiles retain their behavior. Actual Kaya consumers and dev-disabled normal captures
 are separate from prepared engine/network fixtures and deferred hands-on GUI acceptance.
 
+Hybrid Phyrexian mana costs use one `HybridPhyrexian(ColorPip, ColorPip)` symbol for
+`{G/W/P}` (Ajani, Sleeper Agent) or `{G/U/P}` (Tamiyo, Compleated Sage). The cost remains both
+colors and contributes one mana value. The caster explicitly announces either component color
+or two life; an appended private `FlexPipPayment.mana_color` distinguishes the colored branches.
+Mono-Phyrexian costs retain their existing omitted/default mana branch. Validation rejects missing
+hybrid choices, duplicates, incompatible colors, conflicting life/color fields and choices outside
+the selected active cost. Generic reductions preserve indexed zero placeholders for this symbol;
+a free or alternative cost that removes it accepts no stale printed-cost choice. Both normalized
+demands and automatic mana planning use the same validation. Committed life-symbol counts feed
+the existing grouped Compleated entry replacement; unrelated life costs do not contribute.
+
+The client retains the exact payment vector through staging and reconnect, fixes the selected
+local color before mana selection, and rejects modal results after the draft/source/generation/
+transaction or pip cohort changes. Aggregate Begin receipts compare the color as well as the pip
+and life flag. Ordinary direct activations and permanent actions reuse explicit choices. Resolution
+mana payments and the two deferred activation profiles (opponent-chosen targets and hand-source
+return of a tapped creature) lack an early hybrid choice path and remain unavailable for such
+costs. Accepted aggregate counter-cost Begin already has that path. These are capability fixtures;
+Ajani and Tamiyo whole-card admission and user GUI acceptance remain separate.
+
 The bounded 2026-10-19 Scalestorm Summoner port admits one finite `ProgramIf` condition:
 `MaximumPower` among the ability controller's creatures, with a positive `min`, no `max`, default
 remaining filter fields, and no observed-object exclusion. It migrates only `triggered_01` from the

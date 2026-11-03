@@ -174,6 +174,9 @@ fn exact_resolution_payment(
             ManaSymbol::Hybrid(color, _) | ManaSymbol::Phyrexian(color) => {
                 add_color(&mut mana, *color)
             }
+            ManaSymbol::HybridPhyrexian(_, _) => {
+                panic!("hybrid Phyrexian payment needs an explicit announced branch and exact selection")
+            }
             ManaSymbol::X => {}
         }
     }

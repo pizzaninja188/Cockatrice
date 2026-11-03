@@ -93,6 +93,11 @@ bool fixedFlexPaymentsMatch(const PendingActivatedAbility &ability, const QVecto
         if (actual.contains(payment.pip_index()) || !expected.contains(payment.pip_index())) {
             return false;
         }
+        const auto pip = std::find_if(pips.cbegin(), pips.cend(), [&payment](const auto &entry) {
+            return entry.pipIndex == payment.pip_index();
+        });
+        if (pip == pips.cend() || !RuledPendingCast::isFlexPaymentForPip(payment, *pip))
+            return false;
         actual.insert(payment.pip_index());
     }
     return actual == expected;
@@ -704,7 +709,7 @@ void RuledPaymentUi::reconcilePendingRuledTargetSelections()
 bool RuledPaymentUi::promptFlexiblePipChoices(const QString &fullCost,
                                               const QString &cardName,
                                               const QVector<RuledFlexPip> &flex,
-                                              QVector<bool> &choiceIsAlternative)
+                                              QVector<int> &choices)
 {
     QDialog dialog;
     dialog.setWindowTitle(PlayerActions::tr("Pay hybrid/Phyrexian mana for %1").arg(cardName));
@@ -718,10 +723,11 @@ bool RuledPaymentUi::promptFlexiblePipChoices(const QString &fullCost,
         QString primary; // pay the color (colorA)
         QString alternative;
         if (pip.phyrexian) {
-            // CR 107.4f: the color OR 2 life.
-            pipLabel = QStringLiteral("{%1/P}").arg(pip.colorA);
+            pipLabel = pip.colorB.isNull() ? QStringLiteral("{%1/P}").arg(pip.colorA)
+                                          : QStringLiteral("{%1/%2/P}").arg(pip.colorA).arg(pip.colorB);
             primary = PlayerActions::tr("Pay {%1}").arg(pip.colorA);
-            alternative = PlayerActions::tr("Pay 2 life");
+            alternative = pip.colorB.isNull() ? PlayerActions::tr("Pay 2 life")
+                                              : PlayerActions::tr("Pay {%1}").arg(pip.colorB);
         } else if (pip.generic > 0) {
             // CR 107.4e: mono-hybrid — the color OR N generic.
             pipLabel = QStringLiteral("{%1/%2}").arg(pip.generic).arg(pip.colorA);
@@ -738,6 +744,8 @@ bool RuledPaymentUi::promptFlexiblePipChoices(const QString &fullCost,
         auto *combo = new QComboBox(&dialog);
         combo->addItem(primary);     // index 0 -> primary color
         combo->addItem(alternative); // index 1 -> alternative
+        if (pip.phyrexian && !pip.colorB.isNull())
+            combo->addItem(PlayerActions::tr("Pay 2 life"));
         row->addWidget(combo, 1);
         layout->addLayout(row);
         combos.append(combo);
@@ -751,10 +759,10 @@ bool RuledPaymentUi::promptFlexiblePipChoices(const QString &fullCost,
     if (dialog.exec() != QDialog::Accepted) {
         return false;
     }
-    choiceIsAlternative.clear();
-    choiceIsAlternative.reserve(combos.size());
+    choices.clear();
+    choices.reserve(combos.size());
     for (QComboBox *combo : combos) {
-        choiceIsAlternative.append(combo->currentIndex() == 1);
+        choices.append(combo->currentIndex());
     }
     return true;
 }
@@ -822,39 +830,41 @@ bool RuledPaymentUi::promptForRuledSpellXIfNeeded()
 
 bool RuledPaymentUi::resolvePendingSpellFlexiblePips()
 {
-    if (actions->pendingRuledSpellCast.flexPips.isEmpty()) {
+    const auto captured = actions->pendingRuledSpellCast;
+    if (captured.flexPips.isEmpty())
         return true;
-    }
-    const QString fullCost = RuledPendingCast::formatRemainingCost(actions->pendingRuledSpellCast.remainingCost,
-                                                                   actions->pendingRuledSpellCast.flexPips);
-    QVector<bool> choices;
-    if (!promptFlexiblePipChoices(fullCost, actions->pendingRuledSpellCast.cardName,
-                                  actions->pendingRuledSpellCast.flexPips, choices)) {
+    QPointer<PlayerActions> actionsGuard(actions);
+    const QString fullCost = RuledPendingCast::formatRemainingCost(captured.remainingCost, captured.flexPips);
+    QVector<int> choices;
+    const bool accepted = promptFlexiblePipChoices(fullCost, captured.cardName, captured.flexPips, choices);
+    if (!actionsGuard || !RuledPendingCast::sameSpellFlexiblePrompt(captured, actionsGuard->pendingRuledSpellCast))
+        return false;
+    auto &pending = actionsGuard->pendingRuledSpellCast;
+    if (!accepted || !RuledPendingCast::applyFlexChoicesToCost(pending.remainingCost, pending.flexPayments,
+                                                             pending.flexPips, choices)) {
         clearPendingRuledSpellCast();
-        return false; // cancelled at the flexible-pip dialog; cast aborted
+        return false;
     }
-    RuledPendingCast::applyFlexChoicesToCost(actions->pendingRuledSpellCast.remainingCost,
-                                             actions->pendingRuledSpellCast.lifePipIndices,
-                                             actions->pendingRuledSpellCast.flexPips, choices);
     return true;
 }
 
 bool RuledPaymentUi::resolvePendingAbilityFlexiblePips()
 {
-    if (actions->pendingActivatedAbility.flexPips.isEmpty()) {
+    const auto captured = actions->pendingActivatedAbility;
+    if (captured.flexPips.isEmpty())
         return true;
-    }
-    const QString fullCost = RuledPendingCast::formatRemainingCost(actions->pendingActivatedAbility.remainingCost,
-                                                                   actions->pendingActivatedAbility.flexPips);
-    QVector<bool> choices;
-    if (!promptFlexiblePipChoices(fullCost, actions->pendingActivatedAbility.cardName,
-                                  actions->pendingActivatedAbility.flexPips, choices)) {
+    QPointer<PlayerActions> actionsGuard(actions);
+    const QString fullCost = RuledPendingCast::formatRemainingCost(captured.remainingCost, captured.flexPips);
+    QVector<int> choices;
+    const bool accepted = promptFlexiblePipChoices(fullCost, captured.cardName, captured.flexPips, choices);
+    if (!actionsGuard || !RuledPendingCast::sameAbilityFlexiblePrompt(captured, actionsGuard->pendingActivatedAbility))
+        return false;
+    auto &pending = actionsGuard->pendingActivatedAbility;
+    if (!accepted || !RuledPendingCast::applyFlexChoicesToCost(pending.remainingCost, pending.flexPayments,
+                                                             pending.flexPips, choices)) {
         cancelPendingActivatedAbility();
-        return false; // cancelled at the flexible-pip dialog; activation aborted
+        return false;
     }
-    RuledPendingCast::applyFlexChoicesToCost(actions->pendingActivatedAbility.remainingCost,
-                                             actions->pendingActivatedAbility.lifePipIndices,
-                                             actions->pendingActivatedAbility.flexPips, choices);
     return true;
 }
 
@@ -1348,23 +1358,24 @@ void RuledPaymentUi::continuePendingActivatedAbilityAfterChoice()
             QPointer<PlayerActions> actionsGuard(actions);
             const QString fullCost = RuledPendingCast::formatRemainingCost(pending.remainingCost, pending.flexPips);
             const QString cardName = pending.cardName;
-            QVector<bool> payLife;
-            const bool accepted = promptFlexiblePipChoices(fullCost, cardName, phyrexianPips, payLife);
+            QVector<int> selectedBranches;
+            const bool accepted = promptFlexiblePipChoices(fullCost, cardName, phyrexianPips, selectedBranches);
             if (!actionsGuard) {
                 return;
             }
             std::optional<QVector<ruled::v1::FlexPipPayment>> fixedPayments;
             if (accepted) {
-                if (payLife.size() != phyrexianPips.size()) {
+                if (selectedBranches.size() != phyrexianPips.size()) {
                     return;
                 }
                 QVector<ruled::v1::FlexPipPayment> choices;
                 choices.reserve(phyrexianPips.size());
                 for (int index = 0; index < phyrexianPips.size(); ++index) {
-                    ruled::v1::FlexPipPayment payment;
-                    payment.set_pip_index(phyrexianPips.at(index).pipIndex);
-                    payment.set_pay_life(payLife.at(index));
-                    choices.append(std::move(payment));
+                    const auto payment = RuledPendingCast::flexPipPaymentForChoice(
+                        phyrexianPips.at(index), selectedBranches.at(index));
+                    if (!payment)
+                        return;
+                    choices.append(*payment);
                 }
                 fixedPayments = std::move(choices);
             }

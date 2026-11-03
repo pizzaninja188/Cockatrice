@@ -555,7 +555,7 @@ struct PendingActivatedAbility
     bool waitingForMana = false;
     QMap<QChar, int> remainingCost;
     QVector<RuledFlexPip> flexPips;
-    QVector<quint32> lifePipIndices;
+    QVector<ruled::v1::FlexPipPayment> flexPayments;
     bool targetingCostApplied = false;
     bool restartAfterTargetInvalidation = false;
     QVector<RuledPendingCounterContribution> counterGroupContributions;
@@ -1054,7 +1054,7 @@ struct PendingRuledSpellCast
     int castCostGenericReduction = 0;
     bool manaCostFinalized = false;
     QVector<RuledFlexPip> flexPips;
-    QVector<quint32> lifePipIndices;
+    QVector<ruled::v1::FlexPipPayment> flexPayments;
     bool waitingForCost = false;
     QVector<RuledCostChoice> costChoices;
     int nextCostChoice = 0;
@@ -2023,10 +2023,14 @@ public:
     static QString formatSimpleManaCost(const QMap<QChar, int> &cost);
     static QVector<RuledFlexPip> parseFlexPips(const QString &manaCost);
     static bool flexPipMatchesColor(const RuledFlexPip &pip, QChar color);
-    static void applyFlexChoicesToCost(QMap<QChar, int> &fixed,
-                                       QVector<quint32> &lifePipIndices,
+    static std::optional<ruled::v1::FlexPipPayment> flexPipPaymentForChoice(const RuledFlexPip &pip, int choice);
+    static bool isFlexPaymentForPip(const ruled::v1::FlexPipPayment &payment, const RuledFlexPip &pip);
+    static bool sameSpellFlexiblePrompt(const PendingRuledSpellCast &captured, const PendingRuledSpellCast &current);
+    static bool sameAbilityFlexiblePrompt(const PendingActivatedAbility &captured, const PendingActivatedAbility &current);
+    static bool applyFlexChoicesToCost(QMap<QChar, int> &fixed,
+                                       QVector<ruled::v1::FlexPipPayment> &flexPayments,
                                        QVector<RuledFlexPip> &flex,
-                                       const QVector<bool> &choiceIsAlternative);
+                                       const QVector<int> &choices);
     static bool applyManaPipToFlexibleCost(QMap<QChar, int> &fixed,
                                            QVector<RuledFlexPip> &flex,
                                            bool colorlessMana,

@@ -193,6 +193,7 @@ fn phyrexian_metamorph_blue_or_life_payment_and_unaffordable_rejection() {
                 vec![FlexPipPayment {
                     pip_index: 1,
                     pay_life: true,
+                    mana_color: 0,
                 }],
             )
         } else {
@@ -237,6 +238,7 @@ fn phyrexian_metamorph_blue_or_life_payment_and_unaffordable_rejection() {
             vec![FlexPipPayment {
                 pip_index: 1,
                 pay_life: true,
+                mana_color: 0,
             }],
         ),
     );
@@ -449,6 +451,7 @@ fn phyrexian_metamorph_copied_sunburst_uses_its_own_committed_colors() {
                 vec![FlexPipPayment {
                     pip_index: 1,
                     pay_life: true,
+                    mana_color: 0,
                 }],
             )
         } else {

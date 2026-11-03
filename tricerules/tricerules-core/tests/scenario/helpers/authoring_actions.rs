@@ -508,6 +508,9 @@ pub(crate) fn pay(e: &GameEngine, actor: i32, command: &mut RuledCommand) -> Res
                 tricerules_cards::mana::ColorPip::R => mana.r += 1,
                 tricerules_cards::mana::ColorPip::G => mana.g += 1,
             },
+            ManaSymbol::HybridPhyrexian(_, _) => {
+                return Err("unannounced hybrid Phyrexian payment".into())
+            }
             ManaSymbol::X => return Err("unresolved X payment".into()),
         }
     }

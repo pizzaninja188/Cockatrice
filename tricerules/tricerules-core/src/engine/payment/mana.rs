@@ -411,11 +411,7 @@ pub(in crate::engine) fn plan_mana_payment_with_any_color(
     eligible_group_ids: &[u32],
     as_any_color: bool,
 ) -> Result<ManaPaymentPlan, EngineError> {
-    let life_pips: HashSet<usize> = flex_payments
-        .iter()
-        .filter(|fp| fp.pay_life)
-        .map(|fp| fp.pip_index as usize)
-        .collect();
+    let phyrexian = super::demand::validated_phyrexian_choices(cost, flex_payments)?;
 
     let mut need_color: PoolVec = [0; 6];
     let mut need_generic = extra_generic;
@@ -434,12 +430,15 @@ pub(in crate::engine) fn plan_mana_payment_with_any_color(
             ManaSymbol::X => need_generic = need_generic.saturating_add(x_value),
             ManaSymbol::Hybrid(a, b) => flex.push(FlexPip::Hybrid(*a, *b)),
             ManaSymbol::MonoHybrid(n, c) => flex.push(FlexPip::Mono(*n, *c)),
-            ManaSymbol::Phyrexian(c) => {
-                if life_pips.contains(&i) {
-                    life_cost += 2;
-                    phyrexian_symbols_paid_with_life += 1;
-                } else {
-                    flex.push(FlexPip::Color(*c));
+            ManaSymbol::Phyrexian(_) | ManaSymbol::HybridPhyrexian(_, _) => {
+                match phyrexian[i].expect("validated Phyrexian choice") {
+                    super::demand::PhyrexianPayment::Life => {
+                        life_cost += 2;
+                        phyrexian_symbols_paid_with_life += 1;
+                    }
+                    super::demand::PhyrexianPayment::Mana(color) => {
+                        flex.push(FlexPip::Color(color))
+                    }
                 }
             }
         }

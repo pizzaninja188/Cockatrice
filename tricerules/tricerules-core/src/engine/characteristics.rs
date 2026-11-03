@@ -319,7 +319,8 @@ pub(super) fn devotion_value(
                         ManaSymbol::B => color == Color::Black,
                         ManaSymbol::R => color == Color::Red,
                         ManaSymbol::G => color == Color::Green,
-                        ManaSymbol::Hybrid(first, second) => {
+                        ManaSymbol::Hybrid(first, second)
+                        | ManaSymbol::HybridPhyrexian(first, second) => {
                             first.color() == color || second.color() == color
                         }
                         ManaSymbol::MonoHybrid(_, pip) | ManaSymbol::Phyrexian(pip) => {

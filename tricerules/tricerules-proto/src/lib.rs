@@ -684,4 +684,30 @@ mod tests {
         assert_eq!(pending.flex_payments[0].pip_index, 1);
         assert!(pending.flex_payments[0].pay_life);
     }
+    #[test]
+    fn hybrid_phyrexian_color_appends_private_wire_tag_without_changing_old_mono_bytes() {
+        let old = [0x08, 0x02, 0x10, 0x01];
+        let mono = rv1::FlexPipPayment::decode(old.as_slice()).unwrap();
+        assert_eq!(mono.pip_index, 2);
+        assert!(mono.pay_life);
+        assert_eq!(mono.mana_color, 0);
+        assert_eq!(mono.encode_to_vec(), old);
+        for (color, number) in [(rv1::ManaColor::White, 1), (rv1::ManaColor::Green, 5)] {
+            let bytes = [0x08, 0x02, 0x18, number];
+            let payment = rv1::FlexPipPayment::decode(bytes.as_slice()).unwrap();
+            assert_eq!(payment.mana_color, color as i32);
+            assert!(!payment.pay_life);
+            assert_eq!(payment.encode_to_vec(), bytes);
+        }
+        let descriptors = prost_types::FileDescriptorSet::decode(
+            include_bytes!(concat!(env!("OUT_DIR"), "/ruled-descriptors.bin")).as_slice(),
+        )
+        .unwrap();
+        let payment = message_descriptor(&descriptors, "FlexPipPayment");
+        assert_eq!(message_field(payment, "pip_index").number, Some(1));
+        assert_eq!(message_field(payment, "pay_life").number, Some(2));
+        let color = message_field(payment, "mana_color");
+        assert_eq!(color.number, Some(3));
+        assert_eq!(color.type_name.as_deref(), Some(".ruled.v1.ManaColor"));
+    }
 }

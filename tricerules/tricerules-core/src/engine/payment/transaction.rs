@@ -569,17 +569,12 @@ impl PreparedPaymentCosts {
         life: u32,
         as_any_color: bool,
     ) -> Result<CostTransactionPlan, EngineError> {
-        let phyrexian_symbols_paid_with_life = self
-            .flex_payments
-            .iter()
-            .filter(|payment| {
-                payment.pay_life
-                    && matches!(
-                        self.mana.pips.get(payment.pip_index as usize),
-                        Some(ManaSymbol::Phyrexian(_))
-                    )
-            })
-            .count() as u32;
+        let phyrexian_symbols_paid_with_life =
+            super::demand::validated_phyrexian_choices(&self.mana, &self.flex_payments)?
+                .into_iter()
+                .flatten()
+                .filter(|choice| *choice == super::demand::PhyrexianPayment::Life)
+                .count() as u32;
         let mut mana = super::mana::plan_exact_mana_payment(
             state,
             self.transaction.player_idx,
@@ -784,6 +779,17 @@ impl GameEngine {
         } else {
             payment.mana_cost.clone()
         };
+        // Resolution choices have no flexible-pip announcement field. Do not offer or
+        // infer a hybrid Phyrexian branch that the player cannot submit.
+        if cost
+            .pips
+            .iter()
+            .any(|pip| matches!(pip, ManaSymbol::HybridPhyrexian(_, _)))
+        {
+            return Err(EngineError::Illegal(
+                "hybrid Phyrexian resolution payment is unavailable",
+            ));
+        }
         Ok(PreparedPaymentCosts {
             waterbend_limit: payment
                 .waterbend
@@ -3690,6 +3696,7 @@ mod convoke_transaction_tests {
             &[rv1::FlexPipPayment {
                 pip_index: 0,
                 pay_life: true,
+                mana_color: 0,
             }],
         )
         .unwrap();
@@ -6184,10 +6191,12 @@ mod convoke_transaction_tests {
                     rv1::FlexPipPayment {
                         pip_index: 0,
                         pay_life: true,
+                        mana_color: 0,
                     },
                     rv1::FlexPipPayment {
                         pip_index: 1,
                         pay_life: true,
+                        mana_color: 0,
                     },
                 ],
             )
@@ -6629,6 +6638,7 @@ mod convoke_transaction_tests {
                     vec![rv1::FlexPipPayment {
                         pip_index: 0,
                         pay_life: true,
+                        mana_color: 0,
                     }]
                 } else {
                     vec![]
@@ -6693,6 +6703,7 @@ mod convoke_transaction_tests {
                 &[rv1::FlexPipPayment {
                     pip_index: 0,
                     pay_life: true,
+                    mana_color: 0,
                 }],
             )
             .unwrap();
@@ -6741,6 +6752,7 @@ mod convoke_transaction_tests {
                 &[rv1::FlexPipPayment {
                     pip_index: 0,
                     pay_life: true,
+                    mana_color: 0,
                 }],
             )
             .unwrap();
@@ -7160,6 +7172,7 @@ mod compleated_history_tests {
             &[rv1::FlexPipPayment {
                 pip_index: 2,
                 pay_life: true,
+                mana_color: 0,
             }],
             2,
             4,
@@ -7174,6 +7187,7 @@ mod compleated_history_tests {
             &[rv1::FlexPipPayment {
                 pip_index: 2,
                 pay_life: false,
+                mana_color: 0,
             }],
             0,
             0,
@@ -7192,10 +7206,12 @@ mod compleated_history_tests {
                 rv1::FlexPipPayment {
                     pip_index: 3,
                     pay_life: false,
+                    mana_color: 0,
                 },
                 rv1::FlexPipPayment {
                     pip_index: 4,
                     pay_life: false,
+                    mana_color: 0,
                 },
             ],
             0,
@@ -7210,10 +7226,12 @@ mod compleated_history_tests {
                 rv1::FlexPipPayment {
                     pip_index: 3,
                     pay_life: true,
+                    mana_color: 0,
                 },
                 rv1::FlexPipPayment {
                     pip_index: 4,
                     pay_life: false,
+                    mana_color: 0,
                 },
             ],
             0,
@@ -7228,10 +7246,12 @@ mod compleated_history_tests {
                 rv1::FlexPipPayment {
                     pip_index: 3,
                     pay_life: true,
+                    mana_color: 0,
                 },
                 rv1::FlexPipPayment {
                     pip_index: 4,
                     pay_life: true,
+                    mana_color: 0,
                 },
             ],
             0,
@@ -7249,6 +7269,7 @@ mod compleated_history_tests {
             &[rv1::FlexPipPayment {
                 pip_index: 2,
                 pay_life: true,
+                mana_color: 0,
             }],
             rv1::PaymentMana {
                 b: 5,
@@ -7264,6 +7285,7 @@ mod compleated_history_tests {
             &[rv1::FlexPipPayment {
                 pip_index: 2,
                 pay_life: false,
+                mana_color: 0,
             }],
             rv1::PaymentMana {
                 b: 6,
@@ -7291,10 +7313,12 @@ mod compleated_history_tests {
                 rv1::FlexPipPayment {
                     pip_index: 3,
                     pay_life: false,
+                    mana_color: 0,
                 },
                 rv1::FlexPipPayment {
                     pip_index: 4,
                     pay_life: false,
+                    mana_color: 0,
                 },
             ],
             rv1::PaymentMana {
@@ -7312,10 +7336,12 @@ mod compleated_history_tests {
                 rv1::FlexPipPayment {
                     pip_index: 3,
                     pay_life: true,
+                    mana_color: 0,
                 },
                 rv1::FlexPipPayment {
                     pip_index: 4,
                     pay_life: false,
+                    mana_color: 0,
                 },
             ],
             rv1::PaymentMana {
@@ -7333,10 +7359,12 @@ mod compleated_history_tests {
                 rv1::FlexPipPayment {
                     pip_index: 3,
                     pay_life: true,
+                    mana_color: 0,
                 },
                 rv1::FlexPipPayment {
                     pip_index: 4,
                     pay_life: true,
+                    mana_color: 0,
                 },
             ],
             rv1::PaymentMana {
@@ -7359,6 +7387,7 @@ mod compleated_history_tests {
             &[rv1::FlexPipPayment {
                 pip_index: 2,
                 pay_life: true,
+                mana_color: 0,
             }],
             2,
         );
@@ -7399,6 +7428,7 @@ mod compleated_history_tests {
             &[rv1::FlexPipPayment {
                 pip_index: 2,
                 pay_life: false,
+                mana_color: 0,
             }],
             2,
         )
@@ -7418,6 +7448,7 @@ mod compleated_history_tests {
             &[rv1::FlexPipPayment {
                 pip_index: 2,
                 pay_life: true,
+                mana_color: 0,
             }],
             2,
             4,
