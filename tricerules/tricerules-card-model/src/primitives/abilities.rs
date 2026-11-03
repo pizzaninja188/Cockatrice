@@ -3716,6 +3716,7 @@ mod activated_x_exile_all_owner_tests {
         activated_parent.effect = vec![SpellEffectKind::GrantTriggeredAbility {
             subject: EffectSubject::Source,
             ability: Box::new(triggered_child),
+            duration: crate::primitives::ResolvingEffectDuration::UntilEndOfTurn,
         }];
         assert!(activated_parent
             .validate_shape()

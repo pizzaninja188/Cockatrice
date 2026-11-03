@@ -98,6 +98,8 @@ mod stack_exit;
 mod target_receipt_action_tests;
 pub(in crate::engine) use misc::attach_equipment_ids;
 #[cfg(test)]
+mod ghostform_grant_tests;
+#[cfg(test)]
 mod kaya_multiscry_tests;
 #[cfg(test)]
 mod portal_sacrifice_tests;

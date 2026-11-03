@@ -23061,3 +23061,47 @@ fn gemstone_luck_counter_has_its_own_round_trip_and_display_label() {
     assert_eq!(ron::to_string(&luck).unwrap(), "Luck");
     assert!(luck.validate().is_ok());
 }
+
+#[test]
+fn ghostform_counter_is_ordinary_and_round_trips() {
+    let counter: super::CounterKind = ron::from_str("Ghostform").expect("ghostform counter parses");
+    assert_eq!(counter.label(), "ghostform");
+    assert_eq!(ron::to_string(&counter).unwrap(), "Ghostform");
+    assert!(counter.validate().is_ok());
+}
+
+#[test]
+fn ghostform_indefinite_trigger_grant_preserves_default_end_of_turn_and_rejects_other_durations() {
+    let base = r#"GrantTriggeredAbility(subject:Chosen((kind:Creature)),ability:(
+        ability_id:"granted_01",presentation:Fallback,
+        trigger:WheneverPermanentLeavesBattlefield(controller:Controller,
+            filter:(source_only:true),destination:OneOf([Graveyard,Exile])),
+        effect:[ReturnTriggeredCard(reference:TriggerObject,from:[Graveyard,Exile],destination:Hand),
+            CreateTokens(token:"spirit_w_1_1_flying",count:1)]))"#;
+    let ordinary: SpellEffectKind = ron::from_str(base).unwrap();
+    assert!(ordinary.validate(EffectContext::Ability).is_ok());
+    assert!(
+        !ron::to_string(&ordinary).unwrap().contains("duration:"),
+        "old default keeps its canonical representation"
+    );
+    let with_duration = |duration: &str| {
+        base.replacen(
+            "GrantTriggeredAbility(",
+            &format!("GrantTriggeredAbility(duration:{duration},"),
+            1,
+        )
+    };
+    let indefinite: SpellEffectKind =
+        ron::from_str(&with_duration("Indefinite")).expect("indefinite grant parses");
+    assert!(indefinite.validate(EffectContext::Ability).is_ok());
+    assert!(ron::to_string(&indefinite)
+        .unwrap()
+        .contains("duration:Indefinite"));
+    for duration in ["WhileSourceOnBattlefield", "UntilControllerNextTurn"] {
+        let effect: SpellEffectKind = ron::from_str(&with_duration(duration)).unwrap();
+        assert!(
+            effect.validate(EffectContext::Ability).is_err(),
+            "unneeded grant lifetimes stay closed"
+        );
+    }
+}

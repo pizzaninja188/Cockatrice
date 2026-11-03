@@ -248,9 +248,18 @@ fn issue_359_direct_ron_batch2_maps_definitions() {
     let [granted] = grant.effects.as_slice() else {
         panic!("grant mode has one effect");
     };
-    let SpellEffectKind::GrantTriggeredAbility { subject, ability } = granted else {
+    let SpellEffectKind::GrantTriggeredAbility {
+        subject,
+        ability,
+        duration,
+    } = granted
+    else {
         panic!("grant mode grants a triggered ability, got {granted:?}");
     };
+    assert_eq!(
+        duration,
+        &tricerules_cards::primitives::ResolvingEffectDuration::UntilEndOfTurn
+    );
     assert_eq!(
         *subject,
         EffectSubject::Chosen(Box::new(TargetFilter {

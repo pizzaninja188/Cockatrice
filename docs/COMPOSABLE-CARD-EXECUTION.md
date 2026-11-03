@@ -313,6 +313,24 @@ hand clicks use the current hand-slot map plus the offered generation-bound refe
 restores both the opening stage and a parked replacement prompt. Automated captures and headless
 two-client transport checks are distinct from deferred hands-on GUI acceptance.
 
+`GrantTriggeredAbility` now has an explicit `ResolvingEffectDuration`, restricted to
+`UntilEndOfTurn` and `Indefinite`. Omitted duration retains the existing end-of-turn behavior
+and canonical serialization for Abnormal Endurance, Fake Your Own Death, and Trash the Town.
+Kaya the Inexorable's Ghostform capability uses the indefinite form (CR 611.2a); its ordinary
+`Ghostform` counter is only a reminder and has no intrinsic trigger behavior. Counter placement
+and the following grant are independent: a prohibited or replacement-reduced-to-zero placement
+still grants once, including across a parked replacement choice.
+
+The grant reuses the source-only `WheneverPermanentLeavesBattlefield` snapshot used by Spine of
+Ish Sah, with destinations Graveyard or Exile. The departing creature's last controller controls
+the trigger and creates its Spirit, while `ReturnTriggeredCard` returns the exact immediate
+public-zone incarnation to its physical owner's hand (CR 113.8, 400.7e, 603.10a). Each grant has a
+distinct existing occurrence; multiple grants create multiple Spirits, even after the first return
+invalidates later returns. Counter removal, cleanup, Kaya's absence, and its owner's departure do
+not end the indefinite grant. Later ability loss can suppress it; copies and new incarnations do
+not inherit it (CR 707.2, 400.7). This is engine capability evidence with prepared consumers only;
+Kaya's complete card and its three-zone legendary casting emblem are not admitted here.
+
 The bounded 2026-10-19 Scalestorm Summoner port admits one finite `ProgramIf` condition:
 `MaximumPower` among the ability controller's creatures, with a positive `min`, no `max`, default
 remaining filter fields, and no observed-object exclusion. It migrates only `triggered_01` from the

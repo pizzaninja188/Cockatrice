@@ -860,10 +860,22 @@ pub(super) fn grant_triggered_ability(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::GrantTriggeredAbility { subject, ability } = effect else {
+    let SpellEffectKind::GrantTriggeredAbility {
+        subject,
+        ability,
+        duration,
+    } = effect
+    else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let Some((tid, effect_source_id)) = cx.resolve_continuous_subject(&subject) else {
+        return Ok(EffectOutcome::Continue);
+    };
+
+    let duration_label = resolving_duration_label(&duration);
+    let Some((effect_source_id, duration)) =
+        materialize_resolving_duration(cx, effect_source_id, duration)
+    else {
         return Ok(EffectOutcome::Continue);
     };
 
@@ -877,11 +889,11 @@ pub(super) fn grant_triggered_ability(
             affected: AffectedScope::Single(tid),
             kind: ContinuousEffectKind::GrantTriggeredAbility(ability),
             condition: None,
-            duration: EffectDuration::UntilEndOfTurn,
+            duration,
             timestamp: cx.engine.state.command_index,
         });
     cx.events.push(ev_log(format!(
-        "{} grants \"{ability_text}\" to {target_name} until end of turn",
+        "{} grants \"{ability_text}\" to {target_name}{duration_label}",
         cx.spell_label
     )));
     Ok(EffectOutcome::Continue)

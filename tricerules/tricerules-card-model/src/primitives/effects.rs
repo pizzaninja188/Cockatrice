@@ -119,6 +119,8 @@ pub enum CounterKind {
     Time,
     /// Gemstone Caverns' ordinary named counter; its mana ability interprets the count.
     Luck,
+    /// Kaya the Inexorable's reminder counter. The granted ability has an independent lifetime.
+    Ghostform,
 }
 
 impl CounterKind {
@@ -143,6 +145,7 @@ impl CounterKind {
             CounterKind::Doom => "doom".into(),
             CounterKind::Time => "time".into(),
             CounterKind::Luck => "luck".into(),
+            CounterKind::Ghostform => "ghostform".into(),
         }
     }
 
@@ -1695,13 +1698,19 @@ pub enum SpellEffectKind {
         subject: EffectSubject,
         protection: ProtectionGrant,
     },
-    /// CR 611.2c / 613.1f: the subject gains a triggered ability until end of turn. The complete
+    /// CR 611.2c / 613.1f: the subject gains a triggered ability for the authored duration. The complete
     /// definition is embedded because the ability must keep functioning after the effect or its
-    /// source leaves the battlefield. Abnormal Endurance and Fake Your Own Death share this.
+    /// source leaves the battlefield. Abnormal Endurance and Fake Your Own Death keep the default
+    /// end-of-turn lifetime; Kaya the Inexorable uses an independent indefinite grant.
     GrantTriggeredAbility {
         #[serde(default)]
         subject: EffectSubject,
         ability: Box<TriggeredAbilityDef>,
+        #[serde(
+            default = "default_trigger_grant_duration",
+            skip_serializing_if = "is_default_trigger_grant_duration"
+        )]
+        duration: ResolvingEffectDuration,
     },
     /// Return the event-bound card only from the immediate destination generation in `from`.
     /// Abnormal Endurance references the granted ability's source; Unholy Indenture and
@@ -6687,7 +6696,20 @@ impl SpellEffectKind {
                 }
                 Ok(())
             }
-            SpellEffectKind::GrantTriggeredAbility { subject, ability } => {
+            SpellEffectKind::GrantTriggeredAbility {
+                subject,
+                ability,
+                duration,
+            } => {
+                if !matches!(
+                    duration,
+                    ResolvingEffectDuration::UntilEndOfTurn | ResolvingEffectDuration::Indefinite
+                ) {
+                    return Err(
+                        "GrantTriggeredAbility supports only end-of-turn or indefinite duration"
+                            .into(),
+                    );
+                }
                 if matches!(
                     ability.trigger,
                     TriggerCondition::AtBeginningOfChosenPlayerUpkeep { .. }
@@ -7851,6 +7873,14 @@ pub enum ResolvingEffectDuration {
     UntilEndOfTurn,
     WhileSourceOnBattlefield,
     UntilControllerNextTurn,
+}
+
+fn default_trigger_grant_duration() -> ResolvingEffectDuration {
+    ResolvingEffectDuration::UntilEndOfTurn
+}
+
+fn is_default_trigger_grant_duration(duration: &ResolvingEffectDuration) -> bool {
+    *duration == ResolvingEffectDuration::UntilEndOfTurn
 }
 
 /// A duration specialized to control-changing resolution effects. The conditional form snapshots
