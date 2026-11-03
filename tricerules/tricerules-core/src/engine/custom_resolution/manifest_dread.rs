@@ -94,37 +94,7 @@ impl GameEngine {
             .face_down = true;
 
         let mut events = Vec::new();
-        let entry = BattlefieldEntryEvent {
-            phyrexian_symbols_paid_with_life: 0,
-            entry_reveal_receipts: Vec::new(),
-            mana_colors_spent_to_cast: Default::default(),
-            prepared: false,
-            object_id: chosen,
-            deciding_player: controller,
-            destination_controller: controller,
-            battle_protector: None,
-            face_index: 0,
-            unlock_room_door: None,
-            chosen_x: 0,
-            cast_by: None,
-            cast_cost_receipts: Vec::new(),
-            player_life_snapshot: self.player_life_snapshot(),
-            tapped: false,
-            set_types: None,
-            chosen_basic_land_type: None,
-            chosen_opponents: Vec::new(),
-            chosen_creature_types: Vec::new(),
-            entry_counters: BTreeMap::new(),
-            entry_counter_placements: Vec::new(),
-            entry_counter_replacements_resolved: false,
-            entry_modifiers: Vec::new(),
-            entry_cause: None,
-            attached_to: None,
-            pending_copy_candidate: None,
-            pending_aura_recipient: None,
-            accepted_aura_recipient: None,
-            applied_effects: Vec::new(),
-        };
+        let entry = BattlefieldEntryEvent::new(chosen, controller, self.player_life_snapshot());
         let completion = BattlefieldEntryCompletion::ManifestDread {
             owner: controller,
             library_refs: looked_at.clone(),

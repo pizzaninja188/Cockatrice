@@ -2198,33 +2198,7 @@ impl GameEngine {
 
         let label = object_display_name(&self.state, self.registry, exiled.object_id);
         let entry = BattlefieldEntryEvent {
-            phyrexian_symbols_paid_with_life: 0,
-            entry_reveal_receipts: Vec::new(),
-            mana_colors_spent_to_cast: Default::default(),
-            prepared: false,
-            object_id: exiled.object_id,
-            deciding_player: owner,
-            destination_controller: owner,
-            battle_protector: None,
-            face_index: 0,
-            unlock_room_door: None,
-            chosen_x: 0,
-            cast_by: None,
-            cast_cost_receipts: Vec::new(),
-            player_life_snapshot: self.player_life_snapshot(),
-            tapped: false,
-            set_types: None,
-            chosen_basic_land_type: None,
-            chosen_opponents: Vec::new(),
-            chosen_creature_types: Vec::new(),
-            entry_counters: BTreeMap::new(),
-            entry_counter_placements: Vec::new(),
-            entry_counter_replacements_resolved: false,
-            entry_modifiers: Vec::new(),
-            entry_cause: None,
             attached_to: Some(recipient),
-            pending_copy_candidate: None,
-            pending_aura_recipient: None,
             accepted_aura_recipient: Some(crate::state::AcceptedAuraEntryRecipient {
                 filter,
                 entering_zone_generation: generation,
@@ -2241,7 +2215,7 @@ impl GameEngine {
                 },
                 copy_candidate: None,
             }),
-            applied_effects: Vec::new(),
+            ..BattlefieldEntryEvent::new(exiled.object_id, owner, self.player_life_snapshot())
         };
         let resume_original_stack = stack.is_some();
         let item = stack
