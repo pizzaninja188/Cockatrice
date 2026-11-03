@@ -713,6 +713,35 @@ impl GameEngine {
     ) -> Vec<(Option<TriggerObjectRef>, DelayedTriggerPayload)> {
         let mut delayed = Vec::new();
         for observer in &self.state.active_event_observers {
+            if let EventObserverMatcher::WatchedObjectCombatDamageUntilControllerNextTurn {
+                controller,
+                ..
+            } = &observer.matcher
+            {
+                if self
+                    .state
+                    .player_idx(*controller)
+                    .is_none_or(|index| self.state.players[index].has_lost)
+                {
+                    continue;
+                }
+                let (Some(watched), EventObserverPayload::StageDelayedTrigger(payload)) =
+                    (observer.watched, &observer.payload)
+                else {
+                    continue;
+                };
+                if payload.controller == *controller && events.iter().any(|event| {
+                    matches!(event,GameEvent::DamageDealt { event }
+                        if event.classification == DamageClassification::Combat && event.amount > 0
+                            && event.source.object_id == watched.object_id
+                            && event.source.zone_change_generation == Some(watched.zone_change_generation))
+                }) {
+                    // One watched object dealing simultaneous combat damage is one occurrence,
+                    // regardless of how many recipients split that source's damage.
+                    delayed.push((Some(watched),payload.as_ref().clone()));
+                }
+                continue;
+            }
             let EventObserverMatcher::CreatureCombatDamageToPlayerThisTurn {
                 controller,
                 created_turn_instance,

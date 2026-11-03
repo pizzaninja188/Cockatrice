@@ -365,6 +365,9 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::CreateDelayedTriggerThisTurn { .. } => {
             misc::create_delayed_trigger_this_turn(cx, effect)?
         }
+        effect @ SpellEffectKind::CreateWatchedCombatDamageDrawUntilNextTurn { .. } => {
+            misc::create_watched_combat_draw_until_next_turn(cx, effect)?
+        }
         effect @ SpellEffectKind::ExileUntilSourceLeaves { .. } => {
             zones::exile_until_source_leaves(cx, effect)?
         }

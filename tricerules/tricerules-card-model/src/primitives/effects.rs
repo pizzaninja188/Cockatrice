@@ -1744,6 +1744,12 @@ pub enum SpellEffectKind {
     CreateDelayedTriggerThisTurn {
         ability: Box<TriggeredAbilityDef>,
     },
+    /// Tamiyo, Field Researcher's necessary specialized target-bound repeating draw. This
+    /// closed direct activated profile is distinct from Jace's per-player grouped loot watch.
+    CreateWatchedCombatDamageDrawUntilNextTurn {
+        target: TargetFilter,
+        ability: Box<TriggeredAbilityDef>,
+    },
     /// Sacrifice the exact generation-bound cohort captured by an engine-created delayed
     /// trigger. Mobilize uses this runtime context effect so one delayed ability handles all
     /// tokens made by one resolution without re-querying the battlefield by name.
@@ -3917,7 +3923,8 @@ impl SpellEffectKind {
             Self::GrantTriggeredAbility { ability, .. }
             | Self::CreateTriggeredEmblem { ability, .. }
             | Self::CreateDelayedTrigger { ability, .. }
-            | Self::CreateDelayedTriggerThisTurn { ability } => {
+            | Self::CreateDelayedTriggerThisTurn { ability }
+            | Self::CreateWatchedCombatDamageDrawUntilNextTurn { ability, .. } => {
                 ability
                     .effect
                     .iter()
@@ -4029,9 +4036,13 @@ impl SpellEffectKind {
         })
     }
 
-    pub(crate) fn contains_delayed_trigger_this_turn_profile(&self) -> bool {
+    pub(crate) fn contains_repeating_combat_observer_profile(&self) -> bool {
         self.contains_legacy_flat_signature(|leaf| {
-            matches!(leaf, Self::CreateDelayedTriggerThisTurn { .. })
+            matches!(
+                leaf,
+                Self::CreateDelayedTriggerThisTurn { .. }
+                    | Self::CreateWatchedCombatDamageDrawUntilNextTurn { .. }
+            )
         })
     }
 
@@ -4235,6 +4246,7 @@ impl SpellEffectKind {
                 ..
             } => vec![TargetRole::Filtered(target)],
             SpellEffectKind::DamageTarget { target, .. }
+            | SpellEffectKind::CreateWatchedCombatDamageDrawUntilNextTurn { target, .. }
             | SpellEffectKind::DoubleCounters { target }
             | SpellEffectKind::ExileIfWouldDieThisTurn { target }
             | SpellEffectKind::DamageTargets { target, .. }
@@ -5034,15 +5046,19 @@ impl SpellEffectKind {
         allow_typed_search_result: bool,
         allow_delayed_trigger_this_turn: bool,
     ) -> Result<(), String> {
-        if self.contains_delayed_trigger_this_turn_profile() {
-            if !matches!(self, Self::CreateDelayedTriggerThisTurn { .. }) {
+        if self.contains_repeating_combat_observer_profile() {
+            if !matches!(
+                self,
+                Self::CreateDelayedTriggerThisTurn { .. }
+                    | Self::CreateWatchedCombatDamageDrawUntilNextTurn { .. }
+            ) {
                 return Err(
-                    "CreateDelayedTriggerThisTurn must be a direct legacy activated effect".into(),
+                    "repeating combat observer must be a direct legacy activated effect".into(),
                 );
             }
             if !allow_delayed_trigger_this_turn || context != EffectContext::Ability {
                 return Err(
-                    "CreateDelayedTriggerThisTurn is supported only as a direct legacy activated effect".into(),
+                    "repeating combat observer is supported only as a direct legacy activated effect".into(),
                 );
             }
         }
@@ -6699,6 +6715,11 @@ impl SpellEffectKind {
                 affected_player,
                 ability,
             } => {
+                if ability.trigger == TriggerCondition::WheneverWatchedObjectDealsCombatDamage {
+                    return Err(
+                        "watched combat damage requires its fixed next-turn draw profile".into(),
+                    );
+                }
                 if let Some(EffectSubject::Chosen(target)) = subject {
                     if !target.all_terminal_filters_match(|leaf| {
                         matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
@@ -6767,6 +6788,41 @@ impl SpellEffectKind {
                 } else {
                     ability.validate_shape()
                 }
+            }
+            SpellEffectKind::CreateWatchedCombatDamageDrawUntilNextTurn { target, ability } => {
+                let expected = TargetFilter {
+                    kind: TargetKind::Creature,
+                    ..Default::default()
+                };
+                if target != &expected
+                    || ability.trigger != TriggerCondition::WheneverWatchedObjectDealsCombatDamage
+                {
+                    return Err("watched combat draw requires an unrestricted Creature target and its delayed-only combat condition".into());
+                }
+                if ability.program.is_some()
+                    || ability.modal.is_some()
+                    || ability.targeting.is_some()
+                    || ability.may
+                    || ability.intervening_if.is_some()
+                    || ability.triggers_only_once
+                    || ability.max_triggers_per_turn.is_some()
+                {
+                    return Err("watched combat draw child cannot have Program, modes, targets, optionality, conditions or trigger limits".into());
+                }
+                if !matches!(
+                    ability.effect.as_slice(),
+                    [SpellEffectKind::Draw {
+                        who: PlayerRecipient::Controller,
+                        count: Amount::Fixed(1)
+                    }]
+                ) {
+                    return Err("watched combat draw requires exactly Draw(Controller, 1)".into());
+                }
+                ability
+                    .trigger
+                    .validate()
+                    .and_then(|()| ability.validate_trigger_limit())?;
+                ability.validate_shape()
             }
             SpellEffectKind::CreateDelayedTriggerThisTurn { ability } => {
                 let expected_trigger = matches!(
@@ -7429,7 +7485,10 @@ impl SpellEffectKind {
             Self::GrantTriggeredAbility { ability, .. }
             | Self::CreateTriggeredEmblem { ability, .. }
             | Self::CreateDelayedTrigger { ability, .. }
-            | Self::CreateDelayedTriggerThisTurn { ability } => triggered_ability_contains(ability),
+            | Self::CreateDelayedTriggerThisTurn { ability }
+            | Self::CreateWatchedCombatDamageDrawUntilNextTurn { ability, .. } => {
+                triggered_ability_contains(ability)
+            }
             Self::ApplyPermanentModifier {
                 modifier: ResolvingPermanentModifier::GrantActivatedAbility(ability),
                 ..

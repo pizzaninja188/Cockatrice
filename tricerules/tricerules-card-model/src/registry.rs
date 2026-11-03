@@ -2343,7 +2343,8 @@ fn validate_nested_effect_metadata_with_delayed_child_program(
             }
             validate_triggered_ability_effect_tree(ability)
         }
-        SpellEffectKind::CreateDelayedTriggerThisTurn { ability } => {
+        SpellEffectKind::CreateDelayedTriggerThisTurn { ability }
+        | SpellEffectKind::CreateWatchedCombatDamageDrawUntilNextTurn { ability, .. } => {
             ability.ability_id.validate()?;
             ability.validate_shape()?;
             validate_triggered_ability_effect_tree(ability)
@@ -2454,7 +2455,9 @@ fn validate_face_spell_effect_metadata(face: &CardFace) -> Result<(), String> {
         validate_nested_effect_metadata(effect)?;
     }
     for effect in face_activated_abilities(face).flat_map(|ability| &ability.effect) {
-        if let SpellEffectKind::CreateDelayedTriggerThisTurn { ability } = effect {
+        if let SpellEffectKind::CreateDelayedTriggerThisTurn { ability }
+        | SpellEffectKind::CreateWatchedCombatDamageDrawUntilNextTurn { ability, .. } = effect
+        {
             ability.ability_id.validate()?;
             let id = ability.ability_id.as_str().to_owned();
             if runtime_owner_ids.contains(&id) {
@@ -2498,63 +2501,88 @@ fn validate_effect_list_metadata(effects: &[SpellEffectKind]) -> Result<(), Stri
     Ok(())
 }
 
-fn reject_delayed_trigger_this_turn_effects(effects: &[SpellEffectKind]) -> Result<(), String> {
+fn reject_repeating_combat_observer_effects(effects: &[SpellEffectKind]) -> Result<(), String> {
     if effects
         .iter()
-        .any(SpellEffectKind::contains_delayed_trigger_this_turn_profile)
+        .any(SpellEffectKind::contains_repeating_combat_observer_profile)
     {
         return Err(
-            "CreateDelayedTriggerThisTurn is supported only as a direct legacy activated effect"
+            "repeating combat observer is supported only as a direct legacy activated effect"
                 .into(),
         );
     }
     Ok(())
 }
 
-fn reject_delayed_trigger_this_turn_program(program: &crate::CardProgram) -> Result<(), String> {
+fn reject_repeating_combat_observer_program(program: &crate::CardProgram) -> Result<(), String> {
     let mut contains_profile = false;
     visit_authored_program_effects(&program.body, &mut |effect| {
-        contains_profile |= effect.contains_delayed_trigger_this_turn_profile();
+        contains_profile |= effect.contains_repeating_combat_observer_profile();
         Ok(())
     })?;
     if contains_profile {
         return Err(
-            "CreateDelayedTriggerThisTurn is not supported through an authored Program".into(),
+            "repeating combat observer is not supported through an authored Program".into(),
         );
     }
     Ok(())
 }
 
-fn reject_delayed_trigger_this_turn_activated_ability(
+fn reject_repeating_combat_observer_activated_ability(
     ability: &crate::ActivatedAbilityDef,
 ) -> Result<(), String> {
     let contains_profile = ability
         .effect
         .iter()
-        .any(SpellEffectKind::contains_delayed_trigger_this_turn_profile);
+        .any(SpellEffectKind::contains_repeating_combat_observer_profile);
     if contains_profile && (ability.program.is_some() || ability.modal.is_some()) {
         return Err(
-            "CreateDelayedTriggerThisTurn requires a nonmodal activated legacy effect list".into(),
+            "repeating combat observer requires a nonmodal activated legacy effect list".into(),
         );
     }
-    for effect in &ability.effect {
-        if effect.contains_delayed_trigger_this_turn_profile() {
-            if !matches!(effect, SpellEffectKind::CreateDelayedTriggerThisTurn { .. }) {
+    for (effect_index, effect) in ability.effect.iter().enumerate() {
+        if effect.contains_repeating_combat_observer_profile() {
+            if !matches!(
+                effect,
+                SpellEffectKind::CreateDelayedTriggerThisTurn { .. }
+                    | SpellEffectKind::CreateWatchedCombatDamageDrawUntilNextTurn { .. }
+            ) {
                 return Err(
-                    "CreateDelayedTriggerThisTurn must be a direct legacy activated effect".into(),
+                    "repeating combat observer must be a direct legacy activated effect".into(),
                 );
             }
             effect.validate_direct_activated_legacy_effect()?;
+            if matches!(
+                effect,
+                SpellEffectKind::CreateWatchedCombatDamageDrawUntilNextTurn { .. }
+            ) {
+                let schema = crate::primitives::TargetSchema::compile(
+                    &ability.effect,
+                    ability.targeting.as_ref(),
+                )?;
+                let groups = schema
+                    .groups
+                    .iter()
+                    .filter(|group| {
+                        group.bindings.iter().any(|binding| {
+                            binding.effect_index == effect_index && binding.role_index == 0
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                if groups.len() != 1 || groups[0].min != 0 || groups[0].max != 2 {
+                    return Err("watched combat draw requires one up-to-two target group".into());
+                }
+            }
         }
     }
     if let Some(program) = &ability.program {
-        reject_delayed_trigger_this_turn_program(program)?;
+        reject_repeating_combat_observer_program(program)?;
     }
     if let Some(modal) = &ability.modal {
         for mode in &modal.modes {
-            reject_delayed_trigger_this_turn_effects(&mode.effects)?;
+            reject_repeating_combat_observer_effects(&mode.effects)?;
             if let Some(program) = &mode.program {
-                reject_delayed_trigger_this_turn_program(program)?;
+                reject_repeating_combat_observer_program(program)?;
             }
         }
     }
@@ -2564,15 +2592,15 @@ fn reject_delayed_trigger_this_turn_activated_ability(
 fn reject_delayed_trigger_this_turn_triggered_ability(
     ability: &crate::TriggeredAbilityDef,
 ) -> Result<(), String> {
-    reject_delayed_trigger_this_turn_effects(&ability.effect)?;
+    reject_repeating_combat_observer_effects(&ability.effect)?;
     if let Some(program) = &ability.program {
-        reject_delayed_trigger_this_turn_program(program)?;
+        reject_repeating_combat_observer_program(program)?;
     }
     if let Some(modal) = &ability.modal {
         for mode in &modal.modes {
-            reject_delayed_trigger_this_turn_effects(&mode.effects)?;
+            reject_repeating_combat_observer_effects(&mode.effects)?;
             if let Some(program) = &mode.program {
-                reject_delayed_trigger_this_turn_program(program)?;
+                reject_repeating_combat_observer_program(program)?;
             }
         }
     }
@@ -2593,15 +2621,15 @@ fn reject_delayed_trigger_this_turn_in_nested_abilities(face: &CardFace) -> Resu
                 ..
             } => {
                 for nested in activated_abilities {
-                    reject_delayed_trigger_this_turn_effects(&nested.effect)?;
+                    reject_repeating_combat_observer_effects(&nested.effect)?;
                     if let Some(program) = &nested.program {
-                        reject_delayed_trigger_this_turn_program(program)?;
+                        reject_repeating_combat_observer_program(program)?;
                     }
                     if let Some(modal) = &nested.modal {
                         for mode in &modal.modes {
-                            reject_delayed_trigger_this_turn_effects(&mode.effects)?;
+                            reject_repeating_combat_observer_effects(&mode.effects)?;
                             if let Some(program) = &mode.program {
-                                reject_delayed_trigger_this_turn_program(program)?;
+                                reject_repeating_combat_observer_program(program)?;
                             }
                         }
                     }
@@ -2615,15 +2643,15 @@ fn reject_delayed_trigger_this_turn_in_nested_abilities(face: &CardFace) -> Resu
                 ..
             } => {
                 for nested in activated_abilities {
-                    reject_delayed_trigger_this_turn_effects(&nested.effect)?;
+                    reject_repeating_combat_observer_effects(&nested.effect)?;
                     if let Some(program) = &nested.program {
-                        reject_delayed_trigger_this_turn_program(program)?;
+                        reject_repeating_combat_observer_program(program)?;
                     }
                     if let Some(modal) = &nested.modal {
                         for mode in &modal.modes {
-                            reject_delayed_trigger_this_turn_effects(&mode.effects)?;
+                            reject_repeating_combat_observer_effects(&mode.effects)?;
                             if let Some(program) = &mode.program {
-                                reject_delayed_trigger_this_turn_program(program)?;
+                                reject_repeating_combat_observer_program(program)?;
                             }
                         }
                     }
@@ -2648,34 +2676,34 @@ fn reject_delayed_trigger_this_turn_in_nested_abilities(face: &CardFace) -> Resu
 }
 
 fn validate_delayed_trigger_this_turn_admission(face: &CardFace) -> Result<(), String> {
-    reject_delayed_trigger_this_turn_effects(&face.spell_effect)?;
+    reject_repeating_combat_observer_effects(&face.spell_effect)?;
     if let Some(program) = &face.spell_program {
-        reject_delayed_trigger_this_turn_program(program)?;
+        reject_repeating_combat_observer_program(program)?;
     }
     if let Some(modal) = &face.modal_spell {
         for mode in &modal.modes {
-            reject_delayed_trigger_this_turn_effects(&mode.effects)?;
+            reject_repeating_combat_observer_effects(&mode.effects)?;
             if let Some(program) = &mode.program {
-                reject_delayed_trigger_this_turn_program(program)?;
+                reject_repeating_combat_observer_program(program)?;
             }
         }
     }
     for ability in face_activated_abilities(face) {
-        reject_delayed_trigger_this_turn_activated_ability(ability)?;
+        reject_repeating_combat_observer_activated_ability(ability)?;
     }
     for ability in face_triggered_abilities(face) {
         reject_delayed_trigger_this_turn_triggered_ability(ability)?;
     }
     for bar in &face.class_level_bars {
-        reject_delayed_trigger_this_turn_effects(&bar.level_ability.effect)?;
+        reject_repeating_combat_observer_effects(&bar.level_ability.effect)?;
         if let Some(program) = &bar.level_ability.program {
-            reject_delayed_trigger_this_turn_program(program)?;
+            reject_repeating_combat_observer_program(program)?;
         }
         if let Some(modal) = &bar.level_ability.modal {
             for mode in &modal.modes {
-                reject_delayed_trigger_this_turn_effects(&mode.effects)?;
+                reject_repeating_combat_observer_effects(&mode.effects)?;
                 if let Some(program) = &mode.program {
-                    reject_delayed_trigger_this_turn_program(program)?;
+                    reject_repeating_combat_observer_program(program)?;
                 }
             }
         }
@@ -5523,6 +5551,122 @@ mod delayed_trigger_this_turn_profile_tests {
             "the child id cannot reuse its parent activation id: {}",
             rejection_debug(&collision)
         );
+    }
+}
+
+#[cfg(test)]
+mod watched_combat_draw_profile_tests {
+    use super::*;
+
+    const EFFECT: &str = r#"CreateWatchedCombatDamageDrawUntilNextTurn(
+        target: (kind: Creature), ability: (
+            ability_id: "delayed_01", presentation: Fallback,
+            trigger: WheneverWatchedObjectDealsCombatDamage,
+            effect: [Draw(who: Controller, count: 1)]))"#;
+
+    fn direct(effect: &str) -> String {
+        format!(
+            r#"(id: "tamiyo_observer_probe", name: "Tamiyo Observer Probe", face_id: "tamiyo_observer_probe",
+            types: ["Planeswalker"], loyalty: 4,
+            activated_abilities: [(ability_id: "plus_01", presentation: Fallback, costs: [Loyalty(1)],
+                effect: [{effect}], targeting: Some((groups: [(min: 0,max: 2,prompt: "Choose up to two creatures",effect_indices: [0])])) )])"#
+        )
+    }
+
+    fn accepted(source: &str) -> bool {
+        CardRegistry::from_chunks_and_tokens(&[source], &[]).is_ok()
+    }
+
+    fn assert_rejected(source: &str) {
+        let _: RawCardDefinition = RON_OPTS
+            .from_str(source)
+            .expect("negative watched-profile fixture parses");
+        assert!(
+            !accepted(source),
+            "closed watched profile rejects: {source}"
+        );
+    }
+
+    #[test]
+    fn tamiyo_watched_combat_draw_requires_its_bounded_target_group() {
+        let card = direct(EFFECT);
+        for wrong in [
+            card.replace("max: 2", "max: 3"),
+            card.replace("min: 0", "min: 1"),
+        ] {
+            let _: RawCardDefinition = RON_OPTS
+                .from_str(&wrong)
+                .expect("target-boundary fixture parses");
+            assert!(
+                !accepted(&wrong),
+                "the specialized watch is exactly up to two targets"
+            );
+        }
+    }
+
+    #[test]
+    fn tamiyo_watched_combat_draw_accepts_only_its_direct_activated_profile() {
+        let card = direct(EFFECT);
+        let parsed = CardRegistry::from_chunks_and_tokens(&[&card], &[]);
+        assert!(
+            parsed.is_ok(),
+            "exact targeted repeating profile: {:?}",
+            parsed.err()
+        );
+        for invalid in [
+            EFFECT.replace("kind: Creature", "kind: AnyPermanent"),
+            EFFECT.replace("count: 1", "count: 2"),
+            EFFECT.replace("who: Controller", "who: EachOpponent"),
+            EFFECT.replace(
+                "WheneverWatchedObjectDealsCombatDamage",
+                "WheneverSelfDealsCombatDamageToPlayer",
+            ),
+            EFFECT.replace(
+                "trigger: WheneverWatchedObjectDealsCombatDamage,",
+                "trigger: WheneverWatchedObjectDealsCombatDamage, may: true,",
+            ),
+            EFFECT.replace("effect: [Draw", "triggers_only_once: true, effect: [Draw"),
+            format!("Conditional(condition: ActivePlayer(players: Controller), effect: {EFFECT})"),
+        ] {
+            assert_rejected(&direct(&invalid));
+        }
+        let spell = format!(
+            r#"(id: "spell_probe", name: "Spell Probe", face_id: "spell_probe",types: ["Sorcery"],spell_effect: [{EFFECT}])"#
+        );
+        assert_rejected(&spell);
+        let trigger = format!(
+            r#"(id: "trigger_probe", name: "Trigger Probe",face_id: "trigger_probe",types: ["Creature"],power:1,toughness:1,
+            triggered_abilities: [(ability_id:"triggered_01",presentation:Fallback,trigger:WhenSelfEntersBattlefield,effect:[{EFFECT}])])"#
+        );
+        assert_rejected(&trigger);
+        let generic = r#"CreateDelayedTrigger(subject: Some(Chosen((kind:Creature))), ability: (
+            ability_id:"delayed_01",presentation:Fallback,trigger:WheneverWatchedObjectDealsCombatDamage,
+            effect:[Draw(count:1)]))"#;
+        assert_rejected(&direct(generic));
+        let printed = r#"(id:"printed_probe",name:"Printed Probe",face_id:"printed_probe",types:["Artifact"],
+            triggered_abilities:[(ability_id:"triggered_01",presentation:Fallback,
+                trigger:WheneverWatchedObjectDealsCombatDamage,effect:[Draw(count:1)])])"#;
+        assert_rejected(printed);
+    }
+
+    #[test]
+    fn tamiyo_watched_combat_draw_rejects_program_modal_and_child_identity_bypasses() {
+        let program = direct(EFFECT).replace(
+            &format!("effect: [{EFFECT}],"),
+            &format!(r#"effect: [], program: Some((body: (steps:[(id:"watch",bind:[],input:None,kind:Perform({EFFECT}))],yields:[]),target_bindings:[])),"#));
+        assert_rejected(&program);
+        let modal = format!(
+            r#"(id:"modal_probe",name:"Modal Probe",face_id:"modal_probe",types:["Artifact"],
+            activated_abilities:[(ability_id:"ability_01",presentation:Fallback,costs:[Tap],effect:[],
+                modal:Some((min_modes:1,max_modes:1,modes:[
+                    (mode_id:"mode_01",presentation:Fallback,effects:[{EFFECT}]),
+                    (mode_id:"mode_02",presentation:Fallback,effects:[Draw(count:1)])])))])"#
+        );
+        assert_rejected(&modal);
+        assert_rejected(&direct(&EFFECT.replace("delayed_01", "plus_01")));
+        let duplicate = direct(&format!("{EFFECT},{EFFECT}"))
+            .replace("effect_indices: [0]", "effect_indices: [0,1]");
+        assert_rejected(&duplicate);
     }
 }
 

@@ -910,6 +910,9 @@ pub enum TriggerCondition {
     WhenWatchedObjectDiesThisTurn,
     /// Earthbend's one-shot observer (Badgermole, Rebellious Captives), without a turn expiry.
     WhenWatchedObjectDiesOrIsExiled,
+    /// Tamiyo's delayed-only watch: any positive combat damage by an exact captured object,
+    /// independent of recipient and the object's later characteristics or controller.
+    WheneverWatchedObjectDealsCombatDamage,
     /// CR 508.1m / 508.3a: whenever this creature attacks, optionally requiring a minimum number
     /// of *other* creatures in the same declaration group. Zero is an ordinary self-attack
     /// trigger; two is Battalion (Makeshift Battalion, Firefist Striker, Haazda Marshal).
@@ -1260,6 +1263,7 @@ impl TriggerCondition {
                 | Self::WhenControllerLosesControlOf
                 | Self::WhenWatchedObjectDiesThisTurn
                 | Self::WhenWatchedObjectDiesOrIsExiled
+                | Self::WheneverWatchedObjectDealsCombatDamage
         )
     }
 
@@ -1872,6 +1876,9 @@ impl TriggeredAbilityDef {
                     ))
                 }
                 TriggerCondition::WhenSelfDies => Some(format!("When {face_name} dies")),
+                TriggerCondition::WheneverWatchedObjectDealsCombatDamage => {
+                    Some("Whenever that creature deals combat damage".into())
+                }
                 TriggerCondition::WhenSelfLeavesBattlefield => {
                     Some(format!("When {face_name} leaves the battlefield"))
                 }

@@ -15,6 +15,9 @@ mod greatest_power_sacrifice;
 #[path = "activation_tests/opponent_discard_round.rs"]
 mod opponent_discard_round;
 
+#[path = "activation_tests/watched_combat_draw.rs"]
+mod watched_combat_draw;
+
 const OPPONENT_CHOICE_LAND: &str = r#"(
     id: "opponent_choice_land", name: "Opponent Choice Land",
     face_id: "opponent_choice_land", types: ["Land"],

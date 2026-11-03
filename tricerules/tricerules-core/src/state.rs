@@ -4143,6 +4143,10 @@ pub enum EventObserverMatcher {
         controller: PlayerId,
         created_turn_instance: u64,
     },
+    WatchedObjectCombatDamageUntilControllerNextTurn {
+        controller: PlayerId,
+        created_turn_instance: u64,
+    },
     WhenWatchedObjectDiesThisTurn,
     WhenWatchedObjectDiesOrIsExiled,
     WhenWatchedObjectLeavesBattlefield,

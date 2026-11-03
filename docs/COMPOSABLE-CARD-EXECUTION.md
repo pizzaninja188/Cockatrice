@@ -261,6 +261,21 @@ empty active snapshots retiring them before the next round. Programs, modes and 
 wrappers remain unsupported. Onyx now composes this round with the three capabilities above;
 Archmage Emeritus, Ransack the Lab and Crackling Doom remain demonstration reuse, not admissions.
 
+`CreateWatchedCombatDamageDrawUntilNextTurn` is Tamiyo, Field Researcher's specialized +1
+profile. A direct nonmodal activated ability binds one unrestricted Creature role to an up-to-two
+target group and a real delayed child containing only `Draw(Controller, 1)`. The delayed-only
+`WheneverWatchedObjectDealsCombatDamage` condition is rejected on printed/granted abilities and
+generic delayed triggers. Each legal target captures its ObjectId and generation, while the
+payload retains the resolving ability's controller and Tamiyo source (CR 603.7c/e, 400.7).
+Positive committed combat damage matches once per watched observer per simultaneous batch,
+regardless of recipient count or later type/control changes. Two watched creatures trigger twice;
+split trample damage triggers once; separate double-strike steps can trigger twice (CR 510.2/510.4,
+603.2c; cardinality inferred from the official Tamiyo and Five-Alarm Fire rulings). Source departure
+does not end the watch. Cleanup and opponent turns retain it; the captured controller's next actual
+turn expires it before turn-start work (CR 500.4), and controller departure prevents new triggers
+(CR 800.4d). Jace's grouped, cleanup-limited loot observer stays separate. This capability does not
+admit Tamiyo or change the protocol/client contract; her hand-free-cast emblem remains separate.
+
 The bounded 2026-10-19 Scalestorm Summoner port admits one finite `ProgramIf` condition:
 `MaximumPower` among the ability controller's creatures, with a positive `min`, no `max`, default
 remaining filter fields, and no observed-object exclusion. It migrates only `triggered_01` from the

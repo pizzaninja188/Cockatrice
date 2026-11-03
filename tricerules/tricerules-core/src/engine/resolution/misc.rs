@@ -590,7 +590,7 @@ pub(super) fn create_delayed_trigger(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    create_delayed_trigger_inner(cx, effect, None)
+    create_delayed_trigger_inner(cx, effect, None, None)
 }
 
 pub(super) fn create_delayed_trigger_this_turn(
@@ -620,13 +620,54 @@ pub(super) fn create_delayed_trigger_this_turn(
             ability,
         },
         Some(matcher),
+        None,
     )
+}
+
+pub(super) fn create_watched_combat_draw_until_next_turn(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::CreateWatchedCombatDamageDrawUntilNextTurn { ability, .. } = effect else {
+        return Err(EngineError::Illegal("watched combat draw profile missing"));
+    };
+    let targets = cx.current_battlefield_targets(0);
+    for object_id in targets {
+        let object = &cx.engine.state.objects[&object_id];
+        let watched = TriggerObjectRef {
+            object_id,
+            zone_change_generation: cx
+                .engine
+                .state
+                .zone_change_generation
+                .get(&object_id)
+                .copied()
+                .unwrap_or(0),
+            controller_at_event: object.controller,
+        };
+        let matcher = EventObserverMatcher::WatchedObjectCombatDamageUntilControllerNextTurn {
+            controller: cx.controller,
+            created_turn_instance: cx.engine.state.turn_instance,
+        };
+        create_delayed_trigger_inner(
+            cx,
+            SpellEffectKind::CreateDelayedTrigger {
+                subject: None,
+                affected_player: None,
+                ability: ability.clone(),
+            },
+            Some(matcher),
+            Some(watched),
+        )?;
+    }
+    Ok(EffectOutcome::Continue)
 }
 
 fn create_delayed_trigger_inner(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
     matcher_override: Option<EventObserverMatcher>,
+    watched_override: Option<TriggerObjectRef>,
 ) -> Result<EffectOutcome, EngineError> {
     let SpellEffectKind::CreateDelayedTrigger {
         subject,
@@ -721,7 +762,7 @@ fn create_delayed_trigger_inner(
     let emblem_object = matches!(subject, Some(EffectSubject::TriggerObject))
         .then_some(cx.top.trigger_context.emblem_graveyard_object)
         .flatten();
-    let watched = if let Some(object) = emblem_object {
+    let watched = if let Some(object) = watched_override.or(emblem_object) {
         Some(object)
     } else if let Some(subject) = subject.as_ref() {
         let watched_id = match subject {

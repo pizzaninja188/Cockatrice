@@ -7,6 +7,10 @@ fn expire_until_turn_start_effects(state: &mut GameState, player: PlayerId) {
     state
         .continuous_effects
         .retain(|effect| effect.duration != EffectDuration::UntilTurnStart(player));
+    let turn_instance = state.turn_instance;
+    state.active_event_observers.retain(|observer| !matches!(observer.matcher,
+        EventObserverMatcher::WatchedObjectCombatDamageUntilControllerNextTurn { controller,created_turn_instance }
+            if controller == player && turn_instance > created_turn_instance));
 }
 
 fn observed_token_cohort_key(
@@ -895,6 +899,9 @@ impl GameEngine {
             .collect();
         let mut departing_returns = Vec::new();
         self.state.active_event_observers.retain(|observer| {
+            if matches!(observer.matcher,
+                EventObserverMatcher::WatchedObjectCombatDamageUntilControllerNextTurn { controller, .. }
+                    if departed.contains(&controller)) { return false; }
             let watches_departing_source = observer.watched.is_some_and(|watched| {
                 departing_source_generations
                     .contains(&(watched.object_id, watched.zone_change_generation))
