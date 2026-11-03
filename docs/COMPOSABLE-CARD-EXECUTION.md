@@ -5,8 +5,9 @@ instructions retain their explicit input value and admitted type through `Operat
 primitives publish tagged `OperationResults`, including multiple outputs and completed empty
 results. Shared evaluators read these facts without the former input-field projection. Partial
 operation facts survive suspension separately from the parent's run context. Effect lists and
-Programs share the leaf execution boundary while retaining their distinct cursors and retry
-semantics. This changes no authored syntax, card admission, rules behavior or public protocol.
+Programs lower leaves into the same internal resolved instruction and target-role context, and
+share the observer boundary. Their distinct cursors, typed publication and retry semantics remain
+with each driver. This changes no authored syntax, card admission, rules behavior or public protocol.
 
 Status (2026-10-25): the approved retirement of existing flat result-predecessor paths is complete.
 The `DrawDiscard` compatibility family, flat `ChooseResolutionBranch`, and flat resolution

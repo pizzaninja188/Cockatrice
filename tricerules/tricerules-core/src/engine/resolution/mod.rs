@@ -20,6 +20,8 @@ use tricerules_card_model::primitives::{
 use tricerules_card_model::{AbilityPresentation, ChoiceId};
 
 mod chaos_warp;
+mod instruction;
+use instruction::{ResolvedInstruction, ResolvedTargets};
 mod choices;
 mod hand_library_return;
 pub(super) use choices::{
@@ -1421,10 +1423,7 @@ fn resolve_zone_effect_subject(
 /// attached so one primitive can consume multiple independently filtered roles.
 pub(super) struct ResolutionEffect {
     pub(super) effect: SpellEffectKind,
-    targets: Vec<ObjectId>,
-    target_receipts: Vec<StackTarget>,
-    /// Absolute authored group index for each target-filter role, ordered by filter index.
-    role_group_indices: Vec<u32>,
+    target_context: ResolvedTargets,
 }
 
 fn resolving_damage_source_id(item: &StackItem) -> ObjectId {
@@ -1677,9 +1676,12 @@ impl GameEngine {
                 let (effects, _) = self.build_resolution_effects(&top);
                 let targeted: Vec<_> = effects
                     .iter()
-                    .filter(|entry| !entry.role_group_indices.is_empty())
+                    .filter(|entry| !entry.target_context.role_group_indices.is_empty())
                     .collect();
-                !targeted.is_empty() && targeted.iter().all(|entry| entry.targets.is_empty())
+                !targeted.is_empty()
+                    && targeted
+                        .iter()
+                        .all(|entry| entry.target_context.targets.is_empty())
             } else {
                 false
             };
@@ -1912,14 +1914,14 @@ impl GameEngine {
         // CR 608.2b: targets are checked once, at the start of resolution — not again on resume.
         let targeted_effects: Vec<_> = resolution_effects
             .iter()
-            .filter(|entry| !entry.role_group_indices.is_empty())
+            .filter(|entry| !entry.target_context.role_group_indices.is_empty())
             .collect();
         let fizzle = had_chosen_targets
             && (authored_program_targets_all_illegal
                 || (!targeted_effects.is_empty()
                     && targeted_effects
                         .iter()
-                        .all(|entry| entry.targets.is_empty())));
+                        .all(|entry| entry.target_context.targets.is_empty())));
         if fizzle {
             events.push(ev_log(format!("{spell_label} fizzles (no legal targets).")));
             let progress = self.finish_deferred_stack_exit_with_context(
@@ -2162,9 +2164,12 @@ impl GameEngine {
                             .collect::<Vec<_>>();
                         ResolutionEffect {
                             effect,
-                            targets: selected.iter().map(|target| target.object_id).collect(),
-                            target_receipts: selected.iter().map(|target| **target).collect(),
-                            role_group_indices,
+                            target_context: ResolvedTargets::new(
+                                !role_group_indices.is_empty(),
+                                selected.iter().map(|target| target.object_id).collect(),
+                                selected.iter().map(|target| **target).collect(),
+                                role_group_indices,
+                            ),
                         }
                     })
                     .collect::<Vec<_>>()
@@ -2327,49 +2332,28 @@ impl GameEngine {
         let completed_effect_index = u32::try_from(resolution_effects.len()).map_err(|_| {
             EngineError::ProgramInvariant("completed effect-list cursor exceeds its stored index")
         })?;
-        let controller = top.controller;
         for (index, entry) in resolution_effects.into_iter().enumerate().skip(start) {
             let ResolutionEffect {
                 effect,
-                targets: effect_targets,
-                target_receipts,
-                role_group_indices,
+                target_context,
             } = entry;
-            if !role_group_indices.is_empty() && effect_targets.is_empty() {
+            if target_context.has_no_bound_targets() {
                 previous_effect_result = OperationResults::default();
                 continue;
             }
-            let targets_by_role = role_group_indices
-                .iter()
-                .map(|group_index| {
-                    target_receipts
-                        .iter()
-                        .filter(|target| target.group_index == *group_index)
-                        .map(|target| target.object_id)
-                        .collect::<Vec<_>>()
-                })
-                .collect::<Vec<_>>();
-            let mut effect_result = OperationResults::default();
-            let outcome = {
-                let mut cx = EffectCx {
-                    engine: self,
-                    events,
-                    targets: &effect_targets,
-                    targets_by_role: &targets_by_role,
-                    target_receipts: &target_receipts,
-                    target_role_group_indices: &role_group_indices,
-                    top,
-                    controller,
-                    affected_player: top.trigger_context.affected_player.unwrap_or(controller),
-                    spell_label,
-                    previous_effect_result: &previous_effect_result,
-                    resume_previous_result: Some(&previous_effect_result),
-                    effect_result: &mut effect_result,
-                    effect_index: index as u32,
-                    program_state: None,
-                };
-                execute_leaf(&mut cx, effect)?
-            };
+            let (outcome, effect_result) = ResolvedInstruction {
+                effect,
+                targets: &target_context,
+                index: index as u32,
+                input: &previous_effect_result,
+                previous_result: &previous_effect_result,
+                program_state: None,
+                affected_player: top
+                    .trigger_context
+                    .affected_player
+                    .unwrap_or(top.controller),
+            }
+            .execute(self, top, spell_label, events)?;
             if outcome == EffectOutcome::GameEnded {
                 self.state
                     .millennium_calendar_state_trigger_stack_keys
@@ -2423,11 +2407,9 @@ impl GameEngine {
             let mut observer_stack = ParkedStackResolution::new(completed_item.clone());
             observer_stack.resume_effect_index = Some(index as u32 + 1);
             observer_stack.previous_result = effect_result.clone();
-            if self.drain_immediate_observer_actions(Some(observer_stack), events)? {
+            if self.finish_resolution_instruction_boundary(observer_stack, events)? {
                 return Ok(ResolutionProgress::Parked);
             }
-            self.refresh_hideaway_look_permissions();
-            self.check_millennium_calendar_state_triggers();
             match outcome {
                 EffectOutcome::Blighted(_) | EffectOutcome::RetainedExile(..) => {
                     let (effects, label) = self.build_resolution_effects(&completed_item);
@@ -6747,9 +6729,7 @@ mod attached_subject_tests {
         .into_iter()
         .map(|effect| ResolutionEffect {
             effect,
-            targets: vec![],
-            target_receipts: vec![],
-            role_group_indices: vec![],
+            target_context: ResolvedTargets::default(),
         })
         .collect();
         let mut events = Vec::new();
@@ -11013,9 +10993,7 @@ mod attached_subject_tests {
             .into_iter()
             .map(|effect| ResolutionEffect {
                 effect,
-                targets: vec![],
-                target_receipts: vec![],
-                role_group_indices: vec![],
+                target_context: ResolvedTargets::default(),
             })
             .collect();
             engine
@@ -12701,9 +12679,7 @@ mod attached_subject_tests {
                 .into_iter()
                 .map(|effect| ResolutionEffect {
                     effect,
-                    targets: targets.clone(),
-                    target_receipts: vec![],
-                    role_group_indices: vec![],
+                    target_context: ResolvedTargets::new(false, targets.clone(), vec![], vec![]),
                 })
                 .collect();
                 engine
@@ -12775,10 +12751,8 @@ mod attached_subject_tests {
             ]
             .into_iter()
             .map(|(effect, targets)| ResolutionEffect {
-                targets,
                 effect,
-                target_receipts: vec![],
-                role_group_indices: vec![],
+                target_context: ResolvedTargets::new(false, targets, vec![], vec![]),
             })
             .collect();
             engine
@@ -13922,8 +13896,11 @@ mod attached_subject_tests {
         }];
 
         let (effects, label) = engine.build_resolution_effects(&item);
-        assert_eq!(effects[0].role_group_indices, [0]);
-        assert_eq!(effects[0].target_receipts[0].object_id, target);
+        assert_eq!(effects[0].target_context.role_group_indices, [0]);
+        assert_eq!(
+            effects[0].target_context.target_receipts[0].object_id,
+            target
+        );
         let mut events = Vec::new();
         let result = engine.run_effect_list(&item, &label, effects, 0, &mut events);
         assert!(

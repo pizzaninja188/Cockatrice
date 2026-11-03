@@ -435,8 +435,12 @@ Do not re-derive this per card.
   destruction-replacement path until it first overlaps another applicable effect.
 - **Resolution.** `engine/resolution/mod.rs` owns stack setup and the target fizzle, routing
   compiled programs to `engine/resolution/program.rs` and legacy effect lists to
-  their flat cursor driver. Both invoke `execute_leaf`, which executes the primitive, retains
-  actual partial operation facts on suspension and refreshes look permissions. Ordinary `Perform` leaves reuse effect dispatch; program-only
+  their flat cursor driver. Both lower leaves to `instruction.rs`'s `ResolvedInstruction`, using
+  one target-role projection and `EffectCx` construction. Its shared `execute_leaf` path executes
+  the primitive, retains actual partial operation facts on suspension and refreshes look permissions.
+  The drivers supply their own parked cursor and result context to the shared observer boundary;
+  Program output publication, list retries and control-instruction boundaries retain their ordering.
+  Ordinary `Perform` leaves reuse effect dispatch; program-only
   result-producing leaves run in the program path. `dispatch.rs` delegates ordinary effects to
   domain submodules (`damage`, `life`, `zones`, `pump_counters`, `mass`, `tokens`, `stack_ops`,
   `misc`) and owns the exhaustive `SpellEffectKind` match, so a new ordinary effect variant needs

@@ -710,41 +710,29 @@ impl GameEngine {
         let input_result = crate::state::OperationResults::from_value(
             crate::state::ProgramValue::PermanentSelection(objects.clone()),
         );
-        let mut result = OperationResults::default();
-        let empty_targets = Vec::new();
+        let target_context = ResolvedTargets::default();
         let label = self
             .registry
             .get(&stack.item.card_id)
             .and_then(|definition| definition.face(stack.item.face_index))
             .map(|face| face.name.to_string())
             .unwrap_or_else(|| stack.item.card_id.clone());
-        let mut cx = EffectCx {
-            engine: self,
-            events,
-            targets: &empty_targets,
-            targets_by_role: &[],
-            target_receipts: &[],
-            target_role_group_indices: &[],
-            top: &stack.item,
-            controller: stack.item.controller,
+        let (outcome, _) = ResolvedInstruction {
+            effect: SpellEffectKind::Untap {
+                subject: tricerules_card_model::primitives::EffectSubject::PreviousEffectObject,
+            },
+            targets: &target_context,
+            index: instruction_address,
+            input: &input_result,
+            previous_result: &stack.previous_result,
+            program_state: Some(program.clone()),
             affected_player: stack
                 .item
                 .trigger_context
                 .affected_player
                 .unwrap_or(stack.item.controller),
-            spell_label: &label,
-            previous_effect_result: &input_result,
-            resume_previous_result: Some(&stack.previous_result),
-            effect_result: &mut result,
-            effect_index: instruction_address,
-            program_state: Some(program.clone()),
-        };
-        let outcome = super::execute_leaf(
-            &mut cx,
-            SpellEffectKind::Untap {
-                subject: tricerules_card_model::primitives::EffectSubject::PreviousEffectObject,
-            },
-        )?;
+        }
+        .execute(self, &stack.item, &label, events)?;
         if outcome != EffectOutcome::Continue {
             return Err(EngineError::ProgramInvariant(
                 "Behold nested Untap did not complete synchronously",
@@ -1555,7 +1543,7 @@ impl GameEngine {
                         &effect,
                     ) {
                         EffectOutcome::Continue
-                    } else if target_context.has_bindings && target_context.targets.is_empty() {
+                    } else if target_context.has_no_bound_targets() {
                         result.begin_effect(&effect)?;
                         // CR 608.2b has already taken the one stack-wide target snapshot. A
                         // authored leaf whose own owner-local role groups are now empty is
@@ -1605,24 +1593,18 @@ impl GameEngine {
                                 .affected_player
                                 .unwrap_or(top.controller)
                         };
-                        let mut cx = EffectCx {
-                            engine: self,
-                            events,
-                            targets: &target_context.targets,
-                            targets_by_role: &target_context.targets_by_role,
-                            target_receipts: &target_context.target_receipts,
-                            target_role_group_indices: &target_context.role_group_indices,
-                            top,
-                            controller: top.controller,
-                            affected_player,
-                            spell_label: &label,
-                            previous_effect_result: previous,
-                            resume_previous_result: Some(&previous_result),
-                            effect_result: &mut result,
-                            effect_index: instruction_index as u32,
+                        let (outcome, executed_result) = ResolvedInstruction {
+                            effect,
+                            targets: &target_context,
+                            index: instruction_index as u32,
+                            input: previous,
+                            previous_result: &previous_result,
                             program_state: Some(program_state.clone()),
-                        };
-                        super::execute_leaf(&mut cx, effect)?
+                            affected_player,
+                        }
+                        .execute(self, top, &label, events)?;
+                        result = executed_result;
+                        outcome
                     };
 
                     if outcome == EffectOutcome::GameEnded {
@@ -2039,22 +2021,8 @@ impl GameEngine {
         let mut observer_stack = ParkedStackResolution::new(top.clone());
         observer_stack.program = Some(program_state.clone());
         observer_stack.previous_result = result.clone();
-        if self.drain_immediate_observer_actions(Some(observer_stack), events)? {
-            return Ok(true);
-        }
-        self.refresh_hideaway_look_permissions();
-        self.check_millennium_calendar_state_triggers();
-        Ok(false)
+        self.finish_resolution_instruction_boundary(observer_stack, events)
     }
-}
-
-#[derive(Default)]
-struct ProgramTargetContext {
-    has_bindings: bool,
-    targets: Vec<ObjectId>,
-    targets_by_role: Vec<Vec<ObjectId>>,
-    target_receipts: Vec<StackTarget>,
-    role_group_indices: Vec<u32>,
 }
 
 /// Route the structural CreatedTokenBatch receipt into its generation-safe chooser. The model
@@ -2147,7 +2115,7 @@ fn program_target_context(
     top: &StackItem,
     compiled: &CompiledProgram,
     instruction_address: u32,
-) -> Result<ProgramTargetContext, EngineError> {
+) -> Result<ResolvedTargets, EngineError> {
     let mut bindings = compiled
         .target_bindings
         .iter()
@@ -2160,7 +2128,7 @@ fn program_target_context(
         .map(|input| input.group_index)
         .collect::<Vec<_>>();
     if bindings.is_empty() && input_group_indices.is_empty() {
-        return Ok(ProgramTargetContext::default());
+        return Ok(ResolvedTargets::default());
     }
     bindings.sort_by_key(|binding| binding.role_index);
     if bindings
@@ -2188,29 +2156,16 @@ fn program_target_context(
         .iter()
         .filter(|target| projected_group_indices.contains(&target.group_index))
         .collect::<Vec<_>>();
-    let targets_by_role = bindings
-        .iter()
-        .map(|binding| {
-            chosen_targets
-                .iter()
-                .filter(|target| target.group_index == binding.target_group_index)
-                .map(|target| target.object_id)
-                .collect()
-        })
-        .collect();
-    Ok(ProgramTargetContext {
-        // Group inputs supply non-target operands to an instruction. They extend the exact
-        // generation-bound target context used by recipients without turning that instruction
-        // into a targeted effect or changing its role-indexed target bindings.
-        has_bindings: !bindings.is_empty(),
-        targets: selected_targets
+    Ok(ResolvedTargets::new(
+        // Group inputs provide non-target operands while preserving owner-local role bindings.
+        !bindings.is_empty(),
+        selected_targets
             .iter()
             .map(|target| target.object_id)
             .collect(),
-        targets_by_role,
-        target_receipts: selected_targets.iter().map(|target| **target).collect(),
+        selected_targets.iter().map(|target| **target).collect(),
         role_group_indices,
-    })
+    ))
 }
 
 fn block_at_path<'a>(
