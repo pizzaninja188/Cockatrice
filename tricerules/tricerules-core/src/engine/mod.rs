@@ -1999,9 +1999,7 @@ impl GameEngine {
             next_damage_prevention_effect_id: 1,
             death_replacement_effects: Vec::new(),
             next_replacement_application_id: 1,
-            mana_restrictions: Vec::new(),
-            mana_restriction_presentations: Vec::new(),
-            mana_restriction_origins: Vec::new(),
+            mana_restriction_groups: Default::default(),
             undoable_mana_abilities: Vec::new(),
             untapped_this_command: Vec::new(),
         };

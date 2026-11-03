@@ -414,13 +414,12 @@ impl GameEngine {
         let restricted_groups = grouped
             .into_iter()
             .filter_map(|(restriction_group_id, amount)| {
-                let index = restriction_group_id.checked_sub(1)? as usize;
-                let restriction = self.state.mana_restrictions.get(index)?;
-                let origin = self
+                let group = self
                     .state
-                    .mana_restriction_origins
-                    .get(index)
-                    .and_then(Option::as_ref);
+                    .mana_restriction_groups
+                    .get(restriction_group_id)?;
+                let restriction = &group.restriction;
+                let origin = group.origin.as_ref();
                 let display_label = origin.map_or_else(
                     || restriction.fallback_label(),
                     |origin| {
@@ -431,12 +430,7 @@ impl GameEngine {
                         )
                     },
                 );
-                let mut presentation = self
-                    .state
-                    .mana_restriction_presentations
-                    .get(index)
-                    .cloned()
-                    .flatten();
+                let mut presentation = group.presentation.clone();
                 if let Some(presentation) = presentation.as_mut() {
                     if origin.is_some() {
                         // A static Oracle line describes every physical copy of Path alike. The

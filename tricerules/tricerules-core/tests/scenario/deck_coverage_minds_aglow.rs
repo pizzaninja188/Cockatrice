@@ -781,17 +781,21 @@ fn minds_aglow_accepts_only_restricted_mana_eligible_for_resolution_payments() {
     advance_to_main1_from_game_start(&mut engine);
     engine
         .state
-        .mana_restrictions
-        .push(ManaSpendingRestriction {
-            restriction_id: ChoiceId::new("minds_aglow_resolution_only").unwrap(),
-            presentation: AbilityPresentation::Fallback,
-            unrestricted: false,
-            cast_spell: vec![],
-            activate_ability: vec![],
-            activate_any_ability: false,
-            all_nonspell_costs: true,
-            special_actions: vec![],
-            spending_effects: vec![],
+        .mana_restriction_groups
+        .push(tricerules_core::state::ManaRestrictionGroup {
+            restriction: ManaSpendingRestriction {
+                restriction_id: ChoiceId::new("minds_aglow_resolution_only").unwrap(),
+                presentation: AbilityPresentation::Fallback,
+                unrestricted: false,
+                cast_spell: vec![],
+                activate_ability: vec![],
+                activate_any_ability: false,
+                all_nonspell_costs: true,
+                special_actions: vec![],
+                spending_effects: vec![],
+            },
+            presentation: None,
+            origin: None,
         });
     engine.state.players[0].restricted_mana.push(
         tricerules_core::state::RestrictedManaContribution {

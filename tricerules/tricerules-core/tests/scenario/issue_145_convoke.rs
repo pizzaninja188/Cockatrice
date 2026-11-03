@@ -391,20 +391,24 @@ fn convoke_combines_restricted_mana_and_refreshes_unavailable_group_amounts() {
     let bear = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     engine
         .state
-        .mana_restrictions
-        .push(ManaSpendingRestriction {
-            restriction_id: tricerules_cards::ChoiceId::new("restriction_01").unwrap(),
-            presentation: tricerules_cards::AbilityPresentation::Fallback,
-            unrestricted: false,
-            cast_spell: vec![ManaSpendFilter {
-                card_type: Some(CardTypeFilter::InstantOrSorcery),
-                subtype: None,
-            }],
-            activate_ability: vec![],
-            activate_any_ability: false,
-            all_nonspell_costs: false,
-            special_actions: vec![],
-            spending_effects: vec![],
+        .mana_restriction_groups
+        .push(tricerules_core::state::ManaRestrictionGroup {
+            restriction: ManaSpendingRestriction {
+                restriction_id: tricerules_cards::ChoiceId::new("restriction_01").unwrap(),
+                presentation: tricerules_cards::AbilityPresentation::Fallback,
+                unrestricted: false,
+                cast_spell: vec![ManaSpendFilter {
+                    card_type: Some(CardTypeFilter::InstantOrSorcery),
+                    subtype: None,
+                }],
+                activate_ability: vec![],
+                activate_any_ability: false,
+                all_nonspell_costs: false,
+                special_actions: vec![],
+                spending_effects: vec![],
+            },
+            presentation: None,
+            origin: None,
         });
     engine.state.players[0]
         .restricted_mana

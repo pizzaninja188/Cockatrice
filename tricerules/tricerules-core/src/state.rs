@@ -1,6 +1,8 @@
 #[path = "state/operation_results.rs"]
 mod operation_results;
 pub(crate) use operation_results::{OperationInput, OperationResults, ResolutionFacts};
+mod mana_restrictions;
+pub use mana_restrictions::{ManaRestrictionGroup, ManaRestrictionGroups};
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use tricerules_card_model::primitives::ResultSlotId;
@@ -10,11 +12,10 @@ use tricerules_card_model::primitives::{
     CounterKind, CounterPaymentOutcome, CreatureScopeFilter, DamagePreventionAdditionalEffect,
     DelayedTokenSacrificeTiming, EffectDuration, GameCondition, HandCardAction, Keyword,
     LibraryBottomOrder, LibraryLookRemainderPolicy, LibraryPlacement, LinkedExiledCardDestination,
-    LinkedExiledCardPlayKind, ManaAmount, ManaSpendingRestriction, ObjectCastCostKind,
-    PermanentChoiceConstraint, PermanentSacrificeScope, PermanentTypeFilter,
-    ResolvingPermanentModifier, ResultType, SearchDestination, SearchSelectionConstraint,
-    SearchSelectionSlot, SearchZoneSelection, StaticEmblemEffect, TargetFilter,
-    TriggeredAbilityDef, TypeLineReplacement, ZoneCardFilter,
+    LinkedExiledCardPlayKind, ManaAmount, ObjectCastCostKind, PermanentChoiceConstraint,
+    PermanentSacrificeScope, PermanentTypeFilter, ResolvingPermanentModifier, ResultType,
+    SearchDestination, SearchSelectionConstraint, SearchSelectionSlot, SearchZoneSelection,
+    StaticEmblemEffect, TargetFilter, TriggeredAbilityDef, TypeLineReplacement, ZoneCardFilter,
 };
 use tricerules_card_model::primitives::{PlayerRecipient, ResolutionBranchDef};
 pub use tricerules_card_model::AbilityDefinitionId;
@@ -4388,13 +4389,9 @@ pub struct GameState {
     /// Opaque ids exposed by replacement-order prompts. Separate from effect identities so stale
     /// submissions cannot name a newly-applicable effect after recomputation.
     pub next_replacement_application_id: u32,
-    /// Session-lifetime interning table for structurally identical mana restrictions. The
-    /// one-based index is the stable public group id used by commands and UI snapshots.
-    pub mana_restrictions: Vec<ManaSpendingRestriction>,
-    pub mana_restriction_presentations: Vec<Option<tricerules_proto::ruled::v1::PresentationRef>>,
-    /// One source LKI entry per restriction group. Ordinary mana restrictions are interned with
-    /// `None`; source-bound delayed effects such as Path of Ancestry receive a unique group.
-    pub mana_restriction_origins: Vec<Option<ManaSpendingOrigin>>,
+    /// Session-stable restriction groups, including presentation and source-bound origin.
+    /// Ordinary restrictions are interned; source-bound activations receive distinct groups.
+    pub mana_restriction_groups: ManaRestrictionGroups,
     /// Mana abilities the priority player has activated this priority window that are still
     /// inconsequential and may be rewound by `UndoManaAbility` (CR 605 float courtesy). Newest
     /// last. Cleared by any consequential action (see [`UndoableManaAbility`]); empty whenever no

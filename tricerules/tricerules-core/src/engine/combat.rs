@@ -471,14 +471,8 @@ impl GameEngine {
             && activation_uses.is_empty();
         let mana_restriction = ability.mana_restriction().cloned();
         let restriction_presentation = restriction_group_id
-            .and_then(|group_id| group_id.checked_sub(1))
-            .and_then(|index| {
-                self.state
-                    .mana_restriction_presentations
-                    .get(index as usize)
-            })
-            .cloned()
-            .flatten();
+            .and_then(|group_id| self.state.mana_restriction_groups.get(group_id))
+            .and_then(|group| group.presentation.clone());
         internal
             .mana_ability_receipts
             .push(AttackManaAbilityReceipt {
@@ -581,10 +575,7 @@ impl GameEngine {
         // Group identities are public session references and survive a payment rewind, even in
         // this non-mutating reversibility preview. Later receipts are replayed against that stable
         // registry under their original ids.
-        candidate.state.mana_restrictions = self.state.mana_restrictions.clone();
-        candidate.state.mana_restriction_presentations =
-            self.state.mana_restriction_presentations.clone();
-        candidate.state.mana_restriction_origins = self.state.mana_restriction_origins.clone();
+        candidate.state.mana_restriction_groups = self.state.mana_restriction_groups.clone();
         let Some(player) = candidate
             .state
             .pending_attack_declaration
@@ -792,10 +783,7 @@ impl GameEngine {
             // rewind removes its mana contribution, not the identity already published for the
             // source-bound group. Preserve the append-only registry so retained receipts can be
             // replayed under their original ids without aliasing an undone source.
-            self.state.mana_restrictions = after_state.mana_restrictions.clone();
-            self.state.mana_restriction_presentations =
-                after_state.mana_restriction_presentations.clone();
-            self.state.mana_restriction_origins = after_state.mana_restriction_origins.clone();
+            self.state.mana_restriction_groups = after_state.mana_restriction_groups.clone();
             self.state.command_index = command_index;
             self.state.next_object_id = next_object_id;
             self.state.next_trigger_grant_id = next_trigger_grant_id;

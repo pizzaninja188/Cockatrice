@@ -314,7 +314,13 @@ fn special_action_restricted_mana_permissions_are_specific_and_refresh_after_cha
             let (mut engine, _, action) = special_action_payment_fixture(kind);
             let group = action.restricted_mana[0].restriction_group_id;
             // Spell-only mana, or mana for the other special action, cannot pay this action.
-            engine.state.mana_restrictions[(group - 1) as usize].special_actions = allowed;
+            engine
+                .state
+                .mana_restriction_groups
+                .get_mut(group)
+                .unwrap()
+                .restriction
+                .special_actions = allowed;
             let legal = engine.initial_response_batch();
             assert!(legal.legal_by_player[&0]
                 .permanent_actions

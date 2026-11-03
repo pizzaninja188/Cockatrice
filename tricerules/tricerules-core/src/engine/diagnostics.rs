@@ -20,11 +20,48 @@ impl GameEngine {
                 "derived_characteristics": derived,
             }))
         }).collect::<Result<Vec<Value>, serde_json::Error>>()?;
+        let mut state = crate::diagnostic_json::to_value(&self.state)?;
+        // Captures keep their established schema while internal state groups related facts.
+        // Raw state serialization still includes the complete store for atomicity checks.
+        let state_fields = state
+            .as_object_mut()
+            .expect("GameState serializes as an object");
+        state_fields.remove("mana_restriction_groups");
+        let groups: Vec<_> = self
+            .state
+            .mana_restriction_groups
+            .iter()
+            .map(|(_, group)| group)
+            .collect();
+        state_fields.insert(
+            "mana_restrictions".into(),
+            crate::diagnostic_json::to_value(
+                &groups
+                    .iter()
+                    .map(|group| &group.restriction)
+                    .collect::<Vec<_>>(),
+            )?,
+        );
+        state_fields.insert(
+            "mana_restriction_presentations".into(),
+            crate::diagnostic_json::to_value(
+                &groups
+                    .iter()
+                    .map(|group| &group.presentation)
+                    .collect::<Vec<_>>(),
+            )?,
+        );
+        state_fields.insert(
+            "mana_restriction_origins".into(),
+            crate::diagnostic_json::to_value(
+                &groups.iter().map(|group| &group.origin).collect::<Vec<_>>(),
+            )?,
+        );
         Ok(serde_json::json!({
             "format_version": 1,
             "privacy": "server_only",
             "dev_commands_enabled": self.dev_commands_enabled,
-            "state": crate::diagnostic_json::to_value(&self.state)?,
+            "state": state,
             "object_identities": identities,
         }))
     }

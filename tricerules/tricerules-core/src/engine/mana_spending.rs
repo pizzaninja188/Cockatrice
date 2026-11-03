@@ -124,16 +124,18 @@ impl GameEngine {
         }
 
         if let Some(group_id) = preferred_group_id {
-            let index = group_id.checked_sub(1).ok_or(EngineError::Illegal(
-                "invalid preferred mana restriction group",
-            ))? as usize;
-            let matches_registry = self.state.mana_restrictions.get(index) == Some(restriction)
-                && self
-                    .state
-                    .mana_restriction_origins
-                    .get(index)
-                    .and_then(Option::as_ref)
-                    == origin.as_ref();
+            if group_id == 0 {
+                return Err(EngineError::Illegal(
+                    "invalid preferred mana restriction group",
+                ));
+            }
+            let matches_registry = self
+                .state
+                .mana_restriction_groups
+                .get(group_id)
+                .is_some_and(|group| {
+                    &group.restriction == restriction && group.origin.as_ref() == origin.as_ref()
+                });
             if !matches_registry {
                 return Err(EngineError::Illegal(
                     "replayed mana restriction group no longer matches its source",
@@ -143,30 +145,24 @@ impl GameEngine {
         }
 
         if !source_bound {
-            if let Some(position) = self
+            if let Some((group_id, _)) = self
                 .state
-                .mana_restrictions
+                .mana_restriction_groups
                 .iter()
-                .position(|candidate| candidate == restriction)
+                .find(|(_, group)| &group.restriction == restriction)
             {
-                return Ok((position + 1) as u32);
+                return Ok(group_id);
             }
         }
 
-        self.state.mana_restrictions.push(restriction.clone());
-        self.state
-            .mana_restriction_presentations
-            .push(restriction_presentation);
-        self.state.mana_restriction_origins.push(origin);
-        debug_assert_eq!(
-            self.state.mana_restrictions.len(),
-            self.state.mana_restriction_presentations.len()
-        );
-        debug_assert_eq!(
-            self.state.mana_restrictions.len(),
-            self.state.mana_restriction_origins.len()
-        );
-        Ok(self.state.mana_restrictions.len() as u32)
+        Ok(self
+            .state
+            .mana_restriction_groups
+            .push(crate::state::ManaRestrictionGroup {
+                restriction: restriction.clone(),
+                presentation: restriction_presentation,
+                origin,
+            }))
     }
 
     /// Produce the delayed triggers for the *committed* restricted mana in one completed spell
@@ -196,12 +192,10 @@ impl GameEngine {
 
         let mut triggers = Vec::new();
         for (group_id, units) in units_by_group {
-            let Some(index) = group_id.checked_sub(1).map(|id| id as usize) else {
+            let Some(group) = self.state.mana_restriction_groups.get(group_id) else {
                 continue;
             };
-            let Some(restriction) = self.state.mana_restrictions.get(index) else {
-                continue;
-            };
+            let restriction = &group.restriction;
             if !restriction.spending_effects.iter().any(|effect| {
                 matches!(
                     effect,
@@ -210,12 +204,7 @@ impl GameEngine {
             }) {
                 continue;
             }
-            let Some(origin) = self
-                .state
-                .mana_restriction_origins
-                .get(index)
-                .and_then(Option::as_ref)
-            else {
+            let Some(origin) = group.origin.as_ref() else {
                 continue;
             };
             let shares_commander_type = self
@@ -281,5 +270,150 @@ impl GameEngine {
             }
         }
         triggers
+    }
+}
+
+#[cfg(test)]
+mod group_contract_tests {
+    use super::*;
+
+    fn restriction() -> ManaSpendingRestriction {
+        ManaSpendingRestriction {
+            restriction_id: tricerules_card_model::ChoiceId::new("contract").unwrap(),
+            presentation: AbilityPresentation::Fallback,
+            unrestricted: true,
+            cast_spell: vec![],
+            activate_ability: vec![],
+            activate_any_ability: false,
+            all_nonspell_costs: false,
+            special_actions: vec![],
+            spending_effects: vec![],
+        }
+    }
+
+    #[test]
+    fn group_registration_preserves_interning_source_identity_and_diagnostic_shape() {
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            u64::MAX,
+            &[17, 29],
+            20,
+            None,
+            false,
+        )
+        .unwrap();
+        let initial = engine.diagnostic_snapshot().unwrap();
+        let ordinary = restriction();
+        assert_eq!(
+            engine
+                .register_mana_restriction_group(&ordinary, None, None, None)
+                .unwrap(),
+            1
+        );
+        let presentation = rv1::PresentationRef {
+            fallback_text: "source-bound mana".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            engine
+                .register_mana_restriction_group(&ordinary, Some(presentation.clone()), None, None)
+                .unwrap(),
+            1
+        );
+
+        let mut source_bound = ordinary.clone();
+        source_bound.spending_effects =
+            vec![ManaSpendingEffect::Scry1IfSpellSharesCreatureTypeWithCommander];
+        let origin = ManaSpendingOrigin {
+            source_object_id: 42,
+            source_zone_change_generation: u64::MAX,
+            source_face_change_generation: 3,
+            source_face_index: 0,
+            controller: 17,
+            card_id: "path_of_ancestry".into(),
+            source_label: "Path of Ancestry".into(),
+            ability_presentation: Some(presentation.clone()),
+        };
+        for expected_id in [2, 3] {
+            assert_eq!(
+                engine
+                    .register_mana_restriction_group(
+                        &source_bound,
+                        Some(presentation.clone()),
+                        Some(origin.clone()),
+                        None
+                    )
+                    .unwrap(),
+                expected_id
+            );
+        }
+        assert_eq!(
+            engine
+                .register_mana_restriction_group(&source_bound, None, Some(origin.clone()), Some(2))
+                .unwrap(),
+            2
+        );
+        let before_invalid = engine.diagnostic_snapshot().unwrap();
+        let mut different_origin = origin.clone();
+        different_origin.source_zone_change_generation = 0;
+        assert!(engine
+            .register_mana_restriction_group(&source_bound, None, Some(different_origin), Some(2))
+            .is_err());
+        assert!(engine
+            .register_mana_restriction_group(&ordinary, None, None, Some(0))
+            .is_err());
+        assert!(engine
+            .register_mana_restriction_group(&source_bound, None, None, None)
+            .is_err());
+        assert_eq!(engine.diagnostic_snapshot().unwrap(), before_invalid);
+
+        let state = &before_invalid["state"];
+        assert_eq!(state["_type"], "GameState");
+        assert_eq!(state["seed"], u64::MAX.to_string());
+        assert_eq!(state["players"][0]["id"], 17);
+        assert!(state["objects"].is_object());
+        assert!(state["pending_resolution"].is_null());
+        assert!(state.get("mana_restriction_groups").is_none());
+        assert_eq!(
+            state["mana_restrictions"],
+            crate::diagnostic_json::to_value(&vec![&ordinary, &source_bound, &source_bound])
+                .unwrap()
+        );
+        assert_eq!(
+            state["mana_restriction_presentations"],
+            crate::diagnostic_json::to_value(&vec![None, Some(&presentation), Some(&presentation)])
+                .unwrap()
+        );
+        assert_eq!(
+            state["mana_restriction_origins"],
+            crate::diagnostic_json::to_value(&vec![None, Some(&origin), Some(&origin)]).unwrap()
+        );
+        assert_eq!(
+            state["mana_restriction_origins"][1]["source_zone_change_generation"],
+            u64::MAX.to_string()
+        );
+        let raw_state = crate::diagnostic_json::to_value(&engine.state).unwrap();
+        assert_eq!(
+            raw_state["mana_restriction_groups"]["groups"]
+                .as_array()
+                .unwrap()
+                .len(),
+            3,
+            "raw state serialization retains the complete store for rejection snapshots"
+        );
+        let mut initial_state = initial["state"].as_object().unwrap().clone();
+        let mut final_state = state.as_object().unwrap().clone();
+        for field in [
+            "mana_restrictions",
+            "mana_restriction_presentations",
+            "mana_restriction_origins",
+        ] {
+            initial_state.remove(field);
+            final_state.remove(field);
+        }
+        assert_eq!(
+            initial_state, final_state,
+            "all unrelated snapshot fields are unchanged"
+        );
     }
 }

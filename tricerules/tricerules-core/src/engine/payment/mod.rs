@@ -258,14 +258,14 @@ impl GameEngine {
             {
                 continue;
             }
-            let Some(rule) = selection
-                .restriction_group_id
-                .checked_sub(1)
-                .and_then(|index| self.state.mana_restrictions.get(index as usize))
+            let Some(group) = self
+                .state
+                .mana_restriction_groups
+                .get(selection.restriction_group_id)
             else {
                 continue;
             };
-            for effect in &rule.spending_effects {
+            for effect in &group.restriction.spending_effects {
                 if let tricerules_card_model::ManaSpendingEffect::GrantKeywordsToSpellUntilEndOfTurn {
                     filter,
                     keywords: granted,
@@ -318,11 +318,11 @@ impl GameEngine {
             .restricted_mana
             .iter()
             .filter_map(|entry| {
-                let restriction = self
+                let group = self
                     .state
-                    .mana_restrictions
-                    .get(entry.restriction_group_id.checked_sub(1)? as usize)?;
-                restriction_allows_purpose(restriction, purpose)
+                    .mana_restriction_groups
+                    .get(entry.restriction_group_id)?;
+                restriction_allows_purpose(&group.restriction, purpose)
                     .then_some(entry.restriction_group_id)
             })
             .collect();
