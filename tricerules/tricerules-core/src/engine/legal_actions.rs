@@ -2246,6 +2246,69 @@ fn legal_all_modes_cast_cost(
     }
 }
 
+fn legal_spell_modes(
+    eng: &GameEngine,
+    player: PlayerId,
+    target_source: TargetSourceIdentity,
+    card_id: &str,
+    face: &CardFace,
+    modal: &ModalDef,
+    costs: &rv1::LegalCostChoices,
+) -> Vec<rv1::LegalSpellMode> {
+    modal
+        .modes
+        .iter()
+        .enumerate()
+        .map(|(mode_index, mode)| {
+            let program = face_mode_program(eng, card_id, &face.face_id, &mode.mode_id);
+            let needs_target =
+                target_schema_with_program(&mode.effects, mode.targeting.as_ref(), program)
+                    .has_targets();
+            let mut targets = compute_spell_targets_with_program(
+                eng,
+                player,
+                target_source,
+                &mode.effects,
+                mode.targeting.as_ref(),
+                &face.cost_modifiers,
+                program,
+            );
+            apply_cast_cost_target_requirements(
+                eng,
+                player,
+                target_source,
+                face,
+                costs,
+                mode.targeting.as_ref(),
+                &mut targets,
+            );
+            let linked_cost = legal_mode_cast_cost_link(face, costs, mode);
+            rv1::LegalSpellMode {
+                mode_index: mode_index as u32,
+                label: mode_fallback(&face.name, &mode.mode_id),
+                selectable: (!needs_target || spell_target_groups_are_selectable(&targets))
+                    && linked_cost
+                        .as_ref()
+                        .is_none_or(|(_, selectable)| *selectable),
+                needs_target,
+                targets: Some(targets),
+                presentation: Some(presentation_ref(
+                    eng.registry,
+                    card_id,
+                    &face.face_id,
+                    [
+                        PresentationPath::Spell,
+                        PresentationPath::Mode(&mode.mode_id),
+                    ],
+                    &mode.presentation,
+                    mode_fallback(&face.name, &mode.mode_id),
+                )),
+                linked_cast_cost: linked_cost.map(|(link, _)| link),
+            }
+        })
+        .collect()
+}
+
 fn apply_cast_cost_target_requirements(
     eng: &GameEngine,
     player: PlayerId,
@@ -2640,65 +2703,15 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                     action.all_modes_cast_cost = all_modes_cost;
                     action.min_modes = modal.min_modes;
                     action.max_modes = max_modes;
-                    action.modes = modal
-                        .modes
-                        .iter()
-                        .enumerate()
-                        .map(|(mode_index, mode)| {
-                            let program =
-                                face_mode_program(eng, card_id, &face.face_id, &mode.mode_id);
-                            let needs_target = target_schema_with_program(
-                                &mode.effects,
-                                mode.targeting.as_ref(),
-                                program,
-                            )
-                            .has_targets();
-                            let mut targets = compute_spell_targets_with_program(
-                                eng,
-                                pid,
-                                TargetSourceIdentity::spell_face(eng, oid, face_index, pid),
-                                &mode.effects,
-                                mode.targeting.as_ref(),
-                                &face.cost_modifiers,
-                                program,
-                            );
-                            apply_cast_cost_target_requirements(
-                                eng,
-                                pid,
-                                TargetSourceIdentity::spell_face(eng, oid, face_index, pid),
-                                face,
-                                &mode_cost_choices,
-                                mode.targeting.as_ref(),
-                                &mut targets,
-                            );
-                            let linked_cost =
-                                legal_mode_cast_cost_link(face, &mode_cost_choices, mode);
-                            let selectable = (!needs_target
-                                || spell_target_groups_are_selectable(&targets))
-                                && linked_cost
-                                    .as_ref()
-                                    .is_none_or(|(_, selectable)| *selectable);
-                            rv1::LegalSpellMode {
-                                mode_index: mode_index as u32,
-                                label: mode_fallback(&face.name, &mode.mode_id),
-                                selectable,
-                                needs_target,
-                                targets: Some(targets),
-                                presentation: Some(presentation_ref(
-                                    eng.registry,
-                                    card_id,
-                                    &face.face_id,
-                                    [
-                                        PresentationPath::Spell,
-                                        PresentationPath::Mode(&mode.mode_id),
-                                    ],
-                                    &mode.presentation,
-                                    mode_fallback(&face.name, &mode.mode_id),
-                                )),
-                                linked_cast_cost: linked_cost.map(|(link, _)| link),
-                            }
-                        })
-                        .collect();
+                    action.modes = legal_spell_modes(
+                        eng,
+                        pid,
+                        TargetSourceIdentity::spell_face(eng, oid, face_index, pid),
+                        card_id,
+                        face,
+                        modal,
+                        &mode_cost_choices,
+                    );
                     let selectable_count =
                         action.modes.iter().filter(|mode| mode.selectable).count();
                     if selectable_count < modal.min_modes as usize
@@ -2863,65 +2876,15 @@ pub(super) fn legal_zone_cast_actions(
                     action.all_modes_cast_cost = all_modes_cost;
                     action.min_modes = modal.min_modes;
                     action.max_modes = max_modes;
-                    action.modes = modal
-                        .modes
-                        .iter()
-                        .enumerate()
-                        .map(|(mode_index, mode)| {
-                            let program =
-                                face_mode_program(eng, card_id, &face.face_id, &mode.mode_id);
-                            let needs_target = target_schema_with_program(
-                                &mode.effects,
-                                mode.targeting.as_ref(),
-                                program,
-                            )
-                            .has_targets();
-                            let mut targets = compute_spell_targets_with_program(
-                                eng,
-                                pid,
-                                TargetSourceIdentity::spell_face(eng, oid, face_index, pid),
-                                &mode.effects,
-                                mode.targeting.as_ref(),
-                                &face.cost_modifiers,
-                                program,
-                            );
-                            apply_cast_cost_target_requirements(
-                                eng,
-                                pid,
-                                TargetSourceIdentity::spell_face(eng, oid, face_index, pid),
-                                face,
-                                &mode_cost_choices,
-                                mode.targeting.as_ref(),
-                                &mut targets,
-                            );
-                            let linked_cost =
-                                legal_mode_cast_cost_link(face, &mode_cost_choices, mode);
-                            let selectable = (!needs_target
-                                || spell_target_groups_are_selectable(&targets))
-                                && linked_cost
-                                    .as_ref()
-                                    .is_none_or(|(_, selectable)| *selectable);
-                            rv1::LegalSpellMode {
-                                mode_index: mode_index as u32,
-                                label: mode_fallback(&face.name, &mode.mode_id),
-                                selectable,
-                                needs_target,
-                                targets: Some(targets),
-                                presentation: Some(presentation_ref(
-                                    eng.registry,
-                                    card_id,
-                                    &face.face_id,
-                                    [
-                                        PresentationPath::Spell,
-                                        PresentationPath::Mode(&mode.mode_id),
-                                    ],
-                                    &mode.presentation,
-                                    mode_fallback(&face.name, &mode.mode_id),
-                                )),
-                                linked_cast_cost: linked_cost.map(|(link, _)| link),
-                            }
-                        })
-                        .collect();
+                    action.modes = legal_spell_modes(
+                        eng,
+                        pid,
+                        TargetSourceIdentity::spell_face(eng, oid, face_index, pid),
+                        card_id,
+                        face,
+                        modal,
+                        &mode_cost_choices,
+                    );
                     if action.modes.iter().filter(|mode| mode.selectable).count()
                         < modal.min_modes as usize
                         || action.max_modes < action.min_modes
@@ -3099,65 +3062,15 @@ pub(super) fn legal_zone_cast_actions(
                 action.all_modes_cast_cost = all_modes_cost;
                 action.min_modes = modal.min_modes;
                 action.max_modes = max_modes;
-                action.modes = modal
-                    .modes
-                    .iter()
-                    .enumerate()
-                    .map(|(mode_index, mode)| {
-                        let program =
-                            face_mode_program(eng, &object.card_id, &face.face_id, &mode.mode_id);
-                        let needs_target = target_schema_with_program(
-                            &mode.effects,
-                            mode.targeting.as_ref(),
-                            program,
-                        )
-                        .has_targets();
-                        let target_source =
-                            TargetSourceIdentity::spell_face(eng, object.id, face_index, pid);
-                        let mut targets = compute_spell_targets_with_program(
-                            eng,
-                            pid,
-                            target_source,
-                            &mode.effects,
-                            mode.targeting.as_ref(),
-                            &face.cost_modifiers,
-                            program,
-                        );
-                        apply_cast_cost_target_requirements(
-                            eng,
-                            pid,
-                            target_source,
-                            face,
-                            &mode_cost_choices,
-                            mode.targeting.as_ref(),
-                            &mut targets,
-                        );
-                        let linked_cost = legal_mode_cast_cost_link(face, &mode_cost_choices, mode);
-                        rv1::LegalSpellMode {
-                            mode_index: mode_index as u32,
-                            label: mode_fallback(&face.name, &mode.mode_id),
-                            selectable: (!needs_target
-                                || spell_target_groups_are_selectable(&targets))
-                                && linked_cost
-                                    .as_ref()
-                                    .is_none_or(|(_, selectable)| *selectable),
-                            needs_target,
-                            targets: Some(targets),
-                            presentation: Some(presentation_ref(
-                                eng.registry,
-                                &object.card_id,
-                                &face.face_id,
-                                [
-                                    PresentationPath::Spell,
-                                    PresentationPath::Mode(&mode.mode_id),
-                                ],
-                                &mode.presentation,
-                                mode_fallback(&face.name, &mode.mode_id),
-                            )),
-                            linked_cast_cost: linked_cost.map(|(link, _)| link),
-                        }
-                    })
-                    .collect();
+                action.modes = legal_spell_modes(
+                    eng,
+                    pid,
+                    TargetSourceIdentity::spell_face(eng, object.id, face_index, pid),
+                    &object.card_id,
+                    face,
+                    modal,
+                    &mode_cost_choices,
+                );
                 if action.modes.iter().filter(|mode| mode.selectable).count()
                     < modal.min_modes as usize
                     || action.max_modes < action.min_modes
@@ -3337,60 +3250,15 @@ fn legal_library_top_face_cast_actions(
         action.all_modes_cast_cost = all_modes_cost;
         action.min_modes = modal.min_modes;
         action.max_modes = max_modes;
-        action.modes = modal
-            .modes
-            .iter()
-            .enumerate()
-            .map(|(mode_index, mode)| {
-                let program = face_mode_program(eng, card_id, &face.face_id, &mode.mode_id);
-                let needs_target =
-                    target_schema_with_program(&mode.effects, mode.targeting.as_ref(), program)
-                        .has_targets();
-                let target_source =
-                    TargetSourceIdentity::spell_face(eng, object_id, face_index, pid);
-                let mut targets = compute_spell_targets_with_program(
-                    eng,
-                    pid,
-                    target_source,
-                    &mode.effects,
-                    mode.targeting.as_ref(),
-                    &face.cost_modifiers,
-                    program,
-                );
-                apply_cast_cost_target_requirements(
-                    eng,
-                    pid,
-                    target_source,
-                    face,
-                    &cost_choices,
-                    mode.targeting.as_ref(),
-                    &mut targets,
-                );
-                let linked_cost = legal_mode_cast_cost_link(face, &cost_choices, mode);
-                rv1::LegalSpellMode {
-                    mode_index: mode_index as u32,
-                    label: mode_fallback(&face.name, &mode.mode_id),
-                    selectable: (!needs_target || spell_target_groups_are_selectable(&targets))
-                        && linked_cost
-                            .as_ref()
-                            .is_none_or(|(_, selectable)| *selectable),
-                    needs_target,
-                    targets: Some(targets),
-                    presentation: Some(presentation_ref(
-                        eng.registry,
-                        card_id,
-                        &face.face_id,
-                        [
-                            PresentationPath::Spell,
-                            PresentationPath::Mode(&mode.mode_id),
-                        ],
-                        &mode.presentation,
-                        mode_fallback(&face.name, &mode.mode_id),
-                    )),
-                    linked_cast_cost: linked_cost.map(|(link, _)| link),
-                }
-            })
-            .collect();
+        action.modes = legal_spell_modes(
+            eng,
+            pid,
+            TargetSourceIdentity::spell_face(eng, object_id, face_index, pid),
+            card_id,
+            face,
+            modal,
+            &cost_choices,
+        );
         if action.modes.iter().filter(|mode| mode.selectable).count() < modal.min_modes as usize
             || action.max_modes < action.min_modes
         {
