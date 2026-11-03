@@ -344,6 +344,9 @@ enum CastMethod {
   CAST_METHOD_PERMISSION = 6;
   CAST_METHOD_SNEAK = 7;
   CAST_METHOD_MADNESS = 8;
+  // A controller-owned emblem permits a normal face from that player's hand.
+  // Only the base mana cost is waived; taxes and additional costs still apply.
+  CAST_METHOD_WITHOUT_MANA_COST = 9;
 }
 
 message CastSpell {

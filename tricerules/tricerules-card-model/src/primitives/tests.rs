@@ -23017,3 +23017,20 @@ fn phase_out_program_requires_the_typed_ripples_selection_form() {
         Err(reason) if reason == "PhaseOut in a CardProgram supports only the typed Proliferate selection form"
     ));
 }
+
+#[test]
+fn tamiyo_hand_cast_emblem_is_a_closed_static_permission() {
+    let source = r#"CreateStaticEmblem(emblem_id: "tamiyo_hand_cast", display_name: "Tamiyo Emblem",
+        effects: [CastSpellsFromHandWithoutPayingManaCost])"#;
+    let effect: SpellEffectKind =
+        ron::from_str(source).expect("the exact Tamiyo emblem permission parses");
+    assert!(effect.validate(EffectContext::Ability).is_ok());
+    let with_parameters = source.replace(
+        "CastSpellsFromHandWithoutPayingManaCost",
+        "CastSpellsFromHandWithoutPayingManaCost(players: EachOpponent)",
+    );
+    assert!(
+        ron::from_str::<SpellEffectKind>(&with_parameters).is_err(),
+        "no player/zone/cost knobs broaden the fixed hand permission"
+    );
+}

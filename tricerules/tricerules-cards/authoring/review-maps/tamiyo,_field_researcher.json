@@ -1,0 +1,59 @@
+{
+  "format_version": 1,
+  "oracle_id": "9cf99129-f51a-4418-a8cc-8ca2992b17fa",
+  "spans": [
+    {
+      "face_id": "tamiyo_field_researcher",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "tamiyo_field_researcher",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    },
+    {
+      "face_id": "tamiyo_field_researcher",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/2"
+      ]
+    }
+  ],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "deck_registry::deck_coverage_tamiyo_field_researcher::tamiyo_exact_identity_and_all_three_loyalty_abilities",
+      "covers": "Exact Oracle identity, mana, type, loyalty, all three costs and source lines, observer/tap-untap/emblem AST."
+    },
+    {
+      "test": "scenario deck_coverage_tamiyo_field_researcher::tamiyo_actual_cast_enters_with_four_and_plus_one_allows_zero_or_two_distinct_creatures",
+      "covers": "Actual 1GWU cast enters with four loyalty; +1 zero or two distinct targets, duplicate rejection and one loyalty activation per turn."
+    },
+    {
+      "test": "scenario deck_coverage_tamiyo_field_researcher::tamiyo_actual_plus_one_draws_for_attacker_and_opponent_blocker",
+      "covers": "Actual +1 watched attacker and opponent blocker deal simultaneous real combat damage; exactly two cards drawn to Tamiyo controller."
+    },
+    {
+      "test": "scenario deck_coverage_tamiyo_field_researcher::tamiyo_actual_minus_two_taps_noncreature_nonlands_and_skips_only_next_untap",
+      "covers": "Actual -2 accepts noncreature artifact and creature, rejects land, taps both and skips only their next controller untap."
+    },
+    {
+      "test": "scenario deck_coverage_tamiyo_field_researcher::tamiyo_actual_ultimate_draws_three_after_source_dies_and_casts_actual_spell_without_mana",
+      "covers": "Actual -7 at seven removes source while paying, draws three, creates one persistent emblem, offers paid and free choices, and casts/resolves actual Divination with no mana."
+    },
+    {
+      "test": "scenario deck_coverage_tamiyo_field_researcher::tamiyo_actual_rejects_wrong_actor_insufficient_loyalty_and_three_targets_atomically",
+      "covers": "Wrong actor, insufficient loyalty and over-two target cohort reject atomically."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

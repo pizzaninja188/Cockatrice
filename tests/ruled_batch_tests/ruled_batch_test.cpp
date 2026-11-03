@@ -2335,6 +2335,13 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     auto *p1Cast = p1Legal.add_hand_actions();
     p1Cast->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
     p1Cast->set_cast_method(ruled::v1::CAST_METHOD_SNEAK);
+    for (const auto method : {ruled::v1::CAST_METHOD_NORMAL, ruled::v1::CAST_METHOD_WITHOUT_MANA_COST}) {
+        auto *emblemCast = p1Legal.add_hand_actions();
+        emblemCast->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+        emblemCast->set_hand_index(3);
+        emblemCast->set_card_name("Private Expensive Spell");
+        emblemCast->set_cast_method(method);
+    }
     auto *sneakChoice = p1Cast->mutable_cost_choices()->add_choices();
     sneakChoice->set_kind(ruled::v1::COST_CHOICE_KIND_RETURN_UNBLOCKED_ATTACKER);
     sneakChoice->set_zone(ruled::v1::COST_CHOICE_ZONE_BATTLEFIELD);
@@ -2453,6 +2460,9 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     ASSERT_EQ(privateAction.eligible_restricted_mana_group_ids_size(), 1);
     EXPECT_EQ(privateAction.eligible_restricted_mana_group_ids(0), 7u);
     const auto &privateSneak = forP1.legal_by_player().at(1).hand_actions(0);
+    ASSERT_EQ(forP1.legal_by_player().at(1).hand_actions_size(), 3);
+    EXPECT_EQ(forP1.legal_by_player().at(1).hand_actions(1).cast_method(), ruled::v1::CAST_METHOD_NORMAL);
+    EXPECT_EQ(forP1.legal_by_player().at(1).hand_actions(2).cast_method(), ruled::v1::CAST_METHOD_WITHOUT_MANA_COST);
     EXPECT_EQ(privateSneak.cast_method(), ruled::v1::CAST_METHOD_SNEAK);
     EXPECT_EQ(privateSneak.cost_choices().choices(0).kind(),
               ruled::v1::COST_CHOICE_KIND_RETURN_UNBLOCKED_ATTACKER);
@@ -10694,6 +10704,7 @@ TEST_F(RuledBatchTest, PendingSpellCastReconnectRestoresOnlyTheCastersPrivateTra
     pending->set_reserved_object_id(901u);
     pending->set_locked_total_cost("{1}{R}");
     pending->mutable_announcement()->mutable_source()->set_hand_index(0u);
+    pending->mutable_announcement()->set_cast_method(ruled::v1::CAST_METHOD_WITHOUT_MANA_COST);
     pending->mutable_payment_preview()->set_valid(true);
     pending->mutable_payment_preview()->set_remaining_cost("{1}{R}");
     auto *mana = batch->add_events()->mutable_mana_pool_updated();
@@ -10721,6 +10732,7 @@ TEST_F(RuledBatchTest, PendingSpellCastReconnectRestoresOnlyTheCastersPrivateTra
             const auto &own = restored.legal_by_player().at(p1->getPlayerId());
             ASSERT_TRUE(own.has_pending_spell_cast());
             EXPECT_EQ(own.pending_spell_cast().transaction_id(), 77u);
+            EXPECT_EQ(own.pending_spell_cast().announcement().cast_method(), ruled::v1::CAST_METHOD_WITHOUT_MANA_COST);
             EXPECT_EQ(own.pending_spell_cast().locked_total_cost(), "{1}{R}");
         } else {
             EXPECT_TRUE(restored.legal_by_player().empty());

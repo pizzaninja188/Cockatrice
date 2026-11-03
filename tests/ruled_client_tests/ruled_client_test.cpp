@@ -11005,9 +11005,11 @@ TEST_F(RuledClientTest, PendingSpellCastIsAuthoritativePerBatchState)
     pending->set_locked_total_cost("{2}{R}");
     pending->add_eligible_restricted_mana_group_ids(17u);
     pending->mutable_announcement()->mutable_source()->set_hand_index(3u);
+    pending->mutable_announcement()->set_cast_method(ruled::v1::CAST_METHOD_WITHOUT_MANA_COST);
     apply(begun);
     ASSERT_TRUE(state->pendingSpellCast.has_value());
     EXPECT_EQ(state->pendingSpellCast->transaction_id(), 81u);
+    EXPECT_EQ(state->pendingSpellCast->announcement().cast_method(), ruled::v1::CAST_METHOD_WITHOUT_MANA_COST);
     EXPECT_EQ(state->pendingSpellCast->locked_total_cost(), "{2}{R}");
     EXPECT_EQ(state->eligibleRestrictedManaForPendingCast(), QSet<quint32>({17u}));
 
@@ -14792,6 +14794,42 @@ TEST_F(RuledClientTest, NormalWarpAndSneakHandOffersKeepDistinctMethodsAndCostCh
               QSet<quint32>{static_cast<quint32>(ruled::v1::CAST_METHOD_WARP)});
     EXPECT_NE(RuledClientState::handCastActionKey(3, 0, ruled::v1::CAST_METHOD_NORMAL),
               RuledClientState::handCastActionKey(4, 0, ruled::v1::CAST_METHOD_NORMAL));
+}
+
+TEST_F(RuledClientTest, EmblemHandCastKeepsPaidAndWithoutManaCostChoicesDistinct)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    for (const auto method : {ruled::v1::CAST_METHOD_NORMAL, ruled::v1::CAST_METHOD_WITHOUT_MANA_COST}) {
+        auto *action = addHandAction(actions, ruled::v1::HAND_ACTION_CAST_SPELL, 3,
+                                     "Expensive Spell", 0, false,
+                                     method == ruled::v1::CAST_METHOD_NORMAL ? "{7}{U}{U}{U}" : "{0}");
+        action->set_cast_method(method);
+        action->add_eligible_restricted_mana_group_ids(static_cast<quint32>(method));
+        auto *choice = action->mutable_cost_choices()->add_choices();
+        choice->set_cost_index(0);
+        choice->set_zone(ruled::v1::COST_CHOICE_ZONE_BATTLEFIELD);
+        choice->set_kind(ruled::v1::COST_CHOICE_KIND_SACRIFICE);
+        auto *candidate = choice->add_candidate_objects()->mutable_object();
+        candidate->set_object_id(900);
+        candidate->set_zone_change_generation(12);
+    }
+    apply(batch);
+    const auto options = state->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, 3);
+    ASSERT_EQ(options.size(), 2);
+    EXPECT_EQ(options[0].castMethod, ruled::v1::CAST_METHOD_NORMAL);
+    EXPECT_EQ(options[1].castMethod, ruled::v1::CAST_METHOD_WITHOUT_MANA_COST);
+    const auto menu = RuledPendingCast::cardActionMenuOptions(options, *state, 0);
+    ASSERT_EQ(menu.size(), 2);
+    EXPECT_EQ(menu[0].label, QStringLiteral("Cast Expensive Spell ({7}{U}{U}{U})"));
+    EXPECT_EQ(menu[1].label, QStringLiteral("Cast Expensive Spell without paying its mana cost ({0})"));
+    EXPECT_EQ(menu[1].castMethod, ruled::v1::CAST_METHOD_WITHOUT_MANA_COST);
+    const auto costs = state->spellCostData(3, 0, RuledCastSource::Hand,
+                                          ruled::v1::CAST_METHOD_WITHOUT_MANA_COST);
+    ASSERT_EQ(costs.choices.size(), 1);
+    EXPECT_EQ(costs.choices[0].candidateGenerations.value(900), 12u);
+    EXPECT_NE(RuledClientState::handCastActionKey(3, 0, ruled::v1::CAST_METHOD_NORMAL),
+              RuledClientState::handCastActionKey(3, 0, ruled::v1::CAST_METHOD_WITHOUT_MANA_COST));
 }
 
 TEST_F(RuledClientTest, PrototypeHandOfferRemainsDistinctFromNormalCast)

@@ -227,6 +227,9 @@ mod mana_spending;
 mod mass_sacrifice;
 #[cfg(test)]
 mod multikicker_tests;
+
+#[cfg(test)]
+mod hand_free_cast_tests;
 mod opening;
 mod payment;
 mod phasing;

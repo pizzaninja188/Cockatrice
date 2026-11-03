@@ -222,6 +222,7 @@ pub(super) fn create_static_emblem(
                 // The marker retains this permission for the loyalty-timing query.
             }
             StaticEmblemEffect::OpponentsCantCastNoncreatureSpells => {}
+            StaticEmblemEffect::CastSpellsFromHandWithoutPayingManaCost => {}
             StaticEmblemEffect::PreventAllButOneDamageToYouAndYourPlaneswalkers => {
                 // The marker supplies lifetime identity, not a physical replacement source.
                 // The default empty presentation keeps replacement choices source-free.

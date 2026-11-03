@@ -73,7 +73,9 @@ bool supportedSchema()
             appendEnum(contract, file->enum_type(i));
         const QByteArray digest = QCryptographicHash::hash(
             QByteArray(contract.data(), static_cast<qsizetype>(contract.size())), QCryptographicHash::Sha256).toHex();
-        const QByteArray expected("fbde33fc3d600f53250c861d897602247fa824c76f687c1011d5456bfe2ea434");
+        // Tamiyo appends CastMethod::WITHOUT_MANA_COST (9). Its hand source and pending
+        // transaction reuse the same object/slot domains; no field or visibility changed.
+        const QByteArray expected("a615b7199d565167d5524b5c99be991b2c4e7cf8f3354aa29c83a2e3dc0b359c");
         if (digest != expected)
             qCritical() << "ruled presentation schema needs an identity audit:" << digest;
         return digest == expected;

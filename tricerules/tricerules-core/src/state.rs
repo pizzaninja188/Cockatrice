@@ -3698,6 +3698,7 @@ pub enum SpellCastMethod {
     Warp,
     Permission,
     Sneak,
+    WithoutManaCost,
 }
 
 impl SpellCastMethod {
@@ -3717,6 +3718,7 @@ impl SpellCastMethod {
             Self::Warp => Some("Warp"),
             Self::Permission => Some("Alternative cost"),
             Self::Sneak => Some("Sneak"),
+            Self::WithoutManaCost => Some("Without paying its mana cost"),
         }
     }
 }

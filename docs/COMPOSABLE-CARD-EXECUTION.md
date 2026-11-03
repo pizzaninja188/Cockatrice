@@ -273,8 +273,21 @@ split trample damage triggers once; separate double-strike steps can trigger twi
 603.2c; cardinality inferred from the official Tamiyo and Five-Alarm Fire rulings). Source departure
 does not end the watch. Cleanup and opponent turns retain it; the captured controller's next actual
 turn expires it before turn-start work (CR 500.4), and controller departure prevents new triggers
-(CR 800.4d). Jace's grouped, cleanup-limited loot observer stays separate. This capability does not
-admit Tamiyo or change the protocol/client contract; her hand-free-cast emblem remains separate.
+(CR 800.4d). Jace's grouped, cleanup-limited loot observer stays separate.
+
+Tamiyo now combines that observer with the existing nonland Tap/SkipNextUntap pair and a closed
+`CastSpellsFromHandWithoutPayingManaCost` static emblem. Its controller receives a distinct
+`CAST_METHOD_WITHOUT_MANA_COST` hand offer alongside the ordinary paid offer. Announcement,
+pending payment preview and commit require the live controller-owned emblem. Only the base mana
+cost is waived: ordinary timing, targets, modes, mandatory and optional additional costs, taxes
+and reductions remain in the shared locked-cost pipeline (CR 118.9a-d, 601.2f). Mana X is zero
+(CR 107.3b), while printed mana cost and mana value remain unchanged. Prototype and other
+alternative methods cannot combine with this method; lands and other zones remain excluded.
+The method survives existing private offer, announcement, cancellation and reconnect contracts,
+and Qt retains separate paid/free menu entries. Actual hand-origin receipts still enable Narset's
+Rebound observer. The emblem persists after Tamiyo leaves; draw replacements finish before its
+creation. Omniscience demonstrates the same hand-casting mechanic, but its battlefield permission
+provider and complete card are not admitted by this emblem-only implementation.
 
 The bounded 2026-10-19 Scalestorm Summoner port admits one finite `ProgramIf` condition:
 `MaximumPower` among the ability controller's creatures, with a positive `min`, no `max`, default

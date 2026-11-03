@@ -690,7 +690,7 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
         const auto method =
             action.kind() == ruled::v1::HAND_ACTION_CAST_SPELL ? action.cast_method() : ruled::v1::CAST_METHOD_NORMAL;
         if (method != ruled::v1::CAST_METHOD_NORMAL && method != ruled::v1::CAST_METHOD_WARP &&
-            method != ruled::v1::CAST_METHOD_SNEAK)
+            method != ruled::v1::CAST_METHOD_SNEAK && method != ruled::v1::CAST_METHOD_WITHOUT_MANA_COST)
             continue;
         const bool prototyped = action.prototyped();
         const auto castKey = RuledClientState::handCastActionKey(handIndex, faceIndex, method, prototyped);

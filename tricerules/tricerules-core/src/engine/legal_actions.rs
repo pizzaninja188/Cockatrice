@@ -2481,6 +2481,14 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                 });
                 let mut cast_actions = Vec::new();
                 if cast_ok {
+                    if face_cast_permitted && eng.hand_without_mana_cost_permitted(pid) {
+                        let mut without_mana_cost = action.clone();
+                        without_mana_cost.cast_method = rv1::CastMethod::WithoutManaCost as i32;
+                        without_mana_cost.cost = ManaCost::default().to_string();
+                        // This alternative cost cannot combine with Prototype or another
+                        // alternative method. Reuse the normal face's targets/additional costs.
+                        actions.push(without_mana_cost);
+                    }
                     cast_actions.push(action);
                     cast_actions.extend(warp);
                 }

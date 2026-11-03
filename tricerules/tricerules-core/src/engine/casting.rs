@@ -412,7 +412,22 @@ impl GameEngine {
             })
     }
 
-    pub(super) fn validate_pending_spell_cast_emblem_prohibition(
+    pub(super) fn hand_without_mana_cost_permitted(&self, caster: PlayerId) -> bool {
+        self.state
+            .player_idx(caster)
+            .is_some_and(|idx| !self.state.players[idx].has_lost)
+            && self.state.static_emblems.iter().any(|emblem| {
+                emblem.controller == caster
+                    && emblem.effects.iter().any(|effect| {
+                        matches!(
+                            effect,
+                            StaticEmblemEffect::CastSpellsFromHandWithoutPayingManaCost
+                        )
+                    })
+            })
+    }
+
+    pub(super) fn validate_pending_spell_cast_emblem_constraints(
         &self,
         pending: &crate::state::PendingSpellCastState,
     ) -> Result<(), EngineError> {
@@ -421,6 +436,13 @@ impl GameEngine {
             .as_ref()
             .ok_or(EngineError::Illegal("missing locked spell cost"))?
             .prepared;
+        if prepared.cast_method == SpellCastMethod::WithoutManaCost
+            && !self.hand_without_mana_cost_permitted(pending.caster)
+        {
+            return Err(EngineError::Illegal(
+                "hand cast without mana cost requires your emblem",
+            ));
+        }
         let face = self
             .registry
             .get(&prepared.card_id)
@@ -644,7 +666,7 @@ impl GameEngine {
         {
             return Err(EngineError::Illegal("reserved spell source changed"));
         }
-        self.validate_pending_spell_cast_emblem_prohibition(state)?;
+        self.validate_pending_spell_cast_emblem_constraints(state)?;
         let internal = self
             .pending_spell_cast_internal
             .clone()
@@ -991,6 +1013,7 @@ impl GameEngine {
             Ok(rv1::CastMethod::Sneak) => SpellCastMethod::Sneak,
             Ok(rv1::CastMethod::SiegeDefeat) => SpellCastMethod::SiegeDefeat,
             Ok(rv1::CastMethod::Madness) => SpellCastMethod::Madness,
+            Ok(rv1::CastMethod::WithoutManaCost) => SpellCastMethod::WithoutManaCost,
             Ok(rv1::CastMethod::Unspecified) | Err(_) => {
                 return Err(EngineError::Illegal("missing or invalid cast method"));
             }
@@ -1025,9 +1048,19 @@ impl GameEngine {
                 }
                 if !matches!(
                     cast_method,
-                    SpellCastMethod::Normal | SpellCastMethod::Warp | SpellCastMethod::Sneak
+                    SpellCastMethod::Normal
+                        | SpellCastMethod::Warp
+                        | SpellCastMethod::Sneak
+                        | SpellCastMethod::WithoutManaCost
                 ) {
                     return Err(EngineError::Illegal("invalid hand cast method"));
+                }
+                if cast_method == SpellCastMethod::WithoutManaCost
+                    && !self.hand_without_mana_cost_permitted(player)
+                {
+                    return Err(EngineError::Illegal(
+                        "hand cast without mana cost requires your emblem",
+                    ));
                 }
                 (
                     *self.state.players[idx]
@@ -1202,6 +1235,11 @@ impl GameEngine {
             .face(face_index)
             .ok_or(EngineError::Illegal("bad face index"))?;
         let characteristic_face = if command.prototyped {
+            if cast_method == SpellCastMethod::WithoutManaCost {
+                return Err(EngineError::Illegal(
+                    "Prototype cannot combine with casting without mana cost",
+                ));
+            }
             face.prototyped_face()
                 .ok_or(EngineError::Illegal("card has no Prototype mode"))?
         } else {
@@ -1253,6 +1291,7 @@ impl GameEngine {
         let face_is_sorcery = face.is_sorcery;
         let face_instant_speed = castable_at_instant_speed(&face);
         let face_mana = match cast_method {
+            SpellCastMethod::WithoutManaCost => ManaCost::default(),
             SpellCastMethod::Normal => characteristic_face.mana_cost.clone(),
             SpellCastMethod::Warp => face
                 .warp_cost
