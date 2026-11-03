@@ -571,28 +571,28 @@ pub struct CompiledProgram {
     pub slots: Vec<CompiledSlot>,
 }
 
-fn block_contains_nonmodal_ability_effect(block: &AuthoredBlock) -> bool {
-    block
-        .steps
-        .iter()
-        .any(|instruction| match &instruction.kind {
-            InstructionKind::Perform(effect) => effect.contains_nonmodal_ability_effect(),
+fn validate_block_capability_frames(block: &AuthoredBlock) -> Result<(), String> {
+    for instruction in &block.steps {
+        match &instruction.kind {
+            InstructionKind::Perform(effect) => effect.validate_capability_frame("CardProgram")?,
             InstructionKind::If { yes, no, .. } | InstructionKind::IfResult { yes, no, .. } => {
-                block_contains_nonmodal_ability_effect(yes)
-                    || block_contains_nonmodal_ability_effect(no)
+                validate_block_capability_frames(yes)?;
+                validate_block_capability_frames(no)?;
             }
             InstructionKind::Choose {
                 branches,
                 otherwise,
                 ..
             } => {
-                block_contains_nonmodal_ability_effect(otherwise)
-                    || branches
-                        .iter()
-                        .any(|branch| block_contains_nonmodal_ability_effect(&branch.body))
+                validate_block_capability_frames(otherwise)?;
+                for branch in branches {
+                    validate_block_capability_frames(&branch.body)?;
+                }
             }
-            InstructionKind::ImportCastPayment | InstructionKind::DrawCountChoice { .. } => false,
-        })
+            InstructionKind::ImportCastPayment | InstructionKind::DrawCountChoice { .. } => {}
+        }
+    }
+    Ok(())
 }
 
 struct Compiler<'a> {
@@ -669,12 +669,7 @@ impl CompiledProgram {
         cast_cost_groups: &[CastCostGroupDef],
         cast_payment_profile: Option<ProgramCastPaymentProfile>,
     ) -> Result<Self, String> {
-        if block_contains_nonmodal_ability_effect(&program.body) {
-            return Err(
-                "Nonmodal ability-only effects are supported only in direct legacy ability effect lists"
-                    .into(),
-            );
-        }
+        validate_block_capability_frames(&program.body)?;
         let source_program = normalize_authored_program(program, targeting)?;
         let source_program = source_program.as_ref();
         let mut compiled = Self::compile_internal(
@@ -2247,456 +2242,12 @@ impl Compiler<'_> {
                                 .into(),
                         );
                     }
-                    if let SpellEffectKind::GainLife { who, .. } = effect.as_ref() {
-                        // Preserve the established ability-context recipient while keeping the
-                        // new target-group recipient closed to the separately validated Swords
-                        // profile. ProgramInputPlayer is rejected by the shared typed-input gate
-                        // below because GainLife is not an admitted explicit-player consumer.
-                        if *who != PlayerRecipient::Controller
-                            && !matches!(who, PlayerRecipient::ControllerOfTargetGroup { .. })
-                            && *who != PlayerRecipient::ProgramInputPlayer
-                        {
-                            validate_program_recipient(*who, self.context, "GainLife recipient")?;
-                        }
-                    }
-                    let supported_program_input_consumer = matches!(
-                        effect.as_ref(),
-                        SpellEffectKind::CreateTokens {
-                            who: PlayerRecipient::ProgramInputPlayer,
-                            ..
-                        } | SpellEffectKind::CreateDelayedTrigger {
-                            affected_player: Some(PlayerRecipient::ProgramInputPlayer),
-                            ..
-                        }
-                    );
-                    if effect.contains_program_input_player() && !supported_program_input_consumer {
-                        return Err(
-                            "ProgramInputPlayer is supported only by CreateTokens and CreateDelayedTrigger through a typed Program input".into(),
-                        );
-                    }
-                    let direct_count_input = matches!(
-                        effect.as_ref(),
-                        SpellEffectKind::DamagePlayer {
-                            amount: Amount::Count(CountExpression::ProgramInputCount),
-                            who: PlayerRecipient::Controller,
-                        } | SpellEffectKind::Draw {
-                            who: PlayerRecipient::EachPlayer,
-                            count: Amount::Count(CountExpression::ProgramInputCount),
-                        }
-                    ) || is_generic_program_input_count_consumer(effect);
-                    if effect
-                        .result_consuming_amount()
-                        .is_some_and(Amount::uses_program_input_count)
-                        && !direct_count_input
-                    {
-                        return Err(
-                            "ProgramInputCount is supported only by direct typed Count Program inputs".into(),
-                        );
-                    }
-                    let authored_effect = effect;
-                    let (input, lowered_effect) = compile_operation_input(
-                        effect,
-                        instruction.input.as_deref(),
-                        &names,
-                        &self.slots,
-                        &steps,
-                        &self.search_result_slots,
-                    )?;
-                    let effect = lowered_effect.as_ref().unwrap_or(effect);
-                    if operation_needs_affected_player(effect) {
-                        self.required_inputs
-                            .insert(ProgramRequiredInput::TriggerAffectedPlayer);
-                    }
-                    let mut target_group_max = None;
-                    let target_group_index = if matches!(
-                        effect.as_ref(),
-                        SpellEffectKind::CounterTargetAbility
-                    ) {
-                        let (group_index, group_max) = counter_target_ability_target_group(
-                            &instruction.id,
-                            &self.target_references,
-                            self.targeting,
-                        )?;
-                        target_group_max = Some(group_max);
-                        Some(group_index)
-                    } else if matches!(
-                        effect.as_ref(),
-                        SpellEffectKind::Exile {
-                            subject: EffectSubject::Chosen(_),
-                            linked_exile_id: None,
-                        }
-                    ) {
-                        let (group_index, group_max) = chosen_optional_single_target_group(
-                            &instruction.id,
-                            &self.target_references,
-                            self.targeting,
-                            ProgramTargetRole::Subject,
-                            "Exile",
-                        )?;
-                        target_group_max = Some(group_max);
-                        Some(group_index)
-                    } else if self.context == EffectContext::Spell {
-                        match effect.as_ref() {
-                            SpellEffectKind::Destroy {
-                                subject: EffectSubject::Chosen(_),
-                            } => Some(spell_destroy_target_group(
-                                &instruction.id,
-                                &self.target_references,
-                            )?),
-                            SpellEffectKind::ChooseHandCards { .. } => {
-                                Some(spell_hand_discard_target_group(
-                                    &instruction.id,
-                                    &self.target_references,
-                                )?)
-                            }
-                            SpellEffectKind::PutInOwnersLibrary {
-                                subject: EffectSubject::Chosen(_),
-                                ..
-                            } => {
-                                let (group_index, group_max) = chosen_single_target_group(
-                                    &instruction.id,
-                                    &self.target_references,
-                                    self.targeting,
-                                    ProgramTargetRole::Subject,
-                                    "PutInOwnersLibrary",
-                                )?;
-                                target_group_max = Some(group_max);
-                                Some(group_index)
-                            }
-                            SpellEffectKind::PutCounters {
-                                subject: EffectSubject::Chosen(_),
-                                ..
-                            } => {
-                                let (group_index, group_max) = chosen_single_target_group(
-                                    &instruction.id,
-                                    &self.target_references,
-                                    self.targeting,
-                                    ProgramTargetRole::Target,
-                                    "PutCounters",
-                                )?;
-                                target_group_max = Some(group_max);
-                                Some(group_index)
-                            }
-                            SpellEffectKind::Untap {
-                                subject: EffectSubject::Chosen(_),
-                            }
-                            | SpellEffectKind::PumpTarget {
-                                subject: EffectSubject::Chosen(_),
-                                ..
-                            } => {
-                                let (group_index, group_max) = chosen_single_target_group(
-                                    &instruction.id,
-                                    &self.target_references,
-                                    self.targeting,
-                                    ProgramTargetRole::Target,
-                                    "chosen creature effect",
-                                )?;
-                                target_group_max = Some(group_max);
-                                Some(group_index)
-                            }
-                            SpellEffectKind::AttachEquipment {
-                                equipment: EffectSubject::PreviousEffectObject,
-                                creature: EffectSubject::Chosen(_),
-                            } => {
-                                let (group_index, group_max) = chosen_optional_single_target_group(
-                                    &instruction.id,
-                                    &self.target_references,
-                                    self.targeting,
-                                    ProgramTargetRole::Target,
-                                    "AttachEquipment",
-                                )?;
-                                target_group_max = Some(group_max);
-                                Some(group_index)
-                            }
-                            SpellEffectKind::ApplyCombatRestriction {
-                                scope: super::CombatRestrictionScope::Chosen(_),
-                                ..
-                            } => {
-                                let (group_index, group_max) = chosen_single_target_group(
-                                    &instruction.id,
-                                    &self.target_references,
-                                    self.targeting,
-                                    ProgramTargetRole::Target,
-                                    "ApplyCombatRestriction",
-                                )?;
-                                target_group_max = Some(group_max);
-                                Some(group_index)
-                            }
-                            _ => None,
-                        }
-                    } else if self.context == EffectContext::Ability {
-                        match effect.as_ref() {
-                            SpellEffectKind::Tap {
-                                subject: EffectSubject::Chosen(_),
-                            }
-                            | SpellEffectKind::PutCounters {
-                                subject: EffectSubject::Chosen(_),
-                                ..
-                            }
-                            | SpellEffectKind::Untap {
-                                subject: EffectSubject::Chosen(_),
-                            }
-                            | SpellEffectKind::PumpTarget {
-                                subject: EffectSubject::Chosen(_),
-                                ..
-                            } => {
-                                let (group_index, group_max) = chosen_single_target_group(
-                                    &instruction.id,
-                                    &self.target_references,
-                                    self.targeting,
-                                    ProgramTargetRole::Target,
-                                    "chosen permanent effect",
-                                )?;
-                                target_group_max = Some(group_max);
-                                Some(group_index)
-                            }
-                            SpellEffectKind::AttachEquipment {
-                                equipment: EffectSubject::PreviousEffectObject,
-                                creature: EffectSubject::Chosen(_),
-                            } => {
-                                let (group_index, group_max) = chosen_optional_single_target_group(
-                                    &instruction.id,
-                                    &self.target_references,
-                                    self.targeting,
-                                    ProgramTargetRole::Target,
-                                    "AttachEquipment",
-                                )?;
-                                target_group_max = Some(group_max);
-                                Some(group_index)
-                            }
-                            SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { subjects }
-                                if single_source_chosen_shuffle_filter(subjects).is_some() =>
-                            {
-                                let (group_index, group_max) = chosen_single_target_group(
-                                    &instruction.id,
-                                    &self.target_references,
-                                    self.targeting,
-                                    ProgramTargetRole::Target,
-                                    "ShufflePermanentsIntoOwnersLibraries",
-                                )?;
-                                target_group_max = Some(group_max);
-                                Some(group_index)
-                            }
-                            SpellEffectKind::ChoosePermanents { .. }
-                                if targeted_opponent_singleton_choice_group(effect).is_some() =>
-                            {
-                                let expected_group =
-                                    targeted_opponent_singleton_choice_group(effect)
-                                        .expect("guarded above");
-                                let (group_index, group_max) = chosen_single_target_group(
-                                    &instruction.id,
-                                    &self.target_references,
-                                    self.targeting,
-                                    ProgramTargetRole::Target,
-                                    "ChoosePermanents targeted-opponent choice",
-                                )?;
-                                if group_index != expected_group {
-                                    return Err("ChoosePermanents targeted-opponent choice must use its chooser target group".into());
-                                }
-                                target_group_max = Some(group_max);
-                                Some(group_index)
-                            }
-                            SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries {
-                                ..
-                            } if targeted_opponent_nonland_shuffle_group(effect).is_some() => {
-                                let expected_group =
-                                    targeted_opponent_nonland_shuffle_group(effect)
-                                        .expect("guarded above");
-                                let (group_index, group_max) = chosen_single_target_group(
-                                    &instruction.id,
-                                    &self.target_references,
-                                    self.targeting,
-                                    ProgramTargetRole::Target,
-                                    "ShuffleNonlandPermanentsIntoOwnersLibraries",
-                                )?;
-                                if group_index != expected_group {
-                                    return Err("ShuffleNonlandPermanentsIntoOwnersLibraries must use its targeted-player group".into());
-                                }
-                                target_group_max = Some(group_max);
-                                Some(group_index)
-                            }
-                            SpellEffectKind::MoveGraveyardCards {
-                                destination: GraveyardDestination::Exile,
-                                ..
-                            } => {
-                                let (group_index, group_max) =
-                                    ability_graveyard_exile_target_group(
-                                        &instruction.id,
-                                        &self.target_references,
-                                        self.targeting,
-                                    )?;
-                                target_group_max = Some(group_max);
-                                Some(group_index)
-                            }
-                            SpellEffectKind::MoveGraveyardCards {
-                                destination: GraveyardDestination::Battlefield { .. },
-                                ..
-                            } => {
-                                let (group_index, group_max) =
-                                    ability_graveyard_battlefield_target_group(
-                                        &instruction.id,
-                                        &self.target_references,
-                                        self.targeting,
-                                    )?;
-                                target_group_max = Some(group_max);
-                                Some(group_index)
-                            }
-                            _ => None,
-                        }
-                    } else {
-                        None
-                    };
-                    let mut result_types = if instruction.bind.is_empty()
-                        && effect
-                            .typed_resultful_battlefield_search_result_type()
-                            .is_some()
-                    {
-                        validate_resultless_direct_battlefield_library_search(effect, self.context)?
-                    } else {
-                        validate_and_result_types(
-                            effect,
-                            self.context,
-                            target_group_index,
-                            target_group_max,
-                            instruction.bind.len(),
-                            self,
-                        )?
-                    };
-                    if matches!(
-                        effect.as_ref(),
-                        SpellEffectKind::CounterTargetSpell {
-                            unless_controller_pays: None,
-                            ..
-                        }
-                    ) && !instruction.bind.is_empty()
-                    {
-                        if instruction.bind.len() != 1 || self.context != EffectContext::Spell {
-                            return Err(
-                                "nonpayment CounterTargetSpell may bind one TargetedSpellController result only in a spell Program".into(),
-                            );
-                        }
-                        result_types = vec![ResultType::TargetedSpellController];
-                    }
-                    validate_equipment_selection_input(
-                        effect,
-                        input,
-                        &steps,
-                        &self.slots,
-                        target_group_index,
-                    )?;
-                    if self.allow_trigger_object_linked_exile
-                        && matches!(
-                            effect.as_ref(),
-                            SpellEffectKind::Exile {
-                                subject: EffectSubject::TriggerObject,
-                                linked_exile_id: Some(_),
-                                ..
-                            }
-                        )
-                    {
-                        self.required_inputs
-                            .insert(ProgramRequiredInput::TriggerLinkedExileObject);
-                    }
-                    if target_group_index.is_some()
-                        && matches!(
-                            effect.as_ref(),
-                            SpellEffectKind::Destroy {
-                                subject: EffectSubject::Chosen(_),
-                            } | SpellEffectKind::ChooseHandCards { .. }
-                        )
-                        && (instruction.bind.len() != 1 || result_types.len() != 1)
-                    {
-                        let label =
-                            if matches!(effect.as_ref(), SpellEffectKind::ChooseHandCards { .. }) {
-                                "ChooseHandCards"
-                            } else {
-                                "Destroy"
-                            };
-                        return Err(format!(
-                            "spell_program {label} instruction '{}' must bind its single typed result",
-                            instruction.id
-                        ));
-                    }
-                    if target_group_index.is_some()
-                        && matches!(
-                            effect.as_ref(),
-                            SpellEffectKind::MoveGraveyardCards {
-                                destination: GraveyardDestination::Exile,
-                                ..
-                            }
-                        )
-                        && (instruction.bind.len() != 1 || result_types.len() != 1)
-                    {
-                        return Err(format!(
-                            "ability_program MoveGraveyardCards Exile instruction '{}' must bind its single typed result",
-                            instruction.id
-                        ));
-                    }
-                    if matches!(
-                        effect.as_ref(),
-                        SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
-                    ) {
-                        self.required_inputs
-                            .insert(ProgramRequiredInput::TriggerAffectedPlayer);
-                        self.required_inputs
-                            .insert(ProgramRequiredInput::TriggerTargetingStackObject);
-                    }
-                    if matches!(
-                        effect.as_ref(),
-                        SpellEffectKind::CopyTriggeringActivatedAbility
-                    ) {
-                        self.required_inputs
-                            .insert(ProgramRequiredInput::TriggerActivatedStackObject);
-                    }
-                    if matches!(
-                        effect.as_ref(),
-                        SpellEffectKind::CreateTokenCopies {
-                            source: TokenCopySource::TriggerObject,
-                            ..
-                        }
-                    ) {
-                        self.required_inputs
-                            .insert(ProgramRequiredInput::TriggerObservedObject);
-                    }
-                    if matches!(
-                        effect.as_ref(),
-                        SpellEffectKind::ReturnTriggeredCard {
-                            reference: super::TriggeredCardReference::ExactTriggerObject,
-                            ..
-                        }
-                    ) {
-                        self.required_inputs
-                            .insert(ProgramRequiredInput::CapturedTriggerObjectRef);
-                    }
-                    if (matches!(
-                        effect.as_ref(),
-                        SpellEffectKind::SearchLibrary {
-                            selection_bounds: Some(_),
-                            ..
-                        } if !is_resultless_direct_top_library_search(effect)
-                            && !is_resultless_direct_hand_library_search(effect)
-                            && !is_resultless_direct_battlefield_library_search(effect)
-                            && effect
-                                .typed_resultful_battlefield_search_result_type()
-                                .is_none()
-                            && !is_resultless_conditional_top_search(effect)
-                    ) || matches!(
-                        effect.as_ref(),
-                        SpellEffectKind::RevealCohort
-                            | SpellEffectKind::ChooseCohortPartition { .. }
-                    )) && instruction.bind.len() != 1
-                    {
-                        return Err(format!(
-                            "instruction '{}' must bind its typed cohort result",
-                            instruction.id
-                        ));
-                    }
+                    let validated = compile_operation(self, instruction, effect, &names, &steps)?;
+                    self.required_inputs.extend(validated.required_inputs);
                     (
-                        input,
-                        result_types,
-                        CompiledInstructionKind::Perform(
-                            lowered_effect.unwrap_or_else(|| authored_effect.clone()),
-                        ),
+                        validated.input,
+                        validated.result_types,
+                        CompiledInstructionKind::Perform(validated.effect),
                     )
                 }
                 InstructionKind::If { condition, yes, no } => {
@@ -3245,23 +2796,6 @@ impl Compiler<'_> {
         }
         Ok((CompiledBlock { steps, yields }, result_types))
     }
-}
-
-fn operation_needs_affected_player(effect: &SpellEffectKind) -> bool {
-    matches!(
-        effect,
-        SpellEffectKind::Draw {
-            who: PlayerRecipient::AffectedPlayer
-                | PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
-            ..
-        } | SpellEffectKind::Discard {
-            who: PlayerRecipient::AffectedPlayer,
-            ..
-        } | SpellEffectKind::Mill {
-            who: PlayerRecipient::AffectedPlayer,
-            ..
-        }
-    )
 }
 
 fn compile_program_condition(
@@ -4089,373 +3623,65 @@ fn validate_proliferated_phase_out_input(
     )
 }
 
-fn is_generic_program_input_count_consumer(effect: &EffectOp) -> bool {
-    matches!(
-        effect,
-        EffectOp::PumpTarget {
-            subject: EffectSubject::Source,
-            scale: Some(crate::PtScale {
-                basis: crate::PtScaleBasis::Amount(Amount::Count(
-                    CountExpression::ProgramInputCount,
-                )),
-                ..
-            }),
-            ..
-        } | EffectOp::DamageAttackedPlayerOrPlaneswalker {
-            amount: Amount::Count(CountExpression::ProgramInputCount),
-        }
-    )
+struct ValidatedOperation {
+    effect: Box<EffectOp>,
+    input: Option<ResultSlotId>,
+    result_types: Vec<ResultType>,
+    required_inputs: std::collections::BTreeSet<ProgramRequiredInput>,
 }
 
-/// Resolve, lower and validate one operation's explicit result dependency. Cross-instruction
-/// target-schema checks follow compilation because they need the complete owner's bindings.
-fn compile_operation_input(
-    effect: &EffectOp,
-    input: Option<&str>,
-    names: &HashMap<String, ResultSlotId>,
-    slots: &[CompiledSlot],
-    steps: &[CompiledInstruction],
-    search_result_slots: &HashSet<ResultSlotId>,
-) -> Result<(Option<ResultSlotId>, Option<Box<EffectOp>>), String> {
-    let input = compile_input(effect, input, names, slots)?;
-    let lowered = if effect.contains_bound_card_result_count() {
-        let mut lowered = effect.clone();
-        lower_bound_card_result_count(&mut lowered, input, slots)?;
-        Some(Box::new(lowered))
-    } else {
-        None
-    };
-    let effect = lowered.as_deref().unwrap_or(effect);
-    match effect {
-        effect
-            if is_search_result_behold_consumer(effect)
-                || is_search_result_untap_consumer(effect) =>
-        {
-            validate_search_result_input(effect, input, search_result_slots, slots)?
-        }
-        effect if previous_effect_card_result_characteristic_sum_filter(effect).is_some() => {
-            validate_program_card_result_characteristic_sum_input(effect, input, slots)?
-        }
-        EffectOp::GainLife { .. } => {
-            validate_program_gain_life_result_count_input(effect, input, slots)?
-        }
-        EffectOp::Draw { .. } => validate_program_draw_result_count_input(effect, input, slots)?,
-        EffectOp::LoseLife { .. } => {
-            validate_program_revealed_card_mana_value_input(effect, input, steps, slots)?
-        }
-        EffectOp::ReturnToOwnersHand { .. } => {
-            validate_return_to_owners_hand_input(effect, input, slots)?
-        }
-        EffectOp::TapChosenPermanents => {
-            validate_tap_chosen_permanents_input(effect, input, steps, slots)?
-        }
-        EffectOp::ChooseProliferatedPermanents => {
-            validate_proliferated_choice_input(effect, input, steps, slots)?
-        }
-        EffectOp::PhaseOut { .. } => {
-            validate_proliferated_phase_out_input(effect, input, steps, slots)?
-        }
-        _ => {}
+/// A resolved name is not an admitted dependency until its operation checks the type.
+struct OperationDependency<'a> {
+    slot: Option<ResultSlotId>,
+    name: Option<&'a str>,
+    slots: &'a [CompiledSlot],
+    checked: bool,
+}
+
+impl<'a> OperationDependency<'a> {
+    fn resolve(
+        name: Option<&'a str>,
+        names: &HashMap<String, ResultSlotId>,
+        slots: &'a [CompiledSlot],
+    ) -> Result<Self, String> {
+        let slot = name
+            .map(|name| {
+                names
+                    .get(name)
+                    .copied()
+                    .ok_or_else(|| format!("input result '{name}' is not in scope"))
+            })
+            .transpose()?;
+        Ok(Self {
+            slot,
+            name,
+            slots,
+            checked: false,
+        })
     }
-    Ok((input, lowered))
-}
 
-/// Resolve and check an operation's named input in one operation-family dispatch.
-/// Producer and target-schema checks remain separate: they need the lowered effect and
-/// surrounding compiled instructions rather than only a slot's static type.
-fn compile_input(
-    effect: &EffectOp,
-    input: Option<&str>,
-    names: &HashMap<String, ResultSlotId>,
-    slots: &[CompiledSlot],
-) -> Result<Option<ResultSlotId>, String> {
-    let require = |accepts: &dyn Fn(&ResultType) -> bool| {
-        let name = input.ok_or("instruction requires an explicitly bound input result")?;
-        let slot = names
-            .get(name)
-            .copied()
-            .ok_or_else(|| format!("input result '{name}' is not in scope"))?;
-        let actual = slots
-            .get(slot.0 as usize)
+    fn require(&mut self, accepts: &dyn Fn(&ResultType) -> bool) -> Result<(), String> {
+        let name = self
+            .name
+            .ok_or("instruction requires an explicitly bound input result")?;
+        let actual = self
+            .slot
+            .and_then(|slot| self.slots.get(slot.0 as usize))
             .ok_or_else(|| format!("input result '{name}' is unknown"))?;
+        self.checked = true;
         if !accepts(&actual.result_type) {
             return Err(format!(
                 "input result '{name}' has the wrong type for this instruction"
             ));
         }
-        Ok(Some(slot))
-    };
-    match effect {
-        EffectOp::CreateTokens {
-            who: PlayerRecipient::ProgramInputPlayer,
-            ..
-        }
-        | EffectOp::CreateDelayedTrigger {
-            affected_player: Some(PlayerRecipient::ProgramInputPlayer),
-            ..
-        } => require(&|actual| matches!(actual, ResultType::TargetedSpellController)),
-        EffectOp::ChooseCard {
-            source: ChooseCardSource::CardResultCohort { .. },
-            ..
-        } => require(&|actual| {
-            matches!(
-                actual,
-                ResultType::CardResultCohort {
-                    action: CardResultAction::Mill,
-                    ..
-                }
-            )
-        }),
-        effect if previous_effect_card_result_characteristic_sum_filter(effect).is_some() => {
-            require(&|actual| {
-                let filter = previous_effect_card_result_characteristic_sum_filter(effect)
-                    .expect("matched previous-effect characteristic sum");
-                match actual {
-                    ResultType::CardResultCohort { action, .. }
-                    | ResultType::TargetCardResultCohort { action, .. } => *action == filter.action,
-                    _ => false,
-                }
-            })
-        }
-        EffectOp::GainLife { amount, .. } if amount.card_result_filter().is_some() => {
-            require(&|actual| {
-                matches!(
-                    actual,
-                    ResultType::CardResultCohort {
-                        action: CardResultAction::Mill,
-                        ..
-                    } | ResultType::TargetCardResultCohort {
-                        action: CardResultAction::Discard,
-                        ..
-                    }
-                )
-            })
-        }
-        EffectOp::GainLife { amount, .. } if amount.uses_bound_card_result_count() => {
-            require(&|actual| {
-                matches!(
-                    actual,
-                    ResultType::CardResultCohort { .. }
-                        | ResultType::TargetCardResultCohort { .. }
-                        | ResultType::LinkedExileCardResultCohort { .. }
-                        | ResultType::CastPaymentCohort { .. }
-                        | ResultType::DiscardResult { .. }
-                )
-            })
-        }
-        EffectOp::Draw { count, .. } if count.card_result_filter().is_some() => {
-            require(&|actual| matches!(actual, ResultType::DiscardResult { .. }))
-        }
-        EffectOp::Draw { count, .. } if count.uses_bound_card_result_count() => {
-            require(&|actual| matches!(actual, ResultType::DiscardResult { .. }))
-        }
-        EffectOp::DamagePlayer {
-            amount: Amount::Count(CountExpression::ProgramInputCount),
-            who: PlayerRecipient::Controller,
-        } => {
-            require(&|actual| matches!(actual, ResultType::Count(CountResultKind::RevealedPrefix)))
-        }
-        EffectOp::Draw {
-            who: PlayerRecipient::EachPlayer,
-            count: Amount::Count(CountExpression::ProgramInputCount),
-        } => require(&|actual| {
-            matches!(
-                actual,
-                ResultType::Count(CountResultKind::JoinForcesManaPaid)
-            )
-        }),
-        effect if is_generic_program_input_count_consumer(effect) => {
-            require(&|actual| matches!(actual, ResultType::Count(_)))
-        }
-        EffectOp::RevealCohort => {
-            require(&|actual| matches!(actual, ResultType::FoundLibraryCohort))
-        }
-        EffectOp::ChooseCohortPartition { .. } => {
-            require(&|actual| matches!(actual, ResultType::RevealedLibraryCohort))
-        }
-        EffectOp::LoseLife {
-            amount: LifeAmount::RevealedCardManaValue,
-            who: PlayerRecipient::EachOpponent,
-        } => require(&|actual| matches!(actual, ResultType::RevealedCardReceipt)),
-        EffectOp::MoveCohortPartition { .. } => {
-            require(&|actual| matches!(actual, ResultType::CardPartition))
-        }
-        EffectOp::ReturnOtherLinkedExiledCards {
-            producer_ability_id,
-            linked_exile_id,
-        } => require(&|actual| {
-            matches!(
-                actual,
-                ResultType::TriggerObjectLinkedExileReceipt {
-                    producer_ability_id: receipt_producer,
-                    linked_exile_id: receipt_link,
-                    cardinality: Cardinality {
-                        min: 0,
-                        max: Some(1),
-                    },
-                } if receipt_producer == producer_ability_id
-                    && receipt_link == linked_exile_id
-            )
-        }),
-        _ if is_exiled_object_delayed_consumer(effect) => require(&|actual| {
-            matches!(
-                actual,
-                ResultType::ExiledObject {
-                    cardinality: Cardinality {
-                        min: 0,
-                        max: Some(1),
-                    },
-                }
-            )
-        }),
-        EffectOp::RemoveAllAbilities {
-            subject: EffectSubject::PreviousEffectObject,
-            duration: ResolvingEffectDuration::WhileSourceOnBattlefield,
-        } => require(&|actual| {
-            matches!(
-                actual,
-                ResultType::CounteredAbilitySource {
-                    cardinality: Cardinality {
-                        min: 0,
-                        max: Some(1),
-                    },
-                }
-            )
-        }),
-        EffectOp::AttachEquipment {
-            equipment: EffectSubject::Source,
-            creature: EffectSubject::PreviousEffectObject,
-        } => require(&|actual| {
-            matches!(
-                actual,
-                ResultType::ManifestedPermanent {
-                    cardinality: Cardinality {
-                        min: 0,
-                        max: Some(1),
-                    },
-                }
-            )
-        }),
-        EffectOp::AttachEquipment {
-            equipment: EffectSubject::Source,
-            creature: EffectSubject::PreviousEffectObjects,
-        } => require(&|actual| {
-            matches!(
-                actual,
-                ResultType::CreatedTokenBatch {
-                    cardinality: Cardinality { min: 0, max: None },
-                }
-            )
-        }),
-        EffectOp::AttachEquipment {
-            equipment: EffectSubject::PreviousEffectObject,
-            creature: EffectSubject::Chosen(_),
-        } => require(&|actual| {
-            matches!(
-                actual,
-                ResultType::PermanentSelection {
-                    chooser: PlayerRecipient::Controller,
-                    filter,
-                    cardinality: Cardinality {
-                        min: 0,
-                        max: Some(1),
-                    },
-                } if is_equipment_attach_filter(filter)
-            )
-        }),
-        EffectOp::GrantKeywords {
-            subject: EffectSubject::PreviousEffectObject,
-            ..
-        } => require(&|actual| {
-            matches!(
-                actual,
-                ResultType::PermanentSelection {
-                    cardinality: Cardinality {
-                        min: 0,
-                        max: Some(1),
-                    },
-                    ..
-                }
-            )
-        }),
-        EffectOp::CreateReflexiveTrigger { .. }
-            if is_counter_placement_reflexive_consumer(effect) =>
-        {
-            require(&|actual| {
-                let counter = counter_placement_reflexive_counter(effect)
-                    .expect("counter-placement consumer has a source counter condition");
-                matches!(
-                    actual,
-                    ResultType::CounterPlacementReceipt {
-                        counter: actual_counter,
-                        object: super::ConditionObjectRef::Source,
-                        cardinality: Cardinality {
-                            min: 0,
-                            max: Some(1),
-                        },
-                    }
-                    if *actual_counter == counter
-                )
-            })
-        }
-        EffectOp::CreateReflexiveTrigger { .. }
-            if is_source_sacrifice_reflexive_consumer(effect) =>
-        {
-            require(&|actual| {
-                matches!(
-                    actual,
-                    ResultType::CardResultCohort {
-                        action: CardResultAction::Sacrifice,
-                        who: PlayerRecipient::Controller,
-                        cardinality: Cardinality {
-                            min: 0,
-                            max: Some(1),
-                        },
-                    }
-                )
-            })
-        }
-        EffectOp::ChooseProliferatedPermanents => require(&|actual| {
-            matches!(
-                actual,
-                ResultType::ProliferatedPermanentCohort {
-                    cardinality: Cardinality { min: 0, max: None },
-                }
-            )
-        }),
-        EffectOp::PhaseOut {
-            subject: EffectSubject::PreviousEffectObjects,
-        } => require(&|actual| {
-            matches!(
-                actual,
-                ResultType::ProliferatedPermanentSelection {
-                    cardinality: Cardinality { min: 0, max: None },
-                }
-            )
-        }),
-        _ if is_token_copy_batch_consumer(effect) => {
-            require(&|actual| matches!(actual, ResultType::TokenCopyBatch))
-        }
-        EffectOp::UntapChosenPermanents
-        | EffectOp::TapChosenPermanents
-        | EffectOp::Untap {
-            subject: EffectSubject::PreviousEffectObject,
-        }
-        | EffectOp::ReturnToOwnersHand {
-            subject: EffectSubject::PreviousEffectObject,
-        } => require(&|actual| matches!(actual, ResultType::PermanentSelection { .. })),
-        effect if is_search_result_behold_consumer(effect) => {
-            require(&|actual| matches!(actual, ResultType::PermanentSelection { .. }))
-        }
-        EffectOp::PutSelectedHandCardsOnLibraryTop => {
-            require(&|actual| matches!(actual, ResultType::HandSelection { ordered: true, .. }))
-        }
-        _ => {
-            if input.is_none() {
-                Ok(None)
-            } else {
-                Err("instruction does not accept an input result".into())
-            }
+        Ok(())
+    }
+
+    fn finish(&self) -> Result<(), String> {
+        if self.slot.is_some() && !self.checked {
+            Err("instruction does not accept an input result".into())
+        } else {
+            Ok(())
         }
     }
 }
@@ -4803,1218 +4029,1842 @@ fn join_choose_yield_types(
         .collect()
 }
 
-fn validate_and_result_types(
-    effect: &SpellEffectKind,
-    context: EffectContext,
-    target_group_index: Option<u32>,
-    target_group_max: Option<u32>,
-    result_bind_count: usize,
+/// Compile one operation family, including its explicit dependency, producer proof,
+/// target roles, output shape, and captured runtime context. Whole-owner target schema
+/// and cross-instruction relationships are checked after the complete program exists.
+fn compile_operation(
     compiler: &Compiler<'_>,
-) -> Result<Vec<ResultType>, String> {
-    match effect {
-        SpellEffectKind::CounterTargetAbility
-            if matches!(context, EffectContext::Spell | EffectContext::Ability) =>
-        {
-            if target_group_index.is_none() || target_group_max != Some(1) {
-                return Err(
-                    "CounterTargetAbility requires one optional or required single-target group"
-                        .into(),
-                );
-            }
-            effect.validate(context)?;
-            Ok(vec![ResultType::CounteredAbilitySource {
-                cardinality: Cardinality {
-                    min: 0,
-                    max: Some(1),
-                },
-            }])
-        }
-        SpellEffectKind::CounterTargetAbility => Err(
-            "CounterTargetAbility in a resolution program requires a spell or ability owner"
-                .into(),
-        ),
-        SpellEffectKind::RevealTopCardToHand if context == EffectContext::Ability => {
-            effect.validate(context)?;
-            Ok(vec![ResultType::RevealedCardReceipt])
-        }
-        SpellEffectKind::RevealTopCardToHand => Err(
-            "RevealTopCardToHand in a resolution program requires an activated ability".into(),
-        ),
-        SpellEffectKind::RevealUntilArtifact if context == EffectContext::Ability => {
-            effect.validate(context)?;
-            Ok(vec![ResultType::Count(CountResultKind::RevealedPrefix)])
-        }
-        SpellEffectKind::JoinForces => {
-            effect.validate(context)?;
-            Ok(vec![ResultType::Count(
-                CountResultKind::JoinForcesManaPaid,
-            )])
-        }
-        SpellEffectKind::ManifestDread if context == EffectContext::Ability => {
-            effect.validate(context)?;
-            Ok(vec![ResultType::ManifestedPermanent {
-                cardinality: Cardinality {
-                    min: 0,
-                    max: Some(1),
-                },
-            }])
-        }
-        SpellEffectKind::ManifestDread => Err(
-            "ManifestDread in a resolution program requires an ability-owned trigger".into(),
-        ),
-        SpellEffectKind::AttachEquipment {
-            equipment: EffectSubject::Source,
-            creature: EffectSubject::PreviousEffectObject,
-        } => {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::AttachEquipment {
-            equipment: EffectSubject::Source,
-            creature: EffectSubject::PreviousEffectObjects,
-        } if context == EffectContext::Ability => {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::AttachEquipment {
-            equipment: EffectSubject::PreviousEffectObject,
-            creature: EffectSubject::Chosen(filter),
-        } => {
-            effect.validate(context)?;
-            validate_program_target_filter(filter, "AttachEquipment creature target")?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::Untap {
-            subject: EffectSubject::Chosen(filter),
-        } => {
-            effect.validate(context)?;
-            validate_program_target_filter(filter, "Untap target")?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::PumpTarget {
-            subject: EffectSubject::Chosen(filter),
-            ..
-        } => {
-            effect.validate(context)?;
-            validate_program_target_filter(filter, "PumpTarget target")?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::PumpTarget {
-            subject: EffectSubject::Source,
-            ..
-        } if context == EffectContext::Ability => {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { amount }
-            if context == EffectContext::Ability =>
-        {
-            effect.validate(context)?;
-            validate_program_amount(amount)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::AttachEquipment { .. } => Err(
-            "AttachEquipment in a resolution program requires Source and PreviousEffectObject".into(),
-        ),
-        SpellEffectKind::MoveGraveyardCards {
-            filter,
-            destination: GraveyardDestination::Exile,
-            linked_exile_id,
-            entry_modifiers,
-        } if context == EffectContext::Ability => {
-            let target_group_index = target_group_index.ok_or_else(|| {
-                "ability_program MoveGraveyardCards Exile requires one explicit Target binding"
-                    .to_string()
-            })?;
-            let max = target_group_max.ok_or_else(|| {
-                "ability_program graveyard Exile result requires a validated target group".to_string()
-            })?;
-            if linked_exile_id.is_some() || !entry_modifiers.is_empty() {
-                return Err(
-                    "ability_program MoveGraveyardCards Exile does not support linked exile or entry modifiers".into(),
-                );
-            }
-            if filter.mana_value_less_than_trigger_object {
-                return Err(
-                    "ability_program MoveGraveyardCards Exile cannot depend on a trigger object".into(),
-                );
-            }
-            effect.validate(context)?;
-            Ok(vec![ResultType::TargetCardResultCohort {
-                action: CardResultAction::Exile,
-                cardinality: Cardinality {
-                    min: 0,
-                    max: Some(max),
-                },
-                target_group_index,
-            }])
-        }
-        SpellEffectKind::MoveGraveyardCards {
-            filter,
-            destination: GraveyardDestination::Battlefield { tapped: false },
-            linked_exile_id: None,
-            entry_modifiers,
-        } if context == EffectContext::Ability => {
-            if target_group_index.is_none() || target_group_max != Some(1) {
-                return Err("ability_program graveyard Battlefield requires one explicit singleton Target binding".into());
-            }
-            if *filter != (super::GraveyardFilter {
-                card: Some(ZoneCardFilter {
-                    card_type: Some(CardTypeFilter::Artifact),
-                    ..Default::default()
-                }),
-                ..Default::default()
-            }) || !entry_modifiers.is_empty() {
-                return Err("ability_program graveyard Battlefield supports only an unmodified artifact card from the controller's graveyard".into());
-            }
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::MoveGraveyardCards { .. } => Err(
-            "MoveGraveyardCards in a resolution program supports only targeted ability-owned graveyard Exile or the singleton artifact Battlefield profile".into(),
-        ),
-        SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(filter),
-        } if context == EffectContext::Ability
-            && filter.as_ref()
-                == &(TargetFilter {
-                    kind: TargetKind::AnyPermanent,
-                    permanent_types: vec![super::PermanentTypeFilter::Artifact],
-                    ..TargetFilter::default()
-                }) =>
-        {
-            effect.validate(context)?;
-            validate_program_target_filter(filter, "Destroy target")?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(filter),
-        } if context == EffectContext::Spell => {
-            let target_group_index = target_group_index.ok_or_else(|| {
-                "spell_program Destroy requires exactly one explicit Subject target binding".to_string()
-            })?;
-            effect.validate(context)?;
-            validate_program_target_filter(filter, "Destroy target")?;
-            Ok(vec![ResultType::TargetCardResultCohort {
-                action: CardResultAction::Destroy,
-                cardinality: Cardinality {
-                    min: 0,
-                    max: Some(1),
-                },
-                target_group_index,
-            }])
-        }
-        SpellEffectKind::PutInOwnersLibrary {
-            subject: EffectSubject::Chosen(filter),
-            ..
-        } if context == EffectContext::Spell => {
-            if target_group_index.is_none() || target_group_max != Some(1) {
-                return Err(
-                    "PutInOwnersLibrary Chosen requires one explicit single-target binding".into(),
-                );
-            }
-            effect.validate(context)?;
-            validate_program_target_filter(filter, "PutInOwnersLibrary target")?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::PutInOwnersLibrary {
-            subject: EffectSubject::AttachedObject,
-            placement: super::LibraryPlacement::Shuffle,
-        } if context == EffectContext::Ability => {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::PutInOwnersLibrary { .. } => Err(
-            "PutInOwnersLibrary in a resolution program supports a bound single chosen target, or an ability-owned AttachedObject Shuffle".into(),
-        ),
-        SpellEffectKind::Destroy { .. } if context == EffectContext::Spell => Err(
-            "spell_program Destroy requires a chosen permanent target with one explicit Subject binding".into(),
-        ),
-        SpellEffectKind::Destroy { .. } => Err(
-            "Destroy in an ability program supports only a chosen Artifact permanent target".into(),
-        ),
-        SpellEffectKind::ChooseHandCards { count, target, .. }
-            if context == EffectContext::Spell =>
-        {
-            if !is_private_affected_player_discard_profile(effect) {
-                return Err(
-                    "ChooseHandCards in spell_program supports only a positive, unfiltered, nonoptional affected-player discard from one default AnyPlayer or OpponentPlayer target".into(),
-                );
-            }
-            let target_group_index = target_group_index.ok_or_else(|| {
-                "spell_program ChooseHandCards requires exactly one explicit Target binding"
-                    .to_string()
-            })?;
-            effect.validate(context)?;
-            validate_program_target_filter(target, "ChooseHandCards target")?;
-            Ok(vec![ResultType::TargetCardResultCohort {
-                action: CardResultAction::Discard,
-                cardinality: Cardinality {
-                    min: 0,
-                    max: Some(*count),
-                },
-                target_group_index,
-            }])
-        }
-        SpellEffectKind::ChooseHandCards { .. } => Err(
-            "ChooseHandCards in a resolution program supports only the exact spell target-discard profile".into(),
-        ),
-        SpellEffectKind::Draw { who, count } => {
-            effect.validate(context)?;
-            validate_program_draw_recipient(
-                *who,
-                context,
-                count.card_result_filter().is_some(),
-                matches!(
-                    count,
-                    Amount::Count(CountExpression::ProgramInputCount)
-                ),
-            )?;
-            if matches!(
-                count,
-                Amount::Count(CountExpression::ProgramInputCount)
-            ) {
-                if *who != PlayerRecipient::EachPlayer {
-                    return Err(
-                        "ProgramInputCount Draw input requires the EachPlayer recipient".into(),
-                    );
-                }
-                validate_program_amount(count)?;
-            } else if count.card_result_filter().is_some() {
-                // The exact count shape and explicitly bound DiscardResult slot are checked
-                // together during block compilation.
-                if program_draw_result_count_profile(count).is_none() {
-                    return Err(
-                        "Program Draw result counts support only a direct count, an affected-player count, or a per-player maximum".into(),
-                    );
-                }
-            } else {
-                validate_program_amount(count)?;
-                validate_fixed_program_amount("Draw count", count)?;
-            }
-            // Replacement effects may expand the committed draw cohort, so the authored count
-            // does not bound the receipt.
-            Ok(vec![ResultType::DrawReceipt {
-                who: *who,
-                cardinality: Cardinality { min: 0, max: None },
-            }])
-        }
-        SpellEffectKind::Scry { count } => {
-            validate_program_amount(count)?;
-            validate_fixed_program_amount("Scry count", count)?;
-            // Legacy Scry rejects a literal zero, but Programs admit it as a resultless no-op.
-            // Keep the ordinary validator for positive counts and preserve its context checks.
-            if !matches!(count, Amount::Fixed(0)) {
-                effect.validate(context)?;
-            }
-            Ok(Vec::new())
-        }
-        SpellEffectKind::LookTopCardOptionalToHand { .. } => {
-            effect.validate(context)?;
-            if context != EffectContext::Spell {
-                return Err(
-                    "LookTopCardOptionalToHand in a CardProgram is spell-only".into(),
-                );
-            }
-            // This fixed one-card optional look has no typed output. Its exact top-card identity,
-            // filter, and private choice are owned by the resolution continuation.
-            Ok(Vec::new())
-        }
-        SpellEffectKind::LookChooseToHand {
-            filter,
-            min,
-            max,
-            reveal,
-            bottom_order,
-            ..
-        } => {
-            effect.validate(context)?;
-            if context != EffectContext::Spell {
-                return Err("LookChooseToHand in spell_program is spell-only".into());
-            }
-            if filter.is_some()
-                || *reveal
-                || *bottom_order != LibraryBottomOrder::Chosen
-                || *min == 0
-                || min != max
+    instruction: &Instruction,
+    authored_effect: &EffectOp,
+    names: &HashMap<String, ResultSlotId>,
+    steps: &[CompiledInstruction],
+) -> Result<ValidatedOperation, String> {
+    let mut dependency =
+        OperationDependency::resolve(instruction.input.as_deref(), names, &compiler.slots)?;
+    let mut lowered_effect = authored_effect.clone();
+    lower_bound_card_result_count(&mut lowered_effect, dependency.slot, &compiler.slots)?;
+    let effect = &lowered_effect;
+    let context = compiler.context;
+    let result_bind_count = instruction.bind.len();
+    let mut required_inputs = std::collections::BTreeSet::new();
+    let mut admitted_program_input_player = false;
+    let mut admitted_program_input_count = false;
+    let result_types = (|| {
+        match effect {
+            SpellEffectKind::CounterTargetAbility
+                if matches!(context, EffectContext::Spell | EffectContext::Ability) =>
             {
-                return Err(
-                    "LookChooseToHand in spell_program requires an exact positive unfiltered, unrevealed, chosen-order selection".into(),
-                );
-            }
-            Ok(Vec::new())
-        }
-        SpellEffectKind::GainLife { amount, .. }
-            if amount.card_result_characteristic_sum().is_some() =>
-        {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::GainLife { amount, .. } if amount.card_result_filter().is_some() => {
-            if program_gain_life_result_count_profile(amount).is_none() {
-                return Err(
-                    "Program GainLife result counts support only a direct result count or one positive zero-constant affine term".into(),
-                );
-            }
-            // The direct leaf retains ordinary effect validation. The one-term affine form is
-            // checked by the Program's immediate producer contract; global CountExpression
-            // affine validation remains closed to result leaves.
-            if matches!(amount, Amount::Count(CountExpression::CardsMatchingResult { .. })) {
-                effect.validate(context)?;
-            }
-            Ok(Vec::new())
-        }
-        SpellEffectKind::GainLife { amount, .. } => {
-            effect.validate(context)?;
-            validate_program_amount(amount)?;
-            validate_fixed_program_amount("GainLife amount", amount)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::LoseLife {
-            amount: LifeAmount::RevealedCardManaValue,
-            who: PlayerRecipient::EachOpponent,
-        } if context == EffectContext::Ability => {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::LoseLife {
-            amount: LifeAmount::RevealedCardManaValue,
-            ..
-        } => Err(
-            "LoseLife(RevealedCardManaValue) requires an activated ability resolution program"
-                .into(),
-        ),
-        SpellEffectKind::LoseLife { amount, who }
-            if matches!(amount, LifeAmount::Fixed(_))
-                && (*who == PlayerRecipient::EachOpponent
-                    || (*who == PlayerRecipient::Controller
-                        && matches!(context, EffectContext::Spell | EffectContext::Ability))) =>
-        {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::LoseLife { .. } => Err(
-            "LoseLife in a resolution program supports a fixed EachOpponent amount, or a fixed Controller amount on a spell or ability program".into(),
-        ),
-        SpellEffectKind::Blight { .. } => {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::Proliferate => {
-            effect.validate(context)?;
-            match result_bind_count {
-                0 => Ok(Vec::new()),
-                1 => Ok(vec![ResultType::ProliferatedPermanentCohort {
-                    cardinality: Cardinality { min: 0, max: None },
-                }]),
-                _ => Err("Program Proliferate may bind at most one permanent cohort result".into()),
-            }
-        }
-        SpellEffectKind::ChooseProliferatedPermanents => {
-            if context != EffectContext::Spell {
-                return Err(
-                    "ChooseProliferatedPermanents is supported only in a spell Program".into(),
-                );
-            }
-            Ok(vec![ResultType::ProliferatedPermanentSelection {
-                cardinality: Cardinality { min: 0, max: None },
-            }])
-        }
-        SpellEffectKind::PhaseOut {
-            subject: EffectSubject::PreviousEffectObjects,
-        } => {
-            if context != EffectContext::Spell {
-                return Err("Program PhaseOut of selected proliferated permanents is spell-only".into());
-            }
-            Ok(Vec::new())
-        }
-        SpellEffectKind::PhaseOut { .. } => Err(
-            "PhaseOut in a CardProgram supports only the typed Proliferate selection form".into(),
-        ),
-        SpellEffectKind::GrantKeywordsAll { filter, .. } => {
-            effect.validate(context)?;
-            if matches!(
-                filter.controller,
-                Some(super::CreatureScopeController::TargetedPlayer { .. })
-            ) {
-                return Err(
-                    "GrantKeywordsAll in a resolution program does not support TargetedPlayer scopes without a target-role binding".into(),
-                );
-            }
-            Ok(Vec::new())
-        }
-        SpellEffectKind::RemoveAllAbilities {
-            subject: EffectSubject::PreviousEffectObject,
-            duration: ResolvingEffectDuration::WhileSourceOnBattlefield,
-        } if context == EffectContext::Ability => {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::GrantKeywords {
-            subject: EffectSubject::PreviousEffectObject,
-            ..
-        } if context == EffectContext::Spell => {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::GrantKeywords {
-            subject: EffectSubject::PreviousEffectObject,
-            ..
-        } => Err("GrantKeywords(PreviousEffectObject) in a resolution program is spell-only".into()),
-        SpellEffectKind::RemoveAbilitiesAll { .. } | SpellEffectKind::DestroyAll { .. } => {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::CreateReflexiveTrigger { .. } => {
-            effect.validate(context)?;
-            if is_counter_placement_reflexive_consumer(effect) {
-                validate_counter_placement_program_reflexive_trigger(effect, context)?;
-            } else {
-                validate_resultless_program_reflexive_trigger(effect, context)?;
-            }
-            Ok(Vec::new())
-        }
-        SpellEffectKind::Discard { who, quantity } => {
-            effect.validate(context)?;
-            let player_set_discard = context == EffectContext::Ability
-                && matches!(*who, PlayerRecipient::EachOpponent | PlayerRecipient::EachPlayer)
-                && matches!(quantity, super::DiscardQuantity::Exact(1));
-            let spell_each_player_discard = context == EffectContext::Spell
-                && *who == PlayerRecipient::EachPlayer
-                && matches!(
-                    quantity,
-                    super::DiscardQuantity::AnyNumber | super::DiscardQuantity::All
-                );
-            if !player_set_discard && !spell_each_player_discard {
-                validate_program_recipient(*who, context, "Discard recipient")?;
-            }
-            let optional_payment = matches!(quantity, super::DiscardQuantity::OptionalExact(_));
-            Ok(vec![ResultType::DiscardResult {
-                who: *who,
-                cardinality: Cardinality {
-                    min: 0,
-                    // Player-set recipients contribute one choice per applicable player to a
-                    // combined typed cohort, so the per-player Exact(1) count is not an
-                    // aggregate upper bound.
-                    max: if player_set_discard {
-                        None
-                    } else {
-                        discard_upper_bound(quantity)
-                    },
-                },
-                optional_payment,
-            }])
-        }
-        SpellEffectKind::ChoosePermanents {
-            chooser,
-            filter,
-            max,
-            constraints,
-            ..
-        } => {
-            effect.validate(context)?;
-            let targeted_group = targeted_opponent_singleton_choice_group(effect);
-            if targeted_group.is_some() && context != EffectContext::Ability {
-                return Err(
-                    "targeted-opponent ChoosePermanents is supported only on an ability program"
-                        .into(),
-                );
-            }
-            if targeted_group.is_none() {
-                validate_program_controller(*chooser, "ChoosePermanents chooser")?;
-            } else if target_group_index != targeted_group {
-                return Err(
-                    "targeted-opponent ChoosePermanents must bind its player target to the authored target group"
-                        .into(),
-                );
-            }
-            validate_program_choice_filter(filter)?;
-            if !(constraints.is_empty() || equipment_choice_target(effect).is_some()) {
-                return Err("ChoosePermanents constraints are not supported in spell_program without typed object references".into());
-            }
-            // Selection can be limited by the live candidate set, even when the authored minimum
-            // is larger.
-            Ok(vec![ResultType::PermanentSelection {
-                chooser: *chooser,
-                filter: Box::new(filter.clone()),
-                cardinality: Cardinality {
-                    min: 0,
-                    max: Some(*max),
-                },
-            }])
-        }
-        SpellEffectKind::UntapChosenPermanents => {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::TapChosenPermanents => {
-            effect.validate(context)?;
-            Ok(vec![ResultType::Count(CountResultKind::TappedPermanents)])
-        }
-        SpellEffectKind::Untap {
-            subject: EffectSubject::PreviousEffectObject,
-        } => {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::SelectHandCards {
-            count,
-            ordered,
-            prompt,
-        } => {
-            count.validate_effect(context)?;
-            validate_program_amount(count)?;
-            validate_fixed_program_amount("SelectHandCards count", count)?;
-            if prompt.trim().is_empty() {
-                return Err("SelectHandCards requires a nonempty prompt".into());
-            }
-            Ok(vec![ResultType::HandSelection {
-                cardinality: Cardinality {
-                    min: 0,
-                    max: amount_upper_bound(count),
-                },
-                ordered: *ordered,
-            }])
-        }
-        SpellEffectKind::Mill { count, who } => {
-            effect.validate(context)?;
-            validate_program_recipient(*who, context, "Mill recipient")?;
-            validate_program_amount(count)?;
-            Ok(vec![ResultType::CardResultCohort {
-                action: CardResultAction::Mill,
-                who: *who,
-                cardinality: Cardinality {
-                    min: 0,
-                    max: amount_upper_bound(count),
-                },
-            }])
-        }
-        effect if is_search_result_behold_consumer(effect) =>
-        {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::SearchLibrary {
-            selection_bounds: Some(_),
-            destination: SearchDestination::TopOfLibrary,
-            conditional_destination: Some(_),
-            ..
-        } => validate_resultless_conditional_top_search(effect, context),
-        SpellEffectKind::SearchLibrary {
-            selection_bounds: Some(_),
-            destination: SearchDestination::TopOfLibrary,
-            ..
-        } => validate_resultless_direct_top_library_search(effect, context),
-        SpellEffectKind::SearchLibrary {
-            selection_bounds: Some(_),
-            destination: SearchDestination::Hand,
-            ..
-        } => validate_resultless_direct_hand_library_search(effect, context),
-        SpellEffectKind::SearchLibrary {
-            selection_bounds: Some(_),
-            destination: SearchDestination::Battlefield { .. },
-            ..
-        } if effect
-            .typed_resultful_battlefield_search_result_type()
-            .is_some() =>
-        {
-            validate_resultful_direct_battlefield_search(effect, context)
-        }
-        SpellEffectKind::SearchLibrary {
-            selection_bounds: Some(_),
-            destination: SearchDestination::Battlefield { .. },
-            ..
-        } => validate_resultless_direct_battlefield_library_search(effect, context),
-        SpellEffectKind::SearchLibrary {
-            selection_bounds: Some(_),
-            ..
-        } => validate_retained_library_search(effect, context),
-        SpellEffectKind::SearchLibrary { .. } => {
-            Err("SearchLibrary in spell_program requires typed retained selection_bounds".into())
-        }
-        SpellEffectKind::LibraryPartition {
-            count: 1,
-            top_min: 0,
-            top_max: None,
-            kind: super::LibraryPartitionKind::Surveil,
-        } if context == EffectContext::Spell => {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::RevealCohort => Ok(vec![ResultType::RevealedLibraryCohort]),
-        SpellEffectKind::ChooseCohortPartition { chooser, selection } => {
-            let PlayerRecipient::TargetedPlayer { kind, .. } = chooser else {
-                return Err(
-                    "ChooseCohortPartition requires a targeted player chooser in spell_program"
-                        .into(),
-                );
-            };
-            if *kind != TargetKind::OpponentPlayer {
-                return Err(
-                    "ChooseCohortPartition chooser must target an opponent in spell_program".into(),
-                );
-            }
-            match selection {
-                CohortPartitionSelection::ExactlyUpTo(limit) if *limit > 0 => {}
-                CohortPartitionSelection::ExactlyUpTo(_) => {
-                    return Err("ChooseCohortPartition ExactlyUpTo limit must be positive".into())
-                }
-            }
-            Ok(vec![ResultType::CardPartition])
-        }
-        SpellEffectKind::MoveCohortPartition {
-            selected_to,
-            remainder_to,
-        } => {
-            let valid_destination = |destination| {
-                matches!(
-                    destination,
-                    SearchDestination::Hand | SearchDestination::Graveyard
-                )
-            };
-            if !valid_destination(*selected_to)
-                || !valid_destination(*remainder_to)
-                || selected_to == remainder_to
-            {
-                return Err(
-                    "MoveCohortPartition requires distinct Hand or Graveyard destinations".into(),
-                );
-            }
-            Ok(Vec::new())
-        }
-        SpellEffectKind::ShuffleLibrary { who } => {
-            validate_program_controller(*who, "ShuffleLibrary recipient")?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::ExileTopWithPlayPermission {
-            player: PlayerRecipient::Controller,
-            count: 1,
-            count_by_cast_cost: None,
-        } if context == EffectContext::Spell => {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::ExileTopWithPlayPermission { .. } => Err(
-            "ExileTopWithPlayPermission in a resolution program supports only one Controller card without a cast-cost conditional on a spell".into(),
-        ),
-        SpellEffectKind::ChooseCard {
-            filter,
-            destination,
-            ..
-        } => {
-            filter.validate()?;
-            if !matches!(
-                destination,
-                super::GraveyardDestination::Hand
-                    | super::GraveyardDestination::LibraryTop
-                    | super::GraveyardDestination::LibraryBottom
-            ) {
-                return Err(
-                    "ChooseCard currently supports only Hand and Library destinations in spell_program"
-                        .into(),
-                );
-            }
-            Ok(Vec::new())
-        }
-        SpellEffectKind::PutSelectedHandCardsOnLibraryTop => Ok(Vec::new()),
-        SpellEffectKind::DamageTarget { amount, target } => {
-            effect.validate(context)?;
-            validate_program_amount(amount)?;
-            match amount {
-                Amount::Fixed(_) => {}
-                Amount::X if context == EffectContext::Spell => {}
-                _ => {
+                let (group_index, group_max) = counter_target_ability_target_group(
+                    &instruction.id,
+                    &compiler.target_references,
+                    compiler.targeting,
+                )?;
+                let target_group_index = Some(group_index);
+                let target_group_max = Some(group_max);
+
+                if target_group_index.is_none() || target_group_max != Some(1) {
                     return Err(
-                        "DamageTarget amount must be fixed, or X on a resolving spell".into(),
-                    )
-                }
-            }
-            validate_program_target_filter(target, "DamageTarget target")?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::DamagePlayer {
-            amount,
-            who: PlayerRecipient::Controller,
-        } if matches!(amount, Amount::Count(CountExpression::ProgramInputCount)) => {
-            if context != EffectContext::Ability {
-                return Err(
-                    "ProgramInputCount Controller DamagePlayer input is ability-only".into(),
-                );
-            }
-            effect.validate(context)?;
-            validate_program_amount(amount)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::DamagePlayer {
-            amount,
-            who: PlayerRecipient::EachOpponent,
-        } => {
-            if context != EffectContext::Spell {
-                return Err("DamagePlayer EachOpponent in spell_program is spell-only".into());
-            }
-            effect.validate(context)?;
-            match amount {
-                Amount::Fixed(value) if *value > 0 => Ok(Vec::new()),
-                amount if amount.card_result_characteristic_sum().is_some() => {
-                    amount.validate_effect(context)?;
-                    Ok(Vec::new())
-                }
-                _ => Err(
-                    "DamagePlayer EachOpponent in spell_program requires a positive fixed amount or a typed card-result characteristic sum"
-                        .into(),
-                ),
-            }
-        }
-        SpellEffectKind::DamagePlayer {
-            amount,
-            who:
-                PlayerRecipient::TargetedPlayer {
-                    kind: TargetKind::OpponentPlayer,
-                    ..
-                },
-        } => {
-            effect.validate(context)?;
-            match amount {
-                Amount::Fixed(value) if *value > 0 => Ok(Vec::new()),
-                amount if amount.card_result_characteristic_sum().is_some() => {
-                    amount.validate_effect(context)?;
-                    Ok(Vec::new())
-                }
-                _ => Err(
-                    "DamagePlayer TargetedPlayer OpponentPlayer in spell_program requires a positive fixed amount or a typed card-result characteristic sum"
-                        .into(),
-                ),
-            }
-        }
-        SpellEffectKind::DamagePlayer {
-            amount,
-            who: PlayerRecipient::ControllerOfTargetGroup { .. },
-        } => {
-            if context != EffectContext::Spell {
-                return Err(
-                    "DamagePlayer ControllerOfTargetGroup in spell_program is spell-only".into(),
-                );
-            }
-            effect.validate(context)?;
-            validate_program_amount(amount)?;
-            validate_fixed_program_amount("DamagePlayer amount", amount)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::CounterTargetSpell {
-            unless_controller_pays,
-            unless_controller_pays_by_cast_cost,
-            ..
-        } => {
-            effect.validate(context)?;
-            if unless_controller_pays_by_cast_cost.is_some() {
-                return Err(
-                    "CounterTargetSpell cast-cost payment is outside the typed program input contract"
-                        .into(),
-                );
-            }
-            if let Some(amount) = unless_controller_pays {
-                validate_program_amount(amount)?;
-                validate_fixed_program_amount("CounterTargetSpell payment", amount)?;
-            }
-            Ok(if unless_controller_pays.is_some() {
-                vec![ResultType::CounterPaymentOutcome]
-            } else {
-                Vec::new()
-            })
-        }
-        SpellEffectKind::ReturnToOwnersHand { subject } => {
-            effect.validate(context)?;
-            match subject {
-                super::EffectSubject::Chosen(filter) => {
-                    validate_program_target_filter(filter, "ReturnToOwnersHand target")?;
-                }
-                super::EffectSubject::PreviousEffectObject => {}
-                _ => {
-                    return Err(
-                        "ReturnToOwnersHand requires an owner-local chosen target or its exact typed selection input in a resolution program"
+                        "CounterTargetAbility requires one optional or required single-target group"
                             .into(),
                     );
                 }
-            }
-            Ok(Vec::new())
-        }
-        SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries { .. } => {
-            effect.validate(context)?;
-            if context != EffectContext::Ability
-                || targeted_opponent_nonland_shuffle_group(effect).is_none()
-                || target_group_index != targeted_opponent_nonland_shuffle_group(effect)
-            {
-                return Err(
-                    "ShuffleNonlandPermanentsIntoOwnersLibraries supports only its authored targeted-opponent ability group in a resolution program"
-                        .into(),
-                );
-            }
-            Ok(Vec::new())
-        }
-        SpellEffectKind::ReturnAllToOwnersHand { .. } => {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::CreateTokens { count, who, .. } => {
-            effect.validate(context)?;
-            let supported_recipient = *who == PlayerRecipient::Controller
-                || (*who == PlayerRecipient::ProgramInputPlayer && context == EffectContext::Spell)
-                || (*who == PlayerRecipient::SourceController && context == EffectContext::Ability);
-            if !supported_recipient {
-                return Err(
-                    "CreateTokens supports controller-owned tokens, explicit ProgramInputPlayer tokens in a spell program, or SourceController tokens on an ability program"
-                        .into(),
-                );
-            }
-            validate_program_create_tokens_amount(count, who)?;
-            Ok(vec![ResultType::CreatedTokenBatch {
-                cardinality: Cardinality { min: 0, max: None },
-            }])
-        }
-        SpellEffectKind::CreateTokenCopies {
-            count, source, ..
-        } => {
-            effect.validate(context)?;
-            validate_program_amount(count)?;
-            validate_fixed_program_amount("CreateTokenCopies count", count)?;
-            match source {
-                super::TokenCopySource::Chosen(filter) => {
-                    validate_program_target_filter(filter, "CreateTokenCopies target")?;
-                }
-                super::TokenCopySource::TriggerObject if context == EffectContext::Ability => {}
-                super::TokenCopySource::TriggerObject => {
-                    return Err(
-                        "TriggerObject token copies require an ability program owner".into(),
-                    );
-                }
-                super::TokenCopySource::Source => {
-                    return Err(
-                        "CreateTokenCopies source is not supported in a resolution program".into(),
-                    );
-                }
-                super::TokenCopySource::LinkedExile {
-                    ..
-                } if context == EffectContext::Ability
-                    && top_level_ability_id(&compiler.owner).is_some() => {}
-                super::TokenCopySource::LinkedExile { .. } => {
-                    return Err(
-                        "LinkedExile token copies require a top-level ability program owner".into(),
-                    );
-                }
-            }
-            Ok(if matches!(
-                source,
-                TokenCopySource::TriggerObject | TokenCopySource::LinkedExile { .. }
-            ) {
-                vec![ResultType::TokenCopyBatch]
-            } else {
-                Vec::new()
-            })
-        }
-        SpellEffectKind::Tap {
-            subject: EffectSubject::Chosen(filter),
-        } if context == EffectContext::Ability => {
-            if target_group_index.is_none() || target_group_max != Some(1) {
-                return Err("Tap requires one required single-target group".into());
-            }
-            effect.validate(context)?;
-            validate_program_target_filter(filter, "Tap target")?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { subjects }
-            if context == EffectContext::Ability =>
-        {
-            let Some(filter) = single_source_chosen_shuffle_filter(subjects) else {
-                return Err(
-                    "ShufflePermanentsIntoOwnersLibraries in a resolution program requires exactly Source and one Chosen permanent"
-                        .into(),
-                );
-            };
-            if target_group_index.is_none() || target_group_max != Some(1) {
-                return Err(
-                    "ShufflePermanentsIntoOwnersLibraries requires one required single-target group"
-                        .into(),
-                );
-            }
-            effect.validate(context)?;
-            validate_program_target_filter(filter, "ShufflePermanentsIntoOwnersLibraries target")?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::PutCounters {
-            counter,
-            count,
-            subject: EffectSubject::Source,
-            ..
-        } if context == EffectContext::Ability => {
-            effect.validate(context)?;
-            validate_program_amount(count)?;
-            counter.validate()?;
-            Ok(vec![ResultType::CounterPlacementReceipt {
-                counter: *counter,
-                object: super::ConditionObjectRef::Source,
-                cardinality: Cardinality {
-                    min: 0,
-                    max: Some(1),
-                },
-            }])
-        }
-        SpellEffectKind::PutCounters {
-            count,
-            subject: EffectSubject::Chosen(filter),
-            ..
-        } if matches!(context, EffectContext::Spell | EffectContext::Ability)
-            && filter.all_terminal_filters_match(|leaf| leaf.kind == TargetKind::Creature) =>
-        {
-            if target_group_index.is_none() || target_group_max != Some(1) {
-                return Err("PutCounters requires one required single-target group".into());
-            }
-            if !matches!(count, Amount::Fixed(_)) {
-                return Err(
-                    "PutCounters in a resolution program supports only a fixed literal count".into(),
-                );
-            }
-            effect.validate(context)?;
-            validate_program_target_filter(filter, "PutCounters target")?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::RemoveAllCounters {
-            counter,
-            subject: EffectSubject::Source,
-        } if context == EffectContext::Ability => {
-            effect.validate(context)?;
-            counter.validate()?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::RemoveCounters {
-            counter,
-            count,
-            subject: EffectSubject::Source,
-        } if context == EffectContext::Ability && *count > 0 => {
-            effect.validate(context)?;
-            counter.validate()?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::Exile {
-            subject: EffectSubject::Chosen(filter),
-            linked_exile_id: None,
-        } if filter.is_permanent_only() => {
-            if target_group_index.is_none() || target_group_max != Some(1) {
-                return Err("typed Exile result requires one optional or required target group".into());
-            }
-            effect.validate(context)?;
-            validate_program_target_filter(filter, "Exile target")?;
-            let exiled_object = ResultType::ExiledObject {
-                cardinality: Cardinality {
-                    min: 0,
-                    max: Some(1),
-                },
-            };
-            if result_bind_count == 2 {
-                Ok(vec![
-                    exiled_object,
-                    ResultType::TargetCardResultCohort {
-                        action: CardResultAction::Exile,
-                        cardinality: Cardinality {
-                            min: 0,
-                            max: Some(1),
-                        },
-                        target_group_index: target_group_index
-                            .expect("validated chosen Exile has a target group"),
+                effect.validate(context)?;
+                Ok(vec![ResultType::CounteredAbilitySource {
+                    cardinality: Cardinality {
+                        min: 0,
+                        max: Some(1),
                     },
-                ])
-            } else {
-                Ok(vec![exiled_object])
+                }])
             }
-        }
-        SpellEffectKind::Exile {
-            subject: EffectSubject::TriggerObject,
-            linked_exile_id: Some(linked_exile_id),
-        } if context == EffectContext::Ability
-            && compiler.allow_trigger_object_linked_exile
-            && compiler.allow_linked_exile_receipt =>
-        {
-            effect.validate(context)?;
-            let producer_ability_id = top_level_ability_id(&compiler.owner)
-                .cloned()
-                .ok_or_else(|| {
-                    "TriggerObject linked-exile receipt requires a top-level ability owner".to_string()
+            SpellEffectKind::CounterTargetAbility => Err(
+                "CounterTargetAbility in a resolution program requires a spell or ability owner".into(),
+            ),
+            SpellEffectKind::RevealTopCardToHand if context == EffectContext::Ability => {
+                effect.validate(context)?;
+                Ok(vec![ResultType::RevealedCardReceipt])
+            }
+            SpellEffectKind::RevealTopCardToHand => {
+                Err("RevealTopCardToHand in a resolution program requires an activated ability".into())
+            }
+            SpellEffectKind::RevealUntilArtifact if context == EffectContext::Ability => {
+                effect.validate(context)?;
+                Ok(vec![ResultType::Count(CountResultKind::RevealedPrefix)])
+            }
+            SpellEffectKind::JoinForces => {
+                effect.validate(context)?;
+                Ok(vec![ResultType::Count(CountResultKind::JoinForcesManaPaid)])
+            }
+            SpellEffectKind::ManifestDread if context == EffectContext::Ability => {
+                effect.validate(context)?;
+                Ok(vec![ResultType::ManifestedPermanent {
+                    cardinality: Cardinality {
+                        min: 0,
+                        max: Some(1),
+                    },
+                }])
+            }
+            SpellEffectKind::ManifestDread => {
+                Err("ManifestDread in a resolution program requires an ability-owned trigger".into())
+            }
+            SpellEffectKind::AttachEquipment {
+                equipment: EffectSubject::Source,
+                creature: EffectSubject::PreviousEffectObject,
+            } => {
+                dependency.require(&|actual| {
+                    matches!(
+                        actual,
+                        ResultType::ManifestedPermanent {
+                            cardinality: Cardinality {
+                                min: 0,
+                                max: Some(1),
+                            },
+                        }
+                    )
                 })?;
-            Ok(vec![ResultType::TriggerObjectLinkedExileReceipt {
-                producer_ability_id,
-                linked_exile_id: linked_exile_id.clone(),
-                cardinality: Cardinality {
-                    min: 0,
-                    max: Some(1),
-                },
-            }])
-        }
-        SpellEffectKind::Exile {
-            subject: EffectSubject::TriggerObject,
-            linked_exile_id: Some(_),
-        } if context == EffectContext::Ability && compiler.allow_trigger_object_linked_exile => {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::ReturnOtherLinkedExiledCards { .. }
-            if context == EffectContext::Ability
-                && compiler.allow_linked_exile_receipt =>
-        {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::ReturnOtherLinkedExiledCards { .. } => Err(
-            "ReturnOtherLinkedExiledCards in a resolution program requires an explicitly bound matching TriggerObject linked-exile receipt from a top-level ability".into(),
-        ),
-        SpellEffectKind::ChooseLinkedExiledCard {
-            producer_ability_id,
-            linked_exile_id,
-            destination: super::LinkedExiledCardDestination::OwnerGraveyard,
-            optional: false,
-            ..
-        } if context == EffectContext::Ability => {
-            effect.validate(context)?;
-            Ok(vec![ResultType::LinkedExileCardResultCohort {
-                producer_ability_id: producer_ability_id.clone(),
-                linked_exile_id: linked_exile_id.clone(),
-                cardinality: Cardinality {
-                    min: 0,
-                    max: Some(1),
-                },
-            }])
-        }
-        SpellEffectKind::ChooseLinkedExiledCard { .. } => Err(
-            "ChooseLinkedExiledCard in a resolution program requires a mandatory ability-owned OwnerGraveyard choice"
-                .into(),
-        ),
-        SpellEffectKind::PlayLinkedExiledCard {
-            filter: None,
-            play_kind: super::LinkedExiledCardPlayKind::Play,
-            return_source_to_owner_hand_if_cast: false,
-            ..
-        } if context == EffectContext::Ability =>
-        {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::PlayLinkedExiledCard { .. } => Err(
-            "PlayLinkedExiledCard in a resolution program requires a resultless ability Play profile"
-                .into(),
-        ),
-        SpellEffectKind::Sacrifice {
-            subject: EffectSubject::Source,
-        } if context == EffectContext::Ability => {
-            effect.validate(context)?;
-            Ok(vec![ResultType::CardResultCohort {
-                action: CardResultAction::Sacrifice,
-                who: PlayerRecipient::Controller,
-                cardinality: Cardinality {
-                    min: 0,
-                    max: Some(1),
-                },
-            }])
-        }
-        SpellEffectKind::ApplyCombatRestriction {
-            scope: super::CombatRestrictionScope::Source,
-            restriction,
-        } if context == EffectContext::Ability
-            && restriction
-                == &(super::CombatRestriction {
-                    cant_be_blocked: true,
-                    ..Default::default()
-                }) =>
-        {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::ApplyCombatRestriction {
-            scope: super::CombatRestrictionScope::Chosen(filter),
-            restriction,
-        } if context == EffectContext::Spell
-            && filter.all_terminal_filters_match(|leaf| leaf.kind == TargetKind::Creature)
-            && !restriction.is_empty() =>
-        {
-            effect.validate(context)?;
-            validate_program_target_filter(filter, "ApplyCombatRestriction target")?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::ReturnTriggeredCard {
-            reference: super::TriggeredCardReference::ExactTriggerObject,
-            from,
-            destination: super::TriggeredCardDestination::Battlefield,
-            tapped: false,
-            controller: super::ReturnController::Owner,
-            entry_counters,
-            set_types: None,
-        } if context == EffectContext::Ability
-            && !from.is_empty()
-            && from.as_slice() == [super::EventZone::Exile]
-            && entry_counters.is_empty() =>
-        {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::CopyTriggeringActivatedAbility if context == EffectContext::Ability => {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::CopyTriggeringActivatedAbility => Err(
-            "CopyTriggeringActivatedAbility requires an ability-owned trigger Program".into(),
-        ),
-        SpellEffectKind::CounterTriggeringStackObjectUnlessPays { cost } => {
-            if context != EffectContext::Ability {
-                return Err(
-                    "CounterTriggeringStackObjectUnlessPays in a resolution program requires an ability-owned trigger"
-                        .into(),
-                );
+
+                effect.validate(context)?;
+                Ok(Vec::new())
             }
-            match cost {
-                ResolutionCost::Mana(mana)
-                    if !mana.pips.is_empty()
-                        && mana.mana_value() > 0
-                        && !mana.pips.iter().any(|pip| matches!(pip, crate::ManaSymbol::X)) =>
-                {
-                }
-                ResolutionCost::DiscardCard { filter: None } => {}
-                _ => {
-                    return Err(
-                        "CounterTriggeringStackObjectUnlessPays in a resolution program supports only fixed nonempty no-X mana or an unfiltered discard-card cost"
-                            .into(),
+            SpellEffectKind::AttachEquipment {
+                equipment: EffectSubject::Source,
+                creature: EffectSubject::PreviousEffectObjects,
+            } if context == EffectContext::Ability => {
+                dependency.require(&|actual| {
+                    matches!(
+                        actual,
+                        ResultType::CreatedTokenBatch {
+                            cardinality: Cardinality { min: 0, max: None },
+                        }
                     )
+                })?;
+
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::AttachEquipment {
+                equipment: EffectSubject::PreviousEffectObject,
+                creature: EffectSubject::Chosen(filter),
+            } => {
+                let (group_index, _group_max) = chosen_optional_single_target_group(
+                    &instruction.id,
+                    &compiler.target_references,
+                    compiler.targeting,
+                    ProgramTargetRole::Target,
+                    "AttachEquipment",
+                )?;
+                let target_group_index = Some(group_index);
+                dependency.require(&|actual| {
+                    matches!(
+                        actual,
+                        ResultType::PermanentSelection {
+                            chooser: PlayerRecipient::Controller,
+                            filter,
+                            cardinality: Cardinality {
+                                min: 0,
+                                max: Some(1),
+                            },
+                        } if is_equipment_attach_filter(filter)
+                    )
+                })?;
+                validate_equipment_selection_input(
+                    effect,
+                    dependency.slot,
+                    steps,
+                    &compiler.slots,
+                    target_group_index,
+                )?;
+
+                effect.validate(context)?;
+                validate_program_target_filter(filter, "AttachEquipment creature target")?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::Untap {
+                subject: EffectSubject::Chosen(filter),
+            } => {
+                if matches!(context, EffectContext::Spell | EffectContext::Ability) {
+                    let (_group_index, _group_max) = chosen_single_target_group(
+                        &instruction.id,
+                        &compiler.target_references,
+                        compiler.targeting,
+                        ProgramTargetRole::Target,
+                        "chosen creature effect",
+                    )?;
+                }
+
+                effect.validate(context)?;
+                validate_program_target_filter(filter, "Untap target")?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::PumpTarget {
+                subject: EffectSubject::Chosen(filter),
+                ..
+            } => {
+                if matches!(context, EffectContext::Spell | EffectContext::Ability) {
+                    let (_group_index, _group_max) = chosen_single_target_group(
+                        &instruction.id,
+                        &compiler.target_references,
+                        compiler.targeting,
+                        ProgramTargetRole::Target,
+                        "chosen creature effect",
+                    )?;
+                }
+
+                effect.validate(context)?;
+                validate_program_target_filter(filter, "PumpTarget target")?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::PumpTarget {
+                subject: EffectSubject::Source,
+                ..
+            } if context == EffectContext::Ability => {
+                if matches!(
+                    effect,
+                    EffectOp::PumpTarget {
+                        scale: Some(crate::PtScale {
+                            basis: crate::PtScaleBasis::Amount(Amount::Count(
+                                CountExpression::ProgramInputCount
+                            )),
+                            ..
+                        }),
+                        ..
+                    }
+                ) {
+                    admitted_program_input_count = true;
+                    dependency.require(&|actual| matches!(actual, ResultType::Count(_)))?;
+                }
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { amount }
+                if context == EffectContext::Ability =>
+            {
+                if matches!(amount, Amount::Count(CountExpression::ProgramInputCount)) {
+                    admitted_program_input_count = true;
+                    dependency.require(&|actual| matches!(actual, ResultType::Count(_)))?;
+                }
+                effect.validate(context)?;
+                validate_program_amount(amount)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::AttachEquipment { .. } => Err(
+                "AttachEquipment in a resolution program requires Source and PreviousEffectObject"
+                    .into(),
+            ),
+            SpellEffectKind::MoveGraveyardCards {
+                filter,
+                destination: GraveyardDestination::Exile,
+                linked_exile_id,
+                entry_modifiers,
+            } if context == EffectContext::Ability => {
+                let (group_index, group_max) = ability_graveyard_exile_target_group(
+                    &instruction.id,
+                    &compiler.target_references,
+                    compiler.targeting,
+                )?;
+                let target_group_index = Some(group_index);
+                let target_group_max = Some(group_max);
+                if result_bind_count != 1 {
+                    return Err(format!("ability_program MoveGraveyardCards Exile instruction '{}' must bind its single typed result", instruction.id));
+                }
+
+                let target_group_index = target_group_index.ok_or_else(|| {
+                    "ability_program MoveGraveyardCards Exile requires one explicit Target binding"
+                        .to_string()
+                })?;
+                let max = target_group_max.ok_or_else(|| {
+                    "ability_program graveyard Exile result requires a validated target group"
+                        .to_string()
+                })?;
+                if linked_exile_id.is_some() || !entry_modifiers.is_empty() {
+                    return Err(
+                        "ability_program MoveGraveyardCards Exile does not support linked exile or entry modifiers".into(),
+                    );
+                }
+                if filter.mana_value_less_than_trigger_object {
+                    return Err(
+                        "ability_program MoveGraveyardCards Exile cannot depend on a trigger object"
+                            .into(),
+                    );
+                }
+                effect.validate(context)?;
+                Ok(vec![ResultType::TargetCardResultCohort {
+                    action: CardResultAction::Exile,
+                    cardinality: Cardinality {
+                        min: 0,
+                        max: Some(max),
+                    },
+                    target_group_index,
+                }])
+            }
+            SpellEffectKind::MoveGraveyardCards {
+                filter,
+                destination: GraveyardDestination::Battlefield { tapped: false },
+                linked_exile_id: None,
+                entry_modifiers,
+            } if context == EffectContext::Ability => {
+                let (group_index, group_max) = ability_graveyard_battlefield_target_group(
+                    &instruction.id,
+                    &compiler.target_references,
+                    compiler.targeting,
+                )?;
+                let target_group_index = Some(group_index);
+                let target_group_max = Some(group_max);
+
+                if target_group_index.is_none() || target_group_max != Some(1) {
+                    return Err("ability_program graveyard Battlefield requires one explicit singleton Target binding".into());
+                }
+                if *filter
+                    != (super::GraveyardFilter {
+                        card: Some(ZoneCardFilter {
+                            card_type: Some(CardTypeFilter::Artifact),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    })
+                    || !entry_modifiers.is_empty()
+                {
+                    return Err("ability_program graveyard Battlefield supports only an unmodified artifact card from the controller's graveyard".into());
+                }
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::MoveGraveyardCards { .. } => Err(
+                "MoveGraveyardCards in a resolution program supports only targeted ability-owned graveyard Exile or the singleton artifact Battlefield profile".into(),
+            ),
+            SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(filter),
+            } if context == EffectContext::Ability
+                && filter.as_ref()
+                    == &(TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        permanent_types: vec![super::PermanentTypeFilter::Artifact],
+                        ..TargetFilter::default()
+                    }) =>
+            {
+                effect.validate(context)?;
+                validate_program_target_filter(filter, "Destroy target")?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(filter),
+            } if context == EffectContext::Spell => {
+                let target_group_index = Some(spell_destroy_target_group(
+                    &instruction.id,
+                    &compiler.target_references,
+                )?);
+                if result_bind_count != 1 {
+                    return Err(format!(
+                        "spell_program Destroy instruction '{}' must bind its single typed result",
+                        instruction.id
+                    ));
+                }
+
+                let target_group_index = target_group_index.ok_or_else(|| {
+                    "spell_program Destroy requires exactly one explicit Subject target binding"
+                        .to_string()
+                })?;
+                effect.validate(context)?;
+                validate_program_target_filter(filter, "Destroy target")?;
+                Ok(vec![ResultType::TargetCardResultCohort {
+                    action: CardResultAction::Destroy,
+                    cardinality: Cardinality {
+                        min: 0,
+                        max: Some(1),
+                    },
+                    target_group_index,
+                }])
+            }
+            SpellEffectKind::PutInOwnersLibrary {
+                subject: EffectSubject::Chosen(filter),
+                ..
+            } if context == EffectContext::Spell => {
+                let (group_index, group_max) = chosen_single_target_group(
+                    &instruction.id,
+                    &compiler.target_references,
+                    compiler.targeting,
+                    ProgramTargetRole::Subject,
+                    "PutInOwnersLibrary",
+                )?;
+                let target_group_index = Some(group_index);
+                let target_group_max = Some(group_max);
+
+                if target_group_index.is_none() || target_group_max != Some(1) {
+                    return Err(
+                        "PutInOwnersLibrary Chosen requires one explicit single-target binding".into(),
+                    );
+                }
+                effect.validate(context)?;
+                validate_program_target_filter(filter, "PutInOwnersLibrary target")?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::PutInOwnersLibrary {
+                subject: EffectSubject::AttachedObject,
+                placement: super::LibraryPlacement::Shuffle,
+            } if context == EffectContext::Ability => {
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::PutInOwnersLibrary { .. } => Err(
+                "PutInOwnersLibrary in a resolution program supports a bound single chosen target, or an ability-owned AttachedObject Shuffle".into(),
+            ),
+            SpellEffectKind::Destroy { .. } if context == EffectContext::Spell => Err(
+                "spell_program Destroy requires a chosen permanent target with one explicit Subject binding".into(),
+            ),
+            SpellEffectKind::Destroy { .. } => Err(
+                "Destroy in an ability program supports only a chosen Artifact permanent target".into(),
+            ),
+            SpellEffectKind::ChooseHandCards { count, target, .. }
+                if context == EffectContext::Spell =>
+            {
+                let target_group_index = Some(spell_hand_discard_target_group(
+                    &instruction.id,
+                    &compiler.target_references,
+                )?);
+                if result_bind_count != 1 {
+                    return Err(format!("spell_program ChooseHandCards instruction '{}' must bind its single typed result", instruction.id));
+                }
+
+                if !is_private_affected_player_discard_profile(effect) {
+                    return Err(
+                        "ChooseHandCards in spell_program supports only a positive, unfiltered, nonoptional affected-player discard from one default AnyPlayer or OpponentPlayer target".into(),
+                    );
+                }
+                let target_group_index = target_group_index.ok_or_else(|| {
+                    "spell_program ChooseHandCards requires exactly one explicit Target binding"
+                        .to_string()
+                })?;
+                effect.validate(context)?;
+                validate_program_target_filter(target, "ChooseHandCards target")?;
+                Ok(vec![ResultType::TargetCardResultCohort {
+                    action: CardResultAction::Discard,
+                    cardinality: Cardinality {
+                        min: 0,
+                        max: Some(*count),
+                    },
+                    target_group_index,
+                }])
+            }
+            SpellEffectKind::ChooseHandCards { .. } => Err(
+                "ChooseHandCards in a resolution program supports only the exact spell target-discard profile".into(),
+            ),
+            SpellEffectKind::Draw { who, count } => {
+                if let EffectOp::Draw { count, .. } = authored_effect {
+                    if count.card_result_filter().is_some() || count.uses_bound_card_result_count() {
+                        dependency
+                            .require(&|actual| matches!(actual, ResultType::DiscardResult { .. }))?;
+                    } else if *who == PlayerRecipient::EachPlayer
+                        && matches!(count, Amount::Count(CountExpression::ProgramInputCount))
+                    {
+                        admitted_program_input_count = true;
+                        dependency.require(&|actual| {
+                            matches!(
+                                actual,
+                                ResultType::Count(CountResultKind::JoinForcesManaPaid)
+                            )
+                        })?;
+                    }
+                }
+                validate_program_draw_result_count_input(effect, dependency.slot, &compiler.slots)?;
+                if matches!(
+                    who,
+                    PlayerRecipient::AffectedPlayer
+                        | PlayerRecipient::EachOtherPlayerThanAffectedPlayer
+                ) {
+                    required_inputs.insert(ProgramRequiredInput::TriggerAffectedPlayer);
+                }
+
+                effect.validate(context)?;
+                validate_program_draw_recipient(
+                    *who,
+                    context,
+                    count.card_result_filter().is_some(),
+                    matches!(count, Amount::Count(CountExpression::ProgramInputCount)),
+                )?;
+                if matches!(count, Amount::Count(CountExpression::ProgramInputCount)) {
+                    if *who != PlayerRecipient::EachPlayer {
+                        return Err(
+                            "ProgramInputCount Draw input requires the EachPlayer recipient".into(),
+                        );
+                    }
+                    validate_program_amount(count)?;
+                } else if count.card_result_filter().is_some() {
+                    // The exact count shape and explicitly bound DiscardResult slot are checked
+                    // together during block compilation.
+                    if program_draw_result_count_profile(count).is_none() {
+                        return Err(
+                            "Program Draw result counts support only a direct count, an affected-player count, or a per-player maximum".into(),
+                        );
+                    }
+                } else {
+                    validate_program_amount(count)?;
+                    validate_fixed_program_amount("Draw count", count)?;
+                }
+                // Replacement effects may expand the committed draw cohort, so the authored count
+                // does not bound the receipt.
+                Ok(vec![ResultType::DrawReceipt {
+                    who: *who,
+                    cardinality: Cardinality { min: 0, max: None },
+                }])
+            }
+            SpellEffectKind::Scry { count } => {
+                validate_program_amount(count)?;
+                validate_fixed_program_amount("Scry count", count)?;
+                // Legacy Scry rejects a literal zero, but Programs admit it as a resultless no-op.
+                // Keep the ordinary validator for positive counts and preserve its context checks.
+                if !matches!(count, Amount::Fixed(0)) {
+                    effect.validate(context)?;
+                }
+                Ok(Vec::new())
+            }
+            SpellEffectKind::LookTopCardOptionalToHand { .. } => {
+                effect.validate(context)?;
+                if context != EffectContext::Spell {
+                    return Err("LookTopCardOptionalToHand in a CardProgram is spell-only".into());
+                }
+                // This fixed one-card optional look has no typed output. Its exact top-card identity,
+                // filter, and private choice are owned by the resolution continuation.
+                Ok(Vec::new())
+            }
+            SpellEffectKind::LookChooseToHand {
+                filter,
+                min,
+                max,
+                reveal,
+                bottom_order,
+                ..
+            } => {
+                effect.validate(context)?;
+                if context != EffectContext::Spell {
+                    return Err("LookChooseToHand in spell_program is spell-only".into());
+                }
+                if filter.is_some()
+                    || *reveal
+                    || *bottom_order != LibraryBottomOrder::Chosen
+                    || *min == 0
+                    || min != max
+                {
+                    return Err(
+                        "LookChooseToHand in spell_program requires an exact positive unfiltered, unrevealed, chosen-order selection".into(),
+                    );
+                }
+                Ok(Vec::new())
+            }
+            SpellEffectKind::GainLife { amount, .. } => {
+                if let EffectOp::GainLife { amount, who } = authored_effect {
+                    if *who != PlayerRecipient::Controller
+                        && !matches!(who, PlayerRecipient::ControllerOfTargetGroup { .. })
+                        && *who != PlayerRecipient::ProgramInputPlayer
+                    {
+                        validate_program_recipient(*who, context, "GainLife recipient")?;
+                    }
+                    if let Some(filter) = previous_effect_card_result_characteristic_sum_filter(effect) {
+                        dependency.require(&|actual| {
+                            match actual {
+                                ResultType::CardResultCohort { action, .. }
+                                | ResultType::TargetCardResultCohort { action, .. } => {
+                                    *action == filter.action
+                                }
+                                _ => false,
+                            }
+                        })?;
+                    } else if amount.card_result_filter().is_some() {
+                        dependency.require(&|actual| {
+                            matches!(
+                                actual,
+                                ResultType::CardResultCohort {
+                                    action: CardResultAction::Mill,
+                                    ..
+                                } | ResultType::TargetCardResultCohort {
+                                    action: CardResultAction::Discard,
+                                    ..
+                                }
+                            )
+                        })?;
+                    } else if amount.uses_bound_card_result_count() {
+                        dependency.require(&|actual| {
+                            matches!(
+                                actual,
+                                ResultType::CardResultCohort { .. }
+                                    | ResultType::TargetCardResultCohort { .. }
+                                    | ResultType::LinkedExileCardResultCohort { .. }
+                                    | ResultType::CastPaymentCohort { .. }
+                                    | ResultType::DiscardResult { .. }
+                            )
+                        })?;
+                    }
+                }
+                validate_program_gain_life_result_count_input(
+                    effect,
+                    dependency.slot,
+                    &compiler.slots,
+                )?;
+                if previous_effect_card_result_characteristic_sum_filter(effect).is_some() {
+                    validate_program_card_result_characteristic_sum_input(
+                        effect,
+                        dependency.slot,
+                        &compiler.slots,
+                    )?;
+                }
+
+                if amount.card_result_characteristic_sum().is_some() {
+                    effect.validate(context)?;
+                } else if amount.card_result_filter().is_some() {
+                    if program_gain_life_result_count_profile(amount).is_none() {
+                        return Err("Program GainLife result counts support only a direct result count or one positive zero-constant affine term".into());
+                    }
+                    // The one-term affine form is proven by its typed producer contract;
+                    // ordinary effect validation continues to reject arbitrary affine result leaves.
+                    if matches!(amount, Amount::Count(CountExpression::CardsMatchingResult { .. })) {
+                        effect.validate(context)?;
+                    }
+                } else {
+                    effect.validate(context)?;
+                    validate_program_amount(amount)?;
+                    validate_fixed_program_amount("GainLife amount", amount)?;
+                }
+                Ok(Vec::new())
+            }
+            SpellEffectKind::LoseLife {
+                amount: LifeAmount::RevealedCardManaValue,
+                who: PlayerRecipient::EachOpponent,
+            } if context == EffectContext::Ability => {
+                dependency.require(&|actual| matches!(actual, ResultType::RevealedCardReceipt))?;
+                validate_program_revealed_card_mana_value_input(
+                    effect,
+                    dependency.slot,
+                    steps,
+                    &compiler.slots,
+                )?;
+
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::LoseLife {
+                amount: LifeAmount::RevealedCardManaValue,
+                ..
+            } => Err(
+                "LoseLife(RevealedCardManaValue) requires an activated ability resolution program"
+                    .into(),
+            ),
+            SpellEffectKind::LoseLife { amount, who }
+                if matches!(amount, LifeAmount::Fixed(_))
+                    && (*who == PlayerRecipient::EachOpponent
+                        || (*who == PlayerRecipient::Controller
+                            && matches!(context, EffectContext::Spell | EffectContext::Ability))) =>
+            {
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::LoseLife { .. } => Err(
+                "LoseLife in a resolution program supports a fixed EachOpponent amount, or a fixed Controller amount on a spell or ability program".into(),
+            ),
+            SpellEffectKind::Blight { .. } => {
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::Proliferate => {
+                effect.validate(context)?;
+                match result_bind_count {
+                    0 => Ok(Vec::new()),
+                    1 => Ok(vec![ResultType::ProliferatedPermanentCohort {
+                        cardinality: Cardinality { min: 0, max: None },
+                    }]),
+                    _ => Err("Program Proliferate may bind at most one permanent cohort result".into()),
                 }
             }
-            effect.validate(context)?;
-            Ok(Vec::new())
+            SpellEffectKind::ChooseProliferatedPermanents => {
+                dependency.require(&|actual| {
+                    matches!(
+                        actual,
+                        ResultType::ProliferatedPermanentCohort {
+                            cardinality: Cardinality { min: 0, max: None },
+                        }
+                    )
+                })?;
+                validate_proliferated_choice_input(effect, dependency.slot, steps, &compiler.slots)?;
+
+                if context != EffectContext::Spell {
+                    return Err(
+                        "ChooseProliferatedPermanents is supported only in a spell Program".into(),
+                    );
+                }
+                Ok(vec![ResultType::ProliferatedPermanentSelection {
+                    cardinality: Cardinality { min: 0, max: None },
+                }])
+            }
+            SpellEffectKind::PhaseOut {
+                subject: EffectSubject::PreviousEffectObjects,
+            } => {
+                dependency.require(&|actual| {
+                    matches!(
+                        actual,
+                        ResultType::ProliferatedPermanentSelection {
+                            cardinality: Cardinality { min: 0, max: None },
+                        }
+                    )
+                })?;
+                validate_proliferated_phase_out_input(effect, dependency.slot, steps, &compiler.slots)?;
+
+                if context != EffectContext::Spell {
+                    return Err(
+                        "Program PhaseOut of selected proliferated permanents is spell-only".into(),
+                    );
+                }
+                Ok(Vec::new())
+            }
+            SpellEffectKind::PhaseOut { .. } => Err(
+                "PhaseOut in a CardProgram supports only the typed Proliferate selection form".into(),
+            ),
+            SpellEffectKind::GrantKeywordsAll { filter, .. } => {
+                effect.validate(context)?;
+                if matches!(
+                    filter.controller,
+                    Some(super::CreatureScopeController::TargetedPlayer { .. })
+                ) {
+                    return Err(
+                        "GrantKeywordsAll in a resolution program does not support TargetedPlayer scopes without a target-role binding".into(),
+                    );
+                }
+                Ok(Vec::new())
+            }
+            SpellEffectKind::RemoveAllAbilities {
+                subject: EffectSubject::PreviousEffectObject,
+                duration: ResolvingEffectDuration::WhileSourceOnBattlefield,
+            } => {
+                dependency.require(&|actual| {
+                    matches!(
+                        actual,
+                        ResultType::CounteredAbilitySource {
+                            cardinality: Cardinality {
+                                min: 0,
+                                max: Some(1),
+                            },
+                        }
+                    )
+                })?;
+
+                if context != EffectContext::Ability {
+                    return Err("effect is not in the resolution-program operation whitelist".into());
+                }
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::PreviousEffectObject,
+                ..
+            } if context == EffectContext::Spell => {
+                dependency.require(&|actual| {
+                    matches!(
+                        actual,
+                        ResultType::PermanentSelection {
+                            cardinality: Cardinality {
+                                min: 0,
+                                max: Some(1),
+                            },
+                            ..
+                        }
+                    )
+                })?;
+
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::PreviousEffectObject,
+                ..
+            } => {
+                Err("GrantKeywords(PreviousEffectObject) in a resolution program is spell-only".into())
+            }
+            SpellEffectKind::RemoveAbilitiesAll { .. } | SpellEffectKind::DestroyAll { .. } => {
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::CreateReflexiveTrigger { .. } => {
+                if is_counter_placement_reflexive_consumer(effect) {
+                    dependency.require(&|actual| {
+                        let counter = counter_placement_reflexive_counter(effect)
+                            .expect("counter-placement consumer has a source counter condition");
+                        matches!(
+                            actual,
+                            ResultType::CounterPlacementReceipt {
+                                counter: actual_counter,
+                                object: super::ConditionObjectRef::Source,
+                                cardinality: Cardinality {
+                                    min: 0,
+                                    max: Some(1),
+                                },
+                            }
+                            if *actual_counter == counter
+                        )
+                    })?;
+                } else if is_source_sacrifice_reflexive_consumer(effect) {
+                    dependency.require(&|actual| {
+                        matches!(
+                            actual,
+                            ResultType::CardResultCohort {
+                                action: CardResultAction::Sacrifice,
+                                who: PlayerRecipient::Controller,
+                                cardinality: Cardinality {
+                                    min: 0,
+                                    max: Some(1),
+                                },
+                            }
+                        )
+                    })?;
+                }
+
+                effect.validate(context)?;
+                if is_counter_placement_reflexive_consumer(effect) {
+                    validate_counter_placement_program_reflexive_trigger(effect, context)?;
+                } else {
+                    validate_resultless_program_reflexive_trigger(effect, context)?;
+                }
+                Ok(Vec::new())
+            }
+            SpellEffectKind::Discard { who, quantity } => {
+                if *who == PlayerRecipient::AffectedPlayer {
+                    required_inputs.insert(ProgramRequiredInput::TriggerAffectedPlayer);
+                }
+
+                effect.validate(context)?;
+                let player_set_discard = context == EffectContext::Ability
+                    && matches!(
+                        *who,
+                        PlayerRecipient::EachOpponent | PlayerRecipient::EachPlayer
+                    )
+                    && matches!(quantity, super::DiscardQuantity::Exact(1));
+                let spell_each_player_discard = context == EffectContext::Spell
+                    && *who == PlayerRecipient::EachPlayer
+                    && matches!(
+                        quantity,
+                        super::DiscardQuantity::AnyNumber | super::DiscardQuantity::All
+                    );
+                if !player_set_discard && !spell_each_player_discard {
+                    validate_program_recipient(*who, context, "Discard recipient")?;
+                }
+                let optional_payment = matches!(quantity, super::DiscardQuantity::OptionalExact(_));
+                Ok(vec![ResultType::DiscardResult {
+                    who: *who,
+                    cardinality: Cardinality {
+                        min: 0,
+                        // Player-set recipients contribute one choice per applicable player to a
+                        // combined typed cohort, so the per-player Exact(1) count is not an
+                        // aggregate upper bound.
+                        max: if player_set_discard {
+                            None
+                        } else {
+                            discard_upper_bound(quantity)
+                        },
+                    },
+                    optional_payment,
+                }])
+            }
+            SpellEffectKind::ChoosePermanents {
+                chooser,
+                filter,
+                max,
+                constraints,
+                ..
+            } => {
+                let target_group_index = if context == EffectContext::Ability
+                    && targeted_opponent_singleton_choice_group(effect).is_some()
+                {
+                    let (group_index, _group_max) = chosen_single_target_group(
+                        &instruction.id,
+                        &compiler.target_references,
+                        compiler.targeting,
+                        ProgramTargetRole::Target,
+                        "ChoosePermanents targeted-opponent choice",
+                    )?;
+                    Some(group_index)
+                } else {
+                    None
+                };
+
+                effect.validate(context)?;
+                let targeted_group = targeted_opponent_singleton_choice_group(effect);
+                if targeted_group.is_some() && context != EffectContext::Ability {
+                    return Err(
+                        "targeted-opponent ChoosePermanents is supported only on an ability program"
+                            .into(),
+                    );
+                }
+                if targeted_group.is_none() {
+                    validate_program_controller(*chooser, "ChoosePermanents chooser")?;
+                } else if target_group_index != targeted_group {
+                    return Err(
+                        "targeted-opponent ChoosePermanents must bind its player target to the authored target group"
+                            .into(),
+                    );
+                }
+                validate_program_choice_filter(filter)?;
+                if !(constraints.is_empty() || equipment_choice_target(effect).is_some()) {
+                    return Err("ChoosePermanents constraints are not supported in spell_program without typed object references".into());
+                }
+                // Selection can be limited by the live candidate set, even when the authored minimum
+                // is larger.
+                Ok(vec![ResultType::PermanentSelection {
+                    chooser: *chooser,
+                    filter: Box::new(filter.clone()),
+                    cardinality: Cardinality {
+                        min: 0,
+                        max: Some(*max),
+                    },
+                }])
+            }
+            SpellEffectKind::UntapChosenPermanents => {
+                dependency
+                    .require(&|actual| matches!(actual, ResultType::PermanentSelection { .. }))?;
+
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::TapChosenPermanents => {
+                dependency
+                    .require(&|actual| matches!(actual, ResultType::PermanentSelection { .. }))?;
+                validate_tap_chosen_permanents_input(effect, dependency.slot, steps, &compiler.slots)?;
+
+                effect.validate(context)?;
+                Ok(vec![ResultType::Count(CountResultKind::TappedPermanents)])
+            }
+            SpellEffectKind::Untap {
+                subject: EffectSubject::PreviousEffectObject,
+            } => {
+                dependency
+                    .require(&|actual| matches!(actual, ResultType::PermanentSelection { .. }))?;
+                validate_search_result_input(
+                    effect,
+                    dependency.slot,
+                    &compiler.search_result_slots,
+                    &compiler.slots,
+                )?;
+
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::SelectHandCards {
+                count,
+                ordered,
+                prompt,
+            } => {
+                count.validate_effect(context)?;
+                validate_program_amount(count)?;
+                validate_fixed_program_amount("SelectHandCards count", count)?;
+                if prompt.trim().is_empty() {
+                    return Err("SelectHandCards requires a nonempty prompt".into());
+                }
+                Ok(vec![ResultType::HandSelection {
+                    cardinality: Cardinality {
+                        min: 0,
+                        max: amount_upper_bound(count),
+                    },
+                    ordered: *ordered,
+                }])
+            }
+            SpellEffectKind::Mill { count, who } => {
+                if *who == PlayerRecipient::AffectedPlayer {
+                    required_inputs.insert(ProgramRequiredInput::TriggerAffectedPlayer);
+                }
+
+                effect.validate(context)?;
+                validate_program_recipient(*who, context, "Mill recipient")?;
+                validate_program_amount(count)?;
+                Ok(vec![ResultType::CardResultCohort {
+                    action: CardResultAction::Mill,
+                    who: *who,
+                    cardinality: Cardinality {
+                        min: 0,
+                        max: amount_upper_bound(count),
+                    },
+                }])
+            }
+            effect if is_search_result_behold_consumer(effect) => {
+                dependency
+                    .require(&|actual| matches!(actual, ResultType::PermanentSelection { .. }))?;
+                validate_search_result_input(
+                    effect,
+                    dependency.slot,
+                    &compiler.search_result_slots,
+                    &compiler.slots,
+                )?;
+
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::SearchLibrary {
+                selection_bounds: Some(_),
+                destination: SearchDestination::TopOfLibrary,
+                conditional_destination: Some(_),
+                ..
+            } => validate_resultless_conditional_top_search(effect, context),
+            SpellEffectKind::SearchLibrary {
+                selection_bounds: Some(_),
+                destination: SearchDestination::TopOfLibrary,
+                ..
+            } => validate_resultless_direct_top_library_search(effect, context),
+            SpellEffectKind::SearchLibrary {
+                selection_bounds: Some(_),
+                destination: SearchDestination::Hand,
+                ..
+            } => validate_resultless_direct_hand_library_search(effect, context),
+            SpellEffectKind::SearchLibrary {
+                selection_bounds: Some(_),
+                destination: SearchDestination::Battlefield { .. },
+                ..
+            } if effect
+                .typed_resultful_battlefield_search_result_type()
+                .is_some() =>
+            {
+                if result_bind_count == 0 {
+                    validate_resultless_direct_battlefield_library_search(effect, context)
+                } else {
+                    validate_resultful_direct_battlefield_search(effect, context)
+                }
+            }
+            SpellEffectKind::SearchLibrary {
+                selection_bounds: Some(_),
+                destination: SearchDestination::Battlefield { .. },
+                ..
+            } => validate_resultless_direct_battlefield_library_search(effect, context),
+            SpellEffectKind::SearchLibrary {
+                selection_bounds: Some(_),
+                ..
+            } => {
+                if result_bind_count != 1 {
+                    return Err(format!(
+                        "instruction '{}' must bind its typed cohort result",
+                        instruction.id
+                    ));
+                }
+                validate_retained_library_search(effect, context)
+            }
+            SpellEffectKind::SearchLibrary { .. } => {
+                Err("SearchLibrary in spell_program requires typed retained selection_bounds".into())
+            }
+            SpellEffectKind::LibraryPartition {
+                count: 1,
+                top_min: 0,
+                top_max: None,
+                kind: super::LibraryPartitionKind::Surveil,
+            } if context == EffectContext::Spell => {
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::RevealCohort => {
+                dependency.require(&|actual| matches!(actual, ResultType::FoundLibraryCohort))?;
+                if result_bind_count != 1 {
+                    return Err(format!(
+                        "instruction '{}' must bind its typed cohort result",
+                        instruction.id
+                    ));
+                }
+                Ok(vec![ResultType::RevealedLibraryCohort])
+            }
+            SpellEffectKind::ChooseCohortPartition { chooser, selection } => {
+                dependency.require(&|actual| matches!(actual, ResultType::RevealedLibraryCohort))?;
+                if result_bind_count != 1 {
+                    return Err(format!(
+                        "instruction '{}' must bind its typed cohort result",
+                        instruction.id
+                    ));
+                }
+
+                let PlayerRecipient::TargetedPlayer { kind, .. } = chooser else {
+                    return Err(
+                        "ChooseCohortPartition requires a targeted player chooser in spell_program"
+                            .into(),
+                    );
+                };
+                if *kind != TargetKind::OpponentPlayer {
+                    return Err(
+                        "ChooseCohortPartition chooser must target an opponent in spell_program".into(),
+                    );
+                }
+                match selection {
+                    CohortPartitionSelection::ExactlyUpTo(limit) if *limit > 0 => {}
+                    CohortPartitionSelection::ExactlyUpTo(_) => {
+                        return Err("ChooseCohortPartition ExactlyUpTo limit must be positive".into())
+                    }
+                }
+                Ok(vec![ResultType::CardPartition])
+            }
+            SpellEffectKind::MoveCohortPartition {
+                selected_to,
+                remainder_to,
+            } => {
+                dependency.require(&|actual| matches!(actual, ResultType::CardPartition))?;
+
+                let valid_destination = |destination| {
+                    matches!(
+                        destination,
+                        SearchDestination::Hand | SearchDestination::Graveyard
+                    )
+                };
+                if !valid_destination(*selected_to)
+                    || !valid_destination(*remainder_to)
+                    || selected_to == remainder_to
+                {
+                    return Err(
+                        "MoveCohortPartition requires distinct Hand or Graveyard destinations".into(),
+                    );
+                }
+                Ok(Vec::new())
+            }
+            SpellEffectKind::ShuffleLibrary { who } => {
+                validate_program_controller(*who, "ShuffleLibrary recipient")?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::ExileTopWithPlayPermission {
+                player: PlayerRecipient::Controller,
+                count: 1,
+                count_by_cast_cost: None,
+            } if context == EffectContext::Spell => {
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::ExileTopWithPlayPermission { .. } => Err(
+                "ExileTopWithPlayPermission in a resolution program supports only one Controller card without a cast-cost conditional on a spell".into(),
+            ),
+            SpellEffectKind::ChooseCard {
+                filter,
+                destination,
+                ..
+            } => {
+                if matches!(
+                    effect,
+                    EffectOp::ChooseCard {
+                        source: ChooseCardSource::CardResultCohort { .. },
+                        ..
+                    }
+                ) {
+                    dependency.require(&|actual| {
+                        matches!(
+                            actual,
+                            ResultType::CardResultCohort {
+                                action: CardResultAction::Mill,
+                                ..
+                            }
+                        )
+                    })?;
+                }
+
+                filter.validate()?;
+                if !matches!(
+                    destination,
+                    super::GraveyardDestination::Hand
+                        | super::GraveyardDestination::LibraryTop
+                        | super::GraveyardDestination::LibraryBottom
+                ) {
+                    return Err(
+                        "ChooseCard currently supports only Hand and Library destinations in spell_program"
+                            .into(),
+                    );
+                }
+                Ok(Vec::new())
+            }
+            SpellEffectKind::PutSelectedHandCardsOnLibraryTop => {
+                dependency.require(&|actual| {
+                    matches!(actual, ResultType::HandSelection { ordered: true, .. })
+                })?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::DamageTarget { amount, target } => {
+                effect.validate(context)?;
+                validate_program_amount(amount)?;
+                match amount {
+                    Amount::Fixed(_) => {}
+                    Amount::X if context == EffectContext::Spell => {}
+                    _ => {
+                        return Err(
+                            "DamageTarget amount must be fixed, or X on a resolving spell".into(),
+                        )
+                    }
+                }
+                validate_program_target_filter(target, "DamageTarget target")?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::DamagePlayer {
+                amount,
+                who: PlayerRecipient::Controller,
+            } if matches!(amount, Amount::Count(CountExpression::ProgramInputCount)) => {
+                admitted_program_input_count = true;
+
+                dependency.require(&|actual| {
+                    matches!(actual, ResultType::Count(CountResultKind::RevealedPrefix))
+                })?;
+
+                if context != EffectContext::Ability {
+                    return Err(
+                        "ProgramInputCount Controller DamagePlayer input is ability-only".into(),
+                    );
+                }
+                effect.validate(context)?;
+                validate_program_amount(amount)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::DamagePlayer {
+                amount,
+                who: PlayerRecipient::EachOpponent,
+            } => {
+                if previous_effect_card_result_characteristic_sum_filter(effect).is_some() {
+                    dependency.require(&|actual| {
+                        let filter = previous_effect_card_result_characteristic_sum_filter(effect)
+                            .expect("matched previous-effect characteristic sum");
+                        match actual {
+                            ResultType::CardResultCohort { action, .. }
+                            | ResultType::TargetCardResultCohort { action, .. } => {
+                                *action == filter.action
+                            }
+                            _ => false,
+                        }
+                    })?;
+                    validate_program_card_result_characteristic_sum_input(
+                        effect,
+                        dependency.slot,
+                        &compiler.slots,
+                    )?;
+                }
+
+                if context != EffectContext::Spell {
+                    return Err("DamagePlayer EachOpponent in spell_program is spell-only".into());
+                }
+                effect.validate(context)?;
+                match amount {
+                    Amount::Fixed(value) if *value > 0 => Ok(Vec::new()),
+                    amount if amount.card_result_characteristic_sum().is_some() => {
+                        amount.validate_effect(context)?;
+                        Ok(Vec::new())
+                    }
+                    _ => Err(
+                        "DamagePlayer EachOpponent in spell_program requires a positive fixed amount or a typed card-result characteristic sum"
+                            .into(),
+                    ),
+                }
+            }
+            SpellEffectKind::DamagePlayer {
+                amount,
+                who:
+                    PlayerRecipient::TargetedPlayer {
+                        kind: TargetKind::OpponentPlayer,
+                        ..
+                    },
+            } => {
+                if previous_effect_card_result_characteristic_sum_filter(effect).is_some() {
+                    dependency.require(&|actual| {
+                        let filter = previous_effect_card_result_characteristic_sum_filter(effect)
+                            .expect("matched previous-effect characteristic sum");
+                        match actual {
+                            ResultType::CardResultCohort { action, .. }
+                            | ResultType::TargetCardResultCohort { action, .. } => {
+                                *action == filter.action
+                            }
+                            _ => false,
+                        }
+                    })?;
+                    validate_program_card_result_characteristic_sum_input(
+                        effect,
+                        dependency.slot,
+                        &compiler.slots,
+                    )?;
+                }
+
+                effect.validate(context)?;
+                match amount {
+                    Amount::Fixed(value) if *value > 0 => Ok(Vec::new()),
+                    amount if amount.card_result_characteristic_sum().is_some() => {
+                        amount.validate_effect(context)?;
+                        Ok(Vec::new())
+                    }
+                    _ => Err(
+                        "DamagePlayer TargetedPlayer OpponentPlayer in spell_program requires a positive fixed amount or a typed card-result characteristic sum"
+                            .into(),
+                    ),
+                }
+            }
+            SpellEffectKind::DamagePlayer {
+                amount,
+                who: PlayerRecipient::ControllerOfTargetGroup { .. },
+            } => {
+                if context != EffectContext::Spell {
+                    return Err(
+                        "DamagePlayer ControllerOfTargetGroup in spell_program is spell-only".into(),
+                    );
+                }
+                effect.validate(context)?;
+                validate_program_amount(amount)?;
+                validate_fixed_program_amount("DamagePlayer amount", amount)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::CounterTargetSpell {
+                unless_controller_pays,
+                unless_controller_pays_by_cast_cost,
+                ..
+            } => {
+                effect.validate(context)?;
+                if unless_controller_pays_by_cast_cost.is_some() {
+                    return Err(
+                        "CounterTargetSpell cast-cost payment is outside the typed program input contract"
+                            .into(),
+                    );
+                }
+                if let Some(amount) = unless_controller_pays {
+                    validate_program_amount(amount)?;
+                    validate_fixed_program_amount("CounterTargetSpell payment", amount)?;
+                }
+                Ok(if unless_controller_pays.is_some() {
+                    vec![ResultType::CounterPaymentOutcome]
+                } else {
+                    if result_bind_count == 0 {
+                        Vec::new()
+                    } else {
+                        if result_bind_count != 1 || context != EffectContext::Spell {
+                            return Err("nonpayment CounterTargetSpell may bind one TargetedSpellController result only in a spell Program".into());
+                        }
+                        vec![ResultType::TargetedSpellController]
+                    }
+                })
+            }
+            SpellEffectKind::ReturnToOwnersHand { subject } => {
+                if matches!(subject, EffectSubject::PreviousEffectObject) {
+                    dependency
+                        .require(&|actual| matches!(actual, ResultType::PermanentSelection { .. }))?;
+                    validate_return_to_owners_hand_input(effect, dependency.slot, &compiler.slots)?;
+                }
+
+                effect.validate(context)?;
+                match subject {
+                    super::EffectSubject::Chosen(filter) => {
+                        validate_program_target_filter(filter, "ReturnToOwnersHand target")?;
+                    }
+                    super::EffectSubject::PreviousEffectObject => {}
+                    _ => {
+                        return Err(
+                            "ReturnToOwnersHand requires an owner-local chosen target or its exact typed selection input in a resolution program"
+                                .into(),
+                        );
+                    }
+                }
+                Ok(Vec::new())
+            }
+            SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries { .. } => {
+                let target_group_index = if context == EffectContext::Ability
+                    && targeted_opponent_nonland_shuffle_group(effect).is_some()
+                {
+                    let (group_index, _group_max) = chosen_single_target_group(
+                        &instruction.id,
+                        &compiler.target_references,
+                        compiler.targeting,
+                        ProgramTargetRole::Target,
+                        "ShuffleNonlandPermanentsIntoOwnersLibraries",
+                    )?;
+                    Some(group_index)
+                } else {
+                    None
+                };
+
+                effect.validate(context)?;
+                if context != EffectContext::Ability
+                    || targeted_opponent_nonland_shuffle_group(effect).is_none()
+                    || target_group_index != targeted_opponent_nonland_shuffle_group(effect)
+                {
+                    return Err(
+                        "ShuffleNonlandPermanentsIntoOwnersLibraries supports only its authored targeted-opponent ability group in a resolution program"
+                            .into(),
+                    );
+                }
+                Ok(Vec::new())
+            }
+            SpellEffectKind::ReturnAllToOwnersHand { .. } => {
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::CreateTokens { count, who, .. } => {
+                if *who == PlayerRecipient::ProgramInputPlayer {
+                    admitted_program_input_player = true;
+                    dependency
+                        .require(&|actual| matches!(actual, ResultType::TargetedSpellController))?;
+                }
+
+                effect.validate(context)?;
+                let supported_recipient = *who == PlayerRecipient::Controller
+                    || (*who == PlayerRecipient::ProgramInputPlayer && context == EffectContext::Spell)
+                    || (*who == PlayerRecipient::SourceController && context == EffectContext::Ability);
+                if !supported_recipient {
+                    return Err(
+                        "CreateTokens supports controller-owned tokens, explicit ProgramInputPlayer tokens in a spell program, or SourceController tokens on an ability program"
+                            .into(),
+                    );
+                }
+                validate_program_create_tokens_amount(count, who)?;
+                Ok(vec![ResultType::CreatedTokenBatch {
+                    cardinality: Cardinality { min: 0, max: None },
+                }])
+            }
+            SpellEffectKind::CreateTokenCopies { count, source, .. } => {
+                if matches!(source, TokenCopySource::TriggerObject) {
+                    required_inputs.insert(ProgramRequiredInput::TriggerObservedObject);
+                }
+
+                effect.validate(context)?;
+                validate_program_amount(count)?;
+                validate_fixed_program_amount("CreateTokenCopies count", count)?;
+                match source {
+                    super::TokenCopySource::Chosen(filter) => {
+                        validate_program_target_filter(filter, "CreateTokenCopies target")?;
+                    }
+                    super::TokenCopySource::TriggerObject if context == EffectContext::Ability => {}
+                    super::TokenCopySource::TriggerObject => {
+                        return Err(
+                            "TriggerObject token copies require an ability program owner".into(),
+                        );
+                    }
+                    super::TokenCopySource::Source => {
+                        return Err(
+                            "CreateTokenCopies source is not supported in a resolution program".into(),
+                        );
+                    }
+                    super::TokenCopySource::LinkedExile { .. }
+                        if context == EffectContext::Ability
+                            && top_level_ability_id(&compiler.owner).is_some() => {}
+                    super::TokenCopySource::LinkedExile { .. } => {
+                        return Err(
+                            "LinkedExile token copies require a top-level ability program owner".into(),
+                        );
+                    }
+                }
+                Ok(
+                    if matches!(
+                        source,
+                        TokenCopySource::TriggerObject | TokenCopySource::LinkedExile { .. }
+                    ) {
+                        vec![ResultType::TokenCopyBatch]
+                    } else {
+                        Vec::new()
+                    },
+                )
+            }
+            SpellEffectKind::Tap {
+                subject: EffectSubject::Chosen(filter),
+            } if context == EffectContext::Ability => {
+                let (group_index, group_max) = chosen_single_target_group(
+                    &instruction.id,
+                    &compiler.target_references,
+                    compiler.targeting,
+                    ProgramTargetRole::Target,
+                    "Tap",
+                )?;
+                let target_group_index = Some(group_index);
+                let target_group_max = Some(group_max);
+
+                if target_group_index.is_none() || target_group_max != Some(1) {
+                    return Err("Tap requires one required single-target group".into());
+                }
+                effect.validate(context)?;
+                validate_program_target_filter(filter, "Tap target")?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { subjects }
+                if context == EffectContext::Ability =>
+            {
+                let (group_index, group_max) = chosen_single_target_group(
+                    &instruction.id,
+                    &compiler.target_references,
+                    compiler.targeting,
+                    ProgramTargetRole::Target,
+                    "ShufflePermanentsIntoOwnersLibraries",
+                )?;
+                let target_group_index = Some(group_index);
+                let target_group_max = Some(group_max);
+
+                let Some(filter) = single_source_chosen_shuffle_filter(subjects) else {
+                    return Err(
+                        "ShufflePermanentsIntoOwnersLibraries in a resolution program requires exactly Source and one Chosen permanent"
+                            .into(),
+                    );
+                };
+                if target_group_index.is_none() || target_group_max != Some(1) {
+                    return Err(
+                        "ShufflePermanentsIntoOwnersLibraries requires one required single-target group"
+                            .into(),
+                    );
+                }
+                effect.validate(context)?;
+                validate_program_target_filter(filter, "ShufflePermanentsIntoOwnersLibraries target")?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::PutCounters {
+                counter,
+                count,
+                subject: EffectSubject::Source,
+                ..
+            } if context == EffectContext::Ability => {
+                effect.validate(context)?;
+                validate_program_amount(count)?;
+                counter.validate()?;
+                Ok(vec![ResultType::CounterPlacementReceipt {
+                    counter: *counter,
+                    object: super::ConditionObjectRef::Source,
+                    cardinality: Cardinality {
+                        min: 0,
+                        max: Some(1),
+                    },
+                }])
+            }
+            SpellEffectKind::PutCounters {
+                count,
+                subject: EffectSubject::Chosen(filter),
+                ..
+            } if matches!(context, EffectContext::Spell | EffectContext::Ability)
+                && filter.all_terminal_filters_match(|leaf| leaf.kind == TargetKind::Creature) =>
+            {
+                let (group_index, group_max) = chosen_single_target_group(
+                    &instruction.id,
+                    &compiler.target_references,
+                    compiler.targeting,
+                    ProgramTargetRole::Target,
+                    "PutCounters",
+                )?;
+                let target_group_index = Some(group_index);
+                let target_group_max = Some(group_max);
+
+                if target_group_index.is_none() || target_group_max != Some(1) {
+                    return Err("PutCounters requires one required single-target group".into());
+                }
+                if !matches!(count, Amount::Fixed(_)) {
+                    return Err(
+                        "PutCounters in a resolution program supports only a fixed literal count"
+                            .into(),
+                    );
+                }
+                effect.validate(context)?;
+                validate_program_target_filter(filter, "PutCounters target")?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::RemoveAllCounters {
+                counter,
+                subject: EffectSubject::Source,
+            } if context == EffectContext::Ability => {
+                effect.validate(context)?;
+                counter.validate()?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::RemoveCounters {
+                counter,
+                count,
+                subject: EffectSubject::Source,
+            } if context == EffectContext::Ability && *count > 0 => {
+                effect.validate(context)?;
+                counter.validate()?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::Exile {
+                subject: EffectSubject::Chosen(filter),
+                linked_exile_id: None,
+            } if filter.is_permanent_only() => {
+                let (group_index, group_max) = chosen_optional_single_target_group(
+                    &instruction.id,
+                    &compiler.target_references,
+                    compiler.targeting,
+                    ProgramTargetRole::Subject,
+                    "Exile",
+                )?;
+                let target_group_index = Some(group_index);
+                let target_group_max = Some(group_max);
+
+                if target_group_index.is_none() || target_group_max != Some(1) {
+                    return Err(
+                        "typed Exile result requires one optional or required target group".into(),
+                    );
+                }
+                effect.validate(context)?;
+                validate_program_target_filter(filter, "Exile target")?;
+                let exiled_object = ResultType::ExiledObject {
+                    cardinality: Cardinality {
+                        min: 0,
+                        max: Some(1),
+                    },
+                };
+                if result_bind_count == 2 {
+                    Ok(vec![
+                        exiled_object,
+                        ResultType::TargetCardResultCohort {
+                            action: CardResultAction::Exile,
+                            cardinality: Cardinality {
+                                min: 0,
+                                max: Some(1),
+                            },
+                            target_group_index: group_index,
+                        },
+                    ])
+                } else {
+                    Ok(vec![exiled_object])
+                }
+            }
+            SpellEffectKind::Exile {
+                subject: EffectSubject::TriggerObject,
+                linked_exile_id: Some(linked_exile_id),
+            } if context == EffectContext::Ability
+                && compiler.allow_trigger_object_linked_exile
+                && compiler.allow_linked_exile_receipt =>
+            {
+                required_inputs.insert(ProgramRequiredInput::TriggerLinkedExileObject);
+
+                effect.validate(context)?;
+                let producer_ability_id =
+                    top_level_ability_id(&compiler.owner)
+                        .cloned()
+                        .ok_or_else(|| {
+                            "TriggerObject linked-exile receipt requires a top-level ability owner"
+                                .to_string()
+                        })?;
+                Ok(vec![ResultType::TriggerObjectLinkedExileReceipt {
+                    producer_ability_id,
+                    linked_exile_id: linked_exile_id.clone(),
+                    cardinality: Cardinality {
+                        min: 0,
+                        max: Some(1),
+                    },
+                }])
+            }
+            SpellEffectKind::Exile {
+                subject: EffectSubject::TriggerObject,
+                linked_exile_id: Some(_),
+            } if context == EffectContext::Ability && compiler.allow_trigger_object_linked_exile => {
+                required_inputs.insert(ProgramRequiredInput::TriggerLinkedExileObject);
+
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::ReturnOtherLinkedExiledCards {
+                producer_ability_id,
+                linked_exile_id,
+            } if context == EffectContext::Ability && compiler.allow_linked_exile_receipt => {
+                dependency.require(&|actual| {
+                    matches!(
+                        actual,
+                        ResultType::TriggerObjectLinkedExileReceipt {
+                            producer_ability_id: receipt_producer,
+                            linked_exile_id: receipt_link,
+                            cardinality: Cardinality {
+                                min: 0,
+                                max: Some(1),
+                            },
+                        } if receipt_producer == producer_ability_id
+                            && receipt_link == linked_exile_id
+                    )
+                })?;
+
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::ReturnOtherLinkedExiledCards { .. } => Err(
+                "ReturnOtherLinkedExiledCards in a resolution program requires an explicitly bound matching TriggerObject linked-exile receipt from a top-level ability".into(),
+            ),
+            SpellEffectKind::ChooseLinkedExiledCard {
+                producer_ability_id,
+                linked_exile_id,
+                destination: super::LinkedExiledCardDestination::OwnerGraveyard,
+                optional: false,
+                ..
+            } if context == EffectContext::Ability => {
+                effect.validate(context)?;
+                Ok(vec![ResultType::LinkedExileCardResultCohort {
+                    producer_ability_id: producer_ability_id.clone(),
+                    linked_exile_id: linked_exile_id.clone(),
+                    cardinality: Cardinality {
+                        min: 0,
+                        max: Some(1),
+                    },
+                }])
+            }
+            SpellEffectKind::ChooseLinkedExiledCard { .. } => Err(
+                "ChooseLinkedExiledCard in a resolution program requires a mandatory ability-owned OwnerGraveyard choice"
+                    .into(),
+            ),
+            SpellEffectKind::PlayLinkedExiledCard {
+                filter: None,
+                play_kind: super::LinkedExiledCardPlayKind::Play,
+                return_source_to_owner_hand_if_cast: false,
+                ..
+            } if context == EffectContext::Ability => {
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::PlayLinkedExiledCard { .. } => Err(
+                "PlayLinkedExiledCard in a resolution program requires a resultless ability Play profile"
+                    .into(),
+            ),
+            SpellEffectKind::Sacrifice {
+                subject: EffectSubject::Source,
+            } if context == EffectContext::Ability => {
+                effect.validate(context)?;
+                Ok(vec![ResultType::CardResultCohort {
+                    action: CardResultAction::Sacrifice,
+                    who: PlayerRecipient::Controller,
+                    cardinality: Cardinality {
+                        min: 0,
+                        max: Some(1),
+                    },
+                }])
+            }
+            SpellEffectKind::ApplyCombatRestriction {
+                scope: super::CombatRestrictionScope::Source,
+                restriction,
+            } if context == EffectContext::Ability
+                && restriction
+                    == &(super::CombatRestriction {
+                        cant_be_blocked: true,
+                        ..Default::default()
+                    }) =>
+            {
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::ApplyCombatRestriction {
+                scope: super::CombatRestrictionScope::Chosen(filter),
+                restriction,
+            } if context == EffectContext::Spell
+                && filter.all_terminal_filters_match(|leaf| leaf.kind == TargetKind::Creature)
+                && !restriction.is_empty() =>
+            {
+                let (_group_index, _group_max) = chosen_single_target_group(
+                    &instruction.id,
+                    &compiler.target_references,
+                    compiler.targeting,
+                    ProgramTargetRole::Target,
+                    "ApplyCombatRestriction",
+                )?;
+
+                effect.validate(context)?;
+                validate_program_target_filter(filter, "ApplyCombatRestriction target")?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::ReturnTriggeredCard {
+                reference: super::TriggeredCardReference::ExactTriggerObject,
+                from,
+                destination: super::TriggeredCardDestination::Battlefield,
+                tapped: false,
+                controller: super::ReturnController::Owner,
+                entry_counters,
+                set_types: None,
+            } if context == EffectContext::Ability
+                && !from.is_empty()
+                && from.as_slice() == [super::EventZone::Exile]
+                && entry_counters.is_empty() =>
+            {
+                required_inputs.insert(ProgramRequiredInput::CapturedTriggerObjectRef);
+
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::CopyTriggeringActivatedAbility if context == EffectContext::Ability => {
+                required_inputs.insert(ProgramRequiredInput::TriggerActivatedStackObject);
+
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::CopyTriggeringActivatedAbility => {
+                Err("CopyTriggeringActivatedAbility requires an ability-owned trigger Program".into())
+            }
+            SpellEffectKind::CounterTriggeringStackObjectUnlessPays { cost } => {
+                required_inputs.insert(ProgramRequiredInput::TriggerAffectedPlayer);
+                required_inputs.insert(ProgramRequiredInput::TriggerTargetingStackObject);
+
+                if context != EffectContext::Ability {
+                    return Err(
+                        "CounterTriggeringStackObjectUnlessPays in a resolution program requires an ability-owned trigger"
+                            .into(),
+                    );
+                }
+                match cost {
+                    ResolutionCost::Mana(mana)
+                        if !mana.pips.is_empty()
+                            && mana.mana_value() > 0
+                            && !mana.pips.iter().any(|pip| matches!(pip, crate::ManaSymbol::X)) =>
+                    {
+                    }
+                    ResolutionCost::DiscardCard { filter: None } => {}
+                    _ => {
+                        return Err(
+                            "CounterTriggeringStackObjectUnlessPays in a resolution program supports only fixed nonempty no-X mana or an unfiltered discard-card cost"
+                                .into(),
+                        )
+                    }
+                }
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::ApplyPermanentModifier { .. } if is_token_copy_batch_consumer(effect) => {
+                dependency.require(&|actual| matches!(actual, ResultType::TokenCopyBatch))?;
+
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::CreateDelayedTrigger {
+                subject: None,
+                affected_player: Some(PlayerRecipient::ProgramInputPlayer),
+                ..
+            } if context == EffectContext::Spell => {
+                admitted_program_input_player = true;
+
+                dependency.require(&|actual| matches!(actual, ResultType::TargetedSpellController))?;
+
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::CreateDelayedTrigger {
+                subject: None,
+                affected_player: None,
+                ..
+            } if context == EffectContext::Spell => {
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            SpellEffectKind::CreateDelayedTrigger { .. } if is_token_copy_batch_consumer(effect) => {
+                dependency.require(&|actual| matches!(actual, ResultType::TokenCopyBatch))?;
+
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            _ if is_exiled_object_delayed_consumer(effect) => {
+                dependency.require(&|actual| {
+                    matches!(
+                        actual,
+                        ResultType::ExiledObject {
+                            cardinality: Cardinality {
+                                min: 0,
+                                max: Some(1),
+                            },
+                        }
+                    )
+                })?;
+
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
+            _ => Err("effect is not in the resolution-program operation whitelist".into()),
         }
-        SpellEffectKind::ApplyPermanentModifier { .. } if is_token_copy_batch_consumer(effect) => {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::CreateDelayedTrigger {
-            subject: None,
-            affected_player: Some(PlayerRecipient::ProgramInputPlayer),
-            ..
-        } if context == EffectContext::Spell => {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::CreateDelayedTrigger {
-            subject: None,
-            affected_player: None,
-            ..
-        } if context == EffectContext::Spell => {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        SpellEffectKind::CreateDelayedTrigger { .. } if is_token_copy_batch_consumer(effect) => {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        _ if is_exiled_object_delayed_consumer(effect) => {
-            effect.validate(context)?;
-            Ok(Vec::new())
-        }
-        _ => Err("effect is not in the resolution-program operation whitelist".into()),
+    })();
+    if effect.contains_program_input_player() && !admitted_program_input_player {
+        return Err("ProgramInputPlayer is supported only by CreateTokens and CreateDelayedTrigger through a typed Program input".into());
     }
+    if effect
+        .result_consuming_amount()
+        .is_some_and(Amount::uses_program_input_count)
+        && !admitted_program_input_count
+    {
+        return Err(
+            "ProgramInputCount is supported only by direct typed Count Program inputs".into(),
+        );
+    }
+    dependency.finish()?;
+    let result_types = result_types?;
+    Ok(ValidatedOperation {
+        effect: Box::new(lowered_effect),
+        input: dependency.slot,
+        result_types,
+        required_inputs,
+    })
 }
 
 /// The only program consumers of a TriggerObject copy batch are the two exact Flameshadow /
@@ -6878,6 +6728,49 @@ mod scalar_program_input_tests {
 
     fn reveal_prefix() -> SpellEffectKind {
         SpellEffectKind::RevealUntilArtifact
+    }
+
+    #[test]
+    fn payment_characteristic_sum_is_rejected_without_assuming_previous_effect() {
+        let gain_life: SpellEffectKind = ron::from_str(
+            "GainLife(amount: Count(CardResultCharacteristicSum(filter: (source: Payment, action: Mill, players: Controller), characteristic: ManaValue)))",
+        ).expect("the malformed semantic profile still parses");
+        let result = compile_ability(vec![
+            instruction(
+                "mill",
+                &["milled"],
+                None,
+                SpellEffectKind::Mill {
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                },
+            ),
+            instruction("gain", &[], Some("milled"), gain_life),
+        ]);
+        assert!(
+            result.is_err(),
+            "invalid payment mana-value sums must return an error"
+        );
+    }
+
+    #[test]
+    fn restricted_program_capabilities_report_their_own_frame_requirement() {
+        for (source, capability) in [
+            ("EachOpponentMayScry(count: 1)", "EachOpponentMayScry"),
+            (
+                "ExileTargetAndCopyUnlessAura(subject: Chosen((kind: AnyPermanent)))",
+                "ExileTargetAndCopyUnlessAura",
+            ),
+            (
+                "CreateTokenCopies(count: 1, source: Source, copy_exception: Some((power: Some(1), toughness: Some(1))))",
+                "CreateTokenCopies copy_exception",
+            ),
+        ] {
+            let effect: SpellEffectKind = ron::from_str(source).expect("valid effect syntax");
+            let error = compile_ability(vec![instruction("restricted", &[], None, effect)])
+                .expect_err("these capabilities still require their direct ability frame");
+            assert!(error.contains(capability), "{capability}: {error}");
+        }
     }
 
     fn reveal_top_card() -> SpellEffectKind {

@@ -5298,7 +5298,9 @@ mod kaya_intangible_schema_tests {
               (id: "scry", bind: [], input: None,
                 kind: Perform(EachOpponentMayScry(count: 1)))], yields: []),
               target_bindings: [])))])"#;
-        assert!(rejection_debug(program).contains("direct legacy ability effect lists"));
+        assert!(rejection_debug(program).contains(
+            "EachOpponentMayScry requires its direct ability opponent-choice continuation"
+        ));
 
         let program_branch = r#"(id: "program_branch_probe", name: "Program Branch Probe", face_id: "program_branch_probe", types: ["Artifact"],
           activated_abilities: [(ability_id: "ability_01", presentation: Fallback,
@@ -5309,7 +5311,9 @@ mod kaya_intangible_schema_tests {
                     kind: Perform(EachOpponentMayScry(count: 1)))], yields: []),
                   no: (steps: [], yields: [])))], yields: []),
               target_bindings: [])))])"#;
-        assert!(rejection_debug(program_branch).contains("direct legacy ability effect lists"));
+        assert!(rejection_debug(program_branch).contains(
+            "EachOpponentMayScry requires its direct ability opponent-choice continuation"
+        ));
 
         let modal_spell = r#"(id: "modal_spell_probe", name: "Modal Spell Probe", face_id: "modal_spell_probe", types: ["Sorcery"],
           modal_spell: Some((min_modes: 1, max_modes: 1, modes: [

@@ -139,14 +139,8 @@ impl ModalDef {
                     mode.mode_id
                 ));
             }
-            if mode
-                .effects
-                .iter()
-                .any(SpellEffectKind::contains_nonmodal_ability_effect)
-            {
-                return Err(
-                    "Nonmodal ability-only effects are not admitted in modal ability or spell modes".into(),
-                );
+            for effect in &mode.effects {
+                effect.validate_capability_frame("modal ability or spell modes")?;
             }
             if mode.program.is_none() {
                 for effect in &mode.effects {

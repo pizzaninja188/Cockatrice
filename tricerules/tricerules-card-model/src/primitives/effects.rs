@@ -3915,24 +3915,64 @@ impl SpellEffectKind {
         }
     }
 
-    fn requires_nonmodal_ability_frame(effect: &Self) -> bool {
+    fn is_optional_opponent_scry(effect: &Self) -> bool {
+        matches!(effect, Self::EachOpponentMayScry { .. })
+    }
+
+    fn is_exile_and_copy_snapshot(effect: &Self) -> bool {
+        matches!(effect, Self::ExileTargetAndCopyUnlessAura { .. })
+    }
+
+    fn has_fixed_token_copy_exception(effect: &Self) -> bool {
         matches!(
             effect,
-            Self::EachOpponentMayScry { .. }
-                | Self::ExileTargetAndCopyUnlessAura { .. }
-                | Self::CreateTokenCopies {
-                    copy_exception: Some(_),
-                    ..
-                }
+            Self::CreateTokenCopies {
+                copy_exception: Some(_),
+                ..
+            }
         )
     }
 
-    pub(crate) fn contains_nonmodal_ability_effect(&self) -> bool {
-        self.contains_legacy_flat_signature(Self::requires_nonmodal_ability_frame)
+    /// Each capability has its own admission boundary. They currently all need a direct
+    /// ability frame, but adding support for one must not implicitly admit either other family.
+    pub(crate) fn validate_capability_frame(&self, frame: &str) -> Result<(), String> {
+        if self.contains_legacy_flat_signature(Self::is_optional_opponent_scry) {
+            return Err(format!("EachOpponentMayScry requires its direct ability opponent-choice continuation; unsupported in {frame}"));
+        }
+        if self.contains_legacy_flat_signature(Self::is_exile_and_copy_snapshot) {
+            return Err(format!("ExileTargetAndCopyUnlessAura requires its direct ability target snapshot; unsupported in {frame}"));
+        }
+        if self.contains_legacy_flat_signature(Self::has_fixed_token_copy_exception) {
+            return Err(format!("CreateTokenCopies copy_exception requires its direct ability copy profile; unsupported in {frame}"));
+        }
+        Ok(())
     }
 
-    fn is_nonmodal_ability_effect(&self) -> bool {
-        Self::requires_nonmodal_ability_frame(self)
+    fn validate_direct_capability_nesting(&self) -> Result<(), String> {
+        if !Self::is_optional_opponent_scry(self)
+            && self.contains_legacy_flat_signature(Self::is_optional_opponent_scry)
+        {
+            return Err(
+                "EachOpponentMayScry cannot be nested inside a legacy effect wrapper".into(),
+            );
+        }
+        if !Self::is_exile_and_copy_snapshot(self)
+            && self.contains_legacy_flat_signature(Self::is_exile_and_copy_snapshot)
+        {
+            return Err(
+                "ExileTargetAndCopyUnlessAura cannot be nested inside a legacy effect wrapper"
+                    .into(),
+            );
+        }
+        if !Self::has_fixed_token_copy_exception(self)
+            && self.contains_legacy_flat_signature(Self::has_fixed_token_copy_exception)
+        {
+            return Err(
+                "CreateTokenCopies copy_exception cannot be nested inside a legacy effect wrapper"
+                    .into(),
+            );
+        }
+        Ok(())
     }
 
     pub(crate) fn contains_memory_jar_leaf(&self) -> bool {
@@ -4574,17 +4614,8 @@ impl SpellEffectKind {
                     .into(),
             );
         }
-        if effects
-            .iter()
-            .any(SpellEffectKind::contains_nonmodal_ability_effect)
-            && effects.iter().any(|effect| {
-                effect.contains_nonmodal_ability_effect() && !effect.is_nonmodal_ability_effect()
-            })
-        {
-            return Err(
-                "Nonmodal ability-only effects are supported only as direct legacy ability effects"
-                    .into(),
-            );
+        for effect in effects {
+            effect.validate_direct_capability_nesting()?;
         }
         if effects.iter().any(Self::contains_chain_veil_permission)
             && effects != [Self::GrantChainVeilLoyaltyPermission]
@@ -4788,12 +4819,7 @@ impl SpellEffectKind {
     /// Validation entry used only after an activated modal owner has established that this is a
     /// direct legacy mode effect. Nested effects still go through ordinary `validate` calls.
     pub(crate) fn validate_activated_modal_mode_effect(&self) -> Result<(), String> {
-        if self.contains_nonmodal_ability_effect() {
-            return Err(
-                "Nonmodal ability-only effects are not admitted in activated modal ability frames"
-                    .into(),
-            );
-        }
+        self.validate_capability_frame("activated modal ability frames")?;
         match self {
             Self::DoubleYourCounters => Ok(()),
             Self::AddOneCounterOfChosenKindToTarget => Err(

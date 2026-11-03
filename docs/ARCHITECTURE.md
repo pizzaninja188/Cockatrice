@@ -448,7 +448,12 @@ Do not re-derive this per card.
   operations retain partial facts separately from the parent's saved run context. Output capture
   checks actual producer tags, cardinality and receipt provenance before publishing typed slots.
 - **Finite spell programs.** The model compiles lexical bindings and explicit branch yields into
-  an immutable registry program. `engine/resolution/program.rs` sequences its supported leaves,
+  an immutable registry program. Each operation family has one compiler path returning its
+  lowered effect, validated input, output types and captured context requirements; input producer
+  proofs and operation-local target binding checks live in that path. Whole-program target-schema
+  and branch checks still run after compilation. Admission restrictions for optional opponent Scry,
+  exile-and-copy snapshots and fixed token-copy exceptions remain separate capability checks.
+  `engine/resolution/program.rs` sequences its supported leaves,
   retains entered branch paths/cursors and private typed result slots, and reuses draw, discard
   and permanent-choice transactions. `ParkedStackResolution.program` carries that frame through
   suspension; it never reconstructs an entered branch from changed live state. Brainstorm's
