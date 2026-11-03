@@ -331,6 +331,10 @@ cancellation, a fresh Run starts from the beginning and can add duplicate cards 
 fresh game for a clean rerun. The original engine dev gate and capture/logging transport apply to
 every command. See [capture inspection](../../../../docs/RULED-DIAGNOSTICS.md).
 
+Checked-in [setup presets and manual checks](../../../../docs/dev-presets/README.md) cover Aura
+activation restrictions and four-seat Decimate targeting. Load their `.txt` files through the same
+file picker; copy/edit a file to keep another named setup without changing the client.
+
 Three grammar rules worth knowing before extending it:
 
 - **`put` and `move` are separate verbs on purpose.** `put` always conjures a new card; `move`

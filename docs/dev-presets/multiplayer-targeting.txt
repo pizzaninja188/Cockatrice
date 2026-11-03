@@ -1,0 +1,11 @@
+# Prepared test state only; this is not proof of legal gameplay reachability.
+# Fresh -Players 4 -Dev game: finish opening choices; run from seat 1 in its main phase with priority.
+# Seats are 1-based ordinals in ascending player-id order. All four seats must exist before Run.
+# Adds cards/mana. Rerunning adds copies; there is no reset or rollback.
+# Cast Decimate, choose its four targets and resolve it manually.
+put hand Decimate
+put 2 bf Sol Ring
+put 3 bf Grizzly Bears ready
+put 4 bf Propaganda
+put 4 bf Forest
+mana 2RG

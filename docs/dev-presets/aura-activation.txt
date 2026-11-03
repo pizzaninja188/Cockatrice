@@ -1,0 +1,7 @@
+# Prepared test state only; this is not proof of legal gameplay reachability.
+# Fresh -Dev game: finish opening choices, then use your main phase with priority.
+# Adds local cards/mana. Rerunning adds copies; there is no reset or rollback.
+# Cast the Aura and resolve it manually; the preset does not attach it or answer choices.
+put bf Drudge Skeletons ready
+put hand Stuck in Summoner's Sanctum
+mana 2UBB
