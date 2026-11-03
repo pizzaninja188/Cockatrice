@@ -1388,51 +1388,31 @@ pub(super) fn legal_ability_cost_choices(
             AbilityCost::ReturnUnblockedAttacker => {
                 let candidate_ids = eng.ninjutsu_return_candidates(player);
                 structurally_payable &= !candidate_ids.is_empty();
-                requirements.push(ObjectPaymentRequirement::Exact {
-                    candidates: candidate_ids.clone(),
-                    count: 1,
-                });
-                choices.push(rv1::LegalCostChoice {
-                    cost_index: cost_index as u32,
-                    zone: rv1::CostChoiceZone::Battlefield as i32,
-                    candidate_ids: candidate_ids.clone(),
-                    min: 1,
-                    max: 1,
-                    blight_count: 0,
-                    counter_removal: None,
-                    kind: rv1::CostChoiceKind::ReturnUnblockedAttacker as i32,
-                    candidate_objects: candidate_ids
-                        .iter()
-                        .map(|oid| cost_object_candidate(eng, *oid, 0))
-                        .collect(),
-                    aggregate_minimum: None,
-                    ..Default::default()
-                });
+                let (requirement, choice) = object_payment_choice(
+                    eng,
+                    cost_index,
+                    rv1::CostChoiceZone::Battlefield,
+                    rv1::CostChoiceKind::ReturnUnblockedAttacker,
+                    candidate_ids,
+                    ObjectPaymentConstraint::ExactCount(1),
+                );
+                requirements.push(requirement);
+                choices.push(choice);
             }
             AbilityCost::ReturnTappedCreature => {
                 let candidate_ids = eng.tapped_creature_return_candidates(player);
-                if !candidate_ids.is_empty() {
-                    requirements.push(ObjectPaymentRequirement::Exact {
-                        candidates: candidate_ids.clone(),
-                        count: 1,
-                    });
+                let (requirement, choice) = object_payment_choice(
+                    eng,
+                    cost_index,
+                    rv1::CostChoiceZone::Battlefield,
+                    rv1::CostChoiceKind::ReturnTappedCreature,
+                    candidate_ids,
+                    ObjectPaymentConstraint::ExactCount(1),
+                );
+                if !choice.candidate_ids.is_empty() {
+                    requirements.push(requirement);
                 }
-                choices.push(rv1::LegalCostChoice {
-                    cost_index: cost_index as u32,
-                    zone: rv1::CostChoiceZone::Battlefield as i32,
-                    candidate_ids: candidate_ids.clone(),
-                    min: 1,
-                    max: 1,
-                    blight_count: 0,
-                    counter_removal: None,
-                    kind: rv1::CostChoiceKind::ReturnTappedCreature as i32,
-                    candidate_objects: candidate_ids
-                        .iter()
-                        .map(|oid| cost_object_candidate(eng, *oid, 0))
-                        .collect(),
-                    aggregate_minimum: None,
-                    ..Default::default()
-                });
+                choices.push(choice);
             }
             AbilityCost::Discard | AbilityCost::DiscardCard { .. } => {
                 let component = match cost {
@@ -1643,26 +1623,16 @@ fn legal_spell_cost_choices(
         }
     }
     if let Some(candidates) = sneak_candidates {
-        requirements.push(ObjectPaymentRequirement::Exact {
-            candidates: candidates.to_vec(),
-            count: 1,
-        });
-        choices.push(rv1::LegalCostChoice {
-            cost_index: costs.len() as u32,
-            zone: rv1::CostChoiceZone::Battlefield as i32,
-            candidate_ids: candidates.to_vec(),
-            min: 1,
-            max: 1,
-            blight_count: 0,
-            counter_removal: None,
-            kind: rv1::CostChoiceKind::ReturnUnblockedAttacker as i32,
-            candidate_objects: candidates
-                .iter()
-                .map(|oid| cost_object_candidate(eng, *oid, 0))
-                .collect(),
-            aggregate_minimum: None,
-            ..Default::default()
-        });
+        let (requirement, choice) = object_payment_choice(
+            eng,
+            costs.len(),
+            rv1::CostChoiceZone::Battlefield,
+            rv1::CostChoiceKind::ReturnUnblockedAttacker,
+            candidates.to_vec(),
+            ObjectPaymentConstraint::ExactCount(1),
+        );
+        requirements.push(requirement);
+        choices.push(choice);
     }
     let mut non_mana_costs_payable =
         payment_assignment_exists(&requirements, 0, &mut HashSet::new(), &mut HashMap::new())
@@ -1677,21 +1647,10 @@ fn legal_spell_cost_choices(
                 .options
                 .iter()
                 .enumerate()
-                .map(|(option_index, option)| match option {
-                    CastCostOptionDef::Mana {
-                        option_id,
-                        presentation,
-                        cost,
-                        ..
-                    } => rv1::LegalCastCostOption {
+                .map(|(option_index, option)| {
+                    let base = rv1::LegalCastCostOption {
                         option_index: option_index as u32,
                         label: option.fallback_label(),
-                        kind: rv1::CastCostOptionKind::Mana as i32,
-                        additional_mana_cost: cost.to_string(),
-                        maximum_repetitions: option
-                            .multikicker_generic_unit()
-                            .map(|unit| i32::MAX as u32 / unit),
-                        selectable: true,
                         presentation: Some(presentation_ref(
                             eng.registry,
                             card_id,
@@ -1699,37 +1658,76 @@ fn legal_spell_cost_choices(
                             [
                                 PresentationPath::Spell,
                                 PresentationPath::CastCostGroup(&group.group_id),
-                                PresentationPath::CastCostOption(option_id),
+                                PresentationPath::CastCostOption(option.option_id()),
                             ],
-                            presentation,
+                            option.presentation(),
                             option.fallback_label(),
                         )),
                         ..Default::default()
-                    },
-                    CastCostOptionDef::Blight {
-                        option_id,
-                        presentation,
-                        ..
-                    } => {
-                        let candidates = eng.blight_candidates(player);
-                        rv1::LegalCastCostOption {
-                            option_index: option_index as u32,
-                            label: option.fallback_label(),
-                            kind: rv1::CastCostOptionKind::Blight as i32,
-                            selectable: !candidates.is_empty(),
-                            presentation: Some(presentation_ref(
-                                eng.registry,
-                                card_id,
-                                &face.face_id,
-                                [
-                                    PresentationPath::Spell,
-                                    PresentationPath::CastCostGroup(&group.group_id),
-                                    PresentationPath::CastCostOption(option_id),
-                                ],
-                                presentation,
-                                option.fallback_label(),
-                            )),
-                            valid_permanent_generations: candidates
+                    };
+                    match option {
+                        CastCostOptionDef::Mana { cost, .. } => rv1::LegalCastCostOption {
+                            kind: rv1::CastCostOptionKind::Mana as i32,
+                            additional_mana_cost: cost.to_string(),
+                            maximum_repetitions: option
+                                .multikicker_generic_unit()
+                                .map(|unit| i32::MAX as u32 / unit),
+                            selectable: true,
+                            ..base
+                        },
+                        CastCostOptionDef::Blight { .. } => {
+                            let candidates = eng.blight_candidates(player);
+                            rv1::LegalCastCostOption {
+                                kind: rv1::CastCostOptionKind::Blight as i32,
+                                selectable: !candidates.is_empty(),
+                                valid_permanent_generations: candidates
+                                    .iter()
+                                    .map(|oid| {
+                                        eng.state
+                                            .zone_change_generation
+                                            .get(oid)
+                                            .copied()
+                                            .unwrap_or(0)
+                                    })
+                                    .collect(),
+                                valid_permanent_ids: candidates,
+                                ..base
+                            }
+                        }
+                        CastCostOptionDef::Behold { criterion, .. } => {
+                            let hand_filter = criterion.hand_filter();
+                            let permanent_filter = criterion.permanent_filter();
+                            let valid_hand_indices = eng.state.players[player_idx]
+                                .hand
+                                .iter()
+                                .copied()
+                                .enumerate()
+                                .filter(|(_, oid)| {
+                                    *oid != source
+                                        && super::card_predicates::zone_card_matches_filter(
+                                            &eng.state,
+                                            eng.registry,
+                                            *oid,
+                                            Some(&hand_filter),
+                                        )
+                                })
+                                .map(|(slot, _)| slot as u32)
+                                .collect::<Vec<_>>();
+                            let valid_permanent_ids = eng
+                                .state
+                                .players
+                                .iter()
+                                .flat_map(|state| state.battlefield.iter().copied())
+                                .filter(|oid| {
+                                    eng.ability_cost_permanent_matches(
+                                        player,
+                                        None,
+                                        *oid,
+                                        &permanent_filter,
+                                    )
+                                })
+                                .collect::<Vec<_>>();
+                            let valid_permanent_generations = valid_permanent_ids
                                 .iter()
                                 .map(|oid| {
                                     eng.state
@@ -1738,248 +1736,113 @@ fn legal_spell_cost_choices(
                                         .copied()
                                         .unwrap_or(0)
                                 })
-                                .collect(),
-                            valid_permanent_ids: candidates,
-                            ..Default::default()
-                        }
-                    }
-                    CastCostOptionDef::Behold {
-                        option_id,
-                        presentation,
-                        criterion,
-                        ..
-                    } => {
-                        let hand_filter = criterion.hand_filter();
-                        let permanent_filter = criterion.permanent_filter();
-                        let valid_hand_indices = eng.state.players[player_idx]
-                            .hand
-                            .iter()
-                            .copied()
-                            .enumerate()
-                            .filter(|(_, oid)| {
-                                *oid != source
-                                    && super::card_predicates::zone_card_matches_filter(
-                                        &eng.state,
-                                        eng.registry,
-                                        *oid,
-                                        Some(&hand_filter),
-                                    )
-                            })
-                            .map(|(slot, _)| slot as u32)
-                            .collect::<Vec<_>>();
-                        let valid_permanent_ids = eng
-                            .state
-                            .players
-                            .iter()
-                            .flat_map(|state| state.battlefield.iter().copied())
-                            .filter(|oid| {
-                                eng.ability_cost_permanent_matches(
-                                    player,
-                                    None,
-                                    *oid,
-                                    &permanent_filter,
-                                )
-                            })
-                            .collect::<Vec<_>>();
-                        let valid_permanent_generations = valid_permanent_ids
-                            .iter()
-                            .map(|oid| {
-                                eng.state
-                                    .zone_change_generation
-                                    .get(oid)
-                                    .copied()
-                                    .unwrap_or(0)
-                            })
-                            .collect::<Vec<_>>();
-                        let selectable =
-                            !valid_hand_indices.is_empty() || !valid_permanent_ids.is_empty();
-                        rv1::LegalCastCostOption {
-                            option_index: option_index as u32,
-                            label: option.fallback_label(),
-                            kind: rv1::CastCostOptionKind::Behold as i32,
-                            additional_mana_cost: String::new(),
-                            valid_hand_indices,
-                            valid_permanent_ids,
-                            valid_permanent_generations,
-                            selectable,
-                            presentation: Some(presentation_ref(
-                                eng.registry,
-                                card_id,
-                                &face.face_id,
-                                [
-                                    PresentationPath::Spell,
-                                    PresentationPath::CastCostGroup(&group.group_id),
-                                    PresentationPath::CastCostOption(option_id),
-                                ],
-                                presentation,
-                                option.fallback_label(),
-                            )),
-                            ..Default::default()
-                        }
-                    }
-                    CastCostOptionDef::DiscardCard {
-                        option_id,
-                        presentation,
-                    } => {
-                        let eligible =
-                            ObjectPaymentComponent::discard(Some(source)).candidates(eng, player);
-                        let valid_hand_indices = eng.state.players[player_idx]
-                            .hand
-                            .iter()
-                            .enumerate()
-                            .filter_map(|(slot, oid)| eligible.contains(oid).then_some(slot as u32))
-                            .collect::<Vec<_>>();
-                        rv1::LegalCastCostOption {
-                            option_index: option_index as u32,
-                            label: option.fallback_label(),
-                            kind: rv1::CastCostOptionKind::DiscardCard as i32,
-                            selectable: !valid_hand_indices.is_empty(),
-                            valid_hand_indices,
-                            presentation: Some(presentation_ref(
-                                eng.registry,
-                                card_id,
-                                &face.face_id,
-                                [
-                                    PresentationPath::Spell,
-                                    PresentationPath::CastCostGroup(&group.group_id),
-                                    PresentationPath::CastCostOption(option_id),
-                                ],
-                                presentation,
-                                option.fallback_label(),
-                            )),
-                            ..Default::default()
-                        }
-                    }
-                    CastCostOptionDef::PayLife {
-                        option_id,
-                        presentation,
-                        amount,
-                    } => rv1::LegalCastCostOption {
-                        option_index: option_index as u32,
-                        label: option.fallback_label(),
-                        kind: rv1::CastCostOptionKind::PayLife as i32,
-                        selectable: u32::try_from(eng.state.players[player_idx].life)
-                            .is_ok_and(|life| life >= *amount),
-                        presentation: Some(presentation_ref(
-                            eng.registry,
-                            card_id,
-                            &face.face_id,
-                            [
-                                PresentationPath::Spell,
-                                PresentationPath::CastCostGroup(&group.group_id),
-                                PresentationPath::CastCostOption(option_id),
-                            ],
-                            presentation,
-                            option.fallback_label(),
-                        )),
-                        ..Default::default()
-                    },
-                    CastCostOptionDef::TapPermanents {
-                        option_id,
-                        presentation,
-                        constraint,
-                        filter,
-                        ..
-                    } => {
-                        let candidates = ObjectPaymentComponent::announced_tap(
-                            None,
-                            filter,
-                            *constraint,
-                            None,
-                            None,
-                        )
-                        .candidates(eng, player);
-                        let selectable = match constraint {
-                            ObjectPaymentConstraint::ExactCount(count) => {
-                                candidates.len() >= *count as usize
+                                .collect::<Vec<_>>();
+                            let selectable =
+                                !valid_hand_indices.is_empty() || !valid_permanent_ids.is_empty();
+                            rv1::LegalCastCostOption {
+                                kind: rv1::CastCostOptionKind::Behold as i32,
+                                additional_mana_cost: String::new(),
+                                valid_hand_indices,
+                                valid_permanent_ids,
+                                valid_permanent_generations,
+                                selectable,
+                                ..base
                             }
-                            ObjectPaymentConstraint::AggregateMinimum { minimum, .. } => {
-                                candidates
+                        }
+                        CastCostOptionDef::DiscardCard { .. } => {
+                            let eligible = ObjectPaymentComponent::discard(Some(source))
+                                .candidates(eng, player);
+                            let valid_hand_indices = eng.state.players[player_idx]
+                                .hand
+                                .iter()
+                                .enumerate()
+                                .filter_map(|(slot, oid)| {
+                                    eligible.contains(oid).then_some(slot as u32)
+                                })
+                                .collect::<Vec<_>>();
+                            rv1::LegalCastCostOption {
+                                kind: rv1::CastCostOptionKind::DiscardCard as i32,
+                                selectable: !valid_hand_indices.is_empty(),
+                                valid_hand_indices,
+                                ..base
+                            }
+                        }
+                        CastCostOptionDef::PayLife { amount, .. } => rv1::LegalCastCostOption {
+                            kind: rv1::CastCostOptionKind::PayLife as i32,
+                            selectable: u32::try_from(eng.state.players[player_idx].life)
+                                .is_ok_and(|life| life >= *amount),
+                            ..base
+                        },
+                        CastCostOptionDef::TapPermanents {
+                            constraint, filter, ..
+                        } => {
+                            let candidates = ObjectPaymentComponent::announced_tap(
+                                None,
+                                filter,
+                                *constraint,
+                                None,
+                                None,
+                            )
+                            .candidates(eng, player);
+                            let selectable = match constraint {
+                                ObjectPaymentConstraint::ExactCount(count) => {
+                                    candidates.len() >= *count as usize
+                                }
+                                ObjectPaymentConstraint::AggregateMinimum { minimum, .. } => {
+                                    candidates
+                                        .iter()
+                                        .filter_map(|oid| {
+                                            eng.object_payment_contribution(
+                                                *oid,
+                                                ObjectContributionKind::CurrentPower,
+                                            )
+                                        })
+                                        .filter(|value| *value > 0)
+                                        .sum::<i64>()
+                                        >= i64::from(*minimum)
+                                }
+                            };
+                            let (object_min, object_max) = constraint
+                                .exact_count()
+                                .map_or((1, candidates.len() as u32), |count| (count, count));
+                            rv1::LegalCastCostOption {
+                                kind: rv1::CastCostOptionKind::TapPermanents as i32,
+                                selectable,
+                                candidate_objects: candidates
                                     .iter()
-                                    .filter_map(|oid| {
-                                        eng.object_payment_contribution(
+                                    .map(|oid| {
+                                        cost_object_candidate(
+                                            eng,
                                             *oid,
-                                            ObjectContributionKind::CurrentPower,
+                                            eng.object_payment_contribution(
+                                                *oid,
+                                                ObjectContributionKind::CurrentPower,
+                                            )
+                                            .unwrap_or(0),
                                         )
                                     })
-                                    .filter(|value| *value > 0)
-                                    .sum::<i64>()
-                                    >= i64::from(*minimum)
+                                    .collect(),
+                                object_min,
+                                object_max,
+                                aggregate_minimum: aggregate_constraint_proto(*constraint),
+                                ..base
                             }
-                        };
-                        let (object_min, object_max) = constraint
-                            .exact_count()
-                            .map_or((1, candidates.len() as u32), |count| (count, count));
-                        rv1::LegalCastCostOption {
-                            option_index: option_index as u32,
-                            label: option.fallback_label(),
-                            kind: rv1::CastCostOptionKind::TapPermanents as i32,
-                            selectable,
-                            candidate_objects: candidates
-                                .iter()
-                                .map(|oid| {
-                                    cost_object_candidate(
-                                        eng,
-                                        *oid,
-                                        eng.object_payment_contribution(
-                                            *oid,
-                                            ObjectContributionKind::CurrentPower,
-                                        )
-                                        .unwrap_or(0),
-                                    )
-                                })
-                                .collect(),
-                            object_min,
-                            object_max,
-                            aggregate_minimum: aggregate_constraint_proto(*constraint),
-                            presentation: Some(presentation_ref(
-                                eng.registry,
-                                card_id,
-                                &face.face_id,
-                                [
-                                    PresentationPath::Spell,
-                                    PresentationPath::CastCostGroup(&group.group_id),
-                                    PresentationPath::CastCostOption(option_id),
-                                ],
-                                presentation,
-                                option.fallback_label(),
-                            )),
-                            ..Default::default()
                         }
-                    }
-                    CastCostOptionDef::SacrificePermanent {
-                        option_id,
-                        presentation,
-                        filter,
-                        ..
-                    } => {
-                        let candidates =
-                            ObjectPaymentComponent::announced_sacrifice(None, filter, 1)
-                                .candidates(eng, player);
-                        rv1::LegalCastCostOption {
-                            option_index: option_index as u32,
-                            label: option.fallback_label(),
-                            kind: rv1::CastCostOptionKind::SacrificePermanent as i32,
-                            selectable: !candidates.is_empty(),
-                            candidate_objects: candidates
-                                .iter()
-                                .map(|oid| cost_object_candidate(eng, *oid, 0))
-                                .collect(),
-                            object_min: 1,
-                            object_max: 1,
-                            presentation: Some(presentation_ref(
-                                eng.registry,
-                                card_id,
-                                &face.face_id,
-                                [
-                                    PresentationPath::Spell,
-                                    PresentationPath::CastCostGroup(&group.group_id),
-                                    PresentationPath::CastCostOption(option_id),
-                                ],
-                                presentation,
-                                option.fallback_label(),
-                            )),
-                            ..Default::default()
+                        CastCostOptionDef::SacrificePermanent { filter, .. } => {
+                            let candidates =
+                                ObjectPaymentComponent::announced_sacrifice(None, filter, 1)
+                                    .candidates(eng, player);
+                            rv1::LegalCastCostOption {
+                                kind: rv1::CastCostOptionKind::SacrificePermanent as i32,
+                                selectable: !candidates.is_empty(),
+                                candidate_objects: candidates
+                                    .iter()
+                                    .map(|oid| cost_object_candidate(eng, *oid, 0))
+                                    .collect(),
+                                object_min: 1,
+                                object_max: 1,
+                                ..base
+                            }
                         }
                     }
                 })
