@@ -5169,7 +5169,7 @@ pub(super) fn reveal_top_card_to_hand_if_matches(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::RevealTopCardToHandIfMatches { filter } = effect else {
+    let SpellEffectKind::RevealTopCardToHandIfMatches { filter, unmatched } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let Some(player_idx) = cx.engine.state.player_idx(cx.controller) else {
@@ -5197,24 +5197,40 @@ pub(super) fn reveal_top_card_to_hand_if_matches(
         .get(&card_id)
         .map(|definition| definition.name.clone())
         .unwrap_or_else(|| "card".into());
-    cx.events.extend(super::super::reveals::reveal_cards(
+    let matches = zone_card_matches_filter(
+        &cx.engine.state,
+        cx.engine.registry,
+        object_id,
+        Some(&filter),
+    );
+    let offer_bottom = !matches
+        && unmatched == tricerules_card_model::primitives::RevealedTopUnmatchedPolicy::MayPutBottom;
+    let mut receipt = super::super::reveals::reveal_choice(
         &cx.engine.state,
         cx.engine.registry,
         &[object_id],
         cx.top.id,
         cx.spell_label,
-    ));
+    )
+    .ok_or(EngineError::Illegal("top-card reveal receipt is missing"))?;
+    if offer_bottom {
+        // Allocate before publishing or cloning: all views of this occurrence share one ID.
+        receipt.reveal_id = format!(
+            "revealed-top:{}:{}:{}",
+            cx.engine.state.command_index,
+            cx.top.id,
+            cx.events.len()
+        );
+    }
+    cx.events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::CardsRevealed(receipt.clone())),
+    });
     cx.events.push(ev_log(format!(
         "P{} reveals {card_name} for {}.",
         cx.controller, cx.spell_label
     )));
 
-    if zone_card_matches_filter(
-        &cx.engine.state,
-        cx.engine.registry,
-        object_id,
-        Some(&filter),
-    ) {
+    if matches {
         move_object_to_zone(
             &mut cx.engine.state,
             cx.engine.registry,
@@ -5229,6 +5245,37 @@ pub(super) fn reveal_top_card_to_hand_if_matches(
             rv1::permanent_moved::Destination::Hand,
             0,
         ));
+    } else if offer_bottom {
+        let mut stack = cx.parked_stack();
+        stack.set_flat_tail(Some(cx.effect_index + 1), stack.previous_result().clone());
+        let generation = receipt.cards[0].zone_change_generation;
+        let prompt = format!("Keep {card_name} on top or put it on the bottom of your library?");
+        cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
+            cx.controller,
+            PendingResolutionPresentation {
+                source_object_id: cx.top.id,
+                candidates: Vec::new(),
+                min: 1,
+                max: 1,
+                ordered: false,
+                prompt,
+                choice_kind: rv1::ChoiceKind::ResolutionBranch,
+                unique_names: false,
+            },
+            ResolutionContinuation::RevealedTopBottom {
+                stack,
+                library_owner: cx.controller,
+                object_id,
+                zone_change_generation: generation,
+                public_reveal: receipt,
+            },
+        ));
+        cx.events.push(
+            cx.engine
+                .revealed_top_bottom_choice_event()
+                .expect("unmatched top choice"),
+        );
+        return Ok(EffectOutcome::Suspended);
     }
     Ok(EffectOutcome::Continue)
 }

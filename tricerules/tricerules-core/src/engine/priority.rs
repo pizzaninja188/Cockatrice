@@ -124,6 +124,7 @@ impl GameEngine {
             match &pending.continuation {
                 ResolutionContinuation::TypeChoiceSacrifice { stack, .. }
                 | ResolutionContinuation::ChosenCounterAddition { stack, .. }
+                | ResolutionContinuation::RevealedTopBottom { stack, .. }
                 | ResolutionContinuation::EachOpponentMayScry { stack, .. } => {
                     is_departed(stack).then(|| stack.clone())
                 }
@@ -1463,6 +1464,7 @@ impl GameEngine {
         self.refresh_departed_standalone_mana_payment(events)?;
         self.refresh_departed_ward_payment(events)?;
         self.refresh_owner_library_placement_departure(events)?;
+        self.refresh_revealed_top_bottom_departure(events)?;
         self.flush_staged_triggers(events);
         Ok(())
     }

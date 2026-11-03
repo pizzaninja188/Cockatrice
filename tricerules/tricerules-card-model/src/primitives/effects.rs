@@ -722,6 +722,21 @@ pub enum LibraryLookRemainderPolicy {
     RandomBottom,
 }
 
+/// Esper Maduin leaves an unmatched public top card in place. Ajani, Sleeper Agent instead
+/// offers to put that one unmatched card on the bottom; matching cards still go to hand.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RevealedTopUnmatchedPolicy {
+    #[default]
+    KeepTop,
+    MayPutBottom,
+}
+
+impl RevealedTopUnmatchedPolicy {
+    fn is_keep_top(&self) -> bool {
+        *self == Self::KeepTop
+    }
+}
+
 /// Rules meaning attached to a top-library partition.
 ///
 /// `Surveil` is the CR 701.25 keyword action and therefore emits the corresponding completed
@@ -1360,10 +1375,15 @@ pub enum SpellEffectKind {
         kind: LibraryPartitionKind,
     },
     /// Reveal the controller's top library card. If it matches `filter`, put it into that
-    /// player's hand; otherwise leave it on top. Esper Maduin, Llanowar Empath, and Momir Vig
-    /// share this mandatory, non-choice branch.
+    /// player's hand. Esper Maduin leaves an unmatched card on top; Ajani, Sleeper Agent may
+    /// put that unmatched card on the bottom instead.
     RevealTopCardToHandIfMatches {
         filter: ZoneCardFilter,
+        #[serde(
+            default,
+            skip_serializing_if = "RevealedTopUnmatchedPolicy::is_keep_top"
+        )]
+        unmatched: RevealedTopUnmatchedPolicy,
     },
     /// Publicly reveal the controller's top library card and move that exact object to hand.
     /// An activated CardProgram records a typed receipt for the pre-move mana value.
@@ -6175,7 +6195,7 @@ impl SpellEffectKind {
                     }
                 }
             }
-            SpellEffectKind::RevealTopCardToHandIfMatches { filter } => filter.validate()?,
+            SpellEffectKind::RevealTopCardToHandIfMatches { filter, .. } => filter.validate()?,
             SpellEffectKind::RevealTopCardToHand => {}
             SpellEffectKind::ChoosePermanents {
                 chooser,
@@ -8751,6 +8771,29 @@ mod activated_x_mana_value_limit_tests {
                 .unwrap_err()
                 .contains("up_to_count must be in 1..=7"));
         }
+    }
+
+    #[test]
+    fn revealed_top_unmatched_default_preserves_old_serialization_and_optional_policy_roundtrips() {
+        let old: SpellEffectKind =
+            ron::from_str("RevealTopCardToHandIfMatches(filter:(card_type:Some(Creature)))")
+                .unwrap();
+        let explicit: SpellEffectKind = ron::from_str(
+            "RevealTopCardToHandIfMatches(filter:(card_type:Some(Creature)),unmatched:KeepTop)",
+        )
+        .unwrap();
+        assert_eq!(old, explicit);
+        let canonical = ron::to_string(&old).unwrap();
+        assert!(!canonical.contains("unmatched"));
+        assert_eq!(canonical, ron::to_string(&explicit).unwrap());
+        let optional: SpellEffectKind = ron::from_str(
+            "RevealTopCardToHandIfMatches(filter:(card_type:Some(Creature)),unmatched:MayPutBottom)",
+        ).unwrap();
+        assert_ne!(old, optional);
+        assert_eq!(
+            ron::from_str::<SpellEffectKind>(&ron::to_string(&optional).unwrap()).unwrap(),
+            optional
+        );
     }
 
     #[derive(serde::Deserialize)]

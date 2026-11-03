@@ -2275,6 +2275,15 @@ pub enum ResolutionContinuation {
         shuffle: bool,
         reveal: bool,
     },
+    /// One unmatched, publicly revealed top card. Keep preserves its incarnation; Bottom
+    /// renews it under CR 701.20d. The immutable receipt survives prompt refresh/reconnect.
+    RevealedTopBottom {
+        stack: ParkedStackResolution,
+        library_owner: PlayerId,
+        object_id: ObjectId,
+        zone_change_generation: u64,
+        public_reveal: tricerules_proto::ruled::v1::CardsRevealed,
+    },
     OwnerLibraryPlacement {
         stack: ParkedStackResolution,
         object_id: ObjectId,
@@ -2636,6 +2645,7 @@ impl ResolutionContinuation {
             | Self::SearchLibrary { stack, .. }
             | Self::SearchZoneScope { stack, .. }
             | Self::OptionalSearch { stack, .. }
+            | Self::RevealedTopBottom { stack, .. }
             | Self::OwnerLibraryPlacement { stack, .. }
             | Self::ChaosWarpCommander { stack, .. }
             | Self::SpecialCastCommanderCleanup { stack, .. }
@@ -2714,6 +2724,7 @@ impl ResolutionContinuation {
             | Self::SearchLibrary { stack, .. }
             | Self::SearchZoneScope { stack, .. }
             | Self::OptionalSearch { stack, .. }
+            | Self::RevealedTopBottom { stack, .. }
             | Self::OwnerLibraryPlacement { stack, .. }
             | Self::ChaosWarpCommander { stack, .. }
             | Self::SpecialCastCommanderCleanup { stack, .. }

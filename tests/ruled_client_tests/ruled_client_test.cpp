@@ -18166,6 +18166,49 @@ TEST_F(RuledClientTest, PublicRevealReceiptOnResolutionBranchStillStagesTheBranc
               RuledRevealState::Phase::Active);
 }
 
+TEST_F(RuledClientTest, PublicRevealBranchRejectsMalformedOrConflictingReceipt)
+{
+    for (const bool conflict : {false, true}) {
+        ruled::v1::CardsRevealed receipt;
+        receipt.set_reveal_id(conflict ? "ajani:conflict" : "ajani:malformed");
+        receipt.set_source_object_id(80);
+        receipt.set_source_zone(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY);
+        receipt.set_zone_owner_player_id(kLocalPlayer);
+        auto *card = receipt.add_cards();
+        card->set_object_id(950);
+        card->set_zone_change_generation(7);
+        card->set_card_id("forest");
+        card->set_card_name("Forest");
+        if (conflict) {
+            ASSERT_TRUE(state->reveals.publish(receipt));
+            receipt.mutable_cards(0)->set_zone_change_generation(8);
+        } else {
+            // The legacy fixture completes missing IDs; keep an explicit ID and corrupt shape.
+            receipt.mutable_cards(0)->clear_card_name();
+        }
+
+        ruled::v1::RuledEventBatch batch;
+        auto *choice = batch.add_events()->mutable_resolution_choice_required();
+        choice->set_deciding_player_id(kLocalPlayer);
+        choice->set_source_object_id(80);
+        choice->set_choice_kind(ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH);
+        choice->set_prompt_text("Keep on top or put on bottom?");
+        choice->set_min(1);
+        choice->set_max(1);
+        *choice->mutable_public_reveal() = receipt;
+        for (uint32_t index = 0; index < 2; ++index) {
+            auto *branch = choice->add_resolution_branches();
+            branch->set_branch_index(index);
+            branch->set_label(index == 0 ? "Keep on top" : "Bottom");
+            branch->set_selectable(true);
+        }
+        (*batch.mutable_legal_by_player())[kLocalPlayer].set_undoable_mana_abilities(0);
+        apply(batch);
+        EXPECT_FALSE(state->pendingChoice.has_value()) << "conflicting receipt: " << conflict;
+        state->clearPendingChoice();
+    }
+}
+
 TEST_F(RuledClientTest, PublicRevealReceiptOn4043OrderUsesOrderedImagePickerForItsSubset)
 {
     ruled::v1::RuledEventBatch batch;

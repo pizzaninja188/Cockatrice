@@ -1642,6 +1642,11 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     }
 
     if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH) {
+        if (isPublicReveal && !publicRevealReceiptUsable) {
+            qWarning() << "Rejecting a public reveal branch without an exact current receipt";
+            publishPublicRevealForDisplay();
+            return;
+        }
         PendingChoice choice;
         choice.kind = ChoiceKind::ResolutionBranch;
         choice.promptText = QString::fromStdString(rcr.prompt_text());

@@ -315,6 +315,9 @@ impl GameEngine {
         if let Some(event) = self.special_cast_commander_choice_event() {
             batch.events.push(event);
         }
+        if let Some(event) = self.revealed_top_bottom_choice_event() {
+            batch.events.push(event);
+        }
         batch.events.push(ev_log(format!(
             "Game started — active P{}, priority P{} (upkeep).",
             self.state.active_player_id(),

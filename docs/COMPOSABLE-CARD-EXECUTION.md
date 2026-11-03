@@ -374,6 +374,24 @@ return of a tapped creature) lack an early hybrid choice path and remain unavail
 costs. Accepted aggregate counter-cost Begin already has that path. These are capability fixtures;
 Ajani and Tamiyo whole-card admission and user GUI acceptance remain separate.
 
+`RevealTopCardToHandIfMatches` retains its default `KeepTop` unmatched policy and canonical
+serialization for Esper Maduin. Ajani, Sleeper Agent's `MayPutBottom` policy offers one public
+Keep/Bottom branch only when the revealed top card fails its Creature-or-Planeswalker filter.
+Matching cards still go to hand without a choice; an empty library neither prompts nor draws.
+The continuation binds the exact top ObjectId and generation, one immutable public reveal receipt,
+and the saved instruction cursor. Keep does not reorder or renew identity. Bottom reuses the
+revealed-library placement helper after exact-top validation; CR 701.20d renews a reordered revealed
+card's identity even inside the same library. The singleton log does not claim random ordering.
+
+Initial responses repeat the same branch offer and receipt; active reveal snapshots retain the
+receipt until completion. Malformed or conflicting branch receipts remain unanswerable in Qt.
+Source departure does not cancel a surviving library choice. Controller/library departure retires
+the impossible choice without delegation or movement and resumes independently possible tail
+instructions once (CR 608.2m, 800.4a). The existing spell-Program whitelist still rejects this leaf;
+the new behavior uses supported direct effect lists and does not expand Program admission. No new
+wire fields or card registration are introduced; whole-card normal, two-client and GUI evidence
+remain separate.
+
 The bounded 2026-10-19 Scalestorm Summoner port admits one finite `ProgramIf` condition:
 `MaximumPower` among the ability controller's creatures, with a positive `min`, no `max`, default
 remaining filter fields, and no observed-object exclusion. It migrates only `triggered_01` from the

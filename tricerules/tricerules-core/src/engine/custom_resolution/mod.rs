@@ -37,6 +37,7 @@ mod library_order;
 mod library_search;
 mod manifest_dread;
 mod proliferate;
+mod revealed_top;
 mod sacrifice_choices;
 mod trigger_choices;
 mod ward;
@@ -1382,6 +1383,12 @@ impl GameEngine {
         }
         if matches!(
             pending.continuation,
+            ResolutionContinuation::RevealedTopBottom { .. }
+        ) {
+            return self.finish_revealed_top_bottom(pending, answer, decision);
+        }
+        if matches!(
+            pending.continuation,
             ResolutionContinuation::OwnerLibraryPlacement { .. }
         ) {
             return self.finish_owner_library_placement(pending, answer, decision);
@@ -1626,6 +1633,9 @@ impl GameEngine {
             }
             ResolutionContinuation::OptionalSearch { .. } => {
                 unreachable!("optional-search branch handled before object-choice validation")
+            }
+            ResolutionContinuation::RevealedTopBottom { .. } => {
+                unreachable!("revealed top branch handled before object-choice validation")
             }
             ResolutionContinuation::OwnerLibraryPlacement { .. } => {
                 unreachable!("owner placement branch handled before object-choice validation")

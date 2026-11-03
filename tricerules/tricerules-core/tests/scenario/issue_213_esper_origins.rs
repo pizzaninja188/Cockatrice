@@ -217,6 +217,12 @@ fn issue_213_chapter_one_leaves_a_revealed_nonpermanent_on_top() {
         .library
         .retain(|oid| *oid != revealed);
     engine.state.players[0].library.push_front(revealed);
+    let revealed_generation = engine
+        .state
+        .zone_change_generation
+        .get(&revealed)
+        .copied()
+        .unwrap_or(0);
     answer_trigger_order_in_engine_order(&mut engine);
     let first = engine.state.priority_player_id();
     let second = if first == 0 { 1 } else { 0 };
@@ -229,6 +235,19 @@ fn issue_213_chapter_one_leaves_a_revealed_nonpermanent_on_top() {
 
     assert_eq!(engine.state.objects[&revealed].zone, Zone::Library);
     assert_eq!(engine.state.players[0].library.front(), Some(&revealed));
+    assert_eq!(
+        engine
+            .state
+            .zone_change_generation
+            .get(&revealed)
+            .copied()
+            .unwrap_or(0),
+        revealed_generation
+    );
+    assert!(
+        engine.state.pending_resolution.is_none(),
+        "default KeepTop never offers an optional bottom choice"
+    );
     assert!(batch.events.iter().any(|event| matches!(
         event.ev,
         Some(Ev::CardsRevealed(ref reveal))

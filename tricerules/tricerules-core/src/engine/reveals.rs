@@ -183,6 +183,7 @@ pub(super) fn active_reveals(eng: &GameEngine) -> Vec<rv1::CardsRevealed> {
     }
     if let Some(pending) = &eng.state.pending_resolution {
         let receipt = match &pending.continuation {
+            ResolutionContinuation::RevealedTopBottom { public_reveal, .. } => Some(public_reveal),
             ResolutionContinuation::ProgramCohortPartition { public_reveal, .. } => {
                 public_reveal.as_ref()
             }

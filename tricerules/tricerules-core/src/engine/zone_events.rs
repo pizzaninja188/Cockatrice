@@ -794,10 +794,14 @@ impl GameEngine {
                 .entry(*object_id)
                 .or_insert(0) += 1;
         }
-        events.push(events::ev_log(format!(
-            "P{library_owner} puts {} cards on the bottom of their library in a random order.",
-            bottom.len()
-        )));
+        events.push(events::ev_log(if bottom.len() == 1 {
+            format!("P{library_owner} puts the revealed card on the bottom of their library.")
+        } else {
+            format!(
+                "P{library_owner} puts {} cards on the bottom of their library in a random order.",
+                bottom.len()
+            )
+        }));
         Ok(())
     }
 
