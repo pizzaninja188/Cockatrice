@@ -969,6 +969,15 @@ impl GameEngine {
             .copied()
             .unwrap_or(0);
         let timestamp = self.state.command_index;
+        let static_effect = |affected, kind, condition| ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: Some(object_id),
+            affected,
+            kind,
+            condition,
+            duration: EffectDuration::WhileSourceOnBattlefield,
+            timestamp,
+        };
 
         for (definition, static_ability) in statics {
             // Store every static component, even while its printed source is suppressed.
@@ -1002,22 +1011,18 @@ impl GameEngine {
                     // controller's resolution path; it emits no layer effect on entry.
                 }
                 StaticAbilityDef::GrantKeywordToPermanents { filter, keyword } => {
-                    self.state.continuous_effects.push(ContinuousEffect {
-                        trigger_grant_origin: None,
-                        source_id: Some(object_id),
-                        affected: AffectedScope::PermanentsMatching {
+                    self.state.continuous_effects.push(static_effect(
+                        AffectedScope::PermanentsMatching {
                             reference_player: controller,
                             filter: Box::new(filter),
                             exclude: Some(object_id),
                         },
-                        kind: ContinuousEffectKind::Layer6AddKeywordFromStatic {
+                        ContinuousEffectKind::Layer6AddKeywordFromStatic {
                             keyword,
                             source_zone_change,
                         },
-                        condition: None,
-                        duration: EffectDuration::WhileSourceOnBattlefield,
-                        timestamp,
-                    });
+                        None,
+                    ));
                 }
                 StaticAbilityDef::Madness { .. }
                 | StaticAbilityDef::GraveyardAnthemKeyword { .. }
@@ -1079,17 +1084,11 @@ impl GameEngine {
                     // independent continuous-effect record.
                 }
                 StaticAbilityDef::SelfDoesntUntapDuringUntapStepUnless { condition } => {
-                    self.state.continuous_effects.push(ContinuousEffect {
-                        trigger_grant_origin: None,
-                        source_id: Some(object_id),
-                        affected: AffectedScope::Single(object_id),
-                        kind: ContinuousEffectKind::DoesntUntapDuringUntapStepUnless(Box::new(
-                            condition,
-                        )),
-                        condition: None,
-                        duration: EffectDuration::WhileSourceOnBattlefield,
-                        timestamp,
-                    });
+                    self.state.continuous_effects.push(static_effect(
+                        AffectedScope::Single(object_id),
+                        ContinuousEffectKind::DoesntUntapDuringUntapStepUnless(Box::new(condition)),
+                        None,
+                    ));
                 }
                 StaticAbilityDef::PreventDamage {
                     subject,
@@ -1162,18 +1161,14 @@ impl GameEngine {
                     delta_power,
                     delta_toughness,
                 } => {
-                    self.state.continuous_effects.push(ContinuousEffect {
-                        trigger_grant_origin: None,
-                        source_id: Some(object_id),
-                        affected: resolve_creature_scope(&filter, controller, object_id),
-                        kind: ContinuousEffectKind::PtModify {
+                    self.state.continuous_effects.push(static_effect(
+                        resolve_creature_scope(&filter, controller, object_id),
+                        ContinuousEffectKind::PtModify {
                             delta_power,
                             delta_toughness,
                         },
                         condition,
-                        duration: EffectDuration::WhileSourceOnBattlefield,
-                        timestamp,
-                    });
+                    ));
                 }
                 StaticAbilityDef::TargetingCostIncrease { .. }
                 | StaticAbilityDef::SpellGenericReduction { .. } => {
@@ -1196,26 +1191,18 @@ impl GameEngine {
                             }
                         }
                     };
-                    self.state.continuous_effects.push(ContinuousEffect {
-                        trigger_grant_origin: None,
-                        source_id: Some(object_id),
+                    self.state.continuous_effects.push(static_effect(
                         affected,
-                        kind: ContinuousEffectKind::ProhibitSpecialAction(action),
+                        ContinuousEffectKind::ProhibitSpecialAction(action),
                         condition,
-                        duration: EffectDuration::WhileSourceOnBattlefield,
-                        timestamp,
-                    });
+                    ));
                 }
                 StaticAbilityDef::ProhibitActivatedAbilitiesOfAttachedPermanent => {
-                    self.state.continuous_effects.push(ContinuousEffect {
-                        trigger_grant_origin: None,
-                        source_id: Some(object_id),
-                        affected: AffectedScope::AttachedTo(object_id),
-                        kind: ContinuousEffectKind::ProhibitActivatedAbilities,
-                        condition: None,
-                        duration: EffectDuration::WhileSourceOnBattlefield,
-                        timestamp,
-                    });
+                    self.state.continuous_effects.push(static_effect(
+                        AffectedScope::AttachedTo(object_id),
+                        ContinuousEffectKind::ProhibitActivatedAbilities,
+                        None,
+                    ));
                 }
                 StaticAbilityDef::AttachedModifier {
                     condition,
@@ -1240,88 +1227,58 @@ impl GameEngine {
                     doesnt_untap_during_untap_step,
                     cant_untap,
                 } => {
-                    let component_start = self.state.continuous_effects.len();
-                    let origin = TriggerAbilityOrigin::StaticGrant {
-                        source_id: object_id,
-                        source_zone_change,
-                        definition: definition.clone(),
-                    };
                     let affected = AffectedScope::AttachedTo(object_id);
                     if delta_power != 0 || delta_toughness != 0 {
-                        self.state.continuous_effects.push(ContinuousEffect {
-                            trigger_grant_origin: None,
-                            source_id: Some(object_id),
-                            affected: affected.clone(),
-                            kind: ContinuousEffectKind::PtModify {
+                        self.state.continuous_effects.push(static_effect(
+                            affected.clone(),
+                            ContinuousEffectKind::PtModify {
                                 delta_power,
                                 delta_toughness,
                             },
-                            condition: condition.clone(),
-                            duration: EffectDuration::WhileSourceOnBattlefield,
-                            timestamp,
-                        });
+                            condition.clone(),
+                        ));
                     }
                     if let Some(count) = count {
-                        self.state.continuous_effects.push(ContinuousEffect {
-                            trigger_grant_origin: None,
-                            source_id: Some(object_id),
-                            affected: affected.clone(),
-                            kind: ContinuousEffectKind::PtModifyByCount {
+                        self.state.continuous_effects.push(static_effect(
+                            affected.clone(),
+                            ContinuousEffectKind::PtModifyByCount {
                                 count: count.clone(),
                                 power_per_match,
                                 toughness_per_match,
                             },
-                            condition: condition.clone(),
-                            duration: EffectDuration::WhileSourceOnBattlefield,
-                            timestamp,
-                        });
+                            condition.clone(),
+                        ));
                     }
                     if let (Some(power), Some(toughness)) = (set_power, set_toughness) {
-                        self.state.continuous_effects.push(ContinuousEffect {
-                            trigger_grant_origin: None,
-                            source_id: Some(object_id),
-                            affected: affected.clone(),
-                            kind: ContinuousEffectKind::Layer7bSetPt {
+                        self.state.continuous_effects.push(static_effect(
+                            affected.clone(),
+                            ContinuousEffectKind::Layer7bSetPt {
                                 power: i64::from(power),
                                 toughness: i64::from(toughness),
                             },
-                            condition: condition.clone(),
-                            duration: EffectDuration::WhileSourceOnBattlefield,
-                            timestamp,
-                        });
+                            condition.clone(),
+                        ));
                     }
                     if remove_all_abilities {
-                        self.state.continuous_effects.push(ContinuousEffect {
-                            trigger_grant_origin: None,
-                            source_id: Some(object_id),
-                            affected: affected.clone(),
-                            kind: ContinuousEffectKind::Layer6RemoveAllAbilities,
-                            condition: condition.clone(),
-                            duration: EffectDuration::WhileSourceOnBattlefield,
-                            timestamp,
-                        });
+                        self.state.continuous_effects.push(static_effect(
+                            affected.clone(),
+                            ContinuousEffectKind::Layer6RemoveAllAbilities,
+                            condition.clone(),
+                        ));
                     }
                     for keyword in keywords {
-                        self.state.continuous_effects.push(ContinuousEffect {
-                            trigger_grant_origin: None,
-                            source_id: Some(object_id),
-                            affected: affected.clone(),
-                            kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
-                            condition: condition.clone(),
-                            duration: EffectDuration::WhileSourceOnBattlefield,
-                            timestamp,
-                        });
+                        self.state.continuous_effects.push(static_effect(
+                            affected.clone(),
+                            ContinuousEffectKind::Layer6AddKeyword(keyword),
+                            condition.clone(),
+                        ));
                     }
                     for protection in protections {
-                        self.state.continuous_effects.push(ContinuousEffect {
-                            trigger_grant_origin: None,
-                            source_id: Some(object_id),
-                            affected: affected.clone(),
-                            kind: ContinuousEffectKind::Layer6AddProtection(protection),
-                            condition: condition.clone(),
-                            duration: EffectDuration::WhileSourceOnBattlefield,
-                            timestamp,
-                        });
+                        self.state.continuous_effects.push(static_effect(
+                            affected.clone(),
+                            ContinuousEffectKind::Layer6AddProtection(protection),
+                            condition.clone(),
+                        ));
                     }
                     for ability in activated_abilities {
                         let mut granted_definition = definition.clone();
@@ -1362,99 +1319,66 @@ impl GameEngine {
                         });
                     }
                     if !restriction.is_empty() {
-                        self.state.continuous_effects.push(ContinuousEffect {
-                            trigger_grant_origin: None,
-                            source_id: Some(object_id),
-                            affected: affected.clone(),
-                            kind: ContinuousEffectKind::CombatRestriction(restriction),
-                            condition: None,
-                            duration: EffectDuration::WhileSourceOnBattlefield,
-                            timestamp,
-                        });
+                        self.state.continuous_effects.push(static_effect(
+                            affected.clone(),
+                            ContinuousEffectKind::CombatRestriction(restriction),
+                            None,
+                        ));
                     }
                     if cant_untap {
-                        self.state.continuous_effects.push(ContinuousEffect {
-                            trigger_grant_origin: None,
-                            source_id: Some(object_id),
-                            affected: affected.clone(),
-                            kind: ContinuousEffectKind::ProhibitUntap,
-                            condition: condition.clone(),
-                            duration: EffectDuration::WhileSourceOnBattlefield,
-                            timestamp,
-                        });
+                        self.state.continuous_effects.push(static_effect(
+                            affected.clone(),
+                            ContinuousEffectKind::ProhibitUntap,
+                            condition.clone(),
+                        ));
                     }
                     if doesnt_untap_during_untap_step {
-                        self.state.continuous_effects.push(ContinuousEffect {
-                            trigger_grant_origin: None,
-                            source_id: Some(object_id),
+                        self.state.continuous_effects.push(static_effect(
                             affected,
-                            kind: ContinuousEffectKind::DoesntUntapDuringUntapStep,
-                            condition: None,
-                            duration: EffectDuration::WhileSourceOnBattlefield,
-                            timestamp,
-                        });
-                    }
-                    for effect in &mut self.state.continuous_effects[component_start..] {
-                        if effect.trigger_grant_origin.is_none() {
-                            effect.trigger_grant_origin = Some(origin.clone());
-                        }
+                            ContinuousEffectKind::DoesntUntapDuringUntapStep,
+                            None,
+                        ));
                     }
                 }
                 StaticAbilityDef::SelfCombatRestriction {
                     restriction,
                     condition,
                 } => {
-                    self.state.continuous_effects.push(ContinuousEffect {
-                        trigger_grant_origin: None,
-                        source_id: Some(object_id),
-                        affected: AffectedScope::Single(object_id),
-                        kind: ContinuousEffectKind::CombatRestriction(restriction),
+                    self.state.continuous_effects.push(static_effect(
+                        AffectedScope::Single(object_id),
+                        ContinuousEffectKind::CombatRestriction(restriction),
                         condition,
-                        duration: EffectDuration::WhileSourceOnBattlefield,
-                        timestamp,
-                    });
+                    ));
                 }
                 StaticAbilityDef::CreatureScopeCombatRestriction {
                     filter,
                     restriction,
                 } => {
-                    self.state.continuous_effects.push(ContinuousEffect {
-                        trigger_grant_origin: None,
-                        source_id: Some(object_id),
-                        affected: resolve_creature_scope(&filter, controller, object_id),
-                        kind: ContinuousEffectKind::CombatRestriction(restriction),
-                        condition: None,
-                        duration: EffectDuration::WhileSourceOnBattlefield,
-                        timestamp,
-                    });
+                    self.state.continuous_effects.push(static_effect(
+                        resolve_creature_scope(&filter, controller, object_id),
+                        ContinuousEffectKind::CombatRestriction(restriction),
+                        None,
+                    ));
                 }
                 StaticAbilityDef::ControlsAttached => {
-                    self.state.continuous_effects.push(ContinuousEffect {
-                        trigger_grant_origin: None,
-                        source_id: Some(object_id),
-                        affected: AffectedScope::AttachedTo(object_id),
-                        kind: ContinuousEffectKind::Layer2Control {
+                    self.state.continuous_effects.push(static_effect(
+                        AffectedScope::AttachedTo(object_id),
+                        ContinuousEffectKind::Layer2Control {
                             controller: ControllerReference::SourceController,
                         },
-                        condition: None,
-                        duration: EffectDuration::WhileSourceOnBattlefield,
-                        timestamp,
-                    });
+                        None,
+                    ));
                 }
                 StaticAbilityDef::AnthemKeyword {
                     filter,
                     condition,
                     keyword,
                 } => {
-                    self.state.continuous_effects.push(ContinuousEffect {
-                        trigger_grant_origin: None,
-                        source_id: Some(object_id),
-                        affected: resolve_creature_scope(&filter, controller, object_id),
-                        kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
+                    self.state.continuous_effects.push(static_effect(
+                        resolve_creature_scope(&filter, controller, object_id),
+                        ContinuousEffectKind::Layer6AddKeyword(keyword),
                         condition,
-                        duration: EffectDuration::WhileSourceOnBattlefield,
-                        timestamp,
-                    });
+                    ));
                 }
                 StaticAbilityDef::GrantActivatedAbilityToPermanents {
                     filter,
@@ -1588,40 +1512,28 @@ impl GameEngine {
                 } => {
                     let affected = AffectedScope::Single(object_id);
                     if let (Some(power), Some(toughness)) = (base_power, base_toughness) {
-                        self.state.continuous_effects.push(ContinuousEffect {
-                            trigger_grant_origin: None,
-                            source_id: Some(object_id),
-                            affected: affected.clone(),
-                            kind: ContinuousEffectKind::Layer7bSetPt { power, toughness },
-                            condition: Some(condition.clone()),
-                            duration: EffectDuration::WhileSourceOnBattlefield,
-                            timestamp,
-                        });
+                        self.state.continuous_effects.push(static_effect(
+                            affected.clone(),
+                            ContinuousEffectKind::Layer7bSetPt { power, toughness },
+                            Some(condition.clone()),
+                        ));
                     }
                     if delta_power != 0 || delta_toughness != 0 {
-                        self.state.continuous_effects.push(ContinuousEffect {
-                            trigger_grant_origin: None,
-                            source_id: Some(object_id),
-                            affected: affected.clone(),
-                            kind: ContinuousEffectKind::PtModify {
+                        self.state.continuous_effects.push(static_effect(
+                            affected.clone(),
+                            ContinuousEffectKind::PtModify {
                                 delta_power,
                                 delta_toughness,
                             },
-                            condition: Some(condition.clone()),
-                            duration: EffectDuration::WhileSourceOnBattlefield,
-                            timestamp,
-                        });
+                            Some(condition.clone()),
+                        ));
                     }
                     for keyword in keywords {
-                        self.state.continuous_effects.push(ContinuousEffect {
-                            trigger_grant_origin: None,
-                            source_id: Some(object_id),
-                            affected: affected.clone(),
-                            kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
-                            condition: Some(condition.clone()),
-                            duration: EffectDuration::WhileSourceOnBattlefield,
-                            timestamp,
-                        });
+                        self.state.continuous_effects.push(static_effect(
+                            affected.clone(),
+                            ContinuousEffectKind::Layer6AddKeyword(keyword),
+                            Some(condition.clone()),
+                        ));
                     }
                     for ability in activated_abilities {
                         let mut granted_definition = definition.clone();
@@ -1662,15 +1574,11 @@ impl GameEngine {
                         });
                     }
                     if can_attack_as_though_without_defender {
-                        self.state.continuous_effects.push(ContinuousEffect {
-                            trigger_grant_origin: None,
-                            source_id: Some(object_id),
+                        self.state.continuous_effects.push(static_effect(
                             affected,
-                            kind: ContinuousEffectKind::AttackAsThoughWithoutDefender,
-                            condition: Some(condition),
-                            duration: EffectDuration::WhileSourceOnBattlefield,
-                            timestamp,
-                        });
+                            ContinuousEffectKind::AttackAsThoughWithoutDefender,
+                            Some(condition),
+                        ));
                     }
                 }
                 StaticAbilityDef::CountScaledSelfPt {
@@ -1678,41 +1586,29 @@ impl GameEngine {
                     power_per_match,
                     toughness_per_match,
                 } => {
-                    self.state.continuous_effects.push(ContinuousEffect {
-                        trigger_grant_origin: None,
-                        source_id: Some(object_id),
-                        affected: AffectedScope::Single(object_id),
-                        kind: ContinuousEffectKind::PtModifyByCount {
+                    self.state.continuous_effects.push(static_effect(
+                        AffectedScope::Single(object_id),
+                        ContinuousEffectKind::PtModifyByCount {
                             count,
                             power_per_match,
                             toughness_per_match,
                         },
-                        condition: None,
-                        duration: EffectDuration::WhileSourceOnBattlefield,
-                        timestamp,
-                    });
+                        None,
+                    ));
                 }
                 StaticAbilityDef::ExtraLandPlays { count } => {
-                    self.state.continuous_effects.push(ContinuousEffect {
-                        trigger_grant_origin: None,
-                        source_id: Some(object_id),
-                        affected: AffectedScope::Player(controller),
-                        kind: ContinuousEffectKind::ExtraLandPlays(count),
-                        condition: None,
-                        duration: EffectDuration::WhileSourceOnBattlefield,
-                        timestamp,
-                    });
+                    self.state.continuous_effects.push(static_effect(
+                        AffectedScope::Player(controller),
+                        ContinuousEffectKind::ExtraLandPlays(count),
+                        None,
+                    ));
                 }
                 StaticAbilityDef::PlayLandsFromOwnGraveyard => {
-                    self.state.continuous_effects.push(ContinuousEffect {
-                        trigger_grant_origin: None,
-                        source_id: Some(object_id),
-                        affected: AffectedScope::Player(controller),
-                        kind: ContinuousEffectKind::PlayLandsFromOwnGraveyard,
-                        condition: None,
-                        duration: EffectDuration::WhileSourceOnBattlefield,
-                        timestamp,
-                    });
+                    self.state.continuous_effects.push(static_effect(
+                        AffectedScope::Player(controller),
+                        ContinuousEffectKind::PlayLandsFromOwnGraveyard,
+                        None,
+                    ));
                 }
                 StaticAbilityDef::LibraryTopPermission {
                     look_at_top,
@@ -1720,19 +1616,15 @@ impl GameEngine {
                     play_lands,
                     condition,
                 } => {
-                    self.state.continuous_effects.push(ContinuousEffect {
-                        trigger_grant_origin: None,
-                        source_id: Some(object_id),
-                        affected: AffectedScope::Player(controller),
-                        kind: ContinuousEffectKind::LibraryTopPermission {
+                    self.state.continuous_effects.push(static_effect(
+                        AffectedScope::Player(controller),
+                        ContinuousEffectKind::LibraryTopPermission {
                             look_at_top,
                             cast_filter,
                             play_lands,
                         },
                         condition,
-                        duration: EffectDuration::WhileSourceOnBattlefield,
-                        timestamp,
-                    });
+                    ));
                 }
                 StaticAbilityDef::DuplicantImprint { .. } => {}
             }

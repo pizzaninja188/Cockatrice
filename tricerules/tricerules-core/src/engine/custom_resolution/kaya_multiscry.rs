@@ -881,14 +881,12 @@ fn scry_branch_option(branch_index: u32, label: String) -> rv1::ResolutionBranch
     rv1::ResolutionBranchOption {
         branch_index,
         label: label.clone(),
-        cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
-        cost_text: String::new(),
         selectable: true,
-        search_zones: Vec::new(),
         presentation: Some(rv1::PresentationRef {
             fallback_text: label,
             ..Default::default()
         }),
+        ..Default::default()
     }
 }
 

@@ -1713,18 +1713,17 @@ crate::state::ResolutionContinuation::EquipmentReceiptAttach {
             .unwrap_or(true)
     }
 
-    /// Enter one selected branch (or the explicit otherwise block) of a parked Choose node.
-    /// The occurrence is verified against the exact immutable compiled owner before a child
-    /// frame is pushed, and the parent cursor must be exactly one past that instruction.
-    pub(in crate::engine) fn enter_program_choose_body(
-        &mut self,
-        stack: &mut ParkedStackResolution,
+    fn compiled_choose_at_occurrence(
+        &self,
+        run: &ProgramRunState,
         occurrence: &crate::state::ProgramChooseOccurrence,
-        branch_id: Option<&tricerules_card_model::ChoiceId>,
-    ) -> Result<(), EngineError> {
-        let run = stack.program().ok_or(EngineError::ProgramInvariant(
-            "program Choose lost its parked execution state",
-        ))?;
+    ) -> Result<
+        (
+            &tricerules_card_model::primitives::CompiledInstruction,
+            &[CompiledChooseBranch],
+        ),
+        EngineError,
+    > {
         let compiled = self.registry.compiled_program_for_owner(&run.owner).ok_or(
             EngineError::ProgramInvariant("parked Choose program owner disappeared"),
         )?;
@@ -1748,6 +1747,22 @@ crate::state::ResolutionContinuation::EquipmentReceiptAttach {
                 "parked Choose occurrence changed choice identity",
             ));
         }
+        Ok((instruction, branches))
+    }
+
+    /// Enter one selected branch (or the explicit otherwise block) of a parked Choose node.
+    /// The occurrence is verified against the exact immutable compiled owner before a child
+    /// frame is pushed, and the parent cursor must be exactly one past that instruction.
+    pub(in crate::engine) fn enter_program_choose_body(
+        &mut self,
+        stack: &mut ParkedStackResolution,
+        occurrence: &crate::state::ProgramChooseOccurrence,
+        branch_id: Option<&tricerules_card_model::ChoiceId>,
+    ) -> Result<(), EngineError> {
+        let run = stack.program().ok_or(EngineError::ProgramInvariant(
+            "program Choose lost its parked execution state",
+        ))?;
+        let (instruction, branches) = self.compiled_choose_at_occurrence(run, occurrence)?;
         let frame = run.frames.last().ok_or(EngineError::ProgramInvariant(
             "parked Choose lost its parent frame",
         ))?;
@@ -1833,29 +1848,7 @@ crate::state::ResolutionContinuation::EquipmentReceiptAttach {
         let run = stack.program().ok_or(EngineError::ProgramInvariant(
             "program Choose lost its parked execution state",
         ))?;
-        let compiled = self.registry.compiled_program_for_owner(&run.owner).ok_or(
-            EngineError::ProgramInvariant("parked Choose program owner disappeared"),
-        )?;
-        let parent = block_at_path(compiled, &occurrence.parent_path)?;
-        let instruction = parent
-            .steps
-            .get(occurrence.instruction_index as usize)
-            .ok_or(EngineError::ProgramInvariant(
-                "parked Choose instruction disappeared",
-            ))?;
-        let CompiledInstructionKind::Choose {
-            choice, branches, ..
-        } = &instruction.kind
-        else {
-            return Err(EngineError::ProgramInvariant(
-                "parked Choose occurrence changed instruction kind",
-            ));
-        };
-        if choice != &occurrence.choice_id {
-            return Err(EngineError::ProgramInvariant(
-                "parked Choose occurrence changed choice identity",
-            ));
-        }
+        let (_, branches) = self.compiled_choose_at_occurrence(run, occurrence)?;
         let branch = branches
             .get(branch_index)
             .cloned()
@@ -1869,20 +1862,9 @@ crate::state::ResolutionContinuation::EquipmentReceiptAttach {
             return None;
         };
         let run = stack.program()?;
-        let compiled = self.registry.compiled_program_for_owner(&run.owner)?;
-        let parent = block_at_path(compiled, &choose.occurrence.parent_path).ok()?;
-        let instruction = parent
-            .steps
-            .get(choose.occurrence.instruction_index as usize)?;
-        let CompiledInstructionKind::Choose {
-            choice, branches, ..
-        } = &instruction.kind
-        else {
-            return None;
-        };
-        if choice != &choose.occurrence.choice_id {
-            return None;
-        }
+        let (_, branches) = self
+            .compiled_choose_at_occurrence(run, &choose.occurrence)
+            .ok()?;
         let options = match &choose.stage {
             crate::state::PendingProgramChooseStage::ChoosingDelegate { candidates } => {
                 super::resolution_choice_delegate_options(

@@ -51,14 +51,25 @@ pub(super) fn destroy_attached(
     let Some(target) = cx.first_current_battlefield_target(0) else {
         return Ok(EffectOutcome::Continue);
     };
+    // CR 608.2h: determine this untargeted cohort once, using current derived characteristics.
+    // Sorting ObjectIds gives deterministic movement/log order while dies triggers are collected
+    // and fired as one logical destruction batch after every successful move.
+    let victims = attached_objects_matching(cx.engine, target, &attachments);
+    destroy_cohort(cx, victims, false)
+}
+
+fn destroy_cohort(
+    cx: &mut EffectCx<'_>,
+    victims: Vec<ObjectId>,
+    prevent_regeneration: bool,
+) -> Result<EffectOutcome, EngineError> {
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let spell_label = cx.spell_label;
 
-    // CR 608.2h: determine this untargeted cohort once, using current derived characteristics.
-    // Sorting ObjectIds gives deterministic movement/log order while dies triggers are collected
-    // and fired as one logical destruction batch after every successful move.
-    let victims = attached_objects_matching(engine, target, &attachments);
+    // Snapshot every destruction-relevant fact before the first permanent moves. In particular,
+    // an earlier Aura or other static-effect source may leave during this simultaneous event;
+    // its departure must not change whether a later member of the cohort is indestructible.
     let snapshots = victims
         .into_iter()
         .map(|oid| {
@@ -89,7 +100,7 @@ pub(super) fn destroy_attached(
         match attempt_destroy(
             engine,
             snapshot,
-            false,
+            prevent_regeneration,
             spell_label,
             DestroyLogStyle::Cohort,
             events,
@@ -266,56 +277,12 @@ pub(super) fn destroy_all(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let engine = &mut *cx.engine;
-    let events = &mut *cx.events;
-    let spell_label = cx.spell_label;
-
     // CR 701.8 / 704.4: all matching permanents are destroyed simultaneously,
     // then their "dies" triggers fire together. Indestructible permanents survive
     // (CR 702.12b). `prevent_regeneration` bypasses shields (Wrath of God).
     // Untargeted, so hexproof/shroud are irrelevant.
-    // Snapshot every destruction-relevant fact before the first permanent moves. In particular,
-    // an earlier Aura or other static-effect source may leave during this simultaneous event;
-    // its departure must not change whether a later member of the cohort is indestructible.
-    let victims = battlefield_objects_matching(engine, &kind)
-        .into_iter()
-        .map(|tid| {
-            let characteristics = engine.characteristics(tid);
-            DestroySnapshot {
-                object_id: tid,
-                indestructible: engine.effective_has_keyword(tid, Keyword::Indestructible),
-                name: object_display_name(&engine.state, engine.registry, tid),
-                owner: engine.state.objects.get(&tid).map(|object| object.owner),
-                source: engine.trigger_source_snapshot(tid),
-                was_creature: characteristics
-                    .as_ref()
-                    .is_some_and(|value| value.is_creature()),
-                characteristics,
-            }
-        })
-        .collect::<Vec<_>>();
-    let zone_snapshot = engine.snapshot_zone_event();
-    let mut destroyed = Vec::new();
-    let mut tap_events = Vec::new();
-    for snapshot in victims {
-        match attempt_destroy(
-            engine,
-            snapshot,
-            prevent_regeneration,
-            spell_label,
-            DestroyLogStyle::Cohort,
-            events,
-        )? {
-            DestroyOutcome::Indestructible => {}
-            DestroyOutcome::Regenerated { trigger_events } => tap_events.extend(trigger_events),
-            DestroyOutcome::Destroyed { trigger_events, .. } => destroyed.extend(trigger_events),
-        }
-    }
-    let mut trigger_events = tap_events;
-    trigger_events.extend(destroyed);
-    engine.fire_zone_triggers(zone_snapshot, trigger_events, events);
-
-    Ok(EffectOutcome::Continue)
+    let victims = battlefield_objects_matching(cx.engine, &kind);
+    destroy_cohort(cx, victims, prevent_regeneration)
 }
 
 /// Shared selection for mass tap and untap (Cryptic Command / Vitalize). CR 115.10 / 608.2h:

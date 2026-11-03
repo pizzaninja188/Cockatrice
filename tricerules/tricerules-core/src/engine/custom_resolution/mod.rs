@@ -108,14 +108,12 @@ impl GameEngine {
                     rv1::ResolutionBranchOption {
                         branch_index: index as u32,
                         label: label.clone(),
-                        cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
-                        cost_text: String::new(),
                         selectable: true,
-                        search_zones: Vec::new(),
                         presentation: Some(rv1::PresentationRef {
                             fallback_text: label,
                             ..Default::default()
                         }),
+                        ..Default::default()
                     }
                 })
                 .collect(),
@@ -159,14 +157,12 @@ impl GameEngine {
                 vec![rv1::ResolutionBranchOption {
                     branch_index: 0,
                     label: label.clone(),
-                    cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
-                    cost_text: String::new(),
                     selectable: true,
-                    search_zones: Vec::new(),
                     presentation: Some(rv1::PresentationRef {
                         fallback_text: label,
                         ..Default::default()
                     }),
+                    ..Default::default()
                 }]
             }
             crate::state::PendingOptionalTriggeredAbilityStage::ChoosingDelegate { candidates } => {

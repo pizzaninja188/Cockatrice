@@ -1478,20 +1478,14 @@ pub(in crate::engine) fn publish_owner_library_placement_choice(
                         } else {
                             "Top".into()
                         },
-                        cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
-                        cost_text: String::new(),
                         selectable: true,
-                        search_zones: Vec::new(),
-                        presentation: None,
+                        ..Default::default()
                     },
                     rv1::ResolutionBranchOption {
                         branch_index: 1,
                         label: "Bottom".into(),
-                        cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
-                        cost_text: String::new(),
                         selectable: true,
-                        search_zones: Vec::new(),
-                        presentation: None,
+                        ..Default::default()
                     },
                 ],
                 candidate_selectable: Vec::new(),

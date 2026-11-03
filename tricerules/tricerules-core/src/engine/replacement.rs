@@ -1536,56 +1536,8 @@ impl GameEngine {
             let stack = stack.clone();
             self.state.pending_resolution = None;
             self.state.pending_replacement_event = None;
-            let batch = match entry.completion {
-                BattlefieldEntryCompletion::PermanentSpell { .. } => {
-                    let (parked_item, _, parked_previous_result, _) = stack.into_parts();
-                    self.complete_parked_resolution_with_previous(
-                        parked_item,
-                        Some(0),
-                        parked_previous_result,
-                        Vec::new(),
-                    )
-                }?,
-                BattlefieldEntryCompletion::ResolutionEffect { .. }
-                    if stack.program().is_some() =>
-                {
-                    self.complete_parked_stack_with_previous(
-                        stack,
-                        OperationResults::default(),
-                        Vec::new(),
-                    )?
-                }
-                BattlefieldEntryCompletion::ResolutionEffect { .. }
-                | BattlefieldEntryCompletion::Ninjutsu { .. } => {
-                    let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
-                        stack.into_parts();
-                    self.complete_parked_resolution_with_previous(
-                        parked_item,
-                        parked_resume_effect_index,
-                        parked_previous_result,
-                        Vec::new(),
-                    )
-                }?,
-                BattlefieldEntryCompletion::ZoneEntryBatch(mut batch) => {
-                    self.reconcile_departed_zone_entry_members(&mut batch, departed_objects);
-                    let mut resumed_events = Vec::new();
-                    if let Some(completion) = self.continue_zone_entry_batch_with_resume(
-                        stack,
-                        *batch,
-                        &mut resumed_events,
-                    )? {
-                        self.complete_parked_zone_entry_batch(completion, resumed_events)?
-                    } else {
-                        finish_with_events(self, resumed_events)
-                    }
-                }
-                completion => self.finish_entry_copy_without_recipient(
-                    stack,
-                    entry.event,
-                    completion,
-                    Vec::new(),
-                )?,
-            };
+            let batch =
+                self.finish_abandoned_entry_after_departure(stack, entry, departed_objects)?;
             events.extend(batch.events);
             return Ok(());
         }
@@ -1693,6 +1645,17 @@ impl GameEngine {
         let stack = stack.clone();
         self.state.pending_resolution = None;
         self.state.pending_replacement_event = None;
+        let batch = self.finish_abandoned_entry_after_departure(stack, entry, departed_objects)?;
+        events.extend(batch.events);
+        Ok(())
+    }
+
+    fn finish_abandoned_entry_after_departure(
+        &mut self,
+        stack: ParkedStackResolution,
+        entry: PendingBattlefieldEntry,
+        departed_objects: &HashSet<ObjectId>,
+    ) -> Result<RuledEventBatch, EngineError> {
         let batch = match entry.completion {
             BattlefieldEntryCompletion::PermanentSpell { .. } => {
                 let (parked_item, _, parked_previous_result, _) = stack.into_parts();
@@ -1739,8 +1702,7 @@ impl GameEngine {
                 Vec::new(),
             )?,
         };
-        events.extend(batch.events);
-        Ok(())
+        Ok(batch)
     }
 
     pub(super) fn reconcile_departed_zone_entry_members(
@@ -1825,11 +1787,8 @@ impl GameEngine {
             .map(|(index, land_type)| rv1::ResolutionBranchOption {
                 branch_index: index as u32,
                 label: land_type.as_str().to_string(),
-                cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
-                cost_text: String::new(),
                 selectable: true,
-                search_zones: Vec::new(),
-                presentation: None,
+                ..Default::default()
             })
             .collect();
         Some(rv1::RuledEvent {
@@ -1883,7 +1842,6 @@ impl GameEngine {
                     resolution_branches: vec![rv1::ResolutionBranchOption {
                         branch_index: 0,
                         label: format!("Pay {amount} life"),
-                        cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
                         cost_text: format!("{amount} life"),
                         selectable,
                         ..Default::default()
@@ -1908,11 +1866,8 @@ impl GameEngine {
             .map(|(index, land_type)| rv1::ResolutionBranchOption {
                 branch_index: index as u32,
                 label: land_type.as_str().to_string(),
-                cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
-                cost_text: String::new(),
                 selectable: true,
-                search_zones: Vec::new(),
-                presentation: None,
+                ..Default::default()
             })
             .collect();
         let prompt = "Choose a basic land type for Multiversal Passage.".to_string();
@@ -2134,11 +2089,9 @@ impl GameEngine {
                     resolution_branches: vec![rv1::ResolutionBranchOption {
                         branch_index: 0,
                         label,
-                        cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
                         cost_text,
                         selectable,
-                        search_zones: Vec::new(),
-                        presentation: None,
+                        ..Default::default()
                     }],
                     public_reveal: None,
                     candidate_source_zones: Vec::new(),
@@ -2171,11 +2124,8 @@ impl GameEngine {
             .map(|chapter| rv1::ResolutionBranchOption {
                 branch_index: chapter - 1,
                 label: saga_chapter_label(chapter),
-                cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
-                cost_text: String::new(),
                 selectable: true,
-                search_zones: Vec::new(),
-                presentation: None,
+                ..Default::default()
             })
             .collect();
         let prompt = "Choose this Saga's starting chapter (read ahead).".to_string();

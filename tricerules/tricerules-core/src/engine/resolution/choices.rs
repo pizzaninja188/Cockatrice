@@ -201,14 +201,12 @@ pub(super) fn move_one_counter_between_targets(
             rv1::ResolutionBranchOption {
                 branch_index: index as u32,
                 label: label.clone(),
-                cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
-                cost_text: String::new(),
                 selectable: true,
-                search_zones: Vec::new(),
                 presentation: Some(rv1::PresentationRef {
                     fallback_text: label,
                     ..Default::default()
                 }),
+                ..Default::default()
             }
         })
         .collect();
@@ -2070,14 +2068,12 @@ pub(in crate::engine) fn authored_resolution_branch_choice_event(
                     rv1::ResolutionBranchOption {
                         branch_index: index as u32,
                         label: label.clone(),
-                        cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
-                        cost_text: String::new(),
                         selectable: valid,
-                        search_zones: Vec::new(),
                         presentation: Some(rv1::PresentationRef {
                             fallback_text: label,
                             ..Default::default()
                         }),
+                        ..Default::default()
                     }
                 })
                 .collect()
@@ -2222,14 +2218,12 @@ pub(in crate::engine) fn targeted_player_permanent_choice_event(
                     rv1::ResolutionBranchOption {
                         branch_index: index as u32,
                         label: label.clone(),
-                        cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
-                        cost_text: String::new(),
                         selectable,
-                        search_zones: Vec::new(),
                         presentation: Some(rv1::PresentationRef {
                             fallback_text: label,
                             ..Default::default()
                         }),
+                        ..Default::default()
                     }
                 })
                 .collect();

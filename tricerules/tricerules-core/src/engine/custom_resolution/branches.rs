@@ -543,35 +543,44 @@ impl GameEngine {
             .collect()
     }
 
-    fn hand_bottom_cost_choice_event(
+    fn card_cost_choice_prompt(
+        &self,
+        pending: &PendingResolution,
+        candidates: &[ObjectId],
+        choice_kind: rv1::ChoiceKind,
+    ) -> rv1::ResolutionChoiceRequired {
+        rv1::ResolutionChoiceRequired {
+            resolution_prompt_id: pending.resolution_prompt_id.get(),
+            deciding_player_id: pending.deciding_player,
+            source_object_id: pending.presentation.source_object_id,
+            prompt_text: pending.presentation.prompt.clone(),
+            choice_kind: choice_kind as i32,
+            candidate_object_ids: candidates.to_vec(),
+            candidate_card_ids: candidates
+                .iter()
+                .map(|object_id| {
+                    self.state
+                        .objects
+                        .get(object_id)
+                        .map(|object| object.card_id.clone())
+                        .unwrap_or_default()
+                })
+                .collect(),
+            candidate_names: self.object_names(candidates),
+            min: pending.presentation.min,
+            max: 1,
+            ..Default::default()
+        }
+    }
+
+    fn hand_card_cost_choice_event(
         &self,
         pending: &PendingResolution,
         candidates: &[ObjectId],
     ) -> rv1::RuledEvent {
         rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
-                rv1::ResolutionChoiceRequired {
-                    resolution_prompt_id: pending.resolution_prompt_id.get(),
-                    deciding_player_id: pending.deciding_player,
-                    source_object_id: pending.presentation.source_object_id,
-                    prompt_text: pending.presentation.prompt.clone(),
-                    choice_kind: rv1::ChoiceKind::HandCards as i32,
-                    candidate_object_ids: candidates.to_vec(),
-                    candidate_card_ids: candidates
-                        .iter()
-                        .map(|object_id| {
-                            self.state
-                                .objects
-                                .get(object_id)
-                                .map(|object| object.card_id.clone())
-                                .unwrap_or_default()
-                        })
-                        .collect(),
-                    candidate_names: self.object_names(candidates),
-                    min: pending.presentation.min,
-                    max: 1,
-                    ..Default::default()
-                },
+                self.card_cost_choice_prompt(pending, candidates, rv1::ChoiceKind::HandCards),
             )),
         }
     }
@@ -584,63 +593,15 @@ impl GameEngine {
         rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
-                    resolution_prompt_id: pending.resolution_prompt_id.get(),
-                    deciding_player_id: pending.deciding_player,
-                    source_object_id: pending.presentation.source_object_id,
-                    prompt_text: pending.presentation.prompt.clone(),
-                    choice_kind: rv1::ChoiceKind::GraveyardCards as i32,
-                    candidate_object_ids: candidates.to_vec(),
-                    candidate_card_ids: candidates
-                        .iter()
-                        .map(|object_id| {
-                            self.state
-                                .objects
-                                .get(object_id)
-                                .map(|object| object.card_id.clone())
-                                .unwrap_or_default()
-                        })
-                        .collect(),
-                    candidate_names: self.object_names(candidates),
-                    min: pending.presentation.min,
-                    max: 1,
                     candidate_source_zones: vec![
                         rv1::ChoiceCandidateSourceZone::Graveyard as i32;
                         candidates.len()
                     ],
-                    ..Default::default()
-                },
-            )),
-        }
-    }
-
-    fn program_choose_discard_cost_choice_event(
-        &self,
-        pending: &PendingResolution,
-        candidates: &[ObjectId],
-    ) -> rv1::RuledEvent {
-        rv1::RuledEvent {
-            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
-                rv1::ResolutionChoiceRequired {
-                    resolution_prompt_id: pending.resolution_prompt_id.get(),
-                    deciding_player_id: pending.deciding_player,
-                    source_object_id: pending.presentation.source_object_id,
-                    prompt_text: pending.presentation.prompt.clone(),
-                    choice_kind: rv1::ChoiceKind::HandCards as i32,
-                    candidate_object_ids: candidates.to_vec(),
-                    candidate_card_ids: candidates
-                        .iter()
-                        .map(|object_id| {
-                            self.state
-                                .objects
-                                .get(object_id)
-                                .map(|object| object.card_id.clone())
-                                .unwrap_or_default()
-                        })
-                        .collect(),
-                    candidate_names: self.object_names(candidates),
-                    min: pending.presentation.min,
-                    max: 1,
-                    ..Default::default()
+                    ..self.card_cost_choice_prompt(
+                        pending,
+                        candidates,
+                        rv1::ChoiceKind::GraveyardCards,
+                    )
                 },
             )),
         }
@@ -1988,7 +1949,7 @@ impl GameEngine {
                     branch_id: branch.branch_id,
                     candidate_generations,
                 };
-                let event = self.hand_bottom_cost_choice_event(&pending, &candidates);
+                let event = self.hand_card_cost_choice_event(&pending, &candidates);
                 self.state.pending_resolution = Some(pending);
                 events.push(event);
                 Ok(finish_with_events(self, events))
@@ -2074,7 +2035,7 @@ impl GameEngine {
                     branch_id: branch.branch_id,
                     candidate_generations,
                 };
-                let event = self.program_choose_discard_cost_choice_event(&pending, &candidates);
+                let event = self.hand_card_cost_choice_event(&pending, &candidates);
                 self.state.pending_resolution = Some(pending);
                 events.push(event);
                 Ok(finish_with_events(self, events))
@@ -3086,7 +3047,7 @@ impl GameEngine {
                     .pending_resolution
                     .as_ref()
                     .expect("refreshed Program discard-cost payment remains parked");
-                events.push(self.program_choose_discard_cost_choice_event(pending, &candidates));
+                events.push(self.hand_card_cost_choice_event(pending, &candidates));
             }
             return Ok(());
         }
