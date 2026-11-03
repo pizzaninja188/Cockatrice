@@ -6610,20 +6610,14 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
     Ok(EffectOutcome::Suspended)
 }
 
-/// Look at a bounded library prefix, privately acknowledge every looked card, and offer eligible
-/// permanents for the existing simultaneous library-origin entry path.
-pub(super) fn look_choose_battlefield(
+fn library_look_candidates(
     cx: &mut EffectCx<'_>,
     count: u32,
-    card_type: tricerules_card_model::primitives::CardTypeFilter,
-    max_selected: u32,
-    remainder: tricerules_card_model::primitives::LibraryLookRemainderPolicy,
-) -> Result<EffectOutcome, EngineError> {
-    let engine = &mut *cx.engine;
+    filter: Option<&ZoneCardFilter>,
+) -> Option<(Vec<ObjectId>, Vec<bool>)> {
+    let engine = &*cx.engine;
     let controller = cx.controller;
-    let Some(idx) = engine.state.player_idx(controller) else {
-        return Ok(EffectOutcome::Continue);
-    };
+    let idx = engine.state.player_idx(controller)?;
     let looked: Vec<ObjectId> = engine.state.players[idx]
         .library
         .iter()
@@ -6635,48 +6629,33 @@ pub(super) fn look_choose_battlefield(
             "P{controller} looks at an empty library ({}).",
             cx.spell_label
         )));
-        return Ok(EffectOutcome::Continue);
+        return None;
     }
 
     let selectable: Vec<bool> = looked
         .iter()
-        .map(|&oid| {
-            zone_card_matches_filter(
-                &engine.state,
-                engine.registry,
-                oid,
-                Some(&ZoneCardFilter {
-                    card_type: Some(card_type),
-                    ..Default::default()
-                }),
-            )
-        })
+        .map(|&oid| zone_card_matches_filter(&engine.state, engine.registry, oid, filter))
         .collect();
+    Some((looked, selectable))
+}
+
+fn publish_library_look(
+    cx: &mut EffectCx<'_>,
+    looked: &[ObjectId],
+    selectable: Vec<bool>,
+    min: u32,
+    max: u32,
+    prompt: String,
+) -> PendingResolutionPresentation {
+    let controller = cx.controller;
     let legal: Vec<ObjectId> = looked
         .iter()
         .copied()
         .zip(&selectable)
         .filter_map(|(oid, selectable)| selectable.then_some(oid))
         .collect();
-    let (candidate_card_ids, candidate_names) = candidate_identities(engine, &looked);
+    let (candidate_card_ids, candidate_names) = candidate_identities(cx.engine, looked);
     let n = looked.len() as u32;
-    let min = 0;
-    let max = (legal.len() as u32).min(max_selected);
-    // Wording must not disclose the hidden card's type to waiting recipients.
-    let look_phrase = if count == 1 {
-        "the top card".to_string()
-    } else {
-        format!("the top {count} cards")
-    };
-    let noun = card_type.noun();
-    let noun = if max_selected == 1 {
-        noun.to_string()
-    } else {
-        format!("{noun}s")
-    };
-    let prompt = format!(
-        "Look at {look_phrase}. You may put up to {max_selected} {noun} onto the battlefield."
-    );
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
@@ -6688,7 +6667,7 @@ pub(super) fn look_choose_battlefield(
                 source_object_id: cx.top.id,
                 prompt_text: prompt.clone(),
                 choice_kind: custom::ChoiceKind::LibraryLook as i32,
-                candidate_object_ids: looked.clone(),
+                candidate_object_ids: looked.to_vec(),
                 candidate_card_ids,
                 candidate_names: candidate_names.clone(),
                 min,
@@ -6711,37 +6690,61 @@ pub(super) fn look_choose_battlefield(
         format!("P{controller} looks at {}.", candidate_names.join(", ")),
         controller,
     ));
-    engine.state.pending_resolution = Some(PendingResolution {
+    PendingResolutionPresentation {
+        source_object_id: cx.top.id,
+        candidates: legal,
+        min,
+        max,
+        ordered: false,
+        unique_names: false,
+        prompt,
+        choice_kind: custom::ChoiceKind::LibraryLook,
+    }
+}
+
+/// Look at a bounded library prefix, privately acknowledge every looked card, and offer eligible
+/// permanents for the existing simultaneous library-origin entry path.
+pub(super) fn look_choose_battlefield(
+    cx: &mut EffectCx<'_>,
+    count: u32,
+    card_type: tricerules_card_model::primitives::CardTypeFilter,
+    max_selected: u32,
+    remainder: tricerules_card_model::primitives::LibraryLookRemainderPolicy,
+) -> Result<EffectOutcome, EngineError> {
+    let filter = ZoneCardFilter {
+        card_type: Some(card_type),
+        ..Default::default()
+    };
+    let Some((looked, selectable)) = library_look_candidates(cx, count, Some(&filter)) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let min = 0;
+    let max = (selectable.iter().filter(|&&eligible| eligible).count() as u32).min(max_selected);
+    // Wording must not disclose the hidden card's type to waiting recipients.
+    let look_phrase = if count == 1 {
+        "the top card".to_string()
+    } else {
+        format!("the top {count} cards")
+    };
+    let noun = card_type.noun();
+    let noun = if max_selected == 1 {
+        noun.to_string()
+    } else {
+        format!("{noun}s")
+    };
+    let prompt = format!(
+        "Look at {look_phrase}. You may put up to {max_selected} {noun} onto the battlefield."
+    );
+    let presentation = publish_library_look(cx, &looked, selectable, min, max, prompt);
+    cx.engine.state.pending_resolution = Some(PendingResolution {
         resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
         resolution_prompt_semantics: None,
 
-        deciding_player: controller,
-        presentation: PendingResolutionPresentation {
-            source_object_id: cx.top.id,
-            candidates: legal,
-            min,
-            max,
-            ordered: false,
-            unique_names: false,
-            prompt,
-            choice_kind: custom::ChoiceKind::LibraryLook,
-        },
+        deciding_player: cx.controller,
+        presentation,
         continuation: ResolutionContinuation::LibraryLook {
             stack: ParkedStackResolution::dedicated(cx.top.clone()),
-            candidates: looked
-                .iter()
-                .map(|&oid| {
-                    (
-                        oid,
-                        engine
-                            .state
-                            .zone_change_generation
-                            .get(&oid)
-                            .copied()
-                            .unwrap_or(0),
-                    )
-                })
-                .collect(),
+            candidates: super::super::library_choices::capture(cx.engine, &looked),
             stage: PendingLibraryLookStage::ChooseBattlefield {
                 filter: card_type,
                 max_selected,
@@ -6770,39 +6773,13 @@ pub(super) fn look_choose_to_hand(
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let parked_stack = cx.parked_stack();
-    let engine = &mut *cx.engine;
-    let controller = cx.controller;
-    let Some(idx) = engine.state.player_idx(controller) else {
+    let Some((looked, selectable)) = library_look_candidates(cx, count, filter.as_ref()) else {
         return Ok(EffectOutcome::Continue);
     };
-    let looked: Vec<ObjectId> = engine.state.players[idx]
-        .library
-        .iter()
-        .take(count as usize)
-        .copied()
-        .collect();
-    if looked.is_empty() {
-        cx.events.push(ev_log(format!(
-            "P{controller} looks at an empty library ({}).",
-            cx.spell_label
-        )));
-        return Ok(EffectOutcome::Continue);
-    }
-
-    let selectable: Vec<bool> = looked
-        .iter()
-        .map(|&oid| zone_card_matches_filter(&engine.state, engine.registry, oid, filter.as_ref()))
-        .collect();
-    let legal: Vec<ObjectId> = looked
-        .iter()
-        .copied()
-        .zip(&selectable)
-        .filter_map(|(oid, selectable)| selectable.then_some(oid))
-        .collect();
-    let (candidate_card_ids, candidate_names) = candidate_identities(engine, &looked);
     let n = looked.len() as u32;
-    let min = min.min(legal.len() as u32);
-    let max = max.min(legal.len() as u32);
+    let legal_count = selectable.iter().filter(|&&eligible| eligible).count() as u32;
+    let min = min.min(legal_count);
+    let max = max.min(legal_count);
     let selection = if min == max {
         format!("exactly {min}")
     } else {
@@ -6810,71 +6787,16 @@ pub(super) fn look_choose_to_hand(
     };
     let reveal_text = if reveal { "reveal and " } else { "" };
     let prompt = format!("Look at the top {n} cards. Choose {selection} matching cards to {reveal_text}put into your hand.");
-    cx.events.push(rv1::RuledEvent {
-        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
-            rv1::ResolutionChoiceRequired {
-                resolution_prompt_id: 0,
-                accepted_permanent_selections: Vec::new(),
-                candidate_token_identities: Vec::new(),
-                candidate_player_ids: Vec::new(),
-                deciding_player_id: controller,
-                source_object_id: cx.top.id,
-                prompt_text: prompt.clone(),
-                choice_kind: custom::ChoiceKind::LibraryLook as i32,
-                candidate_object_ids: looked.clone(),
-                candidate_card_ids,
-                candidate_names: candidate_names.clone(),
-                min,
-                max,
-                ordered: false,
-                unique_names: false,
-                candidate_server_card_ids: Vec::new(),
-                candidate_selectable: selectable,
-                public_reveal: None,
-                candidate_source_zones: Vec::new(),
-                ..Default::default()
-            },
-        )),
-    });
-    cx.events.push(ev_log(format!(
-        "P{controller} looks at the top {n} cards of their library ({}).",
-        cx.spell_label
-    )));
-    cx.events.push(ev_log_private(
-        format!("P{controller} looks at {}.", candidate_names.join(", ")),
-        controller,
-    ));
-    engine.state.pending_resolution = Some(PendingResolution {
+    let presentation = publish_library_look(cx, &looked, selectable, min, max, prompt);
+    cx.engine.state.pending_resolution = Some(PendingResolution {
         resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
         resolution_prompt_semantics: None,
 
-        deciding_player: controller,
-        presentation: PendingResolutionPresentation {
-            source_object_id: cx.top.id,
-            candidates: legal,
-            min,
-            max,
-            ordered: false,
-            unique_names: false,
-            prompt,
-            choice_kind: custom::ChoiceKind::LibraryLook,
-        },
+        deciding_player: cx.controller,
+        presentation,
         continuation: ResolutionContinuation::LibraryLook {
             stack: parked_stack,
-            candidates: looked
-                .iter()
-                .map(|&oid| {
-                    (
-                        oid,
-                        engine
-                            .state
-                            .zone_change_generation
-                            .get(&oid)
-                            .copied()
-                            .unwrap_or(0),
-                    )
-                })
-                .collect(),
+            candidates: super::super::library_choices::capture(cx.engine, &looked),
             stage: PendingLibraryLookStage::ChooseToHand {
                 looked_at: looked,
                 remainder: crate::state::PendingHandLookRemainderDisposition::Bottom(bottom_order),
