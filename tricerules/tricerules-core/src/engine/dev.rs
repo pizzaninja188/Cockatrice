@@ -16,10 +16,7 @@
 
 use super::events::{ev_log, finish_with_events};
 use super::*;
-use crate::state::{
-    CardChoiceCandidateRef, PendingResolutionPresentation, ResolutionContinuation,
-    ResolutionPromptId,
-};
+use crate::state::{CardChoiceCandidateRef, PendingResolutionPresentation, ResolutionContinuation};
 
 /// What a placement verb hands to the tail the two of them share. A struct rather than seven
 /// positional parameters, mirroring `EffectCx` in `engine::resolution`.
@@ -186,9 +183,9 @@ impl GameEngine {
             .map(|candidate| candidate.object_id)
             .collect::<Vec<_>>();
         let prompt = format!("P{actor}: choose one card from the public zones shown.");
-        self.state.pending_resolution = Some(crate::state::PendingResolution {
-            deciding_player: actor,
-            presentation: PendingResolutionPresentation {
+        self.state.pending_resolution = Some(crate::state::PendingResolution::new_choice(
+            actor,
+            PendingResolutionPresentation {
                 source_object_id,
                 candidates: candidate_object_ids.clone(),
                 min: 1,
@@ -198,15 +195,13 @@ impl GameEngine {
                 choice_kind: rv1::ChoiceKind::ZoneSearch,
                 unique_names: false,
             },
-            continuation: ResolutionContinuation::PublicZoneSearchFixture {
+            ResolutionContinuation::PublicZoneSearchFixture {
                 stack_item: stack_item.clone(),
                 candidates,
                 priority_idx: self.state.priority_idx,
                 passes_since_stack_change: self.state.passes_since_stack_change,
             },
-            resolution_prompt_id: ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-        });
+        ));
         ev.push(RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
@@ -784,42 +779,12 @@ fn zone_label(z: Zone) -> &'static str {
 }
 
 fn dev_entry_item(controller: PlayerId, object_id: ObjectId, card_id: &str) -> StackItem {
-    StackItem {
-        phyrexian_symbols_paid_with_life: 0,
-        mana_colors_spent_to_cast: Default::default(),
-        id: object_id,
+    StackItem::entry_context(
+        object_id,
         controller,
-        card_id: card_id.to_string(),
-        prototyped: false,
-        targets: Vec::new(),
-        ability_text: Some("Dev battlefield placement".to_string()),
-        source_permanent_id: None,
-        source_owner: None,
-        source_zone_change: 0,
-        trigger_use_key: None,
-        source_face_change: 0,
-        ability_index: None,
-        activated_ability: None,
-        activated_ability_occurrence: None,
-        triggered_ability: None,
-        is_triggered: false,
-        is_copy: false,
-        face_index: 0,
-        cast_method: SpellCastMethod::Normal,
-        returned_attacker_assignment: None,
-        chosen_x: 0,
-        chosen_modes: Vec::new(),
-        cast_condition_results: Vec::new(),
-        cast_occurrence: None,
-        cast_by: None,
-        cast_cost_receipts: Vec::new(),
-        payment_result: CardResultCohort::default(),
-        exiled_cohorts: Default::default(),
-        chaos_warp_owner_instructions: Default::default(),
-        resolution_branch_choices: Default::default(),
-        blight_receipts: Vec::new(),
-        trigger_context: TriggerContext::default(),
-    }
+        card_id.to_string(),
+        "Dev battlefield placement",
+    )
 }
 
 /// Render an added-mana payload the way a mana cost reads (`{2}{R}{R}`), for the game log.

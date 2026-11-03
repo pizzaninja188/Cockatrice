@@ -235,11 +235,9 @@ fn publish_order_choice(
         )),
     });
     events.push(super::super::events::ev_log_private(prompt.clone(), owner));
-    engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-        deciding_player: owner,
-        presentation: PendingResolutionPresentation {
+    engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        owner,
+        PendingResolutionPresentation {
             source_object_id: plan.stack.item.id,
             candidates: match &plan.stage {
                 Some(PendingBattlefieldCohortMoveStage::OrderingCommanders {
@@ -254,10 +252,10 @@ fn publish_order_choice(
             prompt,
             choice_kind: rv1::ChoiceKind::SimultaneousEntryOrder,
         },
-        continuation: ResolutionContinuation::BattlefieldCohortMove {
+        ResolutionContinuation::BattlefieldCohortMove {
             pending: Box::new(plan),
         },
-    });
+    ));
 }
 
 fn publish_destination_choice(
@@ -308,11 +306,9 @@ fn publish_destination_choice(
         )),
     });
     events.push(super::super::events::ev_log(prompt.clone()));
-    engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-        deciding_player: owner,
-        presentation: PendingResolutionPresentation {
+    engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        owner,
+        PendingResolutionPresentation {
             source_object_id: plan.stack.item.id,
             candidates: Vec::new(),
             min: 1,
@@ -322,10 +318,10 @@ fn publish_destination_choice(
             prompt,
             choice_kind: rv1::ChoiceKind::ResolutionBranch,
         },
-        continuation: ResolutionContinuation::BattlefieldCohortMove {
+        ResolutionContinuation::BattlefieldCohortMove {
             pending: Box::new(plan),
         },
-    });
+    ));
 }
 
 fn advance_cohort_move(

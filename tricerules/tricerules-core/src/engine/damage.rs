@@ -1380,11 +1380,9 @@ impl GameEngine {
         batch.applications = applications;
         self.state.pending_replacement_event =
             Some(super::replacement::PendingReplacementEvent::Damage(batch));
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
+        self.state.pending_resolution = Some(PendingResolution::new_choice(
             deciding_player,
-            presentation: PendingResolutionPresentation {
+            PendingResolutionPresentation {
                 source_object_id,
                 candidates,
                 min: 1,
@@ -1394,7 +1392,7 @@ impl GameEngine {
                 choice_kind: rv1::ChoiceKind::ReplacementEffect,
                 unique_names: false,
             },
-            continuation: match completion {
+            match completion {
                 DamageBatchContinuation::Combat => {
                     ResolutionContinuation::CombatDamageReplacement {
                         effect_ids: candidate_effect_ids,
@@ -1418,7 +1416,7 @@ impl GameEngine {
                     resume_resolution,
                 },
             },
-        });
+        ));
     }
 
     pub(crate) fn process_or_park_combat_damage(

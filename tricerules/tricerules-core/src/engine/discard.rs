@@ -462,12 +462,9 @@ impl GameEngine {
         };
         self.state.pending_replacement_event =
             Some(PendingReplacementEvent::Discard(Box::new(batch)));
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-
-            deciding_player: player,
-            presentation: PendingResolutionPresentation {
+        self.state.pending_resolution = Some(PendingResolution::new_choice(
+            player,
+            PendingResolutionPresentation {
                 source_object_id: stack.item.id,
                 candidates,
                 min: count,
@@ -477,8 +474,8 @@ impl GameEngine {
                 prompt,
                 choice_kind: rv1::ChoiceKind::PrivateReplacement,
             },
-            continuation: ResolutionContinuation::DiscardReplacement { stack },
-        });
+            ResolutionContinuation::DiscardReplacement { stack },
+        ));
         finish_with_events(self, vec![event])
     }
 

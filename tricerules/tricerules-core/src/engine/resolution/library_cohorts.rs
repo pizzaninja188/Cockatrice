@@ -175,11 +175,9 @@ pub(super) fn choose_cohort_partition(
             )
         };
         let stack = cx.parked_stack();
-        let pending = PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
+        let pending = PendingResolution::new_choice(
             deciding_player,
-            presentation: PendingResolutionPresentation {
+            PendingResolutionPresentation {
                 source_object_id: cx.top.id,
                 candidates: if matches!(
                     stage,
@@ -196,7 +194,7 @@ pub(super) fn choose_cohort_partition(
                 prompt,
                 choice_kind,
             },
-            continuation: ResolutionContinuation::ProgramCohortPartition {
+            ResolutionContinuation::ProgramCohortPartition {
                 stack,
                 target_player,
                 offered_cohort: live,
@@ -204,7 +202,7 @@ pub(super) fn choose_cohort_partition(
                 public_reveal,
                 stage,
             },
-        };
+        );
         cx.events.push(
             super::super::custom_resolution::library_cohorts::program_cohort_partition_event(
                 cx.engine, &pending,
@@ -239,11 +237,9 @@ pub(super) fn choose_cohort_partition(
     };
     cx.events.push(event);
     cx.events.push(ev_log(prompt.clone()));
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-        deciding_player: target_player,
-        presentation: PendingResolutionPresentation {
+    cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        target_player,
+        PendingResolutionPresentation {
             source_object_id: cx.top.id,
             candidates,
             min: chosen_count as u32,
@@ -253,7 +249,7 @@ pub(super) fn choose_cohort_partition(
             prompt,
             choice_kind: custom::ChoiceKind::Revealed,
         },
-        continuation: ResolutionContinuation::ProgramCohortPartition {
+        ResolutionContinuation::ProgramCohortPartition {
             stack,
             target_player,
             offered_cohort: live,
@@ -261,7 +257,7 @@ pub(super) fn choose_cohort_partition(
             public_reveal,
             stage: PendingProgramCohortPartitionStage::ChoosingPartition,
         },
-    });
+    ));
     Ok(EffectOutcome::Suspended)
 }
 
@@ -490,11 +486,9 @@ pub(in crate::engine) fn advance_program_partition_move(
             )),
         });
         events.push(ev_log(prompt.clone()));
-        engine.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-            deciding_player: card.owner,
-            presentation: PendingResolutionPresentation {
+        engine.state.pending_resolution = Some(PendingResolution::new_choice(
+            card.owner,
+            PendingResolutionPresentation {
                 source_object_id: stack.item.id,
                 candidates: Vec::new(),
                 min: 1,
@@ -504,8 +498,8 @@ pub(in crate::engine) fn advance_program_partition_move(
                 prompt,
                 choice_kind: custom::ChoiceKind::ResolutionBranch,
             },
-            continuation: ResolutionContinuation::ProgramPartitionMove { stack, plan },
-        });
+            ResolutionContinuation::ProgramPartitionMove { stack, plan },
+        ));
         return Ok(ProgramPartitionMoveProgress::Parked);
     }
 
@@ -556,11 +550,9 @@ pub(in crate::engine) fn advance_program_partition_move(
             )),
         });
         events.push(ev_log(prompt.clone()));
-        engine.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-            deciding_player: owner,
-            presentation: PendingResolutionPresentation {
+        engine.state.pending_resolution = Some(PendingResolution::new_choice(
+            owner,
+            PendingResolutionPresentation {
                 source_object_id: stack.item.id,
                 candidates: candidate_ids,
                 min: graveyard.len() as u32,
@@ -570,8 +562,8 @@ pub(in crate::engine) fn advance_program_partition_move(
                 prompt,
                 choice_kind: custom::ChoiceKind::SimultaneousEntryOrder,
             },
-            continuation: ResolutionContinuation::ProgramPartitionMove { stack, plan },
-        });
+            ResolutionContinuation::ProgramPartitionMove { stack, plan },
+        ));
         return Ok(ProgramPartitionMoveProgress::Parked);
     }
 

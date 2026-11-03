@@ -877,12 +877,9 @@ impl GameEngine {
         let prompt = format!(
             "P{library_owner}: Put {name} into the command zone instead of {destination_label}?"
         );
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-
-            deciding_player: library_owner,
-            presentation: PendingResolutionPresentation {
+        self.state.pending_resolution = Some(PendingResolution::new_choice(
+            library_owner,
+            PendingResolutionPresentation {
                 source_object_id: stack.item.id,
                 candidates: Vec::new(),
                 min: 1,
@@ -892,7 +889,7 @@ impl GameEngine {
                 prompt: prompt.clone(),
                 choice_kind: rv1::ChoiceKind::ResolutionBranch,
             },
-            continuation: ResolutionContinuation::SpecialCastCommanderCleanup {
+            ResolutionContinuation::SpecialCastCommanderCleanup {
                 stack,
                 library_owner,
                 completion,
@@ -901,7 +898,7 @@ impl GameEngine {
                 commander_choice_index,
                 command_zone_objects,
             },
-        });
+        ));
         events.push(
             self.special_cast_commander_choice_event()
                 .expect("special-cast commander prompt was installed"),
@@ -3396,15 +3393,13 @@ impl GameEngine {
                 .or_default();
             *next_id = (*next_id).max(prior_id);
         }
-        let mut refreshed = PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-            deciding_player: next_decider,
-            presentation: pending.presentation,
-            continuation: ResolutionContinuation::EquipmentReceiptAttach {
+        let mut refreshed = PendingResolution::new_choice(
+            next_decider,
+            pending.presentation,
+            ResolutionContinuation::EquipmentReceiptAttach {
                 attachment: Box::new(attachment),
             },
-        };
+        );
         refreshed.presentation.candidates =
             candidates.iter().map(|(object_id, _)| *object_id).collect();
         refreshed.presentation.prompt =

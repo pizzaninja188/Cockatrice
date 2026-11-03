@@ -212,12 +212,9 @@ impl GameEngine {
                     )),
                 });
                 events.push(ev_log(prompt.clone()));
-                self.state.pending_resolution = Some(PendingResolution {
-                    resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-                    resolution_prompt_semantics: None,
-
-                    deciding_player: owner,
-                    presentation: PendingResolutionPresentation {
+                self.state.pending_resolution = Some(PendingResolution::new_choice(
+                    owner,
+                    PendingResolutionPresentation {
                         source_object_id: exiled.object_id,
                         candidates,
                         min: 1,
@@ -227,11 +224,11 @@ impl GameEngine {
                         choice_kind,
                         unique_names: false,
                     },
-                    continuation: ResolutionContinuation::AuraReturn {
+                    ResolutionContinuation::AuraReturn {
                         stack: resume_stack,
                         exiled,
                     },
-                });
+                ));
                 return Ok(true);
             }
             let entry =
@@ -1198,40 +1195,8 @@ impl GameEngine {
             .map(|object| object.card_id.clone())
             .unwrap_or_default();
         StackItem {
-            phyrexian_symbols_paid_with_life: 0,
-            mana_colors_spent_to_cast: Default::default(),
-            id: object_id,
-            controller,
-            card_id,
-            prototyped: false,
-            targets: Vec::new(),
-            ability_text: Some("paired one-shot return".into()),
-            source_permanent_id: None,
-            source_owner: None,
-            source_zone_change: 0,
-            trigger_use_key: None,
-            source_face_change: 0,
-            ability_index: None,
-            activated_ability: None,
-            activated_ability_occurrence: None,
-            triggered_ability: None,
-            is_triggered: false,
             is_copy: true,
-            face_index: 0,
-            cast_method: SpellCastMethod::Normal,
-            returned_attacker_assignment: None,
-            chosen_x: 0,
-            chosen_modes: Vec::new(),
-            cast_condition_results: Vec::new(),
-            cast_occurrence: None,
-            cast_by: None,
-            cast_cost_receipts: Vec::new(),
-            payment_result: CardResultCohort::default(),
-            exiled_cohorts: Default::default(),
-            chaos_warp_owner_instructions: Default::default(),
-            resolution_branch_choices: BTreeMap::new(),
-            blight_receipts: Vec::new(),
-            trigger_context: TriggerContext::default(),
+            ..StackItem::entry_context(object_id, controller, card_id, "paired one-shot return")
         }
     }
 }

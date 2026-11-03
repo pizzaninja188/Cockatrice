@@ -209,12 +209,9 @@ impl GameEngine {
             )),
         });
         events.push(ev_log(prompt.clone()));
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-
-            deciding_player: controller,
-            presentation: PendingResolutionPresentation {
+        self.state.pending_resolution = Some(PendingResolution::new_choice(
+            controller,
+            PendingResolutionPresentation {
                 source_object_id: stack.item.id,
                 candidates,
                 min: 1,
@@ -224,13 +221,13 @@ impl GameEngine {
                 choice_kind: rv1::ChoiceKind::PermanentObjects,
                 unique_names: false,
             },
-            continuation: ResolutionContinuation::AmassChoice {
+            ResolutionContinuation::AmassChoice {
                 stack,
                 subtype: amass.subtype,
                 count: amass.count,
                 candidate_generations,
             },
-        });
+        ));
     }
 
     pub(in crate::engine) fn finish_amass_choice(

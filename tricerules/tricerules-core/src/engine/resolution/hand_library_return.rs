@@ -5,10 +5,7 @@
 //! answer, so a parked choice never changes the private hand or library order.
 
 use super::*;
-use crate::state::{
-    PendingProgramHandLibraryReturnStage, ProgramHandLibraryReturnPlan, ResolutionPromptId,
-    ResolutionPromptSemanticSnapshot,
-};
+use crate::state::{PendingProgramHandLibraryReturnStage, ProgramHandLibraryReturnPlan};
 use std::collections::HashSet;
 
 pub(super) fn begin_program_hand_library_return(
@@ -177,9 +174,9 @@ pub(in crate::engine) fn publish_commander_choice(
     }
 
     let card_name = object_display_name(&engine.state, engine.registry, reference.object_id);
-    let pending = PendingResolution {
-        deciding_player: plan.owner,
-        presentation: PendingResolutionPresentation {
+    let pending = PendingResolution::new_choice(
+        plan.owner,
+        PendingResolutionPresentation {
             source_object_id: stack.item.id,
             candidates: Vec::new(),
             min: 1,
@@ -189,10 +186,8 @@ pub(in crate::engine) fn publish_commander_choice(
             choice_kind: rv1::ChoiceKind::ResolutionBranch,
             unique_names: false,
         },
-        continuation: ResolutionContinuation::ProgramHandLibraryReturn { stack, plan },
-        resolution_prompt_id: ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None::<ResolutionPromptSemanticSnapshot>,
-    };
+        ResolutionContinuation::ProgramHandLibraryReturn { stack, plan },
+    );
     events.push(super::super::events::ev_log_private(
         format!(
             "P{}: choose a destination for {card_name}.",

@@ -4439,45 +4439,14 @@ impl GameEngine {
         let mut batch = RuledEventBatch::default();
         batch.events.extend(face_down_exile_reveal_events);
         let item = StackItem {
-            phyrexian_symbols_paid_with_life: 0,
-            mana_colors_spent_to_cast: Default::default(),
-            id: oid,
-            controller: player,
-            card_id,
-            prototyped: false,
-            targets: Vec::new(),
-            ability_text: Some("land play".to_string()),
-            source_permanent_id: None,
-            source_owner: None,
             source_zone_change: self
                 .state
                 .zone_change_generation
                 .get(&oid)
                 .copied()
                 .unwrap_or(0),
-            trigger_use_key: None,
-            source_face_change: 0,
-            ability_index: None,
-            activated_ability: None,
-            activated_ability_occurrence: None,
-            triggered_ability: None,
-            is_triggered: false,
-            is_copy: false,
             face_index,
-            cast_method: SpellCastMethod::Normal,
-            returned_attacker_assignment: None,
-            chosen_x: 0,
-            chosen_modes: Vec::new(),
-            cast_condition_results: Vec::new(),
-            cast_occurrence: None,
-            cast_by: None,
-            cast_cost_receipts: Vec::new(),
-            payment_result: CardResultCohort::default(),
-            exiled_cohorts: Default::default(),
-            chaos_warp_owner_instructions: Default::default(),
-            resolution_branch_choices: Default::default(),
-            blight_receipts: Vec::new(),
-            trigger_context: TriggerContext::default(),
+            ..StackItem::entry_context(oid, player, card_id, "land play")
         };
         if special {
             self.state.pending_resolution = None;

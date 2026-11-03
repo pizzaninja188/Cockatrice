@@ -138,12 +138,9 @@ pub(super) fn populate(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineErr
             },
         )),
     });
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-
-        deciding_player: cx.controller,
-        presentation: PendingResolutionPresentation {
+    cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        cx.controller,
+        PendingResolutionPresentation {
             source_object_id: cx.top.id,
             candidates,
             min: 1,
@@ -153,11 +150,11 @@ pub(super) fn populate(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineErr
             choice_kind: rv1::ChoiceKind::CopySource,
             unique_names: false,
         },
-        continuation: ResolutionContinuation::Populate {
+        ResolutionContinuation::Populate {
             stack: parked_stack,
             candidate_generations,
         },
-    });
+    ));
     Ok(EffectOutcome::Suspended)
 }
 
@@ -460,12 +457,9 @@ pub(super) fn create_attacking_tokens(
             },
         )),
     });
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-
-        deciding_player: controller,
-        presentation: PendingResolutionPresentation {
+    cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        controller,
+        PendingResolutionPresentation {
             source_object_id: item.id,
             candidates: Vec::new(),
             min: 1,
@@ -475,7 +469,7 @@ pub(super) fn create_attacking_tokens(
             choice_kind: rv1::ChoiceKind::AttackingTokenDefender,
             unique_names: false,
         },
-        continuation: ResolutionContinuation::AttackingTokenDefenders {
+        ResolutionContinuation::AttackingTokenDefenders {
             stack: parked_stack,
             entries,
             logs,
@@ -483,7 +477,7 @@ pub(super) fn create_attacking_tokens(
             current_options: options,
             delayed_sacrifice: sacrifice_timing,
         },
-    });
+    ));
     Ok(EffectOutcome::Suspended)
 }
 

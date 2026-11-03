@@ -1930,12 +1930,9 @@ impl GameEngine {
                 let candidates = work.applications.iter().map(|value| value.handle).collect();
                 self.state.pending_replacement_event =
                     Some(PendingReplacementEvent::Draw(Box::new(work)));
-                self.state.pending_resolution = Some(PendingResolution {
-                    resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-                    resolution_prompt_semantics: None,
-
-                    deciding_player: player,
-                    presentation: PendingResolutionPresentation {
+                self.state.pending_resolution = Some(PendingResolution::new_choice(
+                    player,
+                    PendingResolutionPresentation {
                         source_object_id,
                         candidates,
                         min: 1,
@@ -1945,8 +1942,8 @@ impl GameEngine {
                         prompt: "Choose which draw replacement applies next.".to_string(),
                         choice_kind: rv1::ChoiceKind::ReplacementEffect,
                     },
-                    continuation: ResolutionContinuation::DrawReplacement { stack },
-                });
+                    ResolutionContinuation::DrawReplacement { stack },
+                ));
                 events.push(
                     self.draw_replacement_choice_event()
                         .expect("parked draw choice"),

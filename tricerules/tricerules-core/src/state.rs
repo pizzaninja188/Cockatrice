@@ -2756,6 +2756,24 @@ pub struct PendingResolution {
     pub(crate) resolution_prompt_semantics: Option<ResolutionPromptSemanticSnapshot>,
 }
 
+impl PendingResolution {
+    /// Start a new logical offer; publication assigns its identity and semantic snapshot.
+    /// Republishing an existing offer must preserve its current identity instead.
+    pub(crate) fn new_choice(
+        deciding_player: PlayerId,
+        presentation: PendingResolutionPresentation,
+        continuation: ResolutionContinuation,
+    ) -> Self {
+        Self {
+            deciding_player,
+            presentation,
+            continuation,
+            resolution_prompt_id: ResolutionPromptId::UNASSIGNED,
+            resolution_prompt_semantics: None,
+        }
+    }
+}
+
 /// Private validation data and exact owner-private offer projection for an assigned prompt.
 #[derive(Debug, Clone)]
 pub(crate) struct ResolutionPromptSemanticSnapshot {
@@ -3770,6 +3788,52 @@ pub(crate) struct CapturedActivatedAbility {
 }
 
 impl StackItem {
+    /// Carry a non-spell battlefield-entry instruction through replacement choices.
+    /// Callers retain any instruction-specific face, generation, or copy marker explicitly.
+    pub(crate) fn entry_context(
+        id: ObjectId,
+        controller: PlayerId,
+        card_id: String,
+        label: &str,
+    ) -> Self {
+        Self {
+            phyrexian_symbols_paid_with_life: 0,
+            mana_colors_spent_to_cast: Default::default(),
+            id,
+            controller,
+            card_id,
+            prototyped: false,
+            targets: Vec::new(),
+            ability_text: Some(label.to_owned()),
+            source_permanent_id: None,
+            source_owner: None,
+            source_zone_change: 0,
+            trigger_use_key: None,
+            source_face_change: 0,
+            ability_index: None,
+            activated_ability: None,
+            activated_ability_occurrence: None,
+            triggered_ability: None,
+            is_triggered: false,
+            is_copy: false,
+            face_index: 0,
+            cast_method: SpellCastMethod::Normal,
+            returned_attacker_assignment: None,
+            chosen_x: 0,
+            chosen_modes: Vec::new(),
+            cast_condition_results: Vec::new(),
+            cast_occurrence: None,
+            cast_by: None,
+            cast_cost_receipts: Vec::new(),
+            payment_result: CardResultCohort::default(),
+            exiled_cohorts: Default::default(),
+            chaos_warp_owner_instructions: Default::default(),
+            resolution_branch_choices: Default::default(),
+            blight_receipts: Vec::new(),
+            trigger_context: TriggerContext::default(),
+        }
+    }
+
     /// Resolve the authored owner bound to this stack ability, if its occurrence has one.
     ///
     /// Static grants retain the parent definition and source incarnation even after payment or

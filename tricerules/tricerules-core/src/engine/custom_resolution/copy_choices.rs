@@ -283,11 +283,9 @@ impl GameEngine {
             )),
         });
         events.push(ev_log(prompt.clone()));
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-            deciding_player: progress.stack.item.controller,
-            presentation: PendingResolutionPresentation {
+        self.state.pending_resolution = Some(PendingResolution::new_choice(
+            progress.stack.item.controller,
+            PendingResolutionPresentation {
                 source_object_id: progress.stack.item.id,
                 candidates,
                 min: 0,
@@ -297,12 +295,12 @@ impl GameEngine {
                 choice_kind: custom::ChoiceKind::TargetObjects,
                 unique_names: false,
             },
-            continuation: ResolutionContinuation::CopyTargets {
+            ResolutionContinuation::CopyTargets {
                 progress,
                 offered_objects: object_offers,
                 offered_players,
             },
-        });
+        ));
         Ok(())
     }
 

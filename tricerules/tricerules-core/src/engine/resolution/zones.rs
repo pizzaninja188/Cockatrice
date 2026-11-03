@@ -132,12 +132,9 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
         Some(cx.effect_index + 1),
         Default::default(),
     );
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-
-        deciding_player: controller,
-        presentation: PendingResolutionPresentation {
+    cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        controller,
+        PendingResolutionPresentation {
             source_object_id: source_id,
             candidates: vec![source_id],
             min: 0,
@@ -147,7 +144,7 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
             choice_kind: rv1::ChoiceKind::SpecialCast,
             unique_names: false,
         },
-        continuation: ResolutionContinuation::SpecialCast {
+        ResolutionContinuation::SpecialCast {
             stack,
             exiled,
             face_index,
@@ -159,7 +156,7 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
             max_face_mana_value: None,
             completion: SpecialCastCompletion::ResumeStack,
         },
-    });
+    ));
     cx.events.push(
         cx.engine
             .resolution_payment_choice_event()
@@ -202,12 +199,9 @@ pub(super) fn madness_cast(
         Some(cx.effect_index + 1),
         Default::default(),
     );
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-
-        deciding_player: cx.top.controller,
-        presentation: PendingResolutionPresentation {
+    cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        cx.top.controller,
+        PendingResolutionPresentation {
             source_object_id: cx.top.id,
             candidates: vec![exiled.object_id],
             min: 0,
@@ -217,7 +211,7 @@ pub(super) fn madness_cast(
             prompt,
             choice_kind: rv1::ChoiceKind::SpecialCast,
         },
-        continuation: ResolutionContinuation::SpecialCast {
+        ResolutionContinuation::SpecialCast {
             stack,
             exiled,
             face_index: 0,
@@ -229,7 +223,7 @@ pub(super) fn madness_cast(
             max_face_mana_value: None,
             completion: SpecialCastCompletion::ResumeStack,
         },
-    });
+    ));
     cx.events.push(
         cx.engine
             .resolution_payment_choice_event()
@@ -748,12 +742,9 @@ pub(in crate::engine) fn park_player_set_discard_choice(
         )),
     });
     events.push(ev_log(prompt.clone()));
-    engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-
-        deciding_player: choice.player,
-        presentation: PendingResolutionPresentation {
+    engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        choice.player,
+        PendingResolutionPresentation {
             source_object_id: stack.item.id,
             candidates,
             min: choice.minimum(),
@@ -763,8 +754,8 @@ pub(in crate::engine) fn park_player_set_discard_choice(
             prompt,
             choice_kind: custom::ChoiceKind::HandCards,
         },
-        continuation: ResolutionContinuation::PlayerSetDiscard { stack, discard },
-    });
+        ResolutionContinuation::PlayerSetDiscard { stack, discard },
+    ));
 }
 
 pub(super) fn exile_top_with_play_permission(
@@ -1511,11 +1502,9 @@ pub(in crate::engine) fn publish_owner_library_placement_choice(
         )),
     });
     events.push(ev_log(prompt.clone()));
-    engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-        deciding_player: owner,
-        presentation: PendingResolutionPresentation {
+    engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        owner,
+        PendingResolutionPresentation {
             source_object_id: stack.item.id,
             candidates: Vec::new(),
             min: 1,
@@ -1525,7 +1514,7 @@ pub(in crate::engine) fn publish_owner_library_placement_choice(
             choice_kind: custom::ChoiceKind::ResolutionBranch,
             unique_names: false,
         },
-        continuation: ResolutionContinuation::OwnerLibraryPlacement {
+        ResolutionContinuation::OwnerLibraryPlacement {
             stack,
             object_id,
             owner,
@@ -1535,7 +1524,7 @@ pub(in crate::engine) fn publish_owner_library_placement_choice(
             stack_source_departed,
             spell_label: spell_label.to_owned(),
         },
-    });
+    ));
     Ok(())
 }
 
@@ -1583,11 +1572,9 @@ pub(in crate::engine) fn publish_owner_library_commander_choice(
         )),
     });
     events.push(ev_log(prompt.clone()));
-    engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-        deciding_player: owner,
-        presentation: PendingResolutionPresentation {
+    engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        owner,
+        PendingResolutionPresentation {
             source_object_id: stack.item.id,
             candidates: Vec::new(),
             min: 1,
@@ -1597,7 +1584,7 @@ pub(in crate::engine) fn publish_owner_library_commander_choice(
             choice_kind: custom::ChoiceKind::ResolutionBranch,
             unique_names: false,
         },
-        continuation: ResolutionContinuation::OwnerLibraryPlacement {
+        ResolutionContinuation::OwnerLibraryPlacement {
             stack,
             object_id,
             owner,
@@ -1607,7 +1594,7 @@ pub(in crate::engine) fn publish_owner_library_commander_choice(
             stack_source_departed,
             spell_label: spell_label.to_owned(),
         },
-    });
+    ));
 }
 
 pub(super) fn put_in_owners_library(
@@ -2251,11 +2238,9 @@ fn choose_hand_cards_for_player(
         )),
     });
     events.push(ev_log(prompt.clone()));
-    engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
+    engine.state.pending_resolution = Some(PendingResolution::new_choice(
         deciding_player,
-        presentation: PendingResolutionPresentation {
+        PendingResolutionPresentation {
             source_object_id: top.id,
             candidates: eligible.clone(),
             min,
@@ -2265,7 +2250,7 @@ fn choose_hand_cards_for_player(
             prompt,
             choice_kind,
         },
-        continuation: ResolutionContinuation::HandChoice {
+        ResolutionContinuation::HandChoice {
             stack: parked_stack.clone(),
             hand_choice: PendingHandChoice {
                 affected_player,
@@ -2289,7 +2274,7 @@ fn choose_hand_cards_for_player(
                 entry_cause,
             },
         },
-    });
+    ));
     Ok(EffectOutcome::Suspended)
 }
 
@@ -2354,12 +2339,9 @@ pub(super) fn select_hand_cards_for_program(
         )),
     });
     events.push(ev_log(prompt.clone()));
-    engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-
-        deciding_player: top.controller,
-        presentation: PendingResolutionPresentation {
+    engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        top.controller,
+        PendingResolutionPresentation {
             source_object_id: top.id,
             candidates: hand.clone(),
             min: chosen_count,
@@ -2369,7 +2351,7 @@ pub(super) fn select_hand_cards_for_program(
             choice_kind,
             unique_names: false,
         },
-        continuation: ResolutionContinuation::HandChoice {
+        ResolutionContinuation::HandChoice {
             stack,
             hand_choice: PendingHandChoice {
                 affected_player: top.controller,
@@ -2394,7 +2376,7 @@ pub(super) fn select_hand_cards_for_program(
                 entry_cause: None,
             },
         },
-    });
+    ));
     Ok(EffectOutcome::Suspended)
 }
 
@@ -2710,12 +2692,9 @@ pub(super) fn target_player_sacrifices(
                     )),
                 });
                 events.push(ev_log(prompt.clone()));
-                engine.state.pending_resolution = Some(PendingResolution {
-                    resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-                    resolution_prompt_semantics: None,
-
-                    deciding_player: pid,
-                    presentation: PendingResolutionPresentation {
+                engine.state.pending_resolution = Some(PendingResolution::new_choice(
+                    pid,
+                    PendingResolutionPresentation {
                         source_object_id: top.id,
                         candidates: qualifying,
                         min: 1,
@@ -2725,10 +2704,10 @@ pub(super) fn target_player_sacrifices(
                         prompt,
                         choice_kind: custom::ChoiceKind::Revealed,
                     },
-                    continuation: ResolutionContinuation::Sacrifice {
+                    ResolutionContinuation::Sacrifice {
                         stack: ParkedStackResolution::dedicated(top.clone()),
                     },
-                });
+                ));
                 return Ok(EffectOutcome::Suspended);
             }
         }
@@ -2848,11 +2827,9 @@ pub(super) fn choose_card(
         )),
     });
     cx.events.push(ev_log(prompt.clone()));
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-        deciding_player: controller,
-        presentation: PendingResolutionPresentation {
+    cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        controller,
+        PendingResolutionPresentation {
             source_object_id: cx.top.id,
             candidates,
             min,
@@ -2862,14 +2839,14 @@ pub(super) fn choose_card(
             choice_kind,
             unique_names: false,
         },
-        continuation: ResolutionContinuation::ChooseCard {
+        ResolutionContinuation::ChooseCard {
             stack: cx.parked_stack(),
             chooser: controller,
             destination,
             candidates: candidate_refs,
             spell_label: cx.spell_label.to_string(),
         },
-    });
+    ));
     Ok(EffectOutcome::Suspended)
 }
 
@@ -3360,12 +3337,9 @@ fn choose_linked_exiled_card_action(
         )),
     });
     cx.events.push(ev_log(prompt.clone()));
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-
-        deciding_player: controller,
-        presentation: PendingResolutionPresentation {
+    cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        controller,
+        PendingResolutionPresentation {
             source_object_id: cx.top.id,
             candidates: candidate_ids,
             min,
@@ -3375,7 +3349,7 @@ fn choose_linked_exiled_card_action(
             choice_kind: custom::ChoiceKind::LinkedExileCards,
             unique_names: false,
         },
-        continuation: ResolutionContinuation::LinkedExileChoice {
+        ResolutionContinuation::LinkedExileChoice {
             stack,
             key,
             action,
@@ -3383,7 +3357,7 @@ fn choose_linked_exiled_card_action(
             stage: crate::state::PendingLinkedExileChoiceStage::default(),
             spell_label: cx.spell_label.to_string(),
         },
-    });
+    ));
     Ok(EffectOutcome::Suspended)
 }
 
@@ -3905,12 +3879,9 @@ impl GameEngine {
                 )),
             });
             events.push(ev_log(prompt.clone()));
-            self.state.pending_resolution = Some(PendingResolution {
-                resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-                resolution_prompt_semantics: None,
-
-                deciding_player: chooser,
-                presentation: PendingResolutionPresentation {
+            self.state.pending_resolution = Some(PendingResolution::new_choice(
+                chooser,
+                PendingResolutionPresentation {
                     source_object_id: cohort.stack.item.id,
                     candidates: candidate_ids,
                     min: 0,
@@ -3920,7 +3891,7 @@ impl GameEngine {
                     choice_kind: custom::ChoiceKind::LinkedExileCards,
                     unique_names: false,
                 },
-                continuation: ResolutionContinuation::LinkedExileChoice {
+                ResolutionContinuation::LinkedExileChoice {
                     stack: cohort.stack.clone(),
                     key: cohort.key.clone(),
                     action: PendingLinkedExileAction::Play {
@@ -3932,7 +3903,7 @@ impl GameEngine {
                     stage: crate::state::PendingLinkedExileChoiceStage::default(),
                     spell_label: cohort.spell_label.clone(),
                 },
-            });
+            ));
             self.state.pending_linked_exile_play = Some(Box::new(cohort));
             return Ok(finish_with_events(self, events));
         }
@@ -4190,12 +4161,9 @@ pub(super) fn return_different_named_permanents_from_graveyard(
         )),
     });
     cx.events.push(ev_log(prompt.clone()));
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-
-        deciding_player: controller,
-        presentation: PendingResolutionPresentation {
+    cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        controller,
+        PendingResolutionPresentation {
             source_object_id: cx.top.id,
             candidates: candidates.clone(),
             min: 0,
@@ -4205,7 +4173,7 @@ pub(super) fn return_different_named_permanents_from_graveyard(
             choice_kind: custom::ChoiceKind::GraveyardCards,
             unique_names: true,
         },
-        continuation: ResolutionContinuation::DifferentNamedGraveyardReturn {
+        ResolutionContinuation::DifferentNamedGraveyardReturn {
             stack: ParkedStackResolution::dedicated(cx.top.clone()),
             candidate_generations: candidates
                 .iter()
@@ -4223,7 +4191,7 @@ pub(super) fn return_different_named_permanents_from_graveyard(
                 .collect(),
             spell_label: cx.spell_label.to_string(),
         },
-    });
+    ));
     Ok(EffectOutcome::Suspended)
 }
 
@@ -5674,12 +5642,9 @@ fn resolve_library_cast_offer(
     let prompt = format!("Cast {found_name} without paying its mana cost?");
     let completion_for_no_cast = completion.clone();
     let stack_for_no_cast = stack.clone();
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-
-        deciding_player: controller,
-        presentation: PendingResolutionPresentation {
+    cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        controller,
+        PendingResolutionPresentation {
             source_object_id: stack.item.id,
             candidates: vec![found.object_id],
             min: 0,
@@ -5689,7 +5654,7 @@ fn resolve_library_cast_offer(
             choice_kind: rv1::ChoiceKind::SpecialCast,
             unique_names: false,
         },
-        continuation: ResolutionContinuation::SpecialCast {
+        ResolutionContinuation::SpecialCast {
             stack,
             exiled: found,
             face_index: 0,
@@ -5701,7 +5666,7 @@ fn resolve_library_cast_offer(
             max_face_mana_value: offer.max_face_mana_value(),
             completion,
         },
-    });
+    ));
     let can_cast = super::super::legal_actions::legal_zone_cast_actions(cx.engine, controller)
         .iter()
         .any(|action| action.object_id == found.object_id);
@@ -5767,11 +5732,9 @@ pub(super) fn cast_rebounded_card(cx: &mut EffectCx<'_>) -> Result<EffectOutcome
     );
     let completion_for_no_cast = completion.clone();
     let stack_for_no_cast = stack.clone();
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-        deciding_player: controller,
-        presentation: PendingResolutionPresentation {
+    cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        controller,
+        PendingResolutionPresentation {
             source_object_id: stack.item.id,
             candidates: vec![exiled.object_id],
             min: 0,
@@ -5781,7 +5744,7 @@ pub(super) fn cast_rebounded_card(cx: &mut EffectCx<'_>) -> Result<EffectOutcome
             choice_kind: rv1::ChoiceKind::SpecialCast,
             unique_names: false,
         },
-        continuation: ResolutionContinuation::SpecialCast {
+        ResolutionContinuation::SpecialCast {
             stack,
             exiled,
             face_index: cx.top.face_index,
@@ -5793,7 +5756,7 @@ pub(super) fn cast_rebounded_card(cx: &mut EffectCx<'_>) -> Result<EffectOutcome
             max_face_mana_value: None,
             completion,
         },
-    });
+    ));
 
     let can_cast = super::super::legal_actions::legal_zone_cast_actions(cx.engine, controller)
         .iter()
@@ -6125,12 +6088,9 @@ impl GameEngine {
                 },
             )),
         });
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-
-            deciding_player: controller,
-            presentation: PendingResolutionPresentation {
+        self.state.pending_resolution = Some(PendingResolution::new_choice(
+            controller,
+            PendingResolutionPresentation {
                 source_object_id: stack.item.id,
                 candidates: vec![revealed.object_id],
                 min: 0,
@@ -6140,12 +6100,12 @@ impl GameEngine {
                 prompt,
                 choice_kind: rv1::ChoiceKind::LibraryLook,
             },
-            continuation: ResolutionContinuation::Explore {
+            ResolutionContinuation::Explore {
                 stack,
                 explorer,
                 revealed,
             },
-        });
+        ));
         Ok(())
     }
 }
@@ -6245,12 +6205,9 @@ pub(super) fn thassa_oracle(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engi
             },
         )),
     });
-    engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-
-        deciding_player: controller,
-        presentation: PendingResolutionPresentation {
+    engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        controller,
+        PendingResolutionPresentation {
             source_object_id: top.id,
             candidates: looked.clone(),
             min: 0,
@@ -6260,12 +6217,12 @@ pub(super) fn thassa_oracle(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engi
             choice_kind: rv1::ChoiceKind::LibraryLook,
             unique_names: false,
         },
-        continuation: ResolutionContinuation::LibraryLook {
+        ResolutionContinuation::LibraryLook {
             stack: ParkedStackResolution::dedicated(top),
             stage: PendingLibraryLookStage::ThassaOracle { devotion_x },
             candidates: super::super::library_choices::capture(engine, &looked),
         },
-    });
+    ));
     Ok(EffectOutcome::Suspended)
 }
 
@@ -6398,12 +6355,9 @@ fn begin_library_partition(
         format!("P{controller} looks at {}.", candidate_names.join(", ")),
         controller,
     ));
-    engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-
-        deciding_player: controller,
-        presentation: PendingResolutionPresentation {
+    engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        controller,
+        PendingResolutionPresentation {
             source_object_id: top.id,
             candidates: candidates.clone(),
             min: destination_min,
@@ -6413,14 +6367,14 @@ fn begin_library_partition(
             prompt,
             choice_kind,
         },
-        continuation: ResolutionContinuation::LibraryPartition {
+        ResolutionContinuation::LibraryPartition {
             stack,
             looked_at: candidates,
             candidate_generations,
             stage: PendingLibraryPartitionStage::ChooseDestination,
             kind,
         },
-    });
+    ));
     Ok(EffectOutcome::Suspended)
 }
 
@@ -6586,12 +6540,9 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
         format!("P{controller} looks at {}.", candidate_names.join(", ")),
         controller,
     ));
-    engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-
-        deciding_player: controller,
-        presentation: PendingResolutionPresentation {
+    engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        controller,
+        PendingResolutionPresentation {
             source_object_id: cx.top.id,
             candidates: candidate_ids,
             min: 1,
@@ -6601,12 +6552,12 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
             prompt,
             choice_kind: custom::ChoiceKind::ManifestDread,
         },
-        continuation: ResolutionContinuation::ManifestDread {
+        ResolutionContinuation::ManifestDread {
             stack: program_stack
                 .unwrap_or_else(|| ParkedStackResolution::dedicated(cx.top.clone())),
             looked_at: library_refs,
         },
-    });
+    ));
     Ok(EffectOutcome::Suspended)
 }
 
@@ -6736,13 +6687,10 @@ pub(super) fn look_choose_battlefield(
         "Look at {look_phrase}. You may put up to {max_selected} {noun} onto the battlefield."
     );
     let presentation = publish_library_look(cx, &looked, selectable, min, max, prompt);
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-
-        deciding_player: cx.controller,
+    cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        cx.controller,
         presentation,
-        continuation: ResolutionContinuation::LibraryLook {
+        ResolutionContinuation::LibraryLook {
             stack: ParkedStackResolution::dedicated(cx.top.clone()),
             candidates: super::super::library_choices::capture(cx.engine, &looked),
             stage: PendingLibraryLookStage::ChooseBattlefield {
@@ -6751,7 +6699,7 @@ pub(super) fn look_choose_battlefield(
                 remainder,
             },
         },
-    });
+    ));
     Ok(EffectOutcome::Suspended)
 }
 
@@ -6788,13 +6736,10 @@ pub(super) fn look_choose_to_hand(
     let reveal_text = if reveal { "reveal and " } else { "" };
     let prompt = format!("Look at the top {n} cards. Choose {selection} matching cards to {reveal_text}put into your hand.");
     let presentation = publish_library_look(cx, &looked, selectable, min, max, prompt);
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-
-        deciding_player: cx.controller,
+    cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        cx.controller,
         presentation,
-        continuation: ResolutionContinuation::LibraryLook {
+        ResolutionContinuation::LibraryLook {
             stack: parked_stack,
             candidates: super::super::library_choices::capture(cx.engine, &looked),
             stage: PendingLibraryLookStage::ChooseToHand {
@@ -6803,7 +6748,7 @@ pub(super) fn look_choose_to_hand(
                 reveal,
             },
         },
-    });
+    ));
     Ok(EffectOutcome::Suspended)
 }
 
@@ -6873,11 +6818,9 @@ pub(super) fn look_top_card_optional_to_hand(
         format!("P{controller} looks at {}.", candidate_names.join(", ")),
         controller,
     ));
-    engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-        deciding_player: controller,
-        presentation: PendingResolutionPresentation {
+    engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        controller,
+        PendingResolutionPresentation {
             source_object_id: cx.top.id,
             candidates: legal,
             min: 0,
@@ -6887,7 +6830,7 @@ pub(super) fn look_top_card_optional_to_hand(
             prompt,
             choice_kind: custom::ChoiceKind::LibraryLook,
         },
-        continuation: ResolutionContinuation::LibraryLook {
+        ResolutionContinuation::LibraryLook {
             stack: parked_stack,
             candidates: super::super::library_choices::capture(engine, &looked),
             stage: PendingLibraryLookStage::ChooseToHand {
@@ -6898,7 +6841,7 @@ pub(super) fn look_top_card_optional_to_hand(
                 reveal: true,
             },
         },
-    });
+    ));
     Ok(EffectOutcome::Suspended)
 }
 
@@ -6982,12 +6925,9 @@ pub(super) fn hideaway(
         format!("P{controller} looks at {}.", candidate_names.join(", ")),
         controller,
     ));
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-
-        deciding_player: controller,
-        presentation: PendingResolutionPresentation {
+    cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        controller,
+        PendingResolutionPresentation {
             source_object_id: cx.top.id,
             candidates: looked_at.clone(),
             min: 1,
@@ -6997,7 +6937,7 @@ pub(super) fn hideaway(
             prompt,
             choice_kind: custom::ChoiceKind::LibraryLook,
         },
-        continuation: ResolutionContinuation::LibraryLook {
+        ResolutionContinuation::LibraryLook {
             stack: ParkedStackResolution::dedicated(cx.top.clone()),
             candidates: crate::engine::library_choices::capture(cx.engine, &looked_at),
             stage: PendingLibraryLookStage::Hideaway {
@@ -7005,7 +6945,7 @@ pub(super) fn hideaway(
                 linked_exile_key,
             },
         },
-    });
+    ));
     Ok(EffectOutcome::Suspended)
 }
 
@@ -7446,12 +7386,9 @@ pub(in crate::engine) fn park_zone_search_choice(
     });
     events.push(ev_log(prompt.clone()));
     stack.item = top.clone();
-    engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-
-        deciding_player: searcher,
-        presentation: PendingResolutionPresentation {
+    engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        searcher,
+        PendingResolutionPresentation {
             source_object_id: top.id,
             candidates,
             min,
@@ -7464,7 +7401,7 @@ pub(in crate::engine) fn park_zone_search_choice(
             prompt,
             choice_kind,
         },
-        continuation: ResolutionContinuation::SearchLibrary {
+        ResolutionContinuation::SearchLibrary {
             stack,
             searcher,
             zones,
@@ -7478,7 +7415,7 @@ pub(in crate::engine) fn park_zone_search_choice(
             reveal,
             commander_choice: None,
         },
-    });
+    ));
     Ok(())
 }
 
@@ -7591,12 +7528,9 @@ pub(in crate::engine) fn begin_search_request(
                 )),
             });
             events.push(ev_log(prompt.clone()));
-            engine.state.pending_resolution = Some(PendingResolution {
-                resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-                resolution_prompt_semantics: None,
-
-                deciding_player: searcher,
-                presentation: PendingResolutionPresentation {
+            engine.state.pending_resolution = Some(PendingResolution::new_choice(
+                searcher,
+                PendingResolutionPresentation {
                     source_object_id: top.id,
                     candidates: Vec::new(),
                     min: 1,
@@ -7606,7 +7540,7 @@ pub(in crate::engine) fn begin_search_request(
                     choice_kind: custom::ChoiceKind::ResolutionBranch,
                     unique_names: false,
                 },
-                continuation: ResolutionContinuation::SearchZoneScope {
+                ResolutionContinuation::SearchZoneScope {
                     stack,
                     searcher,
                     count,
@@ -7617,7 +7551,7 @@ pub(in crate::engine) fn begin_search_request(
                     shuffle,
                     reveal,
                 },
-            });
+            ));
             Ok(SearchRequestOutcome::Parked)
         }
     }
@@ -7770,12 +7704,9 @@ pub(super) fn search_library(
             )),
         });
         cx.events.push(ev_log(prompt.clone()));
-        cx.engine.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-
-            deciding_player: searcher,
-            presentation: PendingResolutionPresentation {
+        cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
+            searcher,
+            PendingResolutionPresentation {
                 source_object_id: cx.top.id,
                 candidates: Vec::new(),
                 min: 0,
@@ -7785,7 +7716,7 @@ pub(super) fn search_library(
                 prompt,
                 choice_kind: custom::ChoiceKind::ResolutionBranch,
             },
-            continuation: ResolutionContinuation::OptionalSearch {
+            ResolutionContinuation::OptionalSearch {
                 stack: parked_stack,
                 searcher,
                 count,
@@ -7797,7 +7728,7 @@ pub(super) fn search_library(
                 shuffle,
                 reveal,
             },
-        });
+        ));
         return Ok(EffectOutcome::Suspended);
     }
     let parked_stack = cx.parked_stack();

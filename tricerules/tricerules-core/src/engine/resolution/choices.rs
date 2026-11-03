@@ -81,11 +81,9 @@ pub(super) fn add_one_counter_of_chosen_kind_to_target(
     }
 
     let prompt = "Choose a kind of counter on the target permanent.".to_string();
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-        deciding_player: cx.controller,
-        presentation: PendingResolutionPresentation {
+    cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        cx.controller,
+        PendingResolutionPresentation {
             source_object_id: cx.top.id,
             candidates: Vec::new(),
             min: 1,
@@ -95,7 +93,7 @@ pub(super) fn add_one_counter_of_chosen_kind_to_target(
             choice_kind: rv1::ChoiceKind::ResolutionBranch,
             unique_names: false,
         },
-        continuation: ResolutionContinuation::ChosenCounterAddition {
+        ResolutionContinuation::ChosenCounterAddition {
             stack: cx.parked_stack(),
             counter_addition: PendingChosenCounterAddition {
                 target,
@@ -103,7 +101,7 @@ pub(super) fn add_one_counter_of_chosen_kind_to_target(
                 stage: PendingChosenCounterAdditionStage::Selecting,
             },
         },
-    });
+    ));
     cx.events.push(
         cx.engine
             .chosen_counter_addition_choice_event()
@@ -174,12 +172,9 @@ pub(super) fn move_one_counter_between_targets(
     let stack = ParkedStackResolution::dedicated(cx.top.clone())
         .with_previous_result(cx.resume_previous_result.cloned().unwrap_or_default());
     let prompt = "Choose a counter to move.".to_string();
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-
-        deciding_player: cx.controller,
-        presentation: PendingResolutionPresentation {
+    cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        cx.controller,
+        PendingResolutionPresentation {
             source_object_id: cx.top.id,
             candidates: Vec::new(),
             min: 1,
@@ -189,7 +184,7 @@ pub(super) fn move_one_counter_between_targets(
             choice_kind: rv1::ChoiceKind::ResolutionBranch,
             unique_names: false,
         },
-        continuation: ResolutionContinuation::CounterMove {
+        ResolutionContinuation::CounterMove {
             stack,
             counter_move: PendingCounterMove {
                 source_target,
@@ -197,7 +192,7 @@ pub(super) fn move_one_counter_between_targets(
                 offered_counter_kinds: offered_counter_kinds.clone(),
             },
         },
-    });
+    ));
     let options = offered_counter_kinds
         .iter()
         .enumerate()
@@ -627,11 +622,9 @@ pub(super) fn choose_permanents(
             )
         })
         .collect();
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
+    cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
         deciding_player,
-        presentation: PendingResolutionPresentation {
+        PendingResolutionPresentation {
             source_object_id: cx.top.id,
             candidates,
             min,
@@ -641,9 +634,7 @@ pub(super) fn choose_permanents(
             choice_kind: rv1::ChoiceKind::PermanentObjects,
             unique_names: false,
         },
-        continuation: if let (Some(target_player), Some(cohort)) =
-            (targeted_player, targeted_player_cohort)
-        {
+        if let (Some(target_player), Some(cohort)) = (targeted_player, targeted_player_cohort) {
             ResolutionContinuation::TargetedPlayerPermanentChoice {
                 stack: cx.parked_stack(),
                 target_player,
@@ -659,7 +650,7 @@ pub(super) fn choose_permanents(
                 candidate_generations,
             }
         },
-    });
+    ));
     if departed_target_choice {
         cx.engine
             .refresh_targeted_player_permanent_choice_departure(cx.events)?;
@@ -790,11 +781,9 @@ pub(super) fn choose_proliferated_permanents(
         )),
     });
     cx.events.push(ev_log(prompt.clone()));
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-        deciding_player: cx.top.controller,
-        presentation: PendingResolutionPresentation {
+    cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        cx.top.controller,
+        PendingResolutionPresentation {
             source_object_id: cx.top.id,
             candidates: candidate_ids,
             min: 0,
@@ -804,11 +793,11 @@ pub(super) fn choose_proliferated_permanents(
             choice_kind: rv1::ChoiceKind::PermanentObjects,
             unique_names: false,
         },
-        continuation: ResolutionContinuation::PermanentChoice {
+        ResolutionContinuation::PermanentChoice {
             stack: cx.parked_stack(),
             candidate_generations: candidates,
         },
-    });
+    ));
     Ok(EffectOutcome::Suspended)
 }
 
@@ -929,11 +918,9 @@ pub(super) fn may_behold(
             )
         })
         .collect();
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
+    cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
         deciding_player,
-        presentation: PendingResolutionPresentation {
+        PendingResolutionPresentation {
             source_object_id: cx.top.id,
             candidates,
             min: 0,
@@ -943,7 +930,7 @@ pub(super) fn may_behold(
             choice_kind: rv1::ChoiceKind::Behold,
             unique_names: false,
         },
-        continuation: ResolutionContinuation::BeholdChoice {
+        ResolutionContinuation::BeholdChoice {
             stack: if cx.program_state.is_some() {
                 cx.parked_stack()
             } else {
@@ -955,7 +942,7 @@ pub(super) fn may_behold(
             hand_filter,
             permanent_filter,
         },
-    });
+    ));
     Ok(EffectOutcome::Suspended)
 }
 
@@ -1870,11 +1857,9 @@ fn park_resolution_branches_for(
             ),
         }
     };
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
+    cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
         deciding_player,
-        presentation: PendingResolutionPresentation {
+        PendingResolutionPresentation {
             source_object_id: cx.top.id,
             candidates: Vec::new(),
             min: if matches!(
@@ -1891,7 +1876,7 @@ fn park_resolution_branches_for(
             choice_kind: rv1::ChoiceKind::ResolutionBranch,
             unique_names: false,
         },
-        continuation: ResolutionContinuation::AuthoredBranch {
+        ResolutionContinuation::AuthoredBranch {
             stack: ParkedStackResolution::dedicated(cx.top.clone())
                 .with_previous_result(cx.resume_previous_result.cloned().unwrap_or_default()),
             branch: PendingResolutionBranch {
@@ -1902,7 +1887,7 @@ fn park_resolution_branches_for(
                 stage,
             },
         },
-    });
+    ));
     let event = authored_resolution_branch_choice_event(cx.engine)
         .expect("parked resolution branch produces a choice event");
     let prompt = match &event.ev {

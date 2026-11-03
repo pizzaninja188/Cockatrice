@@ -31,11 +31,9 @@ pub(super) fn each_opponent_may_scry(
     let stack = cx.parked_stack();
     let spell_label = cx.spell_label.to_string();
     let source_object_id = cx.top.id;
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-        deciding_player: first_subject,
-        presentation: PendingResolutionPresentation {
+    cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        first_subject,
+        PendingResolutionPresentation {
             source_object_id,
             candidates: Vec::new(),
             min: 1,
@@ -45,7 +43,7 @@ pub(super) fn each_opponent_may_scry(
             choice_kind: rv1::ChoiceKind::ResolutionBranch,
             unique_names: false,
         },
-        continuation: ResolutionContinuation::EachOpponentMayScry {
+        ResolutionContinuation::EachOpponentMayScry {
             stack,
             scry: Box::new(PendingEachOpponentScry {
                 controller,
@@ -59,7 +57,7 @@ pub(super) fn each_opponent_may_scry(
                 },
             }),
         },
-    });
+    ));
     cx.events
         .push(cx.engine.each_opponent_scry_choice_event()?.ok_or(
             EngineError::ProgramInvariant("Kaya Scry1 offer could not be built"),

@@ -157,12 +157,9 @@ impl GameEngine {
                 )),
             });
             events.push(events::ev_log_private(prompt.clone(), player));
-            self.state.pending_resolution = Some(PendingResolution {
-                resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-                resolution_prompt_semantics: None,
-
-                deciding_player: player,
-                presentation: PendingResolutionPresentation {
+            self.state.pending_resolution = Some(PendingResolution::new_choice(
+                player,
+                PendingResolutionPresentation {
                     source_object_id,
                     candidates,
                     min: count,
@@ -172,11 +169,11 @@ impl GameEngine {
                     choice_kind: rv1::ChoiceKind::SimultaneousEntryOrder,
                     unique_names: false,
                 },
-                continuation: ResolutionContinuation::SimultaneousEntryOrder {
+                ResolutionContinuation::SimultaneousEntryOrder {
                     stack,
                     order: Box::new(order),
                 },
-            });
+            ));
             return Ok(None);
         }
         Ok(Some(Self::reorder_simultaneous_entry_batch(

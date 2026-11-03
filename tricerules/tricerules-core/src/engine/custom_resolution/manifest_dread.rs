@@ -280,11 +280,9 @@ impl GameEngine {
             )),
         });
         events.push(events::ev_log_private(prompt.clone(), owner));
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-            deciding_player: owner,
-            presentation: PendingResolutionPresentation {
+        self.state.pending_resolution = Some(PendingResolution::new_choice(
+            owner,
+            PendingResolutionPresentation {
                 source_object_id: stack.item.id,
                 candidates,
                 min: count,
@@ -294,14 +292,14 @@ impl GameEngine {
                 choice_kind: rv1::ChoiceKind::SimultaneousEntryOrder,
                 unique_names: false,
             },
-            continuation: ResolutionContinuation::ManifestDreadGraveyardOrder {
+            ResolutionContinuation::ManifestDreadGraveyardOrder {
                 order: Box::new(PendingManifestDreadGraveyardOrder {
                     stack,
                     owner,
                     cohort,
                 }),
             },
-        });
+        ));
         Ok(finish_with_events(self, events))
     }
 

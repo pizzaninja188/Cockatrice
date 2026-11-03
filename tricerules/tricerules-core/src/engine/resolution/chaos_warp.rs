@@ -62,12 +62,9 @@ pub(super) fn chaos_warp(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineE
                 },
             )),
         });
-        cx.engine.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-
-            deciding_player: owner,
-            presentation: PendingResolutionPresentation {
+        cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
+            owner,
+            PendingResolutionPresentation {
                 source_object_id: cx.top.id,
                 candidates: vec![],
                 min: 1,
@@ -77,7 +74,7 @@ pub(super) fn chaos_warp(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineE
                 prompt,
                 choice_kind: custom::ChoiceKind::ResolutionBranch,
             },
-            continuation: ResolutionContinuation::ChaosWarpCommander {
+            ResolutionContinuation::ChaosWarpCommander {
                 stack: ParkedStackResolution::dedicated(cx.top.clone()),
                 owner,
                 target,
@@ -97,7 +94,7 @@ pub(super) fn chaos_warp(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineE
                     .unwrap_or(0),
                 effect_index: cx.effect_index,
             },
-        });
+        ));
         return Ok(EffectOutcome::ChaosWarpCommanderChoice);
     }
     zones::move_permanent_to_owners_library(

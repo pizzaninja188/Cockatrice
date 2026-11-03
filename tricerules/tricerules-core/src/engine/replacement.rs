@@ -1054,6 +1054,41 @@ impl GameEngine {
         }
     }
 
+    fn park_entry_branch(
+        &mut self,
+        event: BattlefieldEntryEvent,
+        completion: BattlefieldEntryCompletion,
+        prompt: String,
+        min: u32,
+        continuation: ResolutionContinuation,
+    ) {
+        let deciding_player = event.destination_controller;
+        let source_object_id = event.object_id;
+        self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
+            Box::new(PendingBattlefieldEntry {
+                event,
+                applications: Vec::new(),
+                copy_source_effect: None,
+                copy_source_candidates: Vec::new(),
+                completion,
+            }),
+        ));
+        self.state.pending_resolution = Some(PendingResolution::new_choice(
+            deciding_player,
+            PendingResolutionPresentation {
+                source_object_id,
+                candidates: Vec::new(),
+                min,
+                max: 1,
+                ordered: false,
+                prompt,
+                choice_kind: rv1::ChoiceKind::ResolutionBranch,
+                unique_names: false,
+            },
+            continuation,
+        ));
+    }
+
     fn park_entry_creature_type_choice(
         &mut self,
         item: StackItem,
@@ -1069,39 +1104,19 @@ impl GameEngine {
         let entering_generation = key.source_zone_change;
         let prompt = "Choose a creature type as this permanent enters.".to_owned();
         events.push(self.entry_creature_type_choice_event(&event));
-        let deciding_player = event.destination_controller;
-        let source_object_id = event.object_id;
-        self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
-            Box::new(PendingBattlefieldEntry {
-                event,
-                applications: Vec::new(),
-                copy_source_effect: None,
-                copy_source_candidates: Vec::new(),
-                completion,
-            }),
-        ));
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-            deciding_player,
-            presentation: PendingResolutionPresentation {
-                source_object_id,
-                candidates: Vec::new(),
-                min: 1,
-                max: 1,
-                ordered: false,
-                prompt,
-                choice_kind: rv1::ChoiceKind::ResolutionBranch,
-                unique_names: false,
-            },
-            continuation: ResolutionContinuation::EntryChooseCreatureType {
+        self.park_entry_branch(
+            event,
+            completion,
+            prompt,
+            1,
+            ResolutionContinuation::EntryChooseCreatureType {
                 stack: ParkedStackResolution::dedicated(item),
                 effect_id,
                 key,
                 entering_zone,
                 entering_generation,
             },
-        });
+        );
     }
 
     fn entry_opponent_players(&self, event: &BattlefieldEntryEvent) -> Vec<PlayerId> {
@@ -1170,32 +1185,12 @@ impl GameEngine {
         let entering_generation = key.source_zone_change;
         let players = self.entry_opponent_players(&event);
         events.push(self.entry_opponent_choice_event(&event, &players));
-        let deciding_player = event.destination_controller;
-        let source_object_id = event.object_id;
-        self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
-            Box::new(PendingBattlefieldEntry {
-                event,
-                applications: Vec::new(),
-                copy_source_effect: None,
-                copy_source_candidates: Vec::new(),
-                completion,
-            }),
-        ));
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-            deciding_player,
-            presentation: PendingResolutionPresentation {
-                source_object_id,
-                candidates: Vec::new(),
-                min: 1,
-                max: 1,
-                ordered: false,
-                prompt: "Choose an opponent as this permanent enters.".into(),
-                choice_kind: rv1::ChoiceKind::ResolutionBranch,
-                unique_names: false,
-            },
-            continuation: ResolutionContinuation::EntryChooseOpponent {
+        self.park_entry_branch(
+            event,
+            completion,
+            "Choose an opponent as this permanent enters.".into(),
+            1,
+            ResolutionContinuation::EntryChooseOpponent {
                 stack: ParkedStackResolution::dedicated(item),
                 effect_id,
                 key,
@@ -1203,7 +1198,7 @@ impl GameEngine {
                 entering_generation,
                 players,
             },
-        });
+        );
     }
 
     pub(super) fn refresh_participating_entry_departure(
@@ -1948,36 +1943,16 @@ impl GameEngine {
                 },
             )),
         });
-        let deciding_player = event.destination_controller;
-        let source_object_id = event.object_id;
-        self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
-            Box::new(PendingBattlefieldEntry {
-                event,
-                applications: Vec::new(),
-                copy_source_effect: None,
-                copy_source_candidates: Vec::new(),
-                completion,
-            }),
-        ));
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-            deciding_player,
-            presentation: PendingResolutionPresentation {
-                source_object_id,
-                candidates: Vec::new(),
-                min: 1,
-                max: 1,
-                ordered: false,
-                prompt,
-                choice_kind: rv1::ChoiceKind::ResolutionBranch,
-                unique_names: false,
-            },
-            continuation: ResolutionContinuation::EntryBasicLandType {
+        self.park_entry_branch(
+            event,
+            completion,
+            prompt,
+            1,
+            ResolutionContinuation::EntryBasicLandType {
                 stack: ParkedStackResolution::dedicated(item),
                 effect_id,
             },
-        });
+        );
     }
 
     fn entry_reveal_candidates(
@@ -2074,12 +2049,9 @@ impl GameEngine {
             .get(&event.object_id)
             .copied()
             .unwrap_or(0);
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-
-            deciding_player: event.destination_controller,
-            presentation: PendingResolutionPresentation {
+        self.state.pending_resolution = Some(PendingResolution::new_choice(
+            event.destination_controller,
+            PendingResolutionPresentation {
                 source_object_id: event.object_id,
                 candidates,
                 min: 0,
@@ -2089,14 +2061,14 @@ impl GameEngine {
                 choice_kind: rv1::ChoiceKind::HandCards,
                 unique_names: false,
             },
-            continuation: ResolutionContinuation::EntryReveal {
+            ResolutionContinuation::EntryReveal {
                 stack: ParkedStackResolution::dedicated(item),
                 effect_id,
                 entering_zone,
                 entering_generation,
                 candidate_generations,
             },
-        });
+        ));
         self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
             Box::new(PendingBattlefieldEntry {
                 event,
@@ -2174,36 +2146,16 @@ impl GameEngine {
                 },
             )),
         });
-        let deciding_player = event.destination_controller;
-        let source_object_id = event.object_id;
-        self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
-            Box::new(PendingBattlefieldEntry {
-                event,
-                applications: Vec::new(),
-                copy_source_effect: None,
-                copy_source_candidates: Vec::new(),
-                completion,
-            }),
-        ));
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-            deciding_player,
-            presentation: PendingResolutionPresentation {
-                source_object_id,
-                candidates: Vec::new(),
-                min: 0,
-                max: 1,
-                ordered: false,
-                prompt,
-                choice_kind: rv1::ChoiceKind::ResolutionBranch,
-                unique_names: false,
-            },
-            continuation: ResolutionContinuation::EntryCost {
+        self.park_entry_branch(
+            event,
+            completion,
+            prompt,
+            0,
+            ResolutionContinuation::EntryCost {
                 stack: ParkedStackResolution::dedicated(item),
                 effect_id,
             },
-        });
+        );
     }
 
     fn park_read_ahead_choice(
@@ -2255,36 +2207,16 @@ impl GameEngine {
             )),
         });
         events.push(ev_log(prompt.clone()));
-        let deciding_player = event.destination_controller;
-        let source_object_id = event.object_id;
-        self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
-            Box::new(PendingBattlefieldEntry {
-                event,
-                applications: Vec::new(),
-                copy_source_effect: None,
-                copy_source_candidates: Vec::new(),
-                completion,
-            }),
-        ));
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-            deciding_player,
-            presentation: PendingResolutionPresentation {
-                source_object_id,
-                candidates: Vec::new(),
-                min: 1,
-                max: 1,
-                ordered: false,
-                prompt,
-                choice_kind: rv1::ChoiceKind::ResolutionBranch,
-                unique_names: false,
-            },
-            continuation: ResolutionContinuation::SagaReadAhead {
+        self.park_entry_branch(
+            event,
+            completion,
+            prompt,
+            1,
+            ResolutionContinuation::SagaReadAhead {
                 stack: ParkedStackResolution::dedicated(item),
                 effect_id,
             },
-        });
+        );
     }
 
     fn copy_source_candidates(
@@ -2837,11 +2769,9 @@ impl GameEngine {
                 completion,
             }),
         ));
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
+        self.state.pending_resolution = Some(PendingResolution::new_choice(
             deciding_player,
-            presentation: PendingResolutionPresentation {
+            PendingResolutionPresentation {
                 source_object_id,
                 candidates: recipients,
                 min: 1,
@@ -2851,8 +2781,8 @@ impl GameEngine {
                 choice_kind,
                 unique_names: false,
             },
-            continuation: ResolutionContinuation::EntryAuraRecipient { stack },
-        });
+            ResolutionContinuation::EntryAuraRecipient { stack },
+        ));
     }
 
     pub(super) fn transfer_entry_choice_resume(&mut self, stack: &ParkedStackResolution) {
@@ -3178,11 +3108,9 @@ impl GameEngine {
                 completion,
             }),
         ));
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
+        self.state.pending_resolution = Some(PendingResolution::new_choice(
             deciding_player,
-            presentation: PendingResolutionPresentation {
+            PendingResolutionPresentation {
                 source_object_id,
                 candidates,
                 min: 0,
@@ -3192,12 +3120,12 @@ impl GameEngine {
                 choice_kind: rv1::ChoiceKind::CopySource,
                 unique_names: false,
             },
-            continuation: ResolutionContinuation::EntryCopySource {
+            ResolutionContinuation::EntryCopySource {
                 stack: ParkedStackResolution::dedicated(item),
                 entering_zone,
                 entering_generation,
             },
-        });
+        ));
     }
 
     fn apply_entry_replacement(
@@ -3451,11 +3379,9 @@ impl GameEngine {
                                         completion,
                                     },
                                 )));
-                            self.state.pending_resolution = Some(PendingResolution {
-                                resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-                                resolution_prompt_semantics: None,
+                            self.state.pending_resolution = Some(PendingResolution::new_choice(
                                 deciding_player,
-                                presentation: PendingResolutionPresentation {
+                                PendingResolutionPresentation {
                                     source_object_id,
                                     candidates: candidate_ids,
                                     min: 1,
@@ -3465,10 +3391,10 @@ impl GameEngine {
                                     choice_kind: rv1::ChoiceKind::BattleProtector,
                                     unique_names: false,
                                 },
-                                continuation: ResolutionContinuation::BattleProtector {
+                                ResolutionContinuation::BattleProtector {
                                     stack: ParkedStackResolution::dedicated(item),
                                 },
-                            });
+                            ));
                             return BattlefieldEntryProgress::Parked;
                         }
                     }
@@ -3636,11 +3562,9 @@ impl GameEngine {
                                 completion,
                             },
                         )));
-                    self.state.pending_resolution = Some(PendingResolution {
-                        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-                        resolution_prompt_semantics: None,
+                    self.state.pending_resolution = Some(PendingResolution::new_choice(
                         deciding_player,
-                        presentation: PendingResolutionPresentation {
+                        PendingResolutionPresentation {
                             source_object_id,
                             candidates: application_ids,
                             min: 1,
@@ -3650,10 +3574,10 @@ impl GameEngine {
                             choice_kind: rv1::ChoiceKind::ReplacementEffect,
                             unique_names: false,
                         },
-                        continuation: ResolutionContinuation::EntryReplacement {
+                        ResolutionContinuation::EntryReplacement {
                             stack: ParkedStackResolution::dedicated(item),
                         },
-                    });
+                    ));
                     return BattlefieldEntryProgress::Parked;
                 }
             }
@@ -4665,6 +4589,32 @@ impl GameEngine {
         Ok(Some(event))
     }
 
+    fn resume_battlefield_entry_after_choice(
+        &mut self,
+        pending: PendingResolution,
+        stack: ParkedStackResolution,
+        entry: PendingBattlefieldEntry,
+        mut events: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        match self.advance_or_park_battlefield_entry(
+            stack.item.clone(),
+            entry.event,
+            entry.completion.clone(),
+            &mut events,
+        ) {
+            BattlefieldEntryProgress::Parked => {
+                self.transfer_entry_choice_resume(&stack);
+                Ok(finish_with_events(self, events))
+            }
+            BattlefieldEntryProgress::Skipped(event) => {
+                self.finish_entry_copy_without_recipient(stack, *event, entry.completion, events)
+            }
+            BattlefieldEntryProgress::Ready(event) => {
+                self.complete_pending_battlefield_entry(pending, *event, entry.completion, events)
+            }
+        }
+    }
+
     pub(super) fn finish_entry_copy_source_choice(
         &mut self,
         pending: PendingResolution,
@@ -4724,7 +4674,7 @@ impl GameEngine {
             return Err(EngineError::Illegal("copy replacement is stale"));
         };
 
-        let mut events = Vec::new();
+        let events = Vec::new();
         if let Some(&source_id) = chosen.first() {
             let Some(source_generation) =
                 entry
@@ -4865,27 +4815,7 @@ impl GameEngine {
             entry.event.accepted_aura_recipient = None;
         }
         entry.event.applied_effects.push(effect_id);
-        let event = match self.advance_or_park_battlefield_entry(
-            stack.item.clone(),
-            entry.event,
-            entry.completion.clone(),
-            &mut events,
-        ) {
-            BattlefieldEntryProgress::Parked => {
-                self.transfer_entry_choice_resume(&stack);
-                return Ok(finish_with_events(self, events));
-            }
-            BattlefieldEntryProgress::Skipped(event) => {
-                return self.finish_entry_copy_without_recipient(
-                    stack,
-                    *event,
-                    entry.completion,
-                    events,
-                );
-            }
-            BattlefieldEntryProgress::Ready(event) => *event,
-        };
-        self.complete_pending_battlefield_entry(pending, event, entry.completion, events)
+        self.resume_battlefield_entry_after_choice(pending, stack, entry, events)
     }
 
     fn install_entry_copy_candidate(
@@ -5081,28 +5011,8 @@ impl GameEngine {
             },
             copy_candidate: aura_choice.copy_candidate,
         });
-        let mut events = Vec::new();
-        let event = match self.advance_or_park_battlefield_entry(
-            stack.item.clone(),
-            entry.event,
-            entry.completion.clone(),
-            &mut events,
-        ) {
-            BattlefieldEntryProgress::Parked => {
-                self.transfer_entry_choice_resume(&stack);
-                return Ok(finish_with_events(self, events));
-            }
-            BattlefieldEntryProgress::Skipped(event) => {
-                return self.finish_entry_copy_without_recipient(
-                    stack,
-                    *event,
-                    entry.completion,
-                    events,
-                );
-            }
-            BattlefieldEntryProgress::Ready(event) => *event,
-        };
-        self.complete_pending_battlefield_entry(pending, event, entry.completion, events)
+        let events = Vec::new();
+        self.resume_battlefield_entry_after_choice(pending, stack, entry, events)
     }
 
     pub(super) fn finish_battlefield_entry_replacement_choice(
@@ -5223,28 +5133,7 @@ impl GameEngine {
         } else {
             self.apply_entry_replacement(&mut entry.event, application.effect_id);
         }
-        let event = match self.advance_or_park_battlefield_entry(
-            stack.item.clone(),
-            entry.event,
-            entry.completion.clone(),
-            &mut events,
-        ) {
-            BattlefieldEntryProgress::Parked => {
-                self.transfer_entry_choice_resume(&stack);
-                return Ok(finish_with_events(self, events));
-            }
-            BattlefieldEntryProgress::Skipped(event) => {
-                return self.finish_entry_copy_without_recipient(
-                    stack,
-                    *event,
-                    entry.completion,
-                    events,
-                );
-            }
-            BattlefieldEntryProgress::Ready(event) => *event,
-        };
-
-        self.complete_pending_battlefield_entry(pending, event, entry.completion, events)
+        self.resume_battlefield_entry_after_choice(pending, stack, entry, events)
     }
 
     pub(super) fn finish_entry_opponent_choice(
@@ -5315,24 +5204,8 @@ impl GameEngine {
             player: selected.unwrap(),
         });
         self.apply_entry_replacement(&mut entry.event, effect_id);
-        let mut events = Vec::new();
-        match self.advance_or_park_battlefield_entry(
-            stack.item.clone(),
-            entry.event,
-            entry.completion.clone(),
-            &mut events,
-        ) {
-            BattlefieldEntryProgress::Parked => {
-                self.transfer_entry_choice_resume(&stack);
-                Ok(finish_with_events(self, events))
-            }
-            BattlefieldEntryProgress::Skipped(event) => {
-                self.finish_entry_copy_without_recipient(stack, *event, entry.completion, events)
-            }
-            BattlefieldEntryProgress::Ready(event) => {
-                self.complete_pending_battlefield_entry(pending, *event, entry.completion, events)
-            }
-        }
+        let events = Vec::new();
+        self.resume_battlefield_entry_after_choice(pending, stack, entry, events)
     }
 
     pub(super) fn finish_entry_creature_type_choice(
@@ -5409,27 +5282,11 @@ impl GameEngine {
                 creature_type: creature_type.to_owned(),
             });
         self.apply_entry_replacement(&mut entry.event, effect_id);
-        let mut events = vec![ev_log(format!(
+        let events = vec![ev_log(format!(
             "P{} chooses {} for this permanent.",
             entry.event.destination_controller, creature_type
         ))];
-        match self.advance_or_park_battlefield_entry(
-            stack.item.clone(),
-            entry.event,
-            entry.completion.clone(),
-            &mut events,
-        ) {
-            BattlefieldEntryProgress::Parked => {
-                self.transfer_entry_choice_resume(&stack);
-                Ok(finish_with_events(self, events))
-            }
-            BattlefieldEntryProgress::Skipped(event) => {
-                self.finish_entry_copy_without_recipient(stack, *event, entry.completion, events)
-            }
-            BattlefieldEntryProgress::Ready(event) => {
-                self.complete_pending_battlefield_entry(pending, *event, entry.completion, events)
-            }
-        }
+        self.resume_battlefield_entry_after_choice(pending, stack, entry, events)
     }
 
     pub(super) fn finish_basic_land_type_choice(
@@ -5655,27 +5512,7 @@ impl GameEngine {
         } else {
             self.apply_entry_replacement(&mut entry.event, effect_id);
         }
-        let event = match self.advance_or_park_battlefield_entry(
-            stack.item.clone(),
-            entry.event,
-            entry.completion.clone(),
-            &mut events,
-        ) {
-            BattlefieldEntryProgress::Parked => {
-                self.transfer_entry_choice_resume(&stack);
-                return Ok(finish_with_events(self, events));
-            }
-            BattlefieldEntryProgress::Skipped(event) => {
-                return self.finish_entry_copy_without_recipient(
-                    stack,
-                    *event,
-                    entry.completion,
-                    events,
-                );
-            }
-            BattlefieldEntryProgress::Ready(event) => *event,
-        };
-        self.complete_pending_battlefield_entry(pending, event, entry.completion, events)
+        self.resume_battlefield_entry_after_choice(pending, stack, entry, events)
     }
 
     pub(super) fn finish_entry_cost_choice(
@@ -5767,27 +5604,7 @@ impl GameEngine {
             _ => unreachable!("entry cost decision validated above"),
         }
 
-        let event = match self.advance_or_park_battlefield_entry(
-            stack.item.clone(),
-            entry.event,
-            entry.completion.clone(),
-            &mut events,
-        ) {
-            BattlefieldEntryProgress::Parked => {
-                self.transfer_entry_choice_resume(&stack);
-                return Ok(finish_with_events(self, events));
-            }
-            BattlefieldEntryProgress::Skipped(event) => {
-                return self.finish_entry_copy_without_recipient(
-                    stack,
-                    *event,
-                    entry.completion,
-                    events,
-                );
-            }
-            BattlefieldEntryProgress::Ready(event) => *event,
-        };
-        self.complete_pending_battlefield_entry(pending, event, entry.completion, events)
+        self.resume_battlefield_entry_after_choice(pending, stack, entry, events)
     }
 
     pub(super) fn finish_saga_read_ahead_choice(
@@ -5856,32 +5673,12 @@ impl GameEngine {
         );
         entry.event.applied_effects.push(effect_id);
 
-        let mut events = vec![ev_log(format!(
+        let events = vec![ev_log(format!(
             "P{} chooses chapter {} for read ahead.",
             pending.deciding_player,
             saga_chapter_label(chapter)
         ))];
-        let event = match self.advance_or_park_battlefield_entry(
-            stack.item.clone(),
-            entry.event,
-            entry.completion.clone(),
-            &mut events,
-        ) {
-            BattlefieldEntryProgress::Parked => {
-                self.transfer_entry_choice_resume(&stack);
-                return Ok(finish_with_events(self, events));
-            }
-            BattlefieldEntryProgress::Skipped(event) => {
-                return self.finish_entry_copy_without_recipient(
-                    stack,
-                    *event,
-                    entry.completion,
-                    events,
-                );
-            }
-            BattlefieldEntryProgress::Ready(event) => *event,
-        };
-        self.complete_pending_battlefield_entry(pending, event, entry.completion, events)
+        self.resume_battlefield_entry_after_choice(pending, stack, entry, events)
     }
 }
 

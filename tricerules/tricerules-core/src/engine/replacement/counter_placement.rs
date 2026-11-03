@@ -2070,11 +2070,9 @@ impl GameEngine {
         out.push(ev_log(prompt.clone()));
         self.state.pending_replacement_event =
             Some(PendingReplacementEvent::Counters(Box::new(batch)));
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
+        self.state.pending_resolution = Some(PendingResolution::new_choice(
             deciding_player,
-            presentation: PendingResolutionPresentation {
+            PendingResolutionPresentation {
                 source_object_id,
                 candidates: application_ids,
                 min: 1,
@@ -2084,8 +2082,8 @@ impl GameEngine {
                 choice_kind: rv1::ChoiceKind::ReplacementEffect,
                 unique_names: false,
             },
-            continuation: ResolutionContinuation::CounterReplacement { stack, completion },
-        });
+            ResolutionContinuation::CounterReplacement { stack, completion },
+        ));
     }
 
     pub(super) fn park_entry_counter_placement_choice(
@@ -2197,11 +2195,9 @@ impl GameEngine {
         out.push(ev_log(prompt.clone()));
         self.state.pending_replacement_event =
             Some(PendingReplacementEvent::Counters(Box::new(counter_batch)));
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
+        self.state.pending_resolution = Some(PendingResolution::new_choice(
             deciding_player,
-            presentation: PendingResolutionPresentation {
+            PendingResolutionPresentation {
                 source_object_id,
                 candidates: candidate_ids,
                 min: 1,
@@ -2211,10 +2207,10 @@ impl GameEngine {
                 choice_kind: rv1::ChoiceKind::ReplacementEffect,
                 unique_names: false,
             },
-            continuation: ResolutionContinuation::EntryCounterReplacement {
+            ResolutionContinuation::EntryCounterReplacement {
                 resume: Box::new(resume),
             },
-        });
+        ));
     }
 
     fn simultaneous_entry_references(

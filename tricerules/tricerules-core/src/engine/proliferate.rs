@@ -270,11 +270,9 @@ impl GameEngine {
                 ..
             }
         );
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
+        self.state.pending_resolution = Some(PendingResolution::new_choice(
             deciding_player,
-            presentation: PendingResolutionPresentation {
+            PendingResolutionPresentation {
                 source_object_id: stack.item.id,
                 candidates: if choosing_delegate {
                     Vec::new()
@@ -293,7 +291,7 @@ impl GameEngine {
                 unique_names: false,
             },
             continuation,
-        });
+        ));
         if stack.program().is_some() || choosing_delegate {
             events.push(
                 self.proliferate_choice_event()
@@ -767,11 +765,9 @@ impl GameEngine {
             .iter()
             .map(|application| application.presentation.object_id)
             .collect::<Vec<_>>();
-        self.state.pending_resolution = Some(crate::state::PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-            deciding_player: chooser,
-            presentation: crate::state::PendingResolutionPresentation {
+        self.state.pending_resolution = Some(crate::state::PendingResolution::new_choice(
+            chooser,
+            crate::state::PendingResolutionPresentation {
                 source_object_id: stack.item.id,
                 candidates,
                 min: 1,
@@ -781,11 +777,8 @@ impl GameEngine {
                 choice_kind: rv1::ChoiceKind::ReplacementEffect,
                 unique_names: false,
             },
-            continuation: crate::state::ResolutionContinuation::ProliferateReplacement {
-                stack,
-                transaction,
-            },
-        });
+            crate::state::ResolutionContinuation::ProliferateReplacement { stack, transaction },
+        ));
         events.push(self.proliferate_replacement_choice_event().ok_or(
             EngineError::ProgramInvariant(
                 "Proliferate replacement prompt does not match its continuation",

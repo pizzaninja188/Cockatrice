@@ -315,12 +315,9 @@ impl GameEngine {
             )),
         });
         events.push(super::events::ev_log(prompt.clone()));
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-
-            deciding_player: choice.player,
-            presentation: PendingResolutionPresentation {
+        self.state.pending_resolution = Some(PendingResolution::new_choice(
+            choice.player,
+            PendingResolutionPresentation {
                 source_object_id: stack.item.id,
                 candidates,
                 min: choice.required,
@@ -330,8 +327,8 @@ impl GameEngine {
                 choice_kind: rv1::ChoiceKind::PermanentObjects,
                 unique_names: false,
             },
-            continuation: ResolutionContinuation::PlayerSetSacrifice { stack, sacrifice },
-        });
+            ResolutionContinuation::PlayerSetSacrifice { stack, sacrifice },
+        ));
     }
 
     pub(super) fn finish_player_set_sacrifice_choice(
@@ -904,11 +901,9 @@ impl GameEngine {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)),
         });
         events.push(super::events::ev_log(prompt.clone()));
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
+        self.state.pending_resolution = Some(PendingResolution::new_choice(
             deciding_player,
-            presentation: PendingResolutionPresentation {
+            PendingResolutionPresentation {
                 source_object_id: stack.item.id,
                 candidates,
                 min: 1,
@@ -918,8 +913,8 @@ impl GameEngine {
                 choice_kind,
                 unique_names: false,
             },
-            continuation: ResolutionContinuation::TypeChoiceSacrifice { stack, sacrifice },
-        });
+            ResolutionContinuation::TypeChoiceSacrifice { stack, sacrifice },
+        ));
     }
 
     pub(super) fn type_choice_sacrifice_victims(
@@ -1281,12 +1276,9 @@ impl GameEngine {
                 },
             )),
         });
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-
-            deciding_player: owner,
-            presentation: PendingResolutionPresentation {
+        self.state.pending_resolution = Some(PendingResolution::new_choice(
+            owner,
+            PendingResolutionPresentation {
                 source_object_id,
                 candidates,
                 min: count,
@@ -1296,11 +1288,11 @@ impl GameEngine {
                 choice_kind: custom::ChoiceKind::GraveyardCards,
                 unique_names: false,
             },
-            continuation: ResolutionContinuation::MassSacrificeGraveyardOrder {
+            ResolutionContinuation::MassSacrificeGraveyardOrder {
                 stack,
                 sacrifice: Box::new(sacrifice),
             },
-        });
+        ));
         true
     }
 

@@ -674,11 +674,9 @@ impl GameEngine {
                 )),
             });
             events.push(ev_log(prompt.clone()));
-            self.state.pending_resolution = Some(PendingResolution {
-                resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-                resolution_prompt_semantics: None,
-                deciding_player: owner,
-                presentation: PendingResolutionPresentation {
+            self.state.pending_resolution = Some(PendingResolution::new_choice(
+                owner,
+                PendingResolutionPresentation {
                     source_object_id: stack.item.id,
                     candidates: Vec::new(),
                     min: 1,
@@ -688,7 +686,7 @@ impl GameEngine {
                     choice_kind: custom::ChoiceKind::ResolutionBranch,
                     unique_names: false,
                 },
-                continuation: ResolutionContinuation::ChooseCardCommander {
+                ResolutionContinuation::ChooseCardCommander {
                     stack,
                     chooser,
                     commander_owner: owner,
@@ -696,7 +694,7 @@ impl GameEngine {
                     candidate,
                     spell_label,
                 },
-            });
+            ));
             return Ok(finish_with_events(self, events));
         }
         self.commit_choose_card_move(stack, chooser, candidate, destination, false, &spell_label)
@@ -1292,12 +1290,9 @@ self.complete_parked_resolution_with_previous(
                         format!("P{controller}: play {card_label} without paying its mana cost?")
                     }
                 };
-self.state.pending_resolution = Some(PendingResolution {
-                    resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-                    resolution_prompt_semantics: None,
-
-            deciding_player: controller,
-                    presentation: PendingResolutionPresentation {
+self.state.pending_resolution = Some(PendingResolution::new_choice(
+controller,
+PendingResolutionPresentation {
                         source_object_id: stack.item.id,
                         candidates: vec![object_id],
                         min: 0,
@@ -1307,7 +1302,7 @@ self.state.pending_resolution = Some(PendingResolution {
                         choice_kind: rv1::ChoiceKind::SpecialCast,
                         unique_names: false,
                     },
-                    continuation: ResolutionContinuation::SpecialCast {
+ResolutionContinuation::SpecialCast {
                         stack,
                         exiled: TriggerObjectRef {
                             object_id,
@@ -1323,7 +1318,7 @@ self.state.pending_resolution = Some(PendingResolution {
                         max_face_mana_value: None,
                         completion: SpecialCastCompletion::ResumeStack,
                     },
-                });
+));
                 events.push(
                     self.resolution_payment_choice_event()
                         .expect("linked exile play offer"),
@@ -1826,11 +1821,9 @@ self.state.pending_resolution = Some(PendingResolution {
             )),
         });
         events.push(ev_log(prompt.clone()));
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-            deciding_player: owner,
-            presentation: PendingResolutionPresentation {
+        self.state.pending_resolution = Some(PendingResolution::new_choice(
+            owner,
+            PendingResolutionPresentation {
                 source_object_id: stack.item.id,
                 candidates: Vec::new(),
                 min: 1,
@@ -1840,7 +1833,7 @@ self.state.pending_resolution = Some(PendingResolution {
                 choice_kind: custom::ChoiceKind::ResolutionBranch,
                 unique_names: false,
             },
-            continuation: ResolutionContinuation::SearchLibrary {
+            ResolutionContinuation::SearchLibrary {
                 stack,
                 searcher,
                 zones,
@@ -1858,7 +1851,7 @@ self.state.pending_resolution = Some(PendingResolution {
                     zone_change_generation,
                 }),
             },
-        });
+        ));
         Ok(finish_with_events(self, events))
     }
 

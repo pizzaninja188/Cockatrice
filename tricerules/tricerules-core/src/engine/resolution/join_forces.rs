@@ -48,12 +48,9 @@ pub(super) fn begin(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError>
         undo_history_start: cx.engine.state.undoable_mana_abilities.len(),
     };
     let prompt = format!("{}: Choose how much mana to contribute.", cx.spell_label);
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-
-        deciding_player: first_payer,
-        presentation: PendingResolutionPresentation {
+    cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        first_payer,
+        PendingResolutionPresentation {
             source_object_id: cx.top.id,
             candidates: Vec::new(),
             min: 0,
@@ -63,14 +60,14 @@ pub(super) fn begin(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError>
             choice_kind: custom::ChoiceKind::ManaPayment,
             unique_names: false,
         },
-        continuation: ResolutionContinuation::JoinForces {
+        ResolutionContinuation::JoinForces {
             stack: cx.parked_stack(),
             payment,
             payer_order,
             next_payer: 0,
             total_paid: 0,
         },
-    });
+    ));
     cx.events.push(
         cx.engine
             .resolution_payment_choice_event()

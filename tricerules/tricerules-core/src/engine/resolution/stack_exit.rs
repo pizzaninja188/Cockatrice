@@ -326,11 +326,9 @@ impl GameEngine {
             .iter()
             .map(|application| application.application_id)
             .collect::<Vec<_>>();
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-            deciding_player: transaction.controller,
-            presentation: PendingResolutionPresentation {
+        self.state.pending_resolution = Some(PendingResolution::new_choice(
+            transaction.controller,
+            PendingResolutionPresentation {
                 source_object_id: stack.item.id,
                 candidates,
                 min: 1,
@@ -340,11 +338,8 @@ impl GameEngine {
                 choice_kind: rv1::ChoiceKind::ReplacementEffect,
                 unique_names: false,
             },
-            continuation: crate::state::ResolutionContinuation::StackExitReplacement {
-                stack,
-                transaction,
-            },
-        });
+            crate::state::ResolutionContinuation::StackExitReplacement { stack, transaction },
+        ));
         events.push(self.stack_exit_replacement_choice_event().ok_or(
             EngineError::ProgramInvariant("stack-exit replacement offer could not be rendered"),
         )?);

@@ -1332,43 +1332,43 @@ impl GameEngine {
                                 }
                             }
                         };
-                    self.state.pending_resolution = Some(crate::state::PendingResolution {
-                        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-                        resolution_prompt_semantics: None,
-                        deciding_player,
-                        presentation: crate::state::PendingResolutionPresentation {
-                            source_object_id: top.id,
-                            candidates: Vec::new(),
-                            min: u32::from(
-                                matches!(
-                                    &choose_stage,
-                                    crate::state::PendingProgramChooseStage::ChoosingDelegate { .. }
-                                ) || !*optional,
-                            ),
-                            max: 1,
-                            ordered: false,
-                            prompt: prompt.clone(),
-                            choice_kind: rv1::ChoiceKind::ResolutionBranch,
-                            unique_names: false,
-                        },
-                        continuation: crate::state::ResolutionContinuation::ProgramChoose {
-                            stack: ParkedStackResolution::for_program(
-                                top.clone(),
-                                None,
-                                previous_result.clone(),
-                                program_state,
-                            ),
-                            choose: crate::state::PendingProgramChoose {
-                                occurrence,
-                                original_chooser: chooser_player,
-                                optional: *optional,
-                                departure_policy: *departure_policy,
-                                delegate_selected,
-                                frozen_game_condition_results,
-                                stage: choose_stage,
+                    self.state.pending_resolution = Some(
+                        crate::state::PendingResolution::new_choice(
+                            deciding_player,
+                            crate::state::PendingResolutionPresentation {
+                                source_object_id: top.id,
+                                candidates: Vec::new(),
+                                min: u32::from(
+                                    matches!(
+                                        &choose_stage,
+                                        crate::state::PendingProgramChooseStage::ChoosingDelegate { .. }
+                                    ) || !*optional,
+                                ),
+                                max: 1,
+                                ordered: false,
+                                prompt: prompt.clone(),
+                                choice_kind: rv1::ChoiceKind::ResolutionBranch,
+                                unique_names: false,
                             },
-                        },
-                    });
+                            crate::state::ResolutionContinuation::ProgramChoose {
+                                stack: ParkedStackResolution::for_program(
+                                    top.clone(),
+                                    None,
+                                    previous_result.clone(),
+                                    program_state,
+                                ),
+                                choose: crate::state::PendingProgramChoose {
+                                    occurrence,
+                                    original_chooser: chooser_player,
+                                    optional: *optional,
+                                    departure_policy: *departure_policy,
+                                    delegate_selected,
+                                    frozen_game_condition_results,
+                                    stage: choose_stage,
+                                },
+                            },
+                        ),
+                    );
                     #[cfg(test)]
                     trip_program_failpoint(ProgramFailpoint::OfferPublished)?;
                     events.push(self.program_choose_choice_event().ok_or(
@@ -1492,11 +1492,9 @@ impl GameEngine {
                                             program_state.clone(),
                                         );
                                         self.state.pending_resolution =
-                                            Some(crate::state::PendingResolution {
-                                                resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-                                                resolution_prompt_semantics: None,
-                                                deciding_player: chooser,
-                                                presentation: crate::state::PendingResolutionPresentation {
+                                            Some(crate::state::PendingResolution::new_choice(
+chooser,
+crate::state::PendingResolutionPresentation {
                                                     source_object_id: top.id,
                                                     candidates: candidates
                                                         .iter()
@@ -1509,7 +1507,7 @@ impl GameEngine {
                                                     choice_kind: rv1::ChoiceKind::PermanentObjects,
                                                     unique_names: false,
                                                 },
-                                                continuation: crate::state::ResolutionContinuation::EquipmentReceiptAttach {
+crate::state::ResolutionContinuation::EquipmentReceiptAttach {
                                                     attachment: Box::new(
                                                         crate::state::PendingEquipmentReceiptAttach {
                                                             stack,
@@ -1523,7 +1521,7 @@ impl GameEngine {
                                                         },
                                                     ),
                                                 },
-                                            });
+));
                                         events.push(
                                             equipment_receipt_choice_event(self).ok_or(
                                                 EngineError::ProgramInvariant(

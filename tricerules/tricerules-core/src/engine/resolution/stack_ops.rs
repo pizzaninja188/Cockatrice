@@ -125,11 +125,9 @@ pub(super) fn counter_target_spell(
                     },
                 )),
             });
-            engine.state.pending_resolution = Some(PendingResolution {
-                resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-                resolution_prompt_semantics: None,
+            engine.state.pending_resolution = Some(PendingResolution::new_choice(
                 deciding_player,
-                presentation: PendingResolutionPresentation {
+                PendingResolutionPresentation {
                     source_object_id: cx.top.id,
                     candidates: Vec::new(),
                     min: 0,
@@ -139,7 +137,7 @@ pub(super) fn counter_target_spell(
                     choice_kind: custom::ChoiceKind::ManaPayment,
                     unique_names: false,
                 },
-                continuation: ResolutionContinuation::ManaPayment {
+                ResolutionContinuation::ManaPayment {
                     stack: parked_stack,
                     payment: PendingManaPayment {
                         waterbend: false,
@@ -150,7 +148,7 @@ pub(super) fn counter_target_spell(
                         undo_history_start: engine.state.undoable_mana_abilities.len(),
                     },
                 },
-            });
+            ));
             // The payment is part of this spell's resolution (CR 608.2g). Keep the resolving
             // counter as the top stack item for public/reconnect state until the player pays or
             // declines; the blocking choice prevents it from resolving a second time.
@@ -570,16 +568,14 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
     cx.events.push(ev_log(format!(
         "P{deciding_player} must decide whether to pay {ward_text}."
     )));
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
+    cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
         deciding_player,
         presentation,
-        continuation: ResolutionContinuation::WardPayment {
+        ResolutionContinuation::WardPayment {
             stack: cx.parked_stack(),
             ward: PendingWardPayment { target, stage },
         },
-    });
+    ));
     if !cx
         .engine
         .state

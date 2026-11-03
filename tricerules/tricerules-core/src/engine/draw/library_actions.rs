@@ -110,12 +110,9 @@ impl GameEngine {
     ) -> DrawProgress {
         let choice = self.draw_library_choice(&work);
         let stack = work.completion.stack().cloned();
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-
-            deciding_player: choice.deciding_player_id,
-            presentation: PendingResolutionPresentation {
+        self.state.pending_resolution = Some(PendingResolution::new_choice(
+            choice.deciding_player_id,
+            PendingResolutionPresentation {
                 source_object_id: choice.source_object_id,
                 candidates: choice.candidate_object_ids.clone(),
                 min: choice.min,
@@ -126,8 +123,8 @@ impl GameEngine {
                 choice_kind: rv1::ChoiceKind::try_from(choice.choice_kind)
                     .expect("draw choice kind"),
             },
-            continuation: ResolutionContinuation::DrawReplacement { stack },
-        });
+            ResolutionContinuation::DrawReplacement { stack },
+        ));
         self.state.pending_replacement_event = Some(PendingReplacementEvent::Draw(Box::new(work)));
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)),

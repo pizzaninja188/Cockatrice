@@ -1162,13 +1162,11 @@ impl GameEngine {
         let deciding_player = choice.deciding_player();
         out.push(event);
         out.push(ev_log(prompt));
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
+        self.state.pending_resolution = Some(PendingResolution::new_choice(
             deciding_player,
             presentation,
-            continuation: ResolutionContinuation::StateBasedActions { choices },
-        });
+            ResolutionContinuation::StateBasedActions { choices },
+        ));
         Ok(())
     }
 

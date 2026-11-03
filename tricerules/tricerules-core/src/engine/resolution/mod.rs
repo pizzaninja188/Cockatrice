@@ -2013,11 +2013,9 @@ impl GameEngine {
         events: &mut Vec<rv1::RuledEvent>,
     ) -> ResolutionProgress {
         let prompt = format!("{spell_label}: apply the optional effect?");
-        self.state.pending_resolution = Some(PendingResolution {
-            resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-            resolution_prompt_semantics: None,
-            deciding_player: top.controller,
-            presentation: PendingResolutionPresentation {
+        self.state.pending_resolution = Some(PendingResolution::new_choice(
+            top.controller,
+            PendingResolutionPresentation {
                 source_object_id: top.id,
                 candidates: Vec::new(),
                 min: 0,
@@ -2027,11 +2025,11 @@ impl GameEngine {
                 choice_kind: rv1::ChoiceKind::ResolutionBranch,
                 unique_names: false,
             },
-            continuation: ResolutionContinuation::OptionalTriggeredAbility {
+            ResolutionContinuation::OptionalTriggeredAbility {
                 stack: ParkedStackResolution::dedicated(top),
                 stage: crate::state::PendingOptionalTriggeredAbilityStage::Selecting,
             },
-        });
+        ));
         events.push(
             self.optional_triggered_ability_choice_event()
                 .expect("optional trigger choice was parked"),

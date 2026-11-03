@@ -53,12 +53,9 @@ pub(super) fn blight(cx: &mut EffectCx<'_>, count: u32) -> Result<EffectOutcome,
         )),
     });
     let stack = cx.parked_stack();
-    cx.engine.state.pending_resolution = Some(PendingResolution {
-        resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
-        resolution_prompt_semantics: None,
-
-        deciding_player: cx.controller,
-        presentation: PendingResolutionPresentation {
+    cx.engine.state.pending_resolution = Some(PendingResolution::new_choice(
+        cx.controller,
+        PendingResolutionPresentation {
             source_object_id: cx.top.id,
             candidates,
             min: 1,
@@ -68,12 +65,12 @@ pub(super) fn blight(cx: &mut EffectCx<'_>, count: u32) -> Result<EffectOutcome,
             choice_kind: rv1::ChoiceKind::CostObjects,
             unique_names: false,
         },
-        continuation: ResolutionContinuation::Blight {
+        ResolutionContinuation::Blight {
             stack,
             count,
             candidate_generations,
         },
-    });
+    ));
     Ok(EffectOutcome::Suspended)
 }
 
