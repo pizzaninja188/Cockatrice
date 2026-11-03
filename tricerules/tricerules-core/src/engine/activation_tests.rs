@@ -6,6 +6,9 @@ mod poison_difference;
 #[path = "activation_tests/library_hand_graveyard.rs"]
 mod library_hand_graveyard;
 
+#[path = "activation_tests/magecraft.rs"]
+mod magecraft;
+
 const OPPONENT_CHOICE_LAND: &str = r#"(
     id: "opponent_choice_land", name: "Opponent Choice Land",
     face_id: "opponent_choice_land", types: ["Land"],

@@ -934,48 +934,35 @@ impl GameEngine {
             )),
         ];
 
+        let mut trigger_events = Vec::new();
+        if !is_ability {
+            trigger_events.push(self.committed_spell_copy_event(copy_id)?);
+        }
+        trigger_events.push(GameEvent::TargetsChosen {
+            controller,
+            source: if is_ability {
+                TargetingSourceKind::Ability
+            } else {
+                TargetingSourceKind::SpellCopy
+            },
+            stack_object: StackObjectRef {
+                object_id: copy_id,
+                zone_change_generation: None,
+            },
+            targets: event_targets,
+        });
         let has_remaining = !remaining.is_empty();
         if has_remaining {
             self.begin_copy_target_choices(remaining, copy_source_object_id, parent, &mut ev)?;
         } else if let Some(parent) = parent {
-            self.fire_triggers(
-                &[GameEvent::TargetsChosen {
-                    controller,
-                    source: if is_ability {
-                        TargetingSourceKind::Ability
-                    } else {
-                        TargetingSourceKind::SpellCopy
-                    },
-                    stack_object: StackObjectRef {
-                        object_id: copy_id,
-                        zone_change_generation: None,
-                    },
-                    targets: event_targets,
-                }],
-                &mut ev,
-            );
+            self.fire_triggers(&trigger_events, &mut ev);
             return self.complete_parked_stack_with_previous(
                 *parent,
                 OperationResults::default(),
                 ev,
             );
         }
-        self.fire_triggers(
-            &[GameEvent::TargetsChosen {
-                controller,
-                source: if is_ability {
-                    TargetingSourceKind::Ability
-                } else {
-                    TargetingSourceKind::SpellCopy
-                },
-                stack_object: StackObjectRef {
-                    object_id: copy_id,
-                    zone_change_generation: None,
-                },
-                targets: event_targets,
-            }],
-            &mut ev,
-        );
+        self.fire_triggers(&trigger_events, &mut ev);
 
         if !has_remaining {
             if let Some(i) = self.state.player_idx(self.state.active_player_id()) {

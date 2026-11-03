@@ -1923,6 +1923,31 @@ fn library_hand_graveyard_partition_stays_out_of_program_and_conditional_admissi
 }
 
 #[test]
+fn magecraft_trigger_is_typed_without_cast_only_spell_context() {
+    let ability: super::TriggeredAbilityDef = ron::from_str(
+        r#"(
+        ability_id: "magecraft", presentation: Fallback,
+        trigger: WheneverPlayerCastsOrCopiesSpell(player: Controller, card_type: InstantOrSorcery),
+        effect: [LoseLife(amount: Fixed(2), who: EachOpponent), GainLife(amount: 2)],
+    )"#,
+    )
+    .expect("Onyx and Archmage Emeritus need a distinct cast-or-copy condition");
+    assert!(ability.validate_shape().is_ok());
+    let cast_context: super::TriggeredAbilityDef = ron::from_str(
+        r#"(
+        ability_id: "invalid_context", presentation: Fallback,
+        trigger: WheneverPlayerCastsOrCopiesSpell(player: Controller, card_type: InstantOrSorcery),
+        effect: [CounterTriggeringSpell],
+    )"#,
+    )
+    .unwrap();
+    assert!(cast_context
+        .validate_shape()
+        .unwrap_err()
+        .contains("triggering-spell context requires WheneverPlayerCastsSpell"));
+}
+
+#[test]
 fn poison_up_to_nine_requires_an_explicit_player_target() {
     let effect: super::SpellEffectKind =
         ron::from_str("PoisonTargetUpToNine(target: (kind: AnyPlayer))")

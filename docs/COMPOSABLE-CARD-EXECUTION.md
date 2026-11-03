@@ -225,6 +225,16 @@ departure retires a vanished library owner's hidden cohort without delegation. P
 conditional instructions do not admit this operation. This capability adds no card registration
 or protocol/client contract (CR 400.7, 608.2c/m, 701.20e, 704.4).
 
+`WheneverPlayerCastsOrCopiesSpell { player, card_type }` is the shared Magecraft condition for
+Professor Onyx and Archmage Emeritus. Each successful spell-copy stack commit emits a private
+event-time occurrence through either the direct or chosen-target factory. Pending target choices,
+reoffers and ability copies emit none. The occurrence preserves the copy controller and selected
+face's card-type predicates without entering cast history or supplying cast-only spell context.
+Cast ordinals, storm counts and cast-only watchers therefore continue to observe actual casts.
+Copied cards outside the stack do not use this event; a card copy actually cast would use the
+ordinary cast event (CR 603.2c, 707.10). This adds capability only, without card registration or a
+protocol/client change.
+
 The bounded 2026-10-19 Scalestorm Summoner port admits one finite `ProgramIf` condition:
 `MaximumPower` among the ability controller's creatures, with a positive `min`, no `max`, default
 remaining filter fields, and no observed-object exclusion. It migrates only `triggered_01` from the

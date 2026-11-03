@@ -122,6 +122,17 @@ impl GameEngine {
         fact: &crate::state::SpellCastFact,
         controller: PlayerId,
     ) -> bool {
+        if matches!(
+            condition,
+            TriggerCondition::WheneverPlayerCastsOrCopiesSpell { .. }
+        ) {
+            return self.cast_or_copy_trigger_matches(
+                condition,
+                fact.caster,
+                &fact.matched_card_types,
+                controller,
+            );
+        }
         let TriggerCondition::WheneverPlayerCastsSpell {
             caster,
             filter,
@@ -153,6 +164,60 @@ impl GameEngine {
                     .count() as u32,
             };
             expected == actual
+        })
+    }
+
+    fn cast_or_copy_trigger_matches(
+        &self,
+        condition: &TriggerCondition,
+        actor: PlayerId,
+        matched_card_types: &[CardTypeFilter],
+        controller: PlayerId,
+    ) -> bool {
+        matches!(condition, TriggerCondition::WheneverPlayerCastsOrCopiesSpell { player, card_type }
+            if self.relative_player_matches(*player, actor, controller)
+                && matched_card_types.contains(card_type))
+    }
+
+    /// Snapshot only after the virtual copy reaches the stack. These facts never enter cast
+    /// history, so copies cannot advance cast ordinals, storm, or mana-spending predicates.
+    pub(super) fn committed_spell_copy_event(
+        &self,
+        copy_id: ObjectId,
+    ) -> Result<GameEvent, EngineError> {
+        let item = self
+            .state
+            .stack
+            .iter()
+            .find(|item| item.id == copy_id)
+            .filter(|item| {
+                item.is_copy
+                    && item.ability_text.is_none()
+                    && item.activated_ability.is_none()
+                    && item.triggered_ability.is_none()
+            })
+            .ok_or(EngineError::ProgramInvariant(
+                "spell-copy occurrence requires a committed spell copy",
+            ))?;
+        let face = self
+            .registry
+            .get(&item.card_id)
+            .and_then(|definition| definition.face(item.face_index))
+            .ok_or(EngineError::ProgramInvariant(
+                "committed spell copy has no selected face",
+            ))?;
+        Ok(GameEvent::SpellCopied {
+            fact: SpellCopyFact {
+                occurrence: StackObjectRef {
+                    object_id: copy_id,
+                    zone_change_generation: None,
+                },
+                controller: item.controller,
+                matched_card_types: CardTypeFilter::ALL
+                    .into_iter()
+                    .filter(|filter| face.matches_card_type(*filter))
+                    .collect(),
+            },
         })
     }
 
@@ -2469,6 +2534,22 @@ impl GameEngine {
                     })
                 })
                 .collect(),
+            GameEvent::SpellCopied { fact } => {
+                debug_assert!(fact.occurrence.zone_change_generation.is_none());
+                sources
+                    .iter()
+                    .flat_map(|source| {
+                        self.matching_snapshot_abilities(source, |condition| {
+                            self.cast_or_copy_trigger_matches(
+                                condition,
+                                fact.controller,
+                                &fact.matched_card_types,
+                                source.controller,
+                            )
+                        })
+                    })
+                    .collect()
+            }
         }
     }
 
@@ -3233,6 +3314,7 @@ impl GameEngine {
             GameEvent::ManaSpentCastingSpell { player, .. } => Some(*player),
             GameEvent::CardDrawn { drawer, .. } => Some(*drawer),
             GameEvent::SpellCast { fact } => Some(fact.caster),
+            GameEvent::SpellCopied { fact } => Some(fact.controller),
             GameEvent::AbilityActivated { controller, .. } => Some(*controller),
             GameEvent::TargetsChosen { controller, .. } => Some(*controller),
             _ => None,

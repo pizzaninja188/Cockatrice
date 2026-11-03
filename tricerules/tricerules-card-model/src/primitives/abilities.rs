@@ -1062,6 +1062,13 @@ pub enum TriggerCondition {
         #[serde(default)]
         ordinal_scope: CastOrdinalScope,
     },
+    /// Professor Onyx and Archmage Emeritus observe each committed cast or spell copy.
+    /// Copies have no cast ordinal, origin, spending receipt or cast-only spell context.
+    WheneverPlayerCastsOrCopiesSpell {
+        #[serde(default)]
+        player: CastTriggerPlayer,
+        card_type: CardTypeFilter,
+    },
     /// CR 700.14: the selected player's actual spell spending crosses this threshold once a turn.
     /// Covers Bark-Knuckle Boxer, Teapot Slinger, and Wandertale Mentor; not a trigger-use cap.
     WheneverPlayerExpendsMana {
@@ -1441,6 +1448,7 @@ impl TriggerCondition {
             Self::AtBeginningOfDrawStep { .. }
                 | Self::AtBeginningOfUpkeep { .. }
                 | Self::WheneverPlayerCastsSpell { .. }
+                | Self::WheneverPlayerCastsOrCopiesSpell { .. }
                 | Self::WheneverSelfBecomesTarget { .. }
                 | Self::WheneverPermanentBecomesTarget { .. }
                 | Self::WheneverSpellBecomesTarget { .. }

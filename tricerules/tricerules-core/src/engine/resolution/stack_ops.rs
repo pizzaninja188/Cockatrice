@@ -1136,16 +1136,20 @@ pub(super) fn copy_target_spell(
                 events.push(ev_log(format!(
                     "{spell_label} copies {copied_name} (P{controller})"
                 )));
+                let copied = engine.committed_spell_copy_event(copy_id)?;
                 engine.fire_triggers(
-                    &[GameEvent::TargetsChosen {
-                        controller,
-                        source: TargetingSourceKind::SpellCopy,
-                        stack_object: StackObjectRef {
-                            object_id: copy_id,
-                            zone_change_generation: None,
+                    &[
+                        copied,
+                        GameEvent::TargetsChosen {
+                            controller,
+                            source: TargetingSourceKind::SpellCopy,
+                            stack_object: StackObjectRef {
+                                object_id: copy_id,
+                                zone_change_generation: None,
+                            },
+                            targets: src.targets.clone(),
                         },
-                        targets: src.targets.clone(),
-                    }],
+                    ],
                     events,
                 );
             }

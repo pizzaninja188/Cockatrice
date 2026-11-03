@@ -1109,6 +1109,14 @@ enum TargetingSourceKind {
 }
 
 #[derive(Clone)]
+struct SpellCopyFact {
+    /// Virtual stack occurrence, without a physical card generation (CR 707.10).
+    occurrence: StackObjectRef,
+    controller: PlayerId,
+    matched_card_types: Vec<CardTypeFilter>,
+}
+
+#[derive(Clone)]
 enum GameEvent {
     Discarded(crate::state::DiscardBatch),
     Waterbent {
@@ -1245,6 +1253,10 @@ enum GameEvent {
     /// CR 601.2i: a completed cast with immutable event-time characteristics.
     SpellCast {
         fact: crate::state::SpellCastFact,
+    },
+    /// A committed spell copy is an occurrence without a cast or a cast-history entry.
+    SpellCopied {
+        fact: SpellCopyFact,
     },
     /// CR 602.2b: all costs of this nonmana ability have committed and it is on the stack.
     AbilityActivated {
