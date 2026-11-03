@@ -557,6 +557,9 @@ message TargetRef {
   // Optional identity guard from the engine-published candidate. The engine requires it for
   // targets whose legality depends on the exact battlefield incarnation.
   optional uint64 expected_zone_change_generation = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Announced counter quantity for a fixed counter-allocation target occurrence; 0 = unused.
+  // Separate from damage_amount. Copies preserve it when that occurrence changes target.
+  uint32 counter_amount = 6 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message SelectedSpellMode {
@@ -745,6 +748,13 @@ message SpellTargets {
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated TargetCastCostRequirement cast_cost_requirements = 14
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Engine-authored fixed counter distribution for an activated ability target group.
+  CounterAllocation counter_allocation = 15 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message CounterAllocation {
+  uint32 fixed_total = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 group_index = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message TargetCastCostRequirement {

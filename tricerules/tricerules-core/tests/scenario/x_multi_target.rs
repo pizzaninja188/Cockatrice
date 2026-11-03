@@ -113,6 +113,7 @@ fn fireball_single_target_all_damage() {
                 cast_method: tricerules_proto::ruled::v1::CastMethod::Normal as i32,
                 source: Some(hand_cast_source(idx)),
                 targets: vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: 1,
                     damage_amount: 5,
@@ -165,6 +166,7 @@ fn fireball_split_between_two_targets() {
                 source: Some(hand_cast_source(idx)),
                 targets: vec![
                     TargetRef {
+                        counter_amount: 0,
                         expected_zone_change_generation: None,
                         object_id: 1,
                         damage_amount: 0,
@@ -172,6 +174,7 @@ fn fireball_split_between_two_targets() {
                         kind: 0,
                     },
                     TargetRef {
+                        counter_amount: 0,
                         expected_zone_change_generation: None,
                         object_id: 0,
                         damage_amount: 0,
@@ -225,6 +228,7 @@ fn fireball_does_not_accept_cast_time_allocation() {
                 source: Some(hand_cast_source(idx)),
                 targets: vec![
                     TargetRef {
+                        counter_amount: 0,
                         expected_zone_change_generation: None,
                         object_id: 1,
                         damage_amount: 4,
@@ -232,6 +236,7 @@ fn fireball_does_not_accept_cast_time_allocation() {
                         kind: 0,
                     },
                     TargetRef {
+                        counter_amount: 0,
                         expected_zone_change_generation: None,
                         object_id: 0,
                         damage_amount: 2,
@@ -402,6 +407,7 @@ fn fireball_insufficient_mana_for_surcharge_rejected() {
                 source: Some(hand_cast_source(idx)),
                 targets: vec![
                     TargetRef {
+                        counter_amount: 0,
                         expected_zone_change_generation: None,
                         object_id: 1,
                         damage_amount: 2,
@@ -409,6 +415,7 @@ fn fireball_insufficient_mana_for_surcharge_rejected() {
                         kind: 0,
                     },
                     TargetRef {
+                        counter_amount: 0,
                         expected_zone_change_generation: None,
                         object_id: 0,
                         damage_amount: 1,
@@ -479,6 +486,7 @@ fn fireball_divides_evenly_among_targets_still_legal_at_resolution() {
         &cast_spell(
             bolt_idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: bears,
                 damage_amount: 0,

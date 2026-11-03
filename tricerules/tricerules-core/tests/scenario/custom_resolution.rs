@@ -7625,6 +7625,7 @@ fn recast_bounced_creature_is_summoning_sick() {
         &cast_spell(
             unsummon_idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: grizzly,
                 damage_amount: 0,

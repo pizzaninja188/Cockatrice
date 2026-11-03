@@ -15,10 +15,16 @@
 #include "ruled_diagnostic_values.h"
 
 #include <QCursor>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
+#include <QLabel>
 #include <QMenu>
 #include <QPainter>
 #include <QPointer>
+#include <QPushButton>
 #include <QScopedValueRollback>
+#include <QSpinBox>
 #include <QTimer>
 #include <algorithm>
 #include <libcockatrice/utility/zone_names.h>
@@ -70,6 +76,82 @@ bool isUnacceptedCounterGroupActivation(const RuledClientState *state,
     return !isAcceptedCounterGroupPayment(state, ability, actorPlayerId);
 }
 } // namespace
+
+bool RuledPaymentUi::resolvePendingAbilityCounterAllocation()
+{
+    auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    auto &pending = actions->pendingActivatedAbility;
+    const auto data = state ? currentRuledPendingAbilityTargetData(pending, *state) : std::nullopt;
+    const bool hasAmounts = std::any_of(pending.selectedTargets.cbegin(), pending.selectedTargets.cend(),
+                                        [](const auto &target) { return target.ref.counter_amount() != 0; });
+    if (!data || !data->counterAllocation) {
+        if (hasAmounts) {
+            cancelPendingActivatedAbility();
+            return false;
+        }
+        return true;
+    }
+    if (!RuledPendingCast::sameAbilityCounterPrompt(pending, *data, pending, *data, *state)) {
+        cancelPendingActivatedAbility();
+        return false;
+    }
+    const auto step = actions->ruledPendingCast->prepareAbilityCounterAllocation(*data);
+    if (step == RuledPendingCast::CounterAllocationStep::Invalid) {
+        cancelPendingActivatedAbility();
+        return false;
+    }
+    if (step == RuledPendingCast::CounterAllocationStep::Ready)
+        return true;
+
+    const PendingActivatedAbility captured = pending;
+    QPointer<PlayerActions> actionsGuard(actions);
+    QDialog dialog;
+    dialog.setWindowTitle(PlayerActions::tr("Distribute counters — %1").arg(pending.cardName));
+    auto *layout = new QFormLayout(&dialog);
+    layout->addRow(new QLabel(PlayerActions::tr("Distribute %1 counters. Each chosen creature gets at least one.")
+                                 .arg(data->counterAllocation->fixedTotal), &dialog));
+    QVector<QSpinBox *> rows;
+    for (const auto &target : captured.selectedTargets) {
+        if (target.ref.group_index() != static_cast<quint32>(data->counterAllocation->groupIndex))
+            continue;
+        const RuledClientHost *host = actions->player->getGame()->getGameEventHandler();
+        QString name = host->battlefieldCardName(target.ref.object_id());
+        if (name.isEmpty())
+            name = PlayerActions::tr("Creature %1").arg(rows.size() + 1);
+        auto *quantity = new QSpinBox(&dialog);
+        quantity->setRange(1, data->counterAllocation->fixedTotal);
+        quantity->setValue(1);
+        layout->addRow(name, quantity);
+        rows.append(quantity);
+    }
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    layout->addRow(buttons);
+    const auto updateTotal = [rows, buttons, total = data->counterAllocation->fixedTotal]() {
+        qint64 sum = 0;
+        for (const auto *row : rows)
+            sum += row->value();
+        buttons->button(QDialogButtonBox::Ok)->setEnabled(sum == total);
+    };
+    for (auto *row : rows)
+        QObject::connect(row, qOverload<int>(&QSpinBox::valueChanged), &dialog, updateTotal);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    updateTotal();
+    const bool accepted = dialog.exec() == QDialog::Accepted;
+    if (!actionsGuard)
+        return false;
+    auto *latestState = actionsGuard->player->getGame()->getGameEventHandler()->ruled();
+    if (!latestState)
+        return false;
+    std::optional<QVector<int>> amounts;
+    if (accepted) {
+        amounts.emplace();
+        for (const auto *row : rows)
+            amounts->append(row->value());
+    }
+    return actionsGuard->ruledPendingCast->applyAbilityCounterChoiceAfterPrompt(
+        *latestState, captured, *data, amounts, [this]() { cancelPendingActivatedAbility(); });
+}
 
 RuledPaymentUi::RuledPaymentUi(PlayerActions *value) : actions(value)
 {

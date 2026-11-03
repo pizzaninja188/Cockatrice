@@ -194,6 +194,9 @@ pub(super) fn execute_effect(
             pump_counters::change_counters(cx, effect)?
         }
         effect @ SpellEffectKind::PutCounters { .. } => pump_counters::put_counters(cx, effect)?,
+        effect @ SpellEffectKind::DistributeCounters { .. } => {
+            pump_counters::distribute_counters(cx, effect)?
+        }
         SpellEffectKind::MoveOneCounterBetweenTargets => {
             choices::move_one_counter_between_targets(cx)?
         }

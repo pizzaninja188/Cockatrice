@@ -716,28 +716,38 @@ pub(super) fn grant_keywords(
     let SpellEffectKind::GrantKeywords { subject, keywords } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let Some((tid, effect_source_id)) = cx.resolve_continuous_subject(&subject) else {
-        return Ok(EffectOutcome::Continue);
+    let subjects = if matches!(&subject, EffectSubject::Chosen(_)) {
+        // Match the same current legal role cohort as PutCounters, independently of whether
+        // its counters were prevented. Other subject and binding forms keep their old meaning.
+        cx.resolve_battlefield_subjects(&subject)
+            .into_iter()
+            .map(|id| (id, Some(cx.top.id)))
+            .collect::<Vec<_>>()
+    } else {
+        cx.resolve_continuous_subject(&subject)
+            .into_iter()
+            .collect()
     };
-
-    let target_name = object_display_name(&cx.engine.state, cx.engine.registry, tid);
     let keyword_names: Vec<&str> = keywords.iter().map(|keyword| keyword.as_str()).collect();
-    for keyword in keywords {
-        cx.engine.state.continuous_effects.push(ContinuousEffect {
-            trigger_grant_origin: None,
-            source_id: effect_source_id,
-            affected: AffectedScope::Single(tid),
-            kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
-            condition: None,
-            duration: EffectDuration::UntilEndOfTurn,
-            timestamp: cx.engine.state.command_index,
-        });
+    for (tid, effect_source_id) in subjects {
+        let target_name = object_display_name(&cx.engine.state, cx.engine.registry, tid);
+        for &keyword in &keywords {
+            cx.engine.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: effect_source_id,
+                affected: AffectedScope::Single(tid),
+                kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: cx.engine.state.command_index,
+            });
+        }
+        cx.events.push(ev_log(format!(
+            "{} grants {} to {target_name} until end of turn",
+            cx.spell_label,
+            keyword_names.join(", ")
+        )));
     }
-    cx.events.push(ev_log(format!(
-        "{} grants {} to {target_name} until end of turn",
-        cx.spell_label,
-        keyword_names.join(", ")
-    )));
     Ok(EffectOutcome::Continue)
 }
 
@@ -1420,6 +1430,90 @@ pub(super) fn double_counters(
         }
     }
     resolve_counter_placements(cx, proposed)
+}
+
+pub(super) fn distribute_counters(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::DistributeCounters {
+        counter,
+        count,
+        subject,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let group = *cx
+        .target_role_group_indices
+        .first()
+        .ok_or(EngineError::Illegal(
+            "counter distribution target role is missing",
+        ))?;
+    let announced = cx
+        .target_receipts
+        .iter()
+        .filter(|receipt| receipt.group_index == group)
+        .collect::<Vec<_>>();
+    let mut total = 0u32;
+    for receipt in &announced {
+        if receipt.kind != rv1::TargetRefKind::Permanent as i32
+            || receipt.zone_change_generation.is_none()
+            || receipt.counter_amount == 0
+        {
+            return Err(EngineError::Illegal(
+                "counter distribution announcement is malformed",
+            ));
+        }
+        total = total
+            .checked_add(receipt.counter_amount)
+            .ok_or(EngineError::Illegal(
+                "counter distribution announcement overflowed",
+            ))?;
+    }
+    // CR 608.2b has already removed illegal target receipts. Their shares are lost;
+    // only activation/copy announcement validates the complete original total.
+    if total > count {
+        return Err(EngineError::Illegal(
+            "counter distribution receipts exceed the authored total",
+        ));
+    }
+    let mut proposed = Vec::new();
+    for object_id in cx.resolve_battlefield_subjects(&subject) {
+        let amount = cx
+            .target_receipt_in_role(object_id, 0)
+            .ok_or(EngineError::Illegal(
+                "counter distribution target receipt is missing",
+            ))?
+            .counter_amount;
+        if let Some(event) = cx.engine.proposed_object_counter_placement(
+            cx.controller,
+            object_id,
+            [(counter, amount)],
+            super::super::continuous::CounterPlacementOrigin::Effect,
+        ) {
+            proposed.push(event);
+        }
+    }
+    let completion = crate::state::CounterPlacementCompletion::DistributedCounters {
+        stack_id: cx.top.id,
+        leaf_index: cx.effect_index,
+        controller: cx.controller,
+        group_index: group,
+        counter,
+        total: count,
+    };
+    let mut stack = cx.parked_stack();
+    stack.set_flat_tail(cx.effect_index.checked_add(1), cx.effect_result.clone());
+    if let Some(receipts) = cx
+        .engine
+        .begin_counter_placement_batch(proposed, stack, completion, cx.events)?
+    {
+        cx.effect_result.record_counter_placements(receipts);
+        Ok(EffectOutcome::Continue)
+    } else {
+        Ok(EffectOutcome::Suspended)
+    }
 }
 
 pub(super) fn put_counters(

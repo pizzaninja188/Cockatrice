@@ -861,6 +861,7 @@ fn giant_growth_changes_combat_outcome() {
             &cast_spell(
                 growth_idx,
                 vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: p0_bear,
                     damage_amount: 0,
@@ -1036,6 +1037,7 @@ fn cannot_cast_spell_until_blockers_declared() {
             &cast_spell(
                 growth_idx,
                 vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: attacker,
                     damage_amount: 0,
@@ -1069,6 +1071,7 @@ fn cannot_cast_spell_until_blockers_declared() {
         &cast_spell(
             growth_idx2,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: attacker,
                 damage_amount: 0,
@@ -4033,6 +4036,7 @@ fn divine_verdict_targets_only_combatants() {
             &cast_spell(
                 idx,
                 vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: bystander,
                     damage_amount: 0,
@@ -4050,6 +4054,7 @@ fn divine_verdict_targets_only_combatants() {
         &cast_spell(
             idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: attacker,
                 damage_amount: 0,

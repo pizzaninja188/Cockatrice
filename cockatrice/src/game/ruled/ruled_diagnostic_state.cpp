@@ -74,6 +74,7 @@ QJsonObject RuledClientState::diagnosticSnapshot() const
     FIELD(triggerOrderCandidateOids);
     FIELD(firstStrikeStepPending);
     FIELD(stackTargetsByStackOid);
+    FIELD(stackTargetReceiptsByStackOid);
     FIELD(stackAnnotationByOid);
     FIELD(stackSourceOidByStackOid);
     FIELD(stackSourceCapturedOidByStackOid);
@@ -295,6 +296,11 @@ QJsonValue value(const RuledSpellTargetData &v)
     result.insert("isDamageTargets", value(v.isDamageTargets));
     result.insert("extraManaPerTarget", value(v.extraManaPerTarget));
     result.insert("damageDivision", value(v.damageDivision));
+    result.insert("counterAllocation", v.counterAllocation
+        ? QJsonValue(QJsonObject{{"fixedTotal", v.counterAllocation->fixedTotal},
+                                 {"groupIndex", v.counterAllocation->groupIndex},
+                                 {"valid", v.counterAllocation->valid}})
+        : QJsonValue());
     result.insert("targetingCostApplications", value(v.targetingCostApplications));
     result.insert("targetedCostReductionApplications", value(v.targetedCostReductionApplications));
     result.insert("castCostRequirements", value(v.castCostRequirements));

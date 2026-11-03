@@ -8,6 +8,9 @@
 #[path = "scenario/ajani_revealed_top.rs"]
 mod ajani_revealed_top;
 
+#[path = "scenario/ajani_counter_allocation.rs"]
+mod ajani_counter_allocation;
+
 #[path = "scenario/deck_coverage_gemstone_caverns.rs"]
 mod deck_coverage_gemstone_caverns;
 

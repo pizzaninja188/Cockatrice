@@ -105,6 +105,7 @@ private:
     bool promptForRuledSpellXIfNeeded();
     bool resolvePendingSpellFlexiblePips();
     bool resolvePendingAbilityFlexiblePips();
+    bool resolvePendingAbilityCounterAllocation();
     bool completePendingRuledSpellCast();
     bool completeActivateAbility();
     void noteManualAcceptedCounterGroupPaymentEdit();

@@ -274,6 +274,18 @@ struct RuledTargetCastCostRequirement
     QVector<RuledTargetingCostCandidate> affectedTargets;
 };
 
+struct RuledCounterAllocationData
+{
+    int fixedTotal = 0;
+    int groupIndex = -1;
+    bool valid = false;
+
+    bool operator==(const RuledCounterAllocationData &other) const
+    {
+        return fixedTotal == other.fixedTotal && groupIndex == other.groupIndex && valid == other.valid;
+    }
+};
+
 /// Engine-authoritative targeting data for one spell, mode, activated ability, or trigger.
 struct RuledSpellTargetData : RuledTargetGroupData
 {
@@ -284,6 +296,7 @@ struct RuledSpellTargetData : RuledTargetGroupData
     /// Only ChooseAtCast collects an allocation. Automatic modes use the engine target bounds
     /// without imposing a one-damage-per-target allocation minimum.
     ruled::v1::DamageDivision damageDivision = ruled::v1::DAMAGE_DIVISION_CHOOSE_AT_CAST;
+    std::optional<RuledCounterAllocationData> counterAllocation;
     QVector<RuledTargetingCostApplication> targetingCostApplications;
     QVector<RuledTargetedCostReductionApplication> targetedCostReductionApplications;
     QVector<RuledTargetCastCostRequirement> castCostRequirements;
@@ -1108,6 +1121,8 @@ public:
     bool firstStrikeStepPending = false;
     // Stack spell engine ObjectId -> target object ids (or PlayerId for player-targeted damage).
     QHash<quint32, QVector<quint32>> stackTargetsByStackOid;
+    // Preserve occurrences: copied targets may share an ObjectId across different generations.
+    QHash<quint32, QVector<ruled::v1::TargetRef>> stackTargetReceiptsByStackOid;
     /// Where a target sat when it was targeted (CR 608.2b). Latched the first time a targeting
     /// arrow resolves and never revised, because an object that changes zones becomes a new object
     /// and is no longer the thing that was targeted: an arrow must vanish when its target dies, not

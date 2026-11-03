@@ -3,6 +3,7 @@ use crate::helpers::ScenarioCommandExt;
 
 fn stack_target(object_id: u32) -> Vec<TargetRef> {
     vec![TargetRef {
+        counter_amount: 0,
         expected_zone_change_generation: None,
         object_id,
         damage_amount: 0,

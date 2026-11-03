@@ -1267,6 +1267,7 @@ fn phyrexian_mutagenic_growth_paid_with_life() {
             &cast_spell_flex(
                 idx,
                 vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: bear,
                     damage_amount: 0,

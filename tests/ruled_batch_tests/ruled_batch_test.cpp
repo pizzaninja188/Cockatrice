@@ -2707,6 +2707,170 @@ TEST_F(RuledBatchTest, ReconnectStackReplayRetiresAllEngineExitEventsAndEmptySta
                              [](const auto &event) { return event.has_stack_pushed(); }));
 }
 
+TEST_F(RuledBatchTest, CounterAllocationOffersAreActorPrivateAndAnnouncedSharesReconnectPublicly)
+{
+    // Synthetic engine response through the real relay and two serialized recipient interfaces.
+    // This is a protocol contract test, not a sidecar or GUI acceptance run.
+    seedCardCatalog({"Grizzly Bears", "Island", "Hill Giant"});
+    ASSERT_NE(addCardToTable(p1, QStringLiteral("Island")), nullptr);
+    ASSERT_NE(addCardToTable(p1, QStringLiteral("Grizzly Bears")), nullptr);
+    ASSERT_NE(addCardToTable(p2, QStringLiteral("Hill Giant")), nullptr);
+    ruled::v1::IpcResponse offer;
+    offer.set_ok(true);
+    offer.mutable_batch()->add_events()->mutable_priority_changed()->set_player_id(p1->getPlayerId());
+    auto *zone = offer.mutable_batch()->add_events()->mutable_zone_view();
+    auto first = buildPerPlayerView(p1, {800u, 801u}, {false, false});
+    first.mutable_battlefield_objects(0)->set_zone_change_generation(4u);
+    first.mutable_battlefield_objects(1)->set_zone_change_generation(5u);
+    auto second = buildPerPlayerView(p2, {802u}, {false});
+    second.mutable_battlefield_objects(0)->set_zone_change_generation(6u);
+    *zone->add_per_player() = first;
+    *zone->add_per_player() = second;
+    ASSERT_TRUE(callBatchApply(offer).zoneViewApplied);
+    auto &legal = (*offer.mutable_batch()->mutable_legal_by_player())[p1->getPlayerId()];
+    auto &targets = (*legal.mutable_valid_targets_by_ability())[quint64{800} << 32];
+    targets.mutable_counter_allocation()->set_fixed_total(3u);
+    targets.mutable_counter_allocation()->set_group_index(0u);
+    auto *group = targets.add_groups();
+    group->set_group_index(0u);
+    group->set_min(0u);
+    group->set_max(3u);
+    for (int index = 0; index < 2; ++index) {
+        group->add_valid_permanent_ids(801u + index);
+        auto *candidate = group->add_valid_permanent_targets();
+        candidate->set_object_id(801u + index);
+        candidate->set_zone_change_generation(5u + index);
+    }
+    p1Capture = std::make_unique<CapturingTestUserInterface>(&server);
+    p2Capture = std::make_unique<CapturingTestUserInterface>(&server);
+    p1->setUserInterface(p1Capture.get());
+    p2->setUserInterface(p2Capture.get());
+    const auto appendPayloads = [](const GameEventContainer &container,
+                                    QList<ruled::v1::RuledEventBatch> &payloads) {
+        for (const auto &event : container.event_list()) {
+            if (!event.HasExtension(Event_RuledPayload::ext))
+                continue;
+            ruled::v1::RuledEventBatch batch;
+            ASSERT_TRUE(batch.ParseFromString(event.GetExtension(Event_RuledPayload::ext).payload()));
+            payloads.append(batch);
+        }
+    };
+    const auto decodeCapture = [&](const CapturingTestUserInterface &capture) {
+        QList<ruled::v1::RuledEventBatch> payloads;
+        for (const auto &container : capture.gameEvents)
+            appendPayloads(container, payloads);
+        return payloads;
+    };
+    const auto decodeReconnect = [&](Server_Player *recipient) {
+        ResponseContainer reconnect(-1);
+        game->createGameJoinedEvent(recipient, reconnect, true);
+        QList<ruled::v1::RuledEventBatch> payloads;
+        for (const auto &queued : reconnect.getPostResponseQueue()) {
+            const auto *container = dynamic_cast<const GameEventContainer *>(queued.second);
+            if (container)
+                appendPayloads(*container, payloads);
+        }
+        return payloads;
+    };
+    const auto expectOffer = [&](const QList<ruled::v1::RuledEventBatch> &payloads, bool actor, bool restored = true) {
+        ASSERT_FALSE(payloads.isEmpty());
+        bool sawAllocation = false;
+        for (const auto &payload : payloads) {
+            for (const auto &entry : payload.legal_by_player()) {
+                EXPECT_EQ(entry.first, actor ? p1->getPlayerId() : p2->getPlayerId());
+                for (const auto &ability : entry.second.valid_targets_by_ability()) {
+                    ASSERT_TRUE(actor && restored) << "counter offer leaked or an unsubmitted draft was restored";
+                    ASSERT_TRUE(ability.second.has_counter_allocation());
+                    sawAllocation = true;
+                    EXPECT_EQ(ability.first, quint64{800} << 32);
+                    EXPECT_EQ(ability.second.counter_allocation().fixed_total(), 3u);
+                    EXPECT_EQ(ability.second.counter_allocation().group_index(), 0u);
+                    ASSERT_EQ(ability.second.groups_size(), 1);
+                    const auto &offered = ability.second.groups(0);
+                    ASSERT_EQ(offered.valid_permanent_targets_size(), 2);
+                    for (int index = 0; index < 2; ++index) {
+                        EXPECT_EQ(offered.valid_permanent_ids(index), 801u + index);
+                        EXPECT_EQ(offered.valid_permanent_targets(index).object_id(), 801u + index);
+                        EXPECT_EQ(offered.valid_permanent_targets(index).zone_change_generation(), 5u + index);
+                    }
+                }
+            }
+        }
+        EXPECT_EQ(sawAllocation, actor && restored);
+    };
+    game->ruled()->broadcastRuledResponse(offer, true);
+    { SCOPED_TRACE("actor live offer"); expectOffer(decodeCapture(*p1Capture), true); }
+    { SCOPED_TRACE("observer live offer"); expectOffer(decodeCapture(*p2Capture), false); }
+    // An unsubmitted ordinary draft is local. Existing idle reconnect does not restore it.
+    { SCOPED_TRACE("actor reconnect before announcement"); expectOffer(decodeReconnect(p1), true, false); }
+    { SCOPED_TRACE("observer reconnect offer"); expectOffer(decodeReconnect(p2), false); }
+
+    ruled::v1::RuledCommand command;
+    auto *activation = command.mutable_activate_ability();
+    activation->set_source_object_id(800u);
+    activation->set_expected_zone_change_generation(4u);
+    ruled::v1::IpcResponse committed;
+    committed.set_ok(true);
+    committed.mutable_batch()->add_events()->mutable_priority_changed()->set_player_id(p1->getPlayerId());
+    auto *push = committed.mutable_batch()->add_events()->mutable_stack_pushed();
+    push->set_object_id(900u);
+    push->set_ability_controller_player_id(p1->getPlayerId());
+    push->set_description("Prepared counter distribution");
+    push->set_ability_annotation("Distribute three counters");
+    for (int index = 0; index < 2; ++index) {
+        auto *target = push->add_targets();
+        target->set_object_id(801u + index);
+        target->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+        target->set_group_index(0u);
+        target->set_expected_zone_change_generation(5u + index);
+        target->set_counter_amount(2u - index);
+        *activation->add_targets() = *target;
+    }
+    ASSERT_TRUE(canonicalizeClientCommand(p1->getPlayerId(), command));
+    EXPECT_EQ(command.activate_ability().source_object_id(), 800u);
+    for (int index = 0; index < 2; ++index) {
+        const auto &target = command.activate_ability().targets(index);
+        EXPECT_EQ(target.object_id(), 801u + index);
+        EXPECT_EQ(target.expected_zone_change_generation(), 5u + index);
+        EXPECT_EQ(target.counter_amount(), 2u - index);
+    }
+    p1Capture->gameEvents.clear();
+    p2Capture->gameEvents.clear();
+    game->ruled()->broadcastRuledResponse(committed, true);
+    const auto expectStack = [&](const QList<ruled::v1::RuledEventBatch> &payloads, int recipient) {
+        ASSERT_FALSE(payloads.isEmpty());
+        int pushes = 0;
+        for (const auto &payload : payloads) {
+            for (const auto &entry : payload.legal_by_player()) {
+                EXPECT_EQ(entry.first, recipient);
+                EXPECT_TRUE(entry.second.valid_targets_by_ability().empty());
+            }
+            for (const auto &event : payload.events()) {
+                if (!event.has_stack_pushed())
+                    continue;
+                ++pushes;
+                const auto &published = event.stack_pushed();
+                ASSERT_EQ(published.targets_size(), 2);
+                for (int index = 0; index < 2; ++index) {
+                    const auto &target = published.targets(index);
+                    EXPECT_EQ(target.object_id(), 801u + index);
+                    EXPECT_EQ(target.kind(), ruled::v1::TARGET_REF_KIND_PERMANENT);
+                    EXPECT_EQ(target.group_index(), 0u);
+                    EXPECT_TRUE(target.has_expected_zone_change_generation());
+                    EXPECT_EQ(target.expected_zone_change_generation(), 5u + index);
+                    EXPECT_EQ(target.counter_amount(), 2u - index);
+                    EXPECT_EQ(target.damage_amount(), 0u);
+                }
+            }
+        }
+        EXPECT_EQ(pushes, 1);
+    };
+    expectStack(decodeCapture(*p1Capture), p1->getPlayerId());
+    expectStack(decodeCapture(*p2Capture), p2->getPlayerId());
+    expectStack(decodeReconnect(p1), p1->getPlayerId());
+    expectStack(decodeReconnect(p2), p2->getPlayerId());
+}
+
 TEST_F(RuledBatchTest, IdleStackReconnectRestoresLatestPriorityAndOnlyTheRecipientsLegalOffers)
 {
     ruled::v1::IpcResponse initial;
@@ -12103,4 +12267,40 @@ TEST(RuledProtocolVisibilityTest, HybridPhyrexianColorHasAnAppendedPrivateTagAnd
     EXPECT_EQ(hybrid.SerializeAsString(), newBytes);
     clearRuledFieldsByVisibility(&hybrid, ruled::v1::FIELD_VISIBILITY_PER_PLAYER);
     EXPECT_TRUE(hybrid.SerializeAsString().empty());
+}
+
+TEST(RuledProtocolVisibilityTest, CounterAllocationUsesPublicTargetQuantityAndPrivateOfferTags)
+{
+    const auto *quantity = ruled::v1::TargetRef::descriptor()->FindFieldByName("counter_amount");
+    const auto *offer = ruled::v1::SpellTargets::descriptor()->FindFieldByName("counter_allocation");
+    ASSERT_NE(quantity, nullptr);
+    ASSERT_NE(offer, nullptr);
+    EXPECT_EQ(quantity->number(), 6);
+    EXPECT_EQ(quantity->type(), google::protobuf::FieldDescriptor::TYPE_UINT32);
+    EXPECT_EQ(quantity->options().GetExtension(ruled::v1::field_visibility), ruled::v1::FIELD_VISIBILITY_PUBLIC);
+    EXPECT_EQ(offer->number(), 15);
+    EXPECT_EQ(offer->options().GetExtension(ruled::v1::field_visibility), ruled::v1::FIELD_VISIBILITY_PER_PLAYER);
+    const auto *metadata = ruled::v1::CounterAllocation::descriptor();
+    ASSERT_EQ(metadata->field_count(), 2);
+    for (int i = 0; i < metadata->field_count(); ++i) {
+        EXPECT_EQ(metadata->field(i)->number(), i + 1);
+        EXPECT_EQ(metadata->field(i)->type(), google::protobuf::FieldDescriptor::TYPE_UINT32);
+        EXPECT_EQ(metadata->field(i)->options().GetExtension(ruled::v1::field_visibility),
+                  ruled::v1::FIELD_VISIBILITY_PER_PLAYER);
+    }
+    const std::string oldBytes("\x08\x11\x18\x02\x20\x02\x28\x07", 8);
+    ruled::v1::TargetRef target;
+    ASSERT_TRUE(target.ParseFromString(oldBytes));
+    EXPECT_EQ(target.counter_amount(), 0u);
+    EXPECT_EQ(target.SerializeAsString(), oldBytes);
+    target.set_counter_amount(3u);
+    EXPECT_EQ(target.SerializeAsString(), oldBytes + std::string("\x30\x03", 2));
+    clearRuledFieldsByVisibility(&target, ruled::v1::FIELD_VISIBILITY_PER_PLAYER);
+    EXPECT_EQ(target.counter_amount(), 3u);
+    ruled::v1::SpellTargets offered;
+    offered.mutable_counter_allocation()->set_fixed_total(3u);
+    offered.mutable_counter_allocation()->set_group_index(2u);
+    EXPECT_EQ(offered.SerializeAsString(), std::string("\x7a\x04\x08\x03\x10\x02", 6));
+    clearRuledFieldsByVisibility(&offered, ruled::v1::FIELD_VISIBILITY_PER_PLAYER);
+    EXPECT_FALSE(offered.has_counter_allocation());
 }

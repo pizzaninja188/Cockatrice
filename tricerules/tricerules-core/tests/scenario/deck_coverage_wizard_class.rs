@@ -27,6 +27,7 @@ fn trigger_target(object_id: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
             targets: vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id,
                 damage_amount: 0,

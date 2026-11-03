@@ -1096,6 +1096,7 @@ pub(super) fn copy_target_spell(
                             .targets
                             .iter()
                             .map(|target| rv1::TargetRef {
+                                counter_amount: target.counter_amount,
                                 object_id: target.object_id,
                                 damage_amount: target.damage_amount,
                                 group_index: target.group_index,

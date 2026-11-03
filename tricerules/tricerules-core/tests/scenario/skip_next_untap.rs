@@ -6,6 +6,7 @@ use crate::helpers::*;
 
 fn target(oid: u32) -> Vec<TargetRef> {
     vec![TargetRef {
+        counter_amount: 0,
         expected_zone_change_generation: None,
         object_id: oid,
         damage_amount: 0,
@@ -50,6 +51,7 @@ fn frost_breath_accepts_and_affects_two_distinct_creatures() {
                 spell,
                 vec![
                     TargetRef {
+                        counter_amount: 0,
                         expected_zone_change_generation: None,
                         object_id: first,
                         damage_amount: 0,
@@ -57,6 +59,7 @@ fn frost_breath_accepts_and_affects_two_distinct_creatures() {
                         kind: 0,
                     },
                     TargetRef {
+                        counter_amount: 0,
                         expected_zone_change_generation: None,
                         object_id: second,
                         damage_amount: 0,

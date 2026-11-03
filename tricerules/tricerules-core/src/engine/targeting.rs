@@ -186,6 +186,7 @@ pub(super) fn capture_stack_target(engine: &GameEngine, target: &rv1::TargetRef)
             TargetRefIdentity::Object(..)
         );
     StackTarget {
+        counter_amount: target.counter_amount,
         object_id: target.object_id,
         required_controller: None,
         group_index: target.group_index,
@@ -1499,6 +1500,99 @@ fn target_legality_error_for_binding(
     )
 }
 
+fn counter_allocation_for_schema(
+    effects: &[SpellEffectKind],
+    schema: &TargetSchema<'_, '_>,
+) -> Option<rv1::CounterAllocation> {
+    schema
+        .groups
+        .iter()
+        .enumerate()
+        .find_map(|(group_index, group)| {
+            group.bindings.iter().find_map(|binding| {
+                if let Some(SpellEffectKind::DistributeCounters { count, .. }) =
+                    effects.get(binding.effect_index)
+                {
+                    Some(rv1::CounterAllocation {
+                        fixed_total: *count,
+                        group_index: group_index as u32,
+                    })
+                } else {
+                    None
+                }
+            })
+        })
+}
+
+fn validate_counter_allocation(
+    engine: &GameEngine,
+    targets: &[rv1::TargetRef],
+    allocation: Option<&rv1::CounterAllocation>,
+) -> Result<(), EngineError> {
+    let Some(allocation) = allocation else {
+        return if targets.iter().any(|target| target.counter_amount != 0) {
+            Err(EngineError::Illegal(
+                "this action has no counter allocation",
+            ))
+        } else {
+            Ok(())
+        };
+    };
+    let mut total = 0u32;
+    let mut selected = 0usize;
+    for target in targets {
+        if target.group_index != allocation.group_index {
+            if target.counter_amount != 0 {
+                return Err(EngineError::Illegal(
+                    "counter quantity belongs to a different target group",
+                ));
+            }
+            continue;
+        }
+        if target.kind != rv1::TargetRefKind::Permanent as i32
+            || target.damage_amount != 0
+            || target.counter_amount == 0
+            || target.expected_zone_change_generation.is_none()
+        {
+            return Err(EngineError::Illegal(
+                "counter allocation requires positive quantities and exact permanent generations",
+            ));
+        }
+        let expected = target
+            .expected_zone_change_generation
+            .expect("checked above");
+        if !engine
+            .state
+            .objects
+            .get(&target.object_id)
+            .is_some_and(|object| {
+                object.zone == Zone::Battlefield
+                    && engine
+                        .state
+                        .zone_change_generation
+                        .get(&target.object_id)
+                        .copied()
+                        .unwrap_or(0)
+                        == expected
+            })
+        {
+            return Err(EngineError::Illegal(
+                "counter allocation target generation is stale",
+            ));
+        }
+        total = total
+            .checked_add(target.counter_amount)
+            .ok_or(EngineError::Illegal("counter allocation total overflowed"))?;
+        selected += 1;
+    }
+    if selected > 0 && total != allocation.fixed_total {
+        return Err(EngineError::Illegal(
+            "counter allocation does not equal the fixed total",
+        ));
+    }
+    Ok(())
+}
+
 fn validate_grouped_targets(
     engine: &GameEngine,
     caster: PlayerId,
@@ -1511,6 +1605,8 @@ fn validate_grouped_targets(
         target_context.targeting,
         target_context.program,
     );
+    let allocation = counter_allocation_for_schema(target_context.effects, &schema);
+    validate_counter_allocation(engine, targets, allocation.as_ref())?;
     if schema.groups.is_empty() {
         return if targets.is_empty() {
             Ok(())
@@ -2112,10 +2208,31 @@ fn compute_targets_with_context(
         });
     }
 
+    let counter_allocation = counter_allocation_for_schema(target_context.effects, &schema);
+    if let Some(allocation) = &counter_allocation {
+        let group = &mut groups[allocation.group_index as usize];
+        // This profile targets creatures, even when a physical ObjectId is also a PlayerId.
+        group.can_target_self = false;
+        group.can_target_opponent = false;
+        group.valid_permanent_targets = group
+            .valid_permanent_ids
+            .iter()
+            .map(|&object_id| rv1::LegalPermanentTargetCandidate {
+                object_id,
+                zone_change_generation: engine
+                    .state
+                    .zone_change_generation
+                    .get(&object_id)
+                    .copied()
+                    .unwrap_or(0),
+            })
+            .collect();
+    }
     let targeting_cost_applications = targeting_cost_action
         .map(|action| engine.targeting_cost_applications(caster, action, &groups))
         .unwrap_or_default();
     rv1::SpellTargets {
+        counter_allocation,
         fixed_damage,
         is_damage_targets,
         extra_mana_per_target,
@@ -3534,6 +3651,7 @@ mod tests {
         let refs = |first, second| {
             vec![
                 rv1::TargetRef {
+                    counter_amount: 0,
                     object_id: first,
                     damage_amount: 0,
                     group_index: 0,
@@ -3541,6 +3659,7 @@ mod tests {
                     expected_zone_change_generation: None,
                 },
                 rv1::TargetRef {
+                    counter_amount: 0,
                     object_id: second,
                     damage_amount: 0,
                     group_index: 1,

@@ -63,7 +63,8 @@ bool RuledTargetUi::stageActivatedAbilityTargetClick(PlayerActions *actions,
         }
         target.ref.set_expected_zone_change_generation(*generation);
         target.zoneChangeGeneration = *generation;
-    } else if (ability.selectedMode && refKind == ruled::v1::TARGET_REF_KIND_PERMANENT) {
+    } else if ((ability.selectedMode || data->counterAllocation) &&
+               refKind == ruled::v1::TARGET_REF_KIND_PERMANENT) {
         const auto generation = group->validPermanentGenerations.constFind(targetOid);
         if (generation == group->validPermanentGenerations.cend() ||
             generation.value() != zoneChangeGeneration || !state->battlefieldGenerationByOid.contains(targetOid) ||

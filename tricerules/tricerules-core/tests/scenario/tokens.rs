@@ -423,6 +423,7 @@ fn token_dies_and_ceases_to_exist() {
         &cast_spell(
             bolt_idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: victim,
                 damage_amount: 0,
@@ -501,6 +502,7 @@ fn bounced_token_ceases_to_exist() {
         &cast_spell(
             uns_idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: victim,
                 damage_amount: 0,

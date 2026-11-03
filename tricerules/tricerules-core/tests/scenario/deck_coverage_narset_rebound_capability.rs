@@ -4708,6 +4708,7 @@ fn narset_phase_c2_printed_artful_maneuver_resolves_and_schedules_once() {
         0,
         0,
         vec![TargetRef {
+            counter_amount: 0,
             expected_zone_change_generation: Some(grizzly_generation),
             object_id: grizzly,
             damage_amount: 0,
@@ -5138,6 +5139,7 @@ fn narset_phase_c2_artful_schedule_fixture(
         0,
         0,
         vec![TargetRef {
+            counter_amount: 0,
             expected_zone_change_generation: Some(target_a_generation),
             object_id: target_a,
             damage_amount: 0,
@@ -5549,6 +5551,7 @@ fn narset_phase_c2_printed_artful_and_external_rebound_deduplicate_and_use_fresh
             action.cast_method,
             permission_id,
             rv1::TargetRef {
+                counter_amount: 0,
                 object_id: target_b,
                 expected_zone_change_generation: Some(target_generation),
                 damage_amount: 0,

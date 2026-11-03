@@ -165,6 +165,7 @@ fn resolve(
             let receipts = targets
                 .iter()
                 .map(|&object_id| StackTarget {
+                    counter_amount: 0,
                     object_id,
                     group_index: 0,
                     damage_amount: 0,

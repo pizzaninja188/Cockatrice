@@ -2485,6 +2485,16 @@ pub enum SpecialCastCompletion {
 /// Typed work that remains after a shared counter-placement replacement batch finishes.
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) enum CounterPlacementCompletion {
+    /// A fixed distribution binds each surviving target's immutable announced share to this
+    /// exact resolving leaf, including while replacement sources or the controller depart.
+    DistributedCounters {
+        stack_id: ObjectId,
+        leaf_index: u32,
+        controller: PlayerId,
+        group_index: u32,
+        counter: CounterKind,
+        total: u32,
+    },
     /// Vraska's original player-counter proposal, bound to its resolving flat instruction.
     PoisonTargetUpToNine {
         stack_id: ObjectId,
@@ -3668,6 +3678,10 @@ pub struct StackTarget {
     pub object_id: ObjectId,
     pub group_index: u32,
     pub damage_amount: u32,
+    /// Counter allocation is an immutable announcement, distinct from damage. Omit the unused
+    /// zero from older diagnostic/replay state shapes.
+    #[serde(skip_serializing_if = "counter_amount_is_unused")]
+    pub counter_amount: u32,
     /// Authoritative presentation domain for clients. ObjectId and PlayerId share integers.
     pub kind: i32,
     /// Generation captured when an object target was chosen. Player targets have no generation.
@@ -3675,6 +3689,10 @@ pub struct StackTarget {
     /// A target announced by a chosen opponent must remain under that player's control.
     /// Copies preserve this receipt; ordinary controller-chosen targets have none.
     pub required_controller: Option<PlayerId>,
+}
+
+fn counter_amount_is_unused(amount: &u32) -> bool {
+    *amount == 0
 }
 
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]

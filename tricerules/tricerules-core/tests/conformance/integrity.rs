@@ -71,6 +71,7 @@ fn activate_ability(
 
 fn tref(object_id: u32) -> TargetRef {
     TargetRef {
+        counter_amount: 0,
         object_id,
         damage_amount: 0,
         group_index: 0,

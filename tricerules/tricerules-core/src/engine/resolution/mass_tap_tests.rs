@@ -88,6 +88,7 @@ fn resolve_with_source_and_target(
         .iter()
         .zip(groups)
         .map(|(&object_id, &group_index)| StackTarget {
+            counter_amount: 0,
             object_id,
             group_index,
             damage_amount: 0,
@@ -356,6 +357,7 @@ fn issue_444_targeted_player_scope_uses_current_multiplayer_control() {
     let filter = TargetFilter::default_creature();
     let chosen_player_id = [11];
     let chosen_player = [StackTarget {
+        counter_amount: 0,
         object_id: 11,
         group_index: 0,
         damage_amount: 0,

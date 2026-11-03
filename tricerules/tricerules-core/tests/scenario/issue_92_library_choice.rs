@@ -382,6 +382,7 @@ fn owner_library_choice_publicly_logs_the_selected_bottom_placement() {
             ..Default::default()
         },
         vec![TargetRef {
+            counter_amount: 0,
             expected_zone_change_generation: None,
             object_id: target,
             damage_amount: 0,

@@ -13,6 +13,7 @@ use super::targeting::{battlefield_objects_matching, object_matches_mass_filter}
 use super::*;
 
 mod counter_placement;
+mod distributed_counters;
 #[cfg(test)]
 mod entry_layers_tests;
 mod poison_difference;
@@ -6776,6 +6777,7 @@ mod tests {
             .copied()
             .unwrap_or(0);
         let target = |object_id, group_index, generation| crate::state::StackTarget {
+            counter_amount: 0,
             object_id,
             group_index,
             damage_amount: 0,
@@ -6929,6 +6931,7 @@ mod tests {
             .copied()
             .unwrap_or(0);
         let target = |object_id, group_index, generation| crate::state::StackTarget {
+            counter_amount: 0,
             object_id,
             group_index,
             damage_amount: 0,

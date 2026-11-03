@@ -684,6 +684,7 @@ fn exploration_leaving_revokes_extra_land_play() {
         &cast_spell(
             boom_idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: exploration_oid,
                 damage_amount: 0,

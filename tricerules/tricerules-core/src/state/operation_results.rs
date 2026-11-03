@@ -163,7 +163,9 @@ impl OperationResults {
             E::ChoosePermanents { .. } => self.set(ProgramValue::PermanentSelection(Vec::new())),
             E::SelectHandCards { .. } => self.set(ProgramValue::HandSelection(Vec::new())),
             E::ManifestDread => self.set(ProgramValue::ManifestedPermanent(None)),
-            E::PutCounters { .. } | E::Proliferate => self.record_counter_placements([]),
+            E::PutCounters { .. } | E::DistributeCounters { .. } | E::Proliferate => {
+                self.record_counter_placements([])
+            }
             E::CreateTokens { .. } => self.set(ProgramValue::CreatedTokenBatch(Vec::new())),
             E::CreateTokenCopies {
                 source: TokenCopySource::TriggerObject | TokenCopySource::LinkedExile { .. },

@@ -5025,6 +5025,281 @@ TEST_F(RuledClientTest, OpeningSeatDisplayStartsWithYouAndFollowsEngineTurnOrder
     EXPECT_EQ(host.sentCommands[2].choose_starting_player().starting_player_id(), 7);
 }
 
+TEST_F(RuledClientTest, CounterAllocationStagesPositiveFixedQuantitiesBeforeActivation)
+{
+    RuledPendingCast pending;
+    auto &ability = pending.beginAbility();
+    ability.permanentOid = 900;
+    ability.abilityIndex = 0;
+    RuledSpellTargetData data;
+    data.counterAllocation = RuledCounterAllocationData{3, 0, true};
+    RuledTargetGroupData group;
+    group.groupIndex = 0;
+    group.minTargets = 0;
+    group.maxTargets = 3;
+    group.validPermanentIds = {101, 102, 103};
+    group.validPermanentGenerations = {{101, 7}, {102, 8}, {103, 9}};
+    data.groups = {group};
+    EXPECT_EQ(pending.prepareAbilityCounterAllocation(data), RuledPendingCast::CounterAllocationStep::Ready);
+    for (int n = 1; n <= 3; ++n) {
+        ability.selectedTargets.clear();
+        for (int i = 0; i < n; ++i) {
+            PendingActivatedAbility::Target target;
+            target.ref.set_object_id(101 + i);
+            target.ref.set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+            target.ref.set_expected_zone_change_generation(7 + i);
+            target.zoneChangeGeneration = 7 + i;
+            ability.selectedTargets.append(target);
+        }
+        EXPECT_EQ(pending.prepareAbilityCounterAllocation(data), n == 1 ? RuledPendingCast::CounterAllocationStep::Ready
+                                                                       : RuledPendingCast::CounterAllocationStep::Allocating);
+        QVector<int> amounts(n, 1);
+        amounts[0] = 4 - n;
+        ASSERT_TRUE(pending.applyAbilityCounterAllocation(data, amounts));
+        EXPECT_EQ(pending.prepareAbilityCounterAllocation(data), RuledPendingCast::CounterAllocationStep::Ready);
+        ruled::v1::ActivateAbility command;
+        ability.writeActivationHeader(command);
+        ASSERT_EQ(command.targets_size(), n);
+        for (int i = 0; i < n; ++i) {
+            EXPECT_EQ(command.targets(i).counter_amount(), amounts[i]);
+            EXPECT_TRUE(command.targets(i).has_expected_zone_change_generation());
+            EXPECT_EQ(command.targets(i).expected_zone_change_generation(), 7 + i);
+        }
+        const auto before = command.SerializeAsString();
+        EXPECT_FALSE(pending.applyAbilityCounterAllocation(data, QVector<int>(n, 0)));
+        ruled::v1::ActivateAbility after;
+        ability.writeActivationHeader(after);
+        EXPECT_EQ(after.SerializeAsString(), before);
+    }
+    data.counterAllocation->valid = false;
+    EXPECT_EQ(pending.prepareAbilityCounterAllocation(data), RuledPendingCast::CounterAllocationStep::Invalid);
+}
+
+TEST_F(RuledClientTest, CounterAllocationModalResultsRequireUnchangedDraftTargetsSourceAndOffer)
+{
+    RuledPendingCast pending;
+    auto &ability = pending.beginAbility();
+    ability.permanentOid = 900;
+    ability.abilityIndex = 0;
+    ability.expectedZoneChangeGeneration = 4;
+    state->abilitySourceGenerationByOid.insert(900, 4);
+    RuledAbilityEntry entry;
+    entry.text = QStringLiteral("−3: Distribute three counters.");
+    entry.activatable = true;
+    state->activatedAbilitiesByOid.insert(900, RuledAbilityEntries{entry});
+    RuledSpellTargetData data;
+    data.counterAllocation = RuledCounterAllocationData{3, 0, true};
+    RuledTargetGroupData group;
+    group.groupIndex = 0;
+    group.minTargets = 0;
+    group.maxTargets = 3;
+    group.validPermanentIds = {101, 102};
+    group.validPermanentGenerations = {{101, 7}, {102, 8}};
+    data.groups = {group};
+    for (int i = 0; i < 2; ++i) {
+        PendingActivatedAbility::Target target;
+        target.ref.set_object_id(101 + i);
+        target.ref.set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+        target.ref.set_expected_zone_change_generation(7 + i);
+        target.zoneChangeGeneration = 7 + i;
+        ability.selectedTargets.append(target);
+        state->battlefieldGenerationByOid.insert(101 + i, 7 + i);
+    }
+    const auto captured = ability;
+    EXPECT_TRUE(RuledPendingCast::sameAbilityCounterPrompt(captured, data, ability, data, *state));
+    for (int mutation = 0; mutation < 9; ++mutation) {
+        SCOPED_TRACE(mutation);
+        ability = captured;
+        auto currentData = data;
+        switch (mutation) {
+            case 0: ++ability.draftId; break;
+            case 1: ++ability.expectedZoneChangeGeneration; break;
+            case 2: ability.selectedTargets[0].ref.set_counter_amount(1); break;
+            case 3: ability.selectedTargets[0].ref.set_expected_zone_change_generation(9); break;
+            case 4: ability.selectedTargets.removeLast(); break;
+            case 5: currentData.counterAllocation->fixedTotal = 4; break;
+            case 6: currentData.counterAllocation->valid = false; break;
+            case 7: currentData.groups[0].validPermanentGenerations[101] = 9; break;
+            case 8: ability.valid = false; break;
+        }
+        EXPECT_FALSE(RuledPendingCast::sameAbilityCounterPrompt(captured, data, ability, currentData, *state));
+    }
+    ability = captured;
+    state->battlefieldGenerationByOid[101] = 9;
+    EXPECT_FALSE(RuledPendingCast::sameAbilityCounterPrompt(captured, data, ability, data, *state));
+    state->battlefieldGenerationByOid[101] = 7;
+    state->activatedAbilitiesByOid[900][0]->activatable = false;
+    EXPECT_FALSE(RuledPendingCast::sameAbilityCounterPrompt(captured, data, ability, data, *state));
+    state->activatedAbilitiesByOid[900][0]->activatable = true;
+    EXPECT_FALSE(pending.applyAbilityCounterAllocation(data, {0, 3}));
+    EXPECT_EQ(ability.selectedTargets[0].ref.counter_amount(), 0u);
+    ASSERT_TRUE(pending.applyAbilityCounterAllocation(data, {2, 1}));
+    EXPECT_EQ(pending.prepareAbilityCounterAllocation(data), RuledPendingCast::CounterAllocationStep::Ready);
+    // A legal refresh and local retry preserve the immutable quantities; a blink invalidates them.
+    state->validTargetsByAbility.insert(RuledClientState::abilityTargetKey(900, 0), data);
+    PendingRuledSpellCast spell;
+    reconcileRuledPendingTargets(spell, ability, *state, kLocalPlayer);
+    ASSERT_EQ(ability.selectedTargets.size(), 2);
+    EXPECT_EQ(ability.selectedTargets[0].ref.counter_amount(), 2u);
+    EXPECT_TRUE(ruledRejectedActivationCanRetry(ability));
+    state->battlefieldGenerationByOid[101] = 9;
+    reconcileRuledPendingTargets(spell, ability, *state, kLocalPlayer);
+    EXPECT_TRUE(ability.restartAfterTargetInvalidation);
+    EXPECT_FALSE(ruledRejectedActivationCanRetry(ability));
+}
+
+TEST_F(RuledClientTest, CounterAllocationCancellationClearsOnlyTheMatchingDraftBeforePayment)
+{
+    RuledPendingCast pending;
+    auto &ability = pending.beginAbility();
+    ability.permanentOid = 900;
+    ability.abilityIndex = 0;
+    ability.expectedZoneChangeGeneration = 4;
+    state->abilitySourceGenerationByOid.insert(900, 4);
+    RuledAbilityEntry entry;
+    entry.text = QStringLiteral("−3: Distribute three counters.");
+    entry.activatable = true;
+    state->activatedAbilitiesByOid.insert(900, RuledAbilityEntries{entry});
+    RuledSpellTargetData data;
+    data.counterAllocation = RuledCounterAllocationData{3, 0, true};
+    RuledTargetGroupData group;
+    group.groupIndex = 0;
+    group.maxTargets = 3;
+    for (int i = 0; i < 2; ++i) {
+        PendingActivatedAbility::Target target;
+        target.ref.set_object_id(101 + i);
+        target.ref.set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+        target.ref.set_expected_zone_change_generation(7 + i);
+        target.zoneChangeGeneration = 7 + i;
+        ability.selectedTargets.append(target);
+        group.validPermanentIds.insert(101 + i);
+        group.validPermanentGenerations.insert(101 + i, 7 + i);
+        state->battlefieldGenerationByOid.insert(101 + i, 7 + i);
+    }
+    data.groups = {group};
+    state->validTargetsByAbility.insert(RuledClientState::abilityTargetKey(900, 0), data);
+    ASSERT_EQ(pending.prepareAbilityCounterAllocation(data), RuledPendingCast::CounterAllocationStep::Allocating);
+    const auto captured = ability;
+    int cancellations = 0;
+    const auto cancel = [&]() {
+        ++cancellations;
+        EXPECT_EQ(ability.transactionId(), 0u);
+        EXPECT_EQ(ability.stage(), PendingActivatedAbility::Stage::Announcing);
+        EXPECT_EQ(ability.selectedTargets[0].ref.counter_amount(), 0u);
+        EXPECT_TRUE(host.sentCommands.isEmpty());
+        ability = {};
+    };
+    EXPECT_FALSE(pending.applyAbilityCounterChoiceAfterPrompt(*state, captured, data, std::nullopt, cancel));
+    EXPECT_EQ(cancellations, 1);
+    EXPECT_FALSE(ability.valid);
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+    ability = captured;
+    ++ability.draftId;
+    EXPECT_FALSE(pending.applyAbilityCounterChoiceAfterPrompt(*state, captured, data, std::nullopt, cancel));
+    EXPECT_EQ(cancellations, 1);
+    EXPECT_TRUE(ability.valid);
+    ability = captured;
+    EXPECT_FALSE(pending.applyAbilityCounterChoiceAfterPrompt(*state, captured, data, QVector<int>{0, 3}, cancel));
+    EXPECT_EQ(cancellations, 2);
+    EXPECT_FALSE(ability.valid);
+    ability = captured;
+    EXPECT_TRUE(pending.applyAbilityCounterChoiceAfterPrompt(*state, captured, data, QVector<int>{2, 1}, cancel));
+    EXPECT_EQ(cancellations, 2);
+    EXPECT_EQ(ability.selectedTargets[0].ref.counter_amount(), 2u);
+    EXPECT_EQ(ability.selectedTargets[1].ref.counter_amount(), 1u);
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+}
+
+TEST_F(RuledClientTest, CounterStackReceiptsKeepCopiedOccurrencesAndDisplayTheirQuantities)
+{
+    host.cardNames.insert(101, QStringLiteral("Grizzly Bears"));
+    ruled::v1::RuledEventBatch batch;
+    auto *push = batch.add_events()->mutable_stack_pushed();
+    push->set_object_id(901);
+    push->set_is_copy(true);
+    push->set_ability_annotation("Distribute counters");
+    for (int i = 0; i < 2; ++i) {
+        auto *target = push->add_targets();
+        target->set_object_id(101);
+        target->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+        target->set_expected_zone_change_generation(7 + i);
+        target->set_counter_amount(2 - i);
+    }
+    ASSERT_TRUE(dispatcher->processPayload(batch.SerializeAsString()));
+    EXPECT_TRUE(state->stackAnnotationByOid.value(901).contains(QStringLiteral("2 counters")));
+    EXPECT_TRUE(state->stackAnnotationByOid.value(901).contains(QStringLiteral("1 counters")));
+    EXPECT_TRUE(state->diagnosticSnapshot().contains(QStringLiteral("stackTargetReceiptsByStackOid")));
+    const auto receipts = state->stackTargetReceiptsByStackOid.value(901);
+    ASSERT_EQ(receipts.size(), 2);
+    EXPECT_EQ(receipts[0].counter_amount(), 2u);
+    EXPECT_EQ(receipts[1].counter_amount(), 1u);
+    EXPECT_EQ(receipts[0].expected_zone_change_generation(), 7u);
+    EXPECT_EQ(receipts[1].expected_zone_change_generation(), 8u);
+    ruled::v1::RuledEventBatch resolved;
+    resolved.add_events()->mutable_stack_resolved()->set_object_id(901);
+    ASSERT_TRUE(dispatcher->processPayload(resolved.SerializeAsString()));
+    EXPECT_FALSE(state->stackTargetReceiptsByStackOid.contains(901));
+}
+
+TEST_F(RuledClientTest, ParsesCounterAllocationAndExactGenerationsForOrdinaryAbility)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    auto &targets = (*actions.mutable_valid_targets_by_ability())[(quint64(44) << 32) | 0u];
+    targets.mutable_counter_allocation()->set_fixed_total(3);
+    targets.mutable_counter_allocation()->set_group_index(0);
+    auto *group = targets.add_groups();
+    group->set_group_index(0);
+    group->set_min(0);
+    group->set_max(3);
+    for (quint32 oid : {101u, 102u, 103u}) {
+        group->add_valid_permanent_ids(oid);
+        auto *candidate = group->add_valid_permanent_targets();
+        candidate->set_object_id(oid);
+        candidate->set_zone_change_generation(oid - 100);
+    }
+    apply(batch);
+    const auto parsed = state->abilityTargetData(44, 0);
+    ASSERT_TRUE(parsed.counterAllocation.has_value());
+    EXPECT_TRUE(parsed.counterAllocation->valid);
+    EXPECT_EQ(parsed.counterAllocation->fixedTotal, 3);
+    EXPECT_EQ(parsed.counterAllocation->groupIndex, 0);
+    EXPECT_FALSE(parsed.isDamageTargets);
+    ASSERT_EQ(parsed.groups.size(), 1);
+    EXPECT_EQ(parsed.groups.first().validPermanentGenerations.value(102), 2u);
+}
+
+TEST_F(RuledClientTest, MalformedCounterAllocationRemainsPresentAndUnusable)
+{
+    for (int mutation = 0; mutation < 9; ++mutation) {
+        ruled::v1::RuledEventBatch batch;
+        auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+        auto &targets = (*actions.mutable_valid_targets_by_ability())[(quint64(44) << 32) | 0u];
+        targets.mutable_counter_allocation()->set_fixed_total(3);
+        auto *group = targets.add_groups();
+        group->set_max(3);
+        group->add_valid_permanent_ids(101);
+        auto *candidate = group->add_valid_permanent_targets();
+        candidate->set_object_id(101);
+        candidate->set_zone_change_generation(0);
+        switch (mutation) {
+            case 0: targets.mutable_counter_allocation()->set_fixed_total(0); break;
+            case 1: targets.mutable_counter_allocation()->set_fixed_total(std::numeric_limits<quint32>::max()); break;
+            case 2: targets.mutable_counter_allocation()->set_group_index(1); break;
+            case 3: group->set_max(4); break;
+            case 4: group->clear_valid_permanent_targets(); break;
+            case 5: *group->add_valid_permanent_targets() = *candidate; break;
+            case 6: group->set_can_target_opponent(true); break;
+            case 7: targets.set_is_damage_targets(true); break;
+            case 8: group->set_min(4); break;
+        }
+        apply(batch);
+        const auto parsed = state->abilityTargetData(44, 0);
+        ASSERT_TRUE(parsed.counterAllocation.has_value()) << mutation;
+        EXPECT_FALSE(parsed.counterAllocation->valid) << mutation;
+    }
+}
+
 TEST_F(RuledClientTest, ParsesTargetingTablesForHandSlotsAndAbilities)
 {
     ruled::v1::RuledEventBatch batch;

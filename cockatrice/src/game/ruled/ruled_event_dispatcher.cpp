@@ -315,6 +315,37 @@ RuledClientState::SpellTargetData parseSpellTargets(const ruled::v1::SpellTarget
     data.isDamageTargets = src.is_damage_targets();
     data.extraManaPerTarget = static_cast<int>(src.extra_mana_per_target());
     data.damageDivision = src.damage_division();
+    if (src.has_counter_allocation()) {
+        // Presence survives malformed payloads so collectors fail closed rather than silently
+        // falling back to an ordinary activation without announced quantities.
+        data.counterAllocation.emplace();
+        auto &allocation = *data.counterAllocation;
+        const auto &offered = src.counter_allocation();
+        const auto representable = static_cast<quint32>(std::numeric_limits<int>::max());
+        if (offered.fixed_total() > 0 && offered.fixed_total() <= representable &&
+            offered.group_index() < static_cast<quint32>(src.groups_size()) && !src.is_damage_targets()) {
+            allocation.fixedTotal = static_cast<int>(offered.fixed_total());
+            allocation.groupIndex = static_cast<int>(offered.group_index());
+            const auto &group = src.groups(allocation.groupIndex);
+            bool valid = group.group_index() == offered.group_index() && group.min() <= group.max() &&
+                         group.max() > 0 && group.max() <= offered.fixed_total() && !group.chosen_by_opponent() &&
+                         !group.has_x_target_choices() && group.valid_stack_ids_size() == 0 &&
+                         group.valid_graveyard_ids_size() == 0 && !group.can_target_self() &&
+                         !group.can_target_opponent();
+            QSet<quint32> ids;
+            QSet<quint32> generations;
+            for (const quint32 oid : group.valid_permanent_ids()) {
+                valid = valid && oid != 0 && !ids.contains(oid);
+                ids.insert(oid);
+            }
+            for (const auto &candidate : group.valid_permanent_targets()) {
+                valid = valid && ids.contains(candidate.object_id()) &&
+                        !generations.contains(candidate.object_id());
+                generations.insert(candidate.object_id());
+            }
+            allocation.valid = valid && ids == generations && group.min() <= static_cast<quint32>(ids.size());
+        }
+    }
     for (const auto &application : src.targeting_cost_applications()) {
         RuledTargetingCostApplication parsed;
         parsed.applicationId = static_cast<quint64>(application.application_id());
@@ -807,6 +838,7 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
         state->stackOidOrder.clear();
         state->prototypedStackOids.clear();
         state->stackTargetsByStackOid.clear();
+        state->stackTargetReceiptsByStackOid.clear();
         state->stackTargetKindByStackAndTargetOid.clear();
         state->stackAnnotationByOid.clear();
         state->stackSourceOidByStackOid.clear();
@@ -1084,6 +1116,7 @@ void RuledEventDispatcher::applyPhaseChanged(const ruled::v1::PhaseChanged &pc, 
     state->stackOidOrder.clear();
     state->prototypedStackOids.clear();
     state->stackTargetsByStackOid.clear();
+    state->stackTargetReceiptsByStackOid.clear();
     state->stackTargetKindByStackAndTargetOid.clear();
     state->stackSourceOidByStackOid.clear();
     state->stackSourceCapturedOidByStackOid.clear();
@@ -1160,9 +1193,11 @@ void RuledEventDispatcher::applyStackPushed(const ruled::v1::StackPushed &sp, Ba
         ctx.triggerOrderDirty = true;
     }
     QVector<quint32> tlist;
+    QVector<ruled::v1::TargetRef> receipts;
     tlist.reserve(sp.targets_size());
     for (int ti = 0; ti < sp.targets_size(); ++ti) {
         const auto &target = sp.targets(ti);
+        receipts.append(target);
         const quint32 targetOid = static_cast<quint32>(target.object_id());
         tlist.append(targetOid);
         RuledTargetItemKind kind = RuledTargetItemKind::Unknown;
@@ -1185,6 +1220,7 @@ void RuledEventDispatcher::applyStackPushed(const ruled::v1::StackPushed &sp, Ba
         state->latchTargetKind(sp.object_id(), targetOid, kind);
     }
     state->stackTargetsByStackOid.insert(sp.object_id(), tlist);
+    state->stackTargetReceiptsByStackOid.insert(sp.object_id(), receipts);
     RULED_TRACE("client") << "stackPushed: oid=" << sp.object_id() << " cardId=" << QString::fromStdString(sp.card_id())
                           << " isCopy=" << sp.is_copy() << " isTriggered=" << sp.is_triggered() << " annotation='"
                           << QString::fromStdString(sp.ability_annotation()) << "'"
@@ -1205,7 +1241,18 @@ void RuledEventDispatcher::applyStackPushed(const ruled::v1::StackPushed &sp, Ba
     }
     // Overlay the annotation on the stack card: an ability's text, an X value for an X spell
     // ("X = N", CR 107.3), or the cast face of a multi-face spell (e.g. "Fire" / "Ice").
-    const QString stackAnnotation = resolvedStackAnnotation(sp, presentationResolver);
+    QString stackAnnotation = resolvedStackAnnotation(sp, presentationResolver);
+    for (int index = 0; index < sp.targets_size(); ++index) {
+        const auto &target = sp.targets(index);
+        if (target.counter_amount() == 0)
+            continue;
+        QString name = host->battlefieldCardName(target.object_id());
+        if (name.isEmpty())
+            name = QObject::tr("Creature %1").arg(index + 1);
+        if (!stackAnnotation.isEmpty())
+            stackAnnotation += QLatin1Char('\n');
+        stackAnnotation += QObject::tr("%1: %2 counters").arg(name).arg(target.counter_amount());
+    }
     if (!stackAnnotation.isEmpty()) {
         state->stackAnnotationByOid.insert(sp.object_id(), stackAnnotation);
         std::optional<RuledClientHost::TokenStackIdentity> sourceTokenIdentity;
@@ -1314,6 +1361,7 @@ void RuledEventDispatcher::retireStackObject(quint32 objectId, BatchContext &ctx
     const QVector<quint32> spellTargets = state->stackTargetsByStackOid.value(rid);
     state->stackOidOrder.removeOne(rid);
     state->stackTargetsByStackOid.remove(rid);
+    state->stackTargetReceiptsByStackOid.remove(rid);
     for (quint32 t : spellTargets) {
         state->stackTargetKindByStackAndTargetOid.remove(RuledClientState::stackTargetKey(rid, t));
     }

@@ -2103,6 +2103,7 @@ fn indestructible_survives_destroy_spell() {
         &cast_spell(
             murder_idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: myr,
                 damage_amount: 0,

@@ -162,6 +162,7 @@ fn reanimation_applies_intrinsic_entry_replacement_before_etb_triggers() {
             &cast_spell(
                 zombify,
                 vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: ghoul,
                     damage_amount: 0,
@@ -356,6 +357,7 @@ fn graveyard_owner_orders_replacements_even_when_the_permanent_enters_under_oppo
             &cast_spell(
                 reanimate,
                 vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: ghoul,
                     damage_amount: 0,

@@ -452,6 +452,7 @@ fn unsummon_uses_the_shared_commander_return_replacement_before_moving_its_targe
             &cast_spell(
                 slot,
                 vec![tricerules_proto::ruled::v1::TargetRef {
+                    counter_amount: 0,
                     object_id: commander,
                     damage_amount: 0,
                     group_index: 0,
@@ -577,6 +578,7 @@ fn twincast_wash_out_copy_has_an_independent_color_and_commander_pause() {
             &cast_spell(
                 twincast_slot,
                 vec![tricerules_proto::ruled::v1::TargetRef {
+                    counter_amount: 0,
                     object_id: original_id,
                     damage_amount: 0,
                     group_index: 0,
@@ -1170,6 +1172,7 @@ fn wash_out_source_controller_departure_preserves_borrowed_commander_and_program
             &cast_spell(
                 source_slot,
                 vec![tricerules_proto::ruled::v1::TargetRef {
+                    counter_amount: 0,
                     object_id: 20,
                     damage_amount: 0,
                     group_index: 0,

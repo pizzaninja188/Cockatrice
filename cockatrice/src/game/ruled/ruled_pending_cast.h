@@ -1678,7 +1678,10 @@ ruledAdvancePendingActivatedTargetGroup(PendingActivatedAbility &ability,
                 return RuledTargetClickEligibility::Illegal;
             }
         }
-        if (ability.selectedMode && kind == RuledTargetCandidateKind::Battlefield && !group->hasXTargetChoices) {
+        if (data->counterAllocation && !data->counterAllocation->valid)
+            return RuledTargetClickEligibility::Illegal;
+        if ((ability.selectedMode || data->counterAllocation) && kind == RuledTargetCandidateKind::Battlefield &&
+            !group->hasXTargetChoices) {
             const auto generation = group->validPermanentGenerations.constFind(oid);
             if (generation == group->validPermanentGenerations.cend() ||
                 !state.battlefieldGenerationByOid.contains(oid) ||
@@ -1886,7 +1889,8 @@ ruledAdvancePendingActivatedTargetGroup(PendingActivatedAbility &ability,
                  target.zoneChangeGeneration == *xTargetGeneration &&
                  state.battlefieldGenerationByOid.value(target.ref.object_id(), 0) == *xTargetGeneration);
             bool modeTargetIncarnationMatches = true;
-            if (ability.selectedMode && target.ref.kind() == ruled::v1::TARGET_REF_KIND_PERMANENT) {
+            if ((ability.selectedMode || data.counterAllocation) &&
+                target.ref.kind() == ruled::v1::TARGET_REF_KIND_PERMANENT) {
                 const auto generation = candidates.validPermanentGenerations.constFind(target.ref.object_id());
                 modeTargetIncarnationMatches = generation != candidates.validPermanentGenerations.cend() &&
                                                target.ref.has_expected_zone_change_generation() &&
@@ -1903,7 +1907,7 @@ ruledAdvancePendingActivatedTargetGroup(PendingActivatedAbility &ability,
                                           xTargetIncarnationMatches && modeTargetIncarnationMatches &&
                                           ruledTargetPairCompatible(candidates, target.ref.kind(), target.ref.object_id(),
                                                                    ruledSelectedTargetRefs(ability));
-            if (ability.selectedMode && !targetStillLegal) {
+            if ((ability.selectedMode || data.counterAllocation) && !targetStillLegal) {
                 ability.restartAfterTargetInvalidation = true;
             }
             if (!targetStillLegal) {
@@ -2124,6 +2128,32 @@ public:
         Changed
     };
     DamageAllocationStep prepareSpellDamageAllocation();
+    enum class CounterAllocationStep { Ready, Invalid, Allocating };
+    CounterAllocationStep prepareAbilityCounterAllocation(const RuledSpellTargetData &data);
+    bool applyAbilityCounterAllocation(const RuledSpellTargetData &data, const QVector<int> &amounts);
+    static bool sameAbilityCounterPrompt(const PendingActivatedAbility &captured,
+                                         const RuledSpellTargetData &capturedData,
+                                         const PendingActivatedAbility &current,
+                                         const RuledSpellTargetData &currentData,
+                                         const RuledClientState &state);
+    template <typename Cancel>
+    bool applyAbilityCounterChoiceAfterPrompt(const RuledClientState &state,
+                                              const PendingActivatedAbility &captured,
+                                              const RuledSpellTargetData &capturedData,
+                                              const std::optional<QVector<int>> &amounts,
+                                              Cancel cancel)
+    {
+        const auto data = currentRuledPendingAbilityTargetData(ability, state);
+        if (!data || !sameAbilityCounterPrompt(captured, capturedData, ability, *data, state))
+            return false;
+        // A stale modal result must never cancel a newer announcement. A matching cancellation
+        // owns only the local draft; no quantity or payment mutation has happened at this point.
+        if (!amounts || !applyAbilityCounterAllocation(*data, *amounts)) {
+            cancel();
+            return false;
+        }
+        return true;
+    }
     DamageAllocationChange bumpSpellDamageAllocation(quint32 oid, int delta);
     bool confirmSpellDamageAllocation();
     int pendingDamageTargetsTotal() const;

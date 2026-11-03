@@ -1383,6 +1383,7 @@ fn life_goes_on_gains_eight_after_a_creature_dies() {
         &cast_spell(
             murder,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
@@ -1494,6 +1495,7 @@ fn conditional_amount_is_evaluated_when_the_effect_resolves() {
         &cast_spell(
             murder,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
@@ -1544,6 +1546,7 @@ fn the_same_creature_can_die_more_than_once_in_a_turn() {
         &cast_spell(
             first_murder,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
@@ -1561,6 +1564,7 @@ fn the_same_creature_can_die_more_than_once_in_a_turn() {
         &cast_spell(
             reanimate,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
@@ -1579,6 +1583,7 @@ fn the_same_creature_can_die_more_than_once_in_a_turn() {
         &cast_spell(
             second_murder,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
@@ -1662,6 +1667,7 @@ fn cleanup_rolls_current_history_to_previous_and_resets_current() {
         &cast_spell(
             murder,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,

@@ -67,6 +67,34 @@ mod tests {
     use prost::Message;
 
     #[test]
+    fn counter_quantities_append_to_target_wire_without_changing_unused_bytes() {
+        let old = [0x08, 0x11, 0x18, 0x02, 0x20, 0x02, 0x28, 0x07];
+        let target = rv1::TargetRef::decode(old.as_slice()).unwrap();
+        assert_eq!(target.counter_amount, 0);
+        assert_eq!(target.encode_to_vec(), old);
+        let mut allocated = target;
+        allocated.counter_amount = 3;
+        let mut expected = old.to_vec();
+        expected.extend_from_slice(&[0x30, 0x03]);
+        assert_eq!(allocated.encode_to_vec(), expected);
+        assert_eq!(
+            rv1::TargetRef::decode(expected.as_slice()).unwrap(),
+            allocated
+        );
+        let offered = rv1::SpellTargets {
+            counter_allocation: Some(rv1::CounterAllocation {
+                fixed_total: 3,
+                group_index: 2,
+            }),
+            ..Default::default()
+        };
+        assert_eq!(
+            offered.encode_to_vec(),
+            vec![0x7a, 0x04, 0x08, 0x03, 0x10, 0x02]
+        );
+    }
+
+    #[test]
     fn empty_target_pair_constraint_preserves_presence_through_wire_roundtrip() {
         let ordinary = rv1::LegalTargetGroup::default();
         let constrained = rv1::LegalTargetGroup {

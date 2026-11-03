@@ -1325,6 +1325,8 @@ void RuledPaymentUi::continuePendingActivatedAbilityAfterChoice()
     if (!state) {
         return;
     }
+    if (!resolvePendingAbilityCounterAllocation())
+        return;
     if (hasCounterGroupOffers(pending)) {
         if (pending.ownedBegin() || pending.stage() != PendingActivatedAbility::Stage::Announcing ||
             pending.transactionId() != 0) {

@@ -293,6 +293,7 @@ fn go_for_the_throat_destroys_target_creature() {
         &cast_spell(
             gftt_idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: p1_bear,
                 damage_amount: 0,
@@ -751,6 +752,7 @@ fn eyeblights_ending_destroys_target_creature() {
         &cast_spell(
             idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
@@ -841,6 +843,7 @@ fn swords_to_plowshares_exiles_and_gains_life_equal_to_power() {
         &cast_spell(
             idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
@@ -920,6 +923,7 @@ fn swords_zero_and_negative_power_give_no_life_and_emit_no_life_event() {
             &cast_spell(
                 idx,
                 vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: target,
                     damage_amount: 0,
@@ -1001,6 +1005,7 @@ fn swords_life_gain_precedes_the_post_resolution_commander_choice() {
         &cast_spell(
             idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: commander,
                 damage_amount: 0,
@@ -1108,6 +1113,7 @@ fn unsummon_returns_target_creature_to_owner_hand() {
         &cast_spell(
             idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
@@ -1186,6 +1192,7 @@ fn boomerang_returns_target_land_to_owner_hand() {
         &cast_spell(
             idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: island_oid,
                 damage_amount: 0,
@@ -1969,6 +1976,7 @@ fn disentomb_returns_creature_from_graveyard_to_hand() {
         &cast_spell(
             disentomb_idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: bears_oid,
                 damage_amount: 0,
@@ -2117,6 +2125,7 @@ fn move_graveyard_cards_fizzles_when_target_removed_before_resolution() {
         &cast_spell(
             disentomb_idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: dummy_oid,
                 damage_amount: 0,
@@ -2317,6 +2326,7 @@ fn gravedigger_etb_trigger_returns_creature_from_graveyard() {
                 decline: false,
                 selected_modes: Vec::new(),
                 targets: vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: bears_oid,
                     damage_amount: 0,
@@ -2381,6 +2391,7 @@ fn choose_graveyard_return_target(engine: &mut GameEngine, object_id: u32) {
                     decline: false,
                     selected_modes: Vec::new(),
                     targets: vec![TargetRef {
+                        counter_amount: 0,
                         expected_zone_change_generation: None,
                         object_id,
                         damage_amount: 0,
@@ -2456,6 +2467,7 @@ fn graveyard_card_type_salvager_targets_only_own_instants_and_sorceries() {
                     decline: false,
                     selected_modes: Vec::new(),
                     targets: vec![TargetRef {
+                        counter_amount: 0,
                         expected_zone_change_generation: None,
                         object_id: artifact,
                         damage_amount: 0,
@@ -3514,6 +3526,7 @@ fn zombify_returns_creature_from_graveyard_to_battlefield() {
         &cast_spell(
             idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: visionary,
                 damage_amount: 0,
@@ -3591,6 +3604,7 @@ fn zombify_cannot_target_a_noncreature_graveyard_card() {
         &cast_spell(
             idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: sorcery,
                 damage_amount: 0,
@@ -3642,6 +3656,7 @@ fn zombify_cannot_target_an_opponents_graveyard() {
         &cast_spell(
             idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: their_bear,
                 damage_amount: 0,
@@ -4143,6 +4158,7 @@ fn healing_salve_shield_absorbs_mass_damage() {
             vec![(
                 1,
                 vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: shielded,
                     damage_amount: 0,
@@ -4292,6 +4308,7 @@ fn activated_noncombat_damage_from_deathtouch_source_kills_larger_creature() {
                 source,
                 0,
                 vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: target,
                     damage_amount: 0,
@@ -4320,6 +4337,7 @@ fn activated_noncombat_damage_without_deathtouch_is_not_lethal() {
                 source,
                 0,
                 vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: target,
                     damage_amount: 0,
@@ -4346,6 +4364,7 @@ fn fully_prevented_deathtouch_damage_marks_neither_damage_nor_history() {
                 source,
                 0,
                 vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: target,
                     damage_amount: 0,
@@ -4403,6 +4422,7 @@ fn bladebrand_turns_prodigal_sorcerer_damage_lethal_and_draws_a_card() {
             &cast_spell(
                 bladebrand,
                 vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: source,
                     damage_amount: 0,
@@ -4437,6 +4457,7 @@ fn bladebrand_turns_prodigal_sorcerer_damage_lethal_and_draws_a_card() {
                 source,
                 0,
                 vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: target,
                     damage_amount: 0,
@@ -4500,6 +4521,7 @@ fn bladebrand_does_not_draw_when_its_target_leaves_before_resolution() {
             &cast_spell(
                 bladebrand,
                 vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: source,
                     damage_amount: 0,
@@ -4528,6 +4550,7 @@ fn bladebrand_does_not_draw_when_its_target_leaves_before_resolution() {
             &cast_spell(
                 unsummon,
                 vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: source,
                     damage_amount: 0,

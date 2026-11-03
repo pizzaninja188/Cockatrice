@@ -139,6 +139,7 @@ fn setup_convolute_over_bolt() -> (GameEngine, u32, u32) {
     let mut command = cast_spell(
         convolute_idx,
         vec![TargetRef {
+            counter_amount: 0,
             expected_zone_change_generation: None,
             object_id: bolt_oid,
             damage_amount: 0,
@@ -538,6 +539,7 @@ fn countered_spell_moves_to_its_owners_graveyard() {
         &cast_spell(
             counter_idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: bolt_oid,
                 damage_amount: 0,
@@ -669,6 +671,7 @@ fn counterspell_fizzles_when_original_target_already_left_stack() {
         &cast_spell(
             cs1,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: bolt_oid,
                 damage_amount: 0,
@@ -693,6 +696,7 @@ fn counterspell_fizzles_when_original_target_already_left_stack() {
         &cast_spell(
             cs2,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: bolt_oid,
                 damage_amount: 0,
@@ -802,6 +806,7 @@ fn counterspell_counters_a_spell_on_stack() {
             &cast_spell(
                 cs_idx,
                 vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: bolt_oid,
                     damage_amount: 0,
@@ -1321,6 +1326,7 @@ fn counterspell_on_top_bolt_fizzles_second_leaves_bottom_bolt() {
         &cast_spell(
             cs_idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: top_bolt_oid,
                 damage_amount: 0,
@@ -1435,6 +1441,7 @@ fn twincast_copies_bolt_both_deal_damage() {
             &cast_spell(
                 twincast_idx,
                 vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: bolt_oid,
                     damage_amount: 0,
@@ -1517,6 +1524,7 @@ fn twincast_copies_bolt_both_deal_damage() {
     assert_eq!(
         copy_push.targets,
         vec![TargetRef {
+            counter_amount: 0,
             expected_zone_change_generation: None,
             object_id: 1,
             damage_amount: 0,
@@ -1626,6 +1634,7 @@ fn twincast_rejects_non_spell_target() {
         &cast_spell(
             twincast_idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: bears_oid,
                 damage_amount: 0,
@@ -1712,6 +1721,7 @@ fn countering_a_spell_copy_removes_it_without_error() {
         &cast_spell(
             twincast_idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: bolt_oid,
                 damage_amount: 0,
@@ -1754,6 +1764,7 @@ fn countering_a_spell_copy_removes_it_without_error() {
         &cast_spell(
             counter_idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: copy_id,
                 damage_amount: 0,
@@ -1858,6 +1869,7 @@ fn twincast_copy_controller_chooses_new_target() {
         &cast_spell(
             twincast_idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: bolt_oid,
                 damage_amount: 0,
@@ -1901,6 +1913,7 @@ fn twincast_copy_controller_chooses_new_target() {
     assert_eq!(
         copy_push.targets,
         vec![TargetRef {
+            counter_amount: 0,
             expected_zone_change_generation: None,
             object_id: 0,
             damage_amount: 0,
@@ -1966,6 +1979,7 @@ fn twincast_awaiting_copy_target(seed: u64) -> (GameEngine, u32, u32) {
         &cast_spell(
             bolt_idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: original_target,
                 damage_amount: 0,
@@ -1993,6 +2007,7 @@ fn twincast_awaiting_copy_target(seed: u64) -> (GameEngine, u32, u32) {
         &cast_spell(
             twincast_idx,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: bolt_oid,
                 damage_amount: 0,
@@ -2043,6 +2058,7 @@ fn twincast_copy_may_keep_an_original_target_that_is_now_illegal() {
     assert_eq!(
         copy_push.targets,
         vec![TargetRef {
+            counter_amount: 0,
             expected_zone_change_generation: Some(0),
             object_id: original_target,
             damage_amount: 0,

@@ -455,6 +455,7 @@ impl GameEngine {
                 return Ok(finish_with_events(self, events));
             }
             Some(StackTarget {
+                counter_amount: occurrence.original.counter_amount,
                 object_id,
                 group_index: occurrence.group_index,
                 damage_amount: occurrence.original.damage_amount,
@@ -475,6 +476,7 @@ impl GameEngine {
                 return Ok(finish_with_events(self, events));
             }
             Some(StackTarget {
+                counter_amount: occurrence.original.counter_amount,
                 object_id: player_id as ObjectId,
                 group_index: occurrence.group_index,
                 damage_amount: occurrence.original.damage_amount,
@@ -819,6 +821,7 @@ impl GameEngine {
         let published_targets: Vec<_> = selected_targets
             .iter()
             .map(|target| rv1::TargetRef {
+                counter_amount: target.counter_amount,
                 object_id: target.object_id,
                 damage_amount: target.damage_amount,
                 group_index: target.group_index,
@@ -1206,6 +1209,7 @@ mod tests {
         ];
         for (generation, expected_error) in cases {
             let target = StackTarget {
+                counter_amount: 0,
                 object_id: replacement,
                 required_controller: None,
                 group_index: occurrence.group_index,

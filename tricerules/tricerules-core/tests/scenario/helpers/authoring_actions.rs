@@ -327,6 +327,7 @@ pub(crate) fn targets(
                 break;
             }
             result.push(TargetRef {
+                counter_amount: 0,
                 object_id,
                 kind,
                 group_index: group.group_index,

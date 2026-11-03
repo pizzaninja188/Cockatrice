@@ -853,6 +853,7 @@ fn jace_illusion_spell_copy_target_sacrifices_token_before_copy_fails_to_resolve
             &cast_spell(
                 twincast,
                 vec![TargetRef {
+                    counter_amount: 0,
                     object_id: bolt_object,
                     expected_zone_change_generation: None,
                     damage_amount: 0,

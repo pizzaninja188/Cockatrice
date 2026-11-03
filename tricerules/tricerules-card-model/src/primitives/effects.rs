@@ -2243,6 +2243,15 @@ pub enum SpellEffectKind {
         #[serde(default)]
         subject: EffectSubject,
     },
+    /// Announce a fixed total divided among the chosen creature targets before paying costs
+    /// (CR 601.2d, 602.2b). Ajani, Sleeper Agent and Ajani, Mentor of Heroes share this leaf;
+    /// their authored target groups distinguish optional targets and controller restrictions.
+    /// Initially admitted only in direct nonmodal battlefield loyalty ability lists.
+    DistributeCounters {
+        counter: CounterKind,
+        count: u32,
+        subject: EffectSubject,
+    },
     /// CR 122: put `count` counters of `counter` on every creature matching `filter`. Untargeted —
     /// the mass, one-shot sibling of [`Self::PutCounters`], mirroring [`Self::PumpAll`] and
     /// [`Self::GrantKeywordsAll`]. Web-Warriors, Ridgescale Tusker, and Primeval Protector share
@@ -4251,6 +4260,7 @@ impl SpellEffectKind {
             | SpellEffectKind::Regenerate { subject }
             | SpellEffectKind::Explore { subject }
             | SpellEffectKind::PutCounters { subject, .. }
+            | SpellEffectKind::DistributeCounters { subject, .. }
             | SpellEffectKind::RemoveCounters { subject, .. }
             | SpellEffectKind::RemoveAllCounters { subject, .. }
             | SpellEffectKind::PutCounterSnapshot { subject, .. } => match subject {
@@ -4905,6 +4915,26 @@ impl SpellEffectKind {
 
     /// Admission used only for a direct effect item in a nonmodal activated legacy effect list.
     pub(crate) fn validate_direct_activated_legacy_effect(&self) -> Result<(), String> {
+        if let Self::DistributeCounters {
+            counter,
+            count,
+            subject,
+        } = self
+        {
+            counter.validate()?;
+            let EffectSubject::Chosen(target) = subject else {
+                return Err("counter distribution requires chosen creature targets".into());
+            };
+            target.validate_target_constraints()?;
+            return if *count > 0 && target.kind == super::TargetKind::Creature {
+                Ok(())
+            } else {
+                Err(
+                    "counter distribution requires a positive fixed count and creature targets"
+                        .into(),
+                )
+            };
+        }
         if let Self::PoisonTargetUpToNine { target } = self {
             target.validate_target_constraints()?;
             return if target.is_player() {
@@ -5085,6 +5115,12 @@ impl SpellEffectKind {
         allow_typed_search_result: bool,
         allow_delayed_trigger_this_turn: bool,
     ) -> Result<(), String> {
+        if matches!(self, Self::DistributeCounters { .. }) {
+            return Err(
+                "counter distribution requires a direct nonmodal battlefield loyalty ability"
+                    .into(),
+            );
+        }
         if self.contains_repeating_combat_observer_profile() {
             if !matches!(
                 self,
@@ -8803,5 +8839,60 @@ mod activated_x_mana_value_limit_tests {
             max_mana_value: Option<()>,
             up_to_count: u32,
         },
+    }
+}
+
+#[cfg(test)]
+mod counter_distribution_tests {
+    use super::SpellEffectKind;
+
+    #[test]
+    fn fixed_counter_distribution_has_a_distinct_typed_quantity() {
+        let effect: SpellEffectKind = ron::from_str(
+            "DistributeCounters(counter:PlusOnePlusOne,count:3,subject:Chosen((kind:Creature)))",
+        )
+        .expect("fixed counter distribution is a typed effect, separate from damage");
+        let serialized = ron::to_string(&effect).unwrap();
+        assert!(serialized.starts_with("DistributeCounters("));
+        assert!(serialized.contains("count:3"));
+        assert_eq!(
+            ron::from_str::<SpellEffectKind>(&serialized).unwrap(),
+            effect,
+        );
+    }
+
+    #[test]
+    fn counter_distribution_is_closed_to_direct_battlefield_loyalty_owners() {
+        use crate::primitives::ActivatedAbilityDef;
+        const ABILITY: &str = r#"(ability_id:"distribution", presentation:Fallback, costs:[Loyalty(-3)], effect:[
+            DistributeCounters(counter:PlusOnePlusOne,count:3,subject:Chosen((kind:Creature))),
+            GrantKeywords(subject:Chosen((kind:Creature)),keywords:[Vigilance])
+        ], targeting:Some((groups:[(min:0,max:3,prompt:"Choose creatures",effect_indices:[0,1])])))"#;
+        let ability: ActivatedAbilityDef = ron::from_str(ABILITY).unwrap();
+        ability.validate_shape().unwrap();
+        for changed in [
+            ABILITY.replace("count:3", "count:0"),
+            ABILITY.replace("kind:Creature", "kind:AnyPlayer"),
+            ABILITY.replace("costs:[Loyalty(-3)]", "costs:[Mana(\"{1}\")]"),
+            ABILITY.replace("costs:[Loyalty(-3)]", "costs:[Loyalty(-3),Tap]"),
+            ABILITY.replace(
+                "presentation:Fallback",
+                "presentation:Fallback,source_zone:Hand",
+            ),
+            ABILITY.replace(
+                "presentation:Fallback",
+                "presentation:Fallback,source_zone:Graveyard",
+            ),
+        ] {
+            let invalid: ActivatedAbilityDef = ron::from_str(&changed).unwrap();
+            assert!(invalid.validate_shape().is_err(), "{changed}");
+        }
+        // Generic spell/trigger/Program leaves never inherit this activated-owner exception.
+        assert!(ability.effect[0]
+            .validate(super::EffectContext::Spell)
+            .is_err());
+        assert!(ability.effect[0]
+            .validate(super::EffectContext::Ability)
+            .is_err());
     }
 }

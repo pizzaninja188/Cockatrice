@@ -406,6 +406,7 @@ fn copied_non_aura_does_not_keep_the_printed_auras_cast_target() {
             &cast_spell(
                 slot,
                 vec![tricerules_proto::ruled::v1::TargetRef {
+                    counter_amount: 0,
                     object_id: original_target,
                     damage_amount: 0,
                     group_index: 0,
@@ -444,6 +445,7 @@ fn resolve_aura_copy_token_spell(
             &cast_spell(
                 slot,
                 vec![tricerules_proto::ruled::v1::TargetRef {
+                    counter_amount: 0,
                     object_id: aura,
                     damage_amount: 0,
                     group_index: 0,

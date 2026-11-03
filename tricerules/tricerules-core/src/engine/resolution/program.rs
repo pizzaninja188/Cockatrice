@@ -4144,6 +4144,7 @@ mod invariant_rollback_tests {
         let selected_mode_group_one = engine.state.players[0].hand[3];
         let other_mode_group_zero = engine.state.players[1].hand[0];
         let target = |object_id, group_index, damage_amount| StackTarget {
+            counter_amount: 0,
             object_id,
             group_index,
             damage_amount,
@@ -4271,6 +4272,7 @@ mod invariant_rollback_tests {
                 zone_change_generation: Some(generation),
             });
             let target = |player: i32| StackTarget {
+                counter_amount: 0,
                 object_id: player as u32,
                 group_index: 0,
                 damage_amount: 0,
@@ -4643,6 +4645,7 @@ mod invariant_rollback_tests {
                 // A hand object is deliberately used as a stale target. If target snapshot/fizzle
                 // runs before owner validation, both selected modes would be consumed here.
                 targets: vec![StackTarget {
+                    counter_amount: 0,
                     object_id: source_id,
                     group_index: 0,
                     damage_amount: 0,
@@ -6591,6 +6594,7 @@ mod invariant_rollback_tests {
         top.targets = target_groups
             .iter()
             .map(|group_index| StackTarget {
+                counter_amount: 0,
                 object_id: target,
                 group_index: *group_index,
                 damage_amount: 0,

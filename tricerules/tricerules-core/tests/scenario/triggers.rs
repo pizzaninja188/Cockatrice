@@ -5,6 +5,7 @@ use tricerules_core::state::{AffectedScope, ContinuousEffect};
 
 fn trigger_targets(object_id: u32) -> Vec<TargetRef> {
     vec![TargetRef {
+        counter_amount: 0,
         expected_zone_change_generation: None,
         object_id,
         damage_amount: 0,
@@ -3002,6 +3003,7 @@ fn issue_47_bonecrusher_target_trigger_is_above_spell() {
         &cast_spell(
             bolt,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: giant,
                 damage_amount: 0,
@@ -3058,6 +3060,7 @@ fn issue_47_bonecrusher_trigger_resolves_after_targeting_spell_is_countered() {
         &cast_spell(
             bolt,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: giant,
                 damage_amount: 0,
@@ -3077,6 +3080,7 @@ fn issue_47_bonecrusher_trigger_resolves_after_targeting_spell_is_countered() {
         &cast_spell(
             counterspell,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: bolt_id,
                 damage_amount: 0,
@@ -3125,6 +3129,7 @@ fn issue_47_invalid_or_different_spell_target_emits_no_bonecrusher_trigger() {
             &cast_spell(
                 bolt,
                 vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: forest,
                     damage_amount: 0,
@@ -3176,6 +3181,7 @@ fn issue_47_ability_target_does_not_match_bonecrushers_spell_filter() {
             pyromancer,
             0,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: giant,
                 damage_amount: 0,
@@ -3269,6 +3275,7 @@ fn issue_47_spell_copy_targeting_bonecrusher_creates_a_new_trigger() {
         &cast_spell(
             bolt,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: giant,
                 damage_amount: 0,
@@ -3290,6 +3297,7 @@ fn issue_47_spell_copy_targeting_bonecrusher_creates_a_new_trigger() {
         &cast_spell(
             twincast,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: bolt_id,
                 damage_amount: 0,

@@ -73,10 +73,10 @@ bool supportedSchema()
             appendEnum(contract, file->enum_type(i));
         const QByteArray digest = QCryptographicHash::hash(
             QByteArray(contract.data(), static_cast<qsizetype>(contract.size())), QCryptographicHash::Sha256).toHex();
-        // Hybrid Phyrexian appends private FlexPipPayment.mana_color and its finite color enum.
-        // It is a payment branch, never an object/player/slot identity. Existing indexed pips,
-        // source references and recursive per-player projection retain their audited domains.
-        const QByteArray expected("c2e58005391af76e4749f0afa6f8635f7c3da4269307ae41be56a0fa027c1500");
+        // Counter allocation appends a public per-target quantity and private fixed-total/group
+        // metadata. These are amounts/indices, never object/player/slot identities. The bounded
+        // descriptor audit preserves existing domains and recursive per-player projection.
+        const QByteArray expected("65c35ff2b0b350f6af63aa3bf5d6db181f3306197290d46c731060cb63065aed");
         if (digest != expected)
             qCritical() << "ruled presentation schema needs an identity audit:" << digest;
         return digest == expected;

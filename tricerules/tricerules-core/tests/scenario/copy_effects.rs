@@ -1032,6 +1032,7 @@ fn countered_clone_never_emits_a_copy_source_choice() {
             &cast_spell(
                 scatter,
                 vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: clone_spell,
                     damage_amount: 0,

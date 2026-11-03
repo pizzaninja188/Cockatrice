@@ -8,6 +8,7 @@ fn choose_trigger_target(target_object_id: u32) -> RuledCommand {
             decline: false,
             selected_modes: Vec::new(),
             targets: vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: target_object_id,
                 damage_amount: 0,
@@ -34,6 +35,7 @@ fn cast_glaring_aegis(e: &mut GameEngine, enchanted_creature: u32) {
         &cast_spell(
             index,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: enchanted_creature,
                 damage_amount: 0,

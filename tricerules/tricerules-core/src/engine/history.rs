@@ -3878,6 +3878,7 @@ mod tests {
             target_index: 0,
         };
         let valid = StackTarget {
+            counter_amount: 0,
             object_id: 20,
             required_controller: None,
             group_index: 2,

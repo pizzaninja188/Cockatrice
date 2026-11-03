@@ -607,6 +607,7 @@ mod damage_source_tests {
         let targets = vec![chosen];
         let targets_by_role = vec![vec![chosen]];
         let target_receipts = vec![StackTarget {
+            counter_amount: 0,
             object_id: chosen,
             group_index: 0,
             damage_amount: 0,
@@ -663,6 +664,7 @@ mod damage_source_tests {
         let mut target_receipts = Vec::new();
         if include_source_receipt {
             target_receipts.push(StackTarget {
+                counter_amount: 0,
                 object_id: source,
                 group_index: 0,
                 damage_amount: 0,
@@ -672,6 +674,7 @@ mod damage_source_tests {
             });
         }
         target_receipts.push(StackTarget {
+            counter_amount: 0,
             object_id: recipient,
             group_index: 1,
             damage_amount: 0,

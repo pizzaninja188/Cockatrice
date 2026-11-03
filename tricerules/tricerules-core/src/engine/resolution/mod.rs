@@ -1011,6 +1011,7 @@ mod player_recipient_order_tests {
     fn targeted_player_recipient_reads_only_its_authored_group() {
         let targets = [
             StackTarget {
+                counter_amount: 0,
                 object_id: 30,
                 group_index: 1,
                 damage_amount: 0,
@@ -1019,6 +1020,7 @@ mod player_recipient_order_tests {
                 required_controller: None,
             },
             StackTarget {
+                counter_amount: 0,
                 object_id: 20,
                 group_index: 0,
                 damage_amount: 0,
@@ -3255,6 +3257,7 @@ mod attached_subject_tests {
             .insert(target, captured_generation);
         let mut item = triggered_item(target, 0);
         item.targets = vec![crate::state::StackTarget {
+            counter_amount: 0,
             object_id: target,
             required_controller: None,
             group_index: 0,
@@ -3468,6 +3471,7 @@ mod attached_subject_tests {
         item.cast_by = Some(0);
         item.targets = vec![
             crate::state::StackTarget {
+                counter_amount: 0,
                 object_id: 99,
                 group_index: 0,
                 damage_amount: 0,
@@ -3476,6 +3480,7 @@ mod attached_subject_tests {
                 required_controller: None,
             },
             crate::state::StackTarget {
+                counter_amount: 0,
                 object_id: 1,
                 group_index: 1,
                 damage_amount: 0,
@@ -3565,6 +3570,7 @@ mod attached_subject_tests {
             zone_change_generation: Some(source_generation),
         });
         item.targets = vec![crate::state::StackTarget {
+            counter_amount: 0,
             object_id: 1,
             group_index: 0,
             damage_amount: 0,
@@ -4861,6 +4867,7 @@ mod attached_subject_tests {
         item.triggered_ability = None;
         item.ability_index = None;
         item.targets = vec![StackTarget {
+            counter_amount: 0,
             object_id: creature,
             required_controller: None,
             group_index: 0,
@@ -6165,6 +6172,7 @@ mod attached_subject_tests {
         let mut item =
             captured_printed_trigger_item(&engine, source, "authored_program_destroy_tail");
         item.targets.push(crate::state::StackTarget {
+            counter_amount: 0,
             object_id: target,
             group_index: 0,
             damage_amount: 0,
@@ -9311,6 +9319,7 @@ mod attached_subject_tests {
         );
         let mut top = triggered_item(original, 0);
         top.targets.push(StackTarget {
+            counter_amount: 0,
             object_id: original,
             required_controller: None,
             group_index: 0,
@@ -10327,6 +10336,7 @@ mod attached_subject_tests {
                 ],
             );
             item.targets = vec![StackTarget {
+                counter_amount: 0,
                 object_id: target_id,
                 required_controller: None,
                 group_index: 0,
@@ -11818,6 +11828,7 @@ mod attached_subject_tests {
             ],
         );
         item.targets = vec![StackTarget {
+            counter_amount: 0,
             object_id: target,
             required_controller: None,
             group_index: 0,
@@ -12007,6 +12018,7 @@ mod attached_subject_tests {
             ],
         );
         item.targets = vec![StackTarget {
+            counter_amount: 0,
             object_id: target,
             required_controller: None,
             group_index: 0,
@@ -12066,6 +12078,7 @@ mod attached_subject_tests {
             ],
         );
         item.targets = vec![StackTarget {
+            counter_amount: 0,
             object_id: target,
             required_controller: None,
             group_index: 0,
@@ -12099,6 +12112,7 @@ mod attached_subject_tests {
             ],
         );
         item.targets = vec![StackTarget {
+            counter_amount: 0,
             object_id: target,
             required_controller: None,
             group_index: 0,
@@ -13693,6 +13707,7 @@ mod source_keyword_tests {
         let targets_by_role = vec![targets.clone()];
         let target_role_group_indices = vec![0];
         let target_receipts = vec![StackTarget {
+            counter_amount: 0,
             object_id: root,
             group_index: 0,
             damage_amount: 0,
@@ -13821,6 +13836,7 @@ mod source_keyword_tests {
         let targets_by_role = vec![targets.clone()];
         let target_role_group_indices = vec![0];
         let target_receipts = vec![StackTarget {
+            counter_amount: 0,
             object_id: target,
             group_index: 0,
             damage_amount: 0,
@@ -14032,6 +14048,7 @@ mod source_keyword_tests {
         let targets_by_role = vec![targets.clone()];
         let target_role_group_indices = vec![0];
         let target_receipts = vec![StackTarget {
+            counter_amount: 0,
             object_id: root,
             group_index: 0,
             damage_amount: 0,
@@ -14629,6 +14646,7 @@ mod source_keyword_tests {
         let target_receipts = targets
             .iter()
             .map(|&object_id| StackTarget {
+                counter_amount: 0,
                 object_id,
                 group_index: 0,
                 damage_amount: 0,

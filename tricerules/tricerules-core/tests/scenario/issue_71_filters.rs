@@ -52,6 +52,7 @@ fn legions_judgment_publishes_derived_power_targets_and_rejects_a_forged_cast() 
             &cast_spell(
                 slot,
                 vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: ordinary_bear,
                     damage_amount: 0,
@@ -88,6 +89,7 @@ fn legions_judgment_publishes_derived_power_targets_and_rejects_a_forged_cast() 
             &cast_spell(
                 slot,
                 vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: boosted_bear,
                     damage_amount: 0,

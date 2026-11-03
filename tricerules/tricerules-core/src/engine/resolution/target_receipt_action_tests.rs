@@ -433,6 +433,7 @@ fn receipt(engine: &GameEngine, object_id: ObjectId, group_index: u32) -> StackT
         _ => rv1::TargetRefKind::Unspecified,
     };
     StackTarget {
+        counter_amount: 0,
         object_id,
         group_index,
         damage_amount: 0,

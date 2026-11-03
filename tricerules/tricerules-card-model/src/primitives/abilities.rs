@@ -442,6 +442,22 @@ impl ActivatedAbilityDef {
     fn validate_shape_inner(&self, allow_activated_modal_mode_effect: bool) -> Result<(), String> {
         self.ability_id.validate()?;
         self.presentation.validate()?;
+        let counter_distributions = self
+            .effect
+            .iter()
+            .filter(|effect| matches!(effect, SpellEffectKind::DistributeCounters { .. }))
+            .count();
+        if counter_distributions > 0
+            && (counter_distributions != 1
+                || allow_activated_modal_mode_effect
+                || self.modal.is_some()
+                || self.program.is_some()
+                || self.source_zone != AbilitySourceZone::Battlefield
+                || !matches!(self.costs.as_slice(), [AbilityCost::Loyalty(_)])
+                || self.requires_opponent_target_choice())
+        {
+            return Err("counter distribution requires one direct nonmodal battlefield loyalty ability with controller-chosen targets".into());
+        }
         if let Some(modal) = &self.modal {
             return self.validate_modal_shape(modal);
         }

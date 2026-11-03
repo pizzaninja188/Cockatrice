@@ -115,6 +115,7 @@ fn fire_ice_ice_half_taps_and_draws() {
             &cast_spell_face(
                 idx,
                 vec![TargetRef {
+                    counter_amount: 0,
                     expected_zone_change_generation: None,
                     object_id: land_oid,
                     damage_amount: 0,
@@ -876,6 +877,7 @@ fn stomp_with_no_legal_target_goes_to_graveyard_without_permission() {
         &cast_spell_face(
             slot,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
@@ -892,6 +894,7 @@ fn stomp_with_no_legal_target_goes_to_graveyard_without_permission() {
         &cast_spell(
             bolt,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: bear,
                 damage_amount: 0,
@@ -970,6 +973,7 @@ fn countered_stomp_goes_to_graveyard_without_permission() {
         &cast_spell(
             counter,
             vec![TargetRef {
+                counter_amount: 0,
                 expected_zone_change_generation: None,
                 object_id: stomp_on_stack,
                 damage_amount: 0,

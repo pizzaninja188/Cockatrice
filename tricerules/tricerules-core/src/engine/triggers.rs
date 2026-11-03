@@ -5542,6 +5542,7 @@ mod tests {
             .stack
             .push(issue_219_creature_spell_item(copy_id, 0, true));
         let physical_target = |object_id| StackTarget {
+            counter_amount: 0,
             object_id,
             required_controller: None,
             group_index: 0,
@@ -5668,6 +5669,7 @@ mod tests {
                 targets: vec![giants[0], giants[0], giants[1]]
                     .into_iter()
                     .map(|object_id| StackTarget {
+                        counter_amount: 0,
                         object_id,
                         required_controller: None,
                         group_index: 0,

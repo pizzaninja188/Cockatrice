@@ -944,6 +944,7 @@ impl GameEngine {
         parked_stack: Option<&ParkedStackResolution>,
     ) -> Result<(), EngineError> {
         self.validate_poison_difference_completion(events, completion, parked_stack)?;
+        self.validate_distributed_counter_completion(events, completion, parked_stack)?;
         let crate::state::CounterPlacementCompletion::DoubleYourCounters {
             stack_id,
             mode_id,
@@ -3080,6 +3081,10 @@ impl GameEngine {
                 )
                 | (
                     CounterPlacementRecipient::Object { .. },
+                    crate::state::CounterPlacementCompletion::DistributedCounters { .. },
+                )
+                | (
+                    CounterPlacementRecipient::Object { .. },
                     crate::state::CounterPlacementCompletion::Amass { .. },
                 )
                 | (
@@ -3138,6 +3143,7 @@ impl GameEngine {
                 (
                     CounterPlacementRecipient::Player { .. },
                     crate::state::CounterPlacementCompletion::StackEffect { .. }
+                    | crate::state::CounterPlacementCompletion::DistributedCounters { .. }
                     | crate::state::CounterPlacementCompletion::Amass { .. }
                     | crate::state::CounterPlacementCompletion::ActivationCost { .. }
                     | crate::state::CounterPlacementCompletion::ProgramChooseBlight { .. }
@@ -3558,8 +3564,11 @@ impl GameEngine {
             self.begun_self_counter_placement(&original_pending, Some(&original_replacement));
         let begun_poison =
             self.begun_poison_difference(&original_pending, Some(&original_replacement));
+        let begun_distribution = self
+            .begun_distributed_counter_placement(&original_pending, Some(&original_replacement));
         let begun_flat = begun_self_counter
             || begun_poison
+            || begun_distribution
             || self
                 .begun_combined_counter_placement(&original_pending, Some(&original_replacement))
             || self.begun_wolf_counter_placement(&original_pending, Some(&original_replacement))
@@ -3575,6 +3584,11 @@ impl GameEngine {
                 completion:
                     completion @ crate::state::CounterPlacementCompletion::StackEffect { .. },
             } if begun_flat => (stack.clone(), completion.clone()),
+            ResolutionContinuation::CounterReplacement {
+                stack: Some(stack),
+                completion:
+                    completion @ crate::state::CounterPlacementCompletion::DistributedCounters { .. },
+            } if begun_distribution => (stack.clone(), completion.clone()),
             ResolutionContinuation::CounterReplacement {
                 stack: Some(stack),
                 completion:
