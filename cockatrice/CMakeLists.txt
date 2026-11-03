@@ -122,6 +122,8 @@ set(cockatrice_SOURCES
     src/game/ruled/ruled_resume_client.cpp
     src/game/ruled/ruled_dev_command_parser.cpp
     src/game/ruled/ruled_dev_console.cpp
+    src/game/ruled/ruled_dev_console_game.cpp
+    src/game/ruled/ruled_dev_console_runner.cpp
     src/game/ruled/ruled_event_dispatcher.cpp
     src/game/ruled/ruled_private_card_look.cpp
     src/game/ruled/ruled_pending_cast.cpp

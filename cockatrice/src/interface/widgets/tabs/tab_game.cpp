@@ -22,8 +22,8 @@
 #include "../game/ruled/ruled_card_display_identity.h"
 #include "../game/ruled/ruled_card_popup.h"
 #include "../game/ruled/ruled_client_state.h"
-#include "../game/ruled/ruled_dev_command_parser.h"
 #include "../game/ruled/ruled_dev_console.h"
+#include "../game/ruled/ruled_dev_console_game.h"
 #include "../game/ruled/ruled_payment_ui.h"
 #include "../game/ruled/ruled_replacement_picker.h"
 #include "../game/ruled/ruled_resume_client.h"
@@ -1426,43 +1426,6 @@ void TabGame::actSay()
     }
 }
 
-// Fork: one dev-console line. Parse it, send it, or report why not. Kept short on purpose —
-// anything more than transport belongs in RuledDevCommandParser, which is testable headless.
-void TabGame::actDevConsoleCommand(const QString &line)
-{
-    if (!devConsoleWidget) {
-        return;
-    }
-    // Seats ascending; QMap is key-ordered, so ordinal 1 is the lowest player id.
-    //
-    // keys() returns a list *by value*. It must be materialised into a named variable before
-    // taking iterators from it: calling keys().begin() and keys().end() would produce two
-    // separate temporaries, both dead by the end of the statement, leaving the iterators dangling.
-    const QList<int> seatKeys = game->getPlayerManager()->getPlayers().keys();
-    const QVector<int> seatIds(seatKeys.cbegin(), seatKeys.cend());
-    const RuledDevCommandParser::Result parsed =
-        RuledDevCommandParser::parse(line, game->getPlayerManager()->getLocalPlayerId(), seatIds);
-
-    if (parsed.handledLocally) {
-        devConsoleWidget->setStatus(parsed.message, false);
-        return;
-    }
-    if (!parsed.ok) {
-        devConsoleWidget->setStatus(parsed.error, true);
-        return;
-    }
-    // The engine has the final say, and it refuses plenty of legitimate-looking lines — moving a
-    // card you do not own, conjuring into a zone with no minting path. Without an ack those look
-    // like nothing happened, so report a rejection rather than leaving the console silent.
-    // QPointer: the response arrives asynchronously and the tab may be gone by then.
-    QPointer<RuledDevConsoleWidget> console(devConsoleWidget);
-    RuledActions::sendRuledCommandExpectingAck(game, parsed.command, [console](bool accepted) {
-        if (!accepted && console) {
-            console->setStatus(QObject::tr("Rejected by the engine — see the game log."), true);
-        }
-    });
-}
-
 void TabGame::addPlayerToAutoCompleteList(QString playerName)
 {
     if (sayEdit && !autocompleteUserList.contains(playerName)) {
@@ -2637,7 +2600,7 @@ void TabGame::createMessageDock(bool bReplay)
     // asked for; the enforcing gate is engine-side, this only keeps it out of a normal session.
     if (!bReplay && RuledActions::isRuledGame(game) && RuledDevConsoleWidget::isEnabled()) {
         devConsoleWidget = new RuledDevConsoleWidget(this);
-        connect(devConsoleWidget, &RuledDevConsoleWidget::commandSubmitted, this, &TabGame::actDevConsoleCommand);
+        connectRuledDevConsole(devConsoleWidget, game);
         messageLogLayout->addWidget(devConsoleWidget);
     } else {
         devConsoleWidget = nullptr;

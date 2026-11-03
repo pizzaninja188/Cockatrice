@@ -302,21 +302,34 @@ Off unless `--dev-console` is passed, and only built for a ruled non-replay game
 cosmetic.** The enforcing one is engine-side (`tricerules-core/src/engine/dev.rs`), because a
 client is never trusted; both gates must be enabled before dev commands are accepted.
 
-Split in two on purpose:
+The command path stays fork-owned:
 
 - **`RuledDevCommandParser`** is pure `QString` → `ruled::v1::RuledCommand`, with no widget and no
   game-object dependency, so it links into the headless `ruled_client_test` target. This is where
   the text stops being text — everything past it is a typed oneof, which is what keeps the wire
   contract self-documenting and the replay log readable (the fork's no-scripting-DSL rule).
-- **`RuledDevConsoleWidget`** follows `GamePromptWidget`'s discipline: it emits
-  `commandSubmitted(QString)` and sends nothing. It lives in the existing Messages dock under the
-  prompt panel, not in a dock of its own. Command history is the one thing it owns that the chat
-  entry could not have given us.
+- **`RuledDevConsoleWidget`** emits submissions and sends nothing. It owns command history,
+  file preview and busy controls in the existing Messages dock under the prompt panel.
+- **`RuledDevConsoleRunner`** parses through the existing parser, prevalidates every preset line
+  and resolves seat ordinals before sending anything, then waits for each engine acknowledgment.
+- **`ruled_dev_console_game`** attaches the runner to `RuledActions::sendRuledCommandExpectingAck`
+  and cancels on session reset, game closure or connection changes. `TabGame` keeps one install hook.
 
-`TabGame::actDevConsoleCommand` parses and sends, via `RuledActions::sendRuledCommand` rather than
-calling `GameEventHandler` directly — that class keeps its `RuledClientHost` overrides private so
-the view model is normally the only thing that sends, and routing through `RuledActions` keeps this
-transport with the others instead of widening an upstream class.
+**Load preset…** opens a UTF-8 text file (at most 64 KiB). Its filename names the preset; the preview
+shows the loaded contents, and **Run (adds state)** is a separate action. Use one existing command
+per line; blank lines and full-line `#` comments are ignored. Windows CRLF and a UTF-8 BOM are
+accepted. There are no variables, includes, loops, delays or new engine commands. A preset has at
+most 128 commands; `help` is interactive-only. A syntax error or missing seat sends nothing.
+
+These are **prepared test states**, not proof that legal gameplay can reach the state. A successful
+parse is not engine acceptance. Runtime rejection stops the remaining commands; accepted commands
+remain, with no rollback. **Cancel remaining** stops the queue and waits for any command already
+sent before unlocking. A lost response keeps that command pending until a response or lifecycle
+reset; cancellation cannot undo it. Disconnect/session replacement invalidates late callbacks and
+never automatically resumes. Input and Run stay locked while busy. After completion, rejection or
+cancellation, a fresh Run starts from the beginning and can add duplicate cards and mana; use a
+fresh game for a clean rerun. The original engine dev gate and capture/logging transport apply to
+every command. See [capture inspection](../../../../docs/RULED-DIAGNOSTICS.md).
 
 Three grammar rules worth knowing before extending it:
 

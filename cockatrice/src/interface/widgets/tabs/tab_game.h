@@ -218,9 +218,6 @@ private slots:
     void actRotateViewCCW();
     void actToggleStackWindow();
     void actSay();
-    /// Fork: parse one dev-console line and send it. The only new upstream slot the console needs;
-    /// everything it does beyond the send lives in RuledDevCommandParser.
-    void actDevConsoleCommand(const QString &line);
     void actPhaseAction();
     void actNextPhase();
     void actNextPhaseAction();

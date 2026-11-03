@@ -7,8 +7,8 @@
  * same placement pattern `GamePromptWidget` uses, so no new dock is involved.
  *
  * Like `GamePromptWidget`, the widget never sends anything: it emits `commandSubmitted` and
- * `TabGame` does the parse and the send. That keeps the transport in one place and the widget
- * testable offscreen.
+ * the fork-owned runner/game adapter parses and sends. The widget previews files, tracks input
+ * history and locks submissions while the runner waits for engine acceptance.
  *
  * Off unless `--dev-console` was passed, and only ever built for a ruled, non-replay game. That
  * gating is cosmetic convenience, not security: the real gate is engine-side (see `engine::dev`),
@@ -23,6 +23,8 @@
 
 class QLabel;
 class QLineEdit;
+class QPushButton;
+class QPlainTextEdit;
 
 class RuledDevConsoleWidget : public QWidget
 {
@@ -36,11 +38,16 @@ public:
 
     /// Show feedback under the input: a parse error, or the help text.
     void setStatus(const QString &text, bool isError);
+    void setBusy(bool busy);
+    /// Load only: running is a separate user action after previewing the commands.
+    bool loadPreset(const QString &path);
     void retranslateUi();
 
 signals:
     /// A line the user submitted, verbatim. Interpretation belongs to the caller.
     void commandSubmitted(const QString &line);
+    void presetSubmitted(const QString &name, const QString &text);
+    void cancelRequested();
 
 protected:
     /// Intercepts Up/Down on the input for history. An event filter rather than a QLineEdit
@@ -54,6 +61,13 @@ private:
     QLabel *promptLabel = nullptr;
     QLineEdit *input = nullptr;
     QLabel *statusLabel = nullptr;
+    QLabel *presetLabel = nullptr;
+    QPushButton *loadButton = nullptr;
+    QPushButton *runButton = nullptr;
+    QPushButton *cancelButton = nullptr;
+    QPlainTextEdit *preview = nullptr;
+    QString presetName;
+    bool busy = false;
 
     QStringList history;
     /// Index into `history` while browsing; == history.size() means "on the fresh line".

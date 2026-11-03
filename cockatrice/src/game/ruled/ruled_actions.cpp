@@ -169,10 +169,12 @@ void sendRuledCommandExpectingAck(const AbstractGame *game,
                                   std::function<void(bool accepted)> onFinished)
 {
     if (!isRuledGame(game)) {
+        onFinished(false);
         return;
     }
     GameEventHandler *handler = const_cast<AbstractGame *>(game)->getGameEventHandler();
     if (!handler) {
+        onFinished(false);
         return;
     }
     PlayerActions *const actions = localPlayerActions(game);
