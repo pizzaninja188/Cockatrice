@@ -741,7 +741,7 @@ impl GameEngine {
                 "Kaya Scry1 continuation is missing",
             ));
         };
-        let previous = stack.previous_result.clone();
+        let previous = stack.previous_result().clone();
         self.complete_parked_stack_with_previous(stack, previous, events)
     }
 

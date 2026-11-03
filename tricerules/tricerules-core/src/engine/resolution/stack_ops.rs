@@ -897,7 +897,7 @@ pub(super) fn copy_triggering_activated_ability(
     {
         let parent = Box::new(cx.parked_stack());
         cx.engine.begin_copy_target_choices(
-            vec![ParkedStackResolution::new(copy)],
+            vec![ParkedStackResolution::dedicated(copy)],
             original.id,
             Some(parent),
             cx.events,
@@ -1111,7 +1111,7 @@ pub(super) fn copy_target_spell(
                 returned_attacker_assignment: src.returned_attacker_assignment,
             };
             if needs_target_choice {
-                target_choice_copies.push(ParkedStackResolution::new(copy_template));
+                target_choice_copies.push(ParkedStackResolution::dedicated(copy_template));
             } else {
                 engine.state.stack.push(copy_template);
                 events.push(rv1::RuledEvent {

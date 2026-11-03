@@ -1290,7 +1290,7 @@ pub(super) fn double_your_counters(cx: &mut EffectCx<'_>) -> Result<EffectOutcom
     let resume_index = leaf_index.checked_add(1).ok_or(EngineError::Illegal(
         "DoubleYourCounters effect cursor overflow",
     ))?;
-    stack.resume_effect_index = Some(resume_index);
+    stack.set_flat_tail(Some(resume_index), stack.previous_result().clone());
     let completion = crate::state::CounterPlacementCompletion::DoubleYourCounters {
         stack_id: cx.top.id,
         mode_id: selected_mode.mode_id.clone(),

@@ -1281,15 +1281,15 @@ pub struct ParkedStackResolution {
     pub item: StackItem,
     /// Index of the next primitive effect to execute after this choice. `None` is retained for
     /// continuations that own their complete resolution flow.
-    pub resume_effect_index: Option<u32>,
+    resume_effect_index: Option<u32>,
     /// Exact card cohort produced by the primitive that parked this resolution. It remains
     /// engine-private while a player answers the choice, then becomes the next primitive's
     /// `PreviousEffect` input.
-    pub(crate) previous_result: OperationResults,
+    previous_result: OperationResults,
     /// Immutable authored programs stay in `CardRegistry`; this cursor identifies the entered
     /// blocks and typed slots needed to resume one exact operation after a private choice.
     #[serde(default)]
-    pub(crate) program: Option<ProgramRunState>,
+    program: Option<ProgramRunState>,
 }
 
 /// One exact physical card looked at by Manifest Dread before any entry replacements run.
@@ -1311,7 +1311,7 @@ pub(crate) struct PendingManifestDreadGraveyardOrder {
 }
 
 impl ParkedStackResolution {
-    pub fn new(item: StackItem) -> Self {
+    pub fn dedicated(item: StackItem) -> Self {
         Self {
             item,
             resume_effect_index: None,
@@ -1323,6 +1323,136 @@ impl ParkedStackResolution {
     pub(crate) fn with_previous_result(mut self, result: OperationResults) -> Self {
         self.previous_result = result;
         self
+    }
+
+    pub(crate) fn for_flat_effects(
+        item: StackItem,
+        resume_effect_index: Option<u32>,
+        previous_result: OperationResults,
+    ) -> Self {
+        Self {
+            item,
+            resume_effect_index,
+            previous_result,
+            program: None,
+        }
+    }
+
+    pub(crate) fn for_program(
+        item: StackItem,
+        resume_effect_index: Option<u32>,
+        previous_result: OperationResults,
+        program: ProgramRunState,
+    ) -> Self {
+        Self {
+            item,
+            resume_effect_index,
+            previous_result,
+            program: Some(program),
+        }
+    }
+
+    pub fn resume_effect_index(&self) -> Option<u32> {
+        self.resume_effect_index
+    }
+
+    pub(crate) fn previous_result(&self) -> &OperationResults {
+        &self.previous_result
+    }
+
+    pub(crate) fn program(&self) -> Option<&ProgramRunState> {
+        self.program.as_ref()
+    }
+
+    pub(crate) fn into_parts(
+        self,
+    ) -> (
+        StackItem,
+        Option<u32>,
+        OperationResults,
+        Option<ProgramRunState>,
+    ) {
+        (
+            self.item,
+            self.resume_effect_index,
+            self.previous_result,
+            self.program,
+        )
+    }
+
+    /// A replacement may change the stack item while preserving the parent's exact execution.
+    pub(crate) fn restore_execution_from(&mut self, source: &Self) {
+        self.resume_effect_index = source.resume_effect_index;
+        self.previous_result = source.previous_result.clone();
+        self.program = source.program.clone();
+    }
+
+    pub(crate) fn restore_execution_from_owned(&mut self, source: Self) {
+        self.resume_effect_index = source.resume_effect_index;
+        self.previous_result = source.previous_result;
+        self.program = source.program;
+    }
+
+    /// Shared paths retain their owning Program even when they also update a flat fallback tail.
+    pub(crate) fn set_flat_tail(&mut self, next: Option<u32>, results: OperationResults) {
+        self.resume_effect_index = next;
+        self.previous_result = results;
+    }
+
+    pub(crate) fn replace_completed_results(&mut self, results: OperationResults) {
+        self.previous_result = results;
+    }
+
+    pub(crate) fn record_result_value(&mut self, value: ProgramValue) {
+        self.previous_result.set(value);
+    }
+
+    pub(crate) fn record_counter_placements(
+        &mut self,
+        receipts: impl IntoIterator<Item = CounterPlacementReceipt>,
+    ) {
+        self.previous_result.record_counter_placements(receipts);
+    }
+
+    pub(crate) fn record_in_flight_results_if_matches(
+        &mut self,
+        expected: &ProgramRunState,
+        results: &OperationResults,
+    ) {
+        if let Some(run) = self.program.as_mut() {
+            if run.owner == expected.owner && run.in_flight == expected.in_flight {
+                run.in_flight_results = results.clone();
+            }
+        }
+    }
+
+    pub(crate) fn push_program_frame(&mut self, frame: ProgramFrame) -> Option<()> {
+        self.program.as_mut()?.frames.push(frame);
+        Some(())
+    }
+
+    /// Retry one validated chooser instruction while retaining its slots and accumulated facts.
+    pub(crate) fn retry_program_instruction(&mut self, next_instruction: u32) -> Option<()> {
+        let run = self.program.as_mut()?;
+        run.frames.last_mut()?.next_instruction = next_instruction;
+        run.in_flight = None;
+        Some(())
+    }
+
+    /// Abandon the current instruction and authored tail, retaining independently owed returns.
+    pub(crate) fn abandon_execution(&mut self, flat_end: Option<u32>) {
+        if let Some(run) = self.program.as_mut() {
+            run.frames.clear();
+            run.frames.push(ProgramFrame {
+                path: Vec::new(),
+                next_instruction: u32::MAX,
+                yield_to: Vec::new(),
+            });
+            run.in_flight = None;
+            self.resume_effect_index = None;
+        } else {
+            self.resume_effect_index = flat_end;
+        }
     }
 }
 

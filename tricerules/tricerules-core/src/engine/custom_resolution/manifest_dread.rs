@@ -509,7 +509,7 @@ mod skipped_entry_tests {
         else {
             panic!("Manifest Dread choice")
         };
-        assert!(stack.program.as_ref().unwrap().in_flight.is_some());
+        assert!(stack.program().unwrap().in_flight.is_some());
         looked_at.truncate(count);
         if count == 1 {
             engine.state.players[0].library.truncate(1);
@@ -661,7 +661,7 @@ mod skipped_entry_tests {
                     panic!("order continuation")
                 };
                 assert_eq!(
-                    order.stack.program.as_ref().unwrap().frames[0].next_instruction,
+                    order.stack.program().unwrap().frames[0].next_instruction,
                     1,
                     "the real attach tail waits until graveyard ordering commits"
                 );

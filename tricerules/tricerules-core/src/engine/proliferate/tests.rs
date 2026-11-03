@@ -895,7 +895,7 @@ fn observer_restore_keeps_committed_doubled_leaf_and_runs_legacy_tail_once() {
         else {
             panic!("the second doubled leaf remains in its Proliferate transaction");
         };
-        assert!(stack.program.is_none());
+        assert!(stack.program().is_none());
         assert_eq!(transaction.actor, 0);
         assert_eq!(transaction.completed_leaves, 1);
         assert!(transaction.pending_nodes.is_empty());
@@ -919,7 +919,7 @@ fn observer_restore_keeps_committed_doubled_leaf_and_runs_legacy_tail_once() {
         assert_eq!((receipt.before, receipt.after), (1, 2));
         assert_eq!(stack.item.source_permanent_id, Some(source));
         assert_eq!(stack.item.source_zone_change, source_generation);
-        assert_eq!(stack.resume_effect_index, Some(1));
+        assert_eq!(stack.resume_effect_index(), Some(1));
         (
             format!("{stack:?}"),
             format!("{transaction:?}"),
@@ -1197,7 +1197,7 @@ fn delegated_observer_restore_keeps_committed_doubled_leaf_after_actor_concedes(
         else {
             panic!("the delegated second leaf remains in the flat Proliferate transaction");
         };
-        assert!(stack.program.is_none());
+        assert!(stack.program().is_none());
         assert_eq!(transaction.actor, 0);
         assert_eq!(transaction.completed_leaves, 1);
         assert!(transaction.pending_nodes.is_empty());
@@ -1410,10 +1410,9 @@ fn saved_program_proliferate_keeps_first_receipt_when_actor_concedes_under_obser
         assert_eq!(stack.item.card_id, "ripples_of_potential");
         assert_eq!(stack.item.controller, 0);
         assert!(stack.item.source_owner.is_none());
-        assert_eq!(stack.resume_effect_index, None);
+        assert_eq!(stack.resume_effect_index(), None);
         let program = stack
-            .program
-            .as_ref()
+            .program()
             .expect("the actual spell's Program cursor remains parked");
         assert_eq!(program.frames.len(), 1);
         assert_eq!(program.frames[0].next_instruction, 1);
@@ -1734,11 +1733,8 @@ fn saved_program_proliferate_refreshes_departed_recipient_after_independent_obse
             assert_eq!(stack.item.id, spell, "{row}");
             assert_eq!(stack.item.card_id, "ripples_of_potential", "{row}");
             assert_eq!(stack.item.controller, 0, "{row}");
-            assert_eq!(
-                stack.program.as_ref().unwrap().frames[0].next_instruction,
-                1
-            );
-            assert!(stack.program.as_ref().unwrap().in_flight.is_some());
+            assert_eq!(stack.program().unwrap().frames[0].next_instruction, 1);
+            assert!(stack.program().unwrap().in_flight.is_some());
             (
                 format!("{pending:?}"),
                 format!("{stack:?}"),
@@ -2124,10 +2120,9 @@ fn saved_proliferate_outer_and_nested_work_survives_actor_departure_under_observ
         assert_eq!(stack.item.card_id, "ripples_of_potential");
         assert_eq!(stack.item.controller, 0);
         assert!(stack.item.source_owner.is_none());
-        assert_eq!(stack.resume_effect_index, None);
+        assert_eq!(stack.resume_effect_index(), None);
         let program = stack
-            .program
-            .as_ref()
+            .program()
             .expect("the original Ripples Program remains parked");
         assert_eq!(program.frames.len(), 1);
         assert!(program.in_flight.is_some());
@@ -2532,8 +2527,8 @@ fn saved_proliferate_outer_and_nested_work_survives_actor_departure_under_observ
         assert_eq!(stack.item.id, spell);
         assert_eq!(stack.item.card_id, "ripples_of_potential");
         assert_eq!(stack.item.controller, 0);
-        assert_eq!(stack.resume_effect_index, None);
-        assert!(stack.program.as_ref().unwrap().in_flight.is_some());
+        assert_eq!(stack.resume_effect_index(), None);
+        assert!(stack.program().unwrap().in_flight.is_some());
         let PendingReplacementEvent::Counters(counter_batch) = engine
             .state
             .pending_replacement_event
@@ -2890,7 +2885,7 @@ fn saved_nested_proliferate_recipient_retirement_finishes_leaf_before_remaining_
         assert_eq!((receipt.before, receipt.after), (1, 2));
         assert_eq!(stack.item.id, spell);
         assert_eq!(stack.item.controller, 0);
-        assert!(stack.program.as_ref().unwrap().in_flight.is_some());
+        assert!(stack.program().unwrap().in_flight.is_some());
     }
 
     let second_leaf_batch = engine
@@ -2958,7 +2953,7 @@ fn saved_nested_proliferate_recipient_retirement_finishes_leaf_before_remaining_
         assert_eq!((receipt.before, receipt.after), (1, 2));
         assert_eq!(stack.item.id, spell);
         assert_eq!(stack.item.controller, 0);
-        assert!(stack.program.as_ref().unwrap().in_flight.is_some());
+        assert!(stack.program().unwrap().in_flight.is_some());
         let PendingReplacementEvent::Counters(batch) = engine
             .state
             .pending_replacement_event
@@ -3479,7 +3474,7 @@ fn flat_gambit_saved_row(registry: &'static CardRegistry) {
         assert_eq!(stack.item.card_id, "tezzerets_gambit");
         assert_eq!(stack.item.controller, 0);
         assert!(
-            stack.program.is_none(),
+            stack.program().is_none(),
             "actual Gambit remains on the flat path"
         );
         let PendingReplacementEvent::Counters(counter_batch) = engine
@@ -3512,8 +3507,8 @@ fn flat_gambit_saved_row(registry: &'static CardRegistry) {
         }));
         (
             format!("{stack:?}"),
-            stack.resume_effect_index,
-            format!("{:?}", stack.previous_result),
+            stack.resume_effect_index(),
+            format!("{:?}", stack.previous_result()),
         )
     };
 
@@ -3605,13 +3600,13 @@ fn flat_gambit_saved_row(registry: &'static CardRegistry) {
         assert_eq!(stack.item.card_id, "tezzerets_gambit");
         assert_eq!(stack.item.controller, 0);
         assert!(
-            stack.program.is_none(),
+            stack.program().is_none(),
             "actual Gambit remains on the flat path"
         );
         assert_eq!(format!("{stack:?}"), first_stack_snapshot);
-        assert_eq!(stack.resume_effect_index, first_resume_index);
+        assert_eq!(stack.resume_effect_index(), first_resume_index);
         assert_eq!(
-            format!("{:?}", stack.previous_result),
+            format!("{:?}", stack.previous_result()),
             first_previous_result
         );
         let PendingReplacementEvent::Counters(counter_batch) = engine
@@ -3755,7 +3750,7 @@ fn flat_gambit_saved_row(registry: &'static CardRegistry) {
     };
     assert_eq!(format!("{stack:?}"), saved_stack);
     assert_eq!(format!("{:?}", transaction), saved_transaction);
-    assert!(stack.program.is_none());
+    assert!(stack.program().is_none());
 
     let current_aura_offer =
         find_published_choice(&concede_batch, ruled_v1::ChoiceKind::AuraPermanent)
@@ -4052,7 +4047,7 @@ fn flat_second_counter_batch_survives_actor_departure_in_active_and_saved_routes
         assert_eq!(stack.item.card_id, "tezzerets_gambit");
         assert_eq!(stack.item.controller, 0);
         assert!(
-            stack.program.is_none(),
+            stack.program().is_none(),
             "actual Gambit remains on the flat path"
         );
         let PendingReplacementEvent::Counters(counter_batch) = engine
@@ -4076,8 +4071,8 @@ fn flat_second_counter_batch_survives_actor_departure_in_active_and_saved_routes
         (
             format!("{stack:?}"),
             format!("{:?}", stack.item),
-            stack.resume_effect_index,
-            format!("{:?}", stack.previous_result),
+            stack.resume_effect_index(),
+            format!("{:?}", stack.previous_result()),
         )
     };
 
@@ -4168,14 +4163,14 @@ fn flat_second_counter_batch_survives_actor_departure_in_active_and_saved_routes
         assert_eq!(stack.item.card_id, "tezzerets_gambit");
         assert_eq!(stack.item.controller, 0);
         assert!(
-            stack.program.is_none(),
+            stack.program().is_none(),
             "actual Gambit remains on the flat path"
         );
         assert_eq!(format!("{:?}", stack.item), first_item_snapshot);
         assert_eq!(format!("{stack:?}"), first_stack_snapshot);
-        assert_eq!(stack.resume_effect_index, first_resume_index);
+        assert_eq!(stack.resume_effect_index(), first_resume_index);
         assert_eq!(
-            format!("{:?}", stack.previous_result),
+            format!("{:?}", stack.previous_result()),
             first_previous_result
         );
         let PendingReplacementEvent::Counters(counter_batch) = engine
@@ -4498,10 +4493,9 @@ fn ripples_second_counter_batch_keeps_first_child_receipt_after_actor_concedes()
                 zone_change_generation: Some(engine.state.zone_change_generation[&spell]),
             })
         );
-        assert_eq!(stack.resume_effect_index, None);
+        assert_eq!(stack.resume_effect_index(), None);
         let program = stack
-            .program
-            .as_ref()
+            .program()
             .expect("the actual Ripples Program remains parked");
         assert_eq!(
             program.owner,
@@ -4563,7 +4557,7 @@ fn ripples_second_counter_batch_keeps_first_child_receipt_after_actor_concedes()
             format!("{pending:?}"),
             format!("{stack:?}"),
             format!("{:?}", stack.item),
-            format!("{:?}", stack.previous_result),
+            format!("{:?}", stack.previous_result()),
             format!("{program:?}"),
             format!("{transaction:?}"),
             format!(
@@ -4621,13 +4615,10 @@ fn ripples_second_counter_batch_keeps_first_child_receipt_after_actor_concedes()
     assert_eq!(format!("{stack:?}"), stack_snapshot);
     assert_eq!(format!("{:?}", stack.item), item_snapshot);
     assert_eq!(
-        format!("{:?}", stack.previous_result),
+        format!("{:?}", stack.previous_result()),
         previous_result_snapshot
     );
-    assert_eq!(
-        format!("{:?}", stack.program.as_ref().unwrap()),
-        program_snapshot
-    );
+    assert_eq!(format!("{:?}", stack.program().unwrap()), program_snapshot);
     assert_eq!(format!("{transaction:?}"), transaction_snapshot);
     assert_eq!(
         format!(

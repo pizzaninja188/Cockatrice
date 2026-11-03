@@ -1853,7 +1853,7 @@ fn kaya_minus_three_real_token_entry_choice_resumes_the_tail_once() {
             .continuation
             .stack()
             .expect("entry choice retains the resolving ability")
-            .resume_effect_index,
+            .resume_effect_index(),
         Some(1),
         "the continuation starts after the compound exile/copy instruction"
     );

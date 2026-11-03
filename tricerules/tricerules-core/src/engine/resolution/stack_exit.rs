@@ -1057,7 +1057,7 @@ mod tests {
         let mut events = Vec::new();
         let progress = engine
             .finish_deferred_stack_exit_with_context(
-                ParkedStackResolution::new(top_spell.clone()),
+                ParkedStackResolution::dedicated(top_spell.clone()),
                 DeferredStackExit::Resolved,
                 StackExitTail::ExitOnly,
                 "Skimming Strike".to_owned(),

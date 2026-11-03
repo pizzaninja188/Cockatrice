@@ -457,7 +457,7 @@ impl GameEngine {
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<Option<Vec<CompletedDamage>>, EngineError> {
         self.process_or_park_damage_batch_with_stack(
-            ParkedStackResolution::new(item.clone()),
+            ParkedStackResolution::dedicated(item.clone()),
             damage,
             events,
         )

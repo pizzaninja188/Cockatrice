@@ -165,12 +165,16 @@ impl GameEngine {
             else {
                 return Ok(finish_with_events(self, events));
             };
-            return self.complete_parked_resolution_with_previous(
-                stack.item,
-                stack.resume_effect_index,
-                stack.previous_result,
-                events,
-            );
+            return {
+                let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
+                    stack.into_parts();
+                self.complete_parked_resolution_with_previous(
+                    parked_item,
+                    parked_resume_effect_index,
+                    parked_previous_result,
+                    events,
+                )
+            };
         }
         let mut result = CardResultCohort::default();
         let mut discard_receipts = Vec::new();
@@ -422,7 +426,7 @@ impl GameEngine {
         discard: &PendingPlayerSetDiscard,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<Option<CardResultCohort>, EngineError> {
-        let program_discard_outcome = stack.program.as_ref().map(|_| {
+        let program_discard_outcome = stack.program().map(|_| {
             discard
                 .choices
                 .iter()
@@ -448,15 +452,13 @@ impl GameEngine {
             })
         {
             if let Some(outcome) = program_discard_outcome {
-                stack
-                    .previous_result
-                    .set(crate::state::ProgramValue::DiscardResult(
-                        crate::state::ProgramDiscardResult {
-                            outcome,
-                            batches: Vec::new(),
-                            cards: Vec::new(),
-                        },
-                    ));
+                stack.record_result_value(crate::state::ProgramValue::DiscardResult(
+                    crate::state::ProgramDiscardResult {
+                        outcome,
+                        batches: Vec::new(),
+                        cards: Vec::new(),
+                    },
+                ));
             }
             let selected = discard
                 .choices

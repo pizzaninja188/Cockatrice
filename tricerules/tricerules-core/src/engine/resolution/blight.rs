@@ -115,20 +115,23 @@ impl GameEngine {
                 "P{} blights {count}; no creature can receive counters.",
                 pending.deciding_player
             )));
-            let previous_result = stack.previous_result.clone();
-            let completed = if stack.program.is_some() {
+            let previous_result = stack.previous_result().clone();
+            let completed = if stack.program().is_some() {
                 self.complete_parked_stack_with_previous(
                     stack,
                     previous_result,
                     std::mem::take(events),
                 )?
             } else {
-                self.complete_parked_resolution_with_previous(
-                    stack.item,
-                    stack.resume_effect_index,
-                    previous_result,
-                    std::mem::take(events),
-                )?
+                {
+                    let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
+                    self.complete_parked_resolution_with_previous(
+                        parked_item,
+                        parked_resume_effect_index,
+                        previous_result,
+                        std::mem::take(events),
+                    )
+                }?
             };
             events.extend(completed.events);
             return Ok(());
@@ -265,16 +268,19 @@ impl GameEngine {
             pending.deciding_player
         )));
         self.fire_triggers(&[GameEvent::Blighted(receipt)], &mut events);
-        let previous_result = stack.previous_result.clone();
-        if stack.program.is_some() {
+        let previous_result = stack.previous_result().clone();
+        if stack.program().is_some() {
             self.complete_parked_stack_with_previous(stack, previous_result, events)
         } else {
-            self.complete_parked_resolution_with_previous(
-                stack.item,
-                stack.resume_effect_index,
-                previous_result,
-                events,
-            )
+            {
+                let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
+                self.complete_parked_resolution_with_previous(
+                    parked_item,
+                    parked_resume_effect_index,
+                    previous_result,
+                    events,
+                )
+            }
         }
     }
 }

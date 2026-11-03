@@ -453,13 +453,13 @@ impl GameEngine {
             return None;
         }
         let observed = stack.item.trigger_context.observed_object?;
-        let effect = if let Some(program) = stack.program.as_ref() {
+        let effect = if let Some(program) = stack.program() {
             if !program.in_flight.as_ref().is_some_and(Vec::is_empty) {
                 return None;
             }
             self.current_program_perform(program).ok()?
         } else {
-            let index = stack.resume_effect_index?.checked_sub(1)? as usize;
+            let index = stack.resume_effect_index()?.checked_sub(1)? as usize;
             self.build_resolution_effects(&stack.item)
                 .0
                 .get(index)?
@@ -1393,8 +1393,8 @@ impl GameEngine {
         let supported_frame = frame.item.id == *stack_id
             && frame.item.controller == *controller
             && !frame.item.is_triggered
-            && frame.program.is_none()
-            && frame.resume_effect_index == leaf_index.checked_add(1)
+            && frame.program().is_none()
+            && frame.resume_effect_index() == leaf_index.checked_add(1)
             && selected_mode_matches
             && frame
                 .item
@@ -3783,8 +3783,8 @@ impl GameEngine {
         };
         !stack.item.is_triggered
             && stack.item.ability_text.is_some()
-            && stack.program.is_none()
-            && stack.resume_effect_index == Some(1)
+            && stack.program().is_none()
+            && stack.resume_effect_index() == Some(1)
             && pending.presentation.source_object_id == stack.item.id
             && stack
                 .item
@@ -3825,8 +3825,8 @@ impl GameEngine {
             && stack.item.ability_text.is_some()
             && stack.item.source_permanent_id.is_some()
             && stack.item.activated_ability.is_none()
-            && stack.program.is_none()
-            && stack.resume_effect_index == Some(1)
+            && stack.program().is_none()
+            && stack.resume_effect_index() == Some(1)
             && pending.presentation.source_object_id == stack.item.id
             && stack
                 .item
@@ -3879,14 +3879,14 @@ impl GameEngine {
         let Some(PendingReplacementEvent::Counters(batch)) = replacement else {
             return false;
         };
-        if stack.program.is_some()
+        if stack.program().is_some()
             || pending.presentation.source_object_id != stack.item.id
             || batch.event_index >= batch.events.len()
         {
             return false;
         }
         let Some(effect_index) = stack
-            .resume_effect_index
+            .resume_effect_index()
             .and_then(|resume| resume.checked_sub(1))
         else {
             return false;
@@ -4019,7 +4019,7 @@ impl GameEngine {
             self.state.pending_replacement_event = None;
             let completed = self.complete_parked_stack_with_previous(
                 stack.clone(),
-                stack.previous_result.clone(),
+                stack.previous_result().clone(),
                 Vec::new(),
             )?;
             out.extend(completed.events);
@@ -4206,7 +4206,7 @@ impl GameEngine {
             return Ok(());
         }
         let mut previous_result = if begun_flat {
-            stack.previous_result.clone()
+            stack.previous_result().clone()
         } else {
             crate::state::OperationResults::default()
         };
@@ -4290,8 +4290,8 @@ impl GameEngine {
             if !current {
                 return self.complete_parked_resolution_with_previous(
                     parked.item.clone(),
-                    parked.resume_effect_index,
-                    parked.previous_result.clone(),
+                    parked.resume_effect_index(),
+                    parked.previous_result().clone(),
                     Vec::new(),
                 );
             }
@@ -4571,16 +4571,19 @@ impl GameEngine {
                 self.replacement_object_display_name(creature.object_id, None),
             )));
             self.fire_triggers(&[GameEvent::Blighted(receipt)], &mut events);
-            let previous_result = stack.previous_result.clone();
-            return if stack.program.is_some() {
+            let previous_result = stack.previous_result().clone();
+            return if stack.program().is_some() {
                 self.complete_parked_stack_with_previous(stack, previous_result, events)
             } else {
-                self.complete_parked_resolution_with_previous(
-                    stack.item,
-                    stack.resume_effect_index,
-                    previous_result,
-                    events,
-                )
+                {
+                    let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
+                    self.complete_parked_resolution_with_previous(
+                        parked_item,
+                        parked_resume_effect_index,
+                        previous_result,
+                        events,
+                    )
+                }
             };
         }
         if let crate::state::CounterPlacementCompletion::Explore {
@@ -4590,7 +4593,7 @@ impl GameEngine {
             spell_label,
         } = &completion
         {
-            let mut previous_result = stack.previous_result.clone();
+            let mut previous_result = stack.previous_result().clone();
             previous_result.record_counter_placements(receipts);
             if let Some(revealed) = revealed {
                 self.park_explore_choice(
@@ -4607,14 +4610,17 @@ impl GameEngine {
                 "P{controller} explores with an empty library ({spell_label})."
             )));
             self.fire_triggers(&[GameEvent::Explored { object: *explorer }], &mut events);
-            return self.complete_parked_resolution_with_previous(
-                stack.item,
-                stack.resume_effect_index,
-                previous_result,
-                events,
-            );
+            return {
+                let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
+                self.complete_parked_resolution_with_previous(
+                    parked_item,
+                    parked_resume_effect_index,
+                    previous_result,
+                    events,
+                )
+            };
         }
-        let mut previous_result = stack.previous_result.clone();
+        let mut previous_result = stack.previous_result().clone();
         previous_result.record_counter_placements(receipts);
         if let crate::state::CounterPlacementCompletion::Amass {
             controller,
@@ -5289,7 +5295,7 @@ impl GameEngine {
                 unique_names: false,
             },
             continuation: ResolutionContinuation::EntryChooseCreatureType {
-                stack: ParkedStackResolution::new(item),
+                stack: ParkedStackResolution::dedicated(item),
                 effect_id,
                 key,
                 entering_zone,
@@ -5391,7 +5397,7 @@ impl GameEngine {
                 unique_names: false,
             },
             continuation: ResolutionContinuation::EntryChooseOpponent {
-                stack: ParkedStackResolution::new(item),
+                stack: ParkedStackResolution::dedicated(item),
                 effect_id,
                 key,
                 entering_zone,
@@ -5448,7 +5454,7 @@ impl GameEngine {
                 if pending
                     .continuation
                     .stack()
-                    .is_some_and(|stack| stack.program.is_some())
+                    .is_some_and(|stack| stack.program().is_some())
                     || exact_return.is_some() => {}
             _ => return Ok(()),
         }
@@ -5737,14 +5743,18 @@ impl GameEngine {
             self.state.pending_resolution = None;
             self.state.pending_replacement_event = None;
             let batch = match entry.completion {
-                BattlefieldEntryCompletion::PermanentSpell { .. } => self
-                    .complete_parked_resolution_with_previous(
-                        stack.item,
+                BattlefieldEntryCompletion::PermanentSpell { .. } => {
+                    let (parked_item, _, parked_previous_result, _) = stack.into_parts();
+                    self.complete_parked_resolution_with_previous(
+                        parked_item,
                         Some(0),
-                        stack.previous_result,
+                        parked_previous_result,
                         Vec::new(),
-                    )?,
-                BattlefieldEntryCompletion::ResolutionEffect { .. } if stack.program.is_some() => {
+                    )
+                }?,
+                BattlefieldEntryCompletion::ResolutionEffect { .. }
+                    if stack.program().is_some() =>
+                {
                     self.complete_parked_stack_with_previous(
                         stack,
                         OperationResults::default(),
@@ -5752,13 +5762,16 @@ impl GameEngine {
                     )?
                 }
                 BattlefieldEntryCompletion::ResolutionEffect { .. }
-                | BattlefieldEntryCompletion::Ninjutsu { .. } => self
-                    .complete_parked_resolution_with_previous(
-                        stack.item,
-                        stack.resume_effect_index,
-                        stack.previous_result,
+                | BattlefieldEntryCompletion::Ninjutsu { .. } => {
+                    let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
+                        stack.into_parts();
+                    self.complete_parked_resolution_with_previous(
+                        parked_item,
+                        parked_resume_effect_index,
+                        parked_previous_result,
                         Vec::new(),
-                    )?,
+                    )
+                }?,
                 BattlefieldEntryCompletion::ZoneEntryBatch(mut batch) => {
                     self.reconcile_departed_zone_entry_members(&mut batch, departed_objects);
                     let mut resumed_events = Vec::new();
@@ -5887,27 +5900,33 @@ impl GameEngine {
         self.state.pending_resolution = None;
         self.state.pending_replacement_event = None;
         let batch = match entry.completion {
-            BattlefieldEntryCompletion::PermanentSpell { .. } => self
-                .complete_parked_resolution_with_previous(
-                    stack.item,
+            BattlefieldEntryCompletion::PermanentSpell { .. } => {
+                let (parked_item, _, parked_previous_result, _) = stack.into_parts();
+                self.complete_parked_resolution_with_previous(
+                    parked_item,
                     Some(0),
-                    stack.previous_result,
+                    parked_previous_result,
                     Vec::new(),
-                )?,
-            BattlefieldEntryCompletion::ResolutionEffect { .. } if stack.program.is_some() => self
-                .complete_parked_stack_with_previous(
+                )
+            }?,
+            BattlefieldEntryCompletion::ResolutionEffect { .. } if stack.program().is_some() => {
+                self.complete_parked_stack_with_previous(
                     stack,
                     OperationResults::default(),
                     Vec::new(),
-                )?,
+                )?
+            }
             BattlefieldEntryCompletion::ResolutionEffect { .. }
-            | BattlefieldEntryCompletion::Ninjutsu { .. } => self
-                .complete_parked_resolution_with_previous(
-                    stack.item,
-                    stack.resume_effect_index,
-                    stack.previous_result,
+            | BattlefieldEntryCompletion::Ninjutsu { .. } => {
+                let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
+                    stack.into_parts();
+                self.complete_parked_resolution_with_previous(
+                    parked_item,
+                    parked_resume_effect_index,
+                    parked_previous_result,
                     Vec::new(),
-                )?,
+                )
+            }?,
             BattlefieldEntryCompletion::ZoneEntryBatch(mut batch) => {
                 self.reconcile_departed_zone_entry_members(&mut batch, departed_objects);
                 let mut resumed_events = Vec::new();
@@ -6164,7 +6183,7 @@ impl GameEngine {
                 unique_names: false,
             },
             continuation: ResolutionContinuation::EntryBasicLandType {
-                stack: ParkedStackResolution::new(item),
+                stack: ParkedStackResolution::dedicated(item),
                 effect_id,
             },
         });
@@ -6281,7 +6300,7 @@ impl GameEngine {
                 unique_names: false,
             },
             continuation: ResolutionContinuation::EntryReveal {
-                stack: ParkedStackResolution::new(item),
+                stack: ParkedStackResolution::dedicated(item),
                 effect_id,
                 entering_zone,
                 entering_generation,
@@ -6399,7 +6418,7 @@ impl GameEngine {
                 unique_names: false,
             },
             continuation: ResolutionContinuation::EntryCost {
-                stack: ParkedStackResolution::new(item),
+                stack: ParkedStackResolution::dedicated(item),
                 effect_id,
             },
         });
@@ -6488,7 +6507,7 @@ impl GameEngine {
                 unique_names: false,
             },
             continuation: ResolutionContinuation::SagaReadAhead {
-                stack: ParkedStackResolution::new(item),
+                stack: ParkedStackResolution::dedicated(item),
                 effect_id,
             },
         });
@@ -6864,7 +6883,7 @@ impl GameEngine {
             copy_candidate: event.pending_copy_candidate.take(),
         });
         self.park_entry_copy_aura_recipient_choice(
-            ParkedStackResolution::new(item),
+            ParkedStackResolution::dedicated(item),
             event,
             completion,
             filter,
@@ -7066,9 +7085,7 @@ impl GameEngine {
     pub(super) fn transfer_entry_choice_resume(&mut self, stack: &ParkedStackResolution) {
         if let Some(pending) = self.state.pending_resolution.as_mut() {
             if let Some(parked) = pending.continuation.stack_mut() {
-                parked.resume_effect_index = stack.resume_effect_index;
-                parked.previous_result = stack.previous_result.clone();
-                parked.program = stack.program.clone();
+                parked.restore_execution_from(stack);
             }
         }
     }
@@ -7105,17 +7122,20 @@ impl GameEngine {
                 self.clear_rebound_grant_for_stack_item(&stack.item);
                 self.complete_parked_resolution(stack.item, Some(0), events)
             }
-            BattlefieldEntryCompletion::ResolutionEffect { .. } if stack.program.is_some() => {
+            BattlefieldEntryCompletion::ResolutionEffect { .. } if stack.program().is_some() => {
                 self.complete_parked_stack_with_previous(stack, OperationResults::default(), events)
             }
             BattlefieldEntryCompletion::ResolutionEffect { .. }
-            | BattlefieldEntryCompletion::Ninjutsu { .. } => self
-                .complete_parked_resolution_with_previous(
-                    stack.item,
-                    stack.resume_effect_index,
-                    stack.previous_result,
+            | BattlefieldEntryCompletion::Ninjutsu { .. } => {
+                let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
+                    stack.into_parts();
+                self.complete_parked_resolution_with_previous(
+                    parked_item,
+                    parked_resume_effect_index,
+                    parked_previous_result,
                     events,
-                ),
+                )
+            }
             BattlefieldEntryCompletion::LibrarySearch { progress, .. } => {
                 self.continue_library_search_battlefield_entries(stack, progress, events)
             }
@@ -7141,12 +7161,16 @@ impl GameEngine {
                     return Ok(finish_with_events(self, events));
                 }
                 if resume_original_stack {
-                    self.complete_parked_resolution_with_previous(
-                        stack.item,
-                        stack.resume_effect_index,
-                        stack.previous_result,
-                        events,
-                    )
+                    {
+                        let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
+                            stack.into_parts();
+                        self.complete_parked_resolution_with_previous(
+                            parked_item,
+                            parked_resume_effect_index,
+                            parked_previous_result,
+                            events,
+                        )
+                    }
                 } else {
                     self.apply_sbas(&mut events)?;
                     if let Some(index) = self.state.player_idx(self.state.active_player_id()) {
@@ -7169,12 +7193,16 @@ impl GameEngine {
             BattlefieldEntryCompletion::LandPlay { resume_stack, .. } => {
                 self.state.passes_since_stack_change = 0;
                 if let Some(stack) = resume_stack {
-                    self.complete_parked_resolution_with_previous(
-                        stack.item,
-                        stack.resume_effect_index,
-                        stack.previous_result,
-                        events,
-                    )
+                    {
+                        let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
+                            stack.into_parts();
+                        self.complete_parked_resolution_with_previous(
+                            parked_item,
+                            parked_resume_effect_index,
+                            parked_previous_result,
+                            events,
+                        )
+                    }
                 } else {
                     Ok(finish_with_events(self, events))
                 }
@@ -7268,7 +7296,7 @@ impl GameEngine {
         if let Some(amass) = amass {
             return self.finish_amass_after_token_entry(stack, amass, events);
         }
-        let mut previous_result = stack.previous_result.clone();
+        let mut previous_result = stack.previous_result().clone();
         previous_result.set(crate::state::ProgramValue::CreatedTokenBatch(
             self.token_entry_object_refs(&created_ids),
         ));
@@ -7401,7 +7429,7 @@ impl GameEngine {
                 unique_names: false,
             },
             continuation: ResolutionContinuation::EntryCopySource {
-                stack: ParkedStackResolution::new(item),
+                stack: ParkedStackResolution::dedicated(item),
                 entering_zone,
                 entering_generation,
             },
@@ -7565,7 +7593,7 @@ impl GameEngine {
         completion: BattlefieldEntryCompletion,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<BattlefieldEntryProgress, EngineError> {
-        let stack = ParkedStackResolution::new(item.clone());
+        let stack = ParkedStackResolution::dedicated(item.clone());
         match self.advance_or_park_battlefield_entry(item, event, completion.clone(), events) {
             BattlefieldEntryProgress::Ready(event)
                 if !matches!(
@@ -7683,7 +7711,7 @@ impl GameEngine {
                                     unique_names: false,
                                 },
                                 continuation: ResolutionContinuation::BattleProtector {
-                                    stack: ParkedStackResolution::new(item),
+                                    stack: ParkedStackResolution::dedicated(item),
                                 },
                             });
                             return BattlefieldEntryProgress::Parked;
@@ -7876,7 +7904,7 @@ impl GameEngine {
                             unique_names: false,
                         },
                         continuation: ResolutionContinuation::EntryReplacement {
-                            stack: ParkedStackResolution::new(item),
+                            stack: ParkedStackResolution::dedicated(item),
                         },
                     });
                     return BattlefieldEntryProgress::Parked;
@@ -8130,7 +8158,7 @@ impl GameEngine {
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
         self.begin_token_entry_batch_with_stack(
-            ParkedStackResolution::new(item),
+            ParkedStackResolution::dedicated(item),
             entries,
             logs,
             options,
@@ -8561,12 +8589,16 @@ impl GameEngine {
                 self.state.passes_since_stack_change = 0;
                 events.push(ev_log(format!("P{player} played {land_name}")));
                 if let Some(resume_stack) = resume_stack {
-                    self.complete_parked_resolution_with_previous(
-                        resume_stack.item,
-                        resume_stack.resume_effect_index,
-                        resume_stack.previous_result,
-                        events,
-                    )
+                    {
+                        let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
+                            resume_stack.into_parts();
+                        self.complete_parked_resolution_with_previous(
+                            parked_item,
+                            parked_resume_effect_index,
+                            parked_previous_result,
+                            events,
+                        )
+                    }
                 } else {
                     Ok(finish_with_events(self, events))
                 }
@@ -8622,14 +8654,21 @@ impl GameEngine {
                     owner,
                     rv1::permanent_moved::Destination::Battlefield,
                 ));
-                if stack.program.is_some() {
+                if stack.program().is_some() {
                     self.complete_parked_stack_with_previous(
                         stack,
                         OperationResults::default(),
                         events,
                     )
                 } else {
-                    self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
+                    {
+                        let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
+                        self.complete_parked_resolution(
+                            parked_item,
+                            parked_resume_effect_index,
+                            events,
+                        )
+                    }
                 }
             }
             BattlefieldEntryCompletion::Ninjutsu {
@@ -8656,7 +8695,10 @@ impl GameEngine {
                         })),
                     });
                 }
-                self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
+                {
+                    let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
+                    self.complete_parked_resolution(parked_item, parked_resume_effect_index, events)
+                }
             }
             BattlefieldEntryCompletion::ObserverReturn {
                 owner,
@@ -8685,12 +8727,16 @@ impl GameEngine {
                     return Ok(finish_with_events(self, events));
                 }
                 if resume_original_stack {
-                    self.complete_parked_resolution_with_previous(
-                        stack.item,
-                        stack.resume_effect_index,
-                        stack.previous_result,
-                        events,
-                    )
+                    {
+                        let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
+                            stack.into_parts();
+                        self.complete_parked_resolution_with_previous(
+                            parked_item,
+                            parked_resume_effect_index,
+                            parked_previous_result,
+                            events,
+                        )
+                    }
                 } else {
                     self.apply_sbas(&mut events)?;
                     if let Some(index) = self.state.player_idx(self.state.active_player_id()) {
@@ -8802,7 +8848,7 @@ impl GameEngine {
                 if let Some(amass) = amass {
                     return self.finish_amass_after_token_entry(stack, amass, events);
                 }
-                let mut previous_result = stack.previous_result.clone();
+                let mut previous_result = stack.previous_result().clone();
                 previous_result.set(crate::state::ProgramValue::CreatedTokenBatch(
                     self.token_entry_object_refs(&created_ids),
                 ));
@@ -10121,8 +10167,7 @@ mod tests {
                 .activated_abilities[1]
                 .clone(),
         );
-        let mut stack = ParkedStackResolution::new(item);
-        stack.resume_effect_index = Some(1);
+        let stack = ParkedStackResolution::for_flat_effects(item, Some(1), Default::default());
         let pending = PendingResolution {
             deciding_player: 0,
             presentation: PendingResolutionPresentation {
@@ -10186,7 +10231,7 @@ mod tests {
         else {
             unreachable!()
         };
-        stack.resume_effect_index = Some(2);
+        stack.set_flat_tail(Some(2), stack.previous_result().clone());
         assert!(!engine.begun_combined_counter_placement(&wrong_cursor, Some(&replacement)));
 
         let mut wrong_completion = pending.clone();
@@ -10234,8 +10279,7 @@ mod tests {
                 .triggered_abilities[0]
                 .clone(),
         );
-        let mut stack = ParkedStackResolution::new(item);
-        stack.resume_effect_index = Some(1);
+        let stack = ParkedStackResolution::for_flat_effects(item, Some(1), Default::default());
         let pending = PendingResolution {
             deciding_player: 0,
             presentation: PendingResolutionPresentation {
@@ -10330,7 +10374,7 @@ mod tests {
         else {
             unreachable!()
         };
-        stack.resume_effect_index = Some(2);
+        stack.set_flat_tail(Some(2), stack.previous_result().clone());
         assert!(!engine.begun_wolf_counter_placement(&wrong_cursor, Some(&replacement)));
 
         let mut wrong_kind = pending.clone();
@@ -10438,8 +10482,7 @@ mod tests {
         item.is_triggered = true;
         item.triggered_ability = Some(ability);
         item.trigger_context.observed_object = Some(observed);
-        let mut stack = ParkedStackResolution::new(item);
-        stack.resume_effect_index = Some(1);
+        let stack = ParkedStackResolution::for_flat_effects(item, Some(1), Default::default());
         let pending = PendingResolution {
             deciding_player: 1,
             presentation: PendingResolutionPresentation {

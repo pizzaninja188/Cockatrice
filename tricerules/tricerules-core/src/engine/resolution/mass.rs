@@ -465,7 +465,7 @@ pub(super) fn choose_and_sacrifice(
         count,
         filter,
     };
-    let stack = ParkedStackResolution::new(cx.top.clone());
+    let stack = ParkedStackResolution::dedicated(cx.top.clone());
     if cx
         .engine
         .advance_player_set_sacrifice_choices(&mut sacrifice)
@@ -523,7 +523,7 @@ pub(super) fn choose_permanents_by_type_and_sacrifice_rest(
         candidate_generations: Vec::new(),
         stage: crate::state::PendingTypeChoiceSacrificeStage::ChoosingPermanent,
     };
-    let stack = ParkedStackResolution::new(cx.top.clone());
+    let stack = ParkedStackResolution::dedicated(cx.top.clone());
     if cx
         .engine
         .advance_type_choice_sacrifice(&stack, &mut sacrifice)?

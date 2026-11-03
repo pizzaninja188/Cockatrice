@@ -81,7 +81,7 @@ impl GameEngine {
         origin: Zone,
         completion: Option<&crate::state::ZoneEntryCompletion>,
     ) -> bool {
-        let Some(program) = stack.program.as_ref() else {
+        let Some(program) = stack.program() else {
             return false;
         };
         if !program.in_flight.as_ref().is_some_and(Vec::is_empty)
@@ -105,7 +105,7 @@ impl GameEngine {
         origin: Zone,
         completion: Option<&crate::state::ZoneEntryCompletion>,
     ) -> bool {
-        let Some(program) = stack.program.as_ref() else {
+        let Some(program) = stack.program() else {
             return false;
         };
         origin == Zone::Graveyard
@@ -126,7 +126,7 @@ impl GameEngine {
     }
 
     pub(super) fn is_typed_resultful_library_search(&self, stack: &ParkedStackResolution) -> bool {
-        let Some(program) = stack.program.as_ref() else {
+        let Some(program) = stack.program() else {
             return false;
         };
         let Some(outputs) = program
@@ -188,12 +188,16 @@ impl GameEngine {
             return self.complete_parked_stack_with_previous(stack, operation_result, events);
         }
 
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
-            stack.previous_result,
-            events,
-        )
+        {
+            let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
+                stack.into_parts();
+            self.complete_parked_resolution_with_previous(
+                parked_item,
+                parked_resume_effect_index,
+                parked_previous_result,
+                events,
+            )
+        }
     }
 
     pub(super) fn begin_zone_entry_batch(
@@ -705,7 +709,7 @@ impl GameEngine {
         else {
             return Ok(None);
         };
-        let Some(program) = stack.program.as_ref() else {
+        let Some(program) = stack.program() else {
             return Ok(None);
         };
         let effect = self.current_program_perform(program)?;
@@ -1474,7 +1478,7 @@ mod timestamp_order_tests {
         let mut events = Vec::new();
         assert!(engine
             .begin_zone_entry_batch(
-                ParkedStackResolution::new(stack),
+                ParkedStackResolution::dedicated(stack),
                 vec![entry],
                 Zone::Graveyard,
                 "exchange",
@@ -1597,7 +1601,7 @@ mod timestamp_order_tests {
         assert!(
             engine
                 .begin_zone_entry_batch(
-                    ParkedStackResolution::new(stack),
+                    ParkedStackResolution::dedicated(stack),
                     entries,
                     Zone::Graveyard,
                     "return",
@@ -1683,7 +1687,7 @@ mod timestamp_order_tests {
         let mut events = Vec::new();
         assert!(engine
             .begin_zone_entry_batch(
-                ParkedStackResolution::new(stack),
+                ParkedStackResolution::dedicated(stack),
                 entries,
                 Zone::Graveyard,
                 "return",
@@ -1756,7 +1760,7 @@ mod timestamp_order_tests {
         let stack = engine.observer_return_item(ids[0], 0);
         assert!(engine
             .begin_zone_entry_batch(
-                ParkedStackResolution::new(stack),
+                ParkedStackResolution::dedicated(stack),
                 entries,
                 Zone::Graveyard,
                 "return",

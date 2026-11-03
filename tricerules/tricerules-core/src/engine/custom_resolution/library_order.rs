@@ -364,7 +364,10 @@ impl GameEngine {
             if devotion_x as usize >= self.state.players[idx].library.len() {
                 self.state.outcome = Some(crate::state::GameOutcome::Winner(controller));
             }
-            return self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev);
+            return {
+                let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
+                self.complete_parked_resolution(parked_item, parked_resume_effect_index, ev)
+            };
         }
 
         if let PendingLibraryLookStage::Hideaway {
@@ -474,7 +477,10 @@ impl GameEngine {
                 owner,
                 rv1::permanent_moved::Destination::Exile,
             ));
-            return self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev);
+            return {
+                let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
+                self.complete_parked_resolution(parked_item, parked_resume_effect_index, ev)
+            };
         }
 
         if let PendingLibraryLookStage::ChooseBattlefield {
@@ -572,12 +578,16 @@ impl GameEngine {
             else {
                 return Ok(finish_with_events(self, ev));
             };
-            return self.complete_parked_resolution_with_previous(
-                stack.item,
-                stack.resume_effect_index,
-                stack.previous_result,
-                ev,
-            );
+            return {
+                let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
+                    stack.into_parts();
+                self.complete_parked_resolution_with_previous(
+                    parked_item,
+                    parked_resume_effect_index,
+                    parked_previous_result,
+                    ev,
+                )
+            };
         }
 
         if matches!(stage, PendingLibraryLookStage::OrderBottom) {
@@ -818,10 +828,8 @@ mod library_look_choose_battlefield_tests {
                 tail,
             ];
             item.triggered_ability = Some(ability);
-            let mut stack = ParkedStackResolution::new(item);
-            stack.resume_effect_index = Some(1);
-            stack
-                .previous_result
+            let mut results = crate::state::OperationResults::default();
+            results
                 .record_cards([crate::state::CardResultEntry {
                     action: tricerules_card_model::primitives::CardResultAction::Mill,
                     affected_player: 0,
@@ -831,6 +839,7 @@ mod library_look_choose_battlefield_tests {
                     provenance: crate::state::CardResultProvenance::ActionFacts,
                 }])
                 .expect("typed fixture facts");
+            let stack = ParkedStackResolution::for_flat_effects(item, Some(1), results);
             engine.state.pending_resolution = Some(PendingResolution {
                 resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
                 resolution_prompt_semantics: None,
@@ -1028,10 +1037,8 @@ mod library_look_choose_battlefield_tests {
                 tail,
             ];
             item.triggered_ability = Some(ability);
-            let mut stack = ParkedStackResolution::new(item);
-            stack.resume_effect_index = Some(1);
-            stack
-                .previous_result
+            let mut results = crate::state::OperationResults::default();
+            results
                 .record_cards([crate::state::CardResultEntry {
                     action: tricerules_card_model::primitives::CardResultAction::Mill,
                     affected_player: 0,
@@ -1041,6 +1048,7 @@ mod library_look_choose_battlefield_tests {
                     provenance: crate::state::CardResultProvenance::ActionFacts,
                 }])
                 .expect("typed fixture facts");
+            let stack = ParkedStackResolution::for_flat_effects(item, Some(1), results);
             engine.state.pending_resolution = Some(PendingResolution {
                 resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
                 resolution_prompt_semantics: None,
@@ -1142,7 +1150,7 @@ mod library_look_choose_battlefield_tests {
         )
         .unwrap();
         let forest = library_card(&mut engine, "forest");
-        let stack = ParkedStackResolution::new(test_stack_item());
+        let stack = ParkedStackResolution::dedicated(test_stack_item());
         engine.state.pending_resolution = Some(PendingResolution {
             deciding_player: 0,
             presentation: PendingResolutionPresentation {

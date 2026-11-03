@@ -171,7 +171,7 @@ pub(super) fn move_one_counter_between_targets(
         return Ok(EffectOutcome::Continue);
     }
 
-    let stack = ParkedStackResolution::new(cx.top.clone())
+    let stack = ParkedStackResolution::dedicated(cx.top.clone())
         .with_previous_result(cx.resume_previous_result.cloned().unwrap_or_default());
     let prompt = "Choose a counter to move.".to_string();
     cx.engine.state.pending_resolution = Some(PendingResolution {
@@ -950,7 +950,7 @@ pub(super) fn may_behold(
             stack: if cx.program_state.is_some() {
                 cx.parked_stack()
             } else {
-                ParkedStackResolution::new(cx.top.clone())
+                ParkedStackResolution::dedicated(cx.top.clone())
                     .with_previous_result(cx.resume_previous_result.cloned().unwrap_or_default())
             },
             candidate_generations,
@@ -1895,7 +1895,7 @@ fn park_resolution_branches_for(
             unique_names: false,
         },
         continuation: ResolutionContinuation::AuthoredBranch {
-            stack: ParkedStackResolution::new(cx.top.clone())
+            stack: ParkedStackResolution::dedicated(cx.top.clone())
                 .with_previous_result(cx.resume_previous_result.cloned().unwrap_or_default()),
             branch: PendingResolutionBranch {
                 optional,
@@ -2108,7 +2108,7 @@ pub(in crate::engine) fn authored_resolution_branch_choice_event(
                 resolution_branch_is_selectable(
                     engine,
                     &stack.item,
-                    &stack.previous_result,
+                    stack.previous_result(),
                     pending.deciding_player,
                     branch.original_chooser,
                     option,
@@ -2371,7 +2371,7 @@ pub(in crate::engine) fn authored_resolution_branch_has_selectable_option(
             resolution_branch_is_selectable(
                 engine,
                 &stack.item,
-                &stack.previous_result,
+                stack.previous_result(),
                 pending.deciding_player,
                 branch.original_chooser,
                 option,

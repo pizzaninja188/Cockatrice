@@ -343,7 +343,7 @@ impl GameEngine {
             self.state.pending_resolution = Some(pending);
             return Ok(());
         };
-        if stack.program.is_none() {
+        if stack.program().is_none() {
             self.state.pending_resolution = Some(pending);
             return Ok(());
         }
@@ -379,7 +379,7 @@ impl GameEngine {
                 commander_choice,
                 shuffle,
                 ..
-            } if stack.program.is_some() => {
+            } if stack.program().is_some() => {
                 if !self.player_is_live(*searcher) {
                     let stack = stack.clone();
                     let completed =
@@ -438,7 +438,7 @@ impl GameEngine {
                     );
                     let completed = self.complete_parked_stack_with_previous(
                         stack.clone(),
-                        stack.previous_result.clone(),
+                        stack.previous_result().clone(),
                         completed_events,
                     )?;
                     events.extend(completed.events);
@@ -693,11 +693,10 @@ impl GameEngine {
             &mut events,
         );
         let completion_result = if stack
-            .program
-            .as_ref()
+            .program()
             .is_some_and(|program| program.in_flight.as_ref().is_some_and(Vec::is_empty))
         {
-            stack.previous_result.clone()
+            stack.previous_result().clone()
         } else {
             crate::state::OperationResults::from_value(ProgramValue::FoundLibraryCohort(Vec::new()))
         };

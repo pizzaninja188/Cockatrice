@@ -7,7 +7,7 @@ use crate::state::{DiscardBatch, DiscardCause, DiscardReceipt};
 /// Only the closed Memory Jar delayed child carries this private occurrence key. Its discard
 /// replacement is already part of a begun resolution, even when its controller has departed.
 pub(super) fn is_memory_jar_discard_replacement(stack: &ParkedStackResolution) -> bool {
-    stack.program.is_none() && stack.item.trigger_context.memory_jar_cohort.is_some()
+    stack.program().is_none() && stack.item.trigger_context.memory_jar_cohort.is_some()
 }
 
 impl GameEngine {
@@ -608,7 +608,7 @@ impl GameEngine {
         // Keep the per-player semantic discard batches in commit order, and publish them only
         // after every replacement destination and any chosen library order are committed.
         let discard_batches = self.fire_discard_batches(discard_receipts, &mut events);
-        if let Some(early_result) = stack.previous_result.discard_result() {
+        if let Some(early_result) = stack.previous_result().discard_result() {
             result.program_discard_result = Some(crate::state::ProgramDiscardResult {
                 outcome: early_result.outcome,
                 batches: discard_batches,
@@ -631,7 +631,7 @@ impl GameEngine {
         let ResolutionContinuation::DiscardReplacement { stack } = &pending.continuation else {
             return Ok(false);
         };
-        if stack.program.is_none() {
+        if stack.program().is_none() {
             return Ok(false);
         }
         let Some(PendingReplacementEvent::Discard(batch)) =

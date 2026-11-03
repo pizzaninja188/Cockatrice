@@ -255,14 +255,12 @@ impl GameEngine {
         else {
             if let Some(resolution) = self.state.pending_resolution.as_mut() {
                 if let Some(parked) = resolution.continuation.stack_mut() {
-                    parked.resume_effect_index = stack.resume_effect_index;
-                    parked.previous_result = stack.previous_result;
-                    parked.program = stack.program;
+                    parked.restore_execution_from_owned(stack);
                 }
             }
             return Ok(super::super::events::finish_with_events(self, events));
         };
-        let mut previous_result = stack.previous_result.clone();
+        let mut previous_result = stack.previous_result().clone();
         previous_result.set(crate::state::ProgramValue::CreatedTokenBatch(
             produced_objects,
         ));

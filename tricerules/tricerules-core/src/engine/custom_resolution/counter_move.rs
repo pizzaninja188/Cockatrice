@@ -64,20 +64,28 @@ impl GameEngine {
                 [(kind, 1)],
                 super::continuous::CounterPlacementOrigin::Effect,
             ) else {
-                return self.complete_parked_resolution_with_previous(
-                    stack.item,
-                    stack.resume_effect_index,
-                    stack.previous_result,
-                    events,
-                );
+                return {
+                    let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
+                        stack.into_parts();
+                    self.complete_parked_resolution_with_previous(
+                        parked_item,
+                        parked_resume_effect_index,
+                        parked_previous_result,
+                        events,
+                    )
+                };
             };
             let Some(source_zone_change_generation) = source_target.zone_change_generation else {
-                return self.complete_parked_resolution_with_previous(
-                    stack.item,
-                    stack.resume_effect_index,
-                    stack.previous_result,
-                    events,
-                );
+                return {
+                    let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
+                        stack.into_parts();
+                    self.complete_parked_resolution_with_previous(
+                        parked_item,
+                        parked_resume_effect_index,
+                        parked_previous_result,
+                        events,
+                    )
+                };
             };
             proposal.counter_move_context =
                 Some(super::super::replacement::CounterMoveReplacementContext {
@@ -104,25 +112,32 @@ impl GameEngine {
                 &mut events,
             ) {
                 Ok(Some(receipts)) => {
-                    let mut previous_result = stack.previous_result.clone();
+                    let mut previous_result = stack.previous_result().clone();
                     previous_result.record_counter_placements(receipts);
-                    return self.complete_parked_resolution_with_previous(
-                        stack.item,
-                        stack.resume_effect_index,
-                        previous_result,
-                        events,
-                    );
+                    return {
+                        let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
+                        self.complete_parked_resolution_with_previous(
+                            parked_item,
+                            parked_resume_effect_index,
+                            previous_result,
+                            events,
+                        )
+                    };
                 }
                 Ok(None) => return Ok(finish_with_events(self, events)),
                 Err(error) => return Err(error),
             }
         }
 
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
-            stack.previous_result,
-            events,
-        )
+        {
+            let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
+                stack.into_parts();
+            self.complete_parked_resolution_with_previous(
+                parked_item,
+                parked_resume_effect_index,
+                parked_previous_result,
+                events,
+            )
+        }
     }
 }

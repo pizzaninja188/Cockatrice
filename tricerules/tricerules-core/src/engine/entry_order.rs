@@ -292,7 +292,7 @@ impl GameEngine {
                 if let Some(amass) = amass {
                     return self.finish_amass_after_token_entry(stack, amass, events);
                 }
-                let mut previous_result = stack.previous_result.clone();
+                let mut previous_result = stack.previous_result().clone();
                 previous_result.set(crate::state::ProgramValue::CreatedTokenBatch(
                     self.token_entry_object_refs(&created_ids),
                 ));
@@ -310,7 +310,7 @@ impl GameEngine {
                 if let Some(stack) = batch.resume_stack {
                     self.complete_parked_stack_with_previous(
                         stack.clone(),
-                        stack.previous_result.clone(),
+                        stack.previous_result().clone(),
                         events,
                     )
                 } else {
@@ -427,8 +427,10 @@ impl GameEngine {
                         .original_generations
                         .retain(|(oid, _, _)| valid.contains(oid));
                     if let Some(stack) = batch.resume_stack.as_mut() {
-                        stack.resume_effect_index =
-                            Some(self.build_resolution_effects(&stack.item).0.len() as u32);
+                        stack.set_flat_tail(
+                            Some(self.build_resolution_effects(&stack.item).0.len() as u32),
+                            stack.previous_result().clone(),
+                        );
                     }
                     *stack = batch.resume_stack.clone();
                     events.push(events::ev_log("Interrupted return batch discarded stale incarnations; valid independent returns remain owed.".into()));
@@ -581,8 +583,8 @@ mod tests {
         )
         .unwrap();
         let item = legacy_scry_draw_item(&engine, engine.state.players[0].hand[3], 0);
-        let mut stack = ParkedStackResolution::new(item.clone());
-        stack.resume_effect_index = Some(0);
+        let stack =
+            ParkedStackResolution::for_flat_effects(item.clone(), Some(0), Default::default());
         let ids = if tokens {
             let source = engine.state.players[1].hand[0];
             engine.state.objects.get_mut(&source).unwrap().card_id = "pacifism".into();
@@ -848,8 +850,8 @@ mod tests {
             )
             .unwrap();
         let ids: Vec<_> = entries.iter().map(|entry| entry.event.object_id).collect();
-        let mut stack = ParkedStackResolution::new(item.clone());
-        stack.resume_effect_index = Some(0);
+        let stack =
+            ParkedStackResolution::for_flat_effects(item.clone(), Some(0), Default::default());
         let mut events = Vec::new();
         assert!(engine
             .begin_token_entry_batch(
@@ -1038,8 +1040,7 @@ mod tests {
             );
         }
         let item = legacy_scry_draw_item(&engine, ids[2], 0);
-        let mut stack = ParkedStackResolution::new(item);
-        stack.resume_effect_index = Some(0);
+        let stack = ParkedStackResolution::for_flat_effects(item, Some(0), Default::default());
         let mut events = Vec::new();
         assert!(engine
             .drain_immediate_observer_actions(Some(stack), &mut events)
@@ -1212,8 +1213,7 @@ mod tests {
         }
 
         let item = legacy_scry_draw_item(&engine, first, 0);
-        let mut stack = ParkedStackResolution::new(item);
-        stack.resume_effect_index = Some(0);
+        let stack = ParkedStackResolution::for_flat_effects(item, Some(0), Default::default());
         let mut events = Vec::new();
         assert!(engine
             .drain_immediate_observer_actions(Some(stack), &mut events)

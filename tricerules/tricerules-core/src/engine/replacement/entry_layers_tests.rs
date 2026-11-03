@@ -594,7 +594,7 @@ fn manifest_dread_skipped_commander_resumes_none_tail_before_903_9a_choice() {
     let ResolutionContinuation::ProgramChoose { stack, .. } = &tail_pending.continuation else {
         panic!("the tail choice retains the Program cursor");
     };
-    let program = stack.program.as_ref().expect("parked Program state");
+    let program = stack.program().expect("parked Program state");
     let compiled = engine
         .registry
         .compiled_program_for_owner(&program.owner)
@@ -1278,7 +1278,7 @@ fn molten_echoes_and_matching_creature_entering_together_wait_for_choice_then_tr
     // Molten Echoes parks its mandatory as-enters choice.
     let resumed = engine
         .begin_zone_entry_batch(
-            ParkedStackResolution::new(engine.observer_return_item(molten_echoes, 0)),
+            ParkedStackResolution::dedicated(engine.observer_return_item(molten_echoes, 0)),
             vec![event(&engine, bear), event(&engine, molten_echoes)],
             Zone::Graveyard,
             "simultaneous return",
@@ -1419,10 +1419,8 @@ fn paid_divination_stack(engine: &mut GameEngine) -> ParkedStackResolution {
             },
         )
         .unwrap();
-    let mut stack = ParkedStackResolution::new(engine.state.stack.pop().unwrap());
-    stack.resume_effect_index = Some(0);
-    stack
-        .previous_result
+    let mut results = crate::state::OperationResults::default();
+    results
         .append(crate::state::ProgramValue::PermanentSelection(vec![
             TriggerObjectRef {
                 object_id: spell,
@@ -1431,7 +1429,7 @@ fn paid_divination_stack(engine: &mut GameEngine) -> ParkedStackResolution {
             },
         ]))
         .expect("typed retention sentinel");
-    stack
+    ParkedStackResolution::for_flat_effects(engine.state.stack.pop().unwrap(), Some(0), results)
 }
 
 // Synthetic Library-entry instruction around a real paid outer spell and registered Pacifism.
@@ -1471,7 +1469,7 @@ fn printed_aura_library_entry_parks_before_commit_and_preserves_original_tail() 
             .copied()
             .unwrap_or(0);
         let stack = paid_divination_stack(&mut engine);
-        let expected_previous = format!("{:?}", stack.previous_result);
+        let expected_previous = format!("{:?}", stack.previous_result());
         let hand_before_tail = engine.state.players[0].hand.len();
         let mut events = Vec::new();
         let entry = event(&engine, aura);
@@ -1509,13 +1507,13 @@ fn printed_aura_library_entry_parks_before_commit_and_preserves_original_tail() 
         assert_eq!(pending.deciding_player, 0);
         assert_eq!(pending.presentation.candidates, [recipient]);
         assert_eq!(
-            pending.continuation.stack().unwrap().resume_effect_index,
+            pending.continuation.stack().unwrap().resume_effect_index(),
             Some(0)
         );
         assert_eq!(
             format!(
                 "{:?}",
-                pending.continuation.stack().unwrap().previous_result
+                pending.continuation.stack().unwrap().previous_result()
             ),
             expected_previous
         );
@@ -1609,11 +1607,12 @@ fn printed_aura_without_recipient_stays_in_library_and_resumes_tail_once() {
         assert!(!events.iter().any(|event| matches!(&event.ev,
             Some(rv1::ruled_event::Ev::PermanentMoved(moved)) if moved.object_id == aura)));
         assert!(engine.state.pending_resolution.is_none());
+        let (item, resume_effect_index, previous_result, _) = resumed.into_parts();
         engine
             .complete_parked_resolution_with_previous(
-                resumed.item,
-                resumed.resume_effect_index,
-                resumed.previous_result,
+                item,
+                resume_effect_index,
+                previous_result,
                 events,
             )
             .unwrap();
@@ -1645,8 +1644,8 @@ fn printed_aura_resumed_entry_keeps_deferred_tokens_out_of_library_views_and_rej
             engine.state.players[0].library.push_front(token);
             let mut stack = paid_divination_stack(&mut engine);
             // This composition's outer spell has no remaining effects. Draw-tail coverage is above.
-            stack.resume_effect_index = Some(1);
-            let expected_previous = format!("{:?}", stack.previous_result);
+            stack.set_flat_tail(Some(1), stack.previous_result().clone());
+            let expected_previous = format!("{:?}", stack.previous_result());
             let mut events = Vec::new();
             let entry = event(&engine, aura);
             assert!(engine
@@ -1703,12 +1702,12 @@ fn printed_aura_resumed_entry_keeps_deferred_tokens_out_of_library_views_and_rej
             assert_eq!(
                 format!(
                     "{:?}",
-                    pending.continuation.stack().unwrap().previous_result
+                    pending.continuation.stack().unwrap().previous_result()
                 ),
                 expected_previous
             );
             assert_eq!(
-                pending.continuation.stack().unwrap().resume_effect_index,
+                pending.continuation.stack().unwrap().resume_effect_index(),
                 Some(1)
             );
             assert_eq!(engine.state.objects[&aura].zone, Zone::Library);
@@ -1882,7 +1881,7 @@ fn entry_reveal_pair_internal_hand_cohort_retains_paid_reveals_through_timestamp
             let mut events = Vec::new();
             assert!(engine
                 .begin_zone_entry_batch(
-                    ParkedStackResolution::new(item),
+                    ParkedStackResolution::dedicated(item),
                     entries,
                     Zone::Hand,
                     "internal simultaneous hand instruction",
@@ -5971,7 +5970,7 @@ fn compleated_grouped_entry_rejects_wrong_actor_stale_epoch_and_old_or_foreign_h
         let (mut engine, stack) = if program_stack {
             let (engine, mut stack, _, refs) = suspended_conductive_machete_manifest_dread();
             assert_eq!(
-                format!("{:?}", stack.previous_result),
+                format!("{:?}", stack.previous_result()),
                 format!("{:?}", crate::state::OperationResults::default()),
                 "the real Manifest Dread pause has no previous Program result"
             );
@@ -5990,8 +5989,8 @@ fn compleated_grouped_entry_rejects_wrong_actor_stale_epoch_and_old_or_foreign_h
                 .unwrap_or(0);
             assert_eq!(current_generation, manifest_ref.zone_change_generation);
             // Prepared-retention sentinel only; this is not an actual Program output.
-            stack
-                .previous_result
+            let mut results = stack.previous_result().clone();
+            results
                 .append(crate::state::ProgramValue::PermanentSelection(vec![
                     TriggerObjectRef {
                         object_id: manifest_ref.object_id,
@@ -6000,7 +5999,8 @@ fn compleated_grouped_entry_rejects_wrong_actor_stale_epoch_and_old_or_foreign_h
                     },
                 ]))
                 .expect("typed retention sentinel");
-            assert_eq!(stack.previous_result.object_refs().len(), 1);
+            stack.replace_completed_results(results);
+            assert_eq!(stack.previous_result().object_refs().len(), 1);
             (engine, stack)
         } else {
             let mut engine = engine();
@@ -6011,15 +6011,14 @@ fn compleated_grouped_entry_rejects_wrong_actor_stale_epoch_and_old_or_foreign_h
             compleated_grouped_entry_fixture(&mut engine, &stack);
         let expected_stack_debug = format!("{stack:?}");
         assert_ne!(
-            format!("{:?}", stack.previous_result),
+            format!("{:?}", stack.previous_result()),
             format!("{:?}", crate::state::OperationResults::default()),
             "both parked-stack donors carry a nonempty previous result"
         );
         if program_stack {
             assert!(
                 stack
-                    .program
-                    .as_ref()
+                    .program()
                     .is_some_and(|program| !program.frames.is_empty()),
                 "the registered Program donor has a real suspended frame"
             );
@@ -7744,8 +7743,8 @@ fn prepare_compleated_exact_owner_exile_return(
     let mut item = engine.observer_return_item(trigger_source, 0);
     item.is_triggered = true;
     item.triggered_ability = Some(ability);
-    let mut stack = crate::state::ParkedStackResolution::new(item);
-    stack.resume_effect_index = Some(1);
+    let mut stack =
+        crate::state::ParkedStackResolution::for_flat_effects(item, Some(1), Default::default());
 
     let (entrant, entry, seasons, _) = compleated_grouped_entry_fixture(&mut engine, &stack);
     assert_eq!(seasons.len(), 3);

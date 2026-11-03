@@ -294,7 +294,7 @@ impl GameEngine {
             },
             continuation,
         });
-        if stack.program.is_some() || choosing_delegate {
+        if stack.program().is_some() || choosing_delegate {
             events.push(
                 self.proliferate_choice_event()
                     .ok_or(EngineError::ProgramInvariant(
@@ -356,21 +356,24 @@ impl GameEngine {
         transaction: PendingProliferateTransaction,
         events: Vec<rv1::RuledEvent>,
     ) -> Result<rv1::RuledEventBatch, EngineError> {
-        if stack.program.is_some() {
+        if stack.program().is_some() {
             self.complete_parked_stack_with_previous(
                 stack,
                 OperationResults::default().with_counter_placements(transaction.counter_placements),
                 events,
             )
         } else {
-            let mut previous_result = stack.previous_result.clone();
+            let mut previous_result = stack.previous_result().clone();
             previous_result.record_counter_placements(transaction.counter_placements);
-            self.complete_parked_resolution_with_previous(
-                stack.item,
-                stack.resume_effect_index,
-                previous_result,
-                events,
-            )
+            {
+                let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
+                self.complete_parked_resolution_with_previous(
+                    parked_item,
+                    parked_resume_effect_index,
+                    previous_result,
+                    events,
+                )
+            }
         }
     }
 

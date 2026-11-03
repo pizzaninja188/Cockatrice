@@ -14,7 +14,7 @@ pub(super) fn chaos_warp(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineE
         .copied()
     {
         return match cx.engine.reveal_chaos_warp_owner_top(
-            ParkedStackResolution::new(cx.top.clone()),
+            ParkedStackResolution::dedicated(cx.top.clone()),
             owner,
             cx.events,
         )? {
@@ -79,7 +79,7 @@ pub(super) fn chaos_warp(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineE
                 choice_kind: custom::ChoiceKind::ResolutionBranch,
             },
             continuation: ResolutionContinuation::ChaosWarpCommander {
-                stack: ParkedStackResolution::new(cx.top.clone()),
+                stack: ParkedStackResolution::dedicated(cx.top.clone()),
                 owner,
                 target,
                 target_generation: cx
@@ -181,7 +181,7 @@ impl GameEngine {
             || pending.deciding_player != owner
             || !target_current
             || !stack_current
-            || stack.resume_effect_index != Some(effect_index)
+            || stack.resume_effect_index() != Some(effect_index)
             || stack
                 .item
                 .chaos_warp_owner_instructions
@@ -222,12 +222,16 @@ impl GameEngine {
         if self.drain_immediate_observer_actions(Some(stack.clone()), &mut events)? {
             return Ok(super::super::events::finish_with_events(self, events));
         }
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
-            stack.previous_result,
-            events,
-        )
+        {
+            let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
+                stack.into_parts();
+            self.complete_parked_resolution_with_previous(
+                parked_item,
+                parked_resume_effect_index,
+                parked_previous_result,
+                events,
+            )
+        }
     }
 
     pub(in crate::engine) fn refresh_chaos_warp_departure(
@@ -280,19 +284,22 @@ impl GameEngine {
             shuffle_player_library_for_current_command(&mut self.state, owner);
             events.push(ev_log(format!("P{owner} shuffles their library.")));
         } else {
-            stack.resume_effect_index = Some(effect_index + 1);
-            stack.previous_result = OperationResults::default();
+            stack.set_flat_tail(Some(effect_index + 1), OperationResults::default());
         }
         self.state.pending_resolution = None;
         if self.drain_immediate_observer_actions(Some(stack.clone()), events)? {
             return Ok(());
         }
-        let batch = self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
-            stack.previous_result,
-            vec![],
-        )?;
+        let batch = {
+            let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
+                stack.into_parts();
+            self.complete_parked_resolution_with_previous(
+                parked_item,
+                parked_resume_effect_index,
+                parked_previous_result,
+                vec![],
+            )
+        }?;
         events.extend(batch.events);
         Ok(())
     }

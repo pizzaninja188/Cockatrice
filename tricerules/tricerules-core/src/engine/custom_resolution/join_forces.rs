@@ -228,21 +228,23 @@ impl GameEngine {
         total_paid: u32,
         events: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
-        if stack.program.is_some() {
+        if stack.program().is_some() {
             let operation_result = crate::state::OperationResults::from_count(
                 tricerules_card_model::primitives::CountResultKind::JoinForcesManaPaid,
                 total_paid,
             );
             self.complete_parked_stack_with_previous(stack, operation_result, events)
         } else {
-            let previous_result = stack.previous_result;
-
-            self.complete_parked_resolution_with_previous(
-                stack.item,
-                stack.resume_effect_index,
-                previous_result,
-                events,
-            )
+            {
+                let (parked_item, parked_resume_effect_index, previous_result, _) =
+                    stack.into_parts();
+                self.complete_parked_resolution_with_previous(
+                    parked_item,
+                    parked_resume_effect_index,
+                    previous_result,
+                    events,
+                )
+            }
         }
     }
 }

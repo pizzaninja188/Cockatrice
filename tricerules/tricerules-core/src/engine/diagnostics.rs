@@ -383,4 +383,103 @@ mod tests {
             Some(&vec![Keyword::Lifelink])
         );
     }
+
+    #[test]
+    fn parked_resolution_serialization_and_execution_transfer_contract() {
+        use crate::state::{
+            OperationResults, ParkedStackResolution, ProgramFrame, ProgramRunState, ProgramValue,
+        };
+        use tricerules_card_model::primitives::CountResultKind;
+        use tricerules_card_model::{CardFaceId, ProgramOwnerId};
+
+        let engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            707,
+            &[17, 29],
+            20,
+            None,
+            false,
+        )
+        .unwrap();
+        let object_id = *engine.state.players[0].library.front().unwrap();
+        let mut item = engine.observer_return_item(object_id, 17);
+        item.source_zone_change = u64::MAX;
+        let previous = OperationResults::from_count(CountResultKind::RevealedPrefix, 7);
+        let run = ProgramRunState {
+            owner: ProgramOwnerId::face("parked_contract", CardFaceId::new("front").unwrap()),
+            pending_owners: vec![ProgramOwnerId::face(
+                "parked_contract",
+                CardFaceId::new("back").unwrap(),
+            )],
+            frames: vec![ProgramFrame {
+                path: vec![],
+                next_instruction: 2,
+                yield_to: vec![],
+            }],
+            slots: vec![None, Some(ProgramValue::Count(5))],
+            in_flight: Some(vec![]),
+            in_flight_results: OperationResults::from_count(CountResultKind::TappedPermanents, 3),
+        };
+        let dedicated = ParkedStackResolution::dedicated(item.clone());
+        let flat = ParkedStackResolution::for_flat_effects(item.clone(), Some(2), previous.clone());
+        // Shared continuation paths can retain a Program and a fallback flat cursor together.
+        let program = ParkedStackResolution::for_program(
+            item.clone(),
+            Some(9),
+            previous.clone(),
+            run.clone(),
+        );
+        for (source, index, facts, program_state) in [
+            (&dedicated, None, OperationResults::default(), None),
+            (&flat, Some(2), previous.clone(), None),
+            (&program, Some(9), previous.clone(), Some(&run)),
+        ] {
+            let expected = serde_json::json!({
+                "_type": "ParkedStackResolution",
+                "item": crate::diagnostic_json::to_value(&item).unwrap(),
+                "resume_effect_index": index,
+                "previous_result": crate::diagnostic_json::to_value(&facts).unwrap(),
+                "program": crate::diagnostic_json::to_value(&program_state).unwrap(),
+            });
+            assert_eq!(crate::diagnostic_json::to_value(source).unwrap(), expected);
+            assert_eq!(
+                serde_json::to_value(source).unwrap(),
+                serde_json::json!({
+                    "item": serde_json::to_value(&item).unwrap(),
+                    "resume_effect_index": index,
+                    "previous_result": serde_json::to_value(&facts).unwrap(),
+                    "program": serde_json::to_value(program_state).unwrap(),
+                })
+            );
+
+            let receiver_item = engine.observer_return_item(object_id + 1000, 29);
+            let mut receiver = program.clone();
+            receiver.item = receiver_item.clone();
+            receiver.restore_execution_from(source);
+            let mut expected_receiver = expected;
+            expected_receiver["item"] = crate::diagnostic_json::to_value(&receiver_item).unwrap();
+            assert_eq!(
+                crate::diagnostic_json::to_value(&receiver).unwrap(),
+                expected_receiver,
+                "restoring execution retains the receiver's replacement-specific stack item"
+            );
+        }
+
+        let mut retained = program;
+        let completed = OperationResults::from_count(CountResultKind::JoinForcesManaPaid, 11);
+        retained.set_flat_tail(Some(4), completed.clone());
+        assert_eq!(
+            crate::diagnostic_json::to_value(&retained.program()).unwrap(),
+            crate::diagnostic_json::to_value(&Some(&run)).unwrap(),
+            "paired flat-tail updates preserve the owning Program and its partial operation facts"
+        );
+        assert_eq!(
+            crate::diagnostic_json::to_value(&retained.item).unwrap(),
+            crate::diagnostic_json::to_value(&item).unwrap()
+        );
+        assert_eq!(
+            crate::diagnostic_json::to_value(retained.previous_result()).unwrap(),
+            crate::diagnostic_json::to_value(&completed).unwrap()
+        );
+    }
 }

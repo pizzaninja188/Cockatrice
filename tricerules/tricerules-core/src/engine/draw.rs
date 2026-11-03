@@ -609,8 +609,8 @@ mod library_replacement_tests {
             in_flight: Some(draw_outputs),
             in_flight_results: OperationResults::default(),
         };
-        let mut stack = ParkedStackResolution::new(top);
-        stack.program = Some(program);
+        let stack =
+            ParkedStackResolution::for_program(top, None, OperationResults::default(), program);
         let completion = DrawCompletion::resume_effects(stack, OperationResults::default());
         let DrawCompletion::ResumeEffects(resume) = &completion else {
             panic!("expected the saved-effect draw completion")
@@ -865,8 +865,7 @@ mod library_replacement_tests {
                 };
                 let program = resume
                     .stack
-                    .program
-                    .as_ref()
+                    .program()
                     .expect("the actual Decode face owns the parked resolution Program");
                 assert_eq!(
                     program.owner,

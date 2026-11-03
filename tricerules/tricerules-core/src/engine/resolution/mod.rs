@@ -202,7 +202,7 @@ impl GameEngine {
         ) {
             return false;
         }
-        let Some(run) = stack.program.as_ref() else {
+        let Some(run) = stack.program() else {
             return false;
         };
         if run.in_flight.is_none()
@@ -413,12 +413,8 @@ fn execute_leaf(
             .and_then(|pending| pending.continuation.stack_mut())
         {
             if stack.item.id == cx.top.id {
-                if let (Some(run), Some(expected)) =
-                    (stack.program.as_mut(), cx.program_state.as_ref())
-                {
-                    if run.owner == expected.owner && run.in_flight == expected.in_flight {
-                        run.in_flight_results = cx.effect_result.clone();
-                    }
+                if let Some(expected) = cx.program_state.as_ref() {
+                    stack.record_in_flight_results_if_matches(expected, cx.effect_result);
                 }
             }
         }
@@ -429,16 +425,19 @@ fn execute_leaf(
 
 impl EffectCx<'_> {
     fn parked_stack(&self) -> ParkedStackResolution {
-        let mut stack = ParkedStackResolution::new(self.top.clone());
-        if let Some(previous_result) = self.resume_previous_result {
-            stack.previous_result = previous_result.clone();
-        }
+        let previous_result = self.resume_previous_result.cloned().unwrap_or_default();
         let mut program = self.program_state.clone();
         if let Some(run) = program.as_mut() {
             run.in_flight_results = self.effect_result.clone();
         }
-        stack.program = program;
-        stack
+        match program {
+            Some(run) => {
+                ParkedStackResolution::for_program(self.top.clone(), None, previous_result, run)
+            }
+            None => {
+                ParkedStackResolution::for_flat_effects(self.top.clone(), None, previous_result)
+            }
+        }
     }
 
     fn previous_battlefield_object(&self) -> Option<ObjectId> {
@@ -1801,7 +1800,7 @@ impl GameEngine {
                     super::replacement::BattlefieldEntryProgress::Ready(entry) => {
                         let entry = *entry;
                         let Some(entry) = self.prepare_single_entry_counter_placements(
-                            crate::state::ParkedStackResolution::new(top.clone()),
+                            crate::state::ParkedStackResolution::dedicated(top.clone()),
                             entry,
                             crate::state::BattlefieldEntryCompletion::PermanentSpell {
                                 attached_to,
@@ -1901,7 +1900,7 @@ impl GameEngine {
                     "{spell_label} does nothing (its \"if\" condition is no longer true, CR 603.4)."
                 )));
                 let progress = self.finish_deferred_stack_exit_with_context(
-                    ParkedStackResolution::new(top.clone()),
+                    ParkedStackResolution::dedicated(top.clone()),
                     DeferredStackExit::DidNotResolve,
                     crate::state::StackExitTail::ExitOnly,
                     spell_label.clone(),
@@ -1925,7 +1924,7 @@ impl GameEngine {
         if fizzle {
             events.push(ev_log(format!("{spell_label} fizzles (no legal targets).")));
             let progress = self.finish_deferred_stack_exit_with_context(
-                ParkedStackResolution::new(top.clone()),
+                ParkedStackResolution::dedicated(top.clone()),
                 DeferredStackExit::DidNotResolve,
                 crate::state::StackExitTail::ExitOnly,
                 spell_label.clone(),
@@ -1957,7 +1956,7 @@ impl GameEngine {
                     "{spell_label} has no legal optional draw under the current draw limit."
                 )));
                 let progress = self.finish_deferred_stack_exit_with_context(
-                    ParkedStackResolution::new(top.clone()),
+                    ParkedStackResolution::dedicated(top.clone()),
                     DeferredStackExit::Resolved,
                     crate::state::StackExitTail::ExitOnly,
                     spell_label.clone(),
@@ -1994,7 +1993,7 @@ impl GameEngine {
                         top.controller
                     )));
                     let progress = self.finish_deferred_stack_exit_with_context(
-                        ParkedStackResolution::new(top.clone()),
+                        ParkedStackResolution::dedicated(top.clone()),
                         DeferredStackExit::Resolved,
                         crate::state::StackExitTail::ResolveLogAndGraveyardSeat,
                         spell_label.clone(),
@@ -2041,7 +2040,7 @@ impl GameEngine {
                 unique_names: false,
             },
             continuation: ResolutionContinuation::OptionalTriggeredAbility {
-                stack: ParkedStackResolution::new(top),
+                stack: ParkedStackResolution::dedicated(top),
                 stage: crate::state::PendingOptionalTriggeredAbilityStage::Selecting,
             },
         });
@@ -2063,7 +2062,7 @@ impl GameEngine {
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<ResolutionProgress, EngineError> {
         self.finish_deferred_stack_exit_with_context(
-            ParkedStackResolution::new(top.clone()),
+            ParkedStackResolution::dedicated(top.clone()),
             exit,
             crate::state::StackExitTail::ExitOnly,
             String::new(),
@@ -2374,9 +2373,8 @@ impl GameEngine {
                 completed_item
                     .chaos_warp_owner_instructions
                     .insert(index as u32, owner);
-                let mut resume = ParkedStackResolution::new(completed_item.clone());
-                resume.resume_effect_index = Some(index as u32);
-                resume.previous_result = previous_effect_result.clone();
+                let mut resume = ParkedStackResolution::dedicated(completed_item.clone());
+                resume.set_flat_tail(Some(index as u32), previous_effect_result.clone());
                 if self.drain_immediate_observer_actions(Some(resume), events)? {
                     return Ok(ResolutionProgress::Parked);
                 }
@@ -2399,14 +2397,12 @@ impl GameEngine {
                     .and_then(|pending| pending.continuation.stack_mut())
                 {
                     // The owner has not finished this primitive yet; retain its exact input.
-                    stack.resume_effect_index = Some(index as u32);
-                    stack.previous_result = previous_effect_result;
+                    stack.set_flat_tail(Some(index as u32), previous_effect_result);
                 }
                 return Ok(ResolutionProgress::Parked);
             }
-            let mut observer_stack = ParkedStackResolution::new(completed_item.clone());
-            observer_stack.resume_effect_index = Some(index as u32 + 1);
-            observer_stack.previous_result = effect_result.clone();
+            let mut observer_stack = ParkedStackResolution::dedicated(completed_item.clone());
+            observer_stack.set_flat_tail(Some(index as u32 + 1), effect_result.clone());
             if self.finish_resolution_instruction_boundary(observer_stack, events)? {
                 return Ok(ResolutionProgress::Parked);
             }
@@ -2433,8 +2429,7 @@ impl GameEngine {
                     // `Suspended` without parking anything; there is then nothing to stamp.
                     if let Some(pending) = self.state.pending_resolution.as_mut() {
                         if let Some(stack) = pending.continuation.stack_mut() {
-                            stack.resume_effect_index = Some(index as u32 + 1);
-                            stack.previous_result = effect_result;
+                            stack.set_flat_tail(Some(index as u32 + 1), effect_result);
                         }
                     }
                     return Ok(ResolutionProgress::Parked);
@@ -2449,12 +2444,11 @@ impl GameEngine {
             previous_effect_result = effect_result;
         }
         self.finish_deferred_stack_exit_with_context(
-            ParkedStackResolution {
-                item: top.clone(),
-                resume_effect_index: Some(completed_effect_index),
-                previous_result: previous_effect_result,
-                program: None,
-            },
+            ParkedStackResolution::for_flat_effects(
+                top.clone(),
+                Some(completed_effect_index),
+                previous_effect_result,
+            ),
             DeferredStackExit::Resolved,
             crate::state::StackExitTail::ResolveLogAndGraveyardSeat,
             spell_label.to_string(),
@@ -2755,9 +2749,7 @@ impl GameEngine {
                         self.state.pending_resolution.as_mut(),
                     ) {
                         if let Some(parked) = pending.continuation.stack_mut() {
-                            parked.resume_effect_index = resume.resume_effect_index;
-                            parked.previous_result = resume.previous_result.clone();
-                            parked.program = resume.program.clone();
+                            parked.restore_execution_from(resume);
                         }
                     }
                     self.state.pending_observer_return_batch = Some(PendingObserverReturnBatch {
@@ -3077,7 +3069,7 @@ impl GameEngine {
         else {
             return Ok(false);
         };
-        if stack.program.is_none()
+        if stack.program().is_none()
             || !matches!(
                 self.state.pending_replacement_event,
                 Some(crate::engine::replacement::PendingReplacementEvent::Draw(_))
@@ -3103,21 +3095,21 @@ impl GameEngine {
         };
         let stack = match &pending.continuation {
             ResolutionContinuation::HandChoice { stack, hand_choice }
-                if stack.program.is_some()
+                if stack.program().is_some()
                     && (hand_choice.program_selection
                         || self.is_target_hand_discard_program(stack)) =>
             {
                 stack.clone()
             }
-            ResolutionContinuation::PermanentChoice { stack, .. } if stack.program.is_some() => {
+            ResolutionContinuation::PermanentChoice { stack, .. } if stack.program().is_some() => {
                 stack.clone()
             }
-            ResolutionContinuation::BeholdChoice { stack, .. } if stack.program.is_some() => {
+            ResolutionContinuation::BeholdChoice { stack, .. } if stack.program().is_some() => {
                 stack.clone()
             }
             _ => return Ok(false),
         };
-        let Some(mut program) = stack.program.clone() else {
+        let Some(program) = stack.program() else {
             return Ok(false);
         };
         let target_hand_discard_target = match &pending.continuation {
@@ -3143,7 +3135,7 @@ impl GameEngine {
             events.extend(resumed.events);
             return Ok(true);
         }
-        let effect = self.current_program_perform(&program)?;
+        let effect = self.current_program_perform(program)?;
         let chooser_leaf = match &pending.continuation {
             ResolutionContinuation::HandChoice { hand_choice, .. }
                 if hand_choice.program_selection =>
@@ -3172,21 +3164,24 @@ impl GameEngine {
                 "restored program choice does not match its in-flight chooser leaf",
             ));
         }
-        let Some(frame) = program.frames.last_mut() else {
+        let Some(frame) = program.frames.last() else {
             return Err(EngineError::ProgramInvariant(
                 "restored program choice lost its active frame",
             ));
         };
-        frame.next_instruction =
+        let next_instruction =
             frame
                 .next_instruction
                 .checked_sub(1)
                 .ok_or(EngineError::ProgramInvariant(
                     "restored program chooser cursor is invalid",
                 ))?;
-        program.in_flight = None;
         let mut retry = stack;
-        retry.program = Some(program);
+        retry
+            .retry_program_instruction(next_instruction)
+            .ok_or(EngineError::ProgramInvariant(
+                "restored program choice lost its active frame",
+            ))?;
 
         self.state.pending_resolution = None;
         self.state.pending_replacement_event = None;
@@ -3302,22 +3297,22 @@ impl GameEngine {
             return Ok(false);
         };
         let (stack, expected_leaf) = match &pending.continuation {
-            ResolutionContinuation::PermanentChoice { stack, .. } if stack.program.is_none() => {
+            ResolutionContinuation::PermanentChoice { stack, .. } if stack.program().is_none() => {
                 (stack.clone(), ChooserLeaf::ChoosePermanents)
             }
-            ResolutionContinuation::Proliferate { stack, .. } if stack.program.is_none() => {
+            ResolutionContinuation::Proliferate { stack, .. } if stack.program().is_none() => {
                 (stack.clone(), ChooserLeaf::Proliferate)
             }
-            ResolutionContinuation::Populate { stack, .. } if stack.program.is_none() => {
+            ResolutionContinuation::Populate { stack, .. } if stack.program().is_none() => {
                 (stack.clone(), ChooserLeaf::Populate)
             }
-            ResolutionContinuation::AmassChoice { stack, .. } if stack.program.is_none() => {
+            ResolutionContinuation::AmassChoice { stack, .. } if stack.program().is_none() => {
                 (stack.clone(), ChooserLeaf::Amass)
             }
-            ResolutionContinuation::Blight { stack, .. } if stack.program.is_none() => {
+            ResolutionContinuation::Blight { stack, .. } if stack.program().is_none() => {
                 (stack.clone(), ChooserLeaf::Blight)
             }
-            ResolutionContinuation::Sacrifice { stack } if stack.program.is_none() => {
+            ResolutionContinuation::Sacrifice { stack } if stack.program().is_none() => {
                 (stack.clone(), ChooserLeaf::TargetPlayerSacrifices)
             }
             _ => return Ok(false),
@@ -3335,7 +3330,7 @@ impl GameEngine {
             ));
         }
         let leaf_index = stack
-            .resume_effect_index
+            .resume_effect_index()
             .and_then(|next| next.checked_sub(1))
             .ok_or(EngineError::ProgramInvariant(
                 "restored choice has no current effect index",
@@ -3372,12 +3367,12 @@ impl GameEngine {
         let entered_effect = entered_effect.clone();
         effects[leaf_index as usize].effect = entered_effect;
 
-        let previous_result = stack.previous_result.clone();
+        let previous_result = stack.previous_result().clone();
         let mut retry = stack;
-        retry.resume_effect_index = Some(leaf_index);
+        retry.set_flat_tail(Some(leaf_index), retry.previous_result().clone());
         self.state.pending_resolution = None;
         self.state.pending_replacement_event = None;
-        let resume_effect_index = retry.resume_effect_index;
+        let resume_effect_index = retry.resume_effect_index();
         let resumed = self.complete_parked_resolution_with_effects_and_previous(
             retry.item,
             resume_effect_index,
@@ -3672,7 +3667,7 @@ impl GameEngine {
         let mut resumed = Vec::new();
         if !self.drain_immediate_observer_actions(stack.clone(), &mut resumed)? {
             if let Some(stack) = stack {
-                let previous_result = stack.previous_result.clone();
+                let previous_result = stack.previous_result().clone();
                 resumed = self
                     .complete_parked_stack_with_previous(stack, previous_result, resumed)?
                     .events;
@@ -5555,8 +5550,8 @@ mod attached_subject_tests {
             .expect("alternate target-discard Program starts");
         run.frames.last_mut().unwrap().next_instruction = 2;
         run.in_flight = Some(discard.outputs.clone());
-        let mut parked = ParkedStackResolution::new(item);
-        parked.program = Some(run);
+        let parked =
+            ParkedStackResolution::for_program(item, None, OperationResults::default(), run);
 
         let signature = engine
             .target_hand_discard_program_signature(&parked)
@@ -5578,23 +5573,19 @@ mod attached_subject_tests {
             "the admitted alternate owner must share the same target-hand-discard continuation profile"
         );
 
-        let mut wrong_output = parked.clone();
-        wrong_output.program.as_mut().unwrap().in_flight =
-            Some(compiled.body.steps[0].outputs.clone());
+        let (item, next, results, program) = parked.clone().into_parts();
+        let mut program = program.unwrap();
+        program.in_flight = Some(compiled.body.steps[0].outputs.clone());
+        let wrong_output = ParkedStackResolution::for_program(item, next, results, program);
         assert!(
             !engine.is_target_hand_discard_program(&wrong_output),
             "a current hand-discard leaf with another instruction's result must fail closed"
         );
 
-        let mut wrong_cursor = parked.clone();
-        wrong_cursor
-            .program
-            .as_mut()
-            .unwrap()
-            .frames
-            .last_mut()
-            .unwrap()
-            .next_instruction = 1;
+        let (item, next, results, program) = parked.clone().into_parts();
+        let mut program = program.unwrap();
+        program.frames.last_mut().unwrap().next_instruction = 1;
+        let wrong_cursor = ParkedStackResolution::for_program(item, next, results, program);
         assert!(
             !engine.is_target_hand_discard_program(&wrong_cursor),
             "the typed discard output cannot classify a different current operation"
@@ -5689,8 +5680,7 @@ mod attached_subject_tests {
         assert_eq!(hand_choice.candidate_generations.len(), 2);
         assert!(!hand_choice.program_selection);
         let program = stack
-            .program
-            .as_ref()
+            .program()
             .expect("actual Gerrard choice retains its compiled Program cursor");
         assert_eq!(
             program.owner,
@@ -6034,8 +6024,8 @@ mod attached_subject_tests {
             panic!("saved observer fixture retains its Ward continuation");
         };
         let original_target = ward.target;
-        let original_program_debug = format!("{:?}", stack.program);
-        let original_previous_result_debug = format!("{:?}", stack.previous_result);
+        let original_program_debug = format!("{:?}", stack.program());
+        let original_previous_result_debug = format!("{:?}", stack.previous_result());
         let original_stack_id = stack.item.id;
         let original_source_card_id = stack.item.card_id.clone();
         let original_source_controller = stack.item.controller;
@@ -6044,9 +6034,9 @@ mod attached_subject_tests {
         let original_source_generation = stack.item.source_zone_change;
         let original_trigger_use_key = format!("{:?}", stack.item.trigger_use_key);
         let original_trigger_context = stack.item.trigger_context;
-        let original_resume_effect_index = stack.resume_effect_index;
+        let original_resume_effect_index = stack.resume_effect_index();
         assert_eq!(original_resume_effect_index, None);
-        assert!(stack.program.is_some(), "Ward parks its Program cursor");
+        assert!(stack.program().is_some(), "Ward parks its Program cursor");
         let crate::state::PendingWardPaymentStage::Discard {
             candidate_generations: original_generations,
         } = &ward.stage
@@ -6148,12 +6138,12 @@ mod attached_subject_tests {
             original_trigger_use_key
         );
         assert_eq!(stack.item.trigger_context, original_trigger_context);
-        assert_eq!(format!("{:?}", stack.program), original_program_debug);
+        assert_eq!(format!("{:?}", stack.program()), original_program_debug);
         assert_eq!(
-            format!("{:?}", stack.previous_result),
+            format!("{:?}", stack.previous_result()),
             original_previous_result_debug
         );
-        assert_eq!(stack.resume_effect_index, original_resume_effect_index);
+        assert_eq!(stack.resume_effect_index(), original_resume_effect_index);
         let crate::state::PendingWardPaymentStage::Discard {
             candidate_generations,
         } = &ward.stage
@@ -6266,10 +6256,10 @@ mod attached_subject_tests {
         };
         assert_eq!(ward.target.object_id, target);
         assert!(
-            stack.program.is_some(),
+            stack.program().is_some(),
             "saved Ward keeps its Program cursor"
         );
-        let original_program = format!("{:?}", stack.program);
+        let original_program = format!("{:?}", stack.program());
         let original_generation = engine
             .state
             .zone_change_generation
@@ -6368,10 +6358,10 @@ mod attached_subject_tests {
             panic!("restored continuation remains on its Ward payment");
         };
         assert_eq!(ward.target.object_id, target);
-        assert!(stack.program.is_some());
+        assert!(stack.program().is_some());
         // ProgramRunState's debug snapshot includes frames, instruction cursor, and in-flight op.
-        assert_eq!(format!("{:?}", stack.program), original_program);
-        assert_eq!(stack.resume_effect_index, None);
+        assert_eq!(format!("{:?}", stack.program()), original_program);
+        assert_eq!(stack.resume_effect_index(), None);
         assert_eq!(stack.item.controller, ward_controller);
         assert_eq!(stack.item.source_owner, Some(source_owner));
         assert_eq!(stack.item.source_permanent_id, Some(source));
@@ -8290,8 +8280,7 @@ mod attached_subject_tests {
             panic!("the Aura-return choice retains the parked Program stack");
         };
         let saved_program = stack
-            .program
-            .as_ref()
+            .program()
             .expect("the in-flight Program cursor is retained");
         assert_eq!(saved_program.frames.len(), 1);
         assert_eq!(saved_program.frames[0].next_instruction, 1);
@@ -9925,10 +9914,7 @@ mod attached_subject_tests {
             };
             assert_eq!(discard.current, 1);
             assert_eq!(discard.selections, [vec![cards[0]]]);
-            let program = stack
-                .program
-                .as_ref()
-                .expect("Fanatic Program cursor is parked");
+            let program = stack.program().expect("Fanatic Program cursor is parked");
             (
                 program
                     .frames
@@ -9966,7 +9952,7 @@ mod attached_subject_tests {
         };
         assert_eq!(discard.current, 1);
         assert_eq!(discard.selections, [vec![cards[0]]]);
-        let program = stack.program.as_ref().unwrap();
+        let program = stack.program().unwrap();
         assert_eq!(
             program
                 .frames
@@ -10107,7 +10093,7 @@ mod attached_subject_tests {
             assert_eq!(stack.item.controller, 0);
             assert_eq!(stack.item.card_id, card_id);
             assert_eq!(stack.item.ability_program_owner(), expected_ability_owner);
-            assert_eq!(stack.program.is_some(), expects_program);
+            assert_eq!(stack.program().is_some(), expects_program);
             assert_eq!(discard.current, 1);
             assert_eq!(discard.selections, [vec![cards[1]]]);
         }
@@ -10125,7 +10111,7 @@ mod attached_subject_tests {
             };
             assert_eq!(stack.item.controller, 0);
             assert_eq!(stack.item.ability_program_owner(), expected_ability_owner);
-            assert_eq!(stack.program.is_some(), expects_program);
+            assert_eq!(stack.program().is_some(), expects_program);
             assert_eq!(discard.current, 1);
             assert_eq!(discard.selections, [vec![cards[1]]]);
         }
@@ -10168,7 +10154,7 @@ mod attached_subject_tests {
             assert_eq!(stack.item.controller, 0, "retain the original controller");
             assert_eq!(stack.item.card_id, card_id);
             assert_eq!(stack.item.ability_program_owner(), expected_ability_owner);
-            assert_eq!(stack.program.is_some(), expects_program);
+            assert_eq!(stack.program().is_some(), expects_program);
             assert_eq!(discard.current, 1);
             assert_eq!(discard.selections, [vec![cards[1]]]);
             assert!(discard.choices.iter().all(|choice| choice.player != 0));

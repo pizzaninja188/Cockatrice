@@ -739,7 +739,7 @@ fn controller_concede_after_multiscry_begins_keeps_frozen_cohort_and_resumes_tai
                     "the opponent cohort is not recomputed"
                 );
                 assert_eq!(
-                    stack.resume_effect_index,
+                    stack.resume_effect_index(),
                     Some(1),
                     "the tail cursor remains after the Scry effect"
                 );

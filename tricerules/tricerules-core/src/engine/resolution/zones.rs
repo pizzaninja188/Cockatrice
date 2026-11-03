@@ -127,8 +127,11 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
         "Cast {} transformed without paying its mana cost?",
         back.name
     );
-    let mut stack = ParkedStackResolution::new(cx.top.clone());
-    stack.resume_effect_index = Some(cx.effect_index + 1);
+    let stack = ParkedStackResolution::for_flat_effects(
+        cx.top.clone(),
+        Some(cx.effect_index + 1),
+        Default::default(),
+    );
     cx.engine.state.pending_resolution = Some(PendingResolution {
         resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
         resolution_prompt_semantics: None,
@@ -194,8 +197,11 @@ pub(super) fn madness_cast(
         object_display_name(&cx.engine.state, cx.engine.registry, exiled.object_id),
         cost
     );
-    let mut stack = ParkedStackResolution::new(cx.top.clone());
-    stack.resume_effect_index = Some(cx.effect_index + 1);
+    let stack = ParkedStackResolution::for_flat_effects(
+        cx.top.clone(),
+        Some(cx.effect_index + 1),
+        Default::default(),
+    );
     cx.engine.state.pending_resolution = Some(PendingResolution {
         resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
         resolution_prompt_semantics: None,
@@ -380,7 +386,7 @@ pub(super) fn target_player_draws(
                 .with_previous_effect_result(cx.previous_effect_result),
         );
         let completion = super::super::draw::DrawCompletion::resume_effects(
-            ParkedStackResolution::new(cx.top.clone()),
+            ParkedStackResolution::dedicated(cx.top.clone()),
             cx.effect_result.clone(),
         );
         match cx.engine.start_draw_transaction(
@@ -2138,7 +2144,7 @@ fn choose_hand_cards_for_player(
                 && engine.has_discard_library_replacement(affected_player)
             {
                 let batch = engine.start_discard_replacements(
-                    ParkedStackResolution::new(top.clone()),
+                    ParkedStackResolution::dedicated(top.clone()),
                     selected
                         .iter()
                         .map(|oid| (affected_player, *oid, crate::state::DiscardCause::Effect))
@@ -2327,8 +2333,9 @@ pub(super) fn select_hand_cards_for_program(
         .ok_or(EngineError::ProgramInvariant(
             "hand selection has no owning program frame",
         ))?;
-    let mut stack = cx.parked_stack();
-    stack.program = Some(program);
+    let (item, resume_effect_index, previous_result, _) = cx.parked_stack().into_parts();
+    let stack =
+        ParkedStackResolution::for_program(item, resume_effect_index, previous_result, program);
     let engine = &mut *cx.engine;
     let top = cx.top;
     let result = &mut *cx.effect_result;
@@ -2753,7 +2760,7 @@ pub(super) fn target_player_sacrifices(
                         choice_kind: custom::ChoiceKind::Revealed,
                     },
                     continuation: ResolutionContinuation::Sacrifice {
-                        stack: ParkedStackResolution::new(top.clone()),
+                        stack: ParkedStackResolution::dedicated(top.clone()),
                     },
                 });
                 return Ok(EffectOutcome::Suspended);
@@ -3235,15 +3242,15 @@ fn choose_linked_exiled_card_action(
     // An authored Program parks its exact frame and output slot. Only its mandatory owner-GY
     // profile is constrained to face-up linked objects; legacy Hideaway permissions remain local.
     let mut stack = cx.parked_stack();
-    if stack.program.is_none() {
-        stack.resume_effect_index = Some(cx.effect_index + 1);
+    if stack.program().is_none() {
+        stack.set_flat_tail(Some(cx.effect_index + 1), stack.previous_result().clone());
     }
     let controller_is_live = cx
         .engine
         .state
         .player_idx(cx.controller)
         .is_some_and(|index| !cx.engine.state.players[index].has_lost);
-    if stack.program.is_some()
+    if stack.program().is_some()
         && !controller_is_live
         && matches!(
             &action,
@@ -3453,7 +3460,7 @@ impl GameEngine {
         };
         let chooser = stack.item.controller;
         let filter = match self
-            .current_program_perform(stack.program.as_ref().expect("profile requires a Program"))?
+            .current_program_perform(stack.program().expect("profile requires a Program"))?
         {
             SpellEffectKind::ChooseLinkedExiledCard { filter, .. } => Some(filter),
             _ => {
@@ -3826,7 +3833,7 @@ impl GameEngine {
         cohort: crate::state::PendingLinkedExilePlay,
         events: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
-        let complete_parked_stack = cohort.stack.program.is_some()
+        let complete_parked_stack = cohort.stack.program().is_some()
             && cohort.kind == tricerules_card_model::primitives::LinkedExiledCardPlayKind::Play;
         self.advance_pending_linked_exile_play_with_finalizer(cohort, events, complete_parked_stack)
     }
@@ -3987,15 +3994,11 @@ impl GameEngine {
             self.return_linked_cast_source_to_owner_hand(&cohort.stack.item, &mut events)?;
         }
         if complete_parked_stack {
-            let previous_result = cohort.stack.previous_result.clone();
+            let previous_result = cohort.stack.previous_result().clone();
             self.complete_parked_stack_with_previous(cohort.stack, previous_result, events)
         } else {
-            self.complete_parked_resolution_with_previous(
-                cohort.stack.item,
-                cohort.stack.resume_effect_index,
-                cohort.stack.previous_result,
-                events,
-            )
+            let (item, next, previous_result, _) = cohort.stack.into_parts();
+            self.complete_parked_resolution_with_previous(item, next, previous_result, events)
         }
     }
 }
@@ -4132,7 +4135,7 @@ pub(super) fn return_exiled_cohort_to_owners_battlefield(
         if cx
             .engine
             .begin_zone_entry_batch(
-                ParkedStackResolution::new(cx.top.clone()),
+                ParkedStackResolution::dedicated(cx.top.clone()),
                 entries,
                 Zone::Exile,
                 cx.spell_label,
@@ -4264,7 +4267,7 @@ pub(super) fn return_different_named_permanents_from_graveyard(
             unique_names: true,
         },
         continuation: ResolutionContinuation::DifferentNamedGraveyardReturn {
-            stack: ParkedStackResolution::new(cx.top.clone()),
+            stack: ParkedStackResolution::dedicated(cx.top.clone()),
             candidate_generations: candidates
                 .iter()
                 .map(|oid| {
@@ -4368,7 +4371,7 @@ fn return_matching_graveyard_permanents(
         if cx
             .engine
             .begin_zone_entry_batch(
-                ParkedStackResolution::new(cx.top.clone()),
+                ParkedStackResolution::dedicated(cx.top.clone()),
                 entries,
                 Zone::Graveyard,
                 cx.spell_label,
@@ -4456,7 +4459,7 @@ pub(super) fn exchange_artifact_with_graveyard(
         if cx
             .engine
             .begin_zone_entry_batch(
-                ParkedStackResolution::new(cx.top.clone()),
+                ParkedStackResolution::dedicated(cx.top.clone()),
                 vec![entry],
                 Zone::Graveyard,
                 cx.spell_label,
@@ -4759,7 +4762,7 @@ pub(super) fn return_linked_exiled_cards(
         if cx
             .engine
             .begin_zone_entry_batch(
-                ParkedStackResolution::new(cx.top.clone()),
+                ParkedStackResolution::dedicated(cx.top.clone()),
                 entries,
                 Zone::Exile,
                 cx.spell_label,
@@ -5636,7 +5639,7 @@ pub(super) fn reveal_until_artifact(cx: &mut EffectCx<'_>) -> Result<EffectOutco
         let parked_stack = if cx.program_state.is_some() {
             cx.parked_stack()
         } else {
-            ParkedStackResolution::new(cx.top.clone())
+            ParkedStackResolution::dedicated(cx.top.clone())
         };
         if cx
             .engine
@@ -5859,9 +5862,9 @@ fn resolve_library_cast_offer(
             .find(|reference| reference.object_id == object_id)
     });
     let completion = offer.completion(controller, found, cohort);
-    let mut stack =
-        ParkedStackResolution::new(top.clone()).with_previous_result(cx.effect_result.clone());
-    stack.resume_effect_index = Some(resume_effect_index);
+    let mut stack = ParkedStackResolution::dedicated(top.clone())
+        .with_previous_result(cx.effect_result.clone());
+    stack.set_flat_tail(Some(resume_effect_index), stack.previous_result().clone());
 
     let Some(found) = found else {
         let suspended =
@@ -5960,9 +5963,9 @@ pub(super) fn cast_rebounded_card(cx: &mut EffectCx<'_>) -> Result<EffectOutcome
     }
 
     let controller = cx.controller;
-    let mut stack =
-        ParkedStackResolution::new(cx.top.clone()).with_previous_result(cx.effect_result.clone());
-    stack.resume_effect_index = Some(cx.effect_index + 1);
+    let mut stack = ParkedStackResolution::dedicated(cx.top.clone())
+        .with_previous_result(cx.effect_result.clone());
+    stack.set_flat_tail(Some(cx.effect_index + 1), stack.previous_result().clone());
     let completion = SpecialCastCompletion::ResumeStack;
     let prompt = format!(
         "Cast {} without paying its mana cost?",
@@ -6128,7 +6131,7 @@ pub(super) fn explore(
             ) {
                 let receipts = cx.engine.begin_counter_placement_batch(
                     vec![proposal],
-                    ParkedStackResolution::new(cx.top.clone()),
+                    ParkedStackResolution::dedicated(cx.top.clone()),
                     crate::state::CounterPlacementCompletion::Explore {
                         controller,
                         explorer,
@@ -6217,8 +6220,8 @@ pub(super) fn explore(
         return Ok(EffectOutcome::Continue);
     }
 
-    let mut stack = ParkedStackResolution::new(cx.top.clone());
-    stack.previous_result = cx.resume_previous_result.cloned().unwrap_or_default();
+    let mut stack = ParkedStackResolution::dedicated(cx.top.clone());
+    stack.replace_completed_results(cx.resume_previous_result.cloned().unwrap_or_default());
     if explorer_is_current_battlefield_incarnation {
         if let Some(proposal) = cx.engine.proposed_object_counter_placement(
             controller,
@@ -6240,9 +6243,7 @@ pub(super) fn explore(
             let Some(receipts) = receipts else {
                 return Ok(EffectOutcome::Suspended);
             };
-            stack
-                .previous_result
-                .record_counter_placements(receipts.clone());
+            stack.record_counter_placements(receipts.clone());
             cx.effect_result.record_counter_placements(receipts);
         }
     }
@@ -6484,7 +6485,7 @@ pub(super) fn thassa_oracle(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engi
             unique_names: false,
         },
         continuation: ResolutionContinuation::LibraryLook {
-            stack: ParkedStackResolution::new(top),
+            stack: ParkedStackResolution::dedicated(top),
             stage: PendingLibraryLookStage::ThassaOracle { devotion_x },
             candidates: super::super::library_choices::capture(engine, &looked),
         },
@@ -6873,7 +6874,8 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
             choice_kind: custom::ChoiceKind::ManifestDread,
         },
         continuation: ResolutionContinuation::ManifestDread {
-            stack: program_stack.unwrap_or_else(|| ParkedStackResolution::new(cx.top.clone())),
+            stack: program_stack
+                .unwrap_or_else(|| ParkedStackResolution::dedicated(cx.top.clone())),
             looked_at: library_refs,
         },
     });
@@ -7006,7 +7008,7 @@ pub(super) fn look_choose_battlefield(
             choice_kind: custom::ChoiceKind::LibraryLook,
         },
         continuation: ResolutionContinuation::LibraryLook {
-            stack: ParkedStackResolution::new(cx.top.clone()),
+            stack: ParkedStackResolution::dedicated(cx.top.clone()),
             candidates: looked
                 .iter()
                 .map(|&oid| {
@@ -7382,7 +7384,7 @@ pub(super) fn hideaway(
             choice_kind: custom::ChoiceKind::LibraryLook,
         },
         continuation: ResolutionContinuation::LibraryLook {
-            stack: ParkedStackResolution::new(cx.top.clone()),
+            stack: ParkedStackResolution::dedicated(cx.top.clone()),
             candidates: crate::engine::library_choices::capture(cx.engine, &looked_at),
             stage: PendingLibraryLookStage::Hideaway {
                 looked_at,
@@ -8631,9 +8633,7 @@ mod tests {
             _ => panic!("the test must park at its resultless linked Play action"),
         };
         assert!(matches!(
-            engine.current_program_perform(
-                choice_stack.program.as_ref().expect("parked Program frame"),
-            ),
+            engine.current_program_perform(choice_stack.program().expect("parked Program frame"),),
             Ok(SpellEffectKind::PlayLinkedExiledCard {
                 play_kind: tricerules_card_model::primitives::LinkedExiledCardPlayKind::Play,
                 ..
@@ -8822,9 +8822,7 @@ mod tests {
         assert_eq!(choice_stack.item.controller, 0);
         assert_eq!(choice_stack.item.source_permanent_id, Some(source_object));
         assert!(matches!(
-            engine.current_program_perform(
-                choice_stack.program.as_ref().expect("parked Program frame"),
-            ),
+            engine.current_program_perform(choice_stack.program().expect("parked Program frame"),),
             Ok(SpellEffectKind::PlayLinkedExiledCard {
                 play_kind: tricerules_card_model::primitives::LinkedExiledCardPlayKind::Play,
                 ..
@@ -9158,7 +9156,7 @@ mod tests {
             );
         };
         assert_eq!(saved_key, &key);
-        assert!(stack.program.is_some());
+        assert!(stack.program().is_some());
         assert_eq!(saved.deciding_player, 1);
         assert!(delegate_candidates.is_empty());
         assert_eq!(

@@ -6,12 +6,16 @@ impl GameEngine {
         stack: ParkedStackResolution,
         events: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
-            stack.previous_result,
-            events,
-        )
+        {
+            let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
+                stack.into_parts();
+            self.complete_parked_resolution_with_previous(
+                parked_item,
+                parked_resume_effect_index,
+                parked_previous_result,
+                events,
+            )
+        }
     }
 
     fn selection_is_valid_for_departed_controller(
@@ -235,14 +239,17 @@ impl GameEngine {
             &mut events,
         ) {
             Ok(Some(receipts)) => {
-                let mut previous_result = stack.previous_result.clone();
+                let mut previous_result = stack.previous_result().clone();
                 previous_result.record_counter_placements(receipts);
-                self.complete_parked_resolution_with_previous(
-                    stack.item,
-                    stack.resume_effect_index,
-                    previous_result,
-                    events,
-                )
+                {
+                    let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
+                    self.complete_parked_resolution_with_previous(
+                        parked_item,
+                        parked_resume_effect_index,
+                        previous_result,
+                        events,
+                    )
+                }
             }
             Ok(None) => Ok(finish_with_events(self, events)),
             Err(error) => {

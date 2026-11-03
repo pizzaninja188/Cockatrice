@@ -1384,8 +1384,11 @@ fn activated_modal_double_your_counters_doubles_only_the_ability_controller_with
         .expect("activated ability is on the stack")
         .clone();
     let mode_id = item.chosen_modes[0].mode_id.clone();
-    let mut parked = crate::state::ParkedStackResolution::new(item.clone());
-    parked.resume_effect_index = Some(1);
+    let parked = crate::state::ParkedStackResolution::for_flat_effects(
+        item.clone(),
+        Some(1),
+        Default::default(),
+    );
     let snapshot = engine.state.players[0]
         .counters
         .iter()

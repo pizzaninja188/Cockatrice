@@ -60,11 +60,14 @@ impl GameEngine {
             program_discard_result: None,
         };
 
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
-            result.into(),
-            ev,
-        )
+        {
+            let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
+            self.complete_parked_resolution_with_previous(
+                parked_item,
+                parked_resume_effect_index,
+                result.into(),
+                ev,
+            )
+        }
     }
 }

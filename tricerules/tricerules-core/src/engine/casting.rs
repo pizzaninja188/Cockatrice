@@ -674,8 +674,8 @@ impl GameEngine {
             };
             Some((
                 stack.item.clone(),
-                stack.resume_effect_index,
-                stack.previous_result.clone(),
+                stack.resume_effect_index(),
+                stack.previous_result().clone(),
                 *return_source_to_owner_hand_if_cast,
                 completion.clone(),
             ))
@@ -703,9 +703,11 @@ impl GameEngine {
             } else if return_source {
                 self.return_linked_cast_source_to_owner_hand(&item, &mut batch.events)?;
             }
-            let mut parked = ParkedStackResolution::new(item.clone())
-                .with_previous_result(previous_result.clone());
-            parked.resume_effect_index = resume_effect_index;
+            let parked = ParkedStackResolution::for_flat_effects(
+                item.clone(),
+                resume_effect_index,
+                previous_result.clone(),
+            );
             let commander_choice =
                 self.finish_special_cast_completion(&completion, true, parked, &mut batch.events)?;
             batch = if commander_choice {
@@ -4571,12 +4573,16 @@ impl GameEngine {
             self.state.passes_since_stack_change = 0;
             let resume_stack = special_resume_stack;
             return if let Some(stack) = resume_stack {
-                self.complete_parked_resolution_with_previous(
-                    stack.item,
-                    stack.resume_effect_index,
-                    stack.previous_result,
-                    batch.events,
-                )
+                {
+                    let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
+                        stack.into_parts();
+                    self.complete_parked_resolution_with_previous(
+                        parked_item,
+                        parked_resume_effect_index,
+                        parked_previous_result,
+                        batch.events,
+                    )
+                }
             } else {
                 Ok(finish_with_events(self, batch.events))
             };

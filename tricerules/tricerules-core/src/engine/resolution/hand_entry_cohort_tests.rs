@@ -168,11 +168,11 @@ fn reject_then_accept_untouched_companion(
     let resume_index_before = pending_before
         .continuation
         .stack()
-        .map(|stack| stack.resume_effect_index);
+        .map(|stack| stack.resume_effect_index());
     let previous_result_before = pending_before
         .continuation
         .stack()
-        .map(|stack| format!("{:?}", stack.previous_result));
+        .map(|stack| format!("{:?}", stack.previous_result()));
 
     let error = engine
         .submit_resolution_choice(0, &hand_entry_answer(rejected_cohort.to_vec()))
@@ -216,7 +216,7 @@ fn reject_then_accept_untouched_companion(
         pending_after
             .continuation
             .stack()
-            .map(|stack| stack.resume_effect_index),
+            .map(|stack| stack.resume_effect_index()),
         resume_index_before,
         "rejection preserves the parked effect cursor"
     );
@@ -224,7 +224,7 @@ fn reject_then_accept_untouched_companion(
         pending_after
             .continuation
             .stack()
-            .map(|stack| format!("{:?}", stack.previous_result)),
+            .map(|stack| format!("{:?}", stack.previous_result())),
         previous_result_before,
         "rejection preserves the previous effect result"
     );
@@ -646,7 +646,7 @@ fn aura_can_choose_an_existing_recipient_while_a_coentrant_is_not_yet_on_battlef
             .continuation
             .stack()
             .expect("parked hand-entry stack")
-            .resume_effect_index,
+            .resume_effect_index(),
         Some(1)
     );
 
@@ -894,7 +894,7 @@ fn entry_counter_replacement_pause_preserves_the_hand_cohort_and_tail() {
             .continuation
             .stack()
             .expect("entry replacement retains the parked hand effect")
-            .resume_effect_index,
+            .resume_effect_index(),
         Some(1)
     );
 

@@ -35,7 +35,7 @@ fn is_begun_proliferate_observer_continuation(
                 completion: crate::state::CounterPlacementCompletion::Proliferate { .. },
             },
             Some(super::replacement::PendingReplacementEvent::Counters(_)),
-        ) => stack.program.is_some(),
+        ) => stack.program().is_some(),
         _ => false,
     }
 }
@@ -73,22 +73,11 @@ impl GameEngine {
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
         if let Some(stack) = stack.as_mut() {
-            if let Some(program) = stack.program.as_mut() {
-                // A departed resolving controller cannot finish the current instruction or any
-                // authored tail. Retain only a root end cursor so the ordinary deferred stack
-                // exit runs after independently owed observer returns.
-                program.frames.clear();
-                program.frames.push(crate::state::ProgramFrame {
-                    path: Vec::new(),
-                    next_instruction: u32::MAX,
-                    yield_to: Vec::new(),
-                });
-                program.in_flight = None;
-                stack.resume_effect_index = None;
-            } else {
-                stack.resume_effect_index =
-                    Some(self.build_resolution_effects(&stack.item).0.len() as u32);
-            }
+            let flat_end = stack
+                .program()
+                .is_none()
+                .then(|| self.build_resolution_effects(&stack.item).0.len() as u32);
+            stack.abandon_execution(flat_end);
         }
         if let Some(batch) = self.state.pending_observer_return_batch.as_mut() {
             batch.resume_stack = stack.clone();
@@ -103,7 +92,7 @@ impl GameEngine {
         if let Some(stack) = stack {
             let completed = self.complete_parked_stack_with_previous(
                 stack.clone(),
-                stack.previous_result.clone(),
+                stack.previous_result().clone(),
                 Vec::new(),
             )?;
             events.extend(completed.events);
@@ -357,7 +346,7 @@ impl GameEngine {
                         );
                     }
                 }
-                stack.program.is_some()
+                stack.program().is_some()
             });
         if discard_departed_suspended_resolution {
             if let Some(batch) = self.state.pending_observer_return_batch.as_mut() {
@@ -403,7 +392,7 @@ impl GameEngine {
                     let saved_root_matches = stack.item.id == cohort.stack.item.id
                         && stack.item.source_zone_change == cohort.stack.item.source_zone_change
                         && stack.item.controller == cohort.stack.item.controller
-                        && stack.resume_effect_index == cohort.stack.resume_effect_index;
+                        && stack.resume_effect_index() == cohort.stack.resume_effect_index();
                     (*player == chooser
                         && !departed.contains(player)
                         && linked_entry_is_current
@@ -502,8 +491,9 @@ impl GameEngine {
             }
             _ => None,
         };
-        let synthetic = observer_entry
-            .map(|(oid, owner)| ParkedStackResolution::new(self.observer_return_item(oid, owner)));
+        let synthetic = observer_entry.map(|(oid, owner)| {
+            ParkedStackResolution::dedicated(self.observer_return_item(oid, owner))
+        });
         let resultless_battlefield_search_entry = self
             .state
             .pending_resolution
@@ -585,7 +575,7 @@ impl GameEngine {
                 .as_ref()
                 .is_some_and(|pending| match &pending.continuation {
                     ResolutionContinuation::PermanentChoice { stack, .. } => {
-                        stack.program.as_ref().is_some_and(|program| {
+                        stack.program().is_some_and(|program| {
                             matches!(
                                 self.current_program_perform(program),
                                 Ok(SpellEffectKind::ChooseProliferatedPermanents)
@@ -781,7 +771,7 @@ impl GameEngine {
                 ResolutionContinuation::SearchLibrary { stack, .. }
                 | ResolutionContinuation::ProgramCohortPartition { stack, .. }
                 | ResolutionContinuation::ProgramPartitionMove { stack, .. }
-                    if stack.program.is_some() =>
+                    if stack.program().is_some() =>
                 {
                     // A typed library program is already resolving. Preserve its exact frame
                     // when either the physical spell or its controller leaves; post-cleanup
@@ -789,7 +779,7 @@ impl GameEngine {
                     preserve = true;
                 }
                 ResolutionContinuation::ProgramHandLibraryReturn { stack, .. }
-                    if stack.program.is_some() && !departed.contains(&stack.item.controller) =>
+                    if stack.program().is_some() && !departed.contains(&stack.item.controller) =>
                 {
                     // A begun Brainstorm return belongs to the live controller's instruction.
                     // Preserve its exact private cohort when an unrelated player or only the

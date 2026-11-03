@@ -353,7 +353,7 @@ impl GameEngine {
         &self,
         stack: &ParkedStackResolution,
     ) -> Option<TargetHandDiscardProgramSignature> {
-        let program_state = stack.program.as_ref()?;
+        let program_state = stack.program()?;
         let compiled = self
             .registry
             .compiled_program_for_owner(&program_state.owner)?;
@@ -683,7 +683,7 @@ impl GameEngine {
         stack: &ParkedStackResolution,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
-        let program = stack.program.as_ref().ok_or(EngineError::ProgramInvariant(
+        let program = stack.program().ok_or(EngineError::ProgramInvariant(
             "Behold continuation lost its typed Program",
         ))?;
         let (input, instruction_address) = {
@@ -724,7 +724,7 @@ impl GameEngine {
             targets: &target_context,
             index: instruction_address,
             input: &input_result,
-            previous_result: &stack.previous_result,
+            previous_result: stack.previous_result(),
             program_state: Some(program.clone()),
             affected_player: stack
                 .item
@@ -989,12 +989,12 @@ impl GameEngine {
 
                 let label = self.build_resolution_effects(top).1;
                 return self.finish_deferred_stack_exit_with_context(
-                    ParkedStackResolution {
-                        item: top.clone(),
-                        resume_effect_index: None,
-                        previous_result: previous_result.clone(),
-                        program: Some(program_state),
-                    },
+                    ParkedStackResolution::for_program(
+                        top.clone(),
+                        None,
+                        previous_result.clone(),
+                        program_state,
+                    ),
                     DeferredStackExit::Resolved,
                     crate::state::StackExitTail::ResolveLogAndGraveyardSeat,
                     label,
@@ -1352,12 +1352,12 @@ impl GameEngine {
                             unique_names: false,
                         },
                         continuation: crate::state::ResolutionContinuation::ProgramChoose {
-                            stack: ParkedStackResolution {
-                                item: top.clone(),
-                                resume_effect_index: None,
-                                previous_result: previous_result.clone(),
-                                program: Some(program_state),
-                            },
+                            stack: ParkedStackResolution::for_program(
+                                top.clone(),
+                                None,
+                                previous_result.clone(),
+                                program_state,
+                            ),
                             choose: crate::state::PendingProgramChoose {
                                 occurrence,
                                 original_chooser: chooser_player,
@@ -1485,9 +1485,12 @@ impl GameEngine {
                                         let prompt = format!(
                                             "Choose one of the creatures created by {label}."
                                         );
-                                        let mut stack = ParkedStackResolution::new(top.clone())
-                                            .with_previous_result(previous_result.clone());
-                                        stack.program = Some(program_state.clone());
+                                        let stack = ParkedStackResolution::for_program(
+                                            top.clone(),
+                                            None,
+                                            previous_result.clone(),
+                                            program_state.clone(),
+                                        );
                                         self.state.pending_resolution =
                                             Some(crate::state::PendingResolution {
                                                 resolution_prompt_id: crate::state::ResolutionPromptId::UNASSIGNED,
@@ -1721,7 +1724,7 @@ impl GameEngine {
         occurrence: &crate::state::ProgramChooseOccurrence,
         branch_id: Option<&tricerules_card_model::ChoiceId>,
     ) -> Result<(), EngineError> {
-        let run = stack.program.as_mut().ok_or(EngineError::ProgramInvariant(
+        let run = stack.program().ok_or(EngineError::ProgramInvariant(
             "program Choose lost its parked execution state",
         ))?;
         let compiled = self.registry.compiled_program_for_owner(&run.owner).ok_or(
@@ -1773,11 +1776,15 @@ impl GameEngine {
             instruction_index: occurrence.instruction_index,
             arm,
         });
-        run.frames.push(ProgramFrame {
-            path: child_path,
-            next_instruction: 0,
-            yield_to: instruction.outputs.clone(),
-        });
+        stack
+            .push_program_frame(ProgramFrame {
+                path: child_path,
+                next_instruction: 0,
+                yield_to: instruction.outputs.clone(),
+            })
+            .ok_or(EngineError::ProgramInvariant(
+                "program Choose lost its parked execution state",
+            ))?;
         Ok(())
     }
 
@@ -1802,7 +1809,11 @@ impl GameEngine {
                     .get(&branch.branch_id)
                     .copied(),
             )
-            || !self.program_choose_leaf_is_selectable(&stack.item, &stack.previous_result, &branch)
+            || !self.program_choose_leaf_is_selectable(
+                &stack.item,
+                stack.previous_result(),
+                &branch,
+            )
             || !self.program_choose_cost_is_selectable(&stack.item, original_chooser, &branch.cost)
         {
             return Err(EngineError::Illegal(
@@ -1821,7 +1832,7 @@ impl GameEngine {
         occurrence: &crate::state::ProgramChooseOccurrence,
         branch_index: usize,
     ) -> Result<CompiledChooseBranch, EngineError> {
-        let run = stack.program.as_ref().ok_or(EngineError::ProgramInvariant(
+        let run = stack.program().ok_or(EngineError::ProgramInvariant(
             "program Choose lost its parked execution state",
         ))?;
         let compiled = self.registry.compiled_program_for_owner(&run.owner).ok_or(
@@ -1859,7 +1870,7 @@ impl GameEngine {
         let ResolutionContinuation::ProgramChoose { stack, choose } = &pending.continuation else {
             return None;
         };
-        let run = stack.program.as_ref()?;
+        let run = stack.program()?;
         let compiled = self.registry.compiled_program_for_owner(&run.owner)?;
         let parent = block_at_path(compiled, &choose.occurrence.parent_path).ok()?;
         let instruction = parent
@@ -1909,7 +1920,7 @@ impl GameEngine {
                                 )
                             && self.program_choose_leaf_is_selectable(
                                 &stack.item,
-                                &stack.previous_result,
+                                stack.previous_result(),
                                 branch,
                             )
                     })
@@ -2018,9 +2029,12 @@ impl GameEngine {
     ) -> Result<bool, EngineError> {
         self.refresh_hideaway_look_permissions();
         self.refresh_enduring_story_designations();
-        let mut observer_stack = ParkedStackResolution::new(top.clone());
-        observer_stack.program = Some(program_state.clone());
-        observer_stack.previous_result = result.clone();
+        let observer_stack = ParkedStackResolution::for_program(
+            top.clone(),
+            None,
+            result.clone(),
+            program_state.clone(),
+        );
         self.finish_resolution_instruction_boundary(observer_stack, events)
     }
 }
@@ -7875,7 +7889,7 @@ mod invariant_rollback_tests {
             panic!("the saved payment retains its Program Choose continuation");
         };
         assert!(!choose.optional, "the fixture is a mandatory Choose");
-        let original_program = format!("{:?}", stack.program);
+        let original_program = format!("{:?}", stack.program());
         let old_generation = engine.state.zone_change_generation[&borrowed];
         let crate::state::PendingProgramChooseStage::PayingPermanentCost {
             candidate_generations: original_generations,
@@ -7948,7 +7962,7 @@ mod invariant_rollback_tests {
             panic!("restored payment retains its Program Choose continuation");
         };
         assert!(!choose.optional);
-        assert_eq!(format!("{:?}", stack.program), original_program);
+        assert_eq!(format!("{:?}", stack.program()), original_program);
         let crate::state::PendingProgramChooseStage::PayingPermanentCost {
             candidate_generations,
             ..
@@ -8050,7 +8064,7 @@ mod invariant_rollback_tests {
             panic!("saved filtered-discard payment keeps ProgramChoose");
         };
         assert!(choose.optional);
-        let original_program = format!("{:?}", stack.program);
+        let original_program = format!("{:?}", stack.program());
         let original_stack_id = stack.item.id;
         let original_controller = stack.item.controller;
         let original_owner = stack.item.source_owner;
@@ -8123,7 +8137,7 @@ mod invariant_rollback_tests {
             panic!("restored payment retains ProgramChoose");
         };
         assert!(choose.optional);
-        assert_eq!(format!("{:?}", stack.program), original_program);
+        assert_eq!(format!("{:?}", stack.program()), original_program);
         assert_eq!(stack.item.id, original_stack_id);
         assert_eq!(stack.item.controller, original_controller);
         assert_eq!(stack.item.source_owner, original_owner);
@@ -9247,7 +9261,7 @@ mod invariant_rollback_tests {
             other => panic!("expected Program-carrying damage replacement, got {other:?}"),
         };
         assert!(
-            parked_stack.program.is_some(),
+            parked_stack.program().is_some(),
             "the late DamagePlayer replacement retains the active Program and parent cursor"
         );
         let replacement_prompt = paid
@@ -9391,7 +9405,7 @@ mod invariant_rollback_tests {
             | ResolutionContinuation::SearchLibrary { stack, .. } => stack,
             other => panic!("unexpected continuation: {other:?}"),
         };
-        let program = stack.program.as_ref().expect("parked program state");
+        let program = stack.program().expect("parked program state");
         (pending, stack, program)
     }
 
@@ -10037,7 +10051,7 @@ mod invariant_rollback_tests {
         assert_eq!(pending.presentation.candidates, vec![forest]);
         assert_eq!(run.owner, owners[0]);
         assert_eq!(run.pending_owners, owners[1..]);
-        assert_eq!(stack.previous_result.object_refs(), vec![seeded]);
+        assert_eq!(stack.previous_result().object_refs(), vec![seeded]);
         assert_eq!(run.in_flight, Some(Vec::new()));
         assert_eq!(run.slots.len(), 1);
         assert!(nested_slot(run, drawn_slot).is_none());
@@ -10060,7 +10074,7 @@ mod invariant_rollback_tests {
         ));
         assert_eq!(run.owner, owners[0]);
         assert_eq!(run.pending_owners, owners[1..]);
-        assert_eq!(stack.previous_result.object_refs(), vec![seeded]);
+        assert_eq!(stack.previous_result().object_refs(), vec![seeded]);
         assert!(matches!(
             nested_slot(run, drawn_slot),
             Some(ProgramValue::DrawReceipt(cards))
@@ -10136,7 +10150,7 @@ mod invariant_rollback_tests {
             // Keep the published maximum at authored capacity even when no candidate is eligible.
             assert_eq!((pending.presentation.min, pending.presentation.max), (0, 1));
             assert!(pending.presentation.candidates.is_empty());
-            assert_eq!(stack.previous_result.object_refs(), vec![seeded]);
+            assert_eq!(stack.previous_result().object_refs(), vec![seeded]);
             assert_eq!(run.in_flight, Some(Vec::new()));
             nested_select_objects(&mut engine, Vec::new())
         };
@@ -10165,7 +10179,7 @@ mod invariant_rollback_tests {
         ));
         assert_eq!(run.owner, owners[0]);
         assert_eq!(run.pending_owners, owners[1..]);
-        assert_eq!(stack.previous_result.object_refs(), vec![seeded]);
+        assert_eq!(stack.previous_result().object_refs(), vec![seeded]);
         assert_eq!(run.in_flight, None);
 
         nested_answer(&mut engine, Decision::SelectBranch, 0, Vec::new());
@@ -10329,7 +10343,7 @@ mod invariant_rollback_tests {
         let (pending, stack, run) = parked_program(&engine);
         assert_eq!(run.owner, owners[0]);
         assert_eq!(run.pending_owners, owners[1..]);
-        assert_eq!(stack.previous_result.object_refs(), vec![seeded]);
+        assert_eq!(stack.previous_result().object_refs(), vec![seeded]);
         let draw_ref = match nested_slot(run, before_slot) {
             Some(ProgramValue::DrawReceipt(cards)) if cards.len() == 1 => cards[0],
             other => panic!("first modal owner must retain its draw receipt: {other:?}"),
@@ -10363,7 +10377,7 @@ mod invariant_rollback_tests {
         let (_, stack, run) = parked_program(&engine);
         assert_eq!(run.owner, owners[0]);
         assert_eq!(run.pending_owners, owners[1..]);
-        assert_eq!(stack.previous_result.object_refs(), vec![seeded]);
+        assert_eq!(stack.previous_result().object_refs(), vec![seeded]);
         assert!(
             matches!(nested_slot(run, before_slot), Some(ProgramValue::DrawReceipt(cards)) if cards[0].object_id == drawn_id)
         );
@@ -10376,7 +10390,7 @@ mod invariant_rollback_tests {
         ));
         assert_eq!(run.owner, owners[0]);
         assert_eq!(run.pending_owners, owners[1..]);
-        assert_eq!(stack.previous_result.object_refs(), vec![seeded]);
+        assert_eq!(stack.previous_result().object_refs(), vec![seeded]);
         assert_eq!(run.in_flight, Some(vec![selected_slot]));
         assert!(
             nested_slot(run, selected_slot).is_none(),
@@ -10391,7 +10405,7 @@ mod invariant_rollback_tests {
         let (pending, stack, run) = parked_program(&engine);
         assert_eq!(run.owner, owners[0]);
         assert_eq!(run.pending_owners, owners[1..]);
-        assert_eq!(stack.previous_result.object_refs(), vec![seeded]);
+        assert_eq!(stack.previous_result().object_refs(), vec![seeded]);
         assert!(matches!(
             &pending.continuation,
             ResolutionContinuation::ProgramChoose {
@@ -10465,7 +10479,7 @@ mod invariant_rollback_tests {
             &pending.continuation,
             ResolutionContinuation::SearchLibrary { .. }
         ));
-        assert_eq!(stack.previous_result.object_refs(), vec![seeded]);
+        assert_eq!(stack.previous_result().object_refs(), vec![seeded]);
         assert_eq!(run.in_flight, Some(vec![found_slot]));
         assert!(nested_slot(run, found_slot).is_none());
         assert!(
@@ -10479,7 +10493,7 @@ mod invariant_rollback_tests {
             &pending.continuation,
             ResolutionContinuation::HandChoice { .. }
         ));
-        assert_eq!(stack.previous_result.object_refs(), vec![seeded]);
+        assert_eq!(stack.previous_result().object_refs(), vec![seeded]);
         assert_eq!(run.in_flight, Some(vec![selected_slot]));
         assert!(matches!(
             nested_slot(run, found_slot),

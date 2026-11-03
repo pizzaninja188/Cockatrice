@@ -901,8 +901,12 @@ mod tests {
             in_flight: Some(vec![ResultSlotId(0)]),
             in_flight_results: OperationResults::default(),
         };
-        let mut stack = ParkedStackResolution::new(item.clone());
-        stack.program = Some(program);
+        let stack = ParkedStackResolution::for_program(
+            item.clone(),
+            None,
+            OperationResults::default(),
+            program,
+        );
         let mut events = Vec::new();
         zones::park_zone_search_choice(
             &mut engine,
@@ -935,7 +939,7 @@ mod tests {
             .pending_resolution
             .as_ref()
             .and_then(|pending| pending.continuation.stack())
-            .and_then(|stack| stack.program.as_ref())
+            .and_then(|stack| stack.program())
             .expect("the search continuation retains its program frame");
         assert_eq!(saved.owner, owner);
         assert_eq!(saved.frames[0].path[0].instruction_index, 2);
@@ -975,7 +979,7 @@ mod tests {
 
         let progress = advance_program_partition_move(
             &mut engine,
-            ParkedStackResolution::new(fixture_stack_item()),
+            ParkedStackResolution::dedicated(fixture_stack_item()),
             plan,
             &mut events,
         )
@@ -1029,7 +1033,7 @@ mod tests {
 
         let progress = advance_program_partition_move(
             &mut engine,
-            ParkedStackResolution::new(fixture_stack_item()),
+            ParkedStackResolution::dedicated(fixture_stack_item()),
             plan,
             &mut events,
         )
@@ -1080,7 +1084,7 @@ mod tests {
 
         let progress = advance_program_partition_move(
             &mut engine,
-            ParkedStackResolution::new(fixture_stack_item()),
+            ParkedStackResolution::dedicated(fixture_stack_item()),
             plan,
             &mut events,
         )
@@ -1158,7 +1162,7 @@ mod tests {
 
         let result = advance_program_partition_move(
             &mut engine,
-            ParkedStackResolution::new(fixture_stack_item()),
+            ParkedStackResolution::dedicated(fixture_stack_item()),
             plan,
             &mut events,
         );

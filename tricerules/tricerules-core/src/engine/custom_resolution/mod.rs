@@ -750,12 +750,16 @@ impl GameEngine {
                 )? {
                     return Ok(true);
                 }
-                let completed = self.complete_parked_resolution_with_previous(
-                    stack.item,
-                    stack.resume_effect_index,
-                    stack.previous_result,
-                    Vec::new(),
-                )?;
+                let completed = {
+                    let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
+                        stack.into_parts();
+                    self.complete_parked_resolution_with_previous(
+                        parked_item,
+                        parked_resume_effect_index,
+                        parked_previous_result,
+                        Vec::new(),
+                    )
+                }?;
                 events.extend(completed.events);
                 Ok(true)
             }
@@ -795,12 +799,16 @@ impl GameEngine {
                     stack.clone(),
                     events,
                 )? {
-                    let completed = self.complete_parked_resolution_with_previous(
-                        stack.item,
-                        stack.resume_effect_index,
-                        stack.previous_result,
-                        Vec::new(),
-                    )?;
+                    let completed = {
+                        let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
+                            stack.into_parts();
+                        self.complete_parked_resolution_with_previous(
+                            parked_item,
+                            parked_resume_effect_index,
+                            parked_previous_result,
+                            Vec::new(),
+                        )
+                    }?;
                     events.extend(completed.events);
                 }
                 Ok(true)
@@ -1984,7 +1992,7 @@ impl GameEngine {
                         if !resolution_branch_is_selectable(
                             self,
                             &stack.item,
-                            &stack.previous_result,
+                            stack.previous_result(),
                             pending.deciding_player,
                             stack.item.controller,
                             &branch,
@@ -1999,7 +2007,7 @@ impl GameEngine {
                         super::resolution::direct_draw_effect_is_selectable(
                             self,
                             &stack.item,
-                            &stack.previous_result,
+                            stack.previous_result(),
                             &ability.effect,
                         ) == Some(false)
                     }) {
@@ -2027,12 +2035,15 @@ impl GameEngine {
                 ));
             }
         };
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            resume_index,
-            stack.previous_result,
-            events,
-        )
+        {
+            let (parked_item, _, parked_previous_result, _) = stack.into_parts();
+            self.complete_parked_resolution_with_previous(
+                parked_item,
+                resume_index,
+                parked_previous_result,
+                events,
+            )
+        }
     }
 
     pub(in crate::engine) fn refresh_optional_triggered_ability_departure(
@@ -2254,9 +2265,7 @@ impl GameEngine {
                     (stack.as_ref(), self.state.pending_resolution.as_mut())
                 {
                     if let Some(parked) = next_pending.continuation.stack_mut() {
-                        parked.resume_effect_index = resume.resume_effect_index;
-                        parked.previous_result = resume.previous_result.clone();
-                        parked.program = resume.program.clone();
+                        parked.restore_execution_from(resume);
                     }
                 }
                 return Ok(finish_with_events(self, events));
@@ -2268,7 +2277,7 @@ impl GameEngine {
                     .map(|stack| stack.item.clone())
                     .unwrap_or_else(|| self.observer_return_item(exiled.object_id, owner));
                 return self.finish_entry_copy_without_recipient(
-                    stack.unwrap_or_else(|| ParkedStackResolution::new(item)),
+                    stack.unwrap_or_else(|| ParkedStackResolution::dedicated(item)),
                     *entry,
                     BattlefieldEntryCompletion::ObserverReturn {
                         owner,
@@ -2300,7 +2309,7 @@ impl GameEngine {
             return Ok(finish_with_events(self, events));
         }
         if let Some(stack) = stack {
-            let previous_result = stack.previous_result.clone();
+            let previous_result = stack.previous_result().clone();
             return self.complete_parked_stack_with_previous(stack, previous_result, events);
         }
         self.apply_sbas(&mut events)?;
@@ -2472,12 +2481,16 @@ impl GameEngine {
         if self.finish_special_cast_completion(&completion, false, stack.clone(), &mut events)? {
             return Ok(finish_with_events(self, events));
         }
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
-            stack.previous_result,
-            events,
-        )
+        {
+            let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
+                stack.into_parts();
+            self.complete_parked_resolution_with_previous(
+                parked_item,
+                parked_resume_effect_index,
+                parked_previous_result,
+                events,
+            )
+        }
     }
 
     /// The parent special-cast offer is suspended while its accepted child cast is being paid.
@@ -2568,12 +2581,16 @@ impl GameEngine {
         )? {
             return Ok(finish_with_events(self, events));
         }
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
-            stack.previous_result,
-            events,
-        )
+        {
+            let (parked_item, parked_resume_effect_index, parked_previous_result, _) =
+                stack.into_parts();
+            self.complete_parked_resolution_with_previous(
+                parked_item,
+                parked_resume_effect_index,
+                parked_previous_result,
+                events,
+            )
+        }
     }
 
     /// Display names for `oids`, in order (registry lookup, never Oracle).
@@ -2619,7 +2636,7 @@ impl GameEngine {
             } => (stack.clone(), candidate_generations.clone()),
             _ => unreachable!("permanent-choice continuation"),
         };
-        if let Some(program) = stack.program.as_ref() {
+        if let Some(program) = stack.program() {
             match self.current_program_perform(program) {
                 Ok(SpellEffectKind::ChooseProliferatedPermanents) => {
                     return self.finish_proliferated_permanent_choice(
@@ -2695,7 +2712,7 @@ impl GameEngine {
         candidate_generations: Vec<(ObjectId, u64)>,
         chosen: &[ObjectId],
     ) -> Result<RuledEventBatch, EngineError> {
-        let Some(program) = stack.program.as_ref() else {
+        let Some(program) = stack.program() else {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::ProgramInvariant(
                 "Proliferate choice lost its typed Program",
@@ -3454,7 +3471,7 @@ impl GameEngine {
             return Ok(());
         };
         let stack = match &pending.continuation {
-            ResolutionContinuation::PermanentChoice { stack, .. } if stack.program.is_some() => {
+            ResolutionContinuation::PermanentChoice { stack, .. } if stack.program().is_some() => {
                 stack.clone()
             }
             _ => {
@@ -3462,7 +3479,7 @@ impl GameEngine {
                 return Ok(());
             }
         };
-        let Some(mut program) = stack.program.clone() else {
+        let Some(program) = stack.program() else {
             self.state.pending_resolution = Some(pending);
             return Ok(());
         };
@@ -3470,7 +3487,7 @@ impl GameEngine {
             .state
             .player_idx(stack.item.controller)
             .is_some_and(|index| !self.state.players[index].has_lost);
-        let current_effect = match self.current_program_perform(&program) {
+        let current_effect = match self.current_program_perform(program) {
             Ok(effect) => effect,
             Err(error) => {
                 self.state.pending_resolution = Some(pending);
@@ -3518,14 +3535,10 @@ impl GameEngine {
                 "resolution program choice cursor is invalid",
             ));
         };
-        program
-            .frames
-            .last_mut()
-            .expect("active program frame checked")
-            .next_instruction = next_instruction;
-        program.in_flight = None;
         let mut retry = stack;
-        retry.program = Some(program);
+        retry
+            .retry_program_instruction(next_instruction)
+            .expect("active program frame checked");
         self.state.pending_resolution = None;
         let completed = self.complete_parked_stack_with_previous(
             retry,
@@ -3558,7 +3571,7 @@ impl GameEngine {
                 ),
                 _ => unreachable!("behold-choice continuation"),
             };
-        if stack.program.is_none() {
+        if stack.program().is_none() {
             return Err(EngineError::ProgramInvariant(
                 "non-program Behold continuation reached its retired resume path",
             ));
@@ -3638,7 +3651,7 @@ impl GameEngine {
             self.execute_program_behold_untap(&stack, &mut events)?;
         }
 
-        let previous_result = stack.previous_result.clone();
+        let previous_result = stack.previous_result().clone();
         self.complete_parked_stack_with_previous(stack, previous_result, events)
     }
 
@@ -3765,8 +3778,9 @@ impl GameEngine {
             .take()
             .expect("linked play cohort checked above");
         cohort.stack.item = item;
-        cohort.stack.resume_effect_index = resume_effect_index;
-        cohort.stack.previous_result = previous_result;
+        cohort
+            .stack
+            .set_flat_tail(resume_effect_index, previous_result);
         self.advance_pending_linked_exile_play_through_stack(cohort, ev)
     }
 
@@ -3779,10 +3793,11 @@ impl GameEngine {
         previous_result: OperationResults,
         mut ev: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
-        let Some(program) = stack.program.clone() else {
+        let (item, resume_effect_index, saved_previous_result, program) = stack.into_parts();
+        let Some(program) = program else {
             return self.complete_parked_resolution_with_previous(
-                stack.item,
-                stack.resume_effect_index,
+                item,
+                resume_effect_index,
                 previous_result,
                 ev,
             );
@@ -3798,9 +3813,9 @@ impl GameEngine {
             None
         };
         let progress = self.resume_program_with_completion(
-            &stack.item,
+            &item,
             program,
-            stack.previous_result,
+            saved_previous_result,
             operation_result,
             &mut ev,
         )?;
@@ -3909,8 +3924,8 @@ mod resolution_payment_actor_tests {
         item.source_owner = Some(0);
         item.source_zone_change = engine.state.zone_change_generation[&sentry];
         let stack_item_id = item.id;
-        let mut stack = ParkedStackResolution::new(item.clone());
-        stack.resume_effect_index = Some(1);
+        let stack =
+            ParkedStackResolution::for_flat_effects(item.clone(), Some(1), Default::default());
         engine.state.stack.push(item);
 
         let cost = ResolutionCost::TapPermanents {
@@ -4045,7 +4060,7 @@ mod equipment_receipt_reoffer_tests {
         item.source_permanent_id = Some(equipment);
         item.source_owner = Some(10);
         item.source_zone_change = equipment_generation;
-        let stack = ParkedStackResolution::new(item);
+        let stack = ParkedStackResolution::dedicated(item);
         let candidate_generations = candidates
             .iter()
             .map(|object_id| (*object_id, engine.state.zone_change_generation[object_id]))

@@ -184,7 +184,7 @@ impl GameEngine {
     ) -> Result<tricerules_card_model::primitives::ResolutionCost, EngineError> {
         use tricerules_card_model::primitives::{ResolutionCost, SpellEffectKind};
 
-        let program = stack.program.as_ref().ok_or(EngineError::ProgramInvariant(
+        let program = stack.program().ok_or(EngineError::ProgramInvariant(
             "restored Ward discard lost its authored Program state",
         ))?;
         let effect = self.current_program_perform(program)?;
@@ -216,7 +216,7 @@ impl GameEngine {
             .unwrap_or("Ward")
             .to_string();
         counter_stack_object_ref(self, ward.target, &label, &mut events)?;
-        let mut previous_result = stack.previous_result.clone();
+        let mut previous_result = stack.previous_result().clone();
         previous_result.set(crate::state::ProgramValue::CounterPaymentOutcome(outcome));
         self.complete_parked_stack_with_previous(stack, previous_result, events)
     }
@@ -294,7 +294,7 @@ impl GameEngine {
             )));
         }
 
-        let previous_result = stack.previous_result.clone();
+        let previous_result = stack.previous_result().clone();
         self.complete_parked_stack_with_previous(stack, previous_result, events)
     }
 }
