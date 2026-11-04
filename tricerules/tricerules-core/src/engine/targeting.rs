@@ -2303,12 +2303,11 @@ fn compute_targets_with_context(
 
     let counter_allocation = counter_allocation_for_schema(target_context.effects, &schema);
     for (group, authored) in groups.iter_mut().zip(&schema.groups) {
-        if authored.bindings.iter().any(|binding| {
-            matches!(
-                target_context.effects.get(binding.effect_index),
-                Some(SpellEffectKind::PutPoisonCountersOnTargetPlayer { .. })
-            )
-        }) {
+        if authored
+            .bindings
+            .iter()
+            .any(|binding| !binding.role.targets_an_object())
+        {
             // A player-only role must not publish physical candidates whose numeric ID happens
             // to equal a legal PlayerId. The explicit target domain remains authoritative.
             group.valid_permanent_ids.clear();
@@ -4288,6 +4287,109 @@ mod tests {
         );
         assert_eq!(copy_target.zone_change_generation, None);
         assert!(stack_target_identity_is_current(&engine, &copy_target));
+    }
+
+    #[test]
+    fn player_only_roles_omit_physical_candidates_in_every_zone() {
+        let any_player = TargetFilter {
+            kind: TargetKind::AnyPlayer,
+            ..Default::default()
+        };
+        let opponent = TargetFilter {
+            kind: TargetKind::OpponentPlayer,
+            ..Default::default()
+        };
+        let effects = [
+            SpellEffectKind::DamageTarget {
+                target: any_player.clone(),
+                amount: Amount::Fixed(1),
+            },
+            SpellEffectKind::DamageTarget {
+                target: opponent.clone(),
+                amount: Amount::Fixed(1),
+            },
+            SpellEffectKind::DamageTarget {
+                target: TargetFilter {
+                    any_of: Some(vec![any_player.clone(), opponent]),
+                    ..Default::default()
+                },
+                amount: Amount::Fixed(1),
+            },
+            SpellEffectKind::PoisonTargetUpToNine {
+                target: any_player.clone(),
+            },
+            SpellEffectKind::PutPoisonCountersOnTargetPlayer {
+                target: any_player,
+                count: 2,
+            },
+        ];
+        for zone in [Zone::Battlefield, Zone::Graveyard, Zone::Stack] {
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                219_010,
+                &[0, 1],
+                20,
+                Some(vec![
+                    vec!["grizzly_bears".into(); 7],
+                    vec!["forest".into(); 7],
+                ]),
+                true,
+            )
+            .unwrap();
+            let colliding_id = engine.state.players[0].hand[0];
+            super::super::resolution::move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                colliding_id,
+                zone,
+                None,
+            )
+            .unwrap();
+            if zone == Zone::Stack {
+                engine
+                    .state
+                    .stack
+                    .push(issue_205_stack_item(colliding_id, "grizzly_bears", 0, 0));
+            }
+            engine
+                .state
+                .players
+                .push(crate::state::PlayerState::new(colliding_id as PlayerId, 20));
+            let source = TargetSourceIdentity::current(&engine, u32::MAX);
+            for (index, effect) in effects.iter().enumerate() {
+                let targets = compute_spell_targets(
+                    &engine,
+                    0,
+                    source,
+                    std::slice::from_ref(effect),
+                    None,
+                    &[],
+                );
+                let group = &targets.groups[0];
+                assert!(
+                    group.valid_permanent_ids.is_empty()
+                        && group.valid_permanent_targets.is_empty()
+                        && group.valid_stack_ids.is_empty()
+                        && group.valid_graveyard_ids.is_empty(),
+                    "player-only effect {effect:?} published a physical candidate in {zone:?}"
+                );
+                assert_eq!(group.can_target_self, index != 1);
+                assert!(group.can_target_opponent);
+            }
+            // A mixed role must still offer both players and battlefield creatures.
+            let mixed = [SpellEffectKind::DamageTarget {
+                target: TargetFilter::default(),
+                amount: Amount::Fixed(1),
+            }];
+            let targets = compute_spell_targets(&engine, 0, source, &mixed, None, &[]);
+            assert!(targets.groups[0].can_target_self);
+            assert!(targets.groups[0].can_target_opponent);
+            if zone == Zone::Battlefield {
+                assert!(targets.groups[0]
+                    .valid_permanent_ids
+                    .contains(&colliding_id));
+            }
+        }
     }
 
     #[test]
