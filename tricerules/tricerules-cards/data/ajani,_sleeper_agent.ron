@@ -1,0 +1,39 @@
+// Oracle 37714eb9-a39d-4534-a2d3-27908c418f8a; DMU 192 printing 7641f4d9-4614-41c8-87f5-4845bd78e9b3.
+// Official DMU notes: https://magic.wizards.com/en/news/feature/dominaria-united-release-notes-2022-08-26
+// CR 702.150 / 616: Compleated entry replacements; 701.20 / 400.7: public reveal and exact card.
+// CR 601.2d / 608.2b: announced distribution and legal targets; 114 / 603.3d: captured emblem.
+(
+    id: "ajani,_sleeper_agent", name: "Ajani, Sleeper Agent", face_id: "ajani_sleeper_agent",
+    mana_cost: "{1}{G}{G/W/P}{W}", supertypes: ["Legendary"], types: ["Planeswalker", "Ajani"], loyalty: 4,
+    static_abilities: [(
+        ability_id: "static_01", presentation: OracleLines([1]), definition: Compleated,
+    )],
+    activated_abilities: [(
+        ability_id: "activated_01", presentation: OracleLines([2]), costs: [Loyalty(1)],
+        effect: [RevealTopCardToHandIfMatches(
+            filter: (any_of: Some([(card_type: Some(Creature)), (card_type: Some(Planeswalker))])),
+            unmatched: MayPutBottom,
+        )],
+    ), (
+        ability_id: "activated_02", presentation: OracleLines([3]), costs: [Loyalty(-3)],
+        effect: [
+            DistributeCounters(counter: PlusOnePlusOne, count: 3, subject: Chosen((kind: Creature))),
+            GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Vigilance]),
+        ],
+        targeting: Some((groups: [(
+            min: 0, max: 3, prompt: "Choose up to three target creatures", effect_indices: [0, 1],
+        )])),
+    ), (
+        ability_id: "activated_03", presentation: OracleLines([4]), costs: [Loyalty(-6)],
+        effect: [CreateTriggeredEmblem(
+            emblem_id: "ajani_sleeper_agent_emblem", display_name: "Ajani, Sleeper Agent Emblem",
+            ability: (
+                ability_id: "emblem_01", presentation: OracleLines([4]),
+                trigger: WheneverPlayerCastsSpell(caster: Controller,
+                    filter: (any_of: Some([(card_type: Some(Creature)), (card_type: Some(Planeswalker))])),
+                    ordinal: None, ordinal_scope: AllSpells),
+                effect: [PutPoisonCountersOnTargetPlayer(count: 2, target: (kind: OpponentPlayer))],
+            ),
+        )],
+    )],
+)

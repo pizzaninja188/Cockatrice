@@ -216,3 +216,6 @@ mod deck_coverage_zurs_weirding;
 mod issue_507_replicating_ring_program;
 #[path = "../structural_choose_later_ports.rs"]
 mod structural_choose_later_ports;
+
+#[path = "../deck_coverage_ajani_sleeper_agent.rs"]
+mod deck_coverage_ajani_sleeper_agent;

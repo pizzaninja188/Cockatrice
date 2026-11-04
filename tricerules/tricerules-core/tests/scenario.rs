@@ -1354,3 +1354,6 @@ mod deck_coverage_narset_rebound_capability;
 mod deck_coverage_kaya_the_inexorable;
 #[path = "scenario/deck_coverage_narset_emblem_capability.rs"]
 mod deck_coverage_narset_emblem_capability;
+
+#[path = "scenario/deck_coverage_ajani_sleeper_agent.rs"]
+mod deck_coverage_ajani_sleeper_agent;

@@ -288,7 +288,50 @@ pub(crate) fn targets(
         return Ok(vec![]);
     };
     let mut result: Vec<TargetRef> = vec![];
+    if let Some(allocation) = &offer.counter_allocation {
+        if allocation.fixed_total == 0
+            || offer
+                .groups
+                .iter()
+                .filter(|group| group.group_index == allocation.group_index)
+                .count()
+                != 1
+        {
+            return Err("invalid fixed counter-allocation offer".into());
+        }
+    }
     for group in &offer.groups {
+        if let Some(allocation) = offer
+            .counter_allocation
+            .as_ref()
+            .filter(|allocation| allocation.group_index == group.group_index)
+        {
+            if group.min > 1 || group.max < 1 || group.chosen_by_opponent {
+                return Err("counter allocation needs a specialized group fixture".into());
+            }
+            let candidate = group
+                .valid_permanent_targets
+                .iter()
+                .find(|candidate| {
+                    group.valid_permanent_ids.contains(&candidate.object_id)
+                        && !result.iter().any(|target| {
+                            target.object_id == candidate.object_id
+                                && group
+                                    .distinct_from_group_indices
+                                    .contains(&target.group_index)
+                        })
+                })
+                .ok_or("counter allocation needs an offered generation-bound permanent")?;
+            result.push(TargetRef {
+                object_id: candidate.object_id,
+                group_index: group.group_index,
+                kind: TargetRefKind::Permanent as i32,
+                counter_amount: allocation.fixed_total,
+                expected_zone_change_generation: Some(candidate.zone_change_generation),
+                ..Default::default()
+            });
+            continue;
+        }
         let mut candidates = vec![];
         for (kind, ids) in [
             (2, &group.valid_permanent_ids),
@@ -362,6 +405,33 @@ pub(crate) fn targets(
         }
     }
     Ok(result)
+}
+
+/// Choose one announced full-mana branch from the engine's offered cost, never Oracle display data.
+pub(crate) fn hybrid_phyrexian_choices(cost: &str) -> Result<Vec<FlexPipPayment>, String> {
+    let cost = ManaCost::parse(cost).map_err(|error| format!("offered mana cost: {error}"))?;
+    Ok(cost
+        .pips
+        .iter()
+        .enumerate()
+        .filter_map(|(index, pip)| {
+            let ManaSymbol::HybridPhyrexian(first, _) = pip else {
+                return None;
+            };
+            let color = match first {
+                tricerules_cards::mana::ColorPip::W => ManaColor::White,
+                tricerules_cards::mana::ColorPip::U => ManaColor::Blue,
+                tricerules_cards::mana::ColorPip::B => ManaColor::Black,
+                tricerules_cards::mana::ColorPip::R => ManaColor::Red,
+                tricerules_cards::mana::ColorPip::G => ManaColor::Green,
+            };
+            Some(FlexPipPayment {
+                pip_index: index as u32,
+                pay_life: false,
+                mana_color: color as i32,
+            })
+        })
+        .collect())
 }
 
 pub(crate) fn modes(

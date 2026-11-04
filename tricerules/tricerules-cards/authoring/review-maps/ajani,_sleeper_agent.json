@@ -1,0 +1,24 @@
+{
+  "format_version": 1,
+  "oracle_id": "37714eb9-a39d-4534-a2d3-27908c418f8a",
+  "spans": [
+    {"face_id":"ajani_sleeper_agent","start_line":1,"end_line":1,"typed_paths":["/faces/0/static_abilities/0"]},
+    {"face_id":"ajani_sleeper_agent","start_line":2,"end_line":2,"typed_paths":["/faces/0/activated_abilities/0"]},
+    {"face_id":"ajani_sleeper_agent","start_line":3,"end_line":3,"typed_paths":["/faces/0/activated_abilities/1"]},
+    {"face_id":"ajani_sleeper_agent","start_line":4,"end_line":4,"typed_paths":["/faces/0/activated_abilities/2"]}
+  ],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test":"deck_registry::deck_coverage_ajani_sleeper_agent::ajani_exact_identity_compleated_and_all_three_loyalty_abilities","covers":"Exact actual identity, hybrid Phyrexian cost, four loyalty, Compleated, one-based Oracle presentation and all three complete typed loyalty clauses."},
+    {"test":"scenario deck_coverage_ajani_sleeper_agent::actual_ajani_three_payment_branches_and_compleated_season_orders","covers":"Actual green, white and two-life casts enter with four/four/two loyalty; Doubling Season gives eight or ordered Compleated four/six; wrong actor rejects and mana value remains four."},
+    {"test":"scenario deck_coverage_ajani_sleeper_agent::actual_ajani_plus_one_reveals_creature_or_planeswalker_into_hand_and_handles_empty_library","covers":"Actual +1 publicly reveals Creature/Planeswalker into hand without choice, adds loyalty and does not draw or lose on an empty library."},
+    {"test":"scenario deck_coverage_ajani_sleeper_agent::actual_ajani_unmatched_public_reveal_keeps_or_bottoms_exact_card_and_rejects_stale_answers","covers":"Actual unmatched +1 publishes one exact public reveal and private keep/bottom choice, preserves identity/order for keep, moves exact bottom card, and rejects wrong actors and stale repeats atomically."},
+    {"test":"scenario deck_coverage_ajani_sleeper_agent::actual_ajani_minus_three_distributes_zero_to_three_targets_and_vigilance_expires","covers":"Actual -3 pays source into graveyard, announces zero/three/two-one/one-one-one allocations to creatures of different controllers, places exact counters, and grants vigilance through end of turn only."},
+    {"test":"scenario deck_coverage_ajani_sleeper_agent::actual_ajani_minus_three_rejects_bad_announcements_and_does_not_redistribute_stale_shares","covers":"Malformed quantities, identities, generations, target domains, duplicate targets and actors reject before loyalty payment; stale recipients receive no counters/vigilance and surviving shares are not redistributed."},
+    {"test":"scenario deck_coverage_ajani_sleeper_agent::actual_ajani_emblem_outlives_source_matches_own_permanent_casts_and_uses_counter_replacements","covers":"Actual -6 source leaves paying loyalty, persistent captured emblem matches own Creature/Planeswalker but not Artifact/opponent casts, rejects self targets, uses public Player receipts without fake battlefield source, respects Vorinclex and ten-poison loss."},
+    {"test":"scenario deck_coverage_ajani_sleeper_agent::actual_ajani_two_emblems_choose_opponents_independently","covers":"Two actual Ajani emblems order independently for one creature cast and resolve against two different chosen opponents without duplicate targeting or disappearing markers."},
+    {"test":"scenario deck_coverage_ajani_sleeper_agent::actual_ajani_handles_a_dual_type_top_and_grants_vigilance_despite_prevented_counters","covers":"Unchanged actual Ajani RON reveals a synthetic dual-type subject once and grants vigilance to a legal synthetic counter-prohibited creature independently of successfully placed counters."}
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -570,6 +570,7 @@ fn evaluate(case: &Case) -> Result<Outcome, String> {
                         source: Some(helpers::hand_cast_source(slot as usize)),
                         face_index: case.face as u32,
                         cast_method: offer.cast_method,
+                        flex_payments: offers::hybrid_phyrexian_choices(&offer.cost)?,
                         targets: offers::targets(
                             &e,
                             actor,
@@ -689,6 +690,23 @@ fn registry_execution_matches_reviewed_baseline() {
     let actual = rows.join("\n") + "\n";
     let expected = include_str!("conformance/baseline.tsv").replace("\r\n", "\n");
     compare_baseline(&actual, &expected).unwrap_or_else(|err| panic!("{err}"));
+}
+
+#[test]
+fn actual_ajani_conformance_exercises_cast_and_each_loyalty_ability() {
+    for ability in [None, Some(0), Some(1), Some(2)] {
+        let case = Case {
+            card: "ajani,_sleeper_agent".into(),
+            face: 0,
+            ability,
+        };
+        assert_eq!(
+            evaluate(&case).unwrap(),
+            Outcome::Exercised,
+            "{}",
+            case.key()
+        );
+    }
 }
 
 #[test]

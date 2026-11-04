@@ -504,6 +504,9 @@ mod tests {
     mod kaya_inexorable_normal {
         include!("replay_kaya_inexorable_normal.rs");
     }
+    mod ajani_sleeper_normal {
+        include!("replay_ajani_sleeper_normal.rs");
+    }
     mod tamiyo_normal {
         include!("replay_tamiyo_normal.rs");
     }
