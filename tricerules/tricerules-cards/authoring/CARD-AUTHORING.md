@@ -840,6 +840,16 @@ targets becoming illegal prevents resolution. At the end step the captured incar
 together, without rechecking their type, controller, or the source's presence (CR 603.7c). This
 capability does not admit Vronos's other abilities or establish whole-card support.
 
+The separate animation capability composes `ApplyPermanentModifier` with `Indefinite` duration:
+`AddTypes` (Artifact and Creature), `SetCreatureTypes(["Construct"])`, base 9/9, Vigilance and
+Indestructible keywords, and `GrantCantBeBlocked`. Bind all five effects to the same required
+Artifact-you-control target group with `effect_indices: [0, 1, 2, 3, 4]`. `SetCreatureTypes` accepts
+nonempty, distinct known creature subtypes and preserves other subtype families. The nonkeyword
+unblockability grant participates in layer-six ability removal and later grants, then feeds the
+existing engine combat restrictions and public annotation. The animation persists independently
+of its source and cleanup, ends on zone change, and grants no haste. These modifiers also do not
+establish complete Vronos support.
+
 The child is compiled under the full parent-and-child ability identity. Its exact exiled object is
 an inferred `CapturedTriggerObjectRef` input, distinct from the current/last-known copy snapshot
 used by `CreateTokenCopies(TriggerObject)`; authors do not declare this input. The admitted child

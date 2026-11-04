@@ -8,6 +8,9 @@
 #[path = "scenario/vronos_delayed_phasing.rs"]
 mod vronos_delayed_phasing;
 
+#[path = "scenario/vronos_animation.rs"]
+mod vronos_animation;
+
 #[path = "scenario/ajani_revealed_top.rs"]
 mod ajani_revealed_top;
 

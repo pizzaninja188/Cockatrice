@@ -1364,12 +1364,18 @@ impl GameEngine {
                 )
             })
             .filter(|effect| self.continuous_effect_condition_holds(effect))
-            .fold(CombatRestriction::default(), |mut combined, effect| {
-                if let ContinuousEffectKind::CombatRestriction(restriction) = &effect.kind {
-                    combined.combine(restriction);
-                }
-                combined
-            })
+            .fold(
+                CombatRestriction {
+                    cant_be_blocked: characteristics.granted_cant_be_blocked,
+                    ..CombatRestriction::default()
+                },
+                |mut combined, effect| {
+                    if let ContinuousEffectKind::CombatRestriction(restriction) = &effect.kind {
+                        combined.combine(restriction);
+                    }
+                    combined
+                },
+            )
     }
 
     fn can_attack_as_though_without_defender(

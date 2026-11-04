@@ -202,6 +202,12 @@ pub(in crate::engine) fn materialize_resolving_modifier(
         ResolvingPermanentModifier::AddTypes(addition) => {
             vec![ContinuousEffectKind::Layer4AddTypes(addition)]
         }
+        ResolvingPermanentModifier::SetCreatureTypes(types) => {
+            vec![ContinuousEffectKind::Layer4SetCreatureTypes(types)]
+        }
+        ResolvingPermanentModifier::GrantCantBeBlocked => {
+            vec![ContinuousEffectKind::Layer6AddCantBeBlocked]
+        }
         ResolvingPermanentModifier::SetBasePowerToughness { power, toughness } => {
             vec![ContinuousEffectKind::Layer7bSetPt { power, toughness }]
         }

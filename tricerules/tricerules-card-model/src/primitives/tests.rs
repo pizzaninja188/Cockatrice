@@ -23195,3 +23195,46 @@ fn vronos_delayed_phase_out_profile_rejects_unsupported_owners_and_shapes() {
         );
     }
 }
+fn vronos_animation_fixture() -> &'static str {
+    r#"(id: "animation_fixture", name: "Animation Fixture", face_id: "animation_fixture", types: ["Planeswalker"], loyalty: 7,
+        activated_abilities: [(ability_id: "animate", presentation: Fallback, costs: [Loyalty(-7)],
+            targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose an artifact you control", effect_indices: [0,1,2,3,4])])),
+            effect: [
+                ApplyPermanentModifier(subject: Chosen((kind: AnyPermanent, controller: You, permanent_types: [Artifact])), modifier: AddTypes((card_types: [Artifact, Creature])), duration: Indefinite),
+                ApplyPermanentModifier(subject: Chosen((kind: AnyPermanent, controller: You, permanent_types: [Artifact])), modifier: SetCreatureTypes(["Construct"]), duration: Indefinite),
+                ApplyPermanentModifier(subject: Chosen((kind: AnyPermanent, controller: You, permanent_types: [Artifact])), modifier: SetBasePowerToughness(power: 9, toughness: 9), duration: Indefinite),
+                ApplyPermanentModifier(subject: Chosen((kind: AnyPermanent, controller: You, permanent_types: [Artifact])), modifier: GrantKeywords([Vigilance, Indestructible]), duration: Indefinite),
+                ApplyPermanentModifier(subject: Chosen((kind: AnyPermanent, controller: You, permanent_types: [Artifact])), modifier: GrantCantBeBlocked, duration: Indefinite),
+            ]
+        )])"#
+}
+
+#[test]
+fn vronos_animation_modifiers_register_with_one_shared_artifact_target() {
+    let result = crate::CardRegistry::from_chunks_and_tokens(&[vronos_animation_fixture()], &[]);
+    assert!(
+        result.is_ok(),
+        "bounded Vronos animation modifiers: {result:?}"
+    );
+}
+
+#[test]
+fn vronos_animation_creature_subtypes_require_known_distinct_nonempty_values() {
+    for replacement in [
+        "SetCreatureTypes([])",
+        "SetCreatureTypes([\"Equipment\"])",
+        "SetCreatureTypes([\"Construct\",\"Construct\"])",
+    ] {
+        let source =
+            vronos_animation_fixture().replace("SetCreatureTypes([\"Construct\"])", replacement);
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[&source], &[]).is_err(),
+            "must reject {replacement}"
+        );
+    }
+    let source = vronos_animation_fixture().replace(
+        "SetCreatureTypes([\"Construct\"])",
+        "SetCreatureTypes([\"Elf\",\"Construct\"])",
+    );
+    assert!(crate::CardRegistry::from_chunks_and_tokens(&[&source], &[]).is_ok());
+}

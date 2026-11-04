@@ -44,6 +44,8 @@ pub struct Characteristics {
     pub keywords: Vec<Keyword>,
     pub protections: Vec<ProtectionQuality>,
     pub evasions: Vec<Evasion>,
+    /// A granted nonkeyword ability, evaluated with layer-six grants and removals.
+    pub(crate) granted_cant_be_blocked: bool,
     pub power: Option<u32>,
     pub toughness: Option<u32>,
     /// Signed rules values for quantity arithmetic; the existing wire projection stays unsigned.
@@ -408,6 +410,7 @@ pub(super) fn spell_cast_characteristics(
         keywords: face.keywords.clone(),
         protections: face.protections.clone(),
         evasions: face.evasions.clone(),
+        granted_cant_be_blocked: false,
         power: face.power,
         toughness: face.toughness,
         signed_power: face.power.map(i64::from),
@@ -446,6 +449,7 @@ pub(super) fn stack_spell_colors(
         keywords: face.keywords.clone(),
         protections: Vec::new(),
         evasions: Vec::new(),
+        granted_cant_be_blocked: false,
         power: None,
         toughness: None,
         signed_power: None,
@@ -792,6 +796,7 @@ impl CharacteristicsEvaluator<'_> {
             keywords: face.keywords.to_vec(),
             protections: face.protections.to_vec(),
             evasions: face.evasions.to_vec(),
+            granted_cant_be_blocked: false,
             // Object snapshots take precedence for tokens and scenario overrides. Multi-face
             // objects leave these unset and read the active face.
             power: if copied.is_some() || object.prototyped {
@@ -1188,6 +1193,7 @@ impl CharacteristicsEvaluator<'_> {
                     effect.kind,
                     ContinuousEffectKind::Layer6RemoveAllAbilities
                         | ContinuousEffectKind::Layer6AddKeyword(_)
+                        | ContinuousEffectKind::Layer6AddCantBeBlocked
                         | ContinuousEffectKind::Layer6AddKeywordFromStatic { .. }
                         | ContinuousEffectKind::Layer6AddProtection(_)
                 )
@@ -1799,6 +1805,7 @@ pub(super) fn apply_face_down_values(result: &mut Characteristics) {
     result.keywords.clear();
     result.protections.clear();
     result.evasions.clear();
+    result.granted_cant_be_blocked = false;
     result.power = Some(2);
     result.toughness = Some(2);
 }
@@ -2131,6 +2138,7 @@ fn is_characteristic_component(kind: &ContinuousEffectKind) -> bool {
             kind,
             ContinuousEffectKind::Layer6RemoveAllAbilities
                 | ContinuousEffectKind::Layer6AddKeyword(_)
+                | ContinuousEffectKind::Layer6AddCantBeBlocked
                 | ContinuousEffectKind::Layer6AddProtection(_)
                 | ContinuousEffectKind::GrantActivatedAbility(_)
                 | ContinuousEffectKind::GrantTriggeredAbility(_)
@@ -2719,6 +2727,7 @@ impl CharacteristicsEvaluator<'_> {
             result.keywords.clear();
             result.protections.clear();
             result.evasions.clear();
+            result.granted_cant_be_blocked = false;
         }
         let mut last_removal_timestamp = None;
         for effect in effects {
@@ -2726,7 +2735,11 @@ impl CharacteristicsEvaluator<'_> {
                 result.keywords.clear();
                 result.protections.clear();
                 result.evasions.clear();
+                result.granted_cant_be_blocked = false;
                 last_removal_timestamp = Some(effect.timestamp);
+            }
+            if matches!(effect.kind, ContinuousEffectKind::Layer6AddCantBeBlocked) {
+                result.granted_cant_be_blocked = true;
             }
             if let ContinuousEffectKind::Layer6AddKeyword(keyword)
             | ContinuousEffectKind::Layer6AddKeywordFromStatic { keyword, .. } = effect.kind

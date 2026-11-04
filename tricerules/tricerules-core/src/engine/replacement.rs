@@ -619,6 +619,8 @@ impl GameEngine {
                     is_battle |= addition.card_types.contains(&PermanentTypeFilter::Battle);
                 }
                 ResolvingPermanentModifier::SetBasePowerToughness { .. }
+                | ResolvingPermanentModifier::SetCreatureTypes(_)
+                | ResolvingPermanentModifier::GrantCantBeBlocked
                 | ResolvingPermanentModifier::GrantKeywords(_)
                 | ResolvingPermanentModifier::GrantActivatedAbility(_) => {}
             }
