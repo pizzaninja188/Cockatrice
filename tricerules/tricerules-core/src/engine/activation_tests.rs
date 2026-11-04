@@ -6,6 +6,9 @@ mod poison_difference;
 #[path = "activation_tests/counter_distribution.rs"]
 mod counter_distribution;
 
+#[path = "activation_tests/targeted_poison_emblem.rs"]
+mod targeted_poison_emblem;
+
 #[path = "activation_tests/library_hand_graveyard.rs"]
 mod library_hand_graveyard;
 

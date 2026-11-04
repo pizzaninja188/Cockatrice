@@ -1,5 +1,64 @@
 use super::*;
 
+pub(super) fn put_poison_counters_on_target_player(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::PutPoisonCountersOnTargetPlayer { count, .. } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let Some(&target_id) = cx
+        .targets_by_role
+        .first()
+        .and_then(|targets| targets.first())
+    else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let receipt = cx
+        .target_receipt_in_role(target_id, 0)
+        .ok_or(EngineError::Illegal("fixed poison target receipt missing"))?;
+    if count == 0
+        || receipt.kind != rv1::TargetRefKind::Player as i32
+        || receipt.zone_change_generation.is_some()
+        || receipt.counter_amount != 0
+        || receipt.damage_amount != 0
+        || !cx.target_is_current_in_role(target_id, 0)
+    {
+        return Err(EngineError::Illegal(
+            "fixed poison requires one current player target",
+        ));
+    }
+    let target_player = target_id as PlayerId;
+    let proposal = cx
+        .engine
+        .proposed_player_counter_placement(
+            cx.controller,
+            target_player,
+            [(CounterKind::Poison, count)],
+            super::super::continuous::CounterPlacementOrigin::Effect,
+        )
+        .ok_or(EngineError::Illegal("fixed poison recipient unavailable"))?;
+    let completion = crate::state::CounterPlacementCompletion::TargetedPoison {
+        stack_id: cx.top.id,
+        leaf_index: cx.effect_index,
+        controller: cx.controller,
+        target_player,
+        count,
+    };
+    *cx.effect_result = cx.resume_previous_result.cloned().unwrap_or_default();
+    let mut stack = cx.parked_stack();
+    stack.set_flat_tail(cx.effect_index.checked_add(1), cx.effect_result.clone());
+    if cx
+        .engine
+        .begin_counter_placement_batch(vec![proposal], stack, completion, cx.events)?
+        .is_some()
+    {
+        Ok(EffectOutcome::Continue)
+    } else {
+        Ok(EffectOutcome::Suspended)
+    }
+}
+
 pub(super) fn poison_target_up_to_nine(
     cx: &mut EffectCx<'_>,
 ) -> Result<EffectOutcome, EngineError> {

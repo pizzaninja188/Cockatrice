@@ -944,6 +944,7 @@ impl GameEngine {
         parked_stack: Option<&ParkedStackResolution>,
     ) -> Result<(), EngineError> {
         self.validate_poison_difference_completion(events, completion, parked_stack)?;
+        self.validate_targeted_poison_completion(events, completion, parked_stack)?;
         self.validate_distributed_counter_completion(events, completion, parked_stack)?;
         let crate::state::CounterPlacementCompletion::DoubleYourCounters {
             stack_id,
@@ -1815,6 +1816,40 @@ impl GameEngine {
         else {
             return Ok(None);
         };
+        self.current_single_row_counter_placement_choice_event(pending, stack)
+            .map(Some)
+    }
+
+    pub(in crate::engine) fn current_targeted_poison_counter_placement_choice_event(
+        &self,
+    ) -> Result<Option<rv1::RuledEvent>, EngineError> {
+        let Some(pending) = self.state.pending_resolution.as_ref() else {
+            return Ok(None);
+        };
+        let ResolutionContinuation::CounterReplacement {
+            stack: Some(stack),
+            completion: completion @ crate::state::CounterPlacementCompletion::TargetedPoison { .. },
+        } = &pending.continuation
+        else {
+            return Ok(None);
+        };
+        let Some(PendingReplacementEvent::Counters(batch)) =
+            self.state.pending_replacement_event.as_ref()
+        else {
+            return Err(EngineError::ProgramInvariant(
+                "targeted poison counter-order choice has no paired Counters batch",
+            ));
+        };
+        self.validate_targeted_poison_completion(&batch.events, completion, Some(stack))?;
+        self.current_single_row_counter_placement_choice_event(pending, stack)
+            .map(Some)
+    }
+
+    fn current_single_row_counter_placement_choice_event(
+        &self,
+        pending: &PendingResolution,
+        stack: &ParkedStackResolution,
+    ) -> Result<rv1::RuledEvent, EngineError> {
         if pending.presentation.choice_kind != rv1::ChoiceKind::ReplacementEffect
             || pending.presentation.source_object_id != stack.item.id
         {
@@ -1923,7 +1958,7 @@ impl GameEngine {
             &batch.applications,
             &labels,
         );
-        Ok(Some(choice))
+        Ok(choice)
     }
 
     /// Build the one concrete ReplacementEffect projection shared by initial counter-order
@@ -3070,6 +3105,10 @@ impl GameEngine {
                 | (
                     CounterPlacementRecipient::Object { .. },
                     crate::state::CounterPlacementCompletion::PoisonTargetUpToNine { .. },
+                )
+                | (
+                    CounterPlacementRecipient::Object { .. },
+                    crate::state::CounterPlacementCompletion::TargetedPoison { .. },
                 ) => {
                     return Err(EngineError::Illegal(
                         "DoubleYourCounters cannot place counters on a permanent",
@@ -3139,6 +3178,10 @@ impl GameEngine {
                 | (
                     CounterPlacementRecipient::Player { .. },
                     crate::state::CounterPlacementCompletion::PoisonTargetUpToNine { .. },
+                )
+                | (
+                    CounterPlacementRecipient::Player { .. },
+                    crate::state::CounterPlacementCompletion::TargetedPoison { .. },
                 ) => {}
                 (
                     CounterPlacementRecipient::Player { .. },
@@ -3562,8 +3605,9 @@ impl GameEngine {
         };
         let begun_self_counter =
             self.begun_self_counter_placement(&original_pending, Some(&original_replacement));
-        let begun_poison =
-            self.begun_poison_difference(&original_pending, Some(&original_replacement));
+        let begun_poison = self
+            .begun_poison_difference(&original_pending, Some(&original_replacement))
+            || self.begun_targeted_poison_placement(&original_pending, Some(&original_replacement));
         let begun_distribution = self
             .begun_distributed_counter_placement(&original_pending, Some(&original_replacement));
         let begun_flat = begun_self_counter
@@ -3600,6 +3644,11 @@ impl GameEngine {
                     completion @ crate::state::CounterPlacementCompletion::PoisonTargetUpToNine {
                         ..
                     },
+            } if begun_poison => (stack.clone(), completion.clone()),
+            ResolutionContinuation::CounterReplacement {
+                stack: Some(stack),
+                completion:
+                    completion @ crate::state::CounterPlacementCompletion::TargetedPoison { .. },
             } if begun_poison => (stack.clone(), completion.clone()),
             _ => return Ok(()),
         };

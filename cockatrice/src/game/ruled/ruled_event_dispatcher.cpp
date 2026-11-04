@@ -825,6 +825,16 @@ void RuledEventDispatcher::resetPerBatchLegalActions()
 void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
 {
     BatchContext ctx;
+    const bool hasTriggerOffer = std::any_of(batch.events().begin(), batch.events().end(),
+                                             [](const auto &event) { return event.has_trigger_needs_target(); });
+    const bool hasFinalPublicView = std::any_of(batch.events().begin(), batch.events().end(),
+                                                [](const auto &event) { return event.has_zone_view(); });
+    if (!hasTriggerOffer && (hasFinalPublicView || batch.replace_stack_presentation())) {
+        // Settled engine batches and reconnect snapshots contain the final waiting trigger, if
+        // any. Retire a prior target/mode prompt before applying this batch's other choices.
+        state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::TriggerTarget);
+        state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::TriggerMode);
+    }
     if (batch.replace_stack_presentation()) {
         // Reconnects can reuse a client whose tracked stack is older than the relay snapshot.
         // Retire only synthetic cards; a physical spell's binding belongs to the normal zone path.

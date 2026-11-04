@@ -2485,6 +2485,14 @@ pub enum SpecialCastCompletion {
 /// Typed work that remains after a shared counter-placement replacement batch finishes.
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) enum CounterPlacementCompletion {
+    /// Fixed poison placement binds a direct player-targeted instruction and its saved tail.
+    TargetedPoison {
+        stack_id: ObjectId,
+        leaf_index: u32,
+        controller: PlayerId,
+        target_player: PlayerId,
+        count: u32,
+    },
     /// A fixed distribution binds each surviving target's immutable announced share to this
     /// exact resolving leaf, including while replacement sources or the controller depart.
     DistributedCounters {

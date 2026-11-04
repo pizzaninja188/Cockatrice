@@ -2871,6 +2871,183 @@ TEST_F(RuledBatchTest, CounterAllocationOffersAreActorPrivateAndAnnouncedSharesR
     expectStack(decodeReconnect(p2), p2->getPlayerId());
 }
 
+TEST_F(RuledBatchTest, TargetedEmblemOfferAndIdlePublicStateSurviveRecipientReconnect)
+{
+    // Synthetic engine responses through the real relay and serialized interfaces, not a GUI run.
+    p1Capture = std::make_unique<CapturingTestUserInterface>(&server);
+    p2Capture = std::make_unique<CapturingTestUserInterface>(&server);
+    p1->setUserInterface(p1Capture.get());
+    p2->setUserInterface(p2Capture.get());
+    const auto append = [](const GameEventContainer &container, QList<ruled::v1::RuledEventBatch> &out) {
+        for (const auto &event : container.event_list()) {
+            if (event.HasExtension(Event_RuledPayload::ext)) {
+                ruled::v1::RuledEventBatch batch;
+                ASSERT_TRUE(batch.ParseFromString(event.GetExtension(Event_RuledPayload::ext).payload()));
+                out.append(batch);
+            }
+        }
+    };
+    const auto live = [&](const CapturingTestUserInterface &capture) {
+        QList<ruled::v1::RuledEventBatch> out;
+        for (const auto &container : capture.gameEvents)
+            append(container, out);
+        return out;
+    };
+    const auto reconnect = [&](Server_Player *recipient) {
+        ResponseContainer response(-1);
+        game->createGameJoinedEvent(recipient, response, true);
+        QList<ruled::v1::RuledEventBatch> out;
+        for (const auto &queued : response.getPostResponseQueue()) {
+            if (const auto *container = dynamic_cast<const GameEventContainer *>(queued.second))
+                append(*container, out);
+        }
+        return out;
+    };
+    const auto snapshot = [&](bool emblem, int poison) {
+        ruled::v1::IpcResponse response;
+        response.set_ok(true);
+        auto *zone = response.mutable_batch()->add_events()->mutable_zone_view();
+        auto first = buildPerPlayerView(p1, {}, {});
+        if (emblem) {
+            auto *marker = first.add_static_emblems();
+            marker->set_object_id(9001u);
+            marker->set_display_name("Synthetic Targeted Poison Emblem");
+        }
+        *zone->add_per_player() = first;
+        auto second = buildPerPlayerView(p2, {}, {});
+        auto *counter = second.add_player_counters();
+        counter->set_name("poison");
+        counter->set_count(poison);
+        *zone->add_per_player() = second;
+        return response;
+    };
+    auto waiting = snapshot(true, 0);
+    auto *choice = waiting.mutable_batch()->add_events()->mutable_trigger_needs_target();
+    choice->set_source_permanent_id(9001u);
+    choice->set_source_zone_change_generation(0u);
+    choice->set_controller_player_id(p1->getPlayerId());
+    choice->set_ability_text("Target opponent gets two poison counters.");
+    auto *group = choice->mutable_targets()->add_groups();
+    group->set_min(1u);
+    group->set_max(1u);
+    group->set_can_target_opponent(true);
+    ASSERT_TRUE(callBatchApply(waiting).zoneViewApplied);
+    game->ruled()->broadcastRuledResponse(waiting, true);
+    const auto expectOffer = [&](const QList<ruled::v1::RuledEventBatch> &payloads, bool actor, int expectedIndex) {
+        int offers = 0;
+        for (const auto &batch : payloads) {
+            for (const auto &event : batch.events()) {
+                if (!event.has_trigger_needs_target())
+                    continue;
+                ++offers;
+                const auto &offer = event.trigger_needs_target();
+                EXPECT_EQ(offer.source_permanent_id(), 9001u);
+                EXPECT_EQ(offer.controller_player_id(), p1->getPlayerId());
+                EXPECT_EQ(offer.ability_index(), expectedIndex);
+                EXPECT_FALSE(offer.may_decline());
+                EXPECT_EQ(offer.has_targets(), actor);
+                if (actor) {
+                    ASSERT_EQ(offer.targets().groups_size(), 1);
+                    const auto &offered = offer.targets().groups(0);
+                    EXPECT_TRUE(offered.can_target_opponent());
+                    EXPECT_FALSE(offered.can_target_self());
+                    EXPECT_EQ(offered.valid_permanent_ids_size(), 0);
+                    EXPECT_EQ(offered.valid_permanent_targets_size(), 0);
+                    EXPECT_EQ(offered.min(), 1u);
+                    EXPECT_EQ(offered.max(), 1u);
+                } else {
+                    EXPECT_EQ(offer.modes_size(), 0);
+                }
+            }
+        }
+        EXPECT_EQ(offers, expectedIndex < 0 ? 0 : 1);
+    };
+    expectOffer(live(*p1Capture), true, 0);
+    expectOffer(live(*p2Capture), false, 0);
+    expectOffer(reconnect(p1), true, 0);
+    expectOffer(reconnect(p2), false, 0);
+    ruled::v1::IpcResponse query;
+    query.set_ok(true);
+    query.mutable_batch();
+    game->ruled()->broadcastRuledResponse(query, false);
+    expectOffer(reconnect(p1), true, 0);
+    choice->set_ability_index(1u);
+    game->ruled()->broadcastRuledResponse(waiting, true);
+    expectOffer(reconnect(p1), true, 1);
+    expectOffer(reconnect(p2), false, 1);
+
+    auto announced = snapshot(true, 0);
+    auto *push = announced.mutable_batch()->add_events()->mutable_stack_pushed();
+    push->set_object_id(9100u);
+    push->set_ability_controller_player_id(p1->getPlayerId());
+    push->set_description("Synthetic Targeted Poison Emblem");
+    push->set_ability_annotation("Target opponent gets two poison counters.");
+    auto *target = push->add_targets();
+    target->set_object_id(p2->getPlayerId());
+    target->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
+    game->ruled()->broadcastRuledResponse(announced, true);
+    for (auto *recipient : {p1, p2}) {
+        const auto payloads = reconnect(recipient);
+        expectOffer(payloads, recipient == p1, -1);
+        int pushes = 0;
+        for (const auto &batch : payloads) {
+            for (const auto &event : batch.events()) {
+                if (!event.has_stack_pushed())
+                    continue;
+                ++pushes;
+                EXPECT_FALSE(event.stack_pushed().has_ability_source());
+                ASSERT_EQ(event.stack_pushed().targets_size(), 1);
+                EXPECT_EQ(event.stack_pushed().targets(0).object_id(), p2->getPlayerId());
+                EXPECT_EQ(event.stack_pushed().targets(0).kind(), ruled::v1::TARGET_REF_KIND_PLAYER);
+                EXPECT_EQ(event.stack_pushed().targets(0).counter_amount(), 0u);
+                EXPECT_FALSE(event.stack_pushed().targets(0).has_expected_zone_change_generation());
+            }
+        }
+        EXPECT_EQ(pushes, 1);
+    }
+    const auto expectIdle = [&](bool emblem, int poison) {
+        for (auto *recipient : {p1, p2}) {
+            int views = 0;
+            for (const auto &batch : reconnect(recipient)) {
+                for (const auto &event : batch.events()) {
+                    EXPECT_FALSE(event.has_trigger_needs_target());
+                    EXPECT_FALSE(event.has_stack_pushed());
+                    if (!event.has_zone_view())
+                        continue;
+                    ++views;
+                    for (const auto &player : event.zone_view().per_player()) {
+                        if (player.player_id() == p1->getPlayerId())
+                            EXPECT_EQ(player.static_emblems_size(), emblem ? 1 : 0);
+                        if (player.player_id() == p2->getPlayerId()) {
+                            ASSERT_EQ(player.player_counters_size(), 1);
+                            EXPECT_EQ(player.player_counters(0).name(), "poison");
+                            EXPECT_EQ(player.player_counters(0).count(), poison);
+                        }
+                    }
+                }
+            }
+            EXPECT_EQ(views, 1);
+        }
+    };
+    auto resolved = snapshot(true, 2);
+    resolved.mutable_batch()->add_events()->mutable_stack_resolved()->set_object_id(9100u);
+    ASSERT_TRUE(callBatchApply(resolved).zoneViewApplied);
+    game->ruled()->broadcastRuledResponse(resolved, true);
+    expectIdle(true, 2);
+    auto cleared = snapshot(false, 0); // Explicit zero; omitted counters are a separate legacy boundary.
+    ASSERT_TRUE(callBatchApply(cleared).zoneViewApplied);
+    game->ruled()->broadcastRuledResponse(cleared, true);
+    expectIdle(false, 0);
+    EXPECT_TRUE(bindingFor(p1).staticEmblemServerCardIds.isEmpty());
+    for (const auto *counter : p2->getCounters()) {
+        if (counter && counter->getName() == QStringLiteral("poison"))
+            EXPECT_EQ(counter->getCount(), 0);
+    }
+    game->ruled()->resetForNewGame();
+    expectOffer(reconnect(p1), true, -1);
+    expectOffer(reconnect(p2), false, -1);
+}
+
 TEST_F(RuledBatchTest, IdleStackReconnectRestoresLatestPriorityAndOnlyTheRecipientsLegalOffers)
 {
     ruled::v1::IpcResponse initial;

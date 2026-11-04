@@ -252,6 +252,9 @@ pub(super) fn execute_effect(
         SpellEffectKind::PoisonTargetUpToNine { .. } => {
             pump_counters::poison_target_up_to_nine(cx)?
         }
+        effect @ SpellEffectKind::PutPoisonCountersOnTargetPlayer { .. } => {
+            pump_counters::put_poison_counters_on_target_player(cx, effect)?
+        }
         effect @ SpellEffectKind::EachOpponentLosesLifeYouGainEqual { .. } => {
             life::each_opponent_loses_life_you_gain_equal(cx, effect)?
         }

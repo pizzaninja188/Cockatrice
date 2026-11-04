@@ -44,6 +44,8 @@ private:
     bool hasLastBroadcastHandSlotMap = false;
     QSet<int> lastBroadcastHandSlotParticipants;
     std::optional<ruled::v1::ResolutionChoiceRequired> pendingResolutionChoice;
+    // Engine settlement republishes exactly the current front offer in every authoritative batch.
+    std::optional<ruled::v1::TriggerNeedsTarget> pendingTriggerTarget;
     // Authoritative prompt generation travels independently of the legacy RCR event. Retain its
     // final state for reconnects, including the inactive snapshot that retires a prior prompt.
     std::optional<ruled::v1::ResolutionPromptState> currentResolutionPromptState;
@@ -54,6 +56,8 @@ private:
     // reconnect. The fail-closed redactor removes each transaction for every other participant.
     ruled::v1::RuledEventBatch pendingAnnouncementState;
     std::optional<ruled::v1::ZoneViewSync> currentPublicZoneView;
+    // Retain full-replacement public views after the first emblem/counter, including later clears.
+    bool publicEmblemOrCounterSnapshotRequired = false;
     // The last public priority event is retained independently of per-seat legal offers.
     std::optional<ruled::v1::PriorityChanged> currentPriority;
     // Engine-published live stack presentations, in bottom-to-top order. They carry no private

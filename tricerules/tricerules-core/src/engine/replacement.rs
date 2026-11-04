@@ -17,6 +17,7 @@ mod distributed_counters;
 #[cfg(test)]
 mod entry_layers_tests;
 mod poison_difference;
+mod targeted_poison;
 use crate::state::{
     ChosenCreatureTypeRecord, ChosenOpponentRecord, CounterPlacementReceipt, EntryCounterPlacement,
     EntryCounterPlacementHistory, EntryCounterReplacementReceipt, EntryCounterSource,

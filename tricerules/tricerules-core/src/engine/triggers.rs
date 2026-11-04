@@ -1,5 +1,5 @@
 use super::damage::{DamageClassification, DamageRecipient};
-use super::events::{ev_log, ev_trigger_order_required};
+use super::events::{ev_log, ev_priority_changed, ev_trigger_order_required};
 use super::presentation::{ability_presentation, child_presentation_ref, PresentationPath};
 use super::targeting::{
     ability_mode_program, ability_program, compute_ability_targets_with_context_and_program,
@@ -3370,38 +3370,28 @@ impl GameEngine {
         }
     }
 
-    /// Put one staged trigger on the stack, or park it in `pending_triggers` when its effect needs
-    /// a target (CR 603.3d).
-    ///
-    /// Only ever reached through [`Self::flush_staged_triggers`], which is what guarantees the
-    /// caller has already fixed the order and that at most one target choice is outstanding.
-    ///
-    /// The effect is looked up from the registry here and again at resolution rather than being
-    /// carried on the staged trigger, so an ability whose source has since left the battlefield
-    /// still knows what it does.
-    pub(super) fn push_trigger(
-        &mut self,
-        trigger: StagedTrigger,
-        events: &mut Vec<rv1::RuledEvent>,
-    ) {
-        let StagedTrigger {
-            object_id: virtual_id,
-            source_permanent_id: source_id,
-            source_owner,
-            source_face_index,
-            source_zone_change,
-            source_face_change,
-            card_id,
-            card_name,
-            controller,
-            ability_index,
-            ability_origin,
-            ability,
-            ability_text,
-            presentation,
-            trigger_context,
-            ..
-        } = trigger;
+    /// Rebuild a waiting trigger's offer from captured rules identity and current legality.
+    /// A departed physical source does not invalidate its already-created ability (CR 113.7a).
+    pub(super) fn pending_trigger_target_offer(
+        &self,
+        trigger: &PendingTrigger,
+    ) -> Option<rv1::TriggerNeedsTarget> {
+        let source_id = trigger.source_permanent_id;
+        let source_zone_change = trigger.source_zone_change;
+        let controller = trigger.controller;
+        if !self
+            .state
+            .players
+            .iter()
+            .any(|player| player.id == controller && !player.has_lost)
+        {
+            return None;
+        }
+        let ability = &trigger.ability;
+        let ability_origin = &trigger.ability_origin;
+        let ability_text = &trigger.ability_text;
+        let presentation = &trigger.presentation;
+        let trigger_context = trigger.trigger_context;
         let authored_definition = ability_origin.as_ref().and_then(|origin| match origin {
             TriggerAbilityOrigin::Printed(definition)
             | TriggerAbilityOrigin::StaticGrant { definition, .. } => Some(definition),
@@ -3473,7 +3463,7 @@ impl GameEngine {
                         && !used_modes.contains(&mode.mode_id);
                     rv1::LegalSpellMode {
                         mode_index: mode_index as u32,
-                        label: mode_fallback(&ability_text, &mode.mode_id),
+                        label: mode_fallback(ability_text, &mode.mode_id),
                         selectable,
                         needs_target: mode_needs_target,
                         targets: Some(targets),
@@ -3482,7 +3472,7 @@ impl GameEngine {
                                 parent,
                                 PresentationPath::Mode(&mode.mode_id),
                                 &mode.presentation,
-                                mode_fallback(&ability_text, &mode.mode_id),
+                                mode_fallback(ability_text, &mode.mode_id),
                             )
                         }),
                         linked_cast_cost: None,
@@ -3520,10 +3510,119 @@ impl GameEngine {
                 modes.iter().filter(|mode| mode.selectable).count() >= modal.min_modes as usize
             })
         });
-        if needs_choice && has_legal_target && modal_has_enough_choices {
+        if !needs_choice || !has_legal_target || !modal_has_enough_choices {
+            return None;
+        }
+        Some(rv1::TriggerNeedsTarget {
+            source_permanent_id: source_id,
+            ability_index: trigger.ability_index as u32,
+            ability_text: ability_text.clone(),
+            controller_player_id: controller,
+            may_decline: false,
+            targets: legal_targets,
+            min_modes,
+            max_modes,
+            modes: modal_modes.unwrap_or_default(),
+            ability_presentation: presentation.clone(),
+            source_zone_change_generation: Some(source_zone_change),
+        })
+    }
+
+    /// Publish only the final waiting trigger after departures/SBAs and preserve APNAP placement.
+    pub(super) fn refresh_or_retire_pending_trigger_offer(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) {
+        events
+            .retain(|event| !matches!(event.ev, Some(rv1::ruled_event::Ev::TriggerNeedsTarget(_))));
+        let mut retired = false;
+        while self.state.blocking_choice() == Some(BlockingChoice::TriggerTarget) {
+            let offer = self
+                .state
+                .pending_triggers
+                .front()
+                .and_then(|trigger| self.pending_trigger_target_offer(trigger));
+            if let Some(offer) = offer {
+                // A trigger still awaiting placement cannot grant priority.
+                events.retain(|event| {
+                    !matches!(
+                        event.ev,
+                        Some(
+                            rv1::ruled_event::Ev::PriorityChanged(_)
+                                | rv1::ruled_event::Ev::TriggerNeedsTarget(_)
+                        )
+                    )
+                });
+                events.push(rv1::RuledEvent {
+                    ev: Some(rv1::ruled_event::Ev::TriggerNeedsTarget(offer)),
+                });
+                return;
+            }
+            self.state.pending_triggers.pop_front();
+            retired = true;
+            self.flush_staged_triggers(events);
+        }
+        if retired {
+            events.retain(|event| {
+                !matches!(event.ev, Some(rv1::ruled_event::Ev::PriorityChanged(_)))
+            });
+            if self.state.blocking_choice().is_none() {
+                events.push(ev_priority_changed(self));
+            }
+        }
+    }
+
+    /// Put one staged trigger on the stack, or park it in `pending_triggers` when its effect needs
+    /// a target (CR 603.3d).
+    ///
+    /// Only ever reached through [`Self::flush_staged_triggers`], which is what guarantees the
+    /// caller has already fixed the order and that at most one target choice is outstanding.
+    ///
+    /// The effect is looked up from the registry here and again at resolution rather than being
+    /// carried on the staged trigger, so an ability whose source has since left the battlefield
+    /// still knows what it does.
+    pub(super) fn push_trigger(
+        &mut self,
+        trigger: StagedTrigger,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) {
+        let StagedTrigger {
+            object_id: virtual_id,
+            source_permanent_id: source_id,
+            source_owner,
+            source_face_index,
+            source_zone_change,
+            source_face_change,
+            card_id,
+            card_name,
+            controller,
+            ability_index,
+            ability_origin,
+            ability,
+            ability_text,
+            presentation,
+            trigger_context,
+            ..
+        } = trigger;
+        let authored_definition = ability_origin.as_ref().and_then(|origin| match origin {
+            TriggerAbilityOrigin::Printed(definition)
+            | TriggerAbilityOrigin::StaticGrant { definition, .. } => Some(definition),
+            TriggerAbilityOrigin::ResolvingGrant { definition, .. } => definition.as_ref(),
+            TriggerAbilityOrigin::SpellKeyword(_) => None,
+        });
+        let ability_program =
+            authored_definition.and_then(|definition| ability_program(self, definition));
+        let needs_target = target_schema_with_program(
+            &ability.effect,
+            ability.targeting.as_ref(),
+            ability_program,
+        )
+        .has_targets();
+        let needs_choice = needs_target || ability.modal.is_some();
+        if needs_choice {
             let was_empty = self.state.pending_triggers.is_empty();
             let may = ability.may;
-            self.state.pending_triggers.push_back(PendingTrigger {
+            let pending = PendingTrigger {
                 object_id: virtual_id,
                 source_permanent_id: source_id,
                 source_owner,
@@ -3542,24 +3641,15 @@ impl GameEngine {
                 // Preserve the ability's optionality; the target/mode prompt cannot decline it.
                 // CR 603.5 places that choice on resolution.
                 may,
-            });
+            };
+            let Some(offer) = self.pending_trigger_target_offer(&pending) else {
+                // CR 603.3d: impossible mandatory targets or modes retire this trigger.
+                return;
+            };
+            self.state.pending_triggers.push_back(pending);
             if was_empty {
                 events.push(rv1::RuledEvent {
-                    ev: Some(rv1::ruled_event::Ev::TriggerNeedsTarget(
-                        rv1::TriggerNeedsTarget {
-                            source_permanent_id: source_id,
-                            ability_index: ability_index as u32,
-                            ability_text: ability_text.clone(),
-                            controller_player_id: controller,
-                            may_decline: false,
-                            targets: legal_targets.clone(),
-                            min_modes,
-                            max_modes,
-                            modes: modal_modes.unwrap_or_default(),
-                            ability_presentation: presentation.clone(),
-                            source_zone_change_generation: Some(source_zone_change),
-                        },
-                    )),
+                    ev: Some(rv1::ruled_event::Ev::TriggerNeedsTarget(offer)),
                 });
                 events.push(ev_log_ability(
                     format!("Triggered: {card_name} — choose for: "),
@@ -3568,9 +3658,6 @@ impl GameEngine {
                     String::new(),
                 ));
             }
-        } else if needs_choice {
-            // CR 603.3d: a trigger that has no legal target or enough legal modes is removed,
-            // even when its effects are optional. Optionality is decided only on resolution.
         } else {
             let state_trigger_key = millennium_calendar_state_trigger_key(
                 source_id,

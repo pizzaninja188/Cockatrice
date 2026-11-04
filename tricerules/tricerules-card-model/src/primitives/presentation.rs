@@ -198,6 +198,13 @@ pub(super) fn simple_effects(effects: &[SpellEffectKind]) -> Option<String> {
                     amount: Amount::Fixed(amount),
                     who: PlayerRecipient::Controller,
                 } => format!("You gain {amount} life."),
+                SpellEffectKind::PutPoisonCountersOnTargetPlayer { count, target }
+                    if *count > 0 && target.is_player() =>
+                {
+                    let mut target = simple_target(target)?;
+                    target[..1].make_ascii_uppercase();
+                    format!("{target} gets {count} poison counter{}.", if *count == 1 { "" } else { "s" })
+                }
                 SpellEffectKind::DamageTarget {
                     amount: Amount::Fixed(amount),
                     target,

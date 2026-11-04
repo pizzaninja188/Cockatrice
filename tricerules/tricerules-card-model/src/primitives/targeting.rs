@@ -318,6 +318,24 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
         };
         schema.validate_chosen_target_power_references(effects)?;
         for (effect_index, effect) in effects.iter().enumerate() {
+            if !matches!(
+                effect,
+                SpellEffectKind::PutPoisonCountersOnTargetPlayer { .. }
+            ) {
+                continue;
+            }
+            let group = schema.groups.iter().find(|group| {
+                group
+                    .bindings
+                    .iter()
+                    .any(|binding| binding.effect_index == effect_index)
+            });
+            if group.is_none_or(|group| group.min != 1 || group.max != 1 || group.chooser != TargetChooser::Controller
+                || group.bindings.iter().any(|binding| !matches!(binding.role, TargetRole::Filtered(filter) if filter.is_player()))) {
+                return Err("fixed targeted poison requires one mandatory controller-chosen player group".into());
+            }
+        }
+        for (effect_index, effect) in effects.iter().enumerate() {
             if matches!(effect, SpellEffectKind::ExchangeArtifactWithGraveyard) {
                 let pair = schema.artifact_exchange_groups(effect_index);
                 if pair.is_none_or(|(first, second)| {

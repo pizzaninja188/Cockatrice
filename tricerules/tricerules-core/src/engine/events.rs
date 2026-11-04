@@ -27,6 +27,7 @@ impl GameEngine {
                 event.ev.as_ref(),
                 Some(
                     rv1::ruled_event::Ev::ResolutionChoiceRequired(_)
+                        | rv1::ruled_event::Ev::TriggerNeedsTarget(_)
                         | rv1::ruled_event::Ev::TriggerOrderRequired(_)
                         | rv1::ruled_event::Ev::PriorityChanged(_)
                 )

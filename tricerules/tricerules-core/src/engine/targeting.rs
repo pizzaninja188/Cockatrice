@@ -1607,6 +1607,29 @@ fn validate_grouped_targets(
     );
     let allocation = counter_allocation_for_schema(target_context.effects, &schema);
     validate_counter_allocation(engine, targets, allocation.as_ref())?;
+    for target in targets {
+        let fixed_poison = schema
+            .groups
+            .get(target.group_index as usize)
+            .is_some_and(|group| {
+                group.bindings.iter().any(|binding| {
+                    matches!(
+                        target_context.effects.get(binding.effect_index),
+                        Some(SpellEffectKind::PutPoisonCountersOnTargetPlayer { .. })
+                    )
+                })
+            });
+        if fixed_poison
+            && (target.kind != rv1::TargetRefKind::Player as i32
+                || target.expected_zone_change_generation.is_some()
+                || target.damage_amount != 0
+                || target.counter_amount != 0)
+        {
+            return Err(EngineError::Illegal(
+                "fixed poison announcement requires only a player target",
+            ));
+        }
+    }
     if schema.groups.is_empty() {
         return if targets.is_empty() {
             Ok(())
@@ -2209,6 +2232,21 @@ fn compute_targets_with_context(
     }
 
     let counter_allocation = counter_allocation_for_schema(target_context.effects, &schema);
+    for (group, authored) in groups.iter_mut().zip(&schema.groups) {
+        if authored.bindings.iter().any(|binding| {
+            matches!(
+                target_context.effects.get(binding.effect_index),
+                Some(SpellEffectKind::PutPoisonCountersOnTargetPlayer { .. })
+            )
+        }) {
+            // A player-only role must not publish physical candidates whose numeric ID happens
+            // to equal a legal PlayerId. The explicit target domain remains authoritative.
+            group.valid_permanent_ids.clear();
+            group.valid_permanent_targets.clear();
+            group.valid_stack_ids.clear();
+            group.valid_graveyard_ids.clear();
+        }
+    }
     if let Some(allocation) = &counter_allocation {
         let group = &mut groups[allocation.group_index as usize];
         // This profile targets creatures, even when a physical ObjectId is also a PlayerId.

@@ -11056,6 +11056,80 @@ TEST_F(RuledClientTest, TriggerNeedsTargetOnlyPendsForItsController)
     EXPECT_FALSE(state->isWaitingForChoice());
 }
 
+TEST_F(RuledClientTest, EmblemTriggerSubmitsOnlyAnOpponentPlayerWithoutPhysicalIdentity)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *trigger = batch.add_events()->mutable_trigger_needs_target();
+    trigger->set_controller_player_id(kLocalPlayer);
+    trigger->set_source_permanent_id(9001u);
+    trigger->set_source_zone_change_generation(0u);
+    trigger->set_ability_text("Target opponent gets two poison counters.");
+    auto *group = trigger->mutable_targets()->add_groups();
+    group->set_min(1u);
+    group->set_max(1u);
+    group->set_can_target_opponent(true);
+    apply(batch);
+    ASSERT_TRUE(state->hasPendingTriggerTarget());
+    EXPECT_FALSE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, 9001u, kOpponent));
+    EXPECT_FALSE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PLAYER, 0u, kLocalPlayer));
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+    EXPECT_TRUE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PLAYER, kOpponent, kOpponent));
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    ASSERT_EQ(host.sentCommands[0].choose_trigger_target().targets_size(), 1);
+    const auto &target = host.sentCommands[0].choose_trigger_target().targets(0);
+    EXPECT_EQ(target.kind(), ruled::v1::TARGET_REF_KIND_PLAYER);
+    EXPECT_EQ(target.object_id(), kOpponent);
+    EXPECT_FALSE(target.has_expected_zone_change_generation());
+    EXPECT_EQ(target.damage_amount(), 0u);
+    EXPECT_EQ(target.counter_amount(), 0u);
+}
+
+TEST_F(RuledClientTest, FinalPublicSnapshotRetiresOldTriggerChoiceWithoutAStackPush)
+{
+    for (bool modal : {false, true}) {
+        ruled::v1::RuledEventBatch waiting;
+        auto *trigger = waiting.add_events()->mutable_trigger_needs_target();
+        trigger->set_controller_player_id(kLocalPlayer);
+        trigger->set_source_permanent_id(9001u); // Emblem identity; no physical permanent binding.
+        trigger->set_source_zone_change_generation(0u);
+        trigger->set_ability_text("Target opponent gets two poison counters.");
+        auto *group = trigger->mutable_targets()->add_groups();
+        group->set_min(1u);
+        group->set_max(1u);
+        group->set_can_target_opponent(true);
+        if (modal) {
+            trigger->set_min_modes(1u);
+            trigger->set_max_modes(1u);
+            auto *mode = trigger->add_modes();
+            mode->set_label("Target opponent gets two poison counters.");
+            mode->set_selectable(true);
+            mode->set_needs_target(true);
+            *mode->mutable_targets() = trigger->targets();
+        }
+        apply(waiting);
+        EXPECT_TRUE(modal ? state->hasPendingChoiceOptions() : state->hasPendingTriggerTarget());
+        ruled::v1::RuledEventBatch query;
+        apply(query);
+        EXPECT_TRUE(modal ? state->hasPendingChoiceOptions() : state->hasPendingTriggerTarget());
+        auto refreshed = waiting;
+        refreshed.add_events()->mutable_zone_view();
+        apply(refreshed);
+        EXPECT_TRUE(modal ? state->hasPendingChoiceOptions() : state->hasPendingTriggerTarget());
+        ruled::v1::RuledEventBatch retired;
+        retired.add_events()->mutable_zone_view();
+        apply(retired);
+        EXPECT_FALSE(state->hasPendingTriggerTarget());
+        EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::TriggerMode));
+        EXPECT_FALSE(state->isWaitingForChoice());
+        apply(waiting);
+        ruled::v1::RuledEventBatch reconnect;
+        reconnect.set_replace_stack_presentation(true);
+        apply(reconnect);
+        EXPECT_FALSE(state->hasPendingTriggerTarget());
+        EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::TriggerMode));
+    }
+}
+
 TEST_F(RuledClientTest, TriggerModeWaitTransfersToTheNextDecidingPlayer)
 {
     ruled::v1::RuledEventBatch batch;

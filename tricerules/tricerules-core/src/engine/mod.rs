@@ -3319,6 +3319,7 @@ impl GameEngine {
         if self.state.is_terminal() {
             return Ok(self.finish_terminal_batch(b));
         }
+        self.refresh_or_retire_pending_trigger_offer(&mut b.events);
         self.reconcile_combat_characteristics(&mut b.events);
         self.publish_settled_combat_priority(&mut b.events);
         self.reconcile_activated_ability_slots();

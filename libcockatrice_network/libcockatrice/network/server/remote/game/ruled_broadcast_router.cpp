@@ -31,10 +31,12 @@ void RuledBroadcastRouter::resetForNewGame()
     hasLastBroadcastHandSlotMap = false;
     lastBroadcastHandSlotParticipants.clear();
     pendingResolutionChoice.reset();
+    pendingTriggerTarget.reset();
     currentResolutionPromptState.reset();
     pendingResolutionState.Clear();
     pendingAnnouncementState.Clear();
     currentPublicZoneView.reset();
+    publicEmblemOrCounterSnapshotRequired = false;
     currentPriority.reset();
     currentStackPresentations.clear();
     privateLibraryTopByPlayer.clear();
@@ -92,6 +94,7 @@ void RuledBroadcastRouter::updatePendingResolutionChoiceCache(const ruled::v1::I
     const std::optional<ruled::v1::ResolutionPromptState> previousPrompt = currentResolutionPromptState;
     const ruled::v1::RuledEventBatch previousResolutionState = pendingResolutionState;
 
+    pendingTriggerTarget.reset();
     pendingResolutionChoice.reset();
     pendingResolutionState.Clear();
     pendingAnnouncementState.Clear();
@@ -151,6 +154,8 @@ void RuledBroadcastRouter::updatePendingResolutionChoiceCache(const ruled::v1::I
         }
     }
     for (const auto &event : response.batch().events()) {
+        if (event.has_trigger_needs_target())
+            pendingTriggerTarget = event.trigger_needs_target();
         if (event.has_priority_changed())
             currentPriority = event.priority_changed();
         const auto retireStack = [this](quint32 oid) {
@@ -193,6 +198,8 @@ void RuledBroadcastRouter::updatePendingResolutionChoiceCache(const ruled::v1::I
             // The reconnect copy needs public abilities and characteristics. Physical hand
             // identities come from the existing recipient-redacted server maps.
             for (auto &player : *view.mutable_per_player()) {
+                if (!player.static_emblems().empty() || !player.player_counters().empty())
+                    publicEmblemOrCounterSnapshotRequired = true;
                 if (player.has_private_library_top()) {
                     privateLibraryTopByPlayer.insert(player.player_id(), player.private_library_top());
                     privateLibraryTopClearPendingByPlayer.remove(player.player_id());
@@ -271,7 +278,8 @@ void RuledBroadcastRouter::enqueuePendingResolutionChoiceForParticipant(Server_A
     const bool hasPrivateLibraryTop = privateLibraryTopByPlayer.contains(participant->getPlayerId());
     const bool hasPrivateLibraryTopClear = privateLibraryTopClearPendingByPlayer.contains(participant->getPlayerId());
     const bool hasPublicSnapshot = hasPublicHand || hasActiveReveal || hasPrivateLibraryTop ||
-                                   hasPrivateLibraryTopClear || !currentStackPresentations.isEmpty();
+                                   hasPrivateLibraryTopClear || !currentStackPresentations.isEmpty() ||
+                                   pendingTriggerTarget || publicEmblemOrCounterSnapshotRequired;
     ruled::v1::IpcResponse snapshot;
     auto *batch = snapshot.mutable_batch();
     if (opening) {
@@ -347,6 +355,8 @@ void RuledBroadcastRouter::enqueuePendingResolutionChoiceForParticipant(Server_A
     }
     for (const auto &pushed : currentStackPresentations)
         batch->add_events()->mutable_stack_pushed()->CopyFrom(pushed);
+    if (pendingTriggerTarget)
+        batch->add_events()->mutable_trigger_needs_target()->CopyFrom(*pendingTriggerTarget);
     for (const auto &event : prior.events()) {
         if (event.has_resolution_choice_required())
             batch->add_events()->CopyFrom(event);

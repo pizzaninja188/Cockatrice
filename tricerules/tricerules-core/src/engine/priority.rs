@@ -562,6 +562,10 @@ impl GameEngine {
             .as_ref()
             .is_some_and(|pending| {
                 self.begun_poison_difference(pending, self.state.pending_replacement_event.as_ref())
+                    || self.begun_targeted_poison_placement(
+                        pending,
+                        self.state.pending_replacement_event.as_ref(),
+                    )
             });
         let begun_distribution = self
             .state
@@ -1263,6 +1267,8 @@ impl GameEngine {
         if self.state.is_terminal() {
             return Ok(());
         }
+        let was_waiting_for_trigger_target =
+            self.state.blocking_choice() == Some(BlockingChoice::TriggerTarget);
         let departed: Vec<_> = self
             .state
             .players
@@ -1476,6 +1482,12 @@ impl GameEngine {
         self.refresh_owner_library_placement_departure(events)?;
         self.refresh_revealed_top_bottom_departure(events)?;
         self.flush_staged_triggers(events);
+        if was_waiting_for_trigger_target && self.state.blocking_choice().is_none() {
+            events.retain(|event| {
+                !matches!(event.ev, Some(rv1::ruled_event::Ev::PriorityChanged(_)))
+            });
+            events.push(ev_priority_changed(self));
+        }
         Ok(())
     }
 

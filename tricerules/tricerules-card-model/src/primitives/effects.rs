@@ -1865,6 +1865,12 @@ pub enum SpellEffectKind {
     PoisonTargetUpToNine {
         target: TargetFilter,
     },
+    /// Fixed poison placement through the shared player-counter planner (Ajani's emblem and
+    /// Caress of Phyrexia's poison instruction). This is not a distributed counter announcement.
+    PutPoisonCountersOnTargetPlayer {
+        count: u32,
+        target: TargetFilter,
+    },
     EachOpponentLosesLifeYouGainEqual {
         amount: u32,
     },
@@ -4027,6 +4033,11 @@ impl SpellEffectKind {
     /// Each capability has its own admission boundary. They currently all need a direct
     /// ability frame, but adding support for one must not implicitly admit either other family.
     pub(crate) fn validate_capability_frame(&self, frame: &str) -> Result<(), String> {
+        if self.contains_legacy_flat_signature(|effect| {
+            matches!(effect, Self::PutPoisonCountersOnTargetPlayer { .. })
+        }) {
+            return Err(format!("fixed targeted poison requires a direct flat resolution frame; unsupported in {frame}"));
+        }
         if self.contains_legacy_flat_signature(Self::is_opponent_discard_round) {
             return Err(format!("EachOpponentMayDiscardOrLoseLife requires its direct ability round continuation; unsupported in {frame}"));
         }
@@ -4043,6 +4054,16 @@ impl SpellEffectKind {
     }
 
     fn validate_direct_capability_nesting(&self) -> Result<(), String> {
+        if matches!(
+            self,
+            Self::Conditional { .. } | Self::ConditionalCastCost { .. } | Self::MayBehold { .. }
+        ) && self.contains_legacy_flat_signature(|effect| {
+            matches!(effect, Self::PutPoisonCountersOnTargetPlayer { .. })
+        }) {
+            return Err(
+                "fixed targeted poison cannot be nested inside a legacy effect wrapper".into(),
+            );
+        }
         if !Self::is_opponent_discard_round(self)
             && self.contains_legacy_flat_signature(Self::is_opponent_discard_round)
         {
@@ -4305,6 +4326,7 @@ impl SpellEffectKind {
             | SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
             | SpellEffectKind::PoisonTargetUpToNine { target }
+            | SpellEffectKind::PutPoisonCountersOnTargetPlayer { target, .. }
             | SpellEffectKind::TargetPlayerDraws { target, .. }
             | SpellEffectKind::DrainTarget { target, .. }
             | SpellEffectKind::MillTargetPlayer { target, .. }
@@ -5513,7 +5535,35 @@ impl SpellEffectKind {
                 }
                 && ability.effect.as_slice()
                     == [SpellEffectKind::CastLegendarySpellFromHandGraveyardOrOwnedExile];
-            let supported_profile = kaya_upkeep
+            let creature_or_planeswalker = if let TriggerCondition::WheneverPlayerCastsSpell {
+                caster: super::CastTriggerPlayer::Controller,
+                filter,
+                ordinal: None,
+                ordinal_scope: super::CastOrdinalScope::AllSpells,
+            } = &ability.trigger
+            {
+                let creature = super::SpellCastFilter {
+                    card_type: Some(CardTypeFilter::Creature),
+                    ..Default::default()
+                };
+                let planeswalker = super::SpellCastFilter {
+                    card_type: Some(CardTypeFilter::Planeswalker),
+                    ..Default::default()
+                };
+                let mut outer = filter.clone();
+                let branches = outer.any_of.take().unwrap_or_default();
+                outer == super::SpellCastFilter::default()
+                    && branches.len() == 2
+                    && branches.contains(&creature)
+                    && branches.contains(&planeswalker)
+            } else {
+                false
+            };
+            let fixed_poison_emblem = creature_or_planeswalker
+                && matches!(ability.effect.as_slice(), [SpellEffectKind::PutPoisonCountersOnTargetPlayer {count: 2,target}]
+                    if target == &TargetFilter {kind: super::TargetKind::OpponentPlayer,..Default::default()});
+            let supported_profile = fixed_poison_emblem
+                || kaya_upkeep
                 || (ability.trigger == expected_trigger && child_is_valid)
                 || (ability.trigger == first_opponent_spell
                     && ability.effect.as_slice() == [SpellEffectKind::CounterTriggeringSpell]);
@@ -5524,7 +5574,7 @@ impl SpellEffectKind {
                 || ability.triggers_only_once
                 || ability.max_triggers_per_turn.is_some()
             {
-                return Err("triggered emblem supports only the artifact-return, first-opponent-spell counter and Kaya upkeep profiles".into());
+                return Err("triggered emblem supports only the artifact-return, first-opponent-spell counter, Kaya upkeep and fixed targeted poison cast profiles".into());
             }
             for effect in &ability.effect {
                 effect.validate(EffectContext::Ability)?;
@@ -5537,6 +5587,9 @@ impl SpellEffectKind {
         }
         for filter in self.target_filters() {
             filter.validate_target_constraints()?;
+        }
+        if matches!(self, Self::PutPoisonCountersOnTargetPlayer { count: 0, .. }) {
+            return Err("targeted poison requires a positive fixed count".into());
         }
         if let SpellEffectKind::GainControl {
             duration:
@@ -6477,6 +6530,7 @@ impl SpellEffectKind {
             SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
             | SpellEffectKind::PoisonTargetUpToNine { target }
+            | SpellEffectKind::PutPoisonCountersOnTargetPlayer { target, .. }
             | SpellEffectKind::DrainTarget { target, .. }
             | SpellEffectKind::MillTargetPlayer { target, .. }
             | SpellEffectKind::ChooseHandCards { target, .. } => {
@@ -8894,5 +8948,100 @@ mod counter_distribution_tests {
         assert!(ability.effect[0]
             .validate(super::EffectContext::Ability)
             .is_err());
+    }
+}
+
+#[cfg(test)]
+mod targeted_poison_emblem_tests {
+    use super::{EffectContext, SpellEffectKind};
+
+    const EMBLEM: &str = r#"CreateTriggeredEmblem(
+        emblem_id:"synthetic_targeted_poison_emblem",display_name:"Synthetic Targeted Poison Emblem",
+        ability:(ability_id:"emblem_01",presentation:Fallback,
+            trigger:WheneverPlayerCastsSpell(caster:Controller,
+                filter:(any_of:Some([(card_type:Some(Creature)),(card_type:Some(Planeswalker))])),
+                ordinal:None,ordinal_scope:AllSpells),
+            effect:[PutPoisonCountersOnTargetPlayer(count:2,target:(kind:OpponentPlayer))]))"#;
+
+    #[test]
+    fn fixed_poison_has_one_required_controller_chosen_player_group() {
+        let effect: SpellEffectKind =
+            ron::from_str("PutPoisonCountersOnTargetPlayer(count:3,target:(kind:AnyPlayer))")
+                .unwrap();
+        let effects = vec![effect];
+        crate::primitives::TargetSchema::compile(&effects, None).unwrap();
+        for bounds in [(0, 1), (1, 2), (2, 2)] {
+            let text = format!(
+                "(groups:[(min:{},max:{},prompt:\"Choose\",effect_indices:[0])])",
+                bounds.0, bounds.1
+            );
+            let targeting = ron::from_str(&text).unwrap();
+            assert!(
+                crate::primitives::TargetSchema::compile(&effects, Some(&targeting)).is_err(),
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn fixed_poison_fallback_uses_player_counter_wording() {
+        let effect: SpellEffectKind =
+            ron::from_str("PutPoisonCountersOnTargetPlayer(count:2,target:(kind:OpponentPlayer))")
+                .unwrap();
+        assert_eq!(
+            crate::primitives::presentation::simple_effects(&[effect]),
+            Some("Target opponent gets 2 poison counters.".into())
+        );
+    }
+
+    #[test]
+    fn creature_or_planeswalker_cast_emblem_has_one_closed_targeted_poison_profile() {
+        let effect: SpellEffectKind = ron::from_str(EMBLEM)
+            .expect("targeted poison is a typed fixed-quantity player-counter instruction");
+        effect.validate(EffectContext::Ability).unwrap();
+        assert!(effect.validate_capability_frame("CardProgram").is_err());
+        assert!(effect
+            .validate_capability_frame("modal ability or spell modes")
+            .is_err());
+        for changed in [
+            EMBLEM.replace("count:2", "count:3"),
+            EMBLEM.replace("kind:OpponentPlayer", "kind:AnyPlayer"),
+            EMBLEM.replace("caster:Controller", "caster:Opponent"),
+            EMBLEM.replace("ordinal:None", "ordinal:Some(1)"),
+            EMBLEM.replace("card_type:Some(Planeswalker)", "card_type:Some(Artifact)"),
+            EMBLEM.replace(
+                "ability_id:\"emblem_01\"",
+                "ability_id:\"emblem_01\",may:true",
+            ),
+        ] {
+            let invalid: SpellEffectKind = ron::from_str(&changed).unwrap();
+            assert!(
+                invalid.validate(EffectContext::Ability).is_err(),
+                "{changed}"
+            );
+        }
+        assert!(effect.validate(EffectContext::Spell).is_err());
+    }
+
+    #[test]
+    fn fixed_poison_leaf_supports_any_player_but_rejects_zero_and_permanents() {
+        for (count, kind, valid) in [
+            (2, "OpponentPlayer", true),
+            (3, "AnyPlayer", true),
+            (0, "AnyPlayer", false),
+            (2, "Creature", false),
+        ] {
+            let text =
+                format!("PutPoisonCountersOnTargetPlayer(count:{count},target:(kind:{kind}))");
+            let effect: SpellEffectKind = ron::from_str(&text).unwrap();
+            assert_eq!(effect.validate(EffectContext::Ability).is_ok(), valid);
+            assert_eq!(effect.validate(EffectContext::Spell).is_ok(), valid);
+            assert!(effect.validate_capability_frame("CardProgram").is_err());
+            let nested = SpellEffectKind::Conditional {
+                condition: crate::primitives::GameCondition::ControllerLibraryEmpty,
+                effect: Box::new(effect),
+            };
+            assert!(nested.validate(EffectContext::Ability).is_err());
+        }
     }
 }

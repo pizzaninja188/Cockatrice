@@ -430,6 +430,9 @@ impl GameEngine {
                 ) || self.begun_distributed_counter_placement(
                     pending,
                     self.state.pending_replacement_event.as_ref(),
+                ) || self.begun_targeted_poison_placement(
+                    pending,
+                    self.state.pending_replacement_event.as_ref(),
                 )
             });
         if begun_flat_counters {
@@ -445,7 +448,13 @@ impl GameEngine {
                     )
                 })
             {
-                self.republish_cached_resolution_choice(events)?;
+                if let Some(choice) =
+                    self.current_targeted_poison_counter_placement_choice_event()?
+                {
+                    events.push(choice);
+                } else {
+                    self.republish_cached_resolution_choice(events)?;
+                }
             }
             return Ok(true);
         }
