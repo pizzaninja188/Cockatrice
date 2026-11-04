@@ -11,6 +11,9 @@ mod vronos_delayed_phasing;
 #[path = "scenario/vronos_animation.rs"]
 mod vronos_animation;
 
+#[path = "scenario/deck_coverage_as_foretold.rs"]
+mod deck_coverage_as_foretold;
+
 #[path = "scenario/ajani_revealed_top.rs"]
 mod ajani_revealed_top;
 

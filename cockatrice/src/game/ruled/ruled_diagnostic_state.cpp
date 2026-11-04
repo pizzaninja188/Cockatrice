@@ -460,6 +460,12 @@ QJsonValue value(const RuledCastActionKey &v)
     result.insert("prototyped", value(v.prototyped));
     return result;
 }
+static QJsonValue asForetoldSourceValue(const std::optional<RuledAsForetoldSource> &source)
+{
+    return source ? QJsonValue(QJsonObject{{"objectId", value(source->objectId)},
+                                         {"zoneChangeGeneration", value(source->zoneChangeGeneration)}})
+                  : QJsonValue();
+}
 QJsonValue value(const RuledFaceOption &v)
 {
     QJsonObject result;
@@ -472,6 +478,8 @@ QJsonValue value(const RuledFaceOption &v)
     result.insert("zoneChangeGeneration", value(v.zoneChangeGeneration));
     result.insert("castingPermissionId", value(v.castingPermissionId));
     result.insert("permissionSourceLabel", value(v.permissionSourceLabel));
+    result.insert("asForetoldSource", asForetoldSourceValue(v.asForetoldSource));
+    result.insert("asForetoldLabel", value(v.asForetoldLabel));
     result.insert("prototyped", value(v.prototyped));
     return result;
 }
@@ -630,6 +638,7 @@ QJsonValue value(const PendingRuledSpellCast &v)
     result.insert("castMethod", value(v.castMethod));
     result.insert("sourceZoneChangeGeneration", value(v.sourceZoneChangeGeneration));
     result.insert("castingPermissionId", value(v.castingPermissionId));
+    result.insert("asForetoldSource", asForetoldSourceValue(v.asForetoldSource));
     result.insert("prototyped", value(v.prototyped));
     result.insert("damageDivision", value(v.damageDivision));
     result.insert("faceIndex", value(v.faceIndex));

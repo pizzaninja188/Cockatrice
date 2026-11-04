@@ -222,3 +222,6 @@ mod deck_coverage_ajani_sleeper_agent;
 
 #[path = "../deck_coverage_vronos_masked_inquisitor.rs"]
 mod deck_coverage_vronos_masked_inquisitor;
+
+#[path = "../deck_coverage_as_foretold.rs"]
+mod deck_coverage_as_foretold;

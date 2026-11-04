@@ -1507,6 +1507,19 @@ metadata or the external card database; display text never determines legality.
 
 ### Keep target prompts narrow
 
+`AsForetoldAlternativeCost` is intentionally specialized to As Foretold: its live Time-counter
+threshold supplies a zero alternative base cost, without a new cast origin or timing permission.
+The current controller selects an exact source incarnation. Its use is shared across controllers
+for one actual turn, as explicitly accepted from Forge/XMage implementation behavior; this is
+not a newly sourced official controller-change ruling. Announcement captures the source receipt;
+successful cast completion consumes it even when paying costs removed that source. Cancellation
+and failed payment preserve the use. Independent normal-cost Adventure and library permissions
+compose; other alternative costs do not. Prototype uses its selected characteristics and X is zero.
+Private legal hand/zone actions publish finite source/cost options. `base_cost_unpayable` suppresses
+an ordinary paid choice for an absent mana cost while retaining those explicit alternatives;
+printed `{0}` remains payable. The client preserves exact source selection through Begin/reconnect
+and trusts accepted locked payment costs. It does not derive eligibility from Oracle text.
+
 `TargetGroupDef.for_each_opponent: true` expands one optional controller-chosen target slot
 for each opponent. Vronos and Grasp of Fate share this target contract; currently admission is
 limited to Vronos's flat battlefield activated `ReturnToOwnersHand(Chosen(...))` profile:

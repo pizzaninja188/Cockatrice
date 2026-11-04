@@ -1628,6 +1628,7 @@ impl GameEngine {
                 }
                 StaticAbilityDef::DuplicantImprint { .. } => {}
                 StaticAbilityDef::GemstoneCavernsOpening => {}
+                StaticAbilityDef::AsForetoldAlternativeCost => {}
             }
             for effect in &mut self.state.continuous_effects[static_start..] {
                 if effect.trigger_grant_origin.is_none() {

@@ -3434,6 +3434,9 @@ pub enum StaticAbilityDef {
     /// CR 305.1 / 611.3: the controller may play lands from their own graveyard while this
     /// permanent is on the battlefield. Icetill Explorer, Crucible of Worlds.
     PlayLandsFromOwnGraveyard,
+    /// As Foretold's live Time-counter threshold and once-per-turn alternative base cost.
+    /// Specialized: grants no origin/timing permission and shares usage across controllers.
+    AsForetoldAlternativeCost,
     /// CR 401.5 / 601: look at the current top of your library and use the selected-face filter
     /// to cast spells from it; lands are a separate permission. Case of the Locked Hothouse and
     /// Mystic Forge share the top-library source, while supplying different face filters.

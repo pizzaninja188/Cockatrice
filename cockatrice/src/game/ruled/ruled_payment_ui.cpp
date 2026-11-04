@@ -335,6 +335,11 @@ void RuledPaymentUi::reconcileEnginePendingSpellCast()
         rebuilt.faceIndex = static_cast<int>(announcement.face_index());
         rebuilt.xValue = static_cast<int>(announcement.x_value());
         rebuilt.castMethod = announcement.cast_method();
+        rebuilt.prototyped = announcement.prototyped();
+        if (announcement.has_as_foretold_source()) {
+            rebuilt.asForetoldSource = RuledAsForetoldSource{announcement.as_foretold_source().object_id(),
+                                                           announcement.as_foretold_source().zone_change_generation()};
+        }
         rebuilt.castingPermissionId =
             announcement.has_casting_permission_id() ? announcement.casting_permission_id() : 0;
         rebuilt.sourceZoneChangeGeneration =
@@ -1502,6 +1507,11 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildCommand(PlayerAction
     auto *cast = ruledCommand.mutable_begin_spell_cast()->mutable_announcement();
     cast->set_cast_method(pendingRuledSpellCast.castMethod);
     cast->set_prototyped(pendingRuledSpellCast.prototyped);
+    if (pendingRuledSpellCast.asForetoldSource) {
+        cast->mutable_as_foretold_source()->set_object_id(pendingRuledSpellCast.asForetoldSource->objectId);
+        cast->mutable_as_foretold_source()->set_zone_change_generation(
+            pendingRuledSpellCast.asForetoldSource->zoneChangeGeneration);
+    }
     if (pendingRuledSpellCast.castingPermissionId != 0) {
         cast->set_casting_permission_id(pendingRuledSpellCast.castingPermissionId);
     }

@@ -92,7 +92,8 @@ public:
                              quint64 castingPermissionId = 0,
                              bool prototyped = false,
                              quint64 resolutionPromptId = 0,
-                             quint64 expectedSourceZoneChangeGeneration = 0);
+                             quint64 expectedSourceZoneChangeGeneration = 0,
+                             std::optional<RuledAsForetoldSource> asForetoldSource = std::nullopt);
     void autoApplyRestrictedManaToPendingCost(quint32 groupId, QChar symbol, int amount);
     void finalizePendingSpellManaCost();
     bool tryRuledActivateAbilityMenu(CardItem *card, bool leftClick);

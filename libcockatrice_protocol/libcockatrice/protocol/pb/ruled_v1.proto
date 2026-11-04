@@ -390,6 +390,8 @@ message CastSpell {
   optional uint64 casting_permission_id = 14;
   // CR 718.2a: select the secondary Prototype characteristics independently of cast method.
   bool prototyped = 15;
+  // Selected battlefield source of As Foretold's alternative cost; never a cast-origin permission.
+  CostObjectRef as_foretold_source = 16;
 }
 
 // Payment-free CR 601.2a-e announcement. `CastSpell` remains the legacy atomic request shape
@@ -406,6 +408,7 @@ message SpellCastAnnouncement {
   CastMethod cast_method = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   optional uint64 casting_permission_id = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   bool prototyped = 11 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  CostObjectRef as_foretold_source = 12 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message BeginSpellCast {
@@ -916,6 +919,9 @@ message LegalHandAction {
   LinkedCastCostOption all_modes_cast_cost = 16 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // CR 718.2a: one of the two cast-characteristic choices for a Prototype face.
   bool prototyped = 17 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated AsForetoldCostOption as_foretold_costs = 18 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // No payable printed base cost. Only explicit alternative-cost options may be selected.
+  bool base_cost_unpayable = 19 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // A public source zone for engine-authored cast and land-play actions.
@@ -948,6 +954,16 @@ message LegalZoneCastAction {
   LinkedCastCostOption all_modes_cast_cost = 18 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   PreparationSource preparation_source = 19 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   bool prototyped = 20 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated AsForetoldCostOption as_foretold_costs = 21 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool base_cost_unpayable = 22 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+// A caster-private alternative base cost for an otherwise available cast action. Eligibility,
+// timing, selected face and live source counters are decided by the engine, not the client.
+message AsForetoldCostOption {
+  CostObjectRef source = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string label = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string cost = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message ManaPaymentEligibility {

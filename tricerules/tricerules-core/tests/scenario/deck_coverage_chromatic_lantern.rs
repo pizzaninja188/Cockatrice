@@ -684,6 +684,7 @@ fn lantern_granted_mana_pays_an_open_spell_transaction_with_preview_and_undo() {
             &RuledCommand {
                 cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
                     announcement: Some(SpellCastAnnouncement {
+                        as_foretold_source: None,
                         targets: cast.targets,
                         x_value: cast.x_value,
                         flex_payments: cast.flex_payments,

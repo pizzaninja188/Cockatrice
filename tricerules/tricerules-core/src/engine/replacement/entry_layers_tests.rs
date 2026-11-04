@@ -415,7 +415,7 @@ fn manifest_dread_skipped_commander_resumes_none_tail_before_903_9a_choice() {
         id: "manifest_dread_tail_fixture",
         name: "Manifest Dread Tail Fixture",
         face_id: "manifest_dread_tail_fixture",
-        mana_cost: "",
+        mana_cost: "{0}",
         types: ["Artifact", "Equipment"],
         triggered_abilities: [(
             ability_id: "triggered_01",

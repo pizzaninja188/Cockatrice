@@ -793,6 +793,7 @@ fn solved_case_keeps_an_unchanged_library_top_visible_during_a_hand_cast() {
         unreachable!("hand cast announcement")
     };
     let announcement = rv1::SpellCastAnnouncement {
+        as_foretold_source: None,
         targets: cast.targets,
         x_value: cast.x_value,
         flex_payments: cast.flex_payments,

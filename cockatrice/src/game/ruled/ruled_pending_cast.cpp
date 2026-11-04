@@ -704,6 +704,7 @@ bool RuledPendingCast::sameSpellFlexiblePrompt(const PendingRuledSpellCast &capt
            captured.source == current.source && captured.sourceZoneChangeGeneration == current.sourceZoneChangeGeneration &&
            captured.faceIndex == current.faceIndex && captured.castMethod == current.castMethod &&
            captured.prototyped == current.prototyped && captured.castingPermissionId == current.castingPermissionId &&
+           captured.asForetoldSource == current.asForetoldSource &&
            captured.resolutionPromptId == current.resolutionPromptId && captured.xValue == current.xValue &&
            captured.remainingCost == current.remainingCost && sameCounterGroupFlexPips(captured.flexPips, current.flexPips) &&
            sameCounterGroupFlexPayments(captured.flexPayments, current.flexPayments);
@@ -1268,7 +1269,25 @@ static QString ruledCastOptionLabel(const RuledFaceOption &face)
     if (!face.permissionSourceLabel.isEmpty()) {
         label += QObject::tr(" — %1").arg(face.permissionSourceLabel);
     }
+    if (!face.asForetoldLabel.isEmpty()) {
+        label += QObject::tr(" — %1").arg(face.asForetoldLabel);
+    }
     return face.manaCost.isEmpty() ? label : QStringLiteral("%1 (%2)").arg(label, face.manaCost);
+}
+
+static QString castMenuLabel(const RuledFaceOption &face, const QVector<RuledFaceOption> &faces)
+{
+    QString label = ruledCastOptionLabel(face);
+    if (face.asForetoldSource) {
+        QVector<RuledAsForetoldSource> sources;
+        for (const auto &candidate : faces) {
+            if (candidate.asForetoldSource && !sources.contains(*candidate.asForetoldSource))
+                sources.append(*candidate.asForetoldSource);
+        }
+        if (sources.size() > 1)
+            label += QObject::tr(" (source %1; hover to locate)").arg(sources.indexOf(*face.asForetoldSource) + 1);
+    }
+    return label;
 }
 
 QVector<RuledCardActionMenuOption>
@@ -1286,8 +1305,8 @@ RuledPendingCast::cardActionMenuOptions(const QVector<RuledFaceOption> &castFace
     for (const auto &face : castFaces) {
         if (manaAbilitiesOnly)
             break;
-        options.append({RuledCardActionMenuOption::Kind::CastFace, face.faceIndex, ruledCastOptionLabel(face), true, 0,
-                        face.castMethod, face.prototyped, face.castingPermissionId});
+        options.append({RuledCardActionMenuOption::Kind::CastFace, face.faceIndex, castMenuLabel(face, castFaces), true, 0,
+                        face.castMethod, face.prototyped, face.castingPermissionId, face.asForetoldSource});
     }
     for (const int abilityIndex : abilityIndices) {
         const auto ability = state.activatedAbilityForOid(sourceOid, abilityIndex);
@@ -1319,7 +1338,8 @@ RuledPendingCast::cardActionMenuOptions(const QVector<RuledFaceOption> &castFace
 
 std::optional<RuledFaceOption> RuledPendingCast::chooseFace(QWidget *parent,
                                                             const QString &cardName,
-                                                            const QVector<RuledFaceOption> &faces)
+                                                            const QVector<RuledFaceOption> &faces,
+                                                            const std::function<void(std::optional<RuledAsForetoldSource>)> &hoverSource)
 {
     if (faces.isEmpty()) {
         return std::nullopt;
@@ -1329,10 +1349,17 @@ std::optional<RuledFaceOption> RuledPendingCast::chooseFace(QWidget *parent,
     menu.setTitle(cardName);
     QVector<QAction *> actions;
     actions.reserve(faces.size());
-    for (const auto &face : faces) {
-        actions.append(menu.addAction(ruledCastOptionLabel(face)));
+    for (int i = 0; i < faces.size(); ++i) {
+        auto *action = menu.addAction(castMenuLabel(faces.at(i), faces));
+        actions.append(action);
+        if (hoverSource)
+            QObject::connect(action, &QAction::hovered, &menu, [hoverSource, source = faces.at(i).asForetoldSource] {
+                hoverSource(source);
+            });
     }
     QAction *chosen = menu.exec(QCursor::pos());
+    if (hoverSource)
+        hoverSource(std::nullopt);
     const int position = actions.indexOf(chosen);
     if (position < 0) {
         return std::nullopt;

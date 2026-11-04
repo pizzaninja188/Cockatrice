@@ -29,6 +29,9 @@
 #include "game/ruled/ruled_zone_view_policy.h"
 
 #include <QBuffer>
+#include <QApplication>
+#include <QMenu>
+#include <QTimer>
 #include <QJsonArray>
 #include <QRectF>
 #include <QRegularExpression>
@@ -15277,6 +15280,68 @@ TEST_F(RuledClientTest, EmblemHandCastKeepsPaidAndWithoutManaCostChoicesDistinct
               RuledClientState::handCastActionKey(3, 0, ruled::v1::CAST_METHOD_WITHOUT_MANA_COST));
 }
 
+TEST_F(RuledClientTest, AsForetoldOffersKeepPaidAndBothExactSources)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *offer = (*batch.mutable_legal_by_player())[kLocalPlayer].add_hand_actions();
+    offer->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+    offer->set_hand_index(3);
+    offer->set_card_name("Lightning Bolt");
+    offer->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    offer->set_cost("{R}");
+    for (quint32 id : {80u, 81u}) {
+        auto *option = offer->add_as_foretold_costs();
+        option->mutable_source()->set_object_id(id);
+        option->mutable_source()->set_zone_change_generation(id + 7);
+        option->set_label("As Foretold — 1 time counters");
+        option->set_cost("{0}");
+    }
+    apply(batch);
+    const auto options = state->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, 3);
+    ASSERT_EQ(options.size(), 3);
+    const auto menu = RuledPendingCast::cardActionMenuOptions(options, *state, 0, false, {});
+    ASSERT_EQ(menu.size(), 3);
+    EXPECT_EQ(menu[0].label, QStringLiteral("Cast Lightning Bolt ({R})"));
+    EXPECT_TRUE(menu[1].label.contains(QStringLiteral("source 1; hover to locate")));
+    EXPECT_TRUE(menu[2].label.contains(QStringLiteral("source 2; hover to locate")));
+    EXPECT_NE(menu[1].asForetoldSource, menu[2].asForetoldSource);
+}
+
+TEST_F(RuledClientTest, AsForetoldFaceMenuHoverIdentifiesExactCopiesAndClearsOnCancel)
+{
+    // Exercise the actual nested menu without an interactive desktop.
+    qputenv("QT_QPA_PLATFORM", "offscreen");
+    static int argc = 1;
+    static char name[] = "ruled_client_test";
+    static char *argv[] = {name, nullptr};
+    static QApplication application(argc, argv);
+    QVector<RuledFaceOption> faces(2);
+    for (int i = 0; i < faces.size(); ++i) {
+        faces[i].faceName = QStringLiteral("Lightning Bolt");
+        faces[i].manaCost = QStringLiteral("{0}");
+        faces[i].asForetoldLabel = QStringLiteral("As Foretold — 1 time counters");
+        faces[i].asForetoldSource = RuledAsForetoldSource{static_cast<quint32>(800 + i), 37};
+    }
+    QVector<std::optional<RuledAsForetoldSource>> hovered;
+    QTimer::singleShot(0, [&] {
+        auto *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        EXPECT_NE(menu, nullptr);
+        if (!menu)
+            return;
+        EXPECT_EQ(menu->actions().size(), 2);
+        menu->actions().at(0)->hover();
+        menu->actions().at(1)->hover();
+        menu->close();
+    });
+    const auto chosen = RuledPendingCast::chooseFace(nullptr, QStringLiteral("Lightning Bolt"), faces,
+                                                     [&](auto source) { hovered.append(source); });
+    EXPECT_FALSE(chosen.has_value());
+    ASSERT_GE(hovered.size(), 3);
+    EXPECT_EQ(hovered.at(hovered.size() - 3), faces[0].asForetoldSource);
+    EXPECT_EQ(hovered.at(hovered.size() - 2), faces[1].asForetoldSource);
+    EXPECT_FALSE(hovered.last().has_value());
+}
+
 TEST_F(RuledClientTest, PrototypeHandOfferRemainsDistinctFromNormalCast)
 {
     ruled::v1::RuledEventBatch batch;
@@ -15302,6 +15367,84 @@ TEST_F(RuledClientTest, PrototypeHandOfferRemainsDistinctFromNormalCast)
     EXPECT_FALSE(menu[0].prototyped);
     EXPECT_EQ(menu[1].label, QStringLiteral("Prototype Cast Skitterbeam Battalion ({3}{R}{R})"));
     EXPECT_TRUE(menu[1].prototyped);
+}
+
+TEST_F(RuledClientTest, AsForetoldNoPrintedCostAndPendingSourceReconcileExactly)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *offer = (*batch.mutable_legal_by_player())[kLocalPlayer].add_hand_actions();
+    offer->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+    offer->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    offer->set_hand_index(3);
+    offer->set_card_name("No Cost Spell");
+    offer->set_base_cost_unpayable(true);
+    auto *cost = offer->add_as_foretold_costs();
+    cost->mutable_source()->set_object_id(80);
+    cost->mutable_source()->set_zone_change_generation(7);
+    cost->set_label("As Foretold #80");
+    cost->set_cost("{0}");
+    apply(batch);
+    const auto options = state->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, 3);
+    ASSERT_EQ(options.size(), 1);
+    const auto selected = std::optional<RuledAsForetoldSource>(RuledAsForetoldSource{80, 7});
+    EXPECT_EQ(options[0].asForetoldSource, selected);
+    EXPECT_FALSE(state->isHandCastActionLegal(3, 0, ruled::v1::CAST_METHOD_NORMAL));
+    EXPECT_TRUE(state->isHandCastActionLegal(3, 0, ruled::v1::CAST_METHOD_NORMAL, false, selected));
+    EXPECT_FALSE(state->isHandCastActionLegal(3, 0, ruled::v1::CAST_METHOD_NORMAL, false, RuledAsForetoldSource{80, 8}));
+    RuledPendingCast pending;
+    auto &spell = pending.beginSpell();
+    spell.handIndex = 3;
+    spell.asForetoldSource = selected;
+    ASSERT_TRUE(pending.reconcileSpellCosts(*state, kLocalPlayer));
+    const auto captured = spell;
+    spell.asForetoldSource = RuledAsForetoldSource{81, 7};
+    EXPECT_FALSE(RuledPendingCast::sameSpellFlexiblePrompt(captured, spell));
+    EXPECT_FALSE(pending.reconcileSpellCosts(*state, kLocalPlayer));
+    spell.asForetoldSource = selected;
+    ruled::v1::RuledEventBatch reconnect;
+    auto *engine = (*reconnect.mutable_legal_by_player())[kLocalPlayer].mutable_pending_spell_cast();
+    engine->set_transaction_id(81);
+    engine->set_reserved_object_id(901);
+    engine->set_locked_total_cost("{0}");
+    engine->mutable_announcement()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    engine->mutable_announcement()->mutable_source()->set_hand_index(3);
+    *engine->mutable_announcement()->mutable_as_foretold_source() = cost->source();
+    spell.engineTransactionId = 81;
+    spell.stage = PendingRuledSpellCast::Stage::Paying;
+    apply(reconnect); // No live cost-source offer remains after the accepted begin.
+    ASSERT_TRUE(state->pendingSpellCast);
+    EXPECT_EQ(state->pendingSpellCast->announcement().as_foretold_source().object_id(), 80u);
+    EXPECT_EQ(state->pendingSpellCast->announcement().as_foretold_source().zone_change_generation(), 7u);
+    EXPECT_TRUE(pending.reconcileSpellCosts(*state, kLocalPlayer));
+}
+
+TEST_F(RuledClientTest, AsForetoldZoneOffersKeepPermissionPrototypeAndSourceIdentities)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *offer = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_cast_actions();
+    offer->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_EXILE);
+    offer->set_object_id(90);
+    offer->set_zone_change_generation(3);
+    offer->set_casting_permission_id(0x100000001ULL);
+    offer->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    offer->set_prototyped(true);
+    offer->set_cost("{5}");
+    auto *cost = offer->add_as_foretold_costs();
+    cost->mutable_source()->set_object_id(80);
+    cost->mutable_source()->set_zone_change_generation(7);
+    cost->set_label("As Foretold #80");
+    cost->set_cost("{0}");
+    apply(batch);
+    const auto options = state->zoneActionFaceOptions(90, RuledCastSource::Exile);
+    ASSERT_EQ(options.size(), 2);
+    EXPECT_FALSE(options[0].asForetoldSource);
+    EXPECT_EQ(options[1].manaCost, QStringLiteral("{0}"));
+    EXPECT_TRUE(state->isZoneCastActionLegal(90, 0, RuledCastSource::Exile, ruled::v1::CAST_METHOD_NORMAL,
+                                             0x100000001ULL, 3, true, RuledAsForetoldSource{80, 7}));
+    EXPECT_FALSE(state->isZoneCastActionLegal(90, 0, RuledCastSource::Exile, ruled::v1::CAST_METHOD_NORMAL,
+                                              1, 3, true, RuledAsForetoldSource{80, 7}));
+    EXPECT_FALSE(state->isZoneCastActionLegal(90, 0, RuledCastSource::Exile, ruled::v1::CAST_METHOD_NORMAL,
+                                              0x100000001ULL, 3, false, RuledAsForetoldSource{80, 7}));
 }
 
 TEST(RuledPendingCostSelectionTest, SneakReturnIsGenerationBoundAndExclusive)

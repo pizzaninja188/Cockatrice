@@ -604,6 +604,17 @@ struct RuledCastActionKey
 // CR 709/712/715: one playable face of a hand card the engine offers for a hand action. Split,
 // modal-double-faced, and Adventure cards can yield multiple options for one physical slot. Names
 // and cast costs are engine-authored because Cockatrice may display only the permanent/front face.
+struct RuledAsForetoldSource
+{
+    quint32 objectId = 0;
+    quint64 zoneChangeGeneration = 0;
+    bool operator==(const RuledAsForetoldSource &) const = default;
+    bool operator<(const RuledAsForetoldSource &other) const
+    {
+        return std::tie(objectId, zoneChangeGeneration) < std::tie(other.objectId, other.zoneChangeGeneration);
+    }
+};
+
 struct RuledFaceOption
 {
     int faceIndex;
@@ -616,6 +627,8 @@ struct RuledFaceOption
     quint64 castingPermissionId = 0;
     QString permissionSourceLabel;
     bool prototyped = false;
+    std::optional<RuledAsForetoldSource> asForetoldSource;
+    QString asForetoldLabel;
 };
 
 struct RuledExilePlayPermissionGroup
@@ -1377,11 +1390,13 @@ public:
     [[nodiscard]] bool isHandCastActionLegal(int slot,
                                              int faceIndex,
                                              ruled::v1::CastMethod method,
-                                             bool prototyped = false) const
+                                             bool prototyped = false,
+                                             std::optional<RuledAsForetoldSource> asForetoldSource = std::nullopt) const
     {
         const auto options = handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, slot);
         return std::any_of(options.cbegin(), options.cend(), [=](const RuledFaceOption &option) {
-            return option.faceIndex == faceIndex && option.castMethod == method && option.prototyped == prototyped;
+            return option.faceIndex == faceIndex && option.castMethod == method && option.prototyped == prototyped &&
+                   option.asForetoldSource == asForetoldSource;
         });
     }
     [[nodiscard]] QVector<RuledFaceOption> zoneActionFaceOptions(quint32 objectId, RuledCastSource source) const
@@ -1391,8 +1406,8 @@ public:
         }
         QVector<RuledFaceOption> options = zoneCastActions.faceOptionsByIndex.value(static_cast<int>(objectId));
         std::sort(options.begin(), options.end(), [](const RuledFaceOption &a, const RuledFaceOption &b) {
-            return std::tie(a.faceIndex, a.castMethod, a.castingPermissionId, a.prototyped) <
-                   std::tie(b.faceIndex, b.castMethod, b.castingPermissionId, b.prototyped);
+            return std::tie(a.faceIndex, a.castMethod, a.castingPermissionId, a.prototyped, a.asForetoldSource) <
+                   std::tie(b.faceIndex, b.castMethod, b.castingPermissionId, b.prototyped, b.asForetoldSource);
         });
         return options;
     }
@@ -1459,7 +1474,8 @@ public:
                                              ruled::v1::CastMethod method,
                                              quint64 castingPermissionId = 0,
                                              std::optional<quint64> expectedGeneration = std::nullopt,
-                                             bool prototyped = false) const
+                                             bool prototyped = false,
+                                             std::optional<RuledAsForetoldSource> asForetoldSource = std::nullopt) const
     {
         if (!isZoneActionLegal(objectId, source)) {
             return false;
@@ -1469,6 +1485,7 @@ public:
             return option.faceIndex == faceIndex && option.castMethod == method &&
                    option.castingPermissionId == castingPermissionId &&
                    option.prototyped == prototyped &&
+                   option.asForetoldSource == asForetoldSource &&
                    (!expectedGeneration || option.zoneChangeGeneration == *expectedGeneration);
         });
     }

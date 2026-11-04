@@ -513,6 +513,9 @@ mod tests {
     mod vronos_normal {
         include!("replay_vronos_normal.rs");
     }
+    mod as_foretold_normal {
+        include!("replay_as_foretold_normal.rs");
+    }
     mod professor_onyx_normal {
         include!("replay_professor_onyx_normal.rs");
     }

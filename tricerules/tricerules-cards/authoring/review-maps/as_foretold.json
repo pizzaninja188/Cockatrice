@@ -1,0 +1,16 @@
+{
+  "format_version": 1,
+  "oracle_id": "e4b3e0af-5caa-47c1-b5be-c56a875cbb15",
+  "spans": [
+    {"face_id":"as_foretold","start_line":1,"end_line":1,"typed_paths":["/faces/0/triggered_abilities/0"]},
+    {"face_id":"as_foretold","start_line":2,"end_line":2,"typed_paths":["/faces/0/static_abilities/0"]}
+  ],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test":"deck_registry::deck_coverage_as_foretold::as_foretold_actual_identity_has_both_complete_clauses","covers":"Exact identity, printed cost and type, own-upkeep Time counter and specialized static alternative-cost clause with one-based Oracle mappings."},
+    {"test":"scenario deck_coverage_as_foretold::as_foretold_paid_cast_and_exact_own_upkeep_counters","covers":"Actual paid cast and repeated own-upkeep counters, excluding opponent upkeep."},
+    {"test":"scenario deck_coverage_as_foretold::as_foretold_actual_bolt_offer_uses_only_selected_exact_copy","covers":"Actual Lightning Bolt uses zero base cost and consumes only the explicitly chosen As Foretold incarnation."}
+  ],
+  "complete_definition_review_confirmed": true
+}

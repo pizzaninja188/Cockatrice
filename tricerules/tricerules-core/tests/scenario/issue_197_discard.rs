@@ -370,6 +370,7 @@ fn accept_madness_transaction(cast: rv1::CastSpell) -> rv1::RuledCommand {
                 resolution_prompt_id: 0,
                 decision: rv1::ResolutionChoiceDecision::CastSpell as i32,
                 spell_cast_announcement: Some(rv1::SpellCastAnnouncement {
+                    as_foretold_source: None,
                     targets: cast.targets,
                     x_value: cast.x_value,
                     flex_payments: cast.flex_payments,

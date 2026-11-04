@@ -23,6 +23,7 @@
 #include <QVector>
 #include <QtGlobal>
 #include <algorithm>
+#include <functional>
 #include <limits>
 #include <numeric>
 #include <optional>
@@ -50,6 +51,7 @@ struct RuledCardActionMenuOption
     ruled::v1::CastMethod castMethod = ruled::v1::CAST_METHOD_NORMAL;
     bool prototyped = false;
     quint64 castingPermissionId = 0;
+    std::optional<RuledAsForetoldSource> asForetoldSource;
 };
 
 struct RuledFlexPip
@@ -1028,6 +1030,7 @@ struct PendingRuledSpellCast
     quint64 sourceZoneChangeGeneration = 0;
     quint64 castingPermissionId = 0;
     bool prototyped = false;
+    std::optional<RuledAsForetoldSource> asForetoldSource;
     /// Mirrors the current spell or modal option; only ChooseAtCast collects allocations.
     ruled::v1::DamageDivision damageDivision = ruled::v1::DAMAGE_DIVISION_CHOOSE_AT_CAST;
     int faceIndex = 0;
@@ -2081,7 +2084,8 @@ public:
         const RuledClientState *state);
 
     static std::optional<RuledFaceOption>
-    chooseFace(QWidget *parent, const QString &cardName, const QVector<RuledFaceOption> &faces);
+    chooseFace(QWidget *parent, const QString &cardName, const QVector<RuledFaceOption> &faces,
+               const std::function<void(std::optional<RuledAsForetoldSource>)> &hoverSource = {});
 
     /// Build one engine-authoritative menu model for alternate actions on a physical card.
     /// Castable faces precede zone abilities so a cycler in hand exposes both Cast and Cycle.

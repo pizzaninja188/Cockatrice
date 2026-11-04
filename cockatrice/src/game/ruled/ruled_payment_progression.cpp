@@ -29,6 +29,30 @@
 
 namespace
 {
+class AsForetoldSourceHover
+{
+    QPointer<AbstractGame> game;
+    QPointer<CardItem> hovered;
+
+public:
+    explicit AsForetoldSourceHover(AbstractGame *value) : game(value) {}
+    ~AsForetoldSourceHover() { show(std::nullopt); }
+    void show(std::optional<RuledAsForetoldSource> source)
+    {
+        if (hovered)
+            hovered->setHovered(false);
+        hovered = nullptr;
+        if (source && game) {
+            const auto *state = game->getGameEventHandler()->ruled();
+            if (state && state->battlefieldGenerationByOid.contains(source->objectId) &&
+                state->battlefieldGenerationByOid.value(source->objectId) == source->zoneChangeGeneration)
+                hovered = RuledActions::findBattlefieldCardItemByEngineOid(game, source->objectId);
+        }
+        if (hovered)
+            hovered->setHovered(true);
+    }
+};
+
 bool isSpecialCastCandidate(const RuledClientState *state, quint32 oid)
 {
     return state && state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast) &&
@@ -118,6 +142,7 @@ bool hasExactCastOffer(const RuledClientState *state,
         return current.faceIndex == captured.faceIndex && current.castMethod == captured.castMethod &&
                current.castingPermissionId == captured.castingPermissionId &&
                current.prototyped == captured.prototyped &&
+               current.asForetoldSource == captured.asForetoldSource &&
                current.zoneChangeGeneration == captured.zoneChangeGeneration;
     });
 }
@@ -2220,7 +2245,8 @@ bool RuledPaymentUi::beginRuledSpellCast(CardItem *card,
                                          quint64 castingPermissionId,
                                          bool prototyped,
                                          quint64 resolutionPromptId,
-                                         quint64 expectedSourceZoneChangeGeneration)
+                                         quint64 expectedSourceZoneChangeGeneration,
+                                         std::optional<RuledAsForetoldSource> asForetoldSource)
 {
     RuledClientState *const geh = actions->player->getGame()->getGameEventHandler()->ruled();
     const quint32 specialCastOid = geh->specialCastObjectForSource(ruledHandIndex, source);
@@ -2235,9 +2261,9 @@ bool RuledPaymentUi::beginRuledSpellCast(CardItem *card,
         expectedGeneration = geh->privateLibraryTop->zoneChangeGeneration;
     }
     if (source == RuledCastSource::Hand
-            ? !geh->isHandCastActionLegal(ruledHandIndex, faceIndex, castMethod, prototyped)
+            ? !geh->isHandCastActionLegal(ruledHandIndex, faceIndex, castMethod, prototyped, asForetoldSource)
             : !geh->isZoneCastActionLegal(static_cast<quint32>(ruledHandIndex), faceIndex, source, castMethod,
-                                          castingPermissionId, expectedGeneration, prototyped)) {
+                                          castingPermissionId, expectedGeneration, prototyped, asForetoldSource)) {
         return false;
     }
     if (actions->pendingRuledSpellCast.valid && actions->pendingRuledSpellCast.waitingForTarget &&
@@ -2245,7 +2271,8 @@ bool RuledPaymentUi::beginRuledSpellCast(CardItem *card,
         actions->pendingRuledSpellCast.faceIndex == faceIndex && actions->pendingRuledSpellCast.source == source &&
         actions->pendingRuledSpellCast.castMethod == castMethod &&
         actions->pendingRuledSpellCast.castingPermissionId == castingPermissionId &&
-        actions->pendingRuledSpellCast.prototyped == prototyped) {
+        actions->pendingRuledSpellCast.prototyped == prototyped &&
+        actions->pendingRuledSpellCast.asForetoldSource == asForetoldSource) {
         // Target ranges with an explicit confirmation surface may also be confirmed by clicking
         // the spell again. In particular, 0-1 means "skip this target", not "cancel the cast".
         if (ruledTargetRangeUsesExplicitConfirmation(actions->pendingRuledSpellCast.minTargets,
@@ -2305,6 +2332,7 @@ bool RuledPaymentUi::beginRuledSpellCast(CardItem *card,
             currentOffers.cbegin(), currentOffers.cend(), [&](const auto &offer) {
                 return offer.faceIndex == faceIndex && offer.castMethod == castMethod &&
                        offer.castingPermissionId == castingPermissionId && offer.prototyped == prototyped &&
+                       offer.asForetoldSource == asForetoldSource &&
                        (source == RuledCastSource::Hand || offer.zoneChangeGeneration == expectedSourceZoneChangeGeneration);
             });
         if (!exactOfferStillLegal)
@@ -2332,13 +2360,15 @@ bool RuledPaymentUi::beginRuledSpellCast(CardItem *card,
     actions->pendingRuledSpellCast.castingPermissionId = castingPermissionId;
     actions->pendingRuledSpellCast.resolutionPromptId = resolutionPromptId;
     actions->pendingRuledSpellCast.prototyped = prototyped;
+    actions->pendingRuledSpellCast.asForetoldSource = asForetoldSource;
     actions->pendingRuledSpellCast.faceIndex = faceIndex;
     const auto paymentFaces = source == RuledCastSource::Hand
                                   ? geh->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, ruledHandIndex)
                                   : geh->zoneActionFaceOptions(ruledHandIndex, source);
     for (const auto &face : paymentFaces)
         if (face.faceIndex == faceIndex && face.castMethod == castMethod &&
-            face.castingPermissionId == castingPermissionId && face.prototyped == prototyped) {
+            face.castingPermissionId == castingPermissionId && face.prototyped == prototyped &&
+            face.asForetoldSource == asForetoldSource) {
             actions->pendingRuledSpellCast.hasConvoke = face.hasConvoke;
             actions->pendingRuledSpellCast.sourceZoneChangeGeneration = face.zoneChangeGeneration;
         }
@@ -2765,6 +2795,12 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
 
     const auto cardOptions =
         RuledPendingCast::cardActionMenuOptions(castFaces, *handler, oid, manaAbilitiesOnly, paymentContributions);
+    AsForetoldSourceHover sourceHover(actions->player->getGame());
+    QObject::connect(&menu, &QMenu::hovered, &menu, [&](QAction *action) {
+        const int index = menu.actions().indexOf(action) - permanentActions.size();
+        sourceHover.show(index >= 0 && index < cardOptions.size() ? cardOptions.at(index).asForetoldSource
+                                                               : std::nullopt);
+    });
     QVector<QAction *> cardMenuActions;
     cardMenuActions.reserve(cardOptions.size());
     for (const auto &option : cardOptions) {
@@ -2801,6 +2837,7 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     }
 
     QAction *chosen = menu.exec(QCursor::pos());
+    sourceHover.show(std::nullopt);
     if (!actionsGuard) {
         return true;
     }
@@ -2864,10 +2901,11 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         for (const auto &face : castFaces) {
             if (face.faceIndex == selectedOption.index && face.castMethod == selectedOption.castMethod &&
                 face.castingPermissionId == selectedOption.castingPermissionId &&
-                face.prototyped == selectedOption.prototyped) {
+                face.prototyped == selectedOption.prototyped &&
+                face.asForetoldSource == selectedOption.asForetoldSource) {
                 beginRuledSpellCast(card, castHandIndex, face.faceIndex, face.faceName, face.manaCost,
                                     face.genericCostReduction, castSource, face.castMethod, face.castingPermissionId,
-                                    face.prototyped);
+                                    face.prototyped, 0, face.zoneChangeGeneration, face.asForetoldSource);
                 return true;
             }
         }
@@ -3286,14 +3324,16 @@ bool RuledPaymentUi::startPublicZoneCast(PlayerActions *actions, CardItem *card,
     if (options.isEmpty()) {
         return false;
     }
-    const auto choice = RuledPendingCast::chooseFace(actions->player->getGame()->getTab(), card->getName(), options);
+    AsForetoldSourceHover sourceHover(actions->player->getGame());
+    const auto choice = RuledPendingCast::chooseFace(actions->player->getGame()->getTab(), card->getName(), options,
+                                                    [&](auto source) { sourceHover.show(source); });
     if (choice) {
         if (!hasExactCastOffer(state, oid, source, promptId, *choice))
             return true;
         actions->ruledPayment->beginRuledSpellCast(card, static_cast<int>(oid), choice->faceIndex, choice->faceName,
                                                    choice->manaCost, choice->genericCostReduction, source,
                                                    choice->castMethod, choice->castingPermissionId, choice->prototyped,
-                                                   promptId, choice->zoneChangeGeneration);
+                                                   promptId, choice->zoneChangeGeneration, choice->asForetoldSource);
     }
     return true;
 }
@@ -3330,8 +3370,10 @@ bool RuledPaymentUi::tryStartRuledSpellCast(CardItem *card)
         }
         RuledFaceOption option = options.first();
         if (options.size() > 1) {
+            AsForetoldSourceHover sourceHover(actions->player->getGame());
             const auto chosen =
-                RuledPendingCast::chooseFace(actions->player->getGame()->getTab(), card->getName(), options);
+                RuledPendingCast::chooseFace(actions->player->getGame()->getTab(), card->getName(), options,
+                                             [&](auto source) { sourceHover.show(source); });
             if (!chosen.has_value()) {
                 return true;
             }
@@ -3339,15 +3381,13 @@ bool RuledPaymentUi::tryStartRuledSpellCast(CardItem *card)
         }
         if (!hasExactCastOffer(geh, objectId, source, promptId, option))
             return true;
-        const QString cost =
-            geh->zoneActionCost(objectId, option.faceIndex, source, option.castMethod, option.castingPermissionId,
-                                option.prototyped);
+        const QString cost = option.manaCost;
         if (cost.isEmpty()) {
             return false;
         }
         return beginRuledSpellCast(card, static_cast<int>(objectId), option.faceIndex, option.faceName, cost,
                                    option.genericCostReduction, source, option.castMethod, option.castingPermissionId,
-                                   option.prototyped, promptId, option.zoneChangeGeneration);
+                                   option.prototyped, promptId, option.zoneChangeGeneration, option.asForetoldSource);
     }
 
     const int ruledHandIndex = RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_CAST_SPELL, card);
@@ -3365,7 +3405,7 @@ bool RuledPaymentUi::tryStartRuledSpellCast(CardItem *card)
     const auto &face = faces.first();
     return beginRuledSpellCast(card, ruledHandIndex, face.faceIndex, face.faceName, face.manaCost,
                                face.genericCostReduction, RuledCastSource::Hand, face.castMethod,
-                               face.castingPermissionId, face.prototyped);
+                               face.castingPermissionId, face.prototyped, 0, 0, face.asForetoldSource);
 }
 
 bool RuledPaymentUi::tryRuledSpellCastFaceMenu(CardItem *card)
@@ -3431,9 +3471,11 @@ bool RuledPaymentUi::tryRuledSpellCastFaceMenu(CardItem *card)
         return beginRuledSpellCast(card, sourceIndex, face.faceIndex, face.faceName, face.manaCost,
                                    face.genericCostReduction, fromHand ? RuledCastSource::Hand : publicSource,
                                    face.castMethod, face.castingPermissionId, face.prototyped, promptId,
-                                   face.zoneChangeGeneration);
+                                   face.zoneChangeGeneration, face.asForetoldSource);
     }
-    const auto chosen = RuledPendingCast::chooseFace(actions->player->getGame()->getTab(), card->getName(), faces);
+    AsForetoldSourceHover sourceHover(actions->player->getGame());
+    const auto chosen = RuledPendingCast::chooseFace(actions->player->getGame()->getTab(), card->getName(), faces,
+                                                    [&](auto source) { sourceHover.show(source); });
     if (!chosen.has_value()) {
         return true; // menu was shown, player cancelled
     }
@@ -3442,6 +3484,6 @@ bool RuledPaymentUi::tryRuledSpellCastFaceMenu(CardItem *card)
     beginRuledSpellCast(card, sourceIndex, chosen->faceIndex, chosen->faceName, chosen->manaCost,
                         chosen->genericCostReduction, fromHand ? RuledCastSource::Hand : publicSource,
                         chosen->castMethod, chosen->castingPermissionId, chosen->prototyped, promptId,
-                        chosen->zoneChangeGeneration);
+                        chosen->zoneChangeGeneration, chosen->asForetoldSource);
     return true;
 }

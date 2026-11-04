@@ -134,6 +134,7 @@ fn begin_cast_transaction(engine: &mut GameEngine, player: i32, command: RuledCo
         panic!("expected legacy cast fixture")
     };
     let announcement = SpellCastAnnouncement {
+        as_foretold_source: None,
         targets: cast.targets,
         x_value: cast.x_value,
         flex_payments: cast.flex_payments,
@@ -173,6 +174,7 @@ fn begin_cast_command(command: RuledCommand) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
             announcement: Some(SpellCastAnnouncement {
+                as_foretold_source: None,
                 targets: cast.targets,
                 x_value: cast.x_value,
                 flex_payments: cast.flex_payments,
@@ -207,6 +209,7 @@ fn issue_239_sunderflock_cost_stays_locked_while_activating_mana_abilities() {
         unreachable!()
     };
     let announcement = SpellCastAnnouncement {
+        as_foretold_source: None,
         targets: cast.targets,
         x_value: cast.x_value,
         flex_payments: cast.flex_payments,

@@ -227,6 +227,7 @@ fn validate_cast_cost_target_expansions(
 
 #[derive(Clone)]
 pub(in crate::engine) struct PreparedSpellCast {
+    as_foretold_use: Option<(u64, ObjectId, u64)>,
     idx: usize,
     pub oid: ObjectId,
     card_id: String,
@@ -258,6 +259,7 @@ pub(in crate::engine) struct PendingSpellCastInternal {
 
 fn cast_from_announcement(announcement: &rv1::SpellCastAnnouncement) -> rv1::CastSpell {
     rv1::CastSpell {
+        as_foretold_source: announcement.as_foretold_source,
         targets: announcement.targets.clone(),
         x_value: announcement.x_value,
         flex_payments: announcement.flex_payments.clone(),
@@ -278,6 +280,7 @@ pub(in crate::engine) fn announcement_from_cast(
     cast: &rv1::CastSpell,
 ) -> rv1::SpellCastAnnouncement {
     rv1::SpellCastAnnouncement {
+        as_foretold_source: cast.as_foretold_source,
         targets: cast.targets.clone(),
         x_value: cast.x_value,
         flex_payments: cast.flex_payments.clone(),
@@ -1399,46 +1402,59 @@ impl GameEngine {
         }
         let face_is_sorcery = face.is_sorcery;
         let face_instant_speed = castable_at_instant_speed(&face);
-        let face_mana = match cast_method {
-            SpellCastMethod::WithoutManaCost => ManaCost::default(),
-            SpellCastMethod::Normal => characteristic_face.mana_cost.clone(),
-            SpellCastMethod::Warp => face
-                .warp_cost
-                .clone()
-                .ok_or(EngineError::Illegal("card has no Warp cost"))?,
-            SpellCastMethod::Sneak => face
-                .sneak_cost
-                .clone()
-                .ok_or(EngineError::Illegal("card has no Sneak cost"))?,
-            SpellCastMethod::Flashback => face
-                .flashback_cost
-                .clone()
-                .ok_or(EngineError::Illegal("card has no flashback cost"))?,
-            SpellCastMethod::Harmonize => face
-                .harmonize_cost
-                .clone()
-                .ok_or(EngineError::Illegal("card has no harmonize cost"))?,
-            SpellCastMethod::Permission => match exile_permission_scope.as_ref() {
-                Some((_, crate::state::ExilePermissionCastCost::AlternativeManaCost(cost))) => {
-                    cost.clone()
-                }
-                _ => {
-                    return Err(EngineError::Illegal(
-                        "permission cast has no alternative mana cost",
-                    ));
-                }
-            },
-            SpellCastMethod::SiegeDefeat | SpellCastMethod::Madness => {
-                match exile_permission_scope.as_ref() {
-                    Some((_, crate::state::ExilePermissionCastCost::AlternativeManaCost(cost)))
-                        if special_method == Some(cast_method) =>
-                    {
+        let as_foretold_use =
+            self.prepare_as_foretold_cost(player, command, &characteristic_face, cast_method)?;
+        if cast_method == SpellCastMethod::Normal
+            && as_foretold_use.is_none()
+            && characteristic_face.mana_cost.is_empty()
+        {
+            return Err(EngineError::Illegal(
+                "a spell with no mana cost requires an alternative cost",
+            ));
+        }
+        let face_mana = if as_foretold_use.is_some() {
+            ManaCost::parse("{0}").expect("constant zero cost")
+        } else {
+            match cast_method {
+                SpellCastMethod::WithoutManaCost => ManaCost::default(),
+                SpellCastMethod::Normal => characteristic_face.mana_cost.clone(),
+                SpellCastMethod::Warp => face
+                    .warp_cost
+                    .clone()
+                    .ok_or(EngineError::Illegal("card has no Warp cost"))?,
+                SpellCastMethod::Sneak => face
+                    .sneak_cost
+                    .clone()
+                    .ok_or(EngineError::Illegal("card has no Sneak cost"))?,
+                SpellCastMethod::Flashback => face
+                    .flashback_cost
+                    .clone()
+                    .ok_or(EngineError::Illegal("card has no flashback cost"))?,
+                SpellCastMethod::Harmonize => face
+                    .harmonize_cost
+                    .clone()
+                    .ok_or(EngineError::Illegal("card has no harmonize cost"))?,
+                SpellCastMethod::Permission => match exile_permission_scope.as_ref() {
+                    Some((_, crate::state::ExilePermissionCastCost::AlternativeManaCost(cost))) => {
                         cost.clone()
                     }
                     _ => {
                         return Err(EngineError::Illegal(
-                            "special cast requires active resolution offer",
+                            "permission cast has no alternative mana cost",
                         ));
+                    }
+                },
+                SpellCastMethod::SiegeDefeat | SpellCastMethod::Madness => {
+                    match exile_permission_scope.as_ref() {
+                        Some((
+                            _,
+                            crate::state::ExilePermissionCastCost::AlternativeManaCost(cost),
+                        )) if special_method == Some(cast_method) => cost.clone(),
+                        _ => {
+                            return Err(EngineError::Illegal(
+                                "special cast requires active resolution offer",
+                            ));
+                        }
                     }
                 }
             }
@@ -1762,6 +1778,7 @@ impl GameEngine {
         )?;
 
         Ok(PreparedSpellCast {
+            as_foretold_use,
             idx,
             oid,
             card_id,
@@ -1836,6 +1853,7 @@ impl GameEngine {
         pending: &PendingSpellCastInternal,
     ) -> Result<RuledEventBatch, EngineError> {
         let PreparedSpellCast {
+            as_foretold_use,
             idx,
             oid,
             card_id,
@@ -2091,6 +2109,9 @@ impl GameEngine {
                 ability_source: None,
             })),
         });
+        if let Some(receipt) = as_foretold_use {
+            self.state.as_foretold_uses.insert(receipt);
+        }
         let fact = self.record_spell_cast(player, oid, origin, mana_value, mana_spent);
         if origin == Zone::Hand && prepare_source.is_none() {
             if let Some(generation) = fact.occurrence.zone_change_generation {
@@ -5507,8 +5528,8 @@ mod cast_snapshot_tests {
         );
         let mut chunks = vec![
             include_str!("../../../tricerules-cards/data/forest.ron"),
-            r#"(id: "snapshot_faerie", name: "Snapshot Faerie", face_id: "snapshot_faerie", types: ["Creature", "Faerie", "Mount"], power: 2, toughness: 2)"#,
-            r#"(id: "snapshot_kindred", name: "Snapshot Kindred", face_id: "snapshot_kindred", types: ["Kindred", "Artifact", "Faerie"],)"#,
+            r#"(id: "snapshot_faerie", name: "Snapshot Faerie", face_id: "snapshot_faerie", mana_cost: "{0}", types: ["Creature", "Faerie", "Mount"], power: 2, toughness: 2)"#,
+            r#"(id: "snapshot_kindred", name: "Snapshot Kindred", face_id: "snapshot_kindred", mana_cost: "{0}", types: ["Kindred", "Artifact", "Faerie"],)"#,
             r#"(id: "snapshot_siege_snapshot_reverse", name: "Snapshot Siege // Snapshot Reverse", layout: Transform, faces: [
                 (name: "Snapshot Siege", face_id: "snapshot_siege", types: ["Battle", "Siege"], defense: 3,
                  cast_conditions: [ActivePlayer(players: Opponents)]),
@@ -5546,7 +5567,7 @@ mod cast_snapshot_tests {
                     (ability_id: "triggered_02", presentation: Fallback, trigger: WheneverPlayerCastsSpell(caster: AnyPlayer, filter: (card_type: Some(Noncreature)), ordinal: Some(2), ordinal_scope: MatchingFilter), effect: [GainLife(amount: 1)], ),
                     (ability_id: "triggered_03", presentation: Fallback, trigger: WheneverPlayerCastsSpell(caster: AnyPlayer, filter: (any_of: Some([(card_type: Some(Noncreature)), (required_subtypes: ["Otter"])]))), effect: [GainLife(amount: 1)], ),
                 ])"#,
-                r#"(id: "history_otter", name: "History Otter", face_id: "history_otter", types: ["Kindred", "Artifact", "Otter"])"#,
+                r#"(id: "history_otter", name: "History Otter", face_id: "history_otter", mana_cost: "{0}", types: ["Kindred", "Artifact", "Otter"])"#,
             ],
         );
         // The watcher arrives after these casts; matching ordinals still include all prior casts.
@@ -5952,7 +5973,7 @@ mod cast_snapshot_tests {
                 include_str!(
                     "../../../tricerules-cards/data/multiface/bonecrusher_giant_stomp.ron"
                 ),
-                r#"(id: "history_shifter", name: "History Shifter", face_id: "history_shifter", types: ["Creature", "Shapeshifter"], power: 1, toughness: 1, characteristic_defining_abilities: [(ability_id: "characteristic_01", presentation: Fallback, definition: Changeling)])"#,
+                r#"(id: "history_shifter", name: "History Shifter", face_id: "history_shifter", mana_cost: "{0}", types: ["Creature", "Shapeshifter"], power: 1, toughness: 1, characteristic_defining_abilities: [(ability_id: "characteristic_01", presentation: Fallback, definition: Changeling)])"#,
                 r#"(id: "history_static", name: "History Static", face_id: "history_static", types: ["Creature"], power: 1, toughness: 1,
                     static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(condition: SpellsCastThisTurn(players: Controller, filter: (origin: Some(Graveyard)), min: Some(1)), delta_power: 2))])"#,
             ],

@@ -1,0 +1,20 @@
+// Oracle e4b3e0af-5caa-47c1-b5be-c56a875cbb15.
+// https://magic.wizards.com/en/news/feature/wilds-of-eldraine-release-notes
+// CR118.9/601: alternative base cost preserves origins, timing and additional costs.
+// Shared controller-history semantics explicitly accepted by the user from Forge/XMage.
+(
+    id: "as_foretold",
+    name: "As Foretold",
+    face_id: "as_foretold",
+    mana_cost: "{2}{U}",
+    types: ["Enchantment"],
+    triggered_abilities: [(
+        ability_id: "triggered_01", presentation: OracleLines([1]),
+        trigger: AtBeginningOfUpkeep(),
+        effect: [PutCounters(counter: Time, count: 1, subject: Source)],
+    )],
+    static_abilities: [(
+        ability_id: "static_01", presentation: OracleLines([2]),
+        definition: AsForetoldAlternativeCost,
+    )],
+)

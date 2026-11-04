@@ -51,6 +51,7 @@ fn full_snapshot(engine: &GameEngine) -> serde_json::Value {
 
 fn spell_announcement(cast: rv1::CastSpell) -> rv1::SpellCastAnnouncement {
     rv1::SpellCastAnnouncement {
+        as_foretold_source: cast.as_foretold_source,
         targets: cast.targets,
         x_value: cast.x_value,
         flex_payments: cast.flex_payments,

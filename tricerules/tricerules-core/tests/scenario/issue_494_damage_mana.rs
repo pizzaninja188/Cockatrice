@@ -112,6 +112,7 @@ fn begin_spell_payment(engine: &mut GameEngine, player: i32, card_id: &str) -> u
         unreachable!("cast announcement")
     };
     let announcement = rv1::SpellCastAnnouncement {
+        as_foretold_source: None,
         targets: cast.targets,
         x_value: cast.x_value,
         flex_payments: cast.flex_payments,

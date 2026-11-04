@@ -12419,6 +12419,121 @@ TEST_F(RuledBatchTest, PublicMovementIdentityIsRestoredOnlyWhenEngineAuthorizesI
     }
 }
 
+TEST(RuledProtocolVisibilityTest, AsForetoldOffersAndAnnouncementHavePrivateFieldClassification)
+{
+    for (const auto *descriptor : {ruled::v1::AsForetoldCostOption::descriptor()}) {
+        for (int i = 0; i < descriptor->field_count(); ++i)
+            EXPECT_EQ(descriptor->field(i)->options().GetExtension(ruled::v1::field_visibility),
+                      ruled::v1::FIELD_VISIBILITY_PER_PLAYER);
+    }
+    for (const auto *descriptor : {ruled::v1::LegalHandAction::descriptor(), ruled::v1::LegalZoneCastAction::descriptor()}) {
+        for (const auto *name : {"as_foretold_costs", "base_cost_unpayable"}) {
+            const auto *field = descriptor->FindFieldByName(name);
+            ASSERT_NE(field, nullptr);
+            EXPECT_EQ(field->options().GetExtension(ruled::v1::field_visibility), ruled::v1::FIELD_VISIBILITY_PER_PLAYER);
+        }
+    }
+    const auto *field = ruled::v1::SpellCastAnnouncement::descriptor()->FindFieldByName("as_foretold_source");
+    ASSERT_NE(field, nullptr);
+    EXPECT_EQ(field->options().GetExtension(ruled::v1::field_visibility), ruled::v1::FIELD_VISIBILITY_PER_PLAYER);
+}
+
+TEST_F(RuledBatchTest, AsForetoldOffersAndPendingSourceArePrivateToCaster)
+{
+    constexpr quint32 sourceId = 731u;
+    constexpr quint64 generation = 8u;
+    seedCardCatalog({"As Foretold"});
+    ASSERT_NE(addCardToTable(p1, QStringLiteral("As Foretold")), nullptr);
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *seedZone = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto view = buildPerPlayerView(p1, {sourceId}, {false});
+    view.mutable_battlefield_objects(0)->set_zone_change_generation(generation);
+    // Artificial hidden identity forces remapping. This fixture tests the relay, not card legality.
+    view.mutable_battlefield_objects(0)->set_face_down(true);
+    *seedZone->add_per_player() = view;
+    *seedZone->add_per_player() = buildPerPlayerView(p2, {}, {});
+    ASSERT_TRUE(callBatchApply(seed).zoneViewApplied);
+    auto *spectator = new Server_Player(game, 3, userA, true, nullptr);
+    insertParticipant(3, spectator);
+    ruled::v1::RuledEventBatch batch = seed.batch();
+    auto &legal = (*batch.mutable_legal_by_player())[p1->getPlayerId()];
+    auto *hand = legal.add_hand_actions();
+    hand->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+    hand->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    hand->set_card_name("Private As Foretold spell");
+    auto *cost = hand->add_as_foretold_costs();
+    cost->set_label("private exact source selection");
+    cost->set_cost("{0}");
+    cost->mutable_source()->set_object_id(sourceId);
+    cost->mutable_source()->set_zone_change_generation(generation);
+    auto *zone = legal.add_zone_cast_actions();
+    *zone->add_as_foretold_costs() = *cost;
+    auto *pending = legal.mutable_pending_spell_cast();
+    pending->set_transaction_id(91);
+    pending->mutable_announcement()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    *pending->mutable_announcement()->mutable_as_foretold_source() = cost->source();
+    ASSERT_TRUE(prepareIdentityBatch(batch));
+    ruled::v1::CostObjectRef receipt;
+    for (Server_AbstractParticipant *recipient : {static_cast<Server_AbstractParticipant *>(p1),
+                                                 static_cast<Server_AbstractParticipant *>(p2),
+                                                 static_cast<Server_AbstractParticipant *>(spectator)}) {
+        const auto projected = redactFor(batch, recipient);
+        if (recipient == p1) {
+            ASSERT_TRUE(projected.legal_by_player().contains(p1->getPlayerId()));
+            const auto &own = projected.legal_by_player().at(p1->getPlayerId());
+            receipt = own.hand_actions(0).as_foretold_costs(0).source();
+            EXPECT_NE(receipt.object_id(), sourceId);
+            EXPECT_NE(receipt.zone_change_generation(), generation);
+            EXPECT_EQ(own.zone_cast_actions(0).as_foretold_costs(0).source().SerializeAsString(), receipt.SerializeAsString());
+            EXPECT_EQ(own.pending_spell_cast().announcement().as_foretold_source().SerializeAsString(), receipt.SerializeAsString());
+        } else {
+            EXPECT_TRUE(projected.legal_by_player().empty());
+            EXPECT_EQ(projected.SerializeAsString().find("private exact source selection"), std::string::npos);
+        }
+    }
+    const auto commandFor = [&](bool begin) {
+        ruled::v1::RuledCommand command;
+        if (begin)
+            *command.mutable_begin_spell_cast()->mutable_announcement()->mutable_as_foretold_source() = receipt;
+        else
+            *command.mutable_cast_spell()->mutable_as_foretold_source() = receipt;
+        return command;
+    };
+    for (const bool begin : {false, true}) {
+        auto command = commandFor(begin);
+        ASSERT_TRUE(canonicalizeClientCommand(p1->getPlayerId(), command));
+        const auto &canonical = begin ? command.begin_spell_cast().announcement().as_foretold_source()
+                                      : command.cast_spell().as_foretold_source();
+        EXPECT_EQ(canonical.object_id(), sourceId);
+        EXPECT_EQ(canonical.zone_change_generation(), generation);
+        auto unissued = commandFor(begin);
+        auto *source = begin ? unissued.mutable_begin_spell_cast()->mutable_announcement()->mutable_as_foretold_source()
+                             : unissued.mutable_cast_spell()->mutable_as_foretold_source();
+        source->set_object_id(0xfffffff0u);
+        EXPECT_FALSE(canonicalizeClientCommand(p1->getPlayerId(), unissued));
+    }
+    // Retire the hidden identity; both old command forms must fail before reaching the engine.
+    ruled::v1::RuledEventBatch replacement;
+    auto *departure = replacement.add_events()->mutable_permanent_moved();
+    departure->set_object_id(sourceId);
+    departure->set_destination(ruled::v1::PermanentMoved::DESTINATION_LIBRARY);
+    departure->set_object_id_publicly_observable(true);
+    auto *identityBreak = replacement.add_events()->mutable_presentation_identity_break();
+    identityBreak->set_object_id(sourceId);
+    identityBreak->set_zone_change_generation(generation + 1);
+    auto *newZone = replacement.add_events()->mutable_zone_view();
+    view.mutable_battlefield_objects(0)->set_zone_change_generation(generation + 1);
+    *newZone->add_per_player() = view;
+    *newZone->add_per_player() = buildPerPlayerView(p2, {}, {});
+    ASSERT_TRUE(prepareIdentityBatch(replacement));
+    redactFor(replacement, p1);
+    for (const bool begin : {false, true}) {
+        auto stale = commandFor(begin);
+        EXPECT_FALSE(canonicalizeClientCommand(p1->getPlayerId(), stale));
+    }
+}
+
 TEST(RuledProtocolVisibilityTest, HybridPhyrexianColorHasAnAppendedPrivateTagAndOldMonoWireCompatibility)
 {
     const auto *field = ruled::v1::FlexPipPayment::descriptor()->FindFieldByName("mana_color");

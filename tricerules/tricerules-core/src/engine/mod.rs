@@ -231,6 +231,9 @@ mod mass_sacrifice;
 #[cfg(test)]
 mod multikicker_tests;
 
+mod as_foretold;
+#[cfg(test)]
+mod as_foretold_tests;
 #[cfg(test)]
 mod hand_free_cast_tests;
 mod opening;
@@ -1922,6 +1925,7 @@ impl GameEngine {
             case_solved_generations: HashMap::new(),
             prepared_permanents: Default::default(),
             prepare_spell_sources: Default::default(),
+            as_foretold_uses: Default::default(),
             captured_spell_copies: Default::default(),
             rebound_spell_grants: BTreeSet::new(),
             hand_cast_holders: BTreeMap::new(),

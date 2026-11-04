@@ -11,6 +11,7 @@ fn begin_cast(command: RuledCommand) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
             announcement: Some(SpellCastAnnouncement {
+                as_foretold_source: None,
                 targets: cast.targets,
                 x_value: cast.x_value,
                 flex_payments: cast.flex_payments,

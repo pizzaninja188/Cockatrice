@@ -2187,6 +2187,8 @@ fn hand_action(
     needs_target: bool,
 ) -> rv1::LegalHandAction {
     rv1::LegalHandAction {
+        as_foretold_costs: Vec::new(),
+        base_cost_unpayable: false,
         kind: kind as i32,
         hand_index: hand_index as u32,
         card_name: card_name.to_string(),
@@ -2516,7 +2518,36 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
             }
         }
     }
+    for action in &mut actions {
+        if action.kind != rv1::HandActionKind::HandActionCastSpell as i32
+            || action.cast_method != rv1::CastMethod::Normal as i32
+        {
+            continue;
+        }
+        let oid = eng.state.players[player_index].hand[action.hand_index as usize];
+        if let Some(face) = as_foretold_cast_face(eng, oid, action.face_index, action.prototyped) {
+            action.as_foretold_costs = eng.as_foretold_cost_options(pid, &face);
+            action.base_cost_unpayable = face.mana_cost.is_empty();
+        }
+    }
+    actions.retain(|action| !action.base_cost_unpayable || !action.as_foretold_costs.is_empty());
     actions
+}
+
+fn as_foretold_cast_face(
+    eng: &GameEngine,
+    oid: ObjectId,
+    face_index: u32,
+    prototyped: bool,
+) -> Option<CardFace> {
+    let object = eng.state.objects.get(&oid)?;
+    let definition = eng.registry.get(&object.card_id)?;
+    let face = definition.face(face_index as usize)?;
+    if prototyped {
+        face.prototyped_face()
+    } else {
+        Some((*face).clone())
+    }
 }
 
 pub(super) fn legal_zone_cast_actions(
@@ -2594,6 +2625,8 @@ pub(super) fn legal_zone_cast_actions(
                     continue;
                 }
                 let mut action = rv1::LegalZoneCastAction {
+                    as_foretold_costs: Vec::new(),
+                    base_cost_unpayable: false,
                     source_zone: rv1::CastSourceZone::Graveyard as i32,
                     object_id: oid,
                     zone_change_generation: eng
@@ -2751,6 +2784,8 @@ pub(super) fn legal_zone_cast_actions(
                 _ => cast_method,
             };
             let mut action = rv1::LegalZoneCastAction {
+                as_foretold_costs: Vec::new(),
+                base_cost_unpayable: false,
                 source_zone: rv1::CastSourceZone::Exile as i32,
                 object_id: object.id,
                 zone_change_generation: generation,
@@ -2907,6 +2942,20 @@ pub(super) fn legal_zone_cast_actions(
             }
         }
     }
+    if !special {
+        for action in &mut actions {
+            if action.cast_method != rv1::CastMethod::Normal as i32 {
+                continue;
+            }
+            if let Some(face) =
+                as_foretold_cast_face(eng, action.object_id, action.face_index, action.prototyped)
+            {
+                action.as_foretold_costs = eng.as_foretold_cost_options(pid, &face);
+                action.base_cost_unpayable = face.mana_cost.is_empty();
+            }
+        }
+    }
+    actions.retain(|action| !action.base_cost_unpayable || !action.as_foretold_costs.is_empty());
     actions
 }
 
@@ -2962,6 +3011,8 @@ fn legal_zone_face_cast_actions(
     )
     .has_targets();
     let mut action = rv1::LegalZoneCastAction {
+        as_foretold_costs: Vec::new(),
+        base_cost_unpayable: false,
         source_zone: match legendary_zone {
             Some(Zone::Graveyard) => rv1::CastSourceZone::Graveyard,
             Some(Zone::Exile) => rv1::CastSourceZone::Exile,

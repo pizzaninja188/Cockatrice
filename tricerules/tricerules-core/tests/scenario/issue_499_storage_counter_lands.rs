@@ -600,6 +600,7 @@ fn begin_opt_cast(engine: &mut GameEngine) -> u64 {
         unreachable!()
     };
     let announcement = SpellCastAnnouncement {
+        as_foretold_source: None,
         targets: cast.targets,
         x_value: cast.x_value,
         flex_payments: cast.flex_payments,

@@ -73,10 +73,11 @@ bool supportedSchema()
             appendEnum(contract, file->enum_type(i));
         const QByteArray digest = QCryptographicHash::hash(
             QByteArray(contract.data(), static_cast<qsizetype>(contract.size())), QCryptographicHash::Sha256).toHex();
-        // Counter allocation appends a public per-target quantity and private fixed-total/group
-        // metadata. These are amounts/indices, never object/player/slot identities. The bounded
-        // descriptor audit preserves existing domains and recursive per-player projection.
-        const QByteArray expected("65c35ff2b0b350f6af63aa3bf5d6db181f3306197290d46c731060cb63065aed");
+        // As Foretold appends private offers and an exact source receipt to cast commands and
+        // announcements. Recursive CostObjectRef pair translation covers these nested identities;
+        // labels, costs and the unpayable-base flag introduce no identity domain. Audited descriptor
+        // changes preserve all existing fields; remapping and recipient isolation have regressions.
+        const QByteArray expected("e6858ee30123d767e86d5786220aeed45d313b2d5616d803e36851e532110465");
         if (digest != expected)
             qCritical() << "ruled presentation schema needs an identity audit:" << digest;
         return digest == expected;

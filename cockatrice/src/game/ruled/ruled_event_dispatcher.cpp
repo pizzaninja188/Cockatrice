@@ -710,6 +710,22 @@ RuledAbilityEntry parseAbilityInfo(const ruled::v1::AbilityInfo &ability, const 
     return parsed;
 }
 
+template <typename Action>
+void appendCastFaceOptions(QVector<RuledFaceOption> &options, const RuledFaceOption &base, const Action &action)
+{
+    if (!action.base_cost_unpayable())
+        options.append(base);
+    for (const auto &cost : action.as_foretold_costs()) {
+        if (!cost.has_source() || cost.source().object_id() == 0)
+            continue;
+        auto choice = base;
+        choice.asForetoldSource = RuledAsForetoldSource{cost.source().object_id(), cost.source().zone_change_generation()};
+        choice.asForetoldLabel = QString::fromStdString(cost.label());
+        choice.manaCost = QString::fromStdString(cost.cost());
+        options.append(std::move(choice));
+    }
+}
+
 /// Copies the engine's structured hand-action contract into the generic client-side indexes.
 QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::LegalActions &actions,
                                                                const RuledPresentationResolver &resolver)
@@ -729,9 +745,9 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
         set.handIndices.insert(handIndex);
         const QString cardName = QString::fromStdString(action.card_name());
         set.indicesByCardName.insert(cardName, handIndex);
-        set.faceOptionsByIndex[handIndex].append({faceIndex, cardName, QString::fromStdString(action.cost()),
+        appendCastFaceOptions(set.faceOptionsByIndex[handIndex], {faceIndex, cardName, QString::fromStdString(action.cost()),
                                                   static_cast<int>(action.generic_cost_reduction()), method,
-                                                  action.has_convoke(), 0, 0, QString{}, prototyped});
+                                                  action.has_convoke(), 0, 0, QString{}, prototyped}, action);
         if (action.has_cost_choices()) {
             set.costDataByCastKey.insert(castKey, parseCostData(action.cost_choices(), resolver));
         }
@@ -2860,11 +2876,11 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
             displayName += tr(" — Harmonize");
         }
         state->zoneCastActions.indicesByCardName.insert(cardName, objectId);
-        state->zoneCastActions.faceOptionsByIndex[objectId].append(
+        appendCastFaceOptions(state->zoneCastActions.faceOptionsByIndex[objectId],
             {faceIndex, displayName, QString::fromStdString(action.cost()),
              static_cast<int>(action.generic_cost_reduction()), castMethod, action.has_convoke(),
              action.zone_change_generation(), castingPermissionId,
-             permissionGroups.value(castingPermissionId).sourceLabel, prototyped});
+             permissionGroups.value(castingPermissionId).sourceLabel, prototyped}, action);
         state->zoneCastSourceByOid.insert(objectId, source);
         if (source == RuledCastSource::Exile && action.has_preparation_source()) {
             const auto &preparedSource = action.preparation_source();

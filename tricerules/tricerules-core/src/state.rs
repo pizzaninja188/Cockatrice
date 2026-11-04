@@ -4537,6 +4537,8 @@ pub struct GameState {
     pub prepared_permanents: BTreeMap<ObjectId, PreparedPermanentDesignation>,
     /// Copies keep their prepare-spell classification on the stack, independently of the source.
     pub prepare_spell_sources: BTreeMap<ObjectId, TriggerObjectRef>,
+    /// Accepted shared-source As Foretold history: actual turn, object, incarnation. Not per player.
+    pub(crate) as_foretold_uses: BTreeSet<(u64, ObjectId, u64)>,
     /// Event-time spell choices for delayed copy triggers, keyed by the trigger's unique id.
     pub captured_spell_copies: BTreeMap<ObjectId, StackItem>,
     /// Internal CR 702.88 grant foundation, keyed by the exact committed cast occurrence.

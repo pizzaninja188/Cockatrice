@@ -31,8 +31,8 @@ QVector<RuledFaceOption> RuledClientState::handActionFaceOptions(RuledHandAction
 {
     QVector<RuledFaceOption> options = handActionSet(kind).faceOptionsByIndex.value(handIndex);
     std::sort(options.begin(), options.end(), [](const RuledFaceOption &a, const RuledFaceOption &b) {
-        return std::tie(a.faceIndex, a.castMethod, a.prototyped) <
-               std::tie(b.faceIndex, b.castMethod, b.prototyped);
+        return std::tie(a.faceIndex, a.castMethod, a.prototyped, a.asForetoldSource) <
+               std::tie(b.faceIndex, b.castMethod, b.prototyped, b.asForetoldSource);
     });
     return options;
 }

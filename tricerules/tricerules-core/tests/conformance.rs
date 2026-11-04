@@ -1292,6 +1292,7 @@ fn grouped_offer_choices_are_typed_and_stale_payment_is_rejected() {
         &RuledCommand {
             cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
                 announcement: Some(SpellCastAnnouncement {
+                    as_foretold_source: None,
                     targets: cast.targets,
                     x_value: cast.x_value,
                     flex_payments: cast.flex_payments,

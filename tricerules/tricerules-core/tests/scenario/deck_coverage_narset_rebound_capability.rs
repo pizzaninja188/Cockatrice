@@ -699,6 +699,7 @@ fn failed_spell_cast_commit_then_cancel_does_not_consume_observer() {
                 cmd: Some(Cmd::BeginSpellCast(
                     tricerules_proto::ruled::v1::BeginSpellCast {
                         announcement: Some(tricerules_proto::ruled::v1::SpellCastAnnouncement {
+                            as_foretold_source: None,
                             targets: cast.targets,
                             x_value: cast.x_value,
                             flex_payments: cast.flex_payments,

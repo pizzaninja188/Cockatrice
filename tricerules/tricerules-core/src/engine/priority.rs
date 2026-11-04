@@ -2273,6 +2273,7 @@ impl GameEngine {
             self.state.turn = self.state.turn.saturating_add(1);
         }
         self.state.turn_instance = self.state.turn_instance.saturating_add(1);
+        self.state.as_foretold_uses.clear();
         self.state.trigger_uses_this_turn.clear();
         self.state.trigger_modes_used_this_turn.clear();
         let ap = self.state.active_player_id();

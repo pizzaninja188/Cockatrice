@@ -814,10 +814,11 @@ bool RuledPendingCast::reconcileSpellCosts(const RuledClientState &state, int lo
     if (spell.valid) {
         const bool sourceStillLegal =
             spell.source == RuledCastSource::Hand
-                ? state.isHandCastActionLegal(spell.handIndex, spell.faceIndex, spell.castMethod, spell.prototyped)
+                ? state.isHandCastActionLegal(spell.handIndex, spell.faceIndex, spell.castMethod, spell.prototyped,
+                                               spell.asForetoldSource)
                 : state.isZoneCastActionLegal(static_cast<quint32>(spell.handIndex), spell.faceIndex, spell.source,
                                               spell.castMethod, spell.castingPermissionId,
-                                              spell.sourceZoneChangeGeneration, spell.prototyped);
+                                              spell.sourceZoneChangeGeneration, spell.prototyped, spell.asForetoldSource);
         const auto latest = state.spellCostData(spell.handIndex, spell.faceIndex, spell.source, spell.castMethod,
                                                 spell.castingPermissionId, spell.prototyped);
         const bool castCostSelectionsStillLegal =

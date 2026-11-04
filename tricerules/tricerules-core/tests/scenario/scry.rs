@@ -157,7 +157,7 @@ fn program_scry_count_fixture(count: u32) -> String {
   id: "program_scry_count_{count}_fixture",
   name: "Program Scry Count {count} Fixture",
   face_id: "program_scry_count_{count}_fixture",
-  mana_cost: "",
+  mana_cost: "{{0}}",
   types: ["Instant"],
   spell_program: Some((body: (steps: [
     (id: "scry", bind: [], input: None, kind: Perform(Scry(count: {count}))),
