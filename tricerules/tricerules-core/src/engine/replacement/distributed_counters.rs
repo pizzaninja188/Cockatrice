@@ -128,30 +128,7 @@ impl GameEngine {
             {
                 return Err(invalid());
             }
-            let mut replayed = event.clone();
-            replayed.counters = baseline;
-            replayed.effect_created_counters = true;
-            replayed.applied_replacements.clear();
-            let mut seen = BTreeSet::new();
-            for replacement in &event.applied_replacements {
-                if !replayed.counters.values().any(|count| *count > 0)
-                    || replacement.ability_id.trim().is_empty()
-                    || !seen.insert((
-                        replacement.source_object_id,
-                        replacement.source_zone_change_generation,
-                        replacement.ability_id.as_str(),
-                    ))
-                {
-                    return Err(invalid());
-                }
-                // Accepted instances are immutable receipts. Their source may have departed;
-                // only still-unapplied replacement candidates consult current battlefield state.
-                Self::apply_counter_replacement(&mut replayed, replacement);
-            }
-            if replayed.counters != event.counters
-                || replayed.effect_created_counters != event.effect_created_counters
-                || replayed.applied_replacements != event.applied_replacements
-            {
+            if !Self::counter_placement_has_authenticated_replacement_history(event, true) {
                 return Err(invalid());
             }
         }

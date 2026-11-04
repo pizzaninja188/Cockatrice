@@ -1735,9 +1735,19 @@ impl GameEngine {
             return false;
         }
 
+        Self::counter_placement_has_authenticated_replacement_history(event, false)
+    }
+
+    /// Replay immutable accepted receipts from the caller-authenticated original instruction.
+    /// Callers retain recipient/scope checks and any restrictions on replacement kinds. An
+    /// accepted source may have left, so replay must not consult current battlefield state.
+    pub(super) fn counter_placement_has_authenticated_replacement_history(
+        event: &ProposedCounterPlacement,
+        initially_effect_created: bool,
+    ) -> bool {
         let mut replayed = event.clone();
         replayed.counters = event.original_counters.clone();
-        replayed.effect_created_counters = false;
+        replayed.effect_created_counters = initially_effect_created;
         replayed.applied_replacements.clear();
         let mut applied = BTreeSet::new();
         for replacement in &event.applied_replacements {
