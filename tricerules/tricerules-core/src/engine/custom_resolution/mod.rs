@@ -17,8 +17,8 @@ use super::resolution::{
 };
 use super::targeting::{
     artifact_exchange_player, capture_stack_target, compute_copy_targets_with_context_and_program,
-    face_mode_program, face_program, target_role_legality_error, target_schema_with_program,
-    TargetResolutionContext, TargetSourceIdentity,
+    face_mode_program, face_program, required_target_controller_is_current, runtime_target_schema,
+    target_role_legality_error, TargetResolutionContext, TargetSourceIdentity,
 };
 use super::*;
 use crate::state::{PendingTargetedPlayerChoiceStage, SpecialCastCompletion};

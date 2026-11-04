@@ -377,13 +377,28 @@ impl GameEngine {
             trigger_context,
             program,
         );
-        targets
+        let mut group = targets
             .groups
             .into_iter()
             .find(|group| group.group_index == occurrence.group_index)
             .ok_or(EngineError::ProgramInvariant(
                 "copy target occurrence references an unknown group",
-            ))
+            ))?;
+        group.valid_permanent_ids.retain(|object_id| {
+            required_target_controller_is_current(
+                self,
+                *object_id,
+                occurrence.original.required_controller,
+            )
+        });
+        group.valid_permanent_targets.retain(|target| {
+            required_target_controller_is_current(
+                self,
+                target.object_id,
+                occurrence.original.required_controller,
+            )
+        });
+        Ok(group)
     }
 
     /// Consume one typed choice for one occurrence. Empty selection is the explicit
@@ -551,7 +566,7 @@ impl GameEngine {
     ) -> Result<(), EngineError> {
         let (effects, targeting, program) =
             self.copy_target_data(item, occurrence.mode_id.as_ref())?;
-        let schema = target_schema_with_program(effects, targeting, program);
+        let schema = runtime_target_schema(self, item.controller, effects, targeting, program).0;
         let group = schema.groups.get(occurrence.group_index as usize).ok_or(
             EngineError::ProgramInvariant(
                 "copy target occurrence references an unknown target group",
@@ -578,6 +593,15 @@ impl GameEngine {
             return Err(EngineError::Illegal("copy target generation is required"));
         }
         let source = TargetSourceIdentity::for_stack_item(self, item);
+        if !required_target_controller_is_current(
+            self,
+            target.object_id,
+            occurrence.original.required_controller,
+        ) {
+            return Err(EngineError::Illegal(
+                "changed copy target must retain its bound controller",
+            ));
+        }
         for binding in &group.bindings {
             target_role_legality_error(
                 self,
@@ -610,7 +634,8 @@ impl GameEngine {
         }
         for mode_id in mode_ids {
             let (effects, targeting, program) = self.copy_target_data(item, mode_id.as_ref())?;
-            let schema = target_schema_with_program(effects, targeting, program);
+            let schema =
+                runtime_target_schema(self, item.controller, effects, targeting, program).0;
             let owner_occurrences = occurrences
                 .iter()
                 .enumerate()

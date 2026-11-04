@@ -59,6 +59,10 @@ pub struct TargetingDef {
 /// requirements of every referenced effect.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TargetGroupDef {
+    /// Vronos and Grasp of Fate's target contract: one optional slot for each opponent.
+    /// Currently admitted only for a flat battlefield activated owner-hand return.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub for_each_opponent: bool,
     /// Arena and Magus of the Arena delegate this group's announcement under CR 602.3.
     #[serde(default, skip_serializing_if = "TargetChooser::is_controller")]
     pub chooser: TargetChooser,
@@ -192,6 +196,9 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
         effects: &'effects [SpellEffectKind],
         targeting: Option<&'targeting TargetingDef>,
     ) -> Result<Self, String> {
+        if targeting.is_some_and(TargetingDef::requires_per_opponent_targets) {
+            TargetingDef::validate_per_opponent_profile(targeting.expect("checked"), effects)?;
+        }
         let roles = effects
             .iter()
             .map(SpellEffectKind::target_roles)
@@ -425,6 +432,11 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
         program: &'effects CompiledProgram,
         targeting: Option<&'targeting TargetingDef>,
     ) -> Result<Self, String> {
+        if targeting.is_some_and(TargetingDef::requires_per_opponent_targets) {
+            return Err(
+                "per-opponent targeting requires a flat battlefield activated ability".into(),
+            );
+        }
         let mut effects_by_address = HashMap::new();
         let mut roles_by_address = HashMap::new();
         let mut targeted_choosers_by_address = HashMap::new();
@@ -1176,6 +1188,37 @@ fn collect_program_target_roles<'a>(
 }
 
 impl TargetingDef {
+    pub fn requires_per_opponent_targets(&self) -> bool {
+        self.groups.iter().any(|group| group.for_each_opponent)
+    }
+
+    fn validate_per_opponent_profile(&self, effects: &[SpellEffectKind]) -> Result<(), String> {
+        let expected_filter = TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            controller: TargetController::Opponent,
+            excluded_permanent_types: vec![super::PermanentTypeFilter::Land],
+            ..TargetFilter::default()
+        };
+        let [group] = self.groups.as_slice() else {
+            return Err("per-opponent targeting requires one group template".into());
+        };
+        if !group.for_each_opponent
+            || group.chooser != TargetChooser::Controller
+            || group.min != 0
+            || group.max != 1
+            || group.effect_indices != [0]
+            || !group.distinct_from.is_empty()
+            || group.same_graveyard
+            || group.cast_cost_expansion.is_some()
+            || !matches!(effects, [SpellEffectKind::ReturnToOwnersHand {
+                subject: super::EffectSubject::Chosen(filter)
+            }] if **filter == expected_filter)
+        {
+            return Err("per-opponent targeting requires an optional controller-chosen nonland opponent permanent owner-hand return".into());
+        }
+        Ok(())
+    }
+
     pub fn requires_opponent_choice(&self) -> bool {
         self.groups
             .iter()
@@ -1183,6 +1226,11 @@ impl TargetingDef {
     }
 
     pub(crate) fn validate_nonactivated_program(targeting: Option<&Self>) -> Result<(), String> {
+        if targeting.is_some_and(Self::requires_per_opponent_targets) {
+            return Err(
+                "per-opponent targeting requires a flat battlefield activated ability".into(),
+            );
+        }
         if targeting.is_some_and(Self::requires_opponent_choice) {
             return Err("opponent target choices require a supported activated ability".into());
         }
@@ -1257,6 +1305,11 @@ impl TargetingDef {
         targeting: Option<&Self>,
         effects: &[SpellEffectKind],
     ) -> Result<(), String> {
+        if targeting.is_some_and(Self::requires_per_opponent_targets) {
+            return Err(
+                "per-opponent targeting requires a flat battlefield activated ability".into(),
+            );
+        }
         if targeting.is_some_and(Self::requires_opponent_choice) {
             return Err("opponent target choices require a supported activated ability".into());
         }
@@ -1270,6 +1323,11 @@ impl TargetingDef {
         source_zone: super::AbilitySourceZone,
         costs: &[super::AbilityCost],
     ) -> Result<(), String> {
+        if targeting.is_some_and(Self::requires_per_opponent_targets)
+            && source_zone != super::AbilitySourceZone::Battlefield
+        {
+            return Err("per-opponent targeting requires a battlefield activated ability".into());
+        }
         Self::validate_kaya_exile_target_binding(targeting, effects)?;
         let schema = TargetSchema::compile(effects, targeting)?;
         Self::validate_equip_planeswalker_binding(effects, &schema, targeting)?;
@@ -2386,6 +2444,7 @@ mod tests {
     fn target_group(min: u32, max: u32, effect_indices: Vec<u32>) -> TargetingDef {
         TargetingDef {
             groups: vec![TargetGroupDef {
+                for_each_opponent: false,
                 chooser: TargetChooser::Controller,
                 min,
                 max,
@@ -2400,6 +2459,7 @@ mod tests {
 
     fn counter_move_targeting() -> TargetingDef {
         let group = |prompt: &str, distinct_from| TargetGroupDef {
+            for_each_opponent: false,
             chooser: TargetChooser::Controller,
             min: 1,
             max: 1,
@@ -2442,6 +2502,7 @@ mod tests {
 
         let mut extra_group = valid.clone();
         extra_group.groups.push(TargetGroupDef {
+            for_each_opponent: false,
             chooser: TargetChooser::Controller,
             min: 1,
             max: 1,
@@ -2627,6 +2688,7 @@ mod tests {
         for (min, max) in [(0, 1), (1, 2)] {
             let targeting = TargetingDef {
                 groups: vec![TargetGroupDef {
+                    for_each_opponent: false,
                     chooser: Default::default(),
                     min,
                     max,
@@ -2670,6 +2732,7 @@ mod tests {
         ];
         let targeting = TargetingDef {
             groups: vec![TargetGroupDef {
+                for_each_opponent: false,
                 chooser: TargetChooser::Controller,
                 min: 1,
                 max: 1,
@@ -2706,6 +2769,7 @@ mod tests {
         );
         let group = |min, max| TargetingDef {
             groups: vec![TargetGroupDef {
+                for_each_opponent: false,
                 chooser: Default::default(),
                 min,
                 max,
@@ -2889,6 +2953,7 @@ mod tests {
         let targeting = TargetingDef {
             groups: vec![
                 TargetGroupDef {
+                    for_each_opponent: false,
                     chooser: Default::default(),
                     min: 1,
                     max: 1,
@@ -2899,6 +2964,7 @@ mod tests {
                     cast_cost_expansion: None,
                 },
                 TargetGroupDef {
+                    for_each_opponent: false,
                     chooser: Default::default(),
                     min: 1,
                     max: 1,
@@ -2983,6 +3049,7 @@ mod tests {
         }];
         let same_graveyard = TargetingDef {
             groups: vec![TargetGroupDef {
+                for_each_opponent: false,
                 chooser: Default::default(),
                 min: 0,
                 max: 2,

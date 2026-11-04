@@ -20,6 +20,7 @@ fn token_copy_requires_one_permanent_source() {
     };
     let targeting = TargetingDef {
         groups: vec![TargetGroupDef {
+            for_each_opponent: false,
             chooser: Default::default(),
             min: 1,
             max: 2,

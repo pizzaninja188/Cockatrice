@@ -5846,6 +5846,7 @@ mod luxior_model_contract_tests {
     ) -> crate::primitives::TargetGroupDef {
         crate::primitives::TargetGroupDef {
             chooser,
+            for_each_opponent: false,
             min,
             max,
             prompt: "Choose a planeswalker you control".into(),

@@ -122,6 +122,60 @@ pub(super) fn target_schema_with_program<'effects, 'targeting>(
         .expect("card registry validated authored program target schema")
 }
 
+/// Expand Vronos's one optional target per opponent without changing the wire schema.
+/// Seats are never removed/reordered in this engine; allocate lost opponents' empty slots too.
+/// Occupied slots additionally retain their controller in the existing StackTarget receipt.
+pub(super) fn runtime_target_schema<'effects, 'targeting>(
+    engine: &GameEngine,
+    controller: PlayerId,
+    effects: &'effects [SpellEffectKind],
+    targeting: Option<&'targeting TargetingDef>,
+    program: Option<&'effects CompiledProgram>,
+) -> (TargetSchema<'effects, 'targeting>, Vec<Option<PlayerId>>) {
+    let mut schema = target_schema_with_program(effects, targeting, program);
+    if !targeting.is_some_and(TargetingDef::requires_per_opponent_targets) {
+        return (schema, Vec::new());
+    }
+    let template = schema.groups.remove(0);
+    let mut controllers = Vec::new();
+    for player in &engine.state.players {
+        if engine.state.are_opponents(controller, player.id) {
+            let mut group = template.clone();
+            group.prompt = format!("{} (player {})", group.prompt, player.id).into();
+            schema.groups.push(group);
+            controllers.push(Some(player.id));
+        }
+    }
+    // CR 115.3: this family expands one printed instance of "target". Keeping an illegal
+    // original during retargeting must not allow that same incarnation in another slot.
+    let count = schema.groups.len();
+    for (index, group) in schema.groups.iter_mut().enumerate() {
+        group.distinct_from = (0..count)
+            .filter(|other| *other != index)
+            .map(|other| other as u32)
+            .collect::<Vec<_>>()
+            .into();
+    }
+    (schema, controllers)
+}
+
+pub(super) fn required_target_controller_is_current(
+    engine: &GameEngine,
+    object_id: ObjectId,
+    required: Option<PlayerId>,
+) -> bool {
+    required.is_none_or(|player| {
+        engine
+            .state
+            .players
+            .iter()
+            .any(|state| state.id == player && !state.has_lost)
+            && engine
+                .characteristics(object_id)
+                .is_some_and(|value| value.controller == player)
+    })
+}
+
 /// The authored/legacy target data and event-time context consumed by one targeting operation.
 /// Keeping this together prevents candidate publication and command validation from diverging.
 #[derive(Clone, Copy)]
@@ -1600,7 +1654,9 @@ fn validate_grouped_targets(
     targets: &[rv1::TargetRef],
     target_context: TargetResolutionContext<'_>,
 ) -> Result<(), EngineError> {
-    let schema = target_schema_with_program(
+    let (schema, controllers) = runtime_target_schema(
+        engine,
+        caster,
         target_context.effects,
         target_context.targeting,
         target_context.program,
@@ -1665,6 +1721,14 @@ fn validate_grouped_targets(
         let mut seen = std::collections::HashSet::new();
         let mut graveyard_owner = None;
         for target in selected {
+            if let Some(required) = controllers.get(group_index) {
+                if target.kind != rv1::TargetRefKind::Permanent as i32
+                    || target.expected_zone_change_generation.is_none()
+                    || !required_target_controller_is_current(engine, target.object_id, *required)
+                {
+                    return Err(EngineError::Illegal("per-opponent target requires its bound controller and exact permanent generation"));
+                }
+            }
             if !target_ref_domain_exists(engine, target) {
                 return Err(EngineError::Illegal(
                     "target kind does not match the referenced game object",
@@ -2063,7 +2127,9 @@ fn compute_targets_with_context(
         }
     }
 
-    let schema = target_schema_with_program(
+    let (schema, controllers) = runtime_target_schema(
+        engine,
+        caster,
         target_context.effects,
         target_context.targeting,
         target_context.program,
@@ -2074,7 +2140,11 @@ fn compute_targets_with_context(
         .enumerate()
         .map(|(group_index, group)| {
             let legal = |object_id| {
-                group.bindings.iter().all(|binding| {
+                required_target_controller_is_current(
+                    engine,
+                    object_id,
+                    controllers.get(group_index).copied().flatten(),
+                ) && group.bindings.iter().all(|binding| {
                     target_role_legality_error(
                         engine,
                         binding.role,
@@ -3656,6 +3726,7 @@ mod tests {
         let targeting = TargetingDef {
             groups: vec![
                 TargetGroupDef {
+                    for_each_opponent: false,
                     chooser: Default::default(),
                     min: 1,
                     max: 1,
@@ -3666,6 +3737,7 @@ mod tests {
                     cast_cost_expansion: None,
                 },
                 TargetGroupDef {
+                    for_each_opponent: false,
                     chooser: Default::default(),
                     min: 1,
                     max: 1,

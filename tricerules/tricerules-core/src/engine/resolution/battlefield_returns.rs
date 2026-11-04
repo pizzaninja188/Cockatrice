@@ -41,10 +41,13 @@ pub(super) fn return_to_owners_hand(
             battlefield_objects_matching(cx.engine, &kind)
         }
         SpellEffectKind::ReturnToOwnersHand { subject } => {
-            if matches!(
-                subject,
-                EffectSubject::Chosen(_) | EffectSubject::PreviousEffectObject
-            ) {
+            if matches!(subject, EffectSubject::Chosen(_)) {
+                // One authored role may expand to optional slots for several opponents. Move
+                // their legal incarnations in one cohort, including commander replacement choices.
+                (0..cx.targets_by_role.len())
+                    .flat_map(|role| cx.current_battlefield_targets(role))
+                    .collect()
+            } else if matches!(subject, EffectSubject::PreviousEffectObject) {
                 cx.resolve_battlefield_subjects(&subject)
             } else {
                 resolve_zone_effect_subject(

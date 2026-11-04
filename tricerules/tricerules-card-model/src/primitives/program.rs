@@ -6913,6 +6913,7 @@ mod scalar_program_input_tests {
         };
         let targeting = TargetingDef {
             groups: vec![super::super::TargetGroupDef {
+                for_each_opponent: false,
                 chooser: super::super::TargetChooser::Controller,
                 min: 1,
                 max: 1,
@@ -7215,6 +7216,7 @@ mod scalar_program_input_tests {
         };
         let targeting = TargetingDef {
             groups: vec![super::super::TargetGroupDef {
+                for_each_opponent: false,
                 chooser: super::super::TargetChooser::Controller,
                 min: 1,
                 max: 1,
@@ -7330,6 +7332,7 @@ mod target_exile_result_tests {
         };
         let targeting = TargetingDef {
             groups: vec![super::super::TargetGroupDef {
+                for_each_opponent: false,
                 chooser: super::super::TargetChooser::Controller,
                 min,
                 max: 1,
@@ -7423,6 +7426,7 @@ mod target_exile_result_tests {
         };
         let targeting = TargetingDef {
             groups: vec![super::super::TargetGroupDef {
+                for_each_opponent: false,
                 chooser: super::super::TargetChooser::Controller,
                 min,
                 max,
@@ -7512,6 +7516,7 @@ mod target_exile_result_tests {
         };
         let targeting = TargetingDef {
             groups: vec![super::super::TargetGroupDef {
+                for_each_opponent: false,
                 chooser: super::super::TargetChooser::Controller,
                 min: 1,
                 max: 1,
@@ -7724,6 +7729,7 @@ mod target_exile_result_tests {
         };
         *who = PlayerRecipient::ControllerOfTargetGroup { group_index: 1 };
         targeting.groups.push(super::super::TargetGroupDef {
+            for_each_opponent: false,
             chooser: super::super::TargetChooser::Controller,
             min: 1,
             max: 1,
@@ -7789,6 +7795,7 @@ mod target_exile_result_tests {
             target_group_index: 1,
         });
         targeting.groups.push(super::super::TargetGroupDef {
+            for_each_opponent: false,
             chooser: super::super::TargetChooser::Controller,
             min: 0,
             max: 1,
@@ -7940,6 +7947,7 @@ mod target_exile_result_tests {
         };
         let targeting = TargetingDef {
             groups: vec![super::super::TargetGroupDef {
+                for_each_opponent: false,
                 chooser: super::super::TargetChooser::Controller,
                 min: 1,
                 max: 1,

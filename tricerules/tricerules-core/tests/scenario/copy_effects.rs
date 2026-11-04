@@ -247,6 +247,7 @@ fn token_copy_inline_ability_preserves_explicit_target_groups() {
     face.activated_abilities[0].targeting = Some(TargetingDef {
         groups: (0..2)
             .map(|index| TargetGroupDef {
+                for_each_opponent: false,
                 chooser: Default::default(),
                 min: 1,
                 max: 1,

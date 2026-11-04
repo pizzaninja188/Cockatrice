@@ -1363,3 +1363,9 @@ mod deck_coverage_narset_emblem_capability;
 
 #[path = "scenario/deck_coverage_ajani_sleeper_agent.rs"]
 mod deck_coverage_ajani_sleeper_agent;
+
+#[path = "scenario/vronos_per_opponent.rs"]
+mod vronos_per_opponent;
+
+#[path = "scenario/deck_coverage_vronos_masked_inquisitor.rs"]
+mod deck_coverage_vronos_masked_inquisitor;

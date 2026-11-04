@@ -1507,6 +1507,20 @@ metadata or the external card database; display text never determines legality.
 
 ### Keep target prompts narrow
 
+`TargetGroupDef.for_each_opponent: true` expands one optional controller-chosen target slot
+for each opponent. Vronos and Grasp of Fate share this target contract; currently admission is
+limited to Vronos's flat battlefield activated `ReturnToOwnersHand(Chosen(...))` profile:
+one group, `min: 0`, `max: 1`, `effect_indices: [0]`, and the exact `AnyPermanent` filter with
+`controller: Opponent` and `excluded_permanent_types: [Land]`. Do not combine it with other
+groups, cast-cost expansion, delegated choices, Programs, modes, spell/trigger owners or
+resolving-created ability grants. Grasp of Fate's linked exile is not admitted by this profile.
+Runtime slots retain stable roster order, including empty departed-opponent slots; selected
+targets capture the required opponent. Same-controller copies preserve occupied/skipped slots,
+allow keeping illegal originals, and change targets only within their original opponent role.
+All legal return targets form one simultaneous owner-hand cohort, including commander choices.
+The generated slots are mutually distinct for the single printed target instance (CR 115.3),
+including illegal targets retained on a copy. Distinctness compares full object incarnations.
+
 `TargetGroupDef.prompt` is the narrow exception to the no-prose rule. It provides short,
 effect-specific click guidance such as `Choose target creature you control`. It is combined with
 the spell's face name, the selected mode's presentation, or the ability presentation and does not

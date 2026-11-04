@@ -349,6 +349,13 @@ impl ActivatedAbilityDef {
     /// A resolving grant has no stable ability-definition owner in the registry, so it cannot
     /// refer to an authored program that needs an exact compiled owner.
     pub(crate) fn reject_unowned_authored_program(&self) -> Result<(), String> {
+        if self
+            .targeting
+            .as_ref()
+            .is_some_and(TargetingDef::requires_per_opponent_targets)
+        {
+            return Err("resolving-created abilities cannot use per-opponent targeting".into());
+        }
         if self.program.is_some() {
             return Err("resolving-created abilities cannot use authored programs".into());
         }
@@ -376,6 +383,13 @@ impl ActivatedAbilityDef {
             return Err("trigger mode selection restrictions require a triggered ability".into());
         }
         for mode in &modal.modes {
+            if mode
+                .targeting
+                .as_ref()
+                .is_some_and(TargetingDef::requires_per_opponent_targets)
+            {
+                return Err("activated ability modes cannot use per-opponent targeting".into());
+            }
             if mode.linked_cast_cost.is_some() {
                 return Err("activated ability modes cannot have linked cast costs".into());
             }

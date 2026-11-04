@@ -4726,6 +4726,7 @@ fn activated_modal_shape_rejects_unsupported_owners_and_cost_contexts() {
     cast_cost_expansion.modal.as_mut().unwrap().modes[0].targeting =
         Some(crate::primitives::TargetingDef {
             groups: vec![crate::primitives::TargetGroupDef {
+                for_each_opponent: false,
                 chooser: crate::primitives::TargetChooser::Controller,
                 min: 1,
                 max: 1,
@@ -5611,6 +5612,7 @@ fn typed_optional_exile_result_is_available_for_ability_programs() {
     });
     let targeting = crate::primitives::TargetingDef {
         groups: vec![crate::primitives::TargetGroupDef {
+            for_each_opponent: false,
             chooser: crate::primitives::TargetChooser::Controller,
             min: 0,
             max: 1,
@@ -5692,6 +5694,7 @@ fn typed_exile_result_accepts_permanent_filters_and_lexically_scoped_inputs() {
                     panic!("valid generic Exile ability Program fixture: {error}\n{source}")
                 });
             let target_group = |min, max| crate::primitives::TargetGroupDef {
+                for_each_opponent: false,
                 chooser: crate::primitives::TargetChooser::Controller,
                 min,
                 max,
@@ -5783,6 +5786,7 @@ fn typed_exile_result_accepts_permanent_filters_and_lexically_scoped_inputs() {
         let program: crate::primitives::CardProgram =
             ron::from_str(&source).expect("scoped Exile receipt fixture parses");
         let target_group = |min, max| crate::primitives::TargetGroupDef {
+            for_each_opponent: false,
             chooser: crate::primitives::TargetChooser::Controller,
             min,
             max,
@@ -12454,6 +12458,7 @@ fn program_compiler_types_fixed_cost_counter_payment_results() {
     };
     let targeting = crate::primitives::TargetingDef {
         groups: vec![crate::primitives::TargetGroupDef {
+            for_each_opponent: false,
             chooser: crate::primitives::TargetChooser::Controller,
             min: 1,
             max: 1,
@@ -12520,6 +12525,7 @@ fn counter_payment_outputs_remain_optional_and_conditions_are_typed() {
         );
         let targeting = crate::primitives::TargetingDef {
             groups: vec![crate::primitives::TargetGroupDef {
+                for_each_opponent: false,
                 chooser: crate::primitives::TargetChooser::Controller,
                 min: 1,
                 max: 1,
@@ -12631,6 +12637,7 @@ fn nonpayment_counter_controller_receipt_is_an_opt_in_typed_program_input() {
     .expect("the controller receipt consumer fixture parses");
     let targeting = crate::primitives::TargetingDef {
         groups: vec![crate::primitives::TargetGroupDef {
+            for_each_opponent: false,
             chooser: crate::primitives::TargetChooser::Controller,
             min: 1,
             max: 1,
@@ -12669,6 +12676,7 @@ fn nonpayment_counter_controller_receipt_is_an_opt_in_typed_program_input() {
 fn counter_controller_input_rejects_missing_or_wrong_typed_producers() {
     let targeting = crate::primitives::TargetingDef {
         groups: vec![crate::primitives::TargetGroupDef {
+            for_each_opponent: false,
             chooser: crate::primitives::TargetChooser::Controller,
             min: 1,
             max: 1,
@@ -13600,6 +13608,7 @@ fn program_compiler_lowers_owner_local_named_target_alias() {
         ron::from_str(source).expect("named target aliases must parse as CardProgram source");
     let targeting = TargetingDef {
         groups: vec![TargetGroupDef {
+            for_each_opponent: false,
             chooser: TargetChooser::Controller,
             min: 1,
             max: 1,
@@ -13659,6 +13668,7 @@ fn program_target_aliases_preserve_singleton_requiredness_and_reject_invalid_use
     };
     let targeting = |min, max| TargetingDef {
         groups: vec![TargetGroupDef {
+            for_each_opponent: false,
             chooser: TargetChooser::Controller,
             min,
             max,
@@ -14125,6 +14135,7 @@ fn program_target_aliases_lower_recursively_through_if_result_and_choose_conditi
         ron::from_str(source).expect("the recursive target-alias Program parses");
     let targeting = TargetingDef {
         groups: vec![TargetGroupDef {
+            for_each_opponent: false,
             chooser: TargetChooser::Controller,
             min: 1,
             max: 1,
@@ -14253,6 +14264,7 @@ fn program_target_aliases_reuse_subject_and_shuffle_role_mappings() {
     };
     let targeting = TargetingDef {
         groups: vec![TargetGroupDef {
+            for_each_opponent: false,
             chooser: TargetChooser::Controller,
             min: 1,
             max: 1,
@@ -17779,6 +17791,7 @@ fn spell_program_accepts_fixed_controller_of_target_group_damage_riders() {
     };
     let targeting = |min, max| crate::primitives::TargetingDef {
         groups: vec![crate::primitives::TargetGroupDef {
+            for_each_opponent: false,
             chooser: crate::primitives::TargetChooser::Controller,
             min,
             max,
@@ -18094,6 +18107,7 @@ fn spell_program_target_group_damage_rider_rejects_unsupported_contracts() {
     };
     let targeting = |min, max| crate::primitives::TargetingDef {
         groups: vec![crate::primitives::TargetGroupDef {
+            for_each_opponent: false,
             chooser: crate::primitives::TargetChooser::Controller,
             min,
             max,
@@ -21656,6 +21670,7 @@ mod combustible_gearhulk_program_compiler_tests {
     fn targeting_with_bounds(min: u32, max: u32) -> TargetingDef {
         TargetingDef {
             groups: vec![TargetGroupDef {
+                for_each_opponent: false,
                 chooser: TargetChooser::Controller,
                 min,
                 max,
@@ -22367,6 +22382,7 @@ mod tidebinder_program_compiler_tests {
 
     fn group(min: u32, max: u32) -> TargetGroupDef {
         TargetGroupDef {
+            for_each_opponent: false,
             chooser: TargetChooser::Controller,
             min,
             max,
@@ -22467,6 +22483,7 @@ mod tidebinder_program_compiler_tests {
         };
         let targeting = TargetingDef {
             groups: vec![TargetGroupDef {
+                for_each_opponent: false,
                 chooser: TargetChooser::Controller,
                 min: 0,
                 max: 1,
@@ -23237,4 +23254,122 @@ fn vronos_animation_creature_subtypes_require_known_distinct_nonempty_values() {
         "SetCreatureTypes([\"Elf\",\"Construct\"])",
     );
     assert!(crate::CardRegistry::from_chunks_and_tokens(&[&source], &[]).is_ok());
+}
+
+fn vronos_per_opponent_body() -> &'static str {
+    r#"targeting: Some((groups: [(min: 0, max: 1, prompt: "Choose up to one nonland permanent", effect_indices: [0], for_each_opponent: true)])),
+        effect: [ReturnToOwnersHand(subject: Chosen((kind: AnyPermanent, controller: Opponent, excluded_permanent_types: [Land])))]"#
+}
+
+fn vronos_per_opponent_fixture() -> String {
+    format!(
+        r#"(id: "opponent_fixture", name: "Opponent Fixture", face_id: "opponent_fixture", types: ["Planeswalker"], loyalty: 5,
+        activated_abilities: [(ability_id: "minus", presentation: Fallback, costs: [Loyalty(-2)], {})])"#,
+        vronos_per_opponent_body()
+    )
+}
+
+#[test]
+fn vronos_per_opponent_model_admits_only_the_closed_optional_return_profile() {
+    let source = vronos_per_opponent_fixture();
+    assert!(crate::CardRegistry::from_chunks_and_tokens(&[&source], &[]).is_ok());
+    for (from, to) in [
+        ("min: 0", "min: 1"),
+        ("max: 1", "max: 2"),
+        ("effect_indices: [0]", "effect_indices: [0,0]"),
+        ("controller: Opponent", "controller: You"),
+        (
+            "excluded_permanent_types: [Land]",
+            "excluded_permanent_types: []",
+        ),
+        ("kind: AnyPermanent", "kind: Creature"),
+        (
+            "for_each_opponent: true",
+            "for_each_opponent: true, chooser: ChosenOpponent",
+        ),
+        (
+            "costs: [Loyalty(-2)]",
+            "costs: [Loyalty(-2)], source_zone: Hand",
+        ),
+    ] {
+        let changed = source.replace(from, to);
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[&changed], &[]).is_err(),
+            "must reject {from} -> {to}"
+        );
+    }
+}
+
+#[test]
+fn vronos_per_opponent_model_rejects_unimplemented_owners() {
+    let body = vronos_per_opponent_body();
+    let spell = format!(
+        r#"(id:"bad",name:"Bad",face_id:"bad",types:["Instant"],mana_cost:"{{0}}",{})"#,
+        body.replace("effect:", "spell_effect:")
+    );
+    let trigger = format!(
+        r#"(id:"bad",name:"Bad",face_id:"bad",types:["Artifact"],triggered_abilities:[(ability_id:"t",presentation:Fallback,trigger:WhenSelfEntersBattlefield,{body})])"#
+    );
+    let granted = format!(
+        r#"(id:"bad",name:"Bad",face_id:"bad",types:["Instant"],mana_cost:"{{0}}",spell_effect:[ApplyPermanentModifier(subject:Chosen((kind:Creature)),duration:Indefinite,modifier:GrantActivatedAbility((ability_id:"a",presentation:Fallback,costs:[Loyalty(-2)],{body})))])"#
+    );
+    for source in [spell, trigger, granted] {
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[&source], &[]).is_err(),
+            "unsupported owner must reject: {source}"
+        );
+    }
+    let mode_body = body.replace("effect:", "effects:");
+    let modal = format!(
+        r#"(id:"bad",name:"Bad",face_id:"bad",types:["Planeswalker"],loyalty:5,activated_abilities:[(ability_id:"a",presentation:Fallback,costs:[Loyalty(-2)],effect:[],modal:Some((min_modes:1,max_modes:1,modes:[(mode_id:"one",presentation:Fallback,{mode_body}),(mode_id:"two",presentation:Fallback,{mode_body})])))])"#
+    );
+    let ordinary_modal = modal.replace("for_each_opponent: true", "for_each_opponent: false");
+    assert!(crate::CardRegistry::from_chunks_and_tokens(&[&ordinary_modal], &[]).is_ok());
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&modal], &[]).unwrap_err();
+    assert!(format!("{error:?}").contains("per-opponent"), "{error:?}");
+    let targeting: crate::primitives::TargetingDef = ron::from_str(
+        r#"(groups:[(min:0,max:1,prompt:"Choose",effect_indices:[],for_each_opponent:true)])"#,
+    )
+    .unwrap();
+    let program: crate::primitives::CardProgram = ron::from_str(r#"(body:(steps:[(id:"return",kind:Perform(ReturnToOwnersHand(subject:Chosen((kind:AnyPermanent,controller:Opponent,excluded_permanent_types:[Land])))))]),target_bindings:[(instruction_id:"return",role:Subject,target_group_index:0)])"#).unwrap();
+    let mut ordinary = targeting.clone();
+    ordinary.groups[0].for_each_opponent = false;
+    crate::primitives::CompiledProgram::compile_with_targeting(
+        crate::ProgramOwnerId::face("bad", crate::CardFaceId::new("bad").unwrap()),
+        crate::primitives::EffectContext::Spell,
+        &program,
+        Some(&ordinary),
+    )
+    .unwrap();
+    let error = crate::primitives::CompiledProgram::compile_with_targeting(
+        crate::ProgramOwnerId::face("bad", crate::CardFaceId::new("bad").unwrap()),
+        crate::primitives::EffectContext::Spell,
+        &program,
+        Some(&targeting),
+    )
+    .unwrap_err();
+    assert!(error.contains("per-opponent"), "{error}");
+}
+
+#[test]
+fn vronos_per_opponent_default_false_preserves_legacy_serialization() {
+    let legacy: crate::primitives::TargetingDef =
+        ron::from_str(r#"(groups:[(min:0,max:1,prompt:"Choose",effect_indices:[0])])"#).unwrap();
+    let mut explicit = legacy.clone();
+    assert!(!legacy.requires_per_opponent_targets());
+    explicit.groups[0].for_each_opponent = false;
+    assert_eq!(
+        ron::to_string(&legacy).unwrap(),
+        ron::to_string(&explicit).unwrap()
+    );
+    assert!(!ron::to_string(&legacy)
+        .unwrap()
+        .contains("for_each_opponent"));
+    explicit.groups[0].for_each_opponent = true;
+    let serialized = ron::to_string(&explicit).unwrap();
+    assert!(serialized.contains("for_each_opponent"));
+    assert_eq!(
+        ron::from_str::<crate::primitives::TargetingDef>(&serialized).unwrap(),
+        explicit
+    );
 }

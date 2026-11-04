@@ -510,6 +510,9 @@ mod tests {
     mod tamiyo_normal {
         include!("replay_tamiyo_normal.rs");
     }
+    mod vronos_normal {
+        include!("replay_vronos_normal.rs");
+    }
     mod professor_onyx_normal {
         include!("replay_professor_onyx_normal.rs");
     }

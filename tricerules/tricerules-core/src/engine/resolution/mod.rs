@@ -8,7 +8,7 @@ use super::events::{color_string, ev_log, object_display_name};
 use super::targeting::{
     ability_mode_program, attachment_recipient_for_target, battlefield_objects_matching,
     effect_has_legal_target_at_resolution, face_mode_program, face_program, graveyard_target_legal,
-    object_matches_mass_filter, object_matches_scoped_mass_filter,
+    object_matches_mass_filter, object_matches_scoped_mass_filter, runtime_target_schema,
     stack_target_identity_is_current, target_role_legal_at_resolution, target_schema_with_program,
     TargetSourceIdentity,
 };
@@ -818,11 +818,14 @@ impl GameEngine {
 }
 
 fn target_roles_by_group<'a>(
+    engine: &GameEngine,
+    controller: PlayerId,
     effects: &'a [SpellEffectKind],
     targeting: Option<&TargetingDef>,
     program: Option<&'a tricerules_card_model::primitives::CompiledProgram>,
 ) -> Vec<Vec<TargetRole<'a>>> {
-    target_schema_with_program(effects, targeting, program)
+    runtime_target_schema(engine, controller, effects, targeting, program)
+        .0
         .groups
         .into_iter()
         .map(|group| {
@@ -1541,8 +1544,13 @@ impl GameEngine {
                 } else {
                     None
                 };
-                let requirements =
-                    target_roles_by_group(&mode.effects, mode.targeting.as_ref(), program);
+                let requirements = target_roles_by_group(
+                    self,
+                    controller,
+                    &mode.effects,
+                    mode.targeting.as_ref(),
+                    program,
+                );
                 let x_bound_groups = super::targeting::x_target_group_indices(
                     &mode.effects,
                     mode.targeting.as_ref(),
@@ -1603,7 +1611,7 @@ impl GameEngine {
                 face_program(self, &top.card_id, &face.face_id),
             )
         };
-        let requirements = target_roles_by_group(effects, targeting, program);
+        let requirements = target_roles_by_group(self, controller, effects, targeting, program);
         let x_bound_groups = super::targeting::x_target_group_indices(effects, targeting, program);
         top.targets.retain(|target| {
             requirements
@@ -2119,52 +2127,53 @@ impl GameEngine {
             (effects, name)
         };
 
-        let build_entries =
-            |effects: &[SpellEffectKind],
-             targeting: Option<&TargetingDef>,
-             chosen_targets: &[StackTarget],
-             program: Option<&tricerules_card_model::primitives::CompiledProgram>| {
-                let schema = target_schema_with_program(effects, targeting, program);
-                effects
-                    .iter()
-                    .cloned()
-                    .enumerate()
-                    .map(|(effect_index, effect)| {
-                        let mut role_groups = schema
-                            .groups
-                            .iter()
-                            .enumerate()
-                            .flat_map(|(group_index, group)| {
-                                group.bindings.iter().filter_map(move |binding| {
-                                    (binding.effect_index == effect_index)
-                                        .then_some((binding.role_index, group_index as u32))
-                                })
+        let build_entries = |effects: &[SpellEffectKind],
+                             targeting: Option<&TargetingDef>,
+                             chosen_targets: &[StackTarget],
+                             program: Option<
+            &tricerules_card_model::primitives::CompiledProgram,
+        >| {
+            let schema = runtime_target_schema(self, top.controller, effects, targeting, program).0;
+            effects
+                .iter()
+                .cloned()
+                .enumerate()
+                .map(|(effect_index, effect)| {
+                    let mut role_groups = schema
+                        .groups
+                        .iter()
+                        .enumerate()
+                        .flat_map(|(group_index, group)| {
+                            group.bindings.iter().filter_map(move |binding| {
+                                (binding.effect_index == effect_index)
+                                    .then_some((binding.role_index, group_index as u32))
                             })
-                            .collect::<Vec<_>>();
-                        role_groups.sort_by_key(|(filter_index, _)| *filter_index);
-                        let role_group_indices = role_groups
-                            .into_iter()
-                            .map(|(_, group_index)| group_index)
-                            .collect::<Vec<_>>();
-                        let selected = chosen_targets
-                            .iter()
-                            .filter(|target| {
-                                role_group_indices.is_empty()
-                                    || role_group_indices.contains(&target.group_index)
-                            })
-                            .collect::<Vec<_>>();
-                        ResolutionEffect {
-                            effect,
-                            target_context: ResolvedTargets::new(
-                                !role_group_indices.is_empty(),
-                                selected.iter().map(|target| target.object_id).collect(),
-                                selected.iter().map(|target| **target).collect(),
-                                role_group_indices,
-                            ),
-                        }
-                    })
-                    .collect::<Vec<_>>()
-            };
+                        })
+                        .collect::<Vec<_>>();
+                    role_groups.sort_by_key(|(filter_index, _)| *filter_index);
+                    let role_group_indices = role_groups
+                        .into_iter()
+                        .map(|(_, group_index)| group_index)
+                        .collect::<Vec<_>>();
+                    let selected = chosen_targets
+                        .iter()
+                        .filter(|target| {
+                            role_group_indices.is_empty()
+                                || role_group_indices.contains(&target.group_index)
+                        })
+                        .collect::<Vec<_>>();
+                    ResolutionEffect {
+                        effect,
+                        target_context: ResolvedTargets::new(
+                            !role_group_indices.is_empty(),
+                            selected.iter().map(|target| target.object_id).collect(),
+                            selected.iter().map(|target| **target).collect(),
+                            role_group_indices,
+                        ),
+                    }
+                })
+                .collect::<Vec<_>>()
+        };
 
         let mut resolution_effects: Vec<ResolutionEffect> = Vec::new();
         if !top.chosen_modes.is_empty() {

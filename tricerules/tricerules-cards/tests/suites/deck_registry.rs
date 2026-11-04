@@ -219,3 +219,6 @@ mod structural_choose_later_ports;
 
 #[path = "../deck_coverage_ajani_sleeper_agent.rs"]
 mod deck_coverage_ajani_sleeper_agent;
+
+#[path = "../deck_coverage_vronos_masked_inquisitor.rs"]
+mod deck_coverage_vronos_masked_inquisitor;

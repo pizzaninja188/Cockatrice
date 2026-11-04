@@ -1,0 +1,20 @@
+{
+  "format_version": 1,
+  "oracle_id": "86851bdb-9b2f-4407-97a1-a6a9f2e0ef66",
+  "spans": [
+    {"face_id":"vronos_masked_inquisitor","start_line":1,"end_line":1,"typed_paths":["/faces/0/activated_abilities/0"]},
+    {"face_id":"vronos_masked_inquisitor","start_line":2,"end_line":2,"typed_paths":["/faces/0/activated_abilities/1"]},
+    {"face_id":"vronos_masked_inquisitor","start_line":3,"end_line":3,"typed_paths":["/faces/0/activated_abilities/2"]}
+  ],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test":"deck_registry::deck_coverage_vronos_masked_inquisitor::vronos_exact_identity_and_all_three_complete_loyalty_clauses","covers":"Exact actual identity, cost, legendary planeswalker type, five loyalty, all three complete typed clauses, target bindings and one-based Oracle presentation."},
+    {"test":"scenario deck_coverage_vronos_masked_inquisitor::actual_vronos_cast_pays_three_generic_two_blue_and_enters_with_five_loyalty","covers":"Actual cast pays three generic and two blue, enters with five loyalty and exposes one optional target slot per opponent."},
+    {"test":"scenario deck_coverage_vronos_masked_inquisitor::actual_vronos_plus_zero_one_two_retains_exact_planeswalkers_until_next_end_step_and_untap","covers":"Actual +1 chooses zero, one or two other planeswalkers, adds loyalty, creates one delayed occurrence, phases at next end step and returns exact incarnations at controller untap."},
+    {"test":"scenario deck_coverage_vronos_masked_inquisitor::actual_vronos_plus_rejects_self_opponents_nonwalkers_duplicates_and_three","covers":"Self, opponent, nonplaneswalker, duplicate and excessive +1 targets reject without state mutation."},
+    {"test":"scenario deck_coverage_vronos_masked_inquisitor::actual_vronos_minus_two_selects_each_opponent_once_and_returns_to_owners","covers":"Actual -2 zero, subset and all opponent targets pay loyalty once and move each selected nonland permanent to its owner hand."},
+    {"test":"scenario deck_coverage_vronos_masked_inquisitor::actual_vronos_ultimate_pays_source_away_and_persistently_animates_one_shared_artifact","covers":"Actual -7 pays source into graveyard and one shared artifact target becomes persistent 9/9 Construct with retained flying and counters, vigilance, indestructible and public unblockability, without haste."}
+  ],
+  "complete_definition_review_confirmed": true
+}

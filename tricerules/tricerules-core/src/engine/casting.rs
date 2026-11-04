@@ -9,9 +9,10 @@ use super::presentation::{
     spell_stack_presentation, PresentationPath,
 };
 use super::targeting::{
-    capture_stack_target, face_mode_program, face_program, target_filter_legal_at_resolution,
-    validate_ability_targets_with_context_and_program, validate_spell_targets_with_program,
-    validate_x_target_mana_value, TargetResolutionContext, TargetSourceIdentity,
+    capture_stack_target, face_mode_program, face_program, runtime_target_schema,
+    target_filter_legal_at_resolution, validate_ability_targets_with_context_and_program,
+    validate_spell_targets_with_program, validate_x_target_mana_value, TargetResolutionContext,
+    TargetSourceIdentity,
 };
 use super::*;
 use crate::engine::events::ev_log_ability;
@@ -3130,11 +3131,30 @@ impl GameEngine {
         if targets.is_empty() {
             return;
         }
+        let controllers = if snapshot.ability.targeting.as_ref().is_some_and(
+            tricerules_card_model::primitives::TargetingDef::requires_per_opponent_targets,
+        ) {
+            runtime_target_schema(
+                self,
+                snapshot.player,
+                &snapshot.ability.effect,
+                snapshot.ability.targeting.as_ref(),
+                None,
+            )
+            .1
+        } else {
+            Vec::new()
+        };
         let captured: Vec<_> = targets
             .iter()
             .map(|target| {
                 let mut receipt = capture_stack_target(self, target);
-                receipt.required_controller = required_controller;
+                receipt.required_controller = required_controller.or_else(|| {
+                    controllers
+                        .get(target.group_index as usize)
+                        .copied()
+                        .flatten()
+                });
                 receipt
             })
             .collect();
