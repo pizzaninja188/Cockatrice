@@ -2328,7 +2328,12 @@ impl GameEngine {
                 effect,
                 target_context,
             } = entry;
-            if target_context.has_no_bound_targets() {
+            // A zero-target Vronos activation still creates its delayed no-op occurrence.
+            // The stack-wide CR 608.2b check already rejected wholly illegal chosen targets.
+            let schedules_empty_phasing_cohort = matches!(&effect,
+                SpellEffectKind::CreateDelayedTrigger { ability, .. }
+                    if ability.effect.as_slice() == [SpellEffectKind::PhaseOutObservedObjects]);
+            if target_context.has_no_bound_targets() && !schedules_empty_phasing_cohort {
                 previous_effect_result = OperationResults::default();
                 continue;
             }

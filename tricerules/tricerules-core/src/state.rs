@@ -423,6 +423,8 @@ pub(crate) struct MemoryJarCohort {
 /// reconstructing relationships after objects detach, change controller, or leave a zone.
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct TriggerContext {
+    /// Closed Vronos delayed occurrence. Some(empty) is a resolving zero-target activation.
+    pub delayed_phasing_cohort: Option<[Option<TriggerObjectRef>; 2]>,
     /// Private occurrence key for one Memory Jar delayed hand return.
     pub memory_jar_cohort: Option<ObjectId>,
     /// Event-time copy occurrence for a linked-exile producer/consumer pair. The stack item's
@@ -4121,6 +4123,8 @@ pub struct TriggeredEmblemAbility {
 /// The stack-bound payload of a one-shot delayed triggered ability (CR 603.7).
 #[derive(serde::Serialize, Debug, Clone)]
 pub struct DelayedTriggerPayload {
+    /// Per-occurrence exact incarnations; overlapping activations must never share a map key.
+    pub delayed_phasing_cohort: Option<[Option<TriggerObjectRef>; 2]>,
     /// Creating source, distinct from the watched object (Earthbend, delayed token sacrifice).
     pub source: TriggerObjectRef,
     pub controller: PlayerId,
@@ -5174,6 +5178,7 @@ impl GameState {
                         observed_object: watched,
                         affected_player: delayed.affected_player,
                         memory_jar_cohort: delayed.memory_jar_cohort,
+                        delayed_phasing_cohort: delayed.delayed_phasing_cohort,
                         ..TriggerContext::default()
                     },
                     may: delayed.ability.may,

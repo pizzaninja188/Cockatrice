@@ -461,6 +461,34 @@ impl ActivatedAbilityDef {
         if let Some(modal) = &self.modal {
             return self.validate_modal_shape(modal);
         }
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::contains_delayed_planeswalker_phase_out)
+        {
+            let group = self
+                .targeting
+                .as_ref()
+                .and_then(|targeting| (targeting.groups.len() == 1).then(|| &targeting.groups[0]));
+            if allow_activated_modal_mode_effect
+                || self.program.is_some()
+                || self.source_zone != AbilitySourceZone::Battlefield
+                || !matches!(self.costs.as_slice(), [AbilityCost::Loyalty(1)])
+                || self.effect.len() != 1
+                || !self.effect[0].is_delayed_planeswalker_phase_out()
+                || !group.is_some_and(|group| {
+                    group.min == 0
+                        && group.max == 2
+                        && group.effect_indices == [0]
+                        && group.chooser == super::TargetChooser::Controller
+                        && group.distinct_from.is_empty()
+                        && !group.same_graveyard
+                        && group.cast_cost_expansion.is_none()
+                })
+            {
+                return Err("delayed planeswalker phasing requires one direct +1 battlefield activation and one controller-chosen 0..2 target group".into());
+            }
+        }
         if self.source_zone != AbilitySourceZone::Battlefield
             && self
                 .effect
@@ -511,6 +539,13 @@ impl ActivatedAbilityDef {
             .effect
             .iter()
             .any(SpellEffectKind::contains_source_counter_scaled_mana);
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::contains_unscoped_phase_out_observed_objects)
+        {
+            return Err("PhaseOutObservedObjects requires its exact delayed child".into());
+        }
         let is_supported_source_counter_mana_ability = matches!(
             self.effect.as_slice(),
             [SpellEffectKind::ProduceManaPerSourceCounter { .. }]
@@ -1944,6 +1979,27 @@ impl TriggeredAbilityDef {
         self.validate_shape_with_token_copy_cohort_exile(false)
     }
 
+    pub(crate) fn is_delayed_phase_out_child(&self) -> bool {
+        self.trigger == TriggerCondition::AtBeginningOfNextEndStep
+            && self.effect.as_slice() == [SpellEffectKind::PhaseOutObservedObjects]
+            && self.program.is_none()
+            && self.modal.is_none()
+            && self.targeting.is_none()
+            && !self.may
+            && self.intervening_if.is_none()
+            && !self.triggers_only_once
+            && self.max_triggers_per_turn.is_none()
+    }
+
+    pub(crate) fn validate_delayed_phase_out_child(&self) -> Result<(), String> {
+        if !self.is_delayed_phase_out_child() {
+            return Err("PhaseOutObservedObjects requires one untargeted unconditional next-end-step delayed child".into());
+        }
+        self.ability_id.validate()?;
+        self.presentation.validate()?;
+        self.trigger.validate()
+    }
+
     pub(crate) fn validate_token_copy_cohort_shape(&self) -> Result<(), String> {
         self.validate_shape_with_token_copy_cohort_exile(true)
     }
@@ -1952,6 +2008,12 @@ impl TriggeredAbilityDef {
         &self,
         allow_token_copy_cohort_exile: bool,
     ) -> Result<(), String> {
+        if self.effect.iter().any(|effect| {
+            effect.contains_unscoped_phase_out_observed_objects()
+                || effect.contains_delayed_planeswalker_phase_out()
+        }) {
+            return Err("delayed planeswalker phasing requires a direct activated parent and its exact delayed child".into());
+        }
         if self.modal.as_ref().is_some_and(|modal| {
             modal
                 .modes

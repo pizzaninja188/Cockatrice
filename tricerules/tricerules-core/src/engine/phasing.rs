@@ -82,7 +82,7 @@ impl GameEngine {
         Ok(())
     }
 
-    fn phase_out_selected_permanents(
+    pub(super) fn phase_out_selected_permanents(
         &mut self,
         selected: &[crate::state::TriggerObjectRef],
         events: &mut Vec<rv1::RuledEvent>,

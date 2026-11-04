@@ -829,6 +829,17 @@ before a declared commander owner receives the state-based command-zone choice (
 once that choice moves the object to Command, the captured Exile incarnation cannot be returned
 from there. Koya retains its authored Creature-excluding-Source filter and exact delayed child.
 
+Separate from these Program forms, Vronos's delayed-phasing capability admits one direct legacy
+`Loyalty(1)` activation with a sole `CreateDelayedTrigger` effect. Its `Chosen` filter is exactly
+`AnyPermanent`, `You`, `permanent_types: [Planeswalker]`, and `excluded_objects: [Source]`; its
+single controller-chosen target group is `min: 0`, `max: 2`, `effect_indices: [0]`. The child has
+`AtBeginningOfNextEndStep` and the sole effect `PhaseOutObservedObjects`, with no targets, Program,
+modes, optionality, condition, or trigger limit. Resolution captures legal object incarnations in
+each delayed occurrence. Zero chosen targets still schedules one empty occurrence; all chosen
+targets becoming illegal prevents resolution. At the end step the captured incarnations phase out
+together, without rechecking their type, controller, or the source's presence (CR 603.7c). This
+capability does not admit Vronos's other abilities or establish whole-card support.
+
 The child is compiled under the full parent-and-child ability identity. Its exact exiled object is
 an inferred `CapturedTriggerObjectRef` input, distinct from the current/last-known copy snapshot
 used by `CreateTokenCopies(TriggerObject)`; authors do not declare this input. The admitted child

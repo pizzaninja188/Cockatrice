@@ -414,6 +414,15 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::ExileObservedObjects => {
             tokens::exile_observed_objects(cx, effect)?
         }
+        SpellEffectKind::PhaseOutObservedObjects => {
+            let cohort = cx.top.trigger_context.delayed_phasing_cohort.ok_or(
+                EngineError::ProgramInvariant("delayed phasing child has no captured cohort"),
+            )?;
+            let selected = cohort.into_iter().flatten().collect::<Vec<_>>();
+            cx.engine
+                .phase_out_selected_permanents(&selected, cx.events)?;
+            EffectOutcome::Continue
+        }
         SpellEffectKind::ExileWarpedObject => {
             cx.engine.resolve_warp_exile(cx.top, cx.events)?;
             EffectOutcome::Continue

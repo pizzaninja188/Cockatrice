@@ -5,6 +5,9 @@
 //! binary). The `#[path]` attributes keep every submodule under `tests/scenario/` while
 //! preserving a single `scenario` test binary.
 
+#[path = "scenario/vronos_delayed_phasing.rs"]
+mod vronos_delayed_phasing;
+
 #[path = "scenario/ajani_revealed_top.rs"]
 mod ajani_revealed_top;
 

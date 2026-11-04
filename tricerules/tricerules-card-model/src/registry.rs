@@ -2345,7 +2345,9 @@ fn validate_nested_effect_metadata_with_delayed_child_program(
             } else {
                 ability.reject_unowned_authored_program()?;
             }
-            if matches!(
+            if effect.is_delayed_planeswalker_phase_out() {
+                ability.validate_delayed_phase_out_child()?;
+            } else if matches!(
                 subject,
                 Some(crate::primitives::EffectSubject::PreviousEffectObjects)
             ) {

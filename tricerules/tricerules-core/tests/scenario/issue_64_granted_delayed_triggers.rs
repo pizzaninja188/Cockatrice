@@ -480,6 +480,7 @@ fn next_end_step_delayed_trigger_is_one_shot_and_keeps_object_identity() {
         payload: EventObserverPayload::StageDelayedTrigger(Box::new(DelayedTriggerPayload {
             affected_player: None,
             memory_jar_cohort: None,
+            delayed_phasing_cohort: None,
             source: TriggerObjectRef {
                 object_id: creature,
                 zone_change_generation: generation,

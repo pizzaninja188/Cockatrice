@@ -23129,3 +23129,69 @@ fn kaya_legendary_cast_is_a_closed_upkeep_emblem_profile() {
         assert!(effect.validate(EffectContext::Ability).is_err());
     }
 }
+fn vronos_delayed_phase_fixture() -> &'static str {
+    r#"(id: "delayed_phase_fixture", name: "Delayed Phase Fixture", face_id: "delayed_phase_fixture", types: ["Planeswalker"], loyalty: 5,
+        activated_abilities: [(ability_id: "plus", presentation: Fallback, costs: [Loyalty(1)],
+            targeting: Some((groups: [(min: 0, max: 2, prompt: "Choose up to two other planeswalkers you control", effect_indices: [0])])),
+            effect: [CreateDelayedTrigger(subject: Some(Chosen((kind: AnyPermanent, controller: You, permanent_types: [Planeswalker], excluded_objects: [Source]))),
+                ability: (ability_id: "delayed", presentation: Fallback, trigger: AtBeginningOfNextEndStep, effect: [PhaseOutObservedObjects]))])])"#
+}
+
+#[test]
+fn vronos_delayed_planeswalker_phase_out_profile_is_admitted() {
+    let result =
+        crate::CardRegistry::from_chunks_and_tokens(&[vronos_delayed_phase_fixture()], &[]);
+    assert!(
+        result.is_ok(),
+        "closed Vronos delayed phasing profile: {result:?}"
+    );
+}
+
+#[test]
+fn vronos_delayed_phase_out_profile_rejects_unsupported_owners_and_shapes() {
+    let source = vronos_delayed_phase_fixture();
+    for (from, to) in [
+        ("min: 0", "min: 1"),
+        ("max: 2", "max: 3"),
+        ("effect_indices: [0]", "effect_indices: []"),
+        ("controller: You", "controller: NotYou"),
+        ("excluded_objects: [Source]", "excluded_objects: []"),
+        (
+            "permanent_types: [Planeswalker]",
+            "permanent_types: [Creature]",
+        ),
+        ("costs: [Loyalty(1)]", "costs: [Tap]"),
+        (
+            "trigger: AtBeginningOfNextEndStep",
+            "may: true, trigger: AtBeginningOfNextEndStep",
+        ),
+        (
+            "effect: [PhaseOutObservedObjects]",
+            "effect: [PhaseOutObservedObjects, GainLife(amount: 1)]",
+        ),
+        (
+            "effect_indices: [0]",
+            "chooser: ChosenOpponent, effect_indices: [0]",
+        ),
+        (
+            "effect: [CreateDelayedTrigger",
+            "effect: [GainLife(amount: 1), CreateDelayedTrigger",
+        ),
+    ] {
+        let changed = source.replace(from, to);
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[&changed], &[]).is_err(),
+            "must reject {from} -> {to}"
+        );
+    }
+    for source in [
+        r#"(id: "bad", name: "Bad", face_id: "bad", types: ["Artifact"], activated_abilities: [(ability_id: "a", presentation: Fallback, costs: [Tap], effect: [PhaseOutObservedObjects])])"#,
+        r#"(id: "bad", name: "Bad", face_id: "bad", types: ["Artifact"], triggered_abilities: [(ability_id: "a", presentation: Fallback, trigger: WhenSelfEntersBattlefield, effect: [PhaseOutObservedObjects])])"#,
+        r#"(id: "bad", name: "Bad", face_id: "bad", types: ["Sorcery"], spell_effect: [PhaseOutObservedObjects])"#,
+    ] {
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[source], &[]).is_err(),
+            "unscoped child must reject"
+        );
+    }
+}

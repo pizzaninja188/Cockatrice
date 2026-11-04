@@ -1796,6 +1796,9 @@ pub enum SpellEffectKind {
     /// engine-created delayed trigger. Mimic Vat, Flameshadow Conjuring, and Molten Echoes share
     /// this one-shot follow-up after a token-copy replacement creates more than one token.
     ExileObservedObjects,
+    /// Vronos's closed delayed child: phase out the exact planeswalker incarnations captured
+    /// when its +1 resolved, without retargeting or checking their later types/controllers.
+    PhaseOutObservedObjects,
     /// CR 702.185: exile the observed permanent incarnation and grant its owner Warp's
     /// later-turn permission. Runtime delayed effect shared by all Warp cards.
     ExileWarpedObject,
@@ -4432,6 +4435,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ExileSourceThenReturnTransformed { .. }
             | SpellEffectKind::SacrificeObservedObjects
             | SpellEffectKind::ExileObservedObjects
+            | SpellEffectKind::PhaseOutObservedObjects
             | SpellEffectKind::ExileWarpedObject
             | SpellEffectKind::ReturnLinkedExiledCards { .. }
             | SpellEffectKind::ReturnOtherLinkedExiledCards { .. }
@@ -4589,6 +4593,29 @@ impl SpellEffectKind {
         }
     }
 
+    pub(crate) fn contains_unscoped_phase_out_observed_objects(&self) -> bool {
+        if matches!(self, Self::CreateDelayedTrigger { .. }) {
+            return false;
+        }
+        self.contains_legacy_flat_signature(|leaf| matches!(leaf, Self::PhaseOutObservedObjects))
+    }
+
+    pub(crate) fn is_delayed_planeswalker_phase_out(&self) -> bool {
+        matches!(self, Self::CreateDelayedTrigger {
+            subject: Some(EffectSubject::Chosen(filter)), affected_player: None, ability,
+        } if filter.as_ref() == &TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            controller: TargetController::You,
+            permanent_types: vec![PermanentTypeFilter::Planeswalker],
+            excluded_objects: vec![super::TargetObjectExclusion::Source],
+            ..TargetFilter::default()
+        } && ability.is_delayed_phase_out_child())
+    }
+
+    pub(crate) fn contains_delayed_planeswalker_phase_out(&self) -> bool {
+        self.contains_legacy_flat_signature(Self::is_delayed_planeswalker_phase_out)
+    }
+
     /// Detect the storage-land split-mana effect anywhere in an effect tree so ability-shape
     /// validation can reject nested appearances that would otherwise never execute.
     pub(crate) fn contains_storage_counter_split_mana(&self) -> bool {
@@ -4724,6 +4751,15 @@ impl SpellEffectKind {
     /// effects). Rules that depend on *sibling* effects live here; per-effect rules live in
     /// [`SpellEffectKind::validate`], which the caller runs too.
     pub fn validate_list(effects: &[SpellEffectKind]) -> Result<(), String> {
+        if effects
+            .iter()
+            .any(Self::contains_delayed_planeswalker_phase_out)
+            && (effects.len() != 1 || !effects[0].is_delayed_planeswalker_phase_out())
+        {
+            return Err(
+                "delayed planeswalker phasing requires its sole direct scheduling effect".into(),
+            );
+        }
         if effects
             .iter()
             .any(SpellEffectKind::contains_engine_created_rebound_cast)
@@ -5258,6 +5294,9 @@ impl SpellEffectKind {
                 )
             }
             _ => {}
+        }
+        if matches!(self, Self::PhaseOutObservedObjects) && context != EffectContext::Ability {
+            return Err("PhaseOutObservedObjects requires its delayed ability context".into());
         }
         if matches!(self, Self::ExileObservedObjects) && context != EffectContext::Ability {
             return Err("ExileObservedObjects requires an ability context".into());
@@ -6870,6 +6909,14 @@ impl SpellEffectKind {
                 affected_player,
                 ability,
             } => {
+                if ability.effect.contains(&Self::PhaseOutObservedObjects) {
+                    if context != EffectContext::Ability
+                        || !self.is_delayed_planeswalker_phase_out()
+                    {
+                        return Err("delayed planeswalker phasing requires its exact chosen-other-planeswalkers profile".into());
+                    }
+                    return ability.validate_delayed_phase_out_child();
+                }
                 if ability.trigger == TriggerCondition::WheneverWatchedObjectDealsCombatDamage {
                     return Err(
                         "watched combat damage requires its fixed next-turn draw profile".into(),

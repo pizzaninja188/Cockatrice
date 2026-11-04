@@ -677,6 +677,35 @@ fn create_delayed_trigger_inner(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    // Only this registry-validated child consumes an inline, independently owned cohort.
+    // Capture the already-revalidated role targets, including an intentionally empty selection.
+    let delayed_phasing_cohort =
+        if ability.effect.as_slice() == [SpellEffectKind::PhaseOutObservedObjects] {
+            let current = cx.current_battlefield_targets(0);
+            if current.len() > 2 {
+                return Err(EngineError::ProgramInvariant(
+                    "delayed phasing exceeded its two-target profile",
+                ));
+            }
+            let mut cohort = [None; 2];
+            for (slot, object_id) in current.into_iter().enumerate() {
+                let receipt = cx.target_receipt_in_role(object_id, 0).ok_or(
+                    EngineError::ProgramInvariant("delayed phasing lost its target receipt"),
+                )?;
+                cohort[slot] = Some(TriggerObjectRef {
+                    object_id,
+                    zone_change_generation: receipt.zone_change_generation.ok_or(
+                        EngineError::ProgramInvariant("delayed phasing target has no generation"),
+                    )?,
+                    controller_at_event: cx.engine.controller_of(object_id).ok_or(
+                        EngineError::ProgramInvariant("delayed phasing target has no controller"),
+                    )?,
+                });
+            }
+            Some(cohort)
+        } else {
+            None
+        };
     let memory_jar_delayed = matches!(
         ability.effect.as_slice(),
         [
@@ -762,7 +791,9 @@ fn create_delayed_trigger_inner(
     let emblem_object = matches!(subject, Some(EffectSubject::TriggerObject))
         .then_some(cx.top.trigger_context.emblem_graveyard_object)
         .flatten();
-    let watched = if let Some(object) = watched_override.or(emblem_object) {
+    let watched = if delayed_phasing_cohort.is_some() {
+        None
+    } else if let Some(object) = watched_override.or(emblem_object) {
         Some(object)
     } else if let Some(subject) = subject.as_ref() {
         let watched_id = match subject {
@@ -954,6 +985,7 @@ fn create_delayed_trigger_inner(
                 controller: cx.controller,
                 affected_player,
                 memory_jar_cohort,
+                delayed_phasing_cohort,
                 card_id: cx.top.card_id.clone(),
                 card_name,
                 source_face_index: cx.top.face_index,

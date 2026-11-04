@@ -693,6 +693,7 @@ impl GameEngine {
                     observed_object: watched,
                     affected_player: delayed.affected_player,
                     memory_jar_cohort: delayed.memory_jar_cohort,
+                    delayed_phasing_cohort: delayed.delayed_phasing_cohort,
                     ..TriggerContext::default()
                 },
                 ability: delayed.ability,
