@@ -336,6 +336,9 @@ void SmokeClient::sendRuled(const ruled::v1::RuledCommand &cmd, const QString &w
 }
 void SmokeClient::handleGameEventContainer(const GameEventContainer &cont)
 {
+    if (cont.has_context()) {
+        onGameEventContext(cont.context());
+    }
     for (const auto &ev : cont.event_list()) {
         observePhysicalEvent(ev);
         onPhysicalEvent(ev);

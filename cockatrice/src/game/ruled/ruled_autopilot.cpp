@@ -151,8 +151,6 @@ void RuledAutopilot::createGame(int roomId)
     cmd.set_spectators_allowed(true);
     cmd.set_spectators_can_talk(true);
     cmd.set_spectators_see_everything(true);
-    // Dev convenience: both seats are usually driven by the same person.
-    cmd.set_share_decklists_on_load(true);
     cmd.set_ruled_game(true);
 
     PendingCommand *pend = AbstractClient::prepareRoomCommand(cmd, roomId);

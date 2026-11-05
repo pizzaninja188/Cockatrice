@@ -92,6 +92,9 @@ void DlgCreateGame::sharedCtor()
     joinRestrictionsLayout->addWidget(passwordEdit, 0, 1);
     joinRestrictionsLayout->addWidget(onlyBuddiesCheckBox, 1, 0, 1, 2);
     joinRestrictionsLayout->addWidget(onlyRegisteredCheckBox, 2, 0, 1, 2);
+    createGameAsJudgeCheckBox = new QCheckBox(tr("Create game as judge"));
+    createGameAsJudgeCheckBox->setHidden(!room || !(room->getUserInfo()->user_level() & ServerInfo_User::IsJudge));
+    joinRestrictionsLayout->addWidget(createGameAsJudgeCheckBox, 3, 0, 1, 2);
 
     auto *joinRestrictionsGroupBox = new QGroupBox(tr("Joining restrictions"));
     joinRestrictionsGroupBox->setLayout(joinRestrictionsLayout);
@@ -129,21 +132,12 @@ void DlgCreateGame::sharedCtor()
         if (ruled) shufflePlayersCheckBox->setChecked(false);
     });
 
-
-    createGameAsJudgeCheckBox = new QCheckBox(tr("Create game as judge"));
-
     auto *gameSetupOptionsLayout = new QGridLayout;
     gameSetupOptionsLayout->addWidget(startingLifeTotalLabel, 0, 0);
     gameSetupOptionsLayout->addWidget(startingLifeTotalEdit, 0, 1);
     gameSetupOptionsLayout->addWidget(shareDecklistsOnLoadCheckBox, 1, 0, 1, 2);
     gameSetupOptionsLayout->addWidget(shufflePlayersCheckBox, 2, 0, 1, 2);
     gameSetupOptionsLayout->addWidget(ruledGameCheckBox, 3, 0, 1, 2);
-    if (room && room->getUserInfo()->user_level() & ServerInfo_User::IsJudge) {
-        gameSetupOptionsLayout->addWidget(createGameAsJudgeCheckBox, 4, 0, 1, 2);
-    } else {
-        createGameAsJudgeCheckBox->setChecked(false);
-        createGameAsJudgeCheckBox->setHidden(true);
-    }
     gameSetupOptionsGroupBox = new QGroupBox(tr("Game setup options"));
     gameSetupOptionsGroupBox->setLayout(gameSetupOptionsLayout);
 
@@ -200,8 +194,6 @@ DlgCreateGame::DlgCreateGame(TabRoom *_room, const QMap<int, QString> &_gameType
     spectatorsCanTalkCheckBox->setChecked(SettingsCache::instance().game().getSpectatorsCanTalk());
     spectatorsSeeEverythingCheckBox->setChecked(SettingsCache::instance().game().getSpectatorsCanSeeEverything());
     createGameAsSpectatorCheckBox->setChecked(SettingsCache::instance().game().getCreateGameAsSpectator());
-    startingLifeTotalEdit->setValue(SettingsCache::instance().game().getDefaultStartingLifeTotal());
-    shareDecklistsOnLoadCheckBox->setChecked(SettingsCache::instance().game().getShareDecklistsOnLoad());
     shufflePlayersCheckBox->setChecked(SettingsCache::instance().game().getShufflePlayers());
 
     if (!rememberGameSettings->isChecked()) {
@@ -224,7 +216,7 @@ DlgCreateGame::DlgCreateGame(TabRoom *_room, const QMap<int, QString> &_gameType
     if (SettingsCache::instance().game().getRememberGameSettings()) {
         maxPlayersEdit->setValue(SettingsCache::instance().game().getMaxPlayers());
     }
-    startingLifeTotalEdit->setValue(formatEdit->currentData().toInt() == ruled::v1::GAME_FORMAT_COMMANDER ? 40 : 20);
+    gameSetupOptionsGroupBox->hide();
     setFixedHeight(sizeHint().height());
     setWindowTitle(tr("Create game"));
 }
@@ -298,8 +290,6 @@ void DlgCreateGame::actReset()
     spectatorsSeeEverythingCheckBox->setChecked(false);
     createGameAsSpectatorCheckBox->setChecked(false);
 
-    startingLifeTotalEdit->setValue(20);
-    shareDecklistsOnLoadCheckBox->setChecked(false);
     ruledGameCheckBox->setChecked(true);
     shufflePlayersCheckBox->setChecked(false);
     createGameAsJudgeCheckBox->setChecked(false);
@@ -330,8 +320,6 @@ void DlgCreateGame::actOK()
     cmd.set_spectators_see_everything(spectatorsSeeEverythingCheckBox->isChecked());
     cmd.set_join_as_judge(createGameAsJudgeCheckBox->isChecked());
     cmd.set_join_as_spectator(createGameAsSpectatorCheckBox->isChecked());
-    cmd.set_starting_life_total(startingLifeTotalEdit->value());
-    cmd.set_share_decklists_on_load(shareDecklistsOnLoadCheckBox->isChecked());
     cmd.set_ruled_game(true);
     cmd.set_format(static_cast<ruled::v1::GameFormat>(formatEdit->currentData().toInt()));
     cmd.set_shuffle_players(false);
@@ -358,8 +346,6 @@ void DlgCreateGame::actOK()
         SettingsCache::instance().game().setSpectatorsCanTalk(spectatorsCanTalkCheckBox->isChecked());
         SettingsCache::instance().game().setSpectatorsCanSeeEverything(spectatorsSeeEverythingCheckBox->isChecked());
         SettingsCache::instance().game().setCreateGameAsSpectator(createGameAsSpectatorCheckBox->isChecked());
-        SettingsCache::instance().game().setDefaultStartingLifeTotal(startingLifeTotalEdit->value());
-        SettingsCache::instance().game().setShareDecklistsOnLoad(shareDecklistsOnLoadCheckBox->isChecked());
         SettingsCache::instance().game().setShufflePlayers(shufflePlayersCheckBox->isChecked());
         SettingsCache::instance().game().setGameTypes(_gameTypes);
     }

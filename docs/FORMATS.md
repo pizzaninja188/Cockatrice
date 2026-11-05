@@ -13,8 +13,8 @@ Selection, readiness, sideboard changes and final start all enforce admission. A
 replacement preserves the previously accepted deck or sideboard plan. Format legality and
 executable engine support are separate results, and both must pass. Unknown identities,
 unrecognized construction choices, unavailable data and infrastructure failures cannot pass.
-Card-specific errors go only to the submitting player, including when decklists are closed.
-Ready decks in open lobbies are checked every minute so catalogue changes can clear readiness.
+Lobby decklists are private in every ruled game. Card-specific errors go only to the submitting
+player. Ready decks in pregame lobbies are checked every minute so catalogue changes can clear readiness.
 
 Both deck editors expose **Validate deck…**, also available in the Deck menu. Connect to a
 matching server, choose the validation format, and press Validate. The dialog uses the same
@@ -85,15 +85,17 @@ establish interactive GUI acceptance. The user elected to test after implementat
 
 1. Run `scripts/launch-ruled-game.ps1 -Dev` in the interactive user session. The default Standard
    samples are 60 basic lands. Verify 20 life, the format label and successful readiness.
-2. In Create Game, switch between formats. Standard fixes two seats/20 life; Commander permits
-   two to four seats/40 life and defaults to four. Reopen with remembered settings.
+2. In Create Game, verify the Game setup options section is absent. Switch between formats.
+   Standard fixes two seats and Commander permits two to four seats with a default of four.
+   Reopen with remembered settings.
 3. In each editor, add/move one copy into Commander, undo/redo, save and reopen. The banner
    remains independent. Export/re-import plain text and check the Commander section. Validate
    a valid sample, an illegal copy count and an unsupported card.
    Edit while a response is pending and verify that the old result is marked out of date.
-4. Select an illegal deck with closed decklists. Only its owner receives card details; the
-   previous accepted deck remains loaded. Repeat with an invalid sideboard move, Ready and
-   Force Start. No invalid configuration may start.
+4. Select a legal deck, join from the second client, then reselect it. The second client sees
+   that a deck is loaded and only the owner can view the list. Select an illegal deck. Only its
+   owner receives card details and the previous accepted deck remains loaded. Repeat with an
+   invalid sideboard move, Ready and Force Start. No invalid configuration may start.
 5. Run `scripts/launch-ruled-game.ps1 -Format Commander -Players 2 -Dev` (stop the previous run
    first). The sample declares Kami with 99 Islands. Verify 40 life and one real commander in
    each floating area. Repeat with three/four seats, narrow windows and reconnect/spectator views.

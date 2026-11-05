@@ -3,6 +3,7 @@
 
 #include <libcockatrice/protocol/pb/command_set_sideboard_lock.pb.h>
 #include <libcockatrice/protocol/pb/command_set_sideboard_plan.pb.h>
+#include <libcockatrice/protocol/pb/context_deck_select.pb.h>
 #include <libcockatrice/protocol/pb/response_deck_download.pb.h>
 
 namespace ruled_e2e
@@ -33,10 +34,24 @@ public:
     using SmokeClient::SmokeClient;
     std::set<int> commandOwners;
     std::map<int, int> startingLife;
+    int deckSelectContexts = 0;
+    bool sawLobbyDeckList = false;
+    void onGameEventContext(const GameEventContext &context) override
+    {
+        if (context.HasExtension(Context_DeckSelect::ext)) {
+            ++deckSelectContexts;
+            sawLobbyDeckList |= context.GetExtension(Context_DeckSelect::ext).has_deck_list();
+        }
+    }
     void onPhysicalEvent(const GameEvent &event) override
     {
         if (event.HasExtension(Event_GameStateChanged::ext)) {
             const auto &state = event.GetExtension(Event_GameStateChanged::ext);
+            if (!state.game_started()) {
+                for (const auto &player : state.player_list()) {
+                    sawLobbyDeckList |= player.properties().player_id() != myId && player.has_deck_list();
+                }
+            }
             if (state.game_started()) {
                 for (const auto &player : state.player_list()) {
                     for (const auto &counter : player.counter_list()) {
@@ -84,9 +99,23 @@ TEST_F(RuledE2ESmokeTest, StandardFormatValidatesSelectionEditorAndSideboardingP
     FormatClient a("formatstandard", &transcript), b("formatobserver", &transcript);
     ASSERT_TRUE(a.loginAndJoinRoom());
     ASSERT_TRUE(b.loginAndJoinRoom());
-    ASSERT_TRUE(a.createRuledGame(2, ruled::v1::GAME_FORMAT_STANDARD));
-    ASSERT_TRUE(b.joinRuledGame(a.gameId));
+    CommandContainer creation;
+    creation.set_room_id(a.roomId);
+    auto *create = creation.add_room_command()->MutableExtension(Command_CreateGame::ext);
+    create->set_ruled_game(true);
+    create->set_format(ruled::v1::GAME_FORMAT_STANDARD);
+    create->set_max_players(2);
+    create->set_share_decklists_on_load(true);
+    ASSERT_EQ(exchange(a, creation).response_code(), Response::RespOk);
+    ASSERT_TRUE(a.pumpUntil([&] { return a.gameId >= 0 && a.myId >= 0; }, 10000, "game created"));
     ASSERT_TRUE(a.selectDeck(deckXml({{60, "Forest"}})));
+    ASSERT_TRUE(b.joinRuledGame(a.gameId));
+    ASSERT_TRUE(b.pumpUntil([&] { return b.deckSelectContexts >= 1; }, 10000, "late-join deck selection context"));
+    EXPECT_FALSE(b.sawLobbyDeckList);
+    b.sawLobbyDeckList = false;
+    ASSERT_TRUE(a.selectDeck(deckXml({{60, "Forest"}})));
+    ASSERT_TRUE(b.pumpUntil([&] { return b.deckSelectContexts >= 2; }, 10000, "live deck selection context"));
+    EXPECT_FALSE(b.sawLobbyDeckList);
     const auto invalid = deckXml({{59, "Forest"}, {1, "Black Lotus"}});
     CommandContainer selection;
     selection.set_game_id(a.gameId);

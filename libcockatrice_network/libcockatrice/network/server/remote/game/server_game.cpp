@@ -103,7 +103,7 @@ Server_Game::Server_Game(const GameConfig &config, Server_Room *_room)
       activePhase(-1), onlyBuddies(config.onlyBuddies), onlyRegistered(config.onlyRegistered),
       spectatorsAllowed(config.spectatorsAllowed), spectatorsNeedPassword(config.spectatorsNeedPassword),
       spectatorsCanTalk(config.spectatorsCanTalk), spectatorsSeeEverything(config.spectatorsSeeEverything),
-      startingLifeTotal(config.startingLifeTotal), shareDecklistsOnLoad(config.shareDecklistsOnLoad),
+      startingLifeTotal(config.startingLifeTotal), shareDecklistsOnLoad(!config.ruledGame && config.shareDecklistsOnLoad),
       shufflePlayers(config.shufflePlayers), inactivityCounter(0), startTimeOfThisGame(0), secondsElapsed(0),
       firstGameStarted(false), turnOrderReversed(false), startTime(QDateTime::currentDateTime()), pingClock(nullptr),
       deckValidationStrategy(new Server_DefaultDeckValidationStrategy),

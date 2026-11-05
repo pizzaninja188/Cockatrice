@@ -81,6 +81,9 @@ public:
     virtual void onPhysicalEvent(const GameEvent &)
     {
     }
+    virtual void onGameEventContext(const GameEventContext &)
+    {
+    }
     virtual void onBatchBegin(const ruled::v1::RuledEventBatch &)
     {
     }
