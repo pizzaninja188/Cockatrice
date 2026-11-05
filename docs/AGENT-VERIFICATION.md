@@ -178,6 +178,25 @@ concerns invalidate that evidence. A commit request alone does not require anoth
 Missing sources or tools are failures,
 not permission to omit a required gate. Diagnose unrelated baseline drift before changing it.
 
+### Archive closed evidence
+
+Archive a closed report, capture directory, or verification run with
+`scripts/archive-evidence.py`. Select one item within `build/campaign`,
+`build/deck-coverage`, or `build/verification-logs`. Keep active checkpoints and any paths
+still needed by a live review in place. The tool rejects recorded routine baselines,
+the canonical `oracle-map.tsv`, and verification runs without a completed summary.
+
+```powershell
+python scripts/archive-evidence.py pack 'build/verification-logs/verify-<closed-id>' --remove-source
+python scripts/archive-evidence.py restore 'build/verification-logs/verify-<closed-id>.zip'
+```
+
+`pack` publishes a sibling ZIP after rereading it and matching every file's SHA-256.
+`--remove-source` reclaims the original bytes after verification. Omit it to retain a
+working copy. `restore` checks the archive before publishing the original directory or
+file path, which must be vacant. Restored captures can be replayed from their original
+paths. Use `python3` on hosts where that is the Python command.
+
 ### Opt-in routine RON gate
 
 Use this only after the normal source/rulings research, intended red/green, independent frozen
