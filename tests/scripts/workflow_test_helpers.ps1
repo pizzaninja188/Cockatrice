@@ -20,8 +20,11 @@ function New-WorkflowFixture {
     }
     New-Item -ItemType Directory -Path (Join-Path $root 'tests/scripts') -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $root 'scripts/check-verification-environment.ps1') -Value @'
-param([int] $MinimumFreeGiB = 20)
+param([int] $MinimumFreeGiB = 20, [switch] $SkipRustCache)
 if (Test-Path -LiteralPath (Join-Path $PSScriptRoot '../bad-environment')) { Write-Output "fixture environment failed, minimum free GiB $MinimumFreeGiB"; exit 21 }
+if (-not $SkipRustCache -and $env:COCKATRICE_RUST_CACHE_BUDGET_GIB) {
+    Write-Output "fixture Rust cache budget $env:COCKATRICE_RUST_CACHE_BUDGET_GIB"
+}
 Write-Output 'fixture environment passed'
 exit 0
 '@

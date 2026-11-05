@@ -72,7 +72,9 @@ function Add-VerificationStep {
 function Get-FullVerificationSteps {
     param([string] $SelectedSide, [bool] $CheckCardData)
     $steps = [Collections.Generic.List[object]]::new()
-    Add-VerificationStep 'Verification environment' $windowsPowerShell $environmentArguments
+    $preflight = $environmentArguments
+    if ($SelectedSide -eq 'Cpp') { $preflight += '-SkipRustCache' }
+    Add-VerificationStep 'Verification environment' $windowsPowerShell $preflight
     if ($CheckCardData) {
         $cardArguments = @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'update-card-data.ps1'), '-Mode', 'Check')
         if ($OracleBulk) { $cardArguments += @('-OracleBulk', $OracleBulk) }
@@ -114,6 +116,35 @@ if ($Preview) {
         if ($step.RequireE2E -and -not $isWindowsHost) { Write-Output 'Child environment: QT_QPA_PLATFORM=offscreen' }
     }
     exit 0
+}
+
+$leaseDirectory = Join-Path $repo 'build'
+$originalCacheBudget = $env:COCKATRICE_RUST_CACHE_BUDGET_GIB
+$cacheBudget = $originalCacheBudget
+if ($Side -ne 'Cpp' -and -not $cacheBudget) {
+    $budgetFile = Join-Path $leaseDirectory 'rust-cache-budget-gib'
+    if (Test-Path -LiteralPath $budgetFile -PathType Leaf) {
+        $cacheBudget = (Get-Content -LiteralPath $budgetFile -Raw).Trim()
+    }
+}
+New-Item -ItemType Directory -Path $leaseDirectory -Force | Out-Null
+$leasePath = Join-Path $leaseDirectory '.verification.lock'
+# Normal gates can share a lease. A managed gate holds it exclusively through the
+# build and test commands so another gate cannot recycle the cache between steps.
+try {
+    if (-not [IO.File]::Exists($leasePath)) {
+        try { [IO.File]::Open($leasePath, 'CreateNew', 'Write', 'ReadWrite').Dispose() }
+        catch [IO.IOException] { if (-not [IO.File]::Exists($leasePath)) { throw } }
+    }
+    $lease = if ($Side -ne 'Cpp' -and $cacheBudget) {
+        [IO.File]::Open($leasePath, 'Open', 'ReadWrite', 'None')
+    } else {
+        [IO.File]::Open($leasePath, 'Open', 'Read', 'Read')
+    }
+}
+catch [IO.IOException] {
+    Write-Error "Could not acquire the checkout's verification lease. Retry after managed verification finishes. $_" -ErrorAction Continue
+    exit 1
 }
 
 $runDirectory = Join-Path $repo ('build\verification-logs\verify-' + [guid]::NewGuid())
@@ -175,11 +206,17 @@ try {
         try {
             if ($step.RequireE2E) { $env:RULED_E2E_REQUIRE = '1' }
             if ($step.RequireE2E -and -not $isWindowsHost) { $env:QT_QPA_PLATFORM = 'offscreen' }
+            if ($step.Label -eq 'Verification environment' -and $cacheBudget) {
+                $env:COCKATRICE_RUST_CACHE_BUDGET_GIB = $cacheBudget
+            }
             $result = & (Join-Path $PSScriptRoot 'run-quiet-command.ps1') `
                 -Label $step.Label -Executable $step.Executable -ArgumentList $step.Arguments `
                 -WorkingDirectory $step.WorkingDirectory -LogDirectory $runDirectory -AsResultObject
         }
         finally {
+            if ($step.Label -eq 'Verification environment') {
+                $env:COCKATRICE_RUST_CACHE_BUDGET_GIB = $originalCacheBudget
+            }
             if ($step.RequireE2E) {
                 if ($null -eq $previousE2E) { Remove-Item Env:RULED_E2E_REQUIRE -ErrorAction SilentlyContinue }
                 else { $env:RULED_E2E_REQUIRE = $previousE2E }
@@ -228,6 +265,7 @@ catch {
     Get-Content -LiteralPath $errorPath
 }
 finally {
+    $lease.Dispose()
     $summary.CompletedAt = [DateTime]::UtcNow.ToString('o')
     $summary.ExitCode = $code
     $summary.Status = if ($code -eq 0) { 'Pass' } else { 'Fail' }

@@ -40,12 +40,34 @@ try {
     $platform = if ($workflowWindows) { 'Windows' } else { 'Linux' }
     Assert-Workflow ($result.Output -match 'Rust tests' -and $result.Output -match "$platform Ninja build" -and $result.Output -match 'Card data') 'Preview omitted gates.'
 
+    $leasePath = Join-Path $fixture 'build/.verification.lock'
+    $buildRoot = Split-Path -Parent $leasePath
+    New-Item -ItemType Directory -Path $buildRoot | Out-Null
+    $existingLease = [IO.File]::Open($leasePath, 'CreateNew', 'ReadWrite', 'None')
+    try {
+        $result = Invoke-WorkflowFixture $fixture 'verify.ps1' @('-Side', 'Rust')
+        Assert-Workflow ($result.ExitCode -ne 0 -and $result.Output -match 'verification lease') 'Verification entered a workspace with an exclusive lease.'
+        Assert-Workflow (@(Read-WorkflowTrace $fixture).Count -eq 0) 'An exclusive lease did not stop commands.'
+    }
+    finally { $existingLease.Dispose() }
+    $cacheBudgetFile = Join-Path $buildRoot 'rust-cache-budget-gib'
+    Set-Content -LiteralPath $cacheBudgetFile -Value '25'
+    $existingLease = [IO.File]::Open($leasePath, 'Open', 'Read', 'Read')
+    try {
+        $result = Invoke-WorkflowFixture $fixture 'verify.ps1' @('-Side', 'Rust')
+        Assert-Workflow ($result.ExitCode -ne 0 -and $result.Output -match 'verification lease') 'A configured budget did not require an exclusive lease.'
+    }
+    finally { $existingLease.Dispose() }
+
     $result = Invoke-WorkflowFixture $fixture 'verify.ps1' @('-Side', 'Cpp', '-CardData')
     Assert-Workflow ($result.ExitCode -ne 0) 'Cpp-only card verification was accepted.'
     Assert-Workflow (@(Read-WorkflowTrace $fixture).Count -eq 0) 'Invalid options executed commands.'
 
     $result = Invoke-WorkflowFixture $fixture 'verify.ps1' @('-Side', 'Both', '-CardData') $nested
     Assert-Workflow ($result.ExitCode -eq 0) "Combined verification failed: $($result.Output)"
+    $preflightLogs = @(Get-ChildItem -LiteralPath (Join-Path $buildRoot 'verification-logs') -Recurse -Filter '*Verification-environment.log')
+    Assert-Workflow ($preflightLogs.Count -eq 1 -and (Get-Content -LiteralPath $preflightLogs[0].FullName -Raw) -match 'fixture Rust cache budget 25') 'Checkout-local budget did not reach preflight.'
+    Remove-Item -LiteralPath $cacheBudgetFile
     Assert-Workflow ($result.Output -notmatch 'fixture successful (stdout|stderr)') 'Successful command output was noisy.'
     $trace = @(Read-WorkflowTrace $fixture)
     $formatCalls = @($trace | Where-Object { $_.Tool -eq 'rustfmt' })

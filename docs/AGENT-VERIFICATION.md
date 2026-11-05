@@ -110,7 +110,7 @@ path canonicalization in the checkout and temporary directory (Windows handles o
 to reject capture paths that escape their root. Some host sandboxes permit file IO but deny
 canonicalization; retry through the supported approval route rather than weakening replay
 validation. A failed preflight retains a normal failure log and summary and stops all later gates.
-It never deletes artifacts or changes permissions. `CARGO_TARGET_DIR` overrides are included;
+With default settings it only checks the environment. `CARGO_TARGET_DIR` overrides are included;
 relative overrides resolve from `tricerules`. The capacity check is a minimum headroom check,
 not a guarantee that an arbitrary build will fit. Pass `-MinimumFreeGiB` to the full gate
 or standalone preflight to select a reserve based on the host's measured build usage.
@@ -126,6 +126,25 @@ optional temporary storage tradeoff, not the development default. After changing
 old artifacts remain on disk: with no competing builds, verify the target path and use
 `cargo clean --profile dev` from `tricerules` to reclaim disposable debug output. Keep campaign
 checkpoints and verification logs outside that target directory; do not automatically clean them.
+
+To manage the main checkout's Cargo debug cache automatically, write a positive size in
+GiB to the ignored file `build/rust-cache-budget-gib`. A
+`COCKATRICE_RUST_CACHE_BUDGET_GIB` environment setting overrides the file.
+
+```powershell
+New-Item -ItemType Directory -Path build -Force | Out-Null
+Set-Content -LiteralPath build/rust-cache-budget-gib -Value '20'
+./scripts/verify.ps1 -Side Rust -CardData
+```
+
+Rust and combined verification recycle the dev profile before building if its size exceeds
+the budget or it can make up a shortfall on the Cargo target volume. The next build starts
+with a cold dev cache. The normal free-space check still runs afterward. This is a threshold
+checked between runs. A single build can temporarily exceed it. Leave headroom above the
+budget for a cold build. Automatic cleanup requires Cargo metadata to identify the default
+in-checkout target and build directories. Use this option only while external Cargo commands,
+editor builds and test processes for the checkout are idle. The verification entry point
+holds an exclusive checkout lease when the budget is enabled.
 
 Every selection ends with `git diff --check`. Preview prints argument arrays and working
 directories without running commands or creating artifacts.
