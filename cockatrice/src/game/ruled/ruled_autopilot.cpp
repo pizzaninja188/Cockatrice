@@ -142,7 +142,12 @@ void RuledAutopilot::createGame(int roomId)
     Command_CreateGame cmd;
     cmd.set_description(config.gameName.toStdString());
     cmd.set_max_players(config.playerCount);
-    cmd.set_starting_life_total(20);
+    const bool commander =
+        qEnvironmentVariable("COCKATRICE_AUTOPILOT_FORMAT").compare("Commander", Qt::CaseInsensitive) == 0;
+    if (qEnvironmentVariable("COCKATRICE_AUTOPILOT_RECORDED_GAME") != "1") {
+        cmd.set_format(commander ? ruled::v1::GAME_FORMAT_COMMANDER : ruled::v1::GAME_FORMAT_STANDARD);
+    }
+    cmd.set_starting_life_total(commander ? 40 : 20);
     cmd.set_spectators_allowed(true);
     cmd.set_spectators_can_talk(true);
     cmd.set_spectators_see_everything(true);

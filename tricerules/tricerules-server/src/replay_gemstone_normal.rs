@@ -51,6 +51,7 @@ impl Pilot {
             commander_setup: Some(CommanderSetup {
                 declaration: Some(commander_setup::Declaration::NoCommander(true)),
             }),
+            ..Default::default()
         })
         .collect::<Vec<_>>();
         assert!(decks
@@ -59,6 +60,7 @@ impl Pilot {
         let validation_request = IpcEnvelope {
             msg: Some(Msg::ValidateDeck(ValidateDeck {
                 card_names: vec!["Gemstone Caverns".into(), "Forest".into()],
+                ..Default::default()
             })),
         };
         let validation = pilot.session.process(&validation_request).unwrap();

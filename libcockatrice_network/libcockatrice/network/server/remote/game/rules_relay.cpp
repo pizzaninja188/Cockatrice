@@ -129,9 +129,15 @@ bool RulesRelay::readFrame(QByteArray &out)
     return true;
 }
 
-bool RulesRelay::sessionStart(quint64 gameId, quint64 seed, const QList<int> &playerIds,
-                              const QList<ruled::v1::PlayerDeck> *playerDecks, bool devCommandsEnabled,
-                              ruled::v1::IpcResponse &out)
+bool RulesRelay::sessionStart(quint64 gameId,
+                              quint64 seed,
+                              const QList<int> &playerIds,
+                              const QList<ruled::v1::PlayerDeck> *playerDecks,
+                              bool devCommandsEnabled,
+                              ruled::v1::IpcResponse &out,
+                              ruled::v1::GameFormat format,
+                              const QString &catalogHash,
+                              const QString &catalogDate)
 {
     if (!connectIfNeeded()) {
         return false;
@@ -151,6 +157,9 @@ bool RulesRelay::sessionStart(quint64 gameId, quint64 seed, const QList<int> &pl
             ss->add_player_decks()->CopyFrom(row);
         }
     }
+    ss->set_format(format);
+    ss->set_format_catalog_hash(catalogHash.toStdString());
+    ss->set_format_catalog_source_date(catalogDate.toStdString());
     return sessionStart(*ss, out);
 }
 
@@ -208,6 +217,20 @@ bool RulesRelay::validateDeck(const QStringList &cardNames, ruled::v1::IpcRespon
         return false;
     }
     return out.ParseFromArray(frame.constData(), frame.size());
+}
+
+bool RulesRelay::validateDeck(const ruled::v1::PlayerDeck &deck,
+                              ruled::v1::GameFormat format,
+                              ruled::v1::IpcResponse &out)
+{
+    if (!connectIfNeeded()) {
+        return false;
+    }
+    ruled::v1::IpcEnvelope envelope;
+    auto *query = envelope.mutable_validate_deck();
+    query->set_format(format);
+    *query->mutable_deck() = deck;
+    return exchange(envelope, out);
 }
 
 bool RulesRelay::sessionEnd()

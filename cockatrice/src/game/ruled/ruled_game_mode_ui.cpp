@@ -2,11 +2,14 @@
 
 #include <QAction>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QEvent>
 #include <QObject>
 #include <QPointer>
 #include <QPushButton>
+#include <QSpinBox>
+#include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 
 namespace
 {
@@ -69,6 +72,23 @@ private:
 
 namespace RuledGameModeUi
 {
+void configureFormatControls(QComboBox *format, QSpinBox *players, QSpinBox *life)
+{
+    format->setObjectName("gameFormat");
+    format->addItem(QCoreApplication::translate("DlgCreateGame", "Standard"), ruled::v1::GAME_FORMAT_STANDARD);
+    format->addItem(QCoreApplication::translate("DlgCreateGame", "Commander"), ruled::v1::GAME_FORMAT_COMMANDER);
+    const auto apply = [format, players, life] {
+        const bool commander = format->currentData().toInt() == ruled::v1::GAME_FORMAT_COMMANDER;
+        players->setRange(2, commander ? 4 : 2);
+        players->setValue(commander ? 4 : 2);
+        life->setValue(commander ? 40 : 20);
+        life->setReadOnly(true);
+        life->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    };
+    QObject::connect(format, &QComboBox::currentIndexChanged, format, apply);
+    apply();
+}
+
 bool allowsLocalFreeformGames()
 {
     return false;

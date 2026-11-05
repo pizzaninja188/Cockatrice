@@ -180,10 +180,18 @@ QString RuledE2ESmokeTest::writeServatriceIni()
     // go into the environment both processes inherit.
     env.insert(QStringLiteral("COCKATRICE_RULED_DEV"), QStringLiteral("1"));
     env.insert(QStringLiteral("TRICERULES_DEV_COMMANDS"), QStringLiteral("1"));
+    // Historical 40-card gameplay fixtures use an omitted format behind both dev gates.
+    // Requests explicitly selecting a format always take normal construction admission.
+    env.insert(QStringLiteral("COCKATRICE_RULED_TEST_DECKS"), QStringLiteral("1"));
+    env.insert(QStringLiteral("TRICERULES_TEST_DECKS"), QStringLiteral("1"));
     if (!sidecarIdleTimeoutSecs.isEmpty()) {
         env.insert(QStringLiteral("TRICERULES_IDLE_TIMEOUT_SECS"), sidecarIdleTimeoutSecs);
     }
 
+    env.insert(QStringLiteral("TRICERULES_REPLAY_ADMISSION"),
+               resumePlanPath.isEmpty() ? QStringLiteral("0") : QStringLiteral("1"));
+    env.insert(QStringLiteral("TRICERULES_FORMAT_UPDATES"), QStringLiteral("0"));
+    env.insert(QStringLiteral("TRICERULES_FORMAT_DATA_DIR"), QStringLiteral(RULED_E2E_REPO "/tests/fixtures/formats"));
     sidecar.setProcessEnvironment(env);
     sidecar.start(sidecarExe, {});
     if (!sidecar.waitForStarted(10000)) {

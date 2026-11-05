@@ -1,4 +1,5 @@
 syntax = "proto2";
+import "ruled_v1.proto";
 import "response.proto";
 
 message Response_DeckDownload {
@@ -6,4 +7,10 @@ message Response_DeckDownload {
         optional Response_DeckDownload ext = 1007;
     }
     optional string deck = 1;
+    optional ruled.v1.DeckValidationReport validation = 2;
+}
+
+message Response_RuledDeckValidation {
+    extend Response { optional Response_RuledDeckValidation ext = 1020; }
+    optional ruled.v1.DeckValidationReport validation = 1;
 }

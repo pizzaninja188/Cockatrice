@@ -296,6 +296,8 @@ bool RuledGameDriver::startRuledSidecarSession()
     }
     if (game->currentReplay) {
         game->currentReplay->set_ruled_seed(result.seed);
+        game->currentReplay->set_ruled_format_catalog_hash(result.response.format_catalog_hash());
+        game->currentReplay->set_ruled_format_catalog_source_date(result.response.format_catalog_source_date());
         // Stamp the card-data hash beside the seed so (seed, command log, hash) reproduces the replay.
         if (!result.cardDataHash.isEmpty()) {
             game->currentReplay->set_ruled_card_data_hash(result.cardDataHash.toStdString());

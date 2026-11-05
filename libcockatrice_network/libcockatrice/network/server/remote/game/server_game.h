@@ -19,9 +19,10 @@
  ***************************************************************************/
 #ifndef SERVERGAME_H
 #define SERVERGAME_H
-
 #include "../server_response_containers.h"
 #include "libcockatrice/protocol/pb/game_event_context.pb.h"
+
+#include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 
 // IWYU pragma: keep
 // ServerInfo_Game is passed by value to the gameInfoChanged() signal, so the
@@ -112,6 +113,7 @@ private:
     QList<GameReplay *> replayList;
     GameReplay *currentReplay;
     bool ruledGame;
+    ruled::v1::GameFormat format;
     /// Fork hook: all ruled-mode state and logic lives in the fork-owned driver
     /// (ruled_game_driver.{h,cpp}); non-null iff ruledGame.
     std::unique_ptr<RuledGameDriver> ruledDriver;
@@ -212,6 +214,10 @@ public:
     bool getShareDecklistsOnLoad() const
     {
         return shareDecklistsOnLoad;
+    }
+    ruled::v1::GameFormat getFormat() const
+    {
+        return format;
     }
     bool getRuledGame() const
     {

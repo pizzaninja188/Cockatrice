@@ -29,15 +29,22 @@ public:
     /// (the engine resolves every Oracle name to its card id); nullptr = use engine default
     /// @param devCommandsEnabled ask the sidecar to accept debug cheat commands. Only half the
     /// gate: the sidecar grants it solely if its own TRICERULES_DEV_COMMANDS env var is also set.
-    bool sessionStart(quint64 gameId, quint64 seed, const QList<int> &playerIds,
-                      const QList<ruled::v1::PlayerDeck> *playerDecks, bool devCommandsEnabled,
-                      ruled::v1::IpcResponse &out);
+    bool sessionStart(quint64 gameId,
+                      quint64 seed,
+                      const QList<int> &playerIds,
+                      const QList<ruled::v1::PlayerDeck> *playerDecks,
+                      bool devCommandsEnabled,
+                      ruled::v1::IpcResponse &out,
+                      ruled::v1::GameFormat format = ruled::v1::GAME_FORMAT_UNSPECIFIED,
+                      const QString &catalogHash = {},
+                      const QString &catalogDate = {});
     bool playerCommand(int playerId, const QByteArray &ruledCommandBytes, ruled::v1::IpcResponse &out);
     bool sessionStart(const ruled::v1::SessionStart &start, ruled::v1::IpcResponse &out);
     /// Stateless implemented-card check (no engine session): out.ok() iff every Oracle
     /// name resolves; otherwise out.missing_card_names() lists them sorted, deduplicated.
     /// Returns false only on transport failure (sidecar unreachable / bad frame).
     bool validateDeck(const QStringList &cardNames, ruled::v1::IpcResponse &out);
+    bool validateDeck(const ruled::v1::PlayerDeck &deck, ruled::v1::GameFormat format, ruled::v1::IpcResponse &out);
     bool previewPayment(int playerId, const ruled::v1::PreviewPayment &preview, ruled::v1::IpcResponse &out);
     bool sessionEnd();
     void setDiagnostics(RuledServerDiagnostics *value)

@@ -1,7 +1,5 @@
 #include "server_abstract_player.h"
 
-#include "ruled_game_driver.h"
-#include "ruled_utils.h"
 #include "dump_zone_range.h"
 #include "game/server_abstract_participant.h"
 #include "game/server_arrowtarget.h"
@@ -14,6 +12,9 @@
 #include "libcockatrice/protocol/pb/serverinfo_zone.pb.h"
 #include "libcockatrice/utility/card_ref.h"
 #include "libcockatrice/utility/playmat_params.h"
+#include "ruled_deck_validation.h"
+#include "ruled_game_driver.h"
+#include "ruled_utils.h"
 #include "server_arrow.h"
 #include "server_card.h"
 #include "server_cardzone.h"
@@ -779,7 +780,7 @@ Response::ResponseCode Server_AbstractPlayer::cmdUnconcede(const Command_Unconce
 }
 
 Response::ResponseCode
-Server_AbstractPlayer::cmdReadyStart(const Command_ReadyStart &cmd, ResponseContainer & /*rc*/, GameEventStorage &ges)
+Server_AbstractPlayer::cmdReadyStart(const Command_ReadyStart &cmd, ResponseContainer &rc, GameEventStorage &ges)
 {
     if (!deck || game->getGameStarted()) {
         return Response::RespContextError;
@@ -789,6 +790,9 @@ Server_AbstractPlayer::cmdReadyStart(const Command_ReadyStart &cmd, ResponseCont
         return Response::RespContextError;
     }
 
+    if (cmd.ready() && !RuledDeckValidation::admit(this, *deck, rc)) {
+        return Response::RespInvalidData;
+    }
     setReadyStart(cmd.ready());
 
     Event_PlayerPropertiesChanged event;

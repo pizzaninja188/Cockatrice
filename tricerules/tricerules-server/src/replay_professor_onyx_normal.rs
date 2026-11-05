@@ -33,6 +33,7 @@ impl Pilot {
                 PlayerDeck {
                     player_id,
                     mainboard_card_name,
+                    sideboard_card_name: vec![],
                     commander_setup: Some(CommanderSetup {
                         declaration: Some(commander_setup::Declaration::NoCommander(true)),
                     }),
@@ -49,6 +50,7 @@ impl Pilot {
                         .collect::<std::collections::BTreeSet<_>>()
                         .into_iter()
                         .collect(),
+                    ..Default::default()
                 })),
             })
             .unwrap();

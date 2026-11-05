@@ -1,5 +1,11 @@
 #include "server_protocolhandler.h"
 
+#include "game/ruled_deck_validation.h"
+#include "game/ruled_game_resume.h"
+
+#include <libcockatrice/deck_list/deck_list.h>
+#include <libcockatrice/protocol/pb/response_deck_download.pb.h>
+
 // Challenge-response nonces are valid for at most one minute from issuance.
 static constexpr qint64 kAuthNonceLifetimeSeconds = 60;
 
@@ -220,6 +226,16 @@ Response::ResponseCode Server_ProtocolHandler::processSessionCommandContainer(co
             resp = Response::RespLoginNeeded;
         } else {
             switch (commandType) {
+                case SessionCommand::RULED_VALIDATE_DECK: {
+                    const auto &request = sc.GetExtension(Command_RuledValidateDeck::ext);
+                    const DeckList deck(QString::fromStdString(request.deck()));
+                    const auto result = RuledDeckValidation::query(deck, -1, request.format());
+                    auto *reply = new Response_RuledDeckValidation;
+                    *reply->mutable_validation() = result.deck_validation();
+                    rc.setResponseExtension(reply);
+                    resp = Response::RespOk;
+                    break;
+                }
                 case SessionCommand::PING:
                     resp = cmdPing(sc.GetExtension(Command_Ping::ext), rc);
                     break;
@@ -1091,6 +1107,29 @@ Server_ProtocolHandler::cmdCreateGame(const Command_CreateGame &cmd, Server_Room
     if (!cmd.ruled_game()) {
         return Response::RespInvalidCommand;
     }
+    const bool testDecks =
+        qEnvironmentVariable("COCKATRICE_RULED_TEST_DECKS") == "1" &&
+        (qEnvironmentVariable("COCKATRICE_RULED_DEV") == "1" || qEnvironmentVariable("COCKATRICE_RULED_DEV") == "true");
+    auto format = cmd.format();
+    const RuledGameResume recorded(qEnvironmentVariable("COCKATRICE_RULED_RESUME_PLAN"));
+    if (recorded.enabled()) {
+        if (!recorded.valid() || (cmd.has_format() && cmd.format() != recorded.plan().session_start().format()) ||
+            cmd.max_players() != static_cast<unsigned>(recorded.plan().session_start().player_ids_size())) {
+            return Response::RespInvalidData;
+        }
+        format = recorded.plan().session_start().format();
+    }
+    if ((!cmd.has_format() || format == ruled::v1::GAME_FORMAT_UNSPECIFIED) && !testDecks && !recorded.valid()) {
+        return Response::RespInvalidData;
+    }
+    if (format != ruled::v1::GAME_FORMAT_UNSPECIFIED && format != ruled::v1::GAME_FORMAT_STANDARD &&
+        format != ruled::v1::GAME_FORMAT_COMMANDER) {
+        return Response::RespInvalidData;
+    }
+    if ((format == ruled::v1::GAME_FORMAT_STANDARD && cmd.max_players() != 2) ||
+        (format == ruled::v1::GAME_FORMAT_COMMANDER && (cmd.max_players() < 2 || cmd.max_players() > 4))) {
+        return Response::RespInvalidData;
+    }
     if (cmd.password().length() > MAX_NAME_LENGTH) {
         return Response::RespContextError;
     }
@@ -1118,7 +1157,10 @@ Server_ProtocolHandler::cmdCreateGame(const Command_CreateGame &cmd, Server_Room
     }
 
     QString description = nameFromStdString(cmd.description());
-    int startingLifeTotal = cmd.has_starting_life_total() ? cmd.starting_life_total() : 20;
+    int startingLifeTotal = format == ruled::v1::GAME_FORMAT_COMMANDER ? 40
+                            : format == ruled::v1::GAME_FORMAT_STANDARD
+                                ? 20
+                                : (cmd.has_starting_life_total() ? cmd.starting_life_total() : 20);
 
     bool shareDecklistsOnLoad = cmd.has_share_decklists_on_load() ? cmd.share_decklists_on_load() : false;
     bool shufflePlayers = cmd.has_shuffle_players() ? cmd.shuffle_players() : false;
@@ -1145,7 +1187,8 @@ Server_ProtocolHandler::cmdCreateGame(const Command_CreateGame &cmd, Server_Room
                       .startingLifeTotal = startingLifeTotal,
                       .shareDecklistsOnLoad = shareDecklistsOnLoad,
                       .shufflePlayers = shufflePlayers && !cmd.ruled_game(),
-                      .ruledGame = cmd.ruled_game()};
+                      .ruledGame = cmd.ruled_game(),
+                      .format = format};
 
     auto *game = new Server_Game(config, room);
 

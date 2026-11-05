@@ -1,4 +1,5 @@
 syntax = "proto2";
+import "ruled_v1.proto";
 
 message SessionCommand {
     enum SessionCommandType {
@@ -37,6 +38,7 @@ message SessionCommand {
         DECK_SHARE_LIST_MINE = 1032;
         DECK_SHARE_REMOVE = 1033;
         SUBMIT_PASSWORD_VERIFIER = 1034;
+        RULED_VALIDATE_DECK = 1035;
         REPLAY_LIST = 1100;
         REPLAY_DOWNLOAD = 1101;
         REPLAY_MODIFY_MATCH = 1102;
@@ -242,4 +244,11 @@ message Command_SubmitPasswordVerifier {
     }
     // Full verifier string to store, e.g. "$scrypt$32768$8$1$<salt>$<verifier>"
     required string password_verifier = 1;
+}
+
+// Authenticated stateless query. Native decks are normalized by the server before IPC.
+message Command_RuledValidateDeck {
+    extend SessionCommand { optional Command_RuledValidateDeck ext = 1035; }
+    optional string deck = 1;
+    optional ruled.v1.GameFormat format = 2;
 }

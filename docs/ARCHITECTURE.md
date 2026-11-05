@@ -69,7 +69,7 @@ still depend on the embedded corpus.
 
 ### Fork wire compatibility
 
-The upstream integration uses the shared `kRuledProtocolVersion` (10015) on both client and
+The upstream integration uses the shared `kRuledProtocolVersion` (10016) on both client and
 server. Deploy matching updated fork clients and Servatrice together; protocol 14 peers are
 rejected before login. `Command_CreateGame.ruled_game` keeps field 15 and upstream
 `shuffle_players` uses field 16. The create-game UI and relay disable player shuffling for ruled
@@ -636,3 +636,5 @@ card-level source review, definition authoring, and coverage.
 
 There is deliberately **no full-GUI click automation**; real-GUI verification stays manual.
 Run the E2E smoke after any change to the relay, `ruled_v1.proto`, or ruled `server_game` paths.
+
+Format construction admission and catalogue/replay boundaries are described in [FORMATS.md](FORMATS.md).

@@ -119,6 +119,7 @@ public:
     DeckEditorPrintingSelectorDockWidget *printingSelectorDockWidget; ///< Printing selector dock
 
 public slots:
+    void actValidateDeck();
     /** @brief Called when the deck changes. */
     virtual void onDeckChanged();
 

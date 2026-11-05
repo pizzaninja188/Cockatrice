@@ -22,6 +22,26 @@ bool parse(QTextStream &in,
            DecklistNodeTree &tree)
 {
     tree.clear();
+    enum class Section
+    {
+        Legacy,
+        Main,
+        Side,
+        Commander
+    };
+    Section section = Section::Legacy;
+    bool declarationsSeen = false;
+    const auto beginDeclarations = [&] {
+        if (!declarationsSeen) {
+            metadata.commanders.clear();
+            declarationsSeen = true;
+        }
+    };
+    static const QRegularExpression reSection(
+        R"(^\s*(?://\s*|\[)?(commanders?|command zone|sideboard|deck|mainboard|maindeck)\]?:?\s*$)",
+        QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression reCommanderMark(R"(^\s*(?:CM|Commander):\s*(.+)$)",
+                                                    QRegularExpression::CaseInsensitiveOption);
 
     static const QRegularExpression reCardLine(R"(^\s*[\w\[\(\{].*$)", QRegularExpression::UseUnicodePropertiesOption);
     static const QRegularExpression reEmpty("^\\s*$");
@@ -105,6 +125,21 @@ bool parse(QTextStream &in,
 
     // Parse decklist
     for (; index < max_line; ++index) {
+        const auto line = inputs.at(index).trimmed();
+        if (line.isEmpty() && section == Section::Commander) {
+            section = Section::Main;
+        }
+        match = reSection.match(line);
+        if (match.hasMatch()) {
+            const auto label = match.captured(1).toLower();
+            section = label.startsWith("command") ? Section::Commander
+                      : label == "sideboard"      ? Section::Side
+                                                  : Section::Main;
+            if (section == Section::Commander) {
+                beginDeclarations();
+            }
+            continue;
+        }
         // check if line is a card
         match = reCardLine.match(inputs.at(index));
         if (!match.hasMatch()) {
@@ -113,7 +148,14 @@ bool parse(QTextStream &in,
 
         const QString rawLine = match.captured();
         QString cardName = rawLine.simplified();
-        bool sideboard = false;
+        bool sideboard = section == Section::Side;
+        bool commander = section == Section::Commander;
+        match = reCommanderMark.match(cardName);
+        if (match.hasMatch()) {
+            commander = true;
+            beginDeclarations();
+            cardName = match.captured(1);
+        }
         int amount = 1;
 
         // Card names never contain tab characters, so a leading numeric field
@@ -140,14 +182,13 @@ bool parse(QTextStream &in,
             }
         }
 
-        // Sideboard detection
-        if (sBStart < 0) {
-            match = reSBMark.match(cardName);
-            if (match.hasMatch()) {
-                sideboard = true;
-                cardName = match.captured(1);
-            }
-        } else {
+        // Explicit prefixes remain meaningful inside a mainboard section; unsectioned
+        // upstream lists retain their existing blank-line sideboard inference.
+        match = reSBMark.match(cardName);
+        if (match.hasMatch()) {
+            sideboard = true;
+            cardName = match.captured(1);
+        } else if (section == Section::Legacy && sBStart >= 0) {
             if (index == sBStart) {
                 continue;
             }
@@ -194,6 +235,15 @@ bool parse(QTextStream &in,
         // Normalize the card name
         cardName = cardNameNormalizer(cardName);
 
+        if (commander) {
+            if (amount < 1 || amount > 10000 - metadata.commanders.size() || cardName.isEmpty()) {
+                return false;
+            }
+            for (int copy = 0; copy < amount; ++copy) {
+                metadata.commanders.append({cardName, {}});
+            }
+            continue;
+        }
         // Determine the zone (mainboard/sideboard)
         QString zoneName = sideboard ? DECK_ZONE_SIDE : DECK_ZONE_MAIN;
 

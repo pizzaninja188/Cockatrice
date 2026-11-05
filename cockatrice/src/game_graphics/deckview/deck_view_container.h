@@ -21,6 +21,7 @@ class VisualDeckStorageWidget;
 class Response;
 class TabGame;
 class DeckView;
+class RuledDeckLobbyPanel;
 
 /**
  * Custom QButton implementation in order to have the red/green toggling square around the button
@@ -57,6 +58,8 @@ private:
     QPushButton *unloadDeckButton, *forceStartGameButton;
     ToggleButton *readyStartButton, *sideboardLockButton;
     DeckView *deckView;
+    RuledDeckLobbyPanel *validationPanel;
+    bool sideboardPlanPending = false;
     VisualDeckStorageWidget *visualDeckStorageWidget;
     TabGame *parentGame;
     int playerId;

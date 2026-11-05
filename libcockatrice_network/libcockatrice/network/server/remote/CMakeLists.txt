@@ -12,6 +12,7 @@ set(HEADERS
     game/ruled_presentation_identity.h
     game/ruled_batch_synchronizer.h
     game/ruled_game_driver.h
+    game/ruled_deck_validation.h
     game/ruled_game_session.h
     game/ruled_server_diagnostics.h
     game/ruled_player_binding.h
@@ -52,6 +53,7 @@ add_library(
   game/ruled_batch_synchronizer.cpp
   game/ruled_relay_diagnostic_state.cpp
   game/ruled_game_driver.cpp
+  game/ruled_deck_validation.cpp
   game/ruled_game_session.cpp
   game/ruled_game_resume.cpp
   game/ruled_server_diagnostics.cpp

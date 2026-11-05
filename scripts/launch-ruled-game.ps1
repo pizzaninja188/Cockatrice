@@ -14,19 +14,22 @@
     rebuilding: a live servatrice or tricerules-server holds its .exe and the link step fails.
 
 .PARAMETER DeckA
-    Deck for the hosting seat (p1). Defaults to scripts/decks/dev-red.cod.
+    Deck for the hosting seat (p1). Defaults to the Standard Forest sample, or Commander Kami sample.
 
 .PARAMETER DeckB
-    Deck for the joining seat (p2). Defaults to scripts/decks/dev-blue.cod.
+    Deck for the joining seat (p2). Defaults to the Standard Island sample, or Commander Kami sample.
 
 .PARAMETER DeckC
-    Deck for the third seat (p3) when -Players is 3 or 4. Defaults to scripts/decks/dev-creatures.cod.
+    Deck for the third seat (p3) when -Players is 3 or 4. Defaults to the Commander Kami sample.
 
 .PARAMETER DeckD
-    Deck for the fourth seat (p4) when -Players 4. Defaults to scripts/decks/dev-creatures.cod.
+    Deck for the fourth seat (p4) when -Players 4. Defaults to the Commander Kami sample.
+
+.PARAMETER Format
+    Standard (default) or Commander. Determines legality, starting life, and default sample decks.
 
 .PARAMETER Players
-    Number of seats in the ruled game: 2 (default), 3, or 4.
+    Standard uses two seats. Commander uses two to four seats, defaulting to four.
 
 .PARAMETER GameName
     Game description, and the name the joining seat matches on. Change it to run two sets at once.
@@ -72,10 +75,10 @@
     ./scripts/launch-ruled-game.ps1 -Dev
 
 .EXAMPLE
-    ./scripts/launch-ruled-game.ps1 -Players 3 -Dev
+    ./scripts/launch-ruled-game.ps1 -Format Commander -Players 3 -Dev
 
 .EXAMPLE
-    ./scripts/launch-ruled-game.ps1 -Players 4 -Dev
+    ./scripts/launch-ruled-game.ps1 -Format Commander -Players 4 -Dev
 
 .EXAMPLE
     ./scripts/launch-ruled-game.ps1 -Stop
@@ -88,6 +91,7 @@ param(
     [string]$DeckC,
     [string]$DeckD,
     [ValidateSet(2, 3, 4)][int]$Players = 2,
+    [ValidateSet("Standard", "Commander")][string]$Format = "Standard",
     [string]$GameName,
     [long]$Seed = 0,
     [switch]$Dev,
@@ -101,10 +105,12 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+if ($Format -eq "Commander" -and -not $PSBoundParameters.ContainsKey("Players")) { $Players = 4 }
+if ($Format -eq "Standard" -and $Players -ne 2 -and -not $Capture -and -not $RunDirectory -and -not $Stop) { throw "Standard requires two players; use -Format Commander for three or four." }
 
 # Capture runs own isolated servers and process records; route before the ordinary dev-run cleanup.
 if ($Capture -or $RunDirectory) {
-    foreach ($taskConflict in @('DeckA','DeckB','DeckC','DeckD','Players','Seed','Dev','NoServers')) {
+    foreach ($taskConflict in @('DeckA','DeckB','DeckC','DeckD','Players','Format','Seed','Dev','NoServers')) {
         if ($PSBoundParameters.ContainsKey($taskConflict)) { throw "-$taskConflict cannot override a captured game." }
     }
     & (Join-Path $PSScriptRoot 'launch-ruled-capture.ps1') @PSBoundParameters
@@ -116,6 +122,7 @@ if ($Players -lt 4 -and $PSBoundParameters.ContainsKey('DeckD')) { throw '-DeckD
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $buildDir = Join-Path $repoRoot "build\windows-ninja-all"
+if (-not $env:TRICERULES_FORMAT_DATA_DIR) { $env:TRICERULES_FORMAT_DATA_DIR = Join-Path $repoRoot "build\format-data" }
 $pidFile = Join-Path $buildDir "ruled-dev-game.pids"
 # Each process gets its own file here: the Cockatrice logger always writes "qdebug.txt" into the
 # process working directory and truncates it, so two clients sharing a cwd would clobber each other.
@@ -230,10 +237,10 @@ if ($buildProcess.ExitCode -ne 0) {
     throw "Build failed with exit code $($buildProcess.ExitCode); nothing was launched."
 }
 
-if (-not $DeckA) { $DeckA = Join-Path $PSScriptRoot "decks\dev-red.cod" }
-if (-not $DeckB) { $DeckB = Join-Path $PSScriptRoot "decks\dev-blue.cod" }
-if ($Players -ge 3 -and -not $DeckC) { $DeckC = Join-Path $PSScriptRoot "decks\dev-creatures.cod" }
-if ($Players -eq 4 -and -not $DeckD) { $DeckD = Join-Path $PSScriptRoot "decks\dev-creatures.cod" }
+if (-not $DeckA) { $DeckA = Join-Path $PSScriptRoot $(if ($Format -eq "Commander") { "decks\commander-kami.cod" } else { "decks\standard-forest.cod" }) }
+if (-not $DeckB) { $DeckB = Join-Path $PSScriptRoot $(if ($Format -eq "Commander") { "decks\commander-kami.cod" } else { "decks\standard-island.cod" }) }
+if ($Players -ge 3 -and -not $DeckC) { $DeckC = Join-Path $PSScriptRoot "decks\commander-kami.cod" }
+if ($Players -eq 4 -and -not $DeckD) { $DeckD = Join-Path $PSScriptRoot "decks\commander-kami.cod" }
 if (-not $GameName) {
     $GameName = "Ruled dev game"
 }
@@ -258,6 +265,14 @@ if (-not $NoServers) {
     $sidecarExe = Get-RequiredPath (Join-Path $repoRoot "tricerules\target\release\tricerules-server.exe") `
         "tricerules-server" "Build it first: cargo build --release --manifest-path ./tricerules/Cargo.toml -p tricerules-server"
     $configPath = Get-RequiredPath (Join-Path $repoRoot "servatrice-local.ini") "servatrice-local.ini" "Expected in the repo root."
+
+    # Automatic deck selection must wait for the first trusted catalogue instead of racing
+    # the sidecar's background download on a clean installation.
+    if (-not (Test-Path -LiteralPath (Join-Path $env:TRICERULES_FORMAT_DATA_DIR "current.json"))) {
+        Write-Host "Downloading the initial format catalogue..." -ForegroundColor Cyan
+        & $sidecarExe --refresh-formats
+        if ($LASTEXITCODE -ne 0) { throw "The initial format catalogue could not be loaded. Retry when Scryfall is reachable." }
+    }
 
     Write-Host "Starting servers..." -ForegroundColor Cyan
 
@@ -319,6 +334,8 @@ if (-not $NoServers) {
 # the two that actually vary per seat.
 $env:COCKATRICE_AUTOPILOT_GAME = $GameName
 $env:COCKATRICE_AUTOPILOT_PLAYERS = "$Players"
+$env:COCKATRICE_AUTOPILOT_FORMAT = $Format
+$env:COCKATRICE_AUTOPILOT_RECORDED_GAME = $null
 
 Write-Host "Starting clients..." -ForegroundColor Cyan
 

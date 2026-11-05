@@ -74,6 +74,7 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     p2.sendReady();
     ASSERT_TRUE(p1.pumpUntil([&] { return p1.notifyCustomCount > 0; }, 20000, "unimplemented-cards popup (p1)"));
     ASSERT_TRUE(p2.pumpUntil([&] { return p2.notifyCustomCount > 0; }, 20000, "unimplemented-cards popup (p2)"));
+    EXPECT_FALSE(p1.lastNotifyContent.contains(QStringLiteral("Black Lotus"))) << "Deck identities stay private";
     EXPECT_TRUE(p2.lastNotifyContent.contains(QStringLiteral("Black Lotus")))
         << "popup should name the unimplemented card: " << p2.lastNotifyContent.toStdString();
     EXPECT_FALSE(p1.gameStarted);

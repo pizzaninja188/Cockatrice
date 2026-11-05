@@ -2,6 +2,8 @@
 
 #include "../../client/settings/cache_settings.h"
 #include "../../client/settings/shortcuts_settings.h"
+#include "../../game/ruled/ruled_actions.h"
+#include "../../game/ruled/ruled_deck_lobby_panel.h"
 #include "../../interface/card_picture_loader/card_picture_loader.h"
 #include "../../interface/deck_loader/deck_loader.h"
 #include "../../interface/widgets/dialogs/dlg_load_deck.h"
@@ -34,6 +36,7 @@
 #include <libcockatrice/game/abstract_game.h>
 #include <libcockatrice/game/game_event_handler.h>
 #include <libcockatrice/game/game_state.h>
+#include <libcockatrice/protocol/pb/command_set_sideboard_plan.pb.h>
 #include <libcockatrice/protocol/pb/response_deck_download.pb.h>
 #include <libcockatrice/protocol/pending_command.h>
 #include <libcockatrice/settings/interface_settings.h>
@@ -119,6 +122,9 @@ DeckViewContainer::DeckViewContainer(int _playerId, TabGame *parent)
 
     deckViewLayout = QtUtils::makeLayout<QVBoxLayout>();
     deckViewLayout->addLayout(buttonHBox);
+    validationPanel = new RuledDeckLobbyPanel(this);
+    deckViewLayout->addWidget(validationPanel);
+    validationPanel->setVisible(RuledActions::isRuledGame(parentGame->getGame()));
     deckViewLayout->addWidget(deckView);
     setLayout(deckViewLayout);
 
@@ -411,10 +417,19 @@ void DeckViewContainer::loadFromWebsite()
 
 void DeckViewContainer::deckSelectFinished(const Response &r)
 {
+    if (r.response_code() != Response::RespOk || !r.HasExtension(Response_DeckDownload::ext)) {
+        if (r.HasExtension(Response_RuledDeckValidation::ext)) {
+            validationPanel->showReport(r.GetExtension(Response_RuledDeckValidation::ext).validation(), true);
+        }
+        return;
+    }
     const Response_DeckDownload &resp = r.GetExtension(Response_DeckDownload::ext);
     DeckList newDeck = DeckList(QString::fromStdString(resp.deck()));
     CardPictureLoader::cacheCardPixmaps(CardDatabaseManager::query()->getCards(newDeck.getCardRefList()));
     setDeck(newDeck);
+    if (resp.has_validation()) {
+        validationPanel->showReport(resp.validation());
+    }
     switchToDeckLoadedView();
 }
 
@@ -449,7 +464,38 @@ void DeckViewContainer::sideboardLockButtonClicked()
 
 void DeckViewContainer::sideboardPlanChanged()
 {
-    parentGame->getGame()->getGameEventHandler()->sendSetSideboardPlan(deckView->getSideboardPlan(), playerId);
+    if (!RuledActions::isRuledGame(parentGame->getGame())) {
+        parentGame->getGame()->getGameEventHandler()->sendSetSideboardPlan(deckView->getSideboardPlan(), playerId);
+        return;
+    }
+    if (sideboardPlanPending) {
+        return;
+    }
+    const auto plan = deckView->getSideboardPlan();
+    Command_SetSideboardPlan command;
+    for (const auto &move : plan) {
+        *command.add_move_list() = move;
+    }
+    auto *handler = parentGame->getGame()->getGameEventHandler();
+    auto *pending = handler->prepareGameCommand(command);
+    sideboardPlanPending = true;
+    deckView->setLocked(true);
+    readyStartButton->setEnabled(false);
+    connect(pending, &PendingCommand::finished, this, [this, plan](const Response &response) {
+        if (response.response_code() == Response::RespOk) {
+            currentDeck.setCurrentSideboardPlan(plan);
+        } else {
+            deckView->setDeck(currentDeck);
+            if (response.HasExtension(Response_RuledDeckValidation::ext)) {
+                validationPanel->showReport(response.GetExtension(Response_RuledDeckValidation::ext).validation(),
+                                            true);
+            }
+        }
+        sideboardPlanPending = false;
+        readyStartButton->setEnabled(true);
+        setReadyStart(readyStartButton->getState());
+    });
+    handler->sendGameCommand(pending, playerId);
 }
 
 /**
@@ -497,6 +543,7 @@ void DeckViewContainer::setSideboardLocked(bool locked)
 void DeckViewContainer::setDeck(const DeckList &deck)
 {
     currentDeck = deck;
+    validationPanel->setDeck(deck);
     deckView->setDeck(deck);
     switchToDeckLoadedView();
 }

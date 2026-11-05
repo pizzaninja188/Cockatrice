@@ -37,6 +37,7 @@
 #include <QMessageLogger>
 #include <QModelIndex>
 #include <QMouseEvent>
+#include <QPushButton>
 #include <QSize>
 #include <QTimer>
 #include <QTreeView>
@@ -84,6 +85,9 @@ void TabDeckEditorVisual::createCentralFrame()
     centralFrame = new QVBoxLayout;
     centralWidget->setLayout(centralFrame);
     centralFrame->addWidget(new RuledCommanderEditor(deckStateManager, centralWidget));
+    auto *validateDeck = new QPushButton(tr("Validate deck…"), centralWidget);
+    connect(validateDeck, &QPushButton::clicked, this, &AbstractTabDeckEditor::actValidateDeck);
+    centralFrame->addWidget(validateDeck);
 
     tabContainer = new TabDeckEditorVisualTabWidget(centralWidget, this, deckStateManager->getModel(), databaseModel);
 

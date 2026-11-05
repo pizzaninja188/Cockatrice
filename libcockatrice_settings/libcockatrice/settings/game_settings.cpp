@@ -180,3 +180,12 @@ void GameSettings::setLocalGameStartingLifeTotal(int value)
 {
     setValue(value, "startingLifeTotal", "localgameoptions");
 }
+
+int GameSettings::getRuledFormat() const
+{
+    return getValue("ruledFormat", "game", QString(), 1).toInt();
+}
+void GameSettings::setRuledFormat(int format)
+{
+    setValue(format, "ruledFormat", "game");
+}

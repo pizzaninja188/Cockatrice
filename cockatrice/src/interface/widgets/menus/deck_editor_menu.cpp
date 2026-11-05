@@ -33,6 +33,8 @@ DeckEditorMenu::DeckEditorMenu(AbstractTabDeckEditor *parent) : QMenu(parent), d
     aSaveDeckAs = new QAction(QString(), this);
     connect(aSaveDeckAs, &QAction::triggered, deckEditor, &AbstractTabDeckEditor::actSaveDeckAs);
 
+    aValidateDeck = new QAction(tr("Validate deck…"), this);
+    connect(aValidateDeck, &QAction::triggered, deckEditor, &AbstractTabDeckEditor::actValidateDeck);
     aShareDeck = new QAction(QString(), this);
     connect(aShareDeck, &QAction::triggered, deckEditor, &AbstractTabDeckEditor::actShareDeck);
 
@@ -105,6 +107,7 @@ DeckEditorMenu::DeckEditorMenu(AbstractTabDeckEditor *parent) : QMenu(parent), d
     addAction(aSaveDeck);
     addAction(aSaveDeckAs);
     addAction(aShareDeck);
+    addAction(aValidateDeck);
     addSeparator();
     addAction(aLoadDeckFromClipboard);
     addMenu(editDeckInClipboardMenu);

@@ -107,6 +107,21 @@ async fn shutdown_signal() {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    if env::args().any(|arg| arg == "--refresh-formats") {
+        let snapshot = tokio::task::spawn_blocking(|| {
+            tricerules_server::format_runtime::refresh(
+                &tricerules_server::format_runtime::cache_dir(),
+            )
+        })
+        .await?
+        .map_err(std::io::Error::other)?;
+        println!(
+            "Format catalogue {} ({})",
+            snapshot.catalog.source_date, snapshot.catalog.hash
+        );
+        return Ok(());
+    }
+    tricerules_server::format_runtime::start_updates();
     let port: u16 = env::var("TRICERULES_PORT")
         .ok()
         .and_then(|s| s.parse().ok())
@@ -156,9 +171,14 @@ async fn handle_connection(
     mut sock: TcpStream,
     idle_timeouts: IdleTimeouts,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let mut session = tricerules_server::EngineSession::new(dev_commands_allowed(
-        env::var("TRICERULES_DEV_COMMANDS").ok().as_deref(),
-    ));
+    let dev_allowed = dev_commands_allowed(env::var("TRICERULES_DEV_COMMANDS").ok().as_deref());
+    let allow_test_decks =
+        cfg!(test) || dev_allowed && env::var("TRICERULES_TEST_DECKS").as_deref() == Ok("1");
+    let mut session = if env::var("TRICERULES_REPLAY_ADMISSION").as_deref() == Ok("1") {
+        tricerules_server::EngineSession::for_replay(dev_allowed)
+    } else {
+        tricerules_server::EngineSession::for_runtime(dev_allowed, allow_test_decks)
+    };
     loop {
         let idle_timeout = idle_timeouts.for_session(session.engine.is_some());
         let envelope = match read_envelope(&mut sock, idle_timeout).await? {
@@ -255,6 +275,7 @@ mod tests {
             commander_setup: Some(CommanderSetup {
                 declaration: Some(commander_setup::Declaration::NoCommander(true)),
             }),
+            ..Default::default()
         }
     }
 
@@ -643,6 +664,7 @@ mod tests {
             msg: Some(Msg::ValidateDeck(
                 tricerules_proto::ruled::v1::ValidateDeck {
                     card_names: names(&["Mountain", "Black Lotus"]),
+                    ..Default::default()
                 },
             )),
         };
@@ -704,6 +726,7 @@ mod tests {
                         servatrice_build: "test".to_string(),
                         dev_commands_enabled: false,
                         diagnostic_capture_enabled: false,
+                        ..Default::default()
                     },
                 )),
             }))

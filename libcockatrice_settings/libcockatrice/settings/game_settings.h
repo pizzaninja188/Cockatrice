@@ -17,6 +17,8 @@ class GameSettings : public SettingsManager, public IGameSettingsProvider
 public:
     [[nodiscard]] QString getGameDescription() const override;
     [[nodiscard]] int getMaxPlayers() const override;
+    [[nodiscard]] int getRuledFormat() const;
+    void setRuledFormat(int format);
     [[nodiscard]] QString getGameTypes() const override;
     [[nodiscard]] bool getOnlyBuddies() const override;
     [[nodiscard]] bool getOnlyRegistered() const override;

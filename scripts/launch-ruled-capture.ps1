@@ -113,9 +113,9 @@ function Save-CaptureProcess([System.Diagnostics.Process]$Process, [string]$Exec
     $taskProcesses.Add(@{id=$Process.Id; executable=[IO.Path]::GetFullPath($Executable); started_ticks=$Process.StartTime.ToUniversalTime().Ticks.ToString()})
     [IO.File]::WriteAllText((Join-Path $taskRun 'processes.json'), (ConvertTo-Json -InputObject @($taskProcesses.ToArray())))
 }
-$taskEnvNames = @('TRICERULES_PORT','TRICERULES_DEV_COMMANDS','COCKATRICE_RULED_DEV','COCKATRICE_RULED_SEED',
+$taskEnvNames = @('TRICERULES_REPLAY_ADMISSION','TRICERULES_FORMAT_UPDATES','TRICERULES_PORT','TRICERULES_DEV_COMMANDS','COCKATRICE_RULED_DEV','COCKATRICE_RULED_SEED',
     'COCKATRICE_RULED_CAPTURE_DIR','COCKATRICE_RULED_CAPTURE','COCKATRICE_RULED_RESUME_PLAN','COCKATRICE_RULED_RESUME_POLICY',
-    'COCKATRICE_AUTOPILOT_PLAYERS','COCKATRICE_AUTOPILOT_GAME','COCKATRICE_AUTOPILOT_HOST_USER','COCKATRICE_RULED_DEBUG')
+    'COCKATRICE_AUTOPILOT_RECORDED_GAME','COCKATRICE_AUTOPILOT_PLAYERS','COCKATRICE_AUTOPILOT_GAME','COCKATRICE_AUTOPILOT_HOST_USER','COCKATRICE_RULED_DEBUG')
 $taskSavedEnv = @{}
 foreach ($taskName in $taskEnvNames) { $taskSavedEnv[$taskName] = [Environment]::GetEnvironmentVariable($taskName,'Process') }
 try {
@@ -126,6 +126,8 @@ try {
     $env:COCKATRICE_RULED_CAPTURE_DIR = Join-Path $taskRun 'captures'
     $env:COCKATRICE_RULED_CAPTURE = '1'
     $env:COCKATRICE_RULED_RESUME_POLICY = $null
+    $env:TRICERULES_REPLAY_ADMISSION = "1"
+    $env:TRICERULES_FORMAT_UPDATES = "0"
     $env:COCKATRICE_RULED_RESUME_PLAN = Join-Path $taskPlanDir 'resume-plan.pb'
     $env:COCKATRICE_RULED_DEBUG = if ($Trace) { '1' } else { '0' }
     $taskSidecar = Start-Process -FilePath (Join-Path $taskRepo 'tricerules\target\release\tricerules-server.exe') `
@@ -138,6 +140,7 @@ try {
     Wait-CapturePort $taskServerPort $taskServer
     # Client environments contain only their toolbar policy, never the maintainer plan path.
     $env:COCKATRICE_RULED_RESUME_PLAN = $null
+    $env:COCKATRICE_AUTOPILOT_RECORDED_GAME = "1"
     $env:COCKATRICE_AUTOPILOT_PLAYERS = $taskPlayers.Count.ToString()
     $env:COCKATRICE_AUTOPILOT_GAME = $GameName
     $env:COCKATRICE_AUTOPILOT_HOST_USER = 'resume0'

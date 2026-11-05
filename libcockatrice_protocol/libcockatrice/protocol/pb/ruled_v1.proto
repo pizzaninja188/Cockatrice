@@ -2677,8 +2677,42 @@ message IpcEnvelope {
 // Servatrice gates ruled game start on this so an unimplemented card never silently
 // falls back to casual play. Also the extension point for future deck-editor coverage
 // queries (e.g. a ListImplementedCards sibling).
+enum GameFormat {
+  GAME_FORMAT_UNSPECIFIED = 0;
+  GAME_FORMAT_STANDARD = 1;
+  GAME_FORMAT_COMMANDER = 2;
+}
+
+enum DeckLegality {
+  DECK_LEGALITY_UNSPECIFIED = 0;
+  DECK_LEGALITY_LEGAL = 1;
+  DECK_LEGALITY_ILLEGAL = 2;
+  DECK_LEGALITY_UNKNOWN = 3;
+}
+
+// Private query result; never published in a RuledEventBatch.
+message DeckValidationIssue {
+  string code = 1;
+  string section = 2;
+  string card_name = 3;
+  uint32 quantity = 4;
+  string message = 5;
+}
+message DeckValidationReport {
+  GameFormat format = 1;
+  DeckLegality legality = 2;
+  bool engine_supported = 3;
+  repeated string unsupported_card_names = 4;
+  repeated DeckValidationIssue issues = 5;
+  string catalog_hash = 6;
+  string catalog_source_date = 7;
+  string notice = 8;
+}
+
 message ValidateDeck {
-  repeated string card_names = 1; // Oracle card names, duplicates allowed
+  repeated string card_names = 1; // Legacy trusted fixture coverage query.
+  GameFormat format = 2;
+  PlayerDeck deck = 3;
 }
 
 // Deck lists cross IPC as Oracle card names; the engine resolves names to card ids
@@ -2693,6 +2727,7 @@ message PlayerDeck {
   // Required when this PlayerDeck is present. The explicit no-commander branch distinguishes a
   // declared empty setup from an omitted client field; colors are always derived by tricerules.
   CommanderSetup commander_setup = 4;
+  repeated string sideboard_card_name = 5;
 }
 
 message CommanderSetup {
@@ -2719,6 +2754,10 @@ message SessionStart {
   bool dev_commands_enabled = 6;
   // Trusted IPC only. Read-only diagnostic state stays on the server, outside RuledEventBatch.
   bool diagnostic_capture_enabled = 7;
+  GameFormat format = 8;
+  // Servatrice pins the last admission result. Clients cannot provide these IPC fields.
+  string format_catalog_hash = 9;
+  string format_catalog_source_date = 10;
 }
 
 message PlayerCommand {
@@ -2750,4 +2789,7 @@ message IpcResponse {
   string diagnostic_state_json = 7 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
   bool effective_dev_commands_enabled = 8 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
   uint64 diagnostic_command_index = 9 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+  DeckValidationReport deck_validation = 10;
+  string format_catalog_hash = 11;
+  string format_catalog_source_date = 12;
 }

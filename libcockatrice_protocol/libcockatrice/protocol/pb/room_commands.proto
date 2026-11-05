@@ -1,4 +1,5 @@
 syntax = "proto2";
+import "ruled_v1.proto";
 message RoomCommand {
     enum RoomCommandType {
         LEAVE_ROOM = 1000;
@@ -81,6 +82,7 @@ message Command_CreateGame {
 
     // use server-authoritative MTG rules engine (tricerules)
     optional bool ruled_game = 15 [default = false];
+    optional ruled.v1.GameFormat format = 17;
     // shuffle the player order (seats) before each game starts
     optional bool shuffle_players = 16;
 }

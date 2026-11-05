@@ -3,6 +3,7 @@
 
 #include <QList>
 #include <QString>
+#include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_user.pb.h>
 
 struct GameConfig
@@ -23,6 +24,7 @@ struct GameConfig
     bool shareDecklistsOnLoad = true;
     bool shufflePlayers = false;
     bool ruledGame = false;
+    ruled::v1::GameFormat format = ruled::v1::GAME_FORMAT_UNSPECIFIED;
 };
 
 #endif

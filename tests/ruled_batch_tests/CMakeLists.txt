@@ -1,4 +1,4 @@
-add_executable(ruled_batch_test ${VERSION_STRING_CPP} ruled_batch_test.cpp)
+add_executable(ruled_batch_test ${VERSION_STRING_CPP} ruled_batch_test.cpp ruled_format_validation_test.cpp)
 
 if(NOT GTEST_FOUND)
   add_dependencies(ruled_batch_test gtest)

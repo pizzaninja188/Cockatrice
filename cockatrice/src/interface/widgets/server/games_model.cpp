@@ -158,6 +158,12 @@ QVariant GamesModel::data(const QModelIndex &index, int role) const
             switch (role) {
                 case SORT_ROLE:
                 case Qt::DisplayRole: {
+                    if (gameentry.ruled_game() && gameentry.format() == ruled::v1::GAME_FORMAT_STANDARD) {
+                        return tr("Standard");
+                    }
+                    if (gameentry.ruled_game() && gameentry.format() == ruled::v1::GAME_FORMAT_COMMANDER) {
+                        return tr("Commander");
+                    }
                     QStringList result;
                     GameTypeMap gameTypeMap = gameTypes.value(gameentry.room_id());
                     for (int i = gameentry.game_types_size() - 1; i >= 0; --i) {

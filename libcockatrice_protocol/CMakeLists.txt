@@ -6,7 +6,7 @@ add_library(libcockatrice_protocol STATIC)
 target_sources(libcockatrice_protocol PRIVATE libcockatrice/protocol/ruled_diagnostic_archive.cpp)
 target_sources(libcockatrice_protocol PRIVATE libcockatrice/protocol/ruled_diagnostic_reader.cpp)
 
-set(SOURCES libcockatrice/protocol/ruled_diagnostic_journal.cpp libcockatrice/protocol/ruled_diagnostics.cpp libcockatrice/protocol/debug_pb_message.cpp libcockatrice/protocol/featureset.cpp
+set(SOURCES libcockatrice/protocol/ruled_deck_validation_report.cpp libcockatrice/protocol/ruled_diagnostic_journal.cpp libcockatrice/protocol/ruled_diagnostics.cpp libcockatrice/protocol/debug_pb_message.cpp libcockatrice/protocol/featureset.cpp
             libcockatrice/protocol/get_pb_extension.cpp libcockatrice/protocol/pending_command.cpp
 )
 

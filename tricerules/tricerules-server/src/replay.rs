@@ -57,7 +57,7 @@ pub fn build_resume_plan(
     let effective_dev = capture.manifest["effective_dev_commands_enabled"]
         .as_bool()
         .unwrap_or(false);
-    let mut session = EngineSession::new(effective_dev);
+    let mut session = EngineSession::for_replay(effective_dev);
     let first = &capture.exchanges[0];
     let Some(Msg::SessionStart(start)) = &first.request.msg else {
         return Err("missing startup".into());
@@ -134,6 +134,7 @@ pub fn build_resume_plan(
                 Ok(PlayerDeck {
                     player_id: player.id,
                     mainboard_card_name: names,
+                    sideboard_card_name: vec![],
                     commander_setup: Some(CommanderSetup {
                         declaration: Some(setup),
                     }),
@@ -407,7 +408,7 @@ pub fn reconstruct(capture: &Capture, options: &ReplayOptions) -> Result<ReplayR
     {
         return Err("capture has no successfully completed startup".into());
     }
-    let mut session = EngineSession::new(
+    let mut session = EngineSession::for_replay(
         capture.manifest["effective_dev_commands_enabled"]
             .as_bool()
             .unwrap_or(false),
@@ -570,6 +571,7 @@ mod tests {
                 commander_setup: Some(CommanderSetup {
                     declaration: Some(commander_setup::Declaration::NoCommander(true)),
                 }),
+                ..Default::default()
             },
             PlayerDeck {
                 player_id: TEKUTHAL_NORMAL_OPPONENT_ID,
@@ -577,6 +579,7 @@ mod tests {
                 commander_setup: Some(CommanderSetup {
                     declaration: Some(commander_setup::Declaration::NoCommander(true)),
                 }),
+                ..Default::default()
             },
         ]
     }
@@ -2498,6 +2501,7 @@ mod tests {
             .process(&IpcEnvelope {
                 msg: Some(Msg::ValidateDeck(ValidateDeck {
                     card_names: validation_names,
+                    ..Default::default()
                 })),
             })
             .expect("ValidateDeck keeps the Tekuthal normal-pilot session open");
@@ -3576,6 +3580,7 @@ mod tests {
                         },
                     )),
                 }),
+                ..Default::default()
             },
             PlayerDeck {
                 player_id: 29,
@@ -3583,6 +3588,7 @@ mod tests {
                 commander_setup: Some(CommanderSetup {
                     declaration: Some(commander_setup::Declaration::NoCommander(true)),
                 }),
+                ..Default::default()
             },
         ];
         let (root, _) = fixture_with_decks(decks.clone());
@@ -3609,6 +3615,7 @@ mod tests {
                         },
                     )),
                 }),
+                ..Default::default()
             },
             PlayerDeck {
                 player_id: 29,
@@ -3616,6 +3623,7 @@ mod tests {
                 commander_setup: Some(CommanderSetup {
                     declaration: Some(commander_setup::Declaration::NoCommander(true)),
                 }),
+                ..Default::default()
             },
         ];
         let (root, expected) = fixture_with_signet_activation(decks.clone());
@@ -3649,6 +3657,7 @@ mod tests {
                 commander_setup: Some(CommanderSetup {
                     declaration: Some(commander_setup::Declaration::NoCommander(true)),
                 }),
+                ..Default::default()
             })
             .collect();
         let root = tempfile::tempdir().unwrap();
@@ -4244,6 +4253,7 @@ mod tests {
             commander_setup: Some(CommanderSetup {
                 declaration: Some(commander_setup::Declaration::NoCommander(true)),
             }),
+            ..Default::default()
         }
     }
 
@@ -4707,6 +4717,7 @@ mod tests {
                 commander_setup: Some(CommanderSetup {
                     declaration: Some(commander_setup::Declaration::NoCommander(true)),
                 }),
+                ..Default::default()
             }
         };
         let player_decks = vec![make_deck(17, 4), make_deck(29, 0)];
@@ -4718,6 +4729,7 @@ mod tests {
             .process(&IpcEnvelope {
                 msg: Some(Msg::ValidateDeck(ValidateDeck {
                     card_names: vec![JACE_NAME.into(), "Island".into()],
+                    ..Default::default()
                 })),
             })
             .expect("deck validation leaves the session open");
@@ -5302,6 +5314,7 @@ mod tests {
                 commander_setup: Some(CommanderSetup {
                     declaration: Some(commander_setup::Declaration::NoCommander(true)),
                 }),
+                ..Default::default()
             }
         };
         let player_decks = vec![make_deck(17, true), make_deck(29, false)];
@@ -5318,6 +5331,7 @@ mod tests {
                         "Swamp".into(),
                         "Forest".into(),
                     ],
+                    ..Default::default()
                 })),
             })
             .expect("deck validation leaves the session open");
@@ -5767,6 +5781,7 @@ mod tests {
                 commander_setup: Some(CommanderSetup {
                     declaration: Some(commander_setup::Declaration::NoCommander(true)),
                 }),
+                ..Default::default()
             }
         };
         let player_decks = vec![make_deck(17, true), make_deck(29, false)];
@@ -5777,6 +5792,7 @@ mod tests {
             .process(&IpcEnvelope {
                 msg: Some(Msg::ValidateDeck(ValidateDeck {
                     card_names: vec![NAME.into(), "Island".into(), "Forest".into()],
+                    ..Default::default()
                 })),
             })
             .expect("deck validation keeps the normal session open");
@@ -7034,6 +7050,7 @@ mod tests {
                 commander_setup: Some(CommanderSetup {
                     declaration: Some(commander_setup::Declaration::NoCommander(true)),
                 }),
+                ..Default::default()
             },
             PlayerDeck {
                 player_id: 29,
@@ -7041,6 +7058,7 @@ mod tests {
                 commander_setup: Some(CommanderSetup {
                     declaration: Some(commander_setup::Declaration::NoCommander(true)),
                 }),
+                ..Default::default()
             },
         ];
         assert_eq!(player_decks[0].mainboard_card_name.len(), 60);
@@ -7055,6 +7073,7 @@ mod tests {
                         ORNITHOPTER_NORMAL_NAME.into(),
                         "Plains".into(),
                     ],
+                    ..Default::default()
                 })),
             })
             .expect("ValidateDeck keeps the Luxior session open");
@@ -7789,6 +7808,7 @@ mod tests {
                 commander_setup: Some(CommanderSetup {
                     declaration: Some(commander_setup::Declaration::NoCommander(true)),
                 }),
+                ..Default::default()
             }
         };
         let player_decks = vec![make_deck(17, true), make_deck(29, false)];
@@ -7800,6 +7820,7 @@ mod tests {
             .process(&IpcEnvelope {
                 msg: Some(Msg::ValidateDeck(ValidateDeck {
                     card_names: vec![UGIN_NAME.into(), "Forest".into()],
+                    ..Default::default()
                 })),
             })
             .expect("deck validation leaves the session open");
@@ -8158,6 +8179,7 @@ mod tests {
                         "Plains".into(),
                         "Swamp".into(),
                     ],
+                    ..Default::default()
                 })),
             })
             .expect("deck validation leaves the session open");
@@ -8581,6 +8603,7 @@ mod tests {
                 commander_setup: Some(CommanderSetup {
                     declaration: Some(commander_setup::Declaration::NoCommander(true)),
                 }),
+                ..Default::default()
             }
         };
         let player_decks = vec![make_deck(17, true), make_deck(29, false)];
@@ -8597,6 +8620,7 @@ mod tests {
                         "Island".into(),
                         "Forest".into(),
                     ],
+                    ..Default::default()
                 })),
             })
             .expect("deck validation keeps the normal Ripples session open");
@@ -9039,6 +9063,7 @@ mod tests {
                 commander_setup: Some(CommanderSetup {
                     declaration: Some(commander_setup::Declaration::NoCommander(true)),
                 }),
+                ..Default::default()
             },
             PlayerDeck {
                 player_id: TEKUTHAL_NORMAL_OPPONENT_ID,
@@ -9046,6 +9071,7 @@ mod tests {
                 commander_setup: Some(CommanderSetup {
                     declaration: Some(commander_setup::Declaration::NoCommander(true)),
                 }),
+                ..Default::default()
             },
         ]
     }
@@ -10413,6 +10439,7 @@ mod tests {
             .process(&IpcEnvelope {
                 msg: Some(Msg::ValidateDeck(ValidateDeck {
                     card_names: validation_names,
+                    ..Default::default()
                 })),
             })
             .expect("ValidateDeck keeps the Narset normal session open");

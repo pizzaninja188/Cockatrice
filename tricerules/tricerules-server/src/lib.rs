@@ -5,6 +5,12 @@ use std::collections::BTreeSet;
 use tricerules_core::{EngineDeck, GameEngine, PlayerId};
 use tricerules_proto::ipc_envelope::Msg;
 use tricerules_proto::{commander_setup, IpcEnvelope, IpcResponse, PlayerDeck};
+pub mod format_admission;
+pub mod format_catalog;
+pub mod format_runtime;
+pub mod format_validation;
+#[cfg(test)]
+mod format_validation_tests;
 pub mod replay;
 
 pub const ENGINE_BUILD: &str = env!("TRICERULES_BUILD_FINGERPRINT");
@@ -31,6 +37,8 @@ pub struct EngineSession {
     dev_allowed: bool,
     effective_dev: bool,
     diagnostic_capture: bool,
+    replay: bool,
+    require_format: bool,
 }
 
 impl EngineSession {
@@ -41,7 +49,22 @@ impl EngineSession {
             dev_allowed,
             effective_dev: false,
             diagnostic_capture: false,
+            replay: false,
+            require_format: false,
         }
+    }
+
+    /// The TCP entry point always requires a format outside explicitly gated historical fixtures.
+    pub fn for_runtime(dev_allowed: bool, allow_test_decks: bool) -> Self {
+        let mut session = Self::new(dev_allowed);
+        session.require_format = !allow_test_decks;
+        session
+    }
+    /// Reconstruction is trusted: replay accepted construction using its recorded provenance.
+    pub fn for_replay(dev_allowed: bool) -> Self {
+        let mut session = Self::new(dev_allowed);
+        session.replay = true;
+        session
     }
 
     /// None ends the connection. Inspection fields are IPC-only and never enter an event batch.
@@ -52,6 +75,17 @@ impl EngineSession {
                 self.diagnostic_capture = start.diagnostic_capture_enabled;
                 self.effective_dev = start.dev_commands_enabled && self.dev_allowed;
                 self.engine = None;
+                if self.require_format && start.format == 0 {
+                    return Some(IpcResponse {
+                        error: "A game format is required".into(),
+                        ..Default::default()
+                    });
+                }
+                let (starting_life, format_catalog_hash, format_catalog_source_date) =
+                    match format_admission::admit(start, self.replay) {
+                        Ok(setup) => setup,
+                        Err(response) => return Some(*response),
+                    };
                 eprintln!(
                     "tricerules: session start game {} seed {} (servatrice build {})",
                     start.game_id,
@@ -73,7 +107,7 @@ impl EngineSession {
                             tricerules_cards::registry::global(),
                             start.seed,
                             &start.player_ids,
-                            20,
+                            starting_life,
                             decks,
                             false,
                         ) {
@@ -93,6 +127,8 @@ impl EngineSession {
                                     batch: Some(batch),
                                     engine_build: ENGINE_BUILD.into(),
                                     card_data_hash: tricerules_cards::registry::content_hash(),
+                                    format_catalog_hash,
+                                    format_catalog_source_date,
                                     ..Default::default()
                                 }
                             }
@@ -100,7 +136,23 @@ impl EngineSession {
                     }
                 }
             }
-            Msg::ValidateDeck(deck) => validate_deck_response(&deck.card_names),
+            Msg::ValidateDeck(query) => {
+                if let Some(deck) = query.deck.as_ref() {
+                    format_admission::validate(
+                        query.format,
+                        deck,
+                        format_runtime::current().as_ref(),
+                    )
+                } else if query.format == 0 && !self.require_format {
+                    validate_deck_response(&query.card_names)
+                } else {
+                    format_admission::validate(
+                        query.format,
+                        &PlayerDeck::default(),
+                        format_runtime::current().as_ref(),
+                    )
+                }
+            }
             Msg::PlayerCommand(command) => match self.engine.as_mut() {
                 Some(engine) => {
                     engine.player_command_ipc(command.player_id, &command.ruled_command)

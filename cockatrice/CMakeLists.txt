@@ -127,6 +127,8 @@ set(cockatrice_SOURCES
     src/game/ruled/ruled_client_ui.cpp
     src/game/ruled/ruled_game_controller.cpp
     src/game/ruled/ruled_game_mode_ui.cpp
+    src/game/ruled/ruled_deck_lobby_panel.cpp
+    src/game/ruled/ruled_deck_validation_ui.cpp
     src/game/ruled/ruled_commander_editor.cpp
     src/game/ruled/ruled_auxiliary_area.cpp
     src/game/ruled/ruled_public_card_zone.cpp

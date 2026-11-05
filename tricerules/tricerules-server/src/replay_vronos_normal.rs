@@ -41,6 +41,7 @@ impl Pilot {
                 commander_setup: Some(CommanderSetup {
                     declaration: Some(commander_setup::Declaration::NoCommander(true)),
                 }),
+                ..Default::default()
             }
         })
         .collect::<Vec<_>>();
@@ -54,6 +55,7 @@ impl Pilot {
                         .collect::<std::collections::BTreeSet<_>>()
                         .into_iter()
                         .collect(),
+                    ..Default::default()
                 })),
             })
             .unwrap();

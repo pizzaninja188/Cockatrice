@@ -14,6 +14,7 @@
 #include <memory>
 
 class RulesRelay;
+class QTimer;
 class Server_Game;
 class RuledServerDiagnostics;
 class RuledGameResume;
@@ -77,6 +78,9 @@ private:
     std::unique_ptr<RulesRelay> relay;
     quint64 seed = 0;
     bool engineConnectionLost = false;
+    std::unique_ptr<QTimer> validationClock;
+    QString admittedCatalogHash;
+    QString admittedCatalogDate;
     QHash<int, ruled::v1::SetAutoPassPolicy> autoPassPolicies;
 };
 

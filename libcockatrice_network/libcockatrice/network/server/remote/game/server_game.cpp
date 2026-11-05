@@ -108,7 +108,7 @@ Server_Game::Server_Game(const GameConfig &config, Server_Room *_room)
       firstGameStarted(false), turnOrderReversed(false), startTime(QDateTime::currentDateTime()), pingClock(nullptr),
       deckValidationStrategy(new Server_DefaultDeckValidationStrategy),
       lifecycleStrategy(new Server_DefaultLifecycleStrategy), matchResultStrategy(new Server_NullMatchResultStrategy),
-      ruledGame(config.ruledGame), gameMutex()
+      ruledGame(config.ruledGame), format(config.format), gameMutex()
 {
     if (ruledGame) {
         ruledDriver = std::make_unique<RuledGameDriver>(this);
@@ -1198,6 +1198,7 @@ void Server_Game::getInfo(ServerInfo_Game &result) const
         result.set_spectators_count(getSpectatorCount());
         result.set_start_time(startTime.toSecsSinceEpoch());
         result.set_ruled_game(ruledGame);
+        result.set_format(format);
     }
 }
 

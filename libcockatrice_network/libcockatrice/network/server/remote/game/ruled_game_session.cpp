@@ -3,6 +3,8 @@
 #include "ruled_game_session.h"
 
 #include "../server_abstractuserinterface.h"
+#include "../server_response_containers.h"
+#include "ruled_deck_validation.h"
 #include "ruled_game_resume.h"
 #include "ruled_server_diagnostics.h"
 #include "rules_relay.h"
@@ -11,8 +13,10 @@
 #include "server_game.h"
 
 #include <QDebug>
+#include <QMutexLocker>
 #include <QRandomGenerator>
 #include <QSet>
+#include <QTimer>
 #include <algorithm>
 #include <libcockatrice/deck_list/deck_list.h>
 #include <libcockatrice/deck_list/tree/deck_list_card_node.h>
@@ -98,6 +102,32 @@ ruled::v1::SetAutoPassPolicy stopEverywhereAutoPassPolicy()
 RuledGameSession::RuledGameSession(Server_Game *_game)
     : game(_game), resumePlan(std::make_unique<RuledGameResume>(qEnvironmentVariable("COCKATRICE_RULED_RESUME_PLAN")))
 {
+    if (game->getFormat() == ruled::v1::GAME_FORMAT_UNSPECIFIED) {
+        return;
+    }
+    validationClock = std::make_unique<QTimer>();
+    validationClock->setInterval(60000);
+    QObject::connect(validationClock.get(), &QTimer::timeout, game, [this] {
+        QMutexLocker lock(&game->gameMutex);
+        if (game->getGameStarted() || game->getFormat() == ruled::v1::GAME_FORMAT_UNSPECIFIED) {
+            return;
+        }
+        bool changed = false;
+        for (auto *player : game->getPlayers()) {
+            if (!player->getReadyStart() || !player->getDeckList()) {
+                continue;
+            }
+            ResponseContainer response(-1);
+            if (!RuledDeckValidation::admit(player, *player->getDeckList(), response)) {
+                player->setReadyStart(false);
+                changed = true;
+            }
+        }
+        if (changed) {
+            game->sendGameStateToPlayers();
+        }
+    });
+    validationClock->start();
 }
 
 RuledGameSession::~RuledGameSession() = default;
@@ -151,6 +181,42 @@ QByteArray RuledGameSession::canonicalGameplayCommand(int playerId, const ruled:
 
 bool RuledGameSession::validateDecksForStart()
 {
+    if (resumePlan->enabled()) {
+        return resumePlan->valid();
+    }
+    if (game->getFormat() != ruled::v1::GAME_FORMAT_UNSPECIFIED) {
+        bool accepted = true;
+        admittedCatalogHash.clear();
+        admittedCatalogDate.clear();
+        const auto seats = game->getPlayers().size();
+        if ((game->getFormat() == ruled::v1::GAME_FORMAT_STANDARD && seats != 2) ||
+            (game->getFormat() == ruled::v1::GAME_FORMAT_COMMANDER && (seats < 2 || seats > 4))) {
+            sendEngineNotice(
+                QStringLiteral("Cannot start game"),
+                QStringLiteral("The chosen format requires two players for Standard, or two to four for Commander."));
+            return false;
+        }
+        for (auto *player : game->getPlayers()) {
+            ResponseContainer response(-1);
+            ruled::v1::DeckValidationReport report;
+            if (!player->getDeckList() ||
+                !RuledDeckValidation::admit(player, *player->getDeckList(), response, &report)) {
+                player->setReadyStart(false);
+                accepted = false;
+                continue;
+            }
+            const auto hash = QString::fromStdString(report.catalog_hash());
+            if (!admittedCatalogHash.isEmpty() && hash != admittedCatalogHash) {
+                accepted = false;
+            }
+            admittedCatalogHash = hash;
+            admittedCatalogDate = QString::fromStdString(report.catalog_source_date());
+        }
+        if (!accepted) {
+            game->sendGameStateToPlayers();
+        }
+        return accepted;
+    }
     const QList<ruled::v1::PlayerDeck> deckByPlayer = playerDecksByPlayer();
     QStringList allNames;
     for (const ruled::v1::PlayerDeck &row : deckByPlayer) {
@@ -251,7 +317,7 @@ RuledGameSession::StartResult RuledGameSession::start()
         }
     } else {
         started = relay->sessionStart(static_cast<quint64>(game->getGameId()), seed, ids, deckPtr, devCommandsRequested,
-                                      result.response);
+                                      result.response, game->getFormat(), admittedCatalogHash, admittedCatalogDate);
     }
     if (!started) {
         qWarning() << "startRuledSidecarSession: tricerules connection failed";
@@ -371,24 +437,11 @@ QList<ruled::v1::PlayerDeck> RuledGameSession::playerDecksByPlayer() const
         ruled::v1::PlayerDeck row;
         row.set_player_id(player->getPlayerId());
         if (const DeckList *deck = player->getDeckList()) {
-            const QSet<QString> mainOnly = QSet<QString>() << QStringLiteral("main");
-            for (const DecklistCardNode *node : deck->getCardNodes(mainOnly)) {
-                if (!node) {
-                    continue;
-                }
-                const QString name = node->getName().trimmed();
-                for (int copy = 0; copy < node->getNumber(); ++copy) {
-                    row.add_mainboard_card_name(name.toStdString());
-                }
-            }
-            const QList<CardRef> commanders = deck->getCommanders();
-            ruled::v1::CommanderSetup *setup = row.mutable_commander_setup();
-            if (commanders.isEmpty()) {
-                setup->set_no_commander(true);
-            } else {
-                auto *declared = setup->mutable_declared();
-                for (const CardRef &commander : commanders)
-                    declared->add_card_name(commander.name.trimmed().toStdString());
+            QString error;
+            if (!RuledDeckValidation::normalize(*deck, player->getPlayerId(), row, error)) {
+                // Production admission refuses this before physical setup. Trusted fixture
+                // failures also remain explicit instead of silently creating a default deck.
+                row.mutable_commander_setup()->set_no_commander(true);
             }
         }
         // A missing deck list still has the same explicit empty Commander setup as an ordinary deck.
@@ -402,59 +455,38 @@ QList<ruled::v1::PlayerDeck> RuledGameSession::playerDecksByPlayer() const
 void RuledGameSession::notifyUnimplementedCards(const QList<ruled::v1::PlayerDeck> &deckByPlayer,
                                                 const QStringList &missingNames)
 {
-    QSet<QString> missingLower;
-    for (const QString &name : missingNames) {
-        missingLower.insert(name.trimmed().toLower());
+    sendEngineNotice(
+        QStringLiteral("Cannot start ruled game"),
+        QStringLiteral(
+            "One or more decks contain cards the engine does not implement. Their owners received private details."));
+    QSet<QString> missing;
+    for (const auto &name : missingNames) {
+        missing.insert(name.trimmed().toLower());
     }
-
-    QStringList perPlayerParts;
-    for (const ruled::v1::PlayerDeck &row : deckByPlayer) {
-        QMap<QString, int> copiesByName;
-        QStringList names;
-        for (const std::string &name : row.mainboard_card_name())
-            names.append(QString::fromStdString(name));
-        if (row.has_commander_setup() && row.commander_setup().has_declared()) {
-            for (const std::string &name : row.commander_setup().declared().card_name())
-                names.append(QString::fromStdString(name));
+    for (const auto &row : deckByPlayer) {
+        ruled::v1::DeckValidationReport report;
+        report.set_legality(ruled::v1::DECK_LEGALITY_UNKNOWN);
+        QSet<QString> names;
+        for (const auto &name : row.mainboard_card_name()) {
+            names.insert(QString::fromStdString(name));
         }
-        for (const QString &name : names) {
-            const QString trimmed = name.trimmed();
-            if (missingLower.contains(trimmed.toLower())) {
-                ++copiesByName[trimmed];
+        for (const auto &name : row.sideboard_card_name()) {
+            names.insert(QString::fromStdString(name));
+        }
+        if (row.has_commander_setup() && row.commander_setup().has_declared()) {
+            for (const auto &name : row.commander_setup().declared().card_name()) {
+                names.insert(QString::fromStdString(name));
             }
         }
-        if (copiesByName.isEmpty()) {
-            continue;
+        for (const auto &name : names) {
+            if (missing.contains(name.trimmed().toLower())) {
+                report.add_unsupported_card_names(name.toStdString());
+            }
         }
-        Server_AbstractPlayer *player = game->getPlayer(row.player_id());
-        const QString playerName = player ? QString::fromStdString(player->getUserInfo()->name())
-                                          : QString::number(row.player_id());
-        QStringList cardParts;
-        for (auto it = copiesByName.constBegin(); it != copiesByName.constEnd(); ++it) {
-            cardParts.append(it.value() > 1 ? QStringLiteral("%1 x%2").arg(it.key()).arg(it.value()) : it.key());
-        }
-        perPlayerParts.append(QStringLiteral("%1 (%2)").arg(cardParts.join(QStringLiteral(", ")), playerName));
-    }
-    if (perPlayerParts.isEmpty()) {
-        perPlayerParts.append(missingNames.join(QStringLiteral(", ")));
-    }
-
-    const QString summary = QStringLiteral("Cannot start ruled game — unimplemented cards: %1. "
-                                           "Swap to a fully implemented deck and ready up again.")
-                                .arg(perPlayerParts.join(QStringLiteral("; ")));
-    Event_GameSay say;
-    say.set_message(summary.toStdString());
-    game->sendGameEventContainer(game->prepareGameEvent(say, -1));
-
-    Event_NotifyUser notify;
-    notify.set_type(Event_NotifyUser::CUSTOM);
-    notify.set_custom_title("Cannot start ruled game");
-    notify.set_custom_content(summary.toStdString());
-    for (Server_AbstractPlayer *player : game->getPlayers().values()) {
-        if (Server_AbstractUserInterface *ui = player->getUserInterface()) {
-            SessionEvent *event = Server_AbstractUserInterface::prepareSessionEvent(notify);
-            ui->sendProtocolItem(*event);
-            delete event;
+        if (report.unsupported_card_names_size() > 0) {
+            if (auto *player = game->getPlayer(row.player_id())) {
+                RuledDeckValidation::notify(player, report);
+            }
         }
     }
 }

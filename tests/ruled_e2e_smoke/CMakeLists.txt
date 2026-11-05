@@ -9,6 +9,7 @@ add_executable(ruled_e2e_smoke_test ${VERSION_STRING_CPP}
   ruled_e2e_observed_state.cpp
   ruled_e2e_opening_driver.cpp
   ruled_e2e_seeded_driver.cpp
+  ruled_e2e_format_test.cpp
   ruled_e2e_harness_test.cpp
   ruled_e2e_seeded_game_test.cpp
   ruled_e2e_opening_diagnostics_test.cpp

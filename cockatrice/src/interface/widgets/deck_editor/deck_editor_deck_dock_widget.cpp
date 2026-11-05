@@ -289,6 +289,9 @@ void DeckEditorDeckDockWidget::createDeckDock()
     upperLayout->addWidget(commanderBracketWidget, 3, 0, 1, 2);
     auto *commanderLayout = new QVBoxLayout;
     commanderLayout->addWidget(new RuledCommanderEditor(deckStateManager, this));
+    auto *validateDeck = new QPushButton(tr("Validate deck…"), this);
+    connect(validateDeck, &QPushButton::clicked, deckEditor, &AbstractTabDeckEditor::actValidateDeck);
+    commanderLayout->addWidget(validateDeck);
     auto *moveCommander = new QPushButton(tr("Move selected card to Commander"), this);
     connect(moveCommander, &QPushButton::clicked, this, [this] {
         const auto indices = getSelectedCardNodeSourceIndices();

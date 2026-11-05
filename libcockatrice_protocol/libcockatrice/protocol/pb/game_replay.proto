@@ -13,4 +13,6 @@ message GameReplay {
     // Stable hash of the engine's embedded card data at game start. With ruled_seed and
     // ruled_command_log this fully determines a ruled replay's reconstruction.
     optional string ruled_card_data_hash = 7;
+    optional string ruled_format_catalog_hash = 8;
+    optional string ruled_format_catalog_source_date = 9;
 }

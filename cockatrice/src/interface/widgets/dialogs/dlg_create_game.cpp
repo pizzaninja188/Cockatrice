@@ -9,6 +9,7 @@
 #include "libcockatrice/utility/macros.h"
 
 #include <QCheckBox>
+#include <QComboBox>
 #include <QDebug>
 #include <QDialogButtonBox>
 #include <QGridLayout>
@@ -53,6 +54,9 @@ void DlgCreateGame::sharedCtor()
     generalGrid->addWidget(descriptionEdit, 0, 1);
     generalGrid->addWidget(maxPlayersLabel, 1, 0);
     generalGrid->addWidget(maxPlayersEdit, 1, 1);
+    formatEdit = new QComboBox(this);
+    generalGrid->addWidget(new QLabel(tr("Format:")), 2, 0);
+    generalGrid->addWidget(formatEdit, 2, 1);
     generalGroupBox = new QGroupBox(tr("General"));
     generalGroupBox->setLayout(generalGrid);
 
@@ -114,6 +118,7 @@ void DlgCreateGame::sharedCtor()
     startingLifeTotalEdit->setMaximum(99999); ///< Arbitrary but we can raise this when people start complaining.
     startingLifeTotalEdit->setValue(20);
     startingLifeTotalLabel->setBuddy(startingLifeTotalEdit);
+    RuledGameModeUi::configureFormatControls(formatEdit, maxPlayersEdit, startingLifeTotalEdit);
 
     shareDecklistsOnLoadCheckBox = new QCheckBox(tr("Open decklists in lobby"));
     ruledGameCheckBox = new QCheckBox(tr("Ruled game (MTGO-style engine — requires tricerules-server)"));
@@ -150,6 +155,8 @@ void DlgCreateGame::sharedCtor()
 
     // Middle row: left column
     grid->addWidget(gameTypeGroupBox, 1, 0);
+    // The fork's required format replaces optional upstream game-type labels.
+    gameTypeGroupBox->hide();
 
     // Middle row: right column (game setup + spectators)
     auto *rightLayout = new QVBoxLayout;
@@ -209,6 +216,15 @@ DlgCreateGame::DlgCreateGame(TabRoom *_room, const QMap<int, QString> &_gameType
     connect(clearButton, &QPushButton::clicked, this, &DlgCreateGame::actReset);
 
     RuledGameModeUi::configureCreationControls(ruledGameCheckBox, shufflePlayersCheckBox);
+    formatEdit->setCurrentIndex(SettingsCache::instance().game().getRememberGameSettings() &&
+                                        SettingsCache::instance().game().getRuledFormat() ==
+                                            ruled::v1::GAME_FORMAT_COMMANDER
+                                    ? 1
+                                    : 0);
+    if (SettingsCache::instance().game().getRememberGameSettings()) {
+        maxPlayersEdit->setValue(SettingsCache::instance().game().getMaxPlayers());
+    }
+    startingLifeTotalEdit->setValue(formatEdit->currentData().toInt() == ruled::v1::GAME_FORMAT_COMMANDER ? 40 : 20);
     setFixedHeight(sizeHint().height());
     setWindowTitle(tr("Create game"));
 }
@@ -234,6 +250,8 @@ DlgCreateGame::DlgCreateGame(const ServerInfo_Game &gameInfo, const QMap<int, QS
     ruledGameCheckBox->setEnabled(false);
     shufflePlayersCheckBox->setEnabled(false);
 
+    formatEdit->setCurrentIndex(gameInfo.format() == ruled::v1::GAME_FORMAT_COMMANDER ? 1 : 0);
+    formatEdit->setEnabled(false);
     descriptionEdit->setText(QString::fromStdString(gameInfo.description()));
     maxPlayersEdit->setValue(gameInfo.max_players());
     onlyBuddiesCheckBox->setChecked(gameInfo.only_buddies());
@@ -267,6 +285,7 @@ DlgCreateGame::DlgCreateGame(const ServerInfo_Game &gameInfo, const QMap<int, QS
 
 void DlgCreateGame::actReset()
 {
+    formatEdit->setCurrentIndex(0);
     descriptionEdit->setText("");
     maxPlayersEdit->setValue(2);
 
@@ -315,13 +334,14 @@ void DlgCreateGame::actOK()
     cmd.set_starting_life_total(startingLifeTotalEdit->value());
     cmd.set_share_decklists_on_load(shareDecklistsOnLoadCheckBox->isChecked());
     cmd.set_ruled_game(true);
+    cmd.set_format(static_cast<ruled::v1::GameFormat>(formatEdit->currentData().toInt()));
     cmd.set_shuffle_players(false);
 
     auto _gameTypes = QString();
     QMapIterator<int, QRadioButton *> gameTypeCheckBoxIterator(gameTypeCheckBoxes);
     while (gameTypeCheckBoxIterator.hasNext()) {
         gameTypeCheckBoxIterator.next();
-        if (gameTypeCheckBoxIterator.value()->isChecked()) {
+        if (!ruledGameCheckBox->isChecked() && gameTypeCheckBoxIterator.value()->isChecked()) {
             cmd.add_game_type_ids(gameTypeCheckBoxIterator.key());
             _gameTypes += gameTypeCheckBoxIterator.value()->text() + ", ";
         }
@@ -329,6 +349,7 @@ void DlgCreateGame::actOK()
 
     SettingsCache::instance().game().setRememberGameSettings(rememberGameSettings->isChecked());
     if (rememberGameSettings->isChecked()) {
+        SettingsCache::instance().game().setRuledFormat(formatEdit->currentData().toInt());
         SettingsCache::instance().game().setGameDescription(descriptionEdit->text());
         SettingsCache::instance().game().setMaxPlayers(maxPlayersEdit->value());
         SettingsCache::instance().game().setOnlyBuddies(onlyBuddiesCheckBox->isChecked());

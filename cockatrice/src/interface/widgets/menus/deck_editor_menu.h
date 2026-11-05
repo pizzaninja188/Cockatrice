@@ -21,6 +21,7 @@ public:
 
     AbstractTabDeckEditor *deckEditor;
 
+    QAction *aValidateDeck;
     QAction *aNewDeck, *aLoadDeck, *aClearRecents, *aSaveDeck, *aSaveDeckAs, *aLoadDeckFromClipboard,
         *aEditDeckInClipboard, *aEditDeckInClipboardRaw, *aSaveDeckToClipboard, *aSaveDeckToClipboardNoSetInfo,
         *aSaveDeckToClipboardRaw, *aSaveDeckToClipboardRawNoSetInfo, *aPrintDeck, *aLoadDeckFromWebsite,

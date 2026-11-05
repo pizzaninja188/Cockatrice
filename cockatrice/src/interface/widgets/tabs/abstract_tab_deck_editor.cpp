@@ -1,3 +1,4 @@
+#include "../../../game/ruled/ruled_deck_validation_ui.h"
 /**
  * @file abstract_tab_deck_editor.cpp
  * @brief Implementation of the AbstractTabDeckEditor class.
@@ -647,4 +648,9 @@ void AbstractTabDeckEditor::showPrintingSelector()
 void AbstractTabDeckEditor::openEdhrecTab(const CardInfoPtr &info, bool isCommander)
 {
     getTabSupervisor()->addEdhrecTab(info, isCommander);
+}
+
+void AbstractTabDeckEditor::actValidateDeck()
+{
+    RuledDeckValidationUi::open(this);
 }

@@ -187,7 +187,7 @@ void SmokeClient::handleRoomEvent(const RoomEvent &ev)
     return ::testing::AssertionSuccess();
 }
 
-::testing::AssertionResult SmokeClient::createRuledGame(int players)
+::testing::AssertionResult SmokeClient::createRuledGame(int players, ruled::v1::GameFormat format)
 {
     CommandContainer cont;
     cont.set_room_id(roomId);
@@ -197,6 +197,9 @@ void SmokeClient::handleRoomEvent(const RoomEvent &ev)
     create->set_spectators_allowed(false);
     create->set_starting_life_total(20);
     create->set_ruled_game(true);
+    if (format != ruled::v1::GAME_FORMAT_UNSPECIFIED) {
+        create->set_format(format);
+    }
     sendContainer(cont);
     return pumpUntil([&] { return gameId >= 0 && myId >= 0; }, 10000, "game created/joined");
 }

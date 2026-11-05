@@ -1,4 +1,5 @@
 syntax = "proto2";
+import "ruled_v1.proto";
 import "serverinfo_user.proto";
 
 // Container for information about a game in the room's game list
@@ -68,6 +69,7 @@ message ServerInfo_Game {
 
     // MTGO-style rules engine (Servatrice + tricerules sidecar)
     optional bool ruled_game = 60 [default = false];
+    optional ruled.v1.GameFormat format = 61;
     // the current host of the game, which may differ from the creator after a host transfer
     optional ServerInfo_User host_info = 53;
 }

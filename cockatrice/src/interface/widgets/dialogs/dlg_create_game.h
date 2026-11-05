@@ -14,6 +14,7 @@
 #include <qtmetamacros.h>
 
 class QCheckBox;
+class QComboBox;
 class QDialogButtonBox;
 class QGroupBox;
 class QLabel;
@@ -47,6 +48,7 @@ private:
     QLabel *descriptionLabel, *passwordLabel, *maxPlayersLabel, *startingLifeTotalLabel, *shareDecklistsOnLoadLabel;
     QLineEdit *descriptionEdit, *passwordEdit;
     QSpinBox *maxPlayersEdit, *startingLifeTotalEdit;
+    QComboBox *formatEdit;
     QCheckBox *onlyBuddiesCheckBox, *onlyRegisteredCheckBox;
     QCheckBox *spectatorsAllowedCheckBox, *spectatorsNeedPasswordCheckBox, *spectatorsCanTalkCheckBox,
         *spectatorsSeeEverythingCheckBox, *createGameAsJudgeCheckBox, *createGameAsSpectatorCheckBox;

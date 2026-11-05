@@ -73,10 +73,10 @@ bool supportedSchema()
             appendEnum(contract, file->enum_type(i));
         const QByteArray digest = QCryptographicHash::hash(
             QByteArray(contract.data(), static_cast<qsizetype>(contract.size())), QCryptographicHash::Sha256).toHex();
-        // Command-zone casts add a generation-bound CastSource and a public physical binding map.
-        // The source is translated by the paired-generation table; map entries reuse the audited
-        // public GraveyardObjectMap.Entry shape. The cast-source enum adds no identity domain.
-        const QByteArray expected("3f1c68f0e5fe941e05938a1710137f90e5ed4391c068d8dd2236beb78d95fa68");
+        // Format enums, private validation reports, sideboard names and catalogue provenance
+        // add no object references. None is reachable from RuledEventBatch; the identity-bearing
+        // command and event fields retain their audited projection and recipient classification.
+        const QByteArray expected("f4fc05476a59cb5f09f1209f9422df62739d5f48ac028db8470d6f274e5f37e8");
         if (digest != expected)
             qCritical() << "ruled presentation schema needs an identity audit:" << digest;
         return digest == expected;

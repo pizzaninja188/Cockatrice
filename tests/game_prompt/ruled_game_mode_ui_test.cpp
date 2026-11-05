@@ -2,10 +2,35 @@
 
 #include <QAction>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QPushButton>
 #include <QSignalSpy>
+#include <QSpinBox>
 #include <QWidget>
 #include <gtest/gtest.h>
+
+TEST(RuledGameModeUiTest, FormatControlsDeriveLifeAndSeatLimits)
+{
+    QComboBox format;
+    QSpinBox players;
+    QSpinBox life;
+    RuledGameModeUi::configureFormatControls(&format, &players, &life);
+    EXPECT_EQ(format.count(), 2);
+    EXPECT_EQ(players.minimum(), 2);
+    EXPECT_EQ(players.maximum(), 2);
+    EXPECT_EQ(life.value(), 20);
+    EXPECT_TRUE(life.isReadOnly());
+    format.setCurrentIndex(1);
+    EXPECT_EQ(players.minimum(), 2);
+    EXPECT_EQ(players.maximum(), 4);
+    EXPECT_EQ(players.value(), 4);
+    EXPECT_EQ(life.value(), 40);
+    players.setValue(3);
+    format.setCurrentIndex(0);
+    EXPECT_EQ(players.maximum(), 2);
+    EXPECT_EQ(players.value(), 2);
+    EXPECT_EQ(life.value(), 20);
+}
 
 TEST(RuledGameModeUiTest, ModeControlsCannotOfferFreeformOrShuffle)
 {

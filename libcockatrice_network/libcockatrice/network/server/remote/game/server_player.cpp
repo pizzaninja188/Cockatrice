@@ -3,7 +3,6 @@
 #include "../server.h"
 #include "../server_database_interface.h"
 #include "../server_room.h"
-#include "ruled_utils.h"
 #include "game/server_abstract_participant.h"
 #include "game/server_abstract_player.h"
 #include "libcockatrice/deck_list/tree/inner_deck_list_node.h"
@@ -15,6 +14,8 @@
 #include "libcockatrice/protocol/pb/serverinfo_zone.pb.h"
 #include "libcockatrice/utility/card_ref.h"
 #include "libcockatrice/utility/playmat_params.h"
+#include "ruled_deck_validation.h"
+#include "ruled_utils.h"
 #include "server_card.h"
 #include "server_cardzone.h"
 #include "server_counter.h"
@@ -23,15 +24,13 @@
 #include "server_response_containers.h"
 
 #include <QDebug>
-#include <QRegularExpression>
-#include <QtGlobal>
-#include <algorithm>
-
 #include <QMapIterator>
+#include <QRegularExpression>
 #include <QSet>
 #include <QSharedPointer>
 #include <QString>
 #include <QtGlobal>
+#include <algorithm>
 #include <google/protobuf/stubs/port.h>
 #include <libcockatrice/deck_list/deck_list.h>
 #include <libcockatrice/protocol/pb/command_change_zone_properties.pb.h>
@@ -117,7 +116,7 @@ void Server_Player::setupZones()
         addZone(commandZone);
     }
 
-    const int startingLife = game->getRuledGame() ? 20 : game->getStartingLifeTotal();
+    const int startingLife = game->getStartingLifeTotal();
     addCounter(new Server_Counter(0, "life", makeColor(255, 255, 255), 25, startingLife));
     addCounter(new Server_Counter(1, "w", makeColor(255, 255, 150), 20, 0));
     addCounter(new Server_Counter(2, "u", makeColor(150, 150, 255), 20, 0));
@@ -290,12 +289,21 @@ Server_Player::cmdDeckSelect(const Command_DeckSelect &cmd, ResponseContainer &r
         }
     }
 
+    ruled::v1::DeckValidationReport validation;
+    if (!RuledDeckValidation::admit(this, *newDeck, rc, &validation)) {
+        delete newDeck;
+        return Response::RespInvalidData;
+    }
     delete deck;
     deck = newDeck;
     sideboardLocked = true;
 
     Event_PlayerPropertiesChanged event;
     event.mutable_player_properties()->set_sideboard_locked(true);
+    if (game->getRuledGame()) {
+        setReadyStart(false);
+        event.mutable_player_properties()->set_ready_start(false);
+    }
     event.mutable_player_properties()->set_deck_hash(deck->getDeckHash().toStdString());
     const auto &playmat = deck->getPlaymat();
     auto *playmatParams = event.mutable_player_properties()->mutable_playmat_params();
@@ -317,13 +325,16 @@ Server_Player::cmdDeckSelect(const Command_DeckSelect &cmd, ResponseContainer &r
 
     auto *re = new Response_DeckDownload;
     re->set_deck(deck->writeToString_Native().toStdString());
+    if (game->getFormat() != ruled::v1::GAME_FORMAT_UNSPECIFIED) {
+        *re->mutable_validation() = validation;
+    }
 
     rc.setResponseExtension(re);
     return Response::RespOk;
 }
 
 Response::ResponseCode Server_Player::cmdSetSideboardPlan(const Command_SetSideboardPlan &cmd,
-                                                          ResponseContainer & /*rc*/,
+                                                          ResponseContainer &rc,
                                                           GameEventStorage & /*ges*/)
 {
     if (readyStart) {
@@ -339,6 +350,13 @@ Response::ResponseCode Server_Player::cmdSetSideboardPlan(const Command_SetSideb
     QList<MoveCard_ToZone> sideboardPlan;
     for (int i = 0; i < cmd.move_list_size(); ++i) {
         sideboardPlan.append(cmd.move_list(i));
+    }
+    if (game->getRuledGame()) {
+        DeckList candidate = *deck;
+        candidate.setCurrentSideboardPlan(sideboardPlan);
+        if (!RuledDeckValidation::admit(this, candidate, rc)) {
+            return Response::RespInvalidData;
+        }
     }
     deck->setCurrentSideboardPlan(sideboardPlan);
 
