@@ -1087,6 +1087,10 @@ Server_ProtocolHandler::cmdCreateGame(const Command_CreateGame &cmd, Server_Room
     if (authState == NotLoggedIn) {
         return Response::RespLoginNeeded;
     }
+    // This fork offers ruled games only; do not silently reinterpret legacy requests.
+    if (!cmd.ruled_game()) {
+        return Response::RespInvalidCommand;
+    }
     if (cmd.password().length() > MAX_NAME_LENGTH) {
         return Response::RespContextError;
     }

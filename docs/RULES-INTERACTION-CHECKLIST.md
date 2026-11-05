@@ -49,7 +49,7 @@ record N/A briefly. See [execution order](AUTHORING-WORKFLOW.md#necessary-engine
 
 - List every producer and consumer affected in Rust, protobuf, Servatrice, and Qt.
 - Update all protobuf constructors, generated consumers, relay bindings, redaction, client state, dispatcher methods, and UI actions that share the contract.
-- Preserve ruled/freeform gating and the upstream-file extraction boundary.
+- Enforce ruled-only creation and local-game entry points; preserve mode guards on shared upstream infrastructure and the upstream-file extraction boundary.
 - Verify physical zone order and stable identity when engine vectors and Cockatrice piles use different orderings.
 
 ## 7. Verification and delivery

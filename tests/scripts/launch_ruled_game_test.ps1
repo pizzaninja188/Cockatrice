@@ -5,6 +5,19 @@ New-Item -ItemType Directory -Path "$fixture/scripts" -Force | Out-Null
 Copy-Item "$repo/scripts/launch-ruled-game.ps1" "$fixture/scripts/launch-ruled-game.ps1"
 $shell = (Get-Process -Id $PID).Path
 try {
+    $rejected = Start-Process $shell -WindowStyle Hidden -PassThru -ArgumentList @(
+        '-NoProfile', '-File', "`"$fixture/scripts/launch-ruled-game.ps1`"", '-Freeform'
+    ) -RedirectStandardOutput "$fixture/freeform-stdout.log" -RedirectStandardError "$fixture/freeform-stderr.log"
+    $rejectedHandle = $rejected.Handle
+    try {
+        if (-not $rejected.WaitForExit(10000)) { throw 'Removed freeform switch did not fail promptly.' }
+        $errorText = Get-Content "$fixture/freeform-stderr.log" -Raw
+        if ($null -eq $rejected.ExitCode -or $rejected.ExitCode -eq 0 -or $errorText -notmatch 'parameter.*Freeform') {
+            throw "Freeform must be rejected during argument binding, before build or launch: $errorText"
+        }
+    } finally {
+        if (-not $rejected.HasExited) { $rejected.Kill(); $rejected.WaitForExit() }
+    }
     foreach ($buildExit in @(0, 7)) {
         @'
 $helper = Start-Process powershell.exe -WindowStyle Hidden -PassThru -ArgumentList @('-NoProfile', '-Command', 'Start-Sleep -Seconds 60')

@@ -51,8 +51,6 @@ public:
         QString gameName;
         /// Whose games the joining seat asks the server about. Ignored when hosting.
         QString hostUser;
-        /// Create the game with the ruled engine enabled.
-        bool ruled = true;
         int playerCount = 2;
     };
 

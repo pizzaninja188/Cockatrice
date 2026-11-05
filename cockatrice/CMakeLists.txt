@@ -126,6 +126,7 @@ set(cockatrice_SOURCES
     src/game/ruled/ruled_large_choice_picker.cpp
     src/game/ruled/ruled_client_ui.cpp
     src/game/ruled/ruled_game_controller.cpp
+    src/game/ruled/ruled_game_mode_ui.cpp
     src/game/ruled/ruled_player_actions.cpp
     src/game/ruled/ruled_actions.cpp
     src/game/ruled/ruled_card_popup.cpp

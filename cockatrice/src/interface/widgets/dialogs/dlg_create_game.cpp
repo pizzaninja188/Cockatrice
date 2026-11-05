@@ -1,6 +1,7 @@
 #include "dlg_create_game.h"
 
 #include "../../../client/settings/cache_settings.h"
+#include "../../../game/ruled/ruled_game_mode_ui.h"
 #include "../interface/widgets/tabs/tab_room.h"
 #include "libcockatrice/protocol/pb/response.pb.h"
 #include "libcockatrice/protocol/pb/room_commands.pb.h"
@@ -207,6 +208,8 @@ DlgCreateGame::DlgCreateGame(TabRoom *_room, const QMap<int, QString> &_gameType
     connect(buttonBox, &QDialogButtonBox::accepted, this, &DlgCreateGame::actOK);
     connect(clearButton, &QPushButton::clicked, this, &DlgCreateGame::actReset);
 
+    RuledGameModeUi::configureCreationControls(ruledGameCheckBox, shufflePlayersCheckBox);
+    setFixedHeight(sizeHint().height());
     setWindowTitle(tr("Create game"));
 }
 
@@ -279,7 +282,7 @@ void DlgCreateGame::actReset()
 
     startingLifeTotalEdit->setValue(20);
     shareDecklistsOnLoadCheckBox->setChecked(false);
-    ruledGameCheckBox->setChecked(false);
+    ruledGameCheckBox->setChecked(true);
     shufflePlayersCheckBox->setChecked(false);
     createGameAsJudgeCheckBox->setChecked(false);
 
@@ -311,8 +314,8 @@ void DlgCreateGame::actOK()
     cmd.set_join_as_spectator(createGameAsSpectatorCheckBox->isChecked());
     cmd.set_starting_life_total(startingLifeTotalEdit->value());
     cmd.set_share_decklists_on_load(shareDecklistsOnLoadCheckBox->isChecked());
-    cmd.set_ruled_game(ruledGameCheckBox->isChecked());
-    cmd.set_shuffle_players(shufflePlayersCheckBox->isChecked());
+    cmd.set_ruled_game(true);
+    cmd.set_shuffle_players(false);
 
     auto _gameTypes = QString();
     QMapIterator<int, QRadioButton *> gameTypeCheckBoxIterator(gameTypeCheckBoxes);

@@ -17,12 +17,15 @@ defines accepted syntax. Prompt-ID propagation and the broader migration stay se
 
 ## 1. System
 
-Two game modes share one client and one server:
+This fork offers ruled games only: a Rust engine is the only thing that decides what is legal,
+and the client can only ask. Servatrice rejects create requests with `ruled_game` absent or false.
+The create dialog and autopilot always request ruled games; the legacy local-game action, saved
+local-game startup setting, and launcher freeform switch cannot start freeform play.
 
-- **Freeform** — the legacy casual mode. The client is trusted; players move cards by hand;
-  there are no rules. Untouched by this fork except where ruled code is gated off.
-- **Ruled** — server-authoritative MTG. A Rust engine is the only thing that decides what is
-  legal, and the client can only ask.
+Upstream freeform infrastructure remains in the source to keep periodic merges manageable.
+Shared card, zone, replay, visual-tap and mana-counter paths still support ruled play. Retain
+their mode guards; removing product access does not authorize deleting their implementation.
+Unsupported engine cards have no manual-play fallback.
 
 ```
 ┌────────────────────┐   Command_RuledPayload    ┌──────────────────────┐   IpcEnvelope    ┌───────────────────┐
@@ -331,7 +334,7 @@ identity maps) → per-participant `redactBatchForParticipant` → private `Even
 
 ## 5. Hidden information and the trust model
 
-**Freeform mode is out of scope.** It is trust-based by upstream design; do not try to harden it.
+**Freeform game creation is rejected.** Upstream freeform implementation remains for merge compatibility, but is not an offered game mode.
 
 | Boundary | Trust | What it checks |
 |---|---|---|
@@ -521,7 +524,7 @@ Conventions that make this greppable:
 - New client fork files go in `cockatrice/src/game/ruled/`.
 - `RuledActions::isRuledGame(game)` is the **only** place that reads the `ruled_game` proto flag.
   Never re-inline `game->getGameMetaInfo()->proto().ruled_game()`.
-- Gate every new UI path on ruled mode; freeform must keep working.
+- Keep ruled-mode guards on shared UI paths. Product entry points are ruled-only; do not restore freeform creation or local-game access.
 
 Representative residual hooks, so you know what "small" looks like: `Server_Game` keeps the flag +
 `unique_ptr` + friend + accessor + two delegators; `Server_AbstractPlayer` keeps one
@@ -537,7 +540,7 @@ view state, and bridges upstream model objects to graphics through `ruled_client
 - Separate pure code motion from behavior changes; characterize unprotected behavior before moving it.
 - Keep player sets generic and rules-semantic opponent tests on `GameState::are_opponents`.
 - Keep typed RON keyed by card identity, without set metadata or a separate scripting language.
-- Preserve the ruled/freeform layering, synchronous relay request/response under the game mutex,
+- Preserve the upstream/fork layering and ruled-only product boundary, synchronous relay request/response under the game mutex,
   and one prompt-mode enum. Removed protobuf tags remain reserved; avoid speculative compatibility
   layers in this single-repository fork.
 - Keep scenario tests in a shared executable; split large helpers by setup/assertion concern,

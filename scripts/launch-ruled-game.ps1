@@ -56,9 +56,6 @@
     Run -Stop first if servers are already up: the sidecar reads its half of the gate from its
     own environment at startup, so a reused one refuses dev commands.
 
-.PARAMETER Freeform
-    Create a legacy freeform game instead of a ruled one.
-
 .PARAMETER NoServers
     Skip starting the sidecar and servatrice; use the ones already running.
 
@@ -95,7 +92,6 @@ param(
     [long]$Seed = 0,
     [switch]$Dev,
     [switch]$Trace,
-    [switch]$Freeform,
     [switch]$NoServers,
     [switch]$Stop,
     [string]$Capture,
@@ -108,7 +104,7 @@ $ErrorActionPreference = "Stop"
 
 # Capture runs own isolated servers and process records; route before the ordinary dev-run cleanup.
 if ($Capture -or $RunDirectory) {
-    foreach ($taskConflict in @('DeckA','DeckB','DeckC','DeckD','Players','Seed','Dev','Freeform','NoServers')) {
+    foreach ($taskConflict in @('DeckA','DeckB','DeckC','DeckD','Players','Seed','Dev','NoServers')) {
         if ($PSBoundParameters.ContainsKey($taskConflict)) { throw "-$taskConflict cannot override a captured game." }
     }
     & (Join-Path $PSScriptRoot 'launch-ruled-capture.ps1') @PSBoundParameters
@@ -239,7 +235,7 @@ if (-not $DeckB) { $DeckB = Join-Path $PSScriptRoot "decks\dev-blue.cod" }
 if ($Players -ge 3 -and -not $DeckC) { $DeckC = Join-Path $PSScriptRoot "decks\dev-creatures.cod" }
 if ($Players -eq 4 -and -not $DeckD) { $DeckD = Join-Path $PSScriptRoot "decks\dev-creatures.cod" }
 if (-not $GameName) {
-    if ($Freeform) { $GameName = "Freeform dev game" } else { $GameName = "Ruled dev game" }
+    $GameName = "Ruled dev game"
 }
 
 $buildHint = "The automatic build completed, but the expected artifact was not produced."
@@ -323,7 +319,6 @@ if (-not $NoServers) {
 # the two that actually vary per seat.
 $env:COCKATRICE_AUTOPILOT_GAME = $GameName
 $env:COCKATRICE_AUTOPILOT_PLAYERS = "$Players"
-if ($Freeform) { $env:COCKATRICE_AUTOPILOT_RULED = "0" } else { $env:COCKATRICE_AUTOPILOT_RULED = "1" }
 
 Write-Host "Starting clients..." -ForegroundColor Cyan
 
@@ -374,11 +369,7 @@ if ($Players -eq 4) {
 }
 
 Write-Host ""
-if ($Freeform) {
-    Write-Host "Freeform game '$GameName' coming up." -ForegroundColor Green
-} else {
-    Write-Host "Ruled game '$GameName' coming up." -ForegroundColor Green
-}
+Write-Host "Ruled game '$GameName' coming up." -ForegroundColor Green
 Write-Host "  p1 $([System.IO.Path]::GetFileName($deckAPath))   p2 $([System.IO.Path]::GetFileName($deckBPath))"
 if ($Players -ge 3) { Write-Host "  p3 $([System.IO.Path]::GetFileName($deckCPath))" }
 if ($Players -eq 4) { Write-Host "  p4 $([System.IO.Path]::GetFileName($deckDPath))" }

@@ -1,6 +1,39 @@
 #include "ruled_e2e_opening_driver.h"
+#include "ruled_e2e_session.h"
 namespace ruled_e2e
 {
+TEST_F(RuledE2ESmokeTest, RejectsFreeformCreationWithoutAllocatingAGame)
+{
+    const auto started = startServers();
+    ASSERT_TRUE(started) << started.message();
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+    SmokeClient client("ruledonly", &transcript);
+    ASSERT_TRUE(client.loginAndJoinRoom());
+    for (bool explicitlyFalse : {false, true}) {
+        CommandContainer container;
+        container.set_room_id(client.roomId);
+        auto *create = container.add_room_command()->MutableExtension(Command_CreateGame::ext);
+        create->set_description("Unsupported freeform request");
+        create->set_max_players(2);
+        if (explicitlyFalse) {
+            create->set_ruled_game(false);
+        }
+        const auto commandId = client.nextCmdId;
+        client.sendContainer(container);
+        ASSERT_TRUE(client.pumpUntil([&] { return client.responses.count(commandId) != 0; }, 10000,
+                                     "freeform rejection"));
+        EXPECT_EQ(client.responses.at(commandId).response_code(), Response::RespInvalidCommand);
+        EXPECT_EQ(client.gameId, -1);
+        EXPECT_EQ(client.myId, -1);
+    }
+    // Rejection must leave the same authenticated connection usable for a ruled game.
+    ASSERT_TRUE(client.createRuledGame());
+    EXPECT_GE(client.gameId, 0);
+    EXPECT_GE(client.myId, 0);
+}
+
 namespace
 {
 class CallbackProbe : public SmokeClient

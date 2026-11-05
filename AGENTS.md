@@ -13,7 +13,7 @@ current request; carry forward authorization and acceptance deferrals. Planning 
   manufactured executable tests.
 - Trace changed ruled contracts through engine, protobuf, relay and client. Change and verify every
   affected producer/consumer; explain unaffected surfaces briefly as N/A. Proto changes require both
-  Rust and C++. Preserve freeform gating.
+  Rust and C++. Enforce ruled-only product entry points; preserve upstream implementation and guarded shared presentation paths for periodic merges.
 - Reuse valid final verification on unchanged content, dependencies and environment. A later commit
   request alone does not require another run. Fix material defects; defer optional polish after green.
 - Default GUI acceptance to the user; provide concise setup, actions and expected results for affected

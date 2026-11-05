@@ -75,7 +75,6 @@ void RuledAutopilot::installFromCommandLine(MainWindow *window, const QString &r
     config.deckFile = deckFile;
     config.gameName = envOr("COCKATRICE_AUTOPILOT_GAME", QString::fromLatin1(kDefaultGameName));
     config.hostUser = envOr("COCKATRICE_AUTOPILOT_HOST_USER", QString::fromLatin1(kDefaultHostUser));
-    config.ruled = envOr("COCKATRICE_AUTOPILOT_RULED", QStringLiteral("1")) != QLatin1String("0");
     bool validPlayerCount = false;
     const int playerCount = qEnvironmentVariableIntValue("COCKATRICE_AUTOPILOT_PLAYERS", &validPlayerCount);
     if (validPlayerCount && playerCount >= 2 && playerCount <= 99)
@@ -95,7 +94,7 @@ RuledAutopilot::RuledAutopilot(TabSupervisor *_supervisor, Config _config, QObje
     }
 
     qCInfo(RuledAutopilotLog) << "armed as" << (config.host ? "host" : "join") << "for game" << config.gameName
-                              << (config.ruled ? "(ruled)" : "(freeform)") << "deck" << config.deckFile;
+                              << "(ruled)" << "deck" << config.deckFile;
 
     connect(client, &AbstractClient::statusChanged, this, [this](ClientStatus status) {
         if (status == StatusLoggedIn && stage == Stage::WaitingForLogin) {
@@ -149,7 +148,7 @@ void RuledAutopilot::createGame(int roomId)
     cmd.set_spectators_see_everything(true);
     // Dev convenience: both seats are usually driven by the same person.
     cmd.set_share_decklists_on_load(true);
-    cmd.set_ruled_game(config.ruled);
+    cmd.set_ruled_game(true);
 
     PendingCommand *pend = AbstractClient::prepareRoomCommand(cmd, roomId);
     connect(pend, &PendingCommand::finished, this,

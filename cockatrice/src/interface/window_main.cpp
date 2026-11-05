@@ -23,6 +23,7 @@
 #include "../client/network/update/client/client_update_checker.h"
 #include "../client/settings/cache_settings.h"
 #include "../game/ruled/ruled_bug_report.h"
+#include "../game/ruled/ruled_game_mode_ui.h"
 #include "../game/ruled/ruled_diagnostic_viewer.h"
 #include "../interface/widgets/dialogs/dlg_connect.h"
 #include "../client/settings/shortcuts_settings.h"
@@ -203,6 +204,9 @@ void MainWindow::actDisconnect()
 
 void MainWindow::actSinglePlayer()
 {
+    if (!RuledGameModeUi::allowsLocalFreeformGames()) {
+        return;
+    }
     DlgLocalGameOptions dlg(this);
     if (dlg.exec() != QDialog::Accepted) {
         return;
@@ -213,6 +217,9 @@ void MainWindow::actSinglePlayer()
 
 void MainWindow::startLocalGame(const LocalGameOptions &options)
 {
+    if (!RuledGameModeUi::allowsLocalFreeformGames()) {
+        return;
+    }
     aConnect->setEnabled(false);
     aRegister->setEnabled(false);
     aForgotPassword->setEnabled(false);
@@ -445,6 +452,7 @@ void MainWindow::createActions()
     aSinglePlayer = new QAction(this);
     aSinglePlayer->setObjectName("actionSinglePlayer");
     connect(aSinglePlayer, &QAction::triggered, this, &MainWindow::actSinglePlayer);
+    RuledGameModeUi::disableLocalGameAction(aSinglePlayer);
     aWatchReplay = new QAction(this);
     aWatchReplay->setObjectName("actionWatchReplay");
     connect(aWatchReplay, &QAction::triggered, this, &MainWindow::actWatchReplay);
@@ -718,7 +726,7 @@ void MainWindow::startupConfigCheck()
         CardDatabaseManager::getInstance()->checkUnknownSets();
     }
 
-    if (SettingsCache::instance().debug().getLocalGameOnStartup()) {
+    if (RuledGameModeUi::allowsLocalFreeformGames() && SettingsCache::instance().debug().getLocalGameOnStartup()) {
         LocalGameOptions options;
         options.numberPlayers = SettingsCache::instance().debug().getLocalGamePlayerCount();
         startLocalGame(options);
@@ -1141,7 +1149,8 @@ void MainWindow::attemptStartupAutoConnect()
         connectionController->connectToServerDirect(connectTo.host(), connectTo.port(), connectTo.userName(),
                                                     connectTo.password());
     } else if (SettingsCache::instance().servers().getAutoConnect() &&
-               !SettingsCache::instance().debug().getLocalGameOnStartup() && !startupDestinationConnectsToServer()) {
+               !(RuledGameModeUi::allowsLocalFreeformGames() && SettingsCache::instance().debug().getLocalGameOnStartup()) &&
+               !startupDestinationConnectsToServer()) {
         qCInfo(WindowMainStartupAutoconnectLog) << "Attempting auto-connect...";
         DlgConnect dlg(this);
         connectionController->connectToServerDirect(dlg.getHost(), static_cast<unsigned int>(dlg.getPort()),

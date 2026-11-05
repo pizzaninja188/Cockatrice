@@ -115,7 +115,7 @@ function Save-CaptureProcess([System.Diagnostics.Process]$Process, [string]$Exec
 }
 $taskEnvNames = @('TRICERULES_PORT','TRICERULES_DEV_COMMANDS','COCKATRICE_RULED_DEV','COCKATRICE_RULED_SEED',
     'COCKATRICE_RULED_CAPTURE_DIR','COCKATRICE_RULED_CAPTURE','COCKATRICE_RULED_RESUME_PLAN','COCKATRICE_RULED_RESUME_POLICY',
-    'COCKATRICE_AUTOPILOT_PLAYERS','COCKATRICE_AUTOPILOT_GAME','COCKATRICE_AUTOPILOT_HOST_USER','COCKATRICE_AUTOPILOT_RULED','COCKATRICE_RULED_DEBUG')
+    'COCKATRICE_AUTOPILOT_PLAYERS','COCKATRICE_AUTOPILOT_GAME','COCKATRICE_AUTOPILOT_HOST_USER','COCKATRICE_RULED_DEBUG')
 $taskSavedEnv = @{}
 foreach ($taskName in $taskEnvNames) { $taskSavedEnv[$taskName] = [Environment]::GetEnvironmentVariable($taskName,'Process') }
 try {
@@ -141,7 +141,6 @@ try {
     $env:COCKATRICE_AUTOPILOT_PLAYERS = $taskPlayers.Count.ToString()
     $env:COCKATRICE_AUTOPILOT_GAME = $GameName
     $env:COCKATRICE_AUTOPILOT_HOST_USER = 'resume0'
-    $env:COCKATRICE_AUTOPILOT_RULED = '1'
     for ($taskSeat = 0; $taskSeat -lt $taskPlayers.Count; ++$taskSeat) {
         $taskPlayer = $taskPlayers[$taskSeat]
         $taskSeatDir = Join-Path $taskRun "seat-$taskPlayer"

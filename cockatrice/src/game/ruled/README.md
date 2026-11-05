@@ -1,6 +1,8 @@
 # `cockatrice/src/game/ruled/` — the client's ruled-mode view model
 
 Fork-owned. All ruled-mode client logic lives here; upstream files keep 1–3-line hooks.
+The product offers ruled games only. Legacy upstream implementation remains behind mode guards
+for periodic merges; it is not a supported freeform or local-game entry point.
 For the system-wide picture (identity glossary, redaction, the life of a command) see
 [docs/ARCHITECTURE.md](../../../../docs/ARCHITECTURE.md).
 
@@ -45,6 +47,12 @@ and targeting entry points on that one QObject. `ruled_client_ui` maps `PlayerLo
 to their existing graphics objects, without creating duplicate model or action objects.
 `RuledActions::isRuledGame` is defined in the model-only `ruled_game_mode.cpp`, so core guards
 do not pull widgets into the game library.
+
+`ruled_game_mode_ui` owns fixed ruled-creation controls and local-game action suppression,
+including upstream attempts to re-enable that action. The main-window slots and saved startup
+setting remain behind its product-policy guard. Servatrice rejects absent/false `ruled_game`
+before allocating a game; the dialog and autopilot always send true. Historical replay viewing
+and shared upstream presentation implementations remain available.
 
 ### `ruled_client_state.{h,cpp}` — `RuledClientState`
 
@@ -469,7 +477,7 @@ Start two dev clients with seed 153 and arrange the named cards/mana.
 - Resolve Dream Seizer with the 1/1 Bears available. Choose Blight, select Bears, and leave the opponent's discard prompt open. Both clients must still show the same Bears on the battlefield. Only the opponent sees discard candidates. Complete discard: that exact Bears moves to its owner's graveyard on both clients.
 - Resolve both Blighted Blackthorn's entry and attack triggers. Paying Blight 2 draws one card and loses one life; declining does neither. A tapped attacker can be chosen to receive the counters.
 - Resolve Chaos Spewer. Choosing Pay opens the staged {2} picker; Undo keeps that payment offer available, and final Decline enters Blight directly. Blight requires exactly one eligible creature when available. If the source has left and no eligible creature remains, final Decline completes without a creature prompt or counters.
-- Check a fresh freeform game: ordinary card movement and activation menus retain their existing behavior.
+- Verify that create/reset always selects ruled play and no local-game action is available. Shared card movement and activation presentation remain covered through ruled games.
 
 ### Draw replacement and simultaneous discard — not established by architecture fixtures
 
