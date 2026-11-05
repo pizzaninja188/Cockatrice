@@ -71,13 +71,13 @@ Combat damage is tracked independently for each commander and victim across zone
 changes; 21 damage from one commander causes loss during state-based actions. Existing return
 to command-zone choices continue to use engine-owned decisions.
 
-`RuledAuxiliaryArea` arranges independent graphics sections, compared with the existing sidebar
-and CardZone views. Its first section contains actual commander CardItems, at the local
-battlefield's bottom right and each opponent's top right. A reserved column prevents permanent
-overlap; empty sections collapse. Kami of the Crescent Moon and Atraxa, Praetors' Voice use the
-card section. A future non-card section can present, for example, Teferi, Hero of Dominaria's
-emblem or Chandra, Torch of Defiance's emblem without pretending those objects are cards or
-battlefield permanents. Moving existing emblems/static-effect displays is deferred.
+The player sidebar lays out counters next to the battlefield. `RuledAuxiliaryArea` lays out
+independent sections inside each player's land row. Its first section contains commander
+CardItems at the right end of the row, alongside a small label. The row reserves room for the
+section as it grows and shrinks. Kami of the Crescent Moon
+and Atraxa, Praetors' Voice use the card section. Future sections can display emblems such as
+Teferi, Hero of Dominaria's or Chandra, Torch of Defiance's using their own representation.
+Moving existing emblem and static-effect displays is deferred.
 
 ## User GUI acceptance — pending
 
@@ -98,9 +98,11 @@ establish interactive GUI acceptance. The user elected to test after implementat
    that a deck is loaded and only the owner can view the list. Select an illegal deck. Only its
    owner receives card details and the previous accepted deck remains loaded. Repeat with an
    invalid sideboard move, Ready and Force Start. No invalid configuration may start.
-5. Run `scripts/launch-ruled-game.ps1 -Format Commander -Players 2 -Dev` (stop the previous run
-   first). The sample declares Kami with 99 Islands. Verify 40 life and one real commander in
-   each floating area. Repeat with three/four seats, narrow windows and reconnect/spectator views.
+5. In a Commander lobby, load `scripts/decks/commander-kami.cod` and verify that Commander
+   appears in the regular deck preview alongside the other boards. For an automated game setup,
+   run `scripts/launch-ruled-game.ps1 -Format Commander -Players 2 -Dev` after stopping the
+   previous run. Verify 40 life and one commander at the end of each land row during play.
+   Repeat with three/four seats, narrow windows and reconnect/spectator views.
 6. Cast, cancel, recast and return a commander to the command zone. Verify the exact card moves
    once, payment tax increases only after committed casts, and opponents cannot cast it. Check
    commander combat damage/loss, and that noncombat damage does not count toward 21.

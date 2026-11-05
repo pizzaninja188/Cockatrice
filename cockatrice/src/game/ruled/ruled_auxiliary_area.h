@@ -16,10 +16,10 @@ public:
     }
     void paint(QPainter *, const QStyleOptionGraphicsItem *, QWidget *) override;
     void addSection(QGraphicsItem *section);
-    void anchorTo(const QRectF &battlefield, bool localPlayer);
+    void anchorTo(const QRectF &landRow);
     qreal reservedWidth() const
     {
-        return bounds.isEmpty() ? 0 : bounds.width() + 16;
+        return bounds.isEmpty() ? 0 : bounds.width() + 2 * edgeInset;
     }
 public slots:
     void relayout();
@@ -27,8 +27,8 @@ signals:
     void extentChanged();
 
 private:
+    static constexpr qreal edgeInset = 8;
     QList<QGraphicsItem *> sections;
     QRectF bounds;
-    QRectF battlefield;
-    bool localPlayer = false;
+    QRectF row;
 };

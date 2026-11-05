@@ -176,16 +176,17 @@ void PlayerGraphicsItem::initializeZones()
     zoneGraphicsItems.insert(player->getHandZone()->getName(), handZoneGraphicsItem);
     if (RuledActions::isRuledGame(player->getGame())) {
         if (auto *logic = player->getZone(QStringLiteral("command"))) {
-            auxiliaryArea = new RuledAuxiliaryArea(this);
+            auxiliaryArea = new RuledAuxiliaryArea(tableZoneGraphicsItem);
             auto *command = new RuledPublicCardZone(logic);
             auxiliaryArea->addSection(command);
             zoneGraphicsItems.insert(logic->getName(), command);
             connect(command, &RuledPublicCardZone::extentChanged, auxiliaryArea, &RuledAuxiliaryArea::relayout);
             connect(auxiliaryArea, &RuledAuxiliaryArea::extentChanged, this, [this] {
-                processSceneSizeChange(availablePlayerWidth > 0 ? availablePlayerWidth
-                                                                : static_cast<int>(getMinimumWidth()));
-                rearrangeZones();
+                tableZoneGraphicsItem->setLandRowReservedWidth(static_cast<int>(auxiliaryArea->reservedWidth()));
             });
+            tableZoneGraphicsItem->setLandRowReservedWidth(static_cast<int>(auxiliaryArea->reservedWidth()));
+            connect(&SettingsCache::instance().userInterface(), &InterfaceSettings::invertVerticalCoordinateChanged,
+                    auxiliaryArea, [this] { auxiliaryArea->anchorTo(tableZoneGraphicsItem->landRowRect()); });
         }
     }
 }
@@ -222,7 +223,7 @@ QRectF PlayerGraphicsItem::boundingRect() const
 qreal PlayerGraphicsItem::getMinimumWidth() const
 {
     qreal result = tableZoneGraphicsItem->getMinimumWidth() + CardDimensions::HEIGHT_F + 15 + counterAreaWidth +
-                   restrictedManaExtraWidth() + auxiliaryWidth();
+                   restrictedManaExtraWidth();
     if (!SettingsCache::instance().userInterface().getHorizontalHand()) {
         result += handZoneGraphicsItem->boundingRect().width();
     }
@@ -288,10 +289,8 @@ QPixmap PlayerGraphicsItem::scaledPlaymatFor(const QRectF &srcRect, const QSizeF
 
 void PlayerGraphicsItem::processSceneSizeChange(int newPlayerWidth)
 {
-    availablePlayerWidth = newPlayerWidth;
     // Extend table (and hand, if horizontal) to accommodate the new player width.
-    qreal tableWidth = newPlayerWidth - CardDimensions::HEIGHT_F - 15 - counterAreaWidth - restrictedManaExtraWidth() -
-                       auxiliaryWidth();
+    qreal tableWidth = newPlayerWidth - CardDimensions::HEIGHT_F - 15 - counterAreaWidth - restrictedManaExtraWidth();
     if (!SettingsCache::instance().userInterface().getHorizontalHand()) {
         tableWidth -= handZoneGraphicsItem->boundingRect().width();
     }
@@ -411,7 +410,7 @@ void PlayerGraphicsItem::rearrangeZones()
 void PlayerGraphicsItem::updateBoundingRect()
 {
     prepareGeometryChange();
-    qreal width = CardDimensions::HEIGHT_F + 15 + counterAreaWidth + restrictedManaExtraWidth() + auxiliaryWidth();
+    qreal width = CardDimensions::HEIGHT_F + 15 + counterAreaWidth + restrictedManaExtraWidth();
     if (SettingsCache::instance().userInterface().getHorizontalHand()) {
         qreal handHeight =
             player->getPlayerInfo()->getLocalOrJudge() ? handZoneGraphicsItem->boundingRect().height() : 0;
@@ -423,9 +422,7 @@ void PlayerGraphicsItem::updateBoundingRect()
             tableZoneGraphicsItem->boundingRect().height());
     }
     if (auxiliaryArea) {
-        auto rect = tableZoneGraphicsItem->boundingRect().translated(tableZoneGraphicsItem->pos());
-        rect.setRight(rect.right() + auxiliaryWidth());
-        auxiliaryArea->anchorTo(rect, player->getPlayerInfo()->getLocal());
+        auxiliaryArea->anchorTo(tableZoneGraphicsItem->landRowRect());
     }
     playerArea->setSize(CardDimensions::HEIGHT_F + counterAreaWidth + restrictedManaExtraWidth() + 15, bRect.height());
 
@@ -435,11 +432,6 @@ void PlayerGraphicsItem::updateBoundingRect()
 qreal PlayerGraphicsItem::restrictedManaExtraWidth() const
 {
     return restrictedManaDisplay ? restrictedManaDisplay->displayWidth() : 0;
-}
-
-qreal PlayerGraphicsItem::auxiliaryWidth() const
-{
-    return auxiliaryArea ? auxiliaryArea->reservedWidth() : 0;
 }
 
 void PlayerGraphicsItem::rearrangeSidebar()

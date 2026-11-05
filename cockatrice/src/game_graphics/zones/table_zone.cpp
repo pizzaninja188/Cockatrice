@@ -274,19 +274,24 @@ void TableZone::paintZoneOutline(QPainter *painter)
     painter->fillRect(QRectF(width - BOX_LINE_WIDTH, 0, BOX_LINE_WIDTH, height), QBrush(grad1));
 }
 
-/**
-   Render a division line for land placement
-
-   @painter QPainter object
- */
-void TableZone::paintLandDivider(QPainter *painter)
+QRectF TableZone::landRowRect() const
 {
     // Place the line 2 grid heights down then back it off just enough to allow
     // some space between a 3-card stack and the land area.
-    qreal separatorY = MARGIN_TOP + 2 * (CardDimensions::HEIGHT + PADDING_Y) - STACKED_CARD_OFFSET_Y / 2;
-    if (isInverted()) {
-        separatorY = height - separatorY;
-    }
+    constexpr int divider = MARGIN_TOP + (TableZoneLogic::ROW_COUNT - 1) * (CardDimensions::HEIGHT + PADDING_Y) -
+                            STACKED_CARD_OFFSET_Y / 2;
+    return QRectF(0, isInverted() ? 0 : divider, width, height - divider);
+}
+
+bool TableZone::isLandRowReserved(const QPointF &point) const
+{
+    return landRowReservedWidth > 0 && point.x() >= width - landRowReservedWidth && landRowRect().contains(point);
+}
+
+void TableZone::paintLandDivider(QPainter *painter)
+{
+    const auto row = landRowRect();
+    const qreal separatorY = isInverted() ? row.bottom() : row.top();
     painter->setPen(QColor(255, 255, 255, 40));
     painter->drawLine(QPointF(0, separatorY), QPointF(width, separatorY));
 }
@@ -464,13 +469,13 @@ void TableZone::toggleTapped()
 
 void TableZone::resizeToContents()
 {
-    int xMax = 0;
+    int xMax = landRowReservedWidth;
 
     // Find rightmost card position, which includes the left margin amount.
     for (int i = 0; i < cardItems().size(); ++i) {
-        if (cardItems()[i]->pos().x() > xMax) {
-            xMax = (int)cardItems()[i]->pos().x();
-        }
+        const auto *card = cardItems()[i];
+        const int reserve = card->getGridPos().y() == TableZoneLogic::ROW_COUNT - 1 ? landRowReservedWidth : 0;
+        xMax = qMax(xMax, static_cast<int>(card->pos().x()) + reserve);
     }
 
     // Minimum width is the rightmost card position plus enough room for
@@ -485,6 +490,14 @@ void TableZone::resizeToContents()
         prepareGeometryChange();
         width = currentMinimumWidth;
         emit sizeChanged();
+    }
+}
+
+void TableZone::setLandRowReservedWidth(int reservedWidth)
+{
+    if (landRowReservedWidth != reservedWidth) {
+        landRowReservedWidth = reservedWidth;
+        resizeToContents();
     }
 }
 
@@ -592,7 +605,8 @@ QPoint TableZone::mapToGrid(const QPointF &mapPoint) const
 
     // Maximum value is a card width from the right margin, referenced to the
     // grid area.
-    const int xMax = width - MARGIN_LEFT - MARGIN_RIGHT - CardDimensions::WIDTH;
+    const int reserve = gridPointY == TableZoneLogic::ROW_COUNT - 1 ? landRowReservedWidth : 0;
+    const int xMax = width - MARGIN_LEFT - MARGIN_RIGHT - CardDimensions::WIDTH - reserve;
 
     int xStack = 0;
     int xNextStack = 0;

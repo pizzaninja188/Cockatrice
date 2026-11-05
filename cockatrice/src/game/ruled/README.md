@@ -38,11 +38,10 @@ this a legal target, is this a creature — is answered from what the engine sen
 
 ### Upstream model and graphics adapters
 
-`ruled_auxiliary_area` owns a reusable per-player floating layout for independently typed sections.
-`ruled_public_card_zone` displays actual command-zone CardItems in that layout, anchored at the
-local battlefield's bottom right and each opponent's top right. Its reserved column keeps the
-battlefield's permanent layout clear. Empty sections collapse. Emblem/effect presentation may
-reuse the container without changing their engine locations or granting card interactions.
+`ruled_auxiliary_area` lays out independent sections along the right end of each player's land row.
+`ruled_public_card_zone` displays actual command-zone CardItems there. The section sizes to its
+cards and the land row reserves that width. Empty sections collapse. Emblem and effect displays
+can use the same layout and keep their own engine locations and interactions.
 Command-zone clicks use engine-offered casts and explicit public physical bindings; payment,
 cancellation, stack movement and reconnect use the existing casting transaction.
 

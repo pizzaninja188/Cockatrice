@@ -63,6 +63,10 @@ void CardDragItem::updatePosition(const QPointF &cursorScenePos)
     } else if (cardZone) {
         cursorZone = cardZone;
     }
+    if (const auto *table = qobject_cast<TableZone *>(cursorZone);
+        table && table->isLandRowReserved(table->mapFromScene(cursorScenePos))) {
+        cursorZone = nullptr;
+    }
 
     // Always update the current zone, even if its null, to cancel the drag
     // instead of dropping cards into an non-intuitive location.

@@ -82,6 +82,7 @@ private:
     int width;
     int height;
     int currentMinimumWidth;
+    int landRowReservedWidth = 0;
 
     /*
     Internal cache for widths of stacks of cards by row and column.
@@ -184,6 +185,9 @@ public:
        outside of the TableZone constraints.
      */
     void resizeToContents();
+    [[nodiscard]] QRectF landRowRect() const;
+    [[nodiscard]] bool isLandRowReserved(const QPointF &point) const;
+    void setLandRowReservedWidth(int reservedWidth);
 
     [[nodiscard]] int getMinimumWidth() const
     {
