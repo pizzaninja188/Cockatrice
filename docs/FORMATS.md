@@ -29,8 +29,9 @@ declarations. Plain text accepts a Commander section and `CM:` lines.
 The sidecar downloads Scryfall's `oracle_cards` JSONL bulk source from the HTTPS location in
 the [bulk-data API](https://api.scryfall.com/bulk-data). It reads format legalities, Oracle IDs,
 all-face color identity, front characteristics and construction exceptions. It derives typed
-partner and copy-limit metadata during ingestion. This catalogue is separate from the authored
-RON definitions: format updates do not add executable card behavior or edit authoring datasets.
+partner and copy-limit metadata during ingestion. Each Oracle record's format legality applies
+even if the representative printing is from a digital release. The authored RON definitions
+provide executable card behavior.
 
 An update runs on startup and every six hours. A complete candidate is parsed and hashed before
 atomic cache promotion. Failed downloads or malformed candidates retain the last good cache.

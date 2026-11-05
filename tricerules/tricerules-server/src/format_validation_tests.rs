@@ -45,6 +45,42 @@ fn commander() -> Deck {
 }
 
 #[test]
+fn tabletop_legality_is_independent_of_the_representative_printing() {
+    let mut rows = records();
+    for name in ["Lotus Petal", "Memory Jar"] {
+        let mut row = card(name, "Artifact", &[], "");
+        row["games"] = json!(["mtgo"]);
+        row["legalities"]["standard"] = json!("not_legal");
+        rows.push(row);
+    }
+    let mut digital_only = card("Digital-only card", "Artifact", &[], "");
+    digital_only["games"] = json!(["arena"]);
+    digital_only["legalities"] = json!({"standard":"not_legal", "commander":"not_legal"});
+    rows.push(digital_only);
+    let c = catalog(rows);
+
+    let mut d = commander();
+    d.mainboard[0] = "Lotus Petal".into();
+    d.mainboard[1] = "Memory Jar".into();
+    let report = validate(&c, Format::Commander, &d, |_| true);
+    assert_eq!(report.legality, Legality::Legal, "{:?}", report.problems);
+    assert!(report.engine_supported);
+
+    d.mainboard[2] = "Digital-only card".into();
+    assert_eq!(
+        validate(&c, Format::Commander, &d, |_| true).legality,
+        Legality::Illegal
+    );
+
+    let mut d = standard();
+    d.mainboard[0] = "Lotus Petal".into();
+    assert_eq!(
+        validate(&c, Format::Standard, &d, |_| true).legality,
+        Legality::Illegal
+    );
+}
+
+#[test]
 fn standard_counts_main_and_side_together_and_distinguishes_support() {
     let c = catalog(records());
     assert_eq!(

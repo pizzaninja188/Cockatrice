@@ -25,7 +25,6 @@ pub struct Card {
     pub colors: BTreeSet<String>,
     pub standard: CardLegality,
     pub commander: CardLegality,
-    pub paper: bool,
     pub basic: bool,
     pub land_colors: BTreeSet<String>,
     pub commander_eligible: bool,
@@ -247,11 +246,9 @@ impl Catalog {
         let card = Card {
             name: name.clone(),
             colors,
+            // The bulk file's `games` field describes its representative printing.
             standard: legality(&record["legalities"]["standard"])?,
             commander: legality(&record["legalities"]["commander"])?,
-            paper: record["games"]
-                .as_array()
-                .is_some_and(|g| g.iter().any(|g| g == "paper")),
             basic,
             land_colors,
             commander_eligible,

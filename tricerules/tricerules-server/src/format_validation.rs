@@ -241,7 +241,7 @@ pub fn validate(
                 Format::Standard => card.standard,
                 Format::Commander => card.commander,
             };
-            if !card.paper || matches!(status, CardLegality::NotLegal | CardLegality::Banned) {
+            if matches!(status, CardLegality::NotLegal | CardLegality::Banned) {
                 report.issue(
                     if status == CardLegality::Banned {
                         "banned"
