@@ -1,5 +1,19 @@
 #include "mana_devotion_config_dialog.h"
 
+#include "../../deck_list_statistics_analyzer.h"
+
+#include <QAbstractItemView>
+#include <QComboBox>
+#include <QDialogButtonBox>
+#include <QHash>
+#include <QLabel>
+#include <QListWidget>
+#include <QListWidgetItem>
+#include <QStringList>
+#include <QVBoxLayout>
+
+class QWidget;
+
 ManaDevotionConfigDialog::ManaDevotionConfigDialog(DeckListStatisticsAnalyzer *analyzer,
                                                    ManaDevotionConfig initial,
                                                    QWidget *parent)
@@ -26,8 +40,9 @@ ManaDevotionConfigDialog::ManaDevotionConfigDialog(DeckListStatisticsAnalyzer *a
 
     // select initial filters
     for (int i = 0; i < filterList->count(); ++i) {
-        if (config.filters.contains(filterList->item(i)->text()))
+        if (config.filters.contains(filterList->item(i)->text())) {
             filterList->item(i)->setSelected(true);
+        }
     }
 
     buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);

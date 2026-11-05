@@ -1,5 +1,6 @@
 #include "deck_analytics_widget.h"
 
+#include "../general/layout_containers/flow_widget.h"
 #include "abstract_analytics_panel_widget.h"
 #include "add_analytics_panel_dialog.h"
 #include "analytics_panel_widget_factory.h"
@@ -9,13 +10,20 @@
 #include "deck_list_statistics_analyzer.h"
 #include "resizable_panel.h"
 
+#include <QCheckBox>
+#include <QDialog>
 #include <QEvent>
+#include <QFrame>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonValueRef>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSettings>
 #include <QVBoxLayout>
+#include <QVariant>
+#include <libcockatrice/utility/qt_utils.h>
+#include <qnamespace.h>
 
 DeckAnalyticsWidget::DeckAnalyticsWidget(QWidget *parent, DeckListStatisticsAnalyzer *_statsAnalyzer)
     : QWidget(parent), statsAnalyzer(_statsAnalyzer)
@@ -23,8 +31,8 @@ DeckAnalyticsWidget::DeckAnalyticsWidget(QWidget *parent, DeckListStatisticsAnal
     layout = new QVBoxLayout(this);
 
     // Controls
-    controlContainer = new QWidget(this);
-    controlLayout = new QHBoxLayout(controlContainer);
+    controlContainer = new FlowWidget(this, Qt::Horizontal, Qt::ScrollBarAlwaysOff, Qt::ScrollBarAlwaysOff);
+    controlContainer->setSpacing(4, 4);
     addButton = new QPushButton(this);
     removeButton = new QPushButton(this);
     saveButton = new QPushButton(this);
@@ -32,11 +40,11 @@ DeckAnalyticsWidget::DeckAnalyticsWidget(QWidget *parent, DeckListStatisticsAnal
     includeSideboardCheckBox = new QCheckBox(this);
     includeSideboardCheckBox->setChecked(false);
 
-    controlLayout->addWidget(addButton);
-    controlLayout->addWidget(removeButton);
-    controlLayout->addWidget(saveButton);
-    controlLayout->addWidget(loadButton);
-    controlLayout->addWidget(includeSideboardCheckBox);
+    controlContainer->addWidget(addButton);
+    controlContainer->addWidget(removeButton);
+    controlContainer->addWidget(saveButton);
+    controlContainer->addWidget(loadButton);
+    controlContainer->addWidget(includeSideboardCheckBox);
 
     layout->addWidget(controlContainer);
 
@@ -47,8 +55,7 @@ DeckAnalyticsWidget::DeckAnalyticsWidget(QWidget *parent, DeckListStatisticsAnal
     connect(includeSideboardCheckBox, &QCheckBox::clicked, this, &DeckAnalyticsWidget::includeSideboardChanged);
 
     // Scroll area and container
-    scrollArea = new QScrollArea(this);
-    scrollArea->setWidgetResizable(true);
+    scrollArea = QtUtils::makeScrollArea(this, Qt::ScrollBarAsNeeded, Qt::ScrollBarAsNeeded);
     scrollArea->setFrameShape(QFrame::NoFrame);
 
     panelContainer = new QWidget(scrollArea);

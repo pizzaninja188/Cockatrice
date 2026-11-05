@@ -1,20 +1,19 @@
 /**
  * @file filter_string.h
  * @ingroup CardDatabaseModelFilters
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef FILTER_STRING_H
 #define FILTER_STRING_H
 
-#include "filter_tree.h"
-
 #include <QLoggingCategory>
-#include <QMap>
 #include <QString>
 #include <functional>
 #include <libcockatrice/card/card_info.h>
-#include <utility>
+#include <libcockatrice/card/card_localization.h>
+
+struct CardSearchLanguage;
 
 inline Q_LOGGING_CATEGORY(FilterStringLog, "filter_string");
 
@@ -22,11 +21,13 @@ typedef CardInfoPtr CardData;
 typedef std::function<bool(const CardData &)> Filter;
 typedef std::function<bool(const QString &)> StringMatcher;
 typedef std::function<bool(int)> NumberMatcher;
+typedef std::function<bool(int, int)> NumberComparer;
 
 namespace peg
 {
 template <typename Annotation> struct AstBase;
 struct EmptyType;
+
 typedef AstBase<EmptyType> Ast;
 } // namespace peg
 
@@ -34,7 +35,7 @@ class FilterString
 {
 public:
     FilterString();
-    explicit FilterString(const QString &exp);
+    explicit FilterString(const QString &exp, const CardSearchLanguage &searchLanguage = {});
     [[nodiscard]] bool check(const CardData &card) const
     {
         if (card.isNull()) {

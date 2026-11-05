@@ -3,7 +3,7 @@
 # This script will run clang-format on all modified, non-3rd-party C++/Header files.
 # Optionally runs cmake-format on all modified cmake files.
 # Optionally runs shellcheck on all modified shell files.
-# Uses clang-format cmake-format git diff find shellcheck
+# Uses clang-format, cmake-format, git, diff, find and shellcheck
 # Never, ever, should this receive a path with a newline in it. Don't bother proofing it for that.
 
 set -o pipefail
@@ -11,23 +11,19 @@ set -o pipefail
 # go to the project root directory, this file should be located in the project root directory
 olddir="$PWD"
 cd "${BASH_SOURCE%/*}/" || exit 2 # could not find path, this could happen with special links etc.
+phys_root="$(pwd -P)"
 
 # defaults
 include=("cockatrice/src" \
-"libcockatrice_card" \
-"libcockatrice_deck_list" \
-"libcockatrice_network" \
-"libcockatrice_protocol" \
-"libcockatrice_rng" \
-"libcockatrice_settings" \
-"libcockatrice_utility" \
+libcockatrice_* \
 "oracle/src" \
 "servatrice/src" \
-"tests")
+"cmake/pch" \
+"tests" \
+"tools/installer-holder-probe")
 exclude=("libcockatrice_rng/libcockatrice/rng/sfmt/" \
 "libcockatrice_utility/libcockatrice/utility/peglib.h" \
 "oracle/src/lzma/" \
-"oracle/src/qt-json/" \
 "oracle/src/zip/" \
 "servatrice/src/smtp/")
 exts=("cpp" "h" "proto")
@@ -37,6 +33,7 @@ cmakefile="CMakeLists.txt"
 cmakedir="cmake/.*\\.cmake"
 cmakeinclude=("cmake/gtest-CMakeLists.txt.in")
 scripts="*.sh"
+scriptsrx="[^/]*\\.sh$"
 color="--"
 verbosity=0
 sep="----------"
@@ -109,11 +106,11 @@ OPTIONS:
         Do not check any source files for clang-format.
 
     --print-version
-        Print the version of clang-format being used before continuing.
+        Print the lint tool version being used before continuing.
 
     --shell
-        Use shellcheck to lint shell files. Not available in the default inline
-        mode.
+        Use shellcheck to lint shell files.
+        Not available in the default inline mode.
 
     -t, --test
         Do not edit files in place. Set exit code to 1 if changes are required.
@@ -174,14 +171,14 @@ EOM
         echo "error in parsing arguments of $0: $1 is an unrecognized option" >&2
         exit 2 # input error
       fi
-      if [[ ! $1 ]] || next_dir=$(cd "$olddir" && cd -- "$1" && pwd); then
+      if [[ ! $1 ]] || next_dir=$(cd "$olddir" && cd -- "$1" && pwd -P); then
         if ! [[ $set_include ]]; then
           include=() # remove default includes
           set_include=1
         fi
         if [[ $1 ]]; then
-          if [[ $next_dir != $PWD/* ]]; then
-            echo "error in parsing arguments of $0: $next_dir is not in $PWD" >&2
+          if [[ "$next_dir" != "$phys_root" && "$next_dir" != "$phys_root"/* ]]; then
+            echo "error in parsing arguments of $0: $next_dir is not in $phys_root" >&2
             exit 2 # input error
           fi
           include+=("$next_dir")
@@ -258,7 +255,7 @@ if [[ $branch ]]; then
   if [[ $do_shell ]]; then
     shell_names=()
     for name in "${basenames[@]}"; do
-      filerx="(^|/)$scripts$"
+      filerx="(^|/)$scriptsrx"
       if [[ $name =~ $filerx ]]; then
         shell_names+=("$name")
       fi

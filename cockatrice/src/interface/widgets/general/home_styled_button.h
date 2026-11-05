@@ -1,12 +1,18 @@
 /**
  * @file home_styled_button.h
  * @ingroup Widgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef HOME_STYLED_BUTTON_H
 #define HOME_STYLED_BUTTON_H
+#include <QColor>
+#include <QPair>
 #include <QPushButton>
+#include <QString>
+#include <qtmetamacros.h>
+
+class QWidget;
 
 class HomeStyledButton : public QPushButton
 {
@@ -17,6 +23,9 @@ public:
     QString generateButtonStylesheet(const QPair<QColor, QColor> &colors);
 public slots:
     void paintEvent(QPaintEvent *event) override;
+
+private slots:
+    void applyInterfaceDefaultFont();
 
 private:
     QPair<QColor, QColor> gradientColors;

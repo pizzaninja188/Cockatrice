@@ -1,6 +1,13 @@
 #include "archidekt_api_response_deck.h"
 
 #include "../card/archidekt_api_response_card_entry.h"
+#include "../deck_listings/archidekt_api_response_deck_owner.h"
+
+#include <QDebug>
+#include <QJsonArray>
+#include <QJsonValue>
+#include <QJsonValueRef>
+#include <qlogging.h>
 
 void ArchidektApiResponseDeck::fromJson(const QJsonObject &json)
 {
@@ -44,7 +51,7 @@ void ArchidektApiResponseDeck::fromJson(const QJsonObject &json)
         cards.append(entry);
     }
 
-    // TODO but not really important
+    //! \todo Parse customCards field (not really important).
     // customCards = {""};
 }
 

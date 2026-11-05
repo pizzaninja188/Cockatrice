@@ -1,15 +1,20 @@
+#include "ruled_client_host.h"
+#include "ruled_game_controller.h"
+#include <libcockatrice/game/player/player_manager.h>
+#include <libcockatrice/game/board/counter_state.h>
+#include "ruled_client_ui.h"
 #include "ruled_payment_ui.h"
 
 #include "../../interface/widgets/tabs/tab_game.h"
-#include "../abstract_game.h"
-#include "../board/abstract_counter.h"
-#include "../board/card_item.h"
-#include "../game_event_handler.h"
-#include "../player/player.h"
-#include "../player/player_actions.h"
-#include "../player/player_event_handler.h"
-#include "../player/player_info.h"
-#include "../zones/logic/card_zone_logic.h"
+#include <libcockatrice/game/abstract_game.h>
+#include "../../game_graphics/board/abstract_counter.h"
+#include "../../game_graphics/board/card_item.h"
+#include <libcockatrice/game/game_event_handler.h>
+#include <libcockatrice/game/player/player_logic.h>
+#include "ruled_player_actions.h"
+#include <libcockatrice/game/player/player_event_handler.h>
+#include <libcockatrice/game/player/player_info.h>
+#include <libcockatrice/game/zones/card_zone_logic.h>
 #include "ruled_actions.h"
 #include "ruled_activation.h"
 #include "ruled_diagnostic_values.h"
@@ -104,20 +109,20 @@ bool RuledPaymentUi::resolvePendingAbilityCounterAllocation()
         return true;
 
     const PendingActivatedAbility captured = pending;
-    QPointer<PlayerActions> actionsGuard(actions);
+    QPointer<RuledPlayerActions> actionsGuard(actions);
     QDialog dialog;
-    dialog.setWindowTitle(PlayerActions::tr("Distribute counters — %1").arg(pending.cardName));
+    dialog.setWindowTitle(RuledPlayerActions::tr("Distribute counters — %1").arg(pending.cardName));
     auto *layout = new QFormLayout(&dialog);
-    layout->addRow(new QLabel(PlayerActions::tr("Distribute %1 counters. Each chosen creature gets at least one.")
+    layout->addRow(new QLabel(RuledPlayerActions::tr("Distribute %1 counters. Each chosen creature gets at least one.")
                                  .arg(data->counterAllocation->fixedTotal), &dialog));
     QVector<QSpinBox *> rows;
     for (const auto &target : captured.selectedTargets) {
         if (target.ref.group_index() != static_cast<quint32>(data->counterAllocation->groupIndex))
             continue;
-        const RuledClientHost *host = actions->player->getGame()->getGameEventHandler();
+        const RuledClientHost *host = RuledActions::host(actions->player->getGame());
         QString name = host->battlefieldCardName(target.ref.object_id());
         if (name.isEmpty())
-            name = PlayerActions::tr("Creature %1").arg(rows.size() + 1);
+            name = RuledPlayerActions::tr("Creature %1").arg(rows.size() + 1);
         auto *quantity = new QSpinBox(&dialog);
         quantity->setRange(1, data->counterAllocation->fixedTotal);
         quantity->setValue(1);
@@ -153,7 +158,7 @@ bool RuledPaymentUi::resolvePendingAbilityCounterAllocation()
         *latestState, captured, *data, amounts, [this]() { cancelPendingActivatedAbility(); });
 }
 
-RuledPaymentUi::RuledPaymentUi(PlayerActions *value) : actions(value)
+RuledPaymentUi::RuledPaymentUi(RuledPlayerActions *value) : actions(value)
 {
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     QObject::connect(state, &RuledClientState::specialCastRequested, actions,
@@ -191,7 +196,7 @@ RuledPaymentUi::RuledPaymentUi(PlayerActions *value) : actions(value)
             return std::tie(left.face.faceIndex, left.isLand) < std::tie(right.face.faceIndex, right.isLand);
         });
         if (options.isEmpty()) {
-            state->emitLocalLog(PlayerActions::tr("No legal cast or land play is available for that card."));
+            state->emitLocalLog(RuledPlayerActions::tr("No legal cast or land play is available for that card."));
             return;
         }
 
@@ -199,14 +204,14 @@ RuledPaymentUi::RuledPaymentUi(PlayerActions *value) : actions(value)
         if (options.size() == 1) {
             selected = options.constFirst();
         } else {
-            QMenu menu(actions->player->getGame()->getTab());
-            menu.setTitle(PlayerActions::tr("Choose how to play the card"));
+            QMenu menu(RuledActions::tab(actions->player->getGame()));
+            menu.setTitle(RuledPlayerActions::tr("Choose how to play the card"));
             QVector<QAction *> actionsByOption;
             actionsByOption.reserve(options.size());
             for (const auto &option : options) {
                 actionsByOption.append(menu.addAction(
-                    option.isLand ? PlayerActions::tr("Play %1").arg(option.face.faceName)
-                                  : PlayerActions::tr("Cast %1").arg(option.face.faceName)));
+                    option.isLand ? RuledPlayerActions::tr("Play %1").arg(option.face.faceName)
+                                  : RuledPlayerActions::tr("Cast %1").arg(option.face.faceName)));
             }
             const int index = actionsByOption.indexOf(menu.exec(QCursor::pos()));
             if (index < 0)
@@ -383,7 +388,7 @@ void RuledPaymentUi::reconcileEnginePendingSpellCast()
                 actions->player->getGame(), static_cast<quint32>(engine.reserved_object_id()))) {
             rebuilt.cardName = card->getName();
         } else {
-            rebuilt.cardName = PlayerActions::tr("spell");
+            rebuilt.cardName = RuledPlayerActions::tr("spell");
         }
     }
 
@@ -473,7 +478,7 @@ bool RuledPaymentUi::beginAbilityActivation()
         ruled::v1::RuledCommand command;
         command.mutable_begin_ability_activation()->CopyFrom(owned->announcement);
         const auto captured = *owned;
-        const QPointer<PlayerActions> actionsGuard(actions);
+        const QPointer<RuledPlayerActions> actionsGuard(actions);
         RuledActions::sendRuledCommandExpectingAck(
             actions->player->getGame(), command, [this, actionsGuard, captured](bool accepted) {
                 if (!actionsGuard) {
@@ -490,7 +495,7 @@ bool RuledPaymentUi::beginAbilityActivation()
                         retry.waitingForMana = false;
                     }
                     if (state) {
-                        state->emitLocalLog(PlayerActions::tr(
+                        state->emitLocalLog(RuledPlayerActions::tr(
                             "The counter cost activation could not start. Its staged choices were kept; confirm again to retry."));
                     }
                     emit actions->ruledAbilityCostPromptChanged();
@@ -546,7 +551,7 @@ bool RuledPaymentUi::beginAbilityActivation()
                        actions->ruledPendingCast->rejectOrdinaryAbilityBegin(draftId)) {
                 if (current.deferredReturnTappedCreature) {
                     actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-                        PlayerActions::tr("Urban Retreat's activation could not start. Refresh the game state and try again."));
+                        RuledPlayerActions::tr("Urban Retreat's activation could not start. Refresh the game state and try again."));
                 } else {
                     current.waitingForTarget = true;
                     current.activeTargetGroupPosition = 0;
@@ -571,7 +576,7 @@ bool RuledPaymentUi::isStagingSpecialCast(const RuledClientState &state) const
     });
 }
 
-bool PlayerActions::isStagingRuledSpecialCast(const RuledClientState &state) const
+bool RuledPlayerActions::isStagingRuledSpecialCast(const RuledClientState &state) const
 {
     return ruledPayment->isStagingSpecialCast(state);
 }
@@ -745,7 +750,7 @@ bool RuledPaymentUi::startOrRefresh()
             const auto transaction = model.transaction();
             const auto capturedSpell = actions->pendingRuledSpellCast;
             const auto capturedAbility = actions->pendingActivatedAbility;
-            QPointer<PlayerActions> actionsGuard(actions);
+            QPointer<RuledPlayerActions> actionsGuard(actions);
             QScopedValueRollback<bool> guard(choosingLifePayment, true);
             QVector<int> alternatives;
             const bool accepted = promptFlexiblePipChoices(
@@ -1210,8 +1215,8 @@ void RuledPaymentUi::restoreOptimisticManaCounters(const QVector<int> &counterId
 {
     for (const int counterId : counterIds)
         if (auto *counter = actions->player->getCounters().value(counterId, nullptr))
-            counter->setValue(actions->player->getPlayerEventHandler()->restoreRuledManaCounterDebit(
-                counterId, counter->getValue(), actions->ruledManaCounterOptimisticSpendCount(counterId)));
+            counter->setValue(RuledActions::controller(actions->player->getGame())->restoreManaCounterDebit(
+                actions->player->getPlayerInfo()->getId(), counterId, counter->getValue(), actions->ruledManaCounterOptimisticSpendCount(counterId)));
 }
 
 QString RuledPaymentUi::prompt() const
@@ -1400,9 +1405,9 @@ void RuledPaymentUi::paint(CardItem *card, QPainter *painter)
     const quint64 generation = oid == 0 ? 0 : state->abilitySourceGeneration(oid);
     auto *manager = game->getPlayerManager();
     auto *localPlayer = manager ? manager->getPlayers().value(manager->getLocalPlayerId(), nullptr) : nullptr;
-    if (!localPlayer || !localPlayer->getPlayerActions())
+    if (!localPlayer || !RuledActions::actions(localPlayer))
         return;
-    const auto &ability = localPlayer->getPlayerActions()->pendingActivatedAbility;
+    const auto &ability = RuledActions::actions(localPlayer)->pendingActivatedAbility;
     const int localActorId = localPlayer->getPlayerInfo()->getId();
     const bool acceptedGroup = ability.valid && ability.counterGroupConfirmed && ability.hasInitializedPayment() &&
                                ability.transactionId() != 0 && state->pendingAbilityActivation &&
@@ -1495,7 +1500,7 @@ void RuledPaymentUi::paint(CardItem *card, QPainter *painter)
     painter->restore();
 }
 
-std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildCommand(PlayerActions *actions)
+std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildCommand(RuledPlayerActions *actions)
 {
     const auto &pendingRuledSpellCast = actions->pendingRuledSpellCast;
     auto *player = actions->player;
@@ -1632,7 +1637,7 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildCommand(PlayerAction
     return ruledCommand;
 }
 
-std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildActivationCommand(PlayerActions *actions)
+std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildActivationCommand(RuledPlayerActions *actions)
 {
     auto &pendingActivatedAbility = actions->pendingActivatedAbility;
     const auto &restrictedManaPaymentSelections = actions->restrictedManaPaymentSelections;

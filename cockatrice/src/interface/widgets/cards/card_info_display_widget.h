@@ -1,21 +1,23 @@
 /**
  * @file card_info_display_widget.h
  * @ingroup CardWidgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef CARDINFOWIDGET_H
 #define CARDINFOWIDGET_H
 
-#include <QComboBox>
 #include <QFrame>
-#include <QStringList>
+#include <QtGlobal>
 #include <libcockatrice/card/printing/exact_card.h>
-#include <libcockatrice/utility/card_ref.h>
+#include <qnamespace.h>
+#include <qtmetamacros.h>
 
 class CardInfoPictureWidget;
 class CardInfoTextWidget;
 class AbstractCardItem;
+class QWidget;
+struct CardRef;
 
 class CardInfoDisplayWidget : public QFrame
 {

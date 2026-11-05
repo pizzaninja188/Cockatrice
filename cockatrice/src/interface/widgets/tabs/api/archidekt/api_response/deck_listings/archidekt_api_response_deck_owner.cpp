@@ -1,5 +1,9 @@
 #include "archidekt_api_response_deck_owner.h"
 
+#include <QDebug>
+#include <QJsonValue>
+#include <qlogging.h>
+
 void ArchidektApiResponseDeckOwner::fromJson(const QJsonObject &json)
 {
     id = json.value("id").toInt();
@@ -7,7 +11,7 @@ void ArchidektApiResponseDeckOwner::fromJson(const QJsonObject &json)
     avatar = QUrl(json.value("avatar").toString());
     moderator = json.value("moderator").toBool();
     pledgeLevel = json.value("pledgeLevel").toInt();
-    // TODO but not really important
+    //! \todo Parse roles field (not really important).
     // roles = {""};
 }
 

@@ -1,11 +1,18 @@
 #include "mana_distribution_config_dialog.h"
 
+#include <QAbstractItemView>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QLabel>
+#include <QList>
 #include <QListWidget>
+#include <QListWidgetItem>
+#include <QString>
+#include <QStringList>
 #include <QVBoxLayout>
+
+class QWidget;
 
 static const QStringList kColors = {"W", "U", "B", "R", "G", "C"};
 
@@ -62,8 +69,9 @@ void ManaDistributionConfigDialog::setFromConfig(const ManaDistributionConfig &c
 
     displayType->setCurrentText(cfg.displayType);
 
-    for (int i = 0; i < filterList->count(); ++i)
+    for (int i = 0; i < filterList->count(); ++i) {
         filterList->item(i)->setSelected(cfg.filters.contains(filterList->item(i)->text()));
+    }
 
     showColorRows->setChecked(cfg.showColorRows);
 }
@@ -74,8 +82,9 @@ void ManaDistributionConfigDialog::accept()
 
     // Filters
     cfg.filters.clear();
-    for (auto *item : filterList->selectedItems())
+    for (auto *item : filterList->selectedItems()) {
         cfg.filters << item->text();
+    }
 
     cfg.showColorRows = showColorRows->isChecked();
 

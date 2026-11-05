@@ -18,6 +18,7 @@
  *   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  ***************************************************************************/
 
+#include "libcockatrice/rng/rng_abstract.h"
 #include "servatrice.h"
 #include "server_logger.h"
 #include "settingscache.h"
@@ -25,15 +26,30 @@
 #include "smtpclient.h"
 #include "version_string.h"
 
+#include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QDebug>
 #include <QFile>
+#include <QList>
+#include <QMetaObject>
 #include <QMetaType>
-#include <QtGlobal>
+#include <QObject>
+#include <QSharedPointer>
+#include <QString>
+#include <QThread>
+#include <QVariant>
+#include <QVector>
+#include <cstdlib>
+#include <google/protobuf/stubs/common.h>
 #include <iostream>
 #include <libcockatrice/rng/rng_sfmt.h>
+#include <libcockatrice/utility/cryptoutil.h>
 #include <libcockatrice/utility/passwordhasher.h>
+#include <qlogging.h>
+#include <qnamespace.h>
+#include <string>
 
 RNG_Abstract *rng;
 ServerLogger *logger;
@@ -69,19 +85,22 @@ void testRNG()
     for (int i = 0; i <= maxMax - min; ++i) {
         std::cerr << (min + i);
         for (auto &number : numbers) {
-            if (i < number.size())
+            if (i < number.size()) {
                 std::cerr << "\t" << number[i];
-            else
+            } else {
                 std::cerr << "\t";
+            }
         }
         std::cerr << std::endl;
     }
     std::cerr << std::endl << "Chi^2 =";
-    for (double j : chisq)
+    for (double j : chisq) {
         std::cerr << "\t" << QString::number(j, 'f', 3).toStdString();
+    }
     std::cerr << std::endl << "k =";
-    for (int j = 0; j < chisq.size(); ++j)
+    for (int j = 0; j < chisq.size(); ++j) {
         std::cerr << "\t" << (j - min + minMax);
+    }
     std::cerr << std::endl << std::endl;
 }
 
@@ -90,8 +109,9 @@ void testHash()
     const int n = 5000;
     std::cerr << "Benchmarking password hash function (n =" << n << ")..." << std::endl;
     QDateTime startTime = QDateTime::currentDateTime();
-    for (int i = 0; i < n; ++i)
+    for (int i = 0; i < n; ++i) {
         PasswordHasher::computeHash("aaaaaa", "aaaaaaaaaaaaaaaa");
+    }
     QDateTime endTime = QDateTime::currentDateTime();
     std::cerr << startTime.secsTo(endTime) << "secs" << std::endl;
 }
@@ -143,28 +163,30 @@ int main(int argc, char *argv[])
         configPath = SettingsCache::guessConfigurationPath();
     } else if (!QFile::exists(configPath)) {
         qCritical() << "Could not find configuration file at" << configPath;
-        return 1;
+        return EXIT_FAILURE;
     }
     qWarning() << "Using configuration file: " << configPath;
     settingsCache = new SettingsCache(configPath);
 
     loggerThread = new QThread;
     loggerThread->setObjectName("logger");
-    logger = new ServerLogger(logToConsole);
+    logger = new ServerLogger(logToConsole, settingsCache->value("server/writelog", 1).toBool(),
+                              settingsCache->value("server/logfilters").toString());
     logger->moveToThread(loggerThread);
 
     loggerThread->start();
     QMetaObject::invokeMethod(logger, "startLog", Qt::BlockingQueuedConnection,
                               Q_ARG(QString, settingsCache->value("server/logfile", QString("server.log")).toString()));
 
-    if (logToConsole)
+    if (logToConsole) {
         qInstallMessageHandler(myMessageOutput);
-    else
+    } else {
         qInstallMessageHandler(myMessageOutput2);
+    }
 
     signalhandler = new SignalHandler();
 
-    rng = new RNG_SFMT;
+    rng = new RNG_SFMT(CryptoUtil::randomUInt64());
 
     std::cerr << "Servatrice " << VERSION_STRING << " starting." << std::endl;
     std::cerr << "-------------------------" << std::endl;
@@ -194,7 +216,15 @@ int main(int argc, char *argv[])
 
         std::cerr << "Server quit." << std::endl;
         std::cerr << "-------------------------" << std::endl;
+    } else {
+        // initServer() logged the reason; a failed startup must not look like a clean exit.
+        std::cerr << "Server initialization failed, exiting." << std::endl;
+        retval = EXIT_FAILURE;
     }
+
+    // The handler reads the logger and settingsCache globals torn down below; leaving it
+    // installed lets Qt's own shutdown warnings dereference freed memory.
+    qInstallMessageHandler(nullptr);
 
     delete smtpClient;
     delete rng;

@@ -1,6 +1,18 @@
 #include "inner_deck_list_node.h"
 
 #include "deck_list_card_node.h"
+#include "libcockatrice/deck_list/tree/abstract_deck_list_card_node.h"
+#include "libcockatrice/deck_list/tree/abstract_deck_list_node.h"
+
+#include <QObject>
+#include <QSharedPointer>
+#include <QStringView>
+#include <QXmlStreamAttributes>
+#include <QXmlStreamReader>
+#include <QXmlStreamWriter>
+#include <QtGlobal>
+#include <algorithm>
+#include <compare>
 
 InnerDecklistNode::InnerDecklistNode(InnerDecklistNode *other, InnerDecklistNode *_parent)
     : AbstractDecklistNode(_parent), name(other->getName())
@@ -28,6 +40,8 @@ QString InnerDecklistNode::visibleNameFromName(const QString &_name)
         return QObject::tr("Sideboard");
     } else if (_name == DECK_ZONE_TOKENS) {
         return QObject::tr("Tokens");
+    } else if (_name == DECK_ZONE_MAYBEBOARD) {
+        return QObject::tr("Maybeboard");
     } else {
         return _name;
     }
@@ -41,6 +55,13 @@ void InnerDecklistNode::setSortMethod(DeckSortMethod method)
     }
 }
 
+const QList<QString> &InnerDecklistNode::boardZoneNames()
+{
+    static const QList<QString> names = {QString(DECK_ZONE_MAIN), QString(DECK_ZONE_SIDE),
+                                         QString(DECK_ZONE_MAYBEBOARD)};
+    return names;
+}
+
 QString InnerDecklistNode::getVisibleName() const
 {
     return visibleNameFromName(name);
@@ -48,8 +69,9 @@ QString InnerDecklistNode::getVisibleName() const
 
 void InnerDecklistNode::clearTree()
 {
-    for (int i = 0; i < size(); i++)
+    for (int i = 0; i < size(); i++) {
         delete at(i);
+    }
     clear();
 }
 
@@ -84,6 +106,9 @@ AbstractDecklistNode *InnerDecklistNode::findCardChildByNameProviderIdAndNumber(
 
 int InnerDecklistNode::height() const
 {
+    if (isEmpty()) {
+        return 1;
+    }
     return at(0)->height() + 1;
 }
 
@@ -138,62 +163,76 @@ bool InnerDecklistNode::compareName(AbstractDecklistNode *other) const
     }
 }
 
-bool InnerDecklistNode::readElement(QXmlStreamReader *xml)
+int InnerDecklistNode::readCardElement(QXmlStreamReader *xml, int remainingBudget)
 {
+    const int amount = qMin(xml->attributes().value("number").toString().toInt(), remainingBudget);
+    new DecklistCardNode(xml->attributes().value("name").toString(), amount, this, -1,
+                         xml->attributes().value("setShortName").toString(),
+                         xml->attributes().value("collectorNumber").toString(),
+                         xml->attributes().value("uuid").toString());
+    return amount;
+}
+
+int InnerDecklistNode::readElement(QXmlStreamReader *xml, int limit)
+{
+    int totalCards = 0;
     while (!xml->atEnd()) {
         xml->readNext();
         const QString childName = xml->name().toString();
+        const int remainingBudget = limit - totalCards;
         if (xml->isStartElement()) {
             if (childName == "zone") {
                 auto *newZone = new InnerDecklistNode(xml->attributes().value("name").toString(), this);
-                newZone->readElement(xml);
+                totalCards += newZone->readElement(xml, remainingBudget);
             } else if (childName == "card") {
-                auto *newCard = new DecklistCardNode(
-                    xml->attributes().value("name").toString(), xml->attributes().value("number").toString().toInt(),
-                    this, -1, xml->attributes().value("setShortName").toString(),
-                    xml->attributes().value("collectorNumber").toString(), xml->attributes().value("uuid").toString());
-                newCard->readElement(xml);
+                totalCards += readCardElement(xml, remainingBudget);
             }
-        } else if (xml->isEndElement() && (childName == "zone"))
-            return false;
+        } else if (xml->isEndElement() && (childName == "zone")) {
+            return totalCards;
+        }
     }
-    return true;
+    return totalCards;
 }
 
 void InnerDecklistNode::writeElement(QXmlStreamWriter *xml)
 {
     xml->writeStartElement("zone");
     xml->writeAttribute("name", name);
-    for (int i = 0; i < size(); i++)
+    for (int i = 0; i < size(); i++) {
         at(i)->writeElement(xml);
+    }
     xml->writeEndElement(); // zone
+}
+
+QVector<QPair<int, AbstractDecklistNode *>> InnerDecklistNode::indexedSnapshot() const
+{
+    QVector<QPair<int, AbstractDecklistNode *>> snapshot(size());
+    for (int i = size() - 1; i >= 0; --i) {
+        snapshot[i].first = i;
+        snapshot[i].second = at(i);
+    }
+    return snapshot;
+}
+
+QVector<QPair<int, int>> InnerDecklistNode::applySortedOrder(const QVector<QPair<int, AbstractDecklistNode *>> &sorted)
+{
+    QVector<QPair<int, int>> result(size());
+    for (int i = size() - 1; i >= 0; --i) {
+        result[i].first = sorted[i].first;
+        result[i].second = i;
+        replace(i, sorted[i].second);
+    }
+    return result;
 }
 
 QVector<QPair<int, int>> InnerDecklistNode::sort(Qt::SortOrder order)
 {
-    QVector<QPair<int, int>> result(size());
+    auto snapshot = indexedSnapshot();
 
-    // Initialize temporary list with contents of current list
-    QVector<QPair<int, AbstractDecklistNode *>> tempList(size());
-    for (int i = size() - 1; i >= 0; --i) {
-        tempList[i].first = i;
-        tempList[i].second = at(i);
-    }
-
-    // Sort temporary list
     auto cmp = [order](const auto &a, const auto &b) {
         return (order == Qt::AscendingOrder) ? (b.second->compare(a.second)) : (a.second->compare(b.second));
     };
+    std::sort(snapshot.begin(), snapshot.end(), cmp);
 
-    std::sort(tempList.begin(), tempList.end(), cmp);
-
-    // Map old indexes to new indexes and
-    // copy temporary list to the current one
-    for (int i = size() - 1; i >= 0; --i) {
-        result[i].first = tempList[i].first;
-        result[i].second = i;
-        replace(i, tempList[i].second);
-    }
-
-    return result;
+    return applySortedOrder(snapshot);
 }

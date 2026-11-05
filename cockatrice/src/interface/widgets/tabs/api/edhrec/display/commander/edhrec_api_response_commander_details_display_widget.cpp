@@ -1,11 +1,23 @@
 #include "edhrec_api_response_commander_details_display_widget.h"
 
+#include "../../../../../../theme_manager.h"
 #include "../../../../../cards/card_info_picture_widget.h"
+#include "../../../../../cards/card_size_widget.h"
+#include "../../api_response/cards/edhrec_commander_api_response_commander_details.h"
 #include "../../tab_edhrec_main.h"
 #include "../card_prices/edhrec_api_response_card_prices_display_widget.h"
-#include "edhrec_commander_api_response_bracket_navigation_widget.h"
+#include "edhrec_commander_api_response_navigation_widget.h"
+#include "libcockatrice/card/database/card_database_querier.h"
 
+#include <QFont>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QObject>
+#include <QSlider>
+#include <QVBoxLayout>
 #include <libcockatrice/card/database/card_database_manager.h>
+#include <libcockatrice/utility/qt_utils.h>
+#include <qnamespace.h>
 
 EdhrecCommanderResponseCommanderDetailsDisplayWidget::EdhrecCommanderResponseCommanderDetailsDisplayWidget(
     QWidget *parent,
@@ -24,20 +36,13 @@ EdhrecCommanderResponseCommanderDetailsDisplayWidget::EdhrecCommanderResponseCom
     commanderPicture = new CardInfoPictureWidget(this);
     commanderPicture->setCard(CardDatabaseManager::query()->getCard({commanderDetails.getName()}));
 
-    QWidget *currentParent = parentWidget();
-    TabEdhRecMain *parentTab = nullptr;
-
-    while (currentParent) {
-        if ((parentTab = qobject_cast<TabEdhRecMain *>(currentParent))) {
-            break;
-        }
-        currentParent = currentParent->parentWidget();
-    }
+    auto *parentTab = QtUtils::findParentOfType<TabEdhRecMain>(this);
 
     if (parentTab) {
         connect(parentTab->getCardSizeSlider()->getSlider(), &QSlider::valueChanged, commanderPicture,
                 &CardInfoPictureWidget::setScaleFactor);
         commanderPicture->setScaleFactor(parentTab->getCardSizeSlider()->getSlider()->value());
+        parentTab->getCardSizeSlider()->enableCtrlScrollResize(this);
     }
 
     commanderDetails.debugPrint();
@@ -45,15 +50,16 @@ EdhrecCommanderResponseCommanderDetailsDisplayWidget::EdhrecCommanderResponseCom
     commanderName = new QLabel(this);
     commanderName->setText(commanderDetails.getName());
     commanderName->setAlignment(Qt::AlignCenter);
-    commanderName->setStyleSheet("font-size: 28px; font-weight: bold");
 
     label = new QLabel(this);
     label->setAlignment(Qt::AlignCenter);
-    label->setStyleSheet("font-size: 16px");
 
     salt = new QLabel(this);
     salt->setAlignment(Qt::AlignCenter);
-    salt->setStyleSheet("font-size: 16px");
+
+    applyCardTextFont();
+    connect(themeManager, &ThemeManager::fontsChanged, this,
+            &EdhrecCommanderResponseCommanderDetailsDisplayWidget::applyCardTextFont);
 
     cardPricesDisplayWidget = new EdhrecApiResponseCardPricesDisplayWidget(this, commanderDetails.getPrices());
 
@@ -79,4 +85,20 @@ void EdhrecCommanderResponseCommanderDetailsDisplayWidget::retranslateUi()
 {
     label->setText(commanderDetails.getLabel());
     salt->setText(tr("Salt: ") + QString::number(commanderDetails.getSalt()));
+}
+
+void EdhrecCommanderResponseCommanderDetailsDisplayWidget::applyCardTextFont()
+{
+    // Family comes from the CardText theme role; the sizes and the bold
+    // weight previously carried by the stylesheets stay caller-side. Pixel
+    // sizes, not point sizes: the stylesheets said 28px and 16px.
+    QFont nameFont = themeManager->appFont(AppFont::CardText);
+    nameFont.setPixelSize(28);
+    nameFont.setWeight(QFont::Bold);
+    commanderName->setFont(nameFont);
+
+    QFont detailsFont = themeManager->appFont(AppFont::CardText);
+    detailsFont.setPixelSize(16);
+    label->setFont(detailsFont);
+    salt->setFont(detailsFont);
 }

@@ -1,16 +1,39 @@
 /**
  * @file abstract_client.h
  * @ingroup Client
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef ABSTRACTCLIENT_H
 #define ABSTRACTCLIENT_H
 
+#include "latency_tracker.h"
+
+#include <QElapsedTimer>
+#include <QLoggingCategory>
+#include <QMap>
 #include <QMutex>
-#include <QVariant>
-#include <libcockatrice/protocol/pb/response.pb.h>
+#include <QMutexLocker>
+#include <QObject>
+#include <QString>
+
+// IWYU pragma: keep
+// ServerInfo_User appears in signal signatures, including inside QList, so the
+// moc-generated code needs the complete type.
+#include <QtGlobal>
 #include <libcockatrice/protocol/pb/serverinfo_user.pb.h>
+#include <qtmetamacros.h>
+
+namespace google
+{
+namespace protobuf
+{
+class Message;
+} // namespace protobuf
+} // namespace google
+template <typename T> class QList;
+
+inline Q_LOGGING_CATEGORY(AbstractClientLog, "abstract_client");
 
 class PendingCommand;
 class CommandContainer;
@@ -24,13 +47,13 @@ class Event_UserJoined;
 class Event_UserLeft;
 class Event_ServerMessage;
 class Event_ListRooms;
+class Command_AccountPassword;
 class Event_GameJoined;
 class Event_UserMessage;
 class Event_NotifyUser;
 class Event_ConnectionClosed;
 class Event_ServerShutdown;
 class Event_ReplayAdded;
-class FeatureSet;
 
 enum ClientStatus
 {
@@ -45,6 +68,9 @@ enum ClientStatus
     StatusSubmitForgotPasswordReset,
     StatusSubmitForgotPasswordChallenge,
     StatusGettingPasswordSalt,
+    //! The server accepted the credentials but keeps the session open until the account
+    //! password is replaced; the connection must survive for `Command_AccountPassword`.
+    StatusPasswordChangeRequired,
 };
 
 class AbstractClient : public QObject
@@ -53,6 +79,18 @@ class AbstractClient : public QObject
 signals:
     void statusChanged(ClientStatus _status);
     void maxPingTime(int seconds, int maxSeconds);
+
+    /**
+     * @brief Aggregated round-trip statistics and a chronological snapshot of
+     * the rolling window, emitted at most once per second.
+     *
+     * All values in the stats struct are in milliseconds; sampleCount is the
+     * number of samples currently in the rolling window. The samples list is
+     * ordered oldest first so graphs can redraw without polling the tracker
+     * across threads. Emitted from the client thread. The connection to UI
+     * objects is automatically queued across threads.
+     */
+    void pingStatsUpdated(const LatencyTracker::Stats &stats, const QList<int> &samplesMs);
 
     // Room events
     void roomEventReceived(const RoomEvent &event);
@@ -85,6 +123,11 @@ private:
     int nextCmdId;
     mutable QMutex clientMutex;
     ClientStatus status;
+    LatencyTracker latencyTracker;
+    QElapsedTimer statsEmitClock;
+    bool statsEmitClockStarted = false;
+
+    void recordLatency(PendingCommand &pend);
 private slots:
     void queuePendingCommand(PendingCommand *pend);
 protected slots:
@@ -94,6 +137,7 @@ protected:
     QMap<int, PendingCommand *> pendingCommands;
     QString userName, password, email, country, realName, token;
     bool serverSupportsPasswordHash;
+    bool serverSupportsChallengeResponse;
     void setStatus(ClientStatus _status);
     int getNewCmdId()
     {
@@ -113,19 +157,58 @@ public:
     void sendCommand(const CommandContainer &cont);
     void sendCommand(PendingCommand *pend);
 
+    /**
+     * @brief Drops all recorded round-trip samples and resets the stats
+     * emission throttle, emitting zeroed stats so that UI listeners can
+     * clear their display.
+     *
+     * Must be called from the client thread (as RemoteClient's disconnect
+     * path does). The tracker is deliberately lock-free.
+     */
+    void clearLatencyStats();
+
     bool getServerSupportsPasswordHash() const
     {
         return serverSupportsPasswordHash;
     }
+    bool getServerSupportsChallengeResponse() const
+    {
+        return serverSupportsChallengeResponse;
+    }
+
+    /**
+     * @brief Builds the account-password command in the form this server understands.
+     *
+     * Challenge-response servers take a scrypt verifier; servers that only advertise
+     * SupportsPasswordHash take a salted SHA-512 hash; anything older gets the plaintext,
+     * which is the only form it understands. Both password-change paths go through here so
+     * the two cannot drift apart and hand a plaintext password to a server that can hash it.
+     */
+    Command_AccountPassword makeAccountPasswordCommand(const QString &oldPassword, const QString &newPassword) const;
     const QString &getUserName() const
     {
         return userName;
+    }
+
+    /**
+     * @brief Returns the server address configured for the current connection.
+     *
+     * May be empty for clients that have no server counterpart (e.g. local test clients).
+     */
+    virtual QString serverName() const
+    {
+        return {};
+    }
+    virtual quint16 serverPort() const
+    {
+        return 0;
     }
 
     static PendingCommand *prepareSessionCommand(const ::google::protobuf::Message &cmd);
     static PendingCommand *prepareRoomCommand(const ::google::protobuf::Message &cmd, int roomId);
     static PendingCommand *prepareModeratorCommand(const ::google::protobuf::Message &cmd);
     static PendingCommand *prepareAdminCommand(const ::google::protobuf::Message &cmd);
+    static PendingCommand *prepareDeveloperCommand(const ::google::protobuf::Message &cmd);
 
     QMap<QString, bool> clientFeatures;
 };

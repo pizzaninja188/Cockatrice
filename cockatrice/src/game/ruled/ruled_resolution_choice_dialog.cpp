@@ -9,6 +9,16 @@
 #include <QVBoxLayout>
 #include <memory>
 
+namespace
+{
+class RuledResolutionChoiceDialog : public QDialog
+{
+protected:
+    // An unanswered engine choice must remain available. Optional choices use Decline.
+    void reject() override {}
+};
+}
+
 QVector<quint32> askRuledResolutionChoice(const QString &prompt,
                                           const QVector<quint32> &oids,
                                           const QStringList &names,
@@ -17,7 +27,7 @@ QVector<quint32> askRuledResolutionChoice(const QString &prompt,
                                           bool ordered,
                                           bool uniqueNames)
 {
-    QDialog dlg;
+    RuledResolutionChoiceDialog dlg;
     dlg.setWindowTitle(QObject::tr("Resolve"));
     // Resolution is mandatory (CR 608); disable the X button so the player
     // cannot dismiss the dialog without submitting a legal selection.

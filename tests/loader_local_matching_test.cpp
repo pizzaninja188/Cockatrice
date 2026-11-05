@@ -1,0 +1,266 @@
+#include "client/settings/cache_settings.h"
+#include "interface/card_picture_loader/card_picture_loader_local.h"
+#include "libcockatrice/card/card_info.h"
+#include "libcockatrice/card/printing/printing_info.h"
+
+#include "gtest/gtest.h"
+#include <QByteArray>
+#include <QByteArrayView>
+#include <QColor>
+#include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
+#include <QImage>
+#include <QImageWriter>
+#include <QLoggingCategory>
+#include <QScopeGuard>
+#include <QSharedPointer>
+#include <QStandardPaths>
+#include <QString>
+#include <QTemporaryDir>
+#include <QtGlobal>
+#include <libcockatrice/card/lazy_properties_hash.h>
+#include <libcockatrice/card/printing/exact_card.h>
+#include <libcockatrice/card/set/card_set.h>
+#include <libcockatrice/interfaces/noop_card_set_priority_controller.h>
+#include <libcockatrice/settings/paths_settings.h>
+#include <qnamespace.h>
+#include <string>
+
+namespace
+{
+
+/**
+ * @brief Builds an ExactCard with the requested identity fields.
+ *
+ * Mirrors how the client constructs cards: the set short name feeds tryLoad()'s
+ * setName, and the "num" printing property feeds the collector number.
+ */
+ExactCard cardFor(const QString &name, const QString &setShortName, const QString &collectorNumber)
+{
+    CardSetPtr set;
+    if (!setShortName.isEmpty()) {
+        set = CardSet::newInstance(new NoopCardSetPriorityController(), setShortName, setShortName);
+    }
+
+    LazyPropertiesHash properties;
+    if (!collectorNumber.isEmpty()) {
+        properties.insert("num", collectorNumber);
+    }
+
+    return ExactCard(CardInfo::newInstance(name), PrintingInfo(set, properties));
+}
+
+class LocalMatcherTest : public ::testing::Test
+{
+protected:
+    QTemporaryDir tempDir;                    ///< Sandboxed "pics" root for every test.
+    CardPictureLoaderLocal *loader = nullptr; ///< Constructed per test against the sandboxed paths.
+
+    QString picsPath() const
+    {
+        return tempDir.path() + "/pics";
+    }
+
+    void SetUp() override
+    {
+        // The loader ctor snapshots the global picture paths once, so point them at the
+        // sandbox before constructing it.
+        SettingsCache::instance().paths().setPicsPath(picsPath());
+        SettingsCache::instance().paths().setCustomPicsPath(picsPath() + "/CUSTOM/");
+
+        loader = new CardPictureLoaderLocal(nullptr);
+    }
+
+    void TearDown() override
+    {
+        delete loader;
+        loader = nullptr;
+    }
+
+    /**
+     * @brief Destroys and rebuilds the loader so the CUSTOM index is re-scanned.
+     *
+     * The CUSTOM-folder index is snapshotted at construction; rebuild it after
+     * writing files so freshly placed images are discoverable.
+     */
+    void rebuildLoader()
+    {
+        delete loader;
+        loader = new CardPictureLoaderLocal(nullptr);
+    }
+
+    /**
+     * @brief Writes a valid 1x1 PNG under the sandboxed pics path.
+     */
+    void writePngUnderPics(const QString &relativePath, const QColor &color = Qt::red)
+    {
+        const QString fullPath = picsPath() + "/" + relativePath;
+        ASSERT_TRUE(QDir().mkpath(QFileInfo(fullPath).absolutePath()));
+
+        QImage image(1, 1, QImage::Format_RGB32);
+        image.fill(color);
+
+        QImageWriter writer(fullPath, "PNG");
+        ASSERT_TRUE(writer.write(image));
+    }
+};
+
+TEST_F(LocalMatcherTest, ExactMatchBareFileWinsOverSuffixedCompanion)
+{
+    writePngUnderPics("downloadedPics/TestCard.png");
+    writePngUnderPics("downloadedPics/TestCard (1).png");
+
+    const QImage image = loader->tryLoad(cardFor("TestCard", "", ""));
+
+    EXPECT_FALSE(image.isNull()) << "The bare TestCard.png must be picked over its suffixed companion";
+}
+
+TEST_F(LocalMatcherTest, SuffixedFileWithoutExactMatchIsNotLoaded)
+{
+    // The pre-refactor prefix match would have accepted "TestCard (1).png" for "TestCard".
+    writePngUnderPics("downloadedPics/TestCard (1).png");
+
+    const QImage image = loader->tryLoad(cardFor("TestCard", "", ""));
+
+    EXPECT_TRUE(image.isNull()) << "A suffixed file must not satisfy an exact card-name lookup";
+}
+
+TEST_F(LocalMatcherTest, SetFolderLookupIgnoresSuffixedFiles)
+{
+    writePngUnderPics("M10/TestCard (1).png");
+
+    const QImage image = loader->tryLoad(cardFor("TestCard", "M10", ""));
+
+    EXPECT_TRUE(image.isNull()) << "Set-folder lookups must also require an exact name match";
+}
+
+TEST_F(LocalMatcherTest, SetFolderLookupStillResolvesExactFile)
+{
+    writePngUnderPics("M10/TestCard.png");
+    writePngUnderPics("M10/TestCard (1).png");
+
+    const QImage image = loader->tryLoad(cardFor("TestCard", "M10", ""));
+
+    EXPECT_FALSE(image.isNull()) << "The exact file in the set folder must still resolve";
+}
+
+TEST_F(LocalMatcherTest, RootDownloadedPicsFallbackResolvesSchemeFilename)
+{
+    // Non-set-folder export schemes (Name_Set_Collector) write straight into downloadedPics/.
+    writePngUnderPics("downloadedPics/TestCard_M10_1.png");
+
+    const QImage image = loader->tryLoad(cardFor("TestCard", "M10", "1"));
+
+    EXPECT_FALSE(image.isNull()) << "downloadedPics/TestCard_M10_1.png must resolve via the root fallback";
+}
+
+TEST_F(LocalMatcherTest, RootFallbackResolvesDashSeparatedVariant)
+{
+    writePngUnderPics("downloadedPics/TestCard-M10-1.png");
+
+    const QImage image = loader->tryLoad(cardFor("TestCard", "M10", "1"));
+
+    EXPECT_FALSE(image.isNull()) << "The dash-separated import variant must resolve via the root fallback";
+}
+
+TEST_F(LocalMatcherTest, DownloadedPicsSetSubfolderStillResolves)
+{
+    writePngUnderPics("downloadedPics/M10/TestCard_M10_1.png");
+
+    const QImage image = loader->tryLoad(cardFor("TestCard", "M10", "1"));
+
+    EXPECT_FALSE(image.isNull()) << "The set-subfolder export scheme must keep resolving";
+}
+
+TEST_F(LocalMatcherTest, SetFolderCandidateTakesPrecedenceOverRootFallback)
+{
+    writePngUnderPics("M10/TestCard_M10_1.png", Qt::red);
+    writePngUnderPics("downloadedPics/TestCard_M10_1.png", Qt::blue);
+
+    const QImage image = loader->tryLoad(cardFor("TestCard", "M10", "1"));
+
+    ASSERT_FALSE(image.isNull());
+    EXPECT_EQ(image.pixelColor(0, 0), QColor(Qt::red)) << "The set-folder candidate must be preferred";
+}
+
+TEST_F(LocalMatcherTest, CustomSubfolderResolvesExactFile)
+{
+    // Images in the CUSTOM folder are indexed by their full file path (extension included),
+    // unlike the extension-less candidate paths built from the naming schemes.
+    writePngUnderPics("CUSTOM/poker/TestCard.png");
+    rebuildLoader();
+
+    const QImage image = loader->tryLoad(cardFor("TestCard", "", ""));
+
+    EXPECT_FALSE(image.isNull()) << "A CUSTOM-folder image in a subdirectory must resolve";
+}
+
+TEST_F(LocalMatcherTest, CustomSubfolderIgnoresSuffixedFiles)
+{
+    writePngUnderPics("CUSTOM/poker/TestCard (1).png");
+    rebuildLoader();
+
+    const QImage image = loader->tryLoad(cardFor("TestCard", "", ""));
+
+    EXPECT_TRUE(image.isNull()) << "A suffixed CUSTOM-folder file must not satisfy an exact name lookup";
+}
+
+} // namespace
+
+int main(int argc, char **argv)
+{
+    // Redirect SettingsCache reads/writes (app-data location) away from the real user profile.
+    QStandardPaths::setTestModeEnabled(true);
+
+    // Some CI containers run as a uid without a passwd entry (e.g. GitHub's docker
+    // runner), so HOME resolves to "/" and the test-mode qttest data dir cannot be
+    // created. SettingsCache's QSettings then silently drops every write, reads come
+    // back empty, and the paths the loader searches are "". Give the test a writable
+    // HOME for the duration of the run so settings behave like on a normal machine.
+    QTemporaryDir home;
+    if (home.isValid()) {
+        qputenv("HOME", home.path().toLocal8Bit());
+    }
+
+    QCoreApplication app(argc, argv);
+
+    // Every TEST() runs as its own process and CI runs them in parallel (ctest -j4),
+    // while the picture paths round-trip through the process-global SettingsCache
+    // file. Parallel cases must therefore never share one settings directory: on
+    // platforms where QStandardPaths ignores the $HOME override above (macOS
+    // resolves the home directory via system APIs), every case would otherwise read
+    // and write the same paths.ini, and a sibling's setPicsPath can land between our
+    // own set and the loader's get — so the loader searches a foreign (or empty)
+    // directory and flakily returns a null image. Scope the settings to this process
+    // with a pid-unique application name; PIDs are never reused by live processes.
+    QCoreApplication::setOrganizationName(QStringLiteral("CockatriceTest"));
+    QCoreApplication::setApplicationName(
+        QStringLiteral("loader-local-matching-test-%1").arg(QCoreApplication::applicationPid()));
+
+    QLoggingCategory::setFilterRules("card_picture_loader.*=false\nsettings_cache.*=false");
+
+    ::testing::InitGoogleTest(&argc, argv);
+
+    // CMake's gtest discovery runs this binary with --gtest_list_tests, which lists
+    // without running any test body. Arming the cleanup guard here would make it the
+    // sole SettingsCache::instance() call in that mode, instantiating the
+    // Q_GLOBAL_STATIC singleton (and its QNetworkAccessManagers) just to tear down at
+    // exit — which LeakSanitizer reports as leaks and fails discovery on the sanitizer
+    // leg. Skip the sandbox cleanup entirely when only listing.
+    if (::testing::GTEST_FLAG(list_tests)) {
+        return RUN_ALL_TESTS();
+    }
+
+    // Best-effort cleanup of this process's settings sandbox. QStandardPaths test
+    // mode is never auto-cleaned, and on macOS the $HOME override above is ignored,
+    // so without this every run litters ~/.qttest with one pid-unique directory.
+    // Safe under parallel runs: the pid-unique application name above guarantees
+    // this directory belongs to this process alone.
+    const auto cleanupSandbox = qScopeGuard([] {
+        QDir(SettingsCache::instance().getDataPath()).removeRecursively();
+        QDir(SettingsCache::instance().getCachePath()).removeRecursively();
+    });
+
+    return RUN_ALL_TESTS();
+}

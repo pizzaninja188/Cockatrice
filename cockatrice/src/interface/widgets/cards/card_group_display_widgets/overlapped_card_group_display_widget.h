@@ -1,14 +1,24 @@
 /**
  * @file overlapped_card_group_display_widget.h
  * @ingroup DeckEditorCardGroupWidgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef OVERLAPPED_CARD_GROUP_DISPLAY_WIDGET_H
 #define OVERLAPPED_CARD_GROUP_DISPLAY_WIDGET_H
 
 #include "../../general/layout_containers/overlap_widget.h"
 #include "card_group_display_widget.h"
+
+#include <QPersistentModelIndex>
+#include <QString>
+#include <QStringList>
+#include <qtmetamacros.h>
+
+class CardSizeWidget;
+class DeckListModel;
+class QItemSelectionModel;
+class QWidget;
 
 class OverlappedCardGroupDisplayWidget : public CardGroupDisplayWidget
 {

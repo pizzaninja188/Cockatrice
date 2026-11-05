@@ -35,6 +35,8 @@ message GameEvent {
         REVERSE_TURN = 2021;
         // MTGO-style rules engine: serialized ruled.v1.RuledEventBatch in Event_RuledPayload
         RULED_PAYLOAD = 2100;
+        GAME_LOG_NOTICE = 2022;
+        PLAYER_ORDER_CHANGED = 2023;
     }
     optional sint32 player_id = 1 [default = -1];
     extensions 100 to max;

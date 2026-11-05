@@ -1,12 +1,35 @@
 #include "deck_editor_filter_dock_widget.h"
 
 #include "../../../client/settings/cache_settings.h"
+#include "../../../client/settings/shortcuts_settings.h"
 #include "../../../filters/filter_builder.h"
 #include "../../../filters/filter_tree_model.h"
+#include "../../key_signals.h"
+#include "../../theme_icon.h"
+#include "../tabs/abstract_tab_deck_editor.h"
+#include "libcockatrice/filters/filter_card.h"
 
+#include <QAbstractItemModel>
+#include <QAction>
+#include <QDebug>
+#include <QFlags>
 #include <QGridLayout>
+#include <QItemSelectionModel>
+#include <QList>
 #include <QMenu>
+#include <QModelIndex>
+#include <QModelIndexList>
+#include <QPersistentModelIndex>
+#include <QPoint>
+#include <QString>
+#include <QStringLiteral>
 #include <QToolButton>
+#include <QTreeView>
+#include <QVBoxLayout>
+#include <QVariant>
+#include <QWidget>
+#include <libcockatrice/utility/qt_utils.h>
+#include <qnamespace.h>
 
 DeckEditorFilterDockWidget::DeckEditorFilterDockWidget(AbstractTabDeckEditor *parent)
     : QDockWidget(parent), deckEditor(parent)
@@ -41,11 +64,11 @@ void DeckEditorFilterDockWidget::createFiltersDock()
     connect(filterBuilder, &FilterBuilder::add, filterModel, &FilterTreeModel::addFilter);
 
     aClearFilterOne = new QAction(QString(), this);
-    aClearFilterOne->setIcon(QPixmap("theme:icons/decrement"));
+    aClearFilterOne->setIcon(loadThemedIcon(QStringLiteral("icons/decrement")));
     connect(aClearFilterOne, &QAction::triggered, this, &DeckEditorFilterDockWidget::actClearFilterOne);
 
     aClearFilterAll = new QAction(QString(), this);
-    aClearFilterAll->setIcon(QPixmap("theme:icons/clearsearch"));
+    aClearFilterAll->setIcon(loadThemedIcon(QStringLiteral("icons/clearsearch")));
     connect(aClearFilterAll, &QAction::triggered, this, &DeckEditorFilterDockWidget::actClearFilterAll);
 
     auto *filterDelOne = new QToolButton();
@@ -58,9 +81,8 @@ void DeckEditorFilterDockWidget::createFiltersDock()
     filterDelAll->setDefaultAction(aClearFilterAll);
     filterDelAll->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 
-    auto *filterLayout = new QGridLayout;
+    auto *filterLayout = QtUtils::makeLayout<QGridLayout>();
     filterLayout->setObjectName("filterLayout");
-    filterLayout->setContentsMargins(0, 0, 0, 0);
     filterLayout->addWidget(filterBuilder, 0, 0, 1, 3);
     filterLayout->addWidget(filterView, 1, 0, 1, 3);
     filterLayout->addWidget(filterDelOne, 2, 0, 1, 1);
@@ -89,8 +111,9 @@ void DeckEditorFilterDockWidget::filterViewCustomContextMenu(const QPoint &point
     QModelIndex idx;
 
     idx = filterView->indexAt(point);
-    if (!idx.isValid())
+    if (!idx.isValid()) {
         return;
+    }
 
     action = menu.addAction(QString("delete"));
     action->setData(point);
@@ -105,8 +128,9 @@ void DeckEditorFilterDockWidget::filterRemove(const QAction *action)
 
     point = action->data().toPoint();
     idx = filterView->indexAt(point);
-    if (!idx.isValid())
+    if (!idx.isValid()) {
         return;
+    }
 
     filterModel->removeRow(idx.row(), idx.parent());
 }

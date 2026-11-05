@@ -4,33 +4,26 @@
 #include "server.h"
 #include "server_abstractuserinterface.h"
 
+#include <QByteArray>
+#include <QDateTime>
+#include <QList>
+#include <QMap>
 #include <QObject>
+#include <QString>
 #include <libcockatrice/protocol/pb/response.pb.h>
-#include <libcockatrice/protocol/pb/server_message.pb.h>
+#include <qtmetamacros.h>
 
-class Features;
 class Server_DatabaseInterface;
-class Server_Player;
-class ServerInfo_User;
 class Server_Room;
-class QTimer;
-class FeatureSet;
-
 class ServerMessage;
-class Response;
-class SessionEvent;
-class GameEventContainer;
-class RoomEvent;
 class ResponseContainer;
-
 class CommandContainer;
 class SessionCommand;
 class ModeratorCommand;
 class AdminCommand;
-
+class DeveloperCommand;
 class Command_Ping;
 class Command_Login;
-class Command_Register;
 class Command_Message;
 class Command_ListUsers;
 class Command_GetGamesOfUser;
@@ -39,6 +32,7 @@ class Command_ListRooms;
 class Command_JoinRoom;
 class Command_LeaveRoom;
 class Command_RoomSay;
+class Command_RoomChannelSay;
 class Command_CreateGame;
 class Command_JoinGame;
 
@@ -52,11 +46,31 @@ protected:
     Server_DatabaseInterface *databaseInterface;
     AuthenticationResult authState;
     bool usingRealPassword;
+    /**
+     * @brief True when the credentials were right but the account must choose a new password
+     *        before it may use the server. Only ping, the password change and disconnecting
+     *        are served while this is set.
+     */
+    bool passwordChangePending;
     bool acceptsUserListChanges;
     bool acceptsRoomListChanges;
     bool idleClientWarningSent;
+    QByteArray authNonce;
+    QString authNonceUser;
+    QDateTime authNonceCreated;
     virtual void logDebugMessage(const QString & /* message */)
     {
+    }
+    /**
+     * @brief Whether debug messages produced by this handler are actually written anywhere.
+     *
+     * Formatting a protocol message for the log is expensive, so callers only
+     * build the debug string when this returns true. The base handler has no
+     * log destination and therefore never needs one.
+     */
+    [[nodiscard]] virtual bool logsDebugMessages() const
+    {
+        return false;
     }
 
 private:
@@ -75,6 +89,8 @@ private:
     Response::ResponseCode cmdListUsers(const Command_ListUsers &cmd, ResponseContainer &rc);
     Response::ResponseCode cmdLeaveRoom(const Command_LeaveRoom &cmd, Server_Room *room, ResponseContainer &rc);
     Response::ResponseCode cmdRoomSay(const Command_RoomSay &cmd, Server_Room *room, ResponseContainer &rc);
+    Response::ResponseCode
+    cmdRoomChannelSay(const Command_RoomChannelSay &cmd, Server_Room *room, ResponseContainer &rc);
     Response::ResponseCode cmdCreateGame(const Command_CreateGame &cmd, Server_Room *room, ResponseContainer &rc);
     Response::ResponseCode cmdJoinGame(const Command_JoinGame &cmd, Server_Room *room, ResponseContainer &rc);
 
@@ -95,6 +111,12 @@ private:
     Response::ResponseCode processAdminCommandContainer(const CommandContainer &cont, ResponseContainer &rc);
     virtual Response::ResponseCode
     processExtendedAdminCommand(int /* cmdType */, const AdminCommand & /* cmd */, ResponseContainer & /* rc */)
+    {
+        return Response::RespFunctionNotAllowed;
+    }
+    Response::ResponseCode processDeveloperCommandContainer(const CommandContainer &cont, ResponseContainer &rc);
+    virtual Response::ResponseCode
+    processExtendedDeveloperCommand(int /* cmdType */, const DeveloperCommand & /* cmd */, ResponseContainer & /* rc */)
     {
         return Response::RespFunctionNotAllowed;
     }
@@ -124,12 +146,19 @@ public:
         return databaseInterface;
     }
 
+    /** @brief Store a fresh challenge nonce bound to @p userName for the next challenge-response login attempt. */
+    void setAuthNonce(const QByteArray &nonce, const QString &userName);
+    /** @brief True if nonce matches the pending one, was issued for @p userName, and is less than 60 seconds old. */
+    bool isAuthNonceValid(const QByteArray &nonce, const QString &userName) const;
+    /** @brief Invalidate the pending nonce (single-use). */
+    void clearAuthNonce();
+
     int getLastCommandTime() const
     {
         return timeRunning - lastDataReceived;
     }
     bool addSaidMessageSize(int size);
-    void processCommandContainer(const CommandContainer &cont);
+    virtual void processCommandContainer(const CommandContainer &cont);
 
     void sendProtocolItem(const Response &item);
     void sendProtocolItem(const SessionEvent &item);

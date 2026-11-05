@@ -3,8 +3,10 @@
 #include "archidekt_api_response_deck_owner.h"
 
 #include <QDebug>
-#include <QJsonArray>
 #include <QJsonObject>
+#include <QJsonValue>
+#include <QJsonValueRef>
+#include <qlogging.h>
 
 void ArchidektApiResponseDeckListingContainer::fromJson(const QJsonObject &json)
 {
@@ -23,7 +25,7 @@ void ArchidektApiResponseDeckListingContainer::fromJson(const QJsonObject &json)
     theoryCrafted = json.value("theoryCrafted").toBool();
     game = json.value("game").toString();
     hasDescription = json.value("hasDescription").toBool();
-    // TODO
+    //! \todo Parse tags field.
     // tags = {""};
     parentFolderId = json.value("parentFolderId").toInt();
     owner.fromJson(json.value("owner").toObject());

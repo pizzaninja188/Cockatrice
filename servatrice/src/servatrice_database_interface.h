@@ -1,18 +1,51 @@
 #ifndef SERVATRICE_DATABASE_INTERFACE_H
 #define SERVATRICE_DATABASE_INTERFACE_H
 
-#include <QChar>
+#include "libcockatrice/protocol/pb/serverinfo_user.pb.h"
+
 #include <QHash>
-#include <QObject>
+#include <QList>
 #include <QSqlDatabase>
+#include <QString>
+#include <QStringList>
+#include <QtGlobal>
+#include <libcockatrice/protocol/pb/serverinfo_ban.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_chat_message.pb.h>
+#include <libcockatrice/protocol/pb/serverinfo_moderator_login.pb.h>
+#include <libcockatrice/protocol/pb/serverinfo_user_alt.pb.h>
+#include <libcockatrice/protocol/pb/serverinfo_user_session.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_warning.pb.h>
+#include <qtmetamacros.h>
 #include <server.h>
 #include <server_database_interface.h>
 
-#define DATABASE_SCHEMA_VERSION 34
+class QSqlQuery;
+
+#define DATABASE_SCHEMA_VERSION 40
 
 class Servatrice;
+
+/** @brief Metadata of a single deck inside a temporary deck share bundle. */
+struct DeckShareItemRecord
+{
+    int id = -1;           ///< Database id, used for downloads.
+    QString name;          ///< Deck name.
+    QStringList tags;      ///< Deck tags.
+    QString bannerCard;    ///< Banner card name (deck image).
+    QString gameFormat;    ///< Game format the deck was built for.
+    QString colorIdentity; ///< Color identity, e.g. "WUBRG".
+    QString content;       ///< Deck content (native format); empty in list queries.
+};
+
+/** @brief Summary of a share bundle owned by a user. */
+struct DeckShareSummaryRecord
+{
+    int id = -1;             ///< Database id, used for revocation.
+    QString name;            ///< Share name.
+    qint64 creationTime = 0; ///< Unix timestamp at which the share was created.
+    qint64 expiresAt = 0;    ///< Unix timestamp at which the share expires.
+    int itemCount = 0;       ///< Number of decks in the bundle.
+};
 
 class Servatrice_DatabaseInterface : public Server_DatabaseInterface
 {
@@ -29,6 +62,10 @@ private:
     bool checkUserIsIpBanned(const QString &ipAddress, QString &banReason, int &banSecondsRemaining);
     /** Must be called after checkSql and server is known to be in auth mode. */
     bool checkUserIsNameBanned(QString const &userName, QString &banReason, int &banSecondsRemaining);
+    /** Seal a legacy credential for the account's downgrade backup; empty when the
+     *  backup key is unset or the sealed value does not fit the column. */
+    QString sealLegacyBackup(const QString &storedName, const QString &credential);
+    bool isStrictModeEnabled(bool &ok) const;
 
 protected:
     AuthenticationResult checkUserPassword(Server_ProtocolHandler *handler,
@@ -62,6 +99,18 @@ public:
     bool activeUserExists(const QString &user) override;
     bool userExists(const QString &user) override;
     QString getUserSalt(const QString &user) override;
+    QString getUserPasswordData(const QString &user) override;
+    bool submitPasswordVerifier(const QString &user, const QString &passwordVerifier) override;
+    /** @brief Decrypt the account's legacy password backup when it exists, is decryptable
+     *  with the configured key and has not aged out; purges it when it has. Returns the
+     *  legacy credential in the stored "salt + hash" format, or an empty string. */
+    QString getUsableLegacyBackup(const QString &user);
+    /** @brief Refresh the age window of the account's legacy password backup. */
+    void touchLegacyBackup(const QString &user);
+    /** @brief Drop the account's legacy password backup. */
+    void clearLegacyBackup(const QString &user);
+    /** @brief Drop every legacy password backup that has not been used within the TTL. */
+    void purgeExpiredLegacyBackups();
     int getUserIdInDB(const QString &name);
     QMap<QString, ServerInfo_User> getBuddyList(const QString &name) override;
     QMap<QString, ServerInfo_User> getIgnoreList(const QString &name) override;
@@ -75,6 +124,37 @@ public:
                               const QSet<QString> &allSpectatorsEver,
                               const QList<GameReplay *> &replayList) override;
     DeckList *getDeckFromDatabase(int deckId, int userId) override;
+
+    /**
+     * @brief Creates a new temporary deck share bundle.
+     * @param expiresAt Receives the actual expiry read back from the database.
+     * @return false on failure.
+     */
+    bool createDeckShare(const QString &token,
+                         const QString &name,
+                         int userId,
+                         const QList<DeckShareItemRecord> &items,
+                         int expiryDays,
+                         qint64 &expiresAt);
+    /** @brief Lists the share bundles created by a user, newest first. */
+    bool getDeckSharesForUser(int userId, QList<DeckShareSummaryRecord> &shares);
+    /**
+     * @brief Deletes one of a user's own share bundles (cascades to its items).
+     * @return false if no such bundle belongs to the user.
+     */
+    bool deleteDeckShare(int shareId, int userId);
+    /**
+     * @brief Looks up a valid (non-expired) share bundle by token.
+     * @return false if the token is unknown or expired.
+     */
+    bool getDeckShareList(const QString &token, QString &name, qint64 &expiresAt, QList<DeckShareItemRecord> &items);
+    /**
+     * @brief Fetches the content of one item of a valid share bundle.
+     * @return false if the token is unknown/expired or the item does not belong to the bundle.
+     */
+    bool getDeckShareItem(const QString &token, int itemId, QString &content);
+    /** @brief Deletes all expired share bundles (cascades to their items). */
+    void cleanupExpiredDeckShares();
 
     int getNextGameId() override;
     int getNextReplayId() override;
@@ -112,13 +192,20 @@ public:
                     const QString &logMessage,
                     LogMessage_TargetType targetType,
                     const int targetId,
-                    const QString &targetName) override;
+                    const QString &targetName,
+                    const QString &channel = QString()) override;
     bool changeUserPassword(const QString &user, const QString &password, bool passwordNeedsHash) override;
+    /** Replace a credential with an already-derived verifier, keeping a sealed legacy hash of the
+     *  same password as the downgrade backup for pre-challenge clients. */
+    bool changeUserPasswordWithLegacyBackup(const QString &user,
+                                            const QString &passwordVerifier,
+                                            const QString &legacyCredential);
     bool changeUserPassword(const QString &user,
                             const QString &oldPassword,
                             bool oldPasswordNeedsHash,
                             const QString &newPassword,
                             bool newPasswordNeedsHash) override;
+    void setForcePasswordChange(const QString &user, bool force) override;
     QList<ServerInfo_Ban> getUserBanHistory(const QString userName);
     bool
     addWarning(const QString userName, const QString adminName, const QString warningReason, const QString clientID);
@@ -132,7 +219,42 @@ public:
                                                        bool &game,
                                                        bool &room,
                                                        int &range,
-                                                       int &maxresults);
+                                                       int &maxresults,
+                                                       int offset = 0,
+                                                       const QString &beforeTime = QString(),
+                                                       bool *hasMore = nullptr);
+    QList<ServerInfo_UserSession> getUserSessions(const QString &userName, int limit);
+    QList<ServerInfo_UserAlt> getUserAlts(const QString &userName);
+    QList<ServerInfo_ModeratorLogin> getModeratorLastLogins();
+
+    // Uptime snapshot as recorded by Servatrice::statusUpdate() into the
+    // {prefix}_uptime table. valid is false when no snapshot exists yet.
+    struct UptimeSnapshot
+    {
+        bool valid = false;
+        quint64 usersCount = 0;
+        quint64 modsCount = 0;
+        quint64 gamesCount = 0;
+        quint64 txBytes = 0;
+        quint64 rxBytes = 0;
+        quint64 uptimeSecs = 0;
+        quint64 timest = 0;
+    };
+    UptimeSnapshot getLatestUptimeSnapshot(int serverId);
+    bool removeUserAvatar(const QString &userName);
+
+    // Outcome of removeUserBanner(), so the caller can tell a missing user apart
+    // from a user who simply has no banner card set.
+    enum class RemoveUserBannerResult
+    {
+        Removed,
+        NothingToRemove,
+        NoSuchUser,
+        DatabaseError,
+    };
+    RemoveUserBannerResult removeUserBanner(const QString &userName);
+    int clearBlacklistedBanners();
+    bool isCardArtAllowed(const QString &cardName, const QString &cardProviderId) override;
     bool addForgotPassword(const QString &user);
     bool removeForgotPassword(const QString &user) override;
     bool doesForgotPasswordExist(const QString &user);

@@ -21,14 +21,24 @@
 
 #include <libcockatrice/utility/zone_names.h>
 
+#include "game/server_abstract_player.h"
+#include "libcockatrice/protocol/pb/card_attributes.pb.h"
+#include "libcockatrice/protocol/pb/serverinfo_cardcounter.pb.h"
+#include "libcockatrice/utility/card_ref.h"
 #include "server_cardzone.h"
-#include "server_player.h"
 
+#include <QMapIterator>
+#include <QSharedPointer>
 #include <QVariant>
 #include <libcockatrice/card/database/card_database_manager.h>
+#include <libcockatrice/card/database/card_database_querier.h>
+#include <QtGlobal>
 #include <libcockatrice/protocol/pb/event_set_card_attr.pb.h>
 #include <libcockatrice/protocol/pb/event_set_card_counter.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_card.pb.h>
+#include <libcockatrice/utility/clamped_arithmetic.h>
+#include <libcockatrice/utility/counter_limits.h>
+#include <string>
 
 Server_Card::Server_Card(const CardRef &cardRef, int _id, int _coord_x, int _coord_y, Server_CardZone *_zone)
     : zone(_zone), id(_id), coord_x(_coord_x), coord_y(_coord_y), cardRef(cardRef), tapped(false), attacking(false),
@@ -39,11 +49,13 @@ Server_Card::Server_Card(const CardRef &cardRef, int _id, int _coord_x, int _coo
 Server_Card::~Server_Card()
 {
     // setParentCard(0) leads to the item being removed from our list, so we can't iterate properly
-    while (!attachedCards.isEmpty())
+    while (!attachedCards.isEmpty()) {
         attachedCards.first()->setParentCard(0);
+    }
 
-    if (parentCard)
+    if (parentCard) {
         parentCard->removeAttachedCard(this);
+    }
 
     if (stashedCard) {
         stashedCard->deleteLater();
@@ -76,8 +88,9 @@ QString Server_Card::setAttribute(CardAttribute attribute, const QString &avalue
 
 QString Server_Card::setAttribute(CardAttribute attribute, const QString &avalue, Event_SetCardAttr *event)
 {
-    if (event)
+    if (event) {
         event->set_attribute(attribute);
+    }
 
     switch (attribute) {
         case AttrTapped: {
@@ -95,8 +108,9 @@ QString Server_Card::setAttribute(CardAttribute attribute, const QString &avalue
             break;
         case AttrPT:
             setPT(avalue);
-            if (event)
+            if (event) {
                 event->set_attr_value(getPT().toStdString());
+            }
             return getPT();
         case AttrAnnotation:
             setAnnotation(avalue);
@@ -105,31 +119,69 @@ QString Server_Card::setAttribute(CardAttribute attribute, const QString &avalue
             setDoesntUntap(avalue == "1");
             break;
     }
-    if (event)
+    if (event) {
         event->set_attr_value(avalue.toStdString());
+    }
     return avalue;
 }
 
-void Server_Card::setCounter(int _id, int value, Event_SetCardCounter *event)
+bool Server_Card::setCounter(int _id, int value, Event_SetCardCounter *event)
 {
-    if (value)
+    // Clamp to valid card counter range [0, MAX_COUNTER_VALUE]
+    value = qBound(0, value, MAX_COUNTER_VALUE);
+
+    const int oldValue = counters.value(_id, 0);
+    if (value == oldValue) {
+        return false;
+    }
+
+    if (value) {
         counters.insert(_id, value);
-    else
+    } else {
         counters.remove(_id);
+    }
 
     if (event) {
         event->set_counter_id(_id);
         event->set_counter_value(value);
     }
+
+    return true;
+}
+
+bool Server_Card::incrementCounter(int counterId, int delta, Event_SetCardCounter *event)
+{
+    const int oldValue = counters.value(counterId, 0);
+    // Clamp to [0, MAX_COUNTER_VALUE] for card counters
+    const int newValue = addClamped(oldValue, delta, 0, MAX_COUNTER_VALUE);
+
+    if (newValue == oldValue) {
+        return false;
+    }
+
+    if (newValue) {
+        counters.insert(counterId, newValue);
+    } else {
+        counters.remove(counterId);
+    }
+
+    if (event) {
+        event->set_counter_id(counterId);
+        event->set_counter_value(newValue);
+    }
+
+    return true;
 }
 
 void Server_Card::setParentCard(Server_Card *_parentCard)
 {
-    if (parentCard)
+    if (parentCard) {
         parentCard->removeAttachedCard(this);
+    }
     parentCard = _parentCard;
-    if (parentCard)
+    if (parentCard) {
         parentCard->addAttachedCard(this);
+    }
 }
 
 void Server_Card::getInfo(ServerInfo_Card *info)

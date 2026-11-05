@@ -1,21 +1,30 @@
 /**
  * @file card_group_display_widget.h
  * @ingroup DeckEditorCardGroupWidgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef CARD_GROUP_DISPLAY_WIDGET_H
 #define CARD_GROUP_DISPLAY_WIDGET_H
 
-#include "../../general/display/banner_widget.h"
-#include "../card_info_picture_with_text_overlay_widget.h"
-#include "../card_size_widget.h"
-
-#include <QItemSelectionModel>
-#include <QLabel>
+#include <QList>
+#include <QMap>
+#include <QMouseEvent>
+#include <QPersistentModelIndex>
+#include <QString>
+#include <QStringList>
 #include <QVBoxLayout>
+#include <QVector>
 #include <QWidget>
-#include <libcockatrice/models/deck_list/deck_list_model.h>
+#include <qtmetamacros.h>
+
+class BannerWidget;
+class CardSizeWidget;
+class DeckListModel;
+class ExactCard;
+class QItemSelection;
+class QItemSelectionModel;
+class QModelIndex;
 
 class CardGroupDisplayWidget : public QWidget
 {
@@ -35,6 +44,7 @@ public:
     void onSelectionChanged(const QItemSelection &selected, const QItemSelection &deselected);
     void refreshSelectionForIndex(const QPersistentModelIndex &persistent);
     void clearAllDisplayWidgets();
+    void addCardWidgets(const QPersistentModelIndex &persistent);
 
     DeckListModel *deckListModel;
     QItemSelectionModel *selectionModel;
@@ -48,18 +58,17 @@ public:
 
 public slots:
     void mousePressEvent(QMouseEvent *event) override;
-    void onClick(QMouseEvent *event, CardInfoPictureWithTextOverlayWidget *card);
-    void onHover(const ExactCard &card);
     virtual QWidget *constructWidgetForIndex(QPersistentModelIndex index);
     virtual void updateCardDisplays();
     virtual void onCardAddition(const QModelIndex &parent, int first, int last);
     virtual void onCardRemoval(const QModelIndex &parent, int first, int last);
     void onDataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight, const QVector<int> &roles);
     void onActiveSortCriteriaChanged(QStringList activeSortCriteria);
+    void updateCardCount();
     void resizeEvent(QResizeEvent *event) override;
 
 signals:
-    void cardClicked(QMouseEvent *event, CardInfoPictureWithTextOverlayWidget *card);
+    void cardClicked(QMouseEvent *event, const ExactCard &card);
     void cardHovered(const ExactCard &card);
     void cleanupRequested(CardGroupDisplayWidget *cardGroupDisplayWidget);
 

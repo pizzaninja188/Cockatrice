@@ -1,15 +1,41 @@
 #include "archidekt_api_response_deck_display_widget.h"
 
+#include "../../../../../../client/settings/cache_settings.h"
 #include "../../../../../deck_loader/card_node_function.h"
-#include "../../../../../deck_loader/deck_loader.h"
-#include "../../../../cards/card_size_widget.h"
 #include "../../../../cards/deck_card_zone_display_widget.h"
 #include "../../../../visual_deck_editor/visual_deck_display_options_widget.h"
+#include "../../../../visual_deck_editor/visual_deck_editor_widget.h"
 #include "../api_response/archidekt_formats.h"
+#include "../api_response/card/archidekt_api_response_card.h"
+#include "../api_response/card/archidekt_api_response_card_entry.h"
+#include "../api_response/card/archidekt_api_response_edition.h"
 #include "../api_response/deck/archidekt_api_response_deck.h"
+#include "deck_list_model.h"
+#include "libcockatrice/deck_list/deck_list.h"
 
+#include <QAbstractListModel>
+#include <QDebug>
+#include <QHBoxLayout>
+#include <QJsonObject>
+#include <QJsonValue>
+#include <QList>
+#include <QModelIndex>
+#include <QPushButton>
+#include <QScrollArea>
+#include <QSharedPointer>
 #include <QSortFilterProxyModel>
+#include <QTextStream>
+#include <QVBoxLayout>
+#include <QVariant>
+#include <functional>
 #include <libcockatrice/card/import/card_name_normalizer.h>
+#include <libcockatrice/deck_list/loaded_deck.h>
+#include <libcockatrice/settings/cards_display_settings.h>
+#include <libcockatrice/utility/qt_utils.h>
+#include <qlogging.h>
+#include <qnamespace.h>
+
+class CardSizeWidget;
 
 ArchidektApiResponseDeckDisplayWidget::ArchidektApiResponseDeckDisplayWidget(QWidget *parent,
                                                                              ArchidektApiResponseDeck _response,
@@ -41,10 +67,7 @@ ArchidektApiResponseDeckDisplayWidget::ArchidektApiResponseDeckDisplayWidget(QWi
     connect(displayOptionsWidget, &VisualDeckDisplayOptionsWidget::groupCriteriaChanged, this,
             &ArchidektApiResponseDeckDisplayWidget::onGroupCriteriaChange);
 
-    scrollArea = new QScrollArea(this);
-    scrollArea->setWidgetResizable(true);
-    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scrollArea = QtUtils::makeScrollArea(this);
 
     layout->addWidget(scrollArea);
 
@@ -120,6 +143,9 @@ ArchidektApiResponseDeckDisplayWidget::ArchidektApiResponseDeckDisplayWidget(QWi
     }
 
     model = new DeckListModel(this);
+    model->setDisplayLanguage(SettingsCache::instance().cardsDisplay().getCardLang());
+    connect(&SettingsCache::instance().cardsDisplay(), &CardsDisplaySettings::cardLangChanged, model,
+            [this](const QString &lang) { model->setDisplayLanguage(lang); });
     connect(model, &DeckListModel::modelReset, this, &ArchidektApiResponseDeckDisplayWidget::decklistModelReset);
 
     auto decklist = QSharedPointer<DeckList>(new DeckList);
@@ -212,7 +238,5 @@ void ArchidektApiResponseDeckDisplayWidget::constructZoneWidgetsFromDeckListMode
 void ArchidektApiResponseDeckDisplayWidget::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
-    layout->invalidate();
-    layout->activate();
-    layout->update();
+    QtUtils::relayout(layout);
 }

@@ -1,0 +1,50 @@
+#ifndef COCKATRICE_PALETTE_GRID_WIDGET_H
+#define COCKATRICE_PALETTE_GRID_WIDGET_H
+
+#include "../theme_config.h"
+
+#include <QList>
+#include <QMap>
+#include <QPalette>
+#include <QVector>
+#include <QWidget>
+#include <qtmetamacros.h>
+
+class QLabel;
+class QScrollArea;
+class ColorButton;
+class QVBoxLayout;
+
+// Scrollable grid of ColorButtons — one per (ColorGroup × ColorRole) cell.
+// Owns the load/read round-trip for PaletteConfig but has no file I/O itself.
+class PaletteGridWidget : public QWidget
+{
+    Q_OBJECT
+public:
+    explicit PaletteGridWidget(QWidget *parent = nullptr);
+
+    void loadPalette(const PaletteConfig &cfg);
+    PaletteConfig currentPaletteConfig() const;
+
+signals:
+    void paletteChanged();
+
+private:
+    void buildGrid(QWidget *host);
+    void changeEvent(QEvent *e);
+    void refreshChromePalettes();
+
+private slots:
+    void applyInterfaceDefaultFont();
+
+private:
+    QMap<QPalette::ColorGroup, QMap<QPalette::ColorRole, ColorButton *>> colorButtons;
+    QMap<AppColor::Role, ColorButton *> appColorButtons;
+    QScrollArea *scroll;
+    QWidget *gridHost;
+    QVBoxLayout *layout;
+    QVector<QLabel *> headerLabels;
+    QVector<QWidget *> rowShadeWidgets;
+};
+
+#endif // COCKATRICE_PALETTE_GRID_WIDGET_H

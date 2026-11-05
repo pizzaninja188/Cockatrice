@@ -1,25 +1,36 @@
 #include "filter_builder.h"
 
+#include "../interface/theme_icon.h"
 #include "../interface/widgets/utility/custom_line_edit.h"
 
 #include <QComboBox>
 #include <QGridLayout>
+#include <QIcon>
 #include <QPushButton>
+#include <QSizePolicy>
+#include <QString>
+#include <QStringLiteral>
+#include <QVariant>
+#include <QtGlobal>
 #include <libcockatrice/filters/filter_card.h>
+#include <libcockatrice/utility/qt_utils.h>
+#include <stddef.h>
 
 FilterBuilder::FilterBuilder(QWidget *parent) : QWidget(parent)
 {
     filterCombo = new QComboBox;
     filterCombo->setObjectName("filterCombo");
-    for (int i = 0; i < CardFilter::AttrEnd; i++)
+    for (int i = 0; i < CardFilter::AttrEnd; i++) {
         filterCombo->addItem(CardFilter::attrName(static_cast<CardFilter::Attr>(i)), QVariant(i));
+    }
 
     typeCombo = new QComboBox;
     typeCombo->setObjectName("typeCombo");
-    for (int i = 0; i < CardFilter::TypeEnd; i++)
+    for (int i = 0; i < CardFilter::TypeEnd; i++) {
         typeCombo->addItem(CardFilter::typeName(static_cast<CardFilter::Type>(i)), QVariant(i));
+    }
 
-    QPushButton *ok = new QPushButton(QPixmap("theme:icons/increment"), QString());
+    QPushButton *ok = new QPushButton(loadThemedIcon(QStringLiteral("icons/increment")), QString());
     ok->setObjectName("ok");
     ok->setMaximumSize(20, 20);
 
@@ -29,9 +40,8 @@ FilterBuilder::FilterBuilder(QWidget *parent) : QWidget(parent)
     edit->setClearButtonEnabled(true);
     edit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
-    QGridLayout *layout = new QGridLayout;
+    QGridLayout *layout = QtUtils::makeLayout<QGridLayout>();
     layout->setObjectName("layout");
-    layout->setContentsMargins(0, 0, 0, 0);
 
     layout->addWidget(typeCombo, 0, 0, 1, 2);
     layout->addWidget(filterCombo, 0, 2, 1, 2);
@@ -53,8 +63,9 @@ FilterBuilder::~FilterBuilder()
 
 void FilterBuilder::destroyFilter()
 {
-    if (fltr)
+    if (fltr) {
         delete fltr;
+    }
 }
 
 static int comboCurrentIntData(const QComboBox *combo)
@@ -67,8 +78,9 @@ void FilterBuilder::emit_add()
     QString txt;
 
     txt = edit->text();
-    if (txt.length() < 1)
+    if (txt.length() < 1) {
         return;
+    }
 
     destroyFilter();
     fltr = new CardFilter(txt, static_cast<CardFilter::Type>(comboCurrentIntData(typeCombo)),

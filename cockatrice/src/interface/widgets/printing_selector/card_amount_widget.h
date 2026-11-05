@@ -2,21 +2,23 @@
  * @file card_amount_widget.h
  * @ingroup CardExtraInfoWidgets
  * @ingroup PrintingWidgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef CARD_AMOUNT_WIDGET_H
 #define CARD_AMOUNT_WIDGET_H
 
-#include "../../../interface/widgets/tabs/abstract_tab_deck_editor.h"
-#include "../general/display/dynamic_font_size_push_button.h"
+#include "libcockatrice/card/printing/exact_card.h"
 
-#include <QHBoxLayout>
-#include <QLabel>
-#include <QTreeView>
+#include <QString>
 #include <QWidget>
-#include <libcockatrice/card/card_info.h>
-#include <libcockatrice/models/deck_list/deck_list_model.h>
+#include <qtmetamacros.h>
+
+class DeckStateManager;
+class DynamicFontSizePushButton;
+class QHBoxLayout;
+class QLabel;
+class QSlider;
 
 class CardAmountWidget : public QWidget
 {
@@ -60,9 +62,12 @@ private:
 private slots:
     void addPrintingMainboard();
     void addPrintingSideboard();
+    void addPrintingTokensboard();
     void removePrintingMainboard();
     void removePrintingSideboard();
+    void removePrintingTokensboard();
     void adjustFontSize(int scalePercentage);
+    void applyCardTextFont();
 };
 
 #endif // CARD_AMOUNT_WIDGET_H

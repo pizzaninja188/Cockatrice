@@ -3,11 +3,17 @@
 #include "../../../client/settings/cache_settings.h"
 #include "../../../client/settings/shortcuts_settings.h"
 
+#include <QCoreApplication>
+#include <QEvent>
+#include <QFlags>
 #include <QKeyEvent>
+#include <QKeySequence>
 #include <QLineEdit>
-#include <QObject>
+#include <QList>
+#include <QString>
 #include <QTreeView>
-#include <QWidget>
+#include <QVector>
+#include <qnamespace.h>
 
 LineEditUnfocusable::LineEditUnfocusable(QWidget *parent) : QLineEdit(parent)
 {
@@ -24,14 +30,18 @@ bool LineEditUnfocusable::isUnfocusShortcut(QKeyEvent *event)
     QString modifier;
     QString keyNoMod;
 
-    if (event->modifiers() & Qt::ShiftModifier)
+    if (event->modifiers() & Qt::ShiftModifier) {
         modifier += "Shift+";
-    if (event->modifiers() & Qt::ControlModifier)
+    }
+    if (event->modifiers() & Qt::ControlModifier) {
         modifier += "Ctrl+";
-    if (event->modifiers() & Qt::AltModifier)
+    }
+    if (event->modifiers() & Qt::AltModifier) {
         modifier += "Alt+";
-    if (event->modifiers() & Qt::MetaModifier)
+    }
+    if (event->modifiers() & Qt::MetaModifier) {
         modifier += "Meta+";
+    }
 
     keyNoMod = QKeySequence(event->key()).toString();
 
@@ -39,8 +49,9 @@ bool LineEditUnfocusable::isUnfocusShortcut(QKeyEvent *event)
     QList<QKeySequence> unfocusShortcut = SettingsCache::instance().shortcuts().getShortcut("Player/unfocusTextBox");
 
     for (const auto &unfocusKey : unfocusShortcut) {
-        if (key.matches(unfocusKey) == QKeySequence::ExactMatch)
+        if (key.matches(unfocusKey) == QKeySequence::ExactMatch) {
             return true;
+        }
     }
     return false;
 }
@@ -79,10 +90,12 @@ void SearchLineEdit::keyPressEvent(QKeyEvent *event)
     static const QVector<Qt::Key> forwardWhenEmpty = {Qt::Key_Home, Qt::Key_End};
     Qt::Key key = static_cast<Qt::Key>(event->key());
     if (treeView) {
-        if (forwardToTreeView.contains(key))
+        if (forwardToTreeView.contains(key)) {
             QCoreApplication::sendEvent(treeView, event);
-        if (text().isEmpty() && forwardWhenEmpty.contains(key))
+        }
+        if (text().isEmpty() && forwardWhenEmpty.contains(key)) {
             QCoreApplication::sendEvent(treeView, event);
+        }
     }
     LineEditUnfocusable::keyPressEvent(event);
 }

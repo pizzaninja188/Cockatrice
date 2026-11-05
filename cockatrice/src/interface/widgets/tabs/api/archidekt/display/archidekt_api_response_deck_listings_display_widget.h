@@ -1,15 +1,15 @@
 #ifndef COCKATRICE_ARCHIDEKT_API_RESPONSE_DECK_LISTINGS_DISPLAY_WIDGET_H
 #define COCKATRICE_ARCHIDEKT_API_RESPONSE_DECK_LISTINGS_DISPLAY_WIDGET_H
 
-#include "../../../../cards/card_size_widget.h"
-#include "../../../../general/layout_containers/flow_widget.h"
-#include "../api_response/archidekt_deck_listing_api_response.h"
-
-#include <QNetworkAccessManager>
-#include <QResizeEvent>
-#include <QScrollArea>
-#include <QVBoxLayout>
+#include <QString>
 #include <QWidget>
+#include <qtmetamacros.h>
+
+class ArchidektDeckListingApiResponse;
+class CardSizeWidget;
+class FlowWidget;
+class QHBoxLayout;
+class QNetworkAccessManager;
 
 /**
  * @class ArchidektApiResponseDeckListingsDisplayWidget
@@ -82,16 +82,16 @@ public:
     void resizeEvent(QResizeEvent *event) override;
 
 private:
-    /// Slider controlling the scale of card thumbnails in all deck entry widgets.
+    /** @brief Slider controlling the scale of card thumbnails in all deck entry widgets. */
     CardSizeWidget *cardSizeSlider;
 
-    /// Main horizontal layout containing the FlowWidget.
+    /** @brief Main horizontal layout containing the FlowWidget. */
     QHBoxLayout *layout;
 
-    /// Container providing scrollable multi-row flow layout of deck entries.
+    /** @brief Container providing scrollable multi-row flow layout of deck entries. */
     FlowWidget *flowWidget;
 
-    /// Shared network manager used to download card images for all child entry widgets.
+    /** @brief Shared network manager used to download card images for all child entry widgets. */
     QNetworkAccessManager *imageNetworkManager;
 };
 

@@ -1,8 +1,8 @@
 /**
  * @file overlap_layout.h
  * @ingroup UI
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef OVERLAP_LAYOUT_H
 #define OVERLAP_LAYOUT_H
@@ -10,7 +10,11 @@
 #include <QLayout>
 #include <QList>
 #include <QLoggingCategory>
-#include <QWidget>
+#include <QSize>
+#include <qnamespace.h>
+
+class QLayoutItem;
+class QWidget;
 
 inline Q_LOGGING_CATEGORY(OverlapLayoutLog, "overlap_layout");
 

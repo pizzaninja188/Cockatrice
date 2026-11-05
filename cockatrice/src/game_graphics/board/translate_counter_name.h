@@ -1,0 +1,32 @@
+/**
+ * @file translate_counter_name.h
+ * @ingroup GameGraphicsPlayers
+ */
+//! \todo Document this file.
+
+#ifndef TRANSLATECOUNTERNAME_H
+#define TRANSLATECOUNTERNAME_H
+
+#include <QByteArray>
+#include <QCoreApplication>
+#include <QMap>
+#include <QString>
+
+class TranslateCounterName
+{
+    Q_DECLARE_TR_FUNCTIONS(TranslateCounterName)
+
+    static const QMap<QString, QString> translated;
+
+public:
+    static QString getDisplayName(const QString &name)
+    {
+        if (translated.contains(name)) {
+            return tr(translated[name].toLatin1());
+        } else {
+            return name;
+        }
+    }
+};
+
+#endif // TRANSLATECOUNTERNAME_H

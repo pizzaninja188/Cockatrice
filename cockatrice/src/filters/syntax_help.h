@@ -2,15 +2,16 @@
  * @file syntax_help.h
  * @ingroup CardDatabaseModelFilters
  * @ingroup DeckStorageWidgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef SEARCH_SYNTAX_HELP_H
 #define SEARCH_SYNTAX_HELP_H
 
-#include <QLineEdit>
 #include <QLoggingCategory>
-#include <QTextBrowser>
+
+class QLineEdit;
+class QTextBrowser;
 
 inline Q_LOGGING_CATEGORY(SyntaxHelpLog, "syntax_help");
 

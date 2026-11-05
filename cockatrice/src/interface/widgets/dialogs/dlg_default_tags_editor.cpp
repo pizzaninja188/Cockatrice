@@ -2,9 +2,22 @@
 
 #include "../../../client/settings/cache_settings.h"
 
+#include <QAbstractItemView>
+#include <QHBoxLayout>
+#include <QLineEdit>
+#include <QList>
+#include <QListWidget>
+#include <QListWidgetItem>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSharedPointer>
+#include <QSizePolicy>
+#include <QString>
+#include <QStringList>
 #include <QVBoxLayout>
+#include <QWidget>
+#include <libcockatrice/settings/visual_deck_storage_settings.h>
+#include <libcockatrice/utility/qt_utils.h>
 
 DlgDefaultTagsEditor::DlgDefaultTagsEditor(QWidget *parent) : QDialog(parent)
 {
@@ -54,7 +67,7 @@ void DlgDefaultTagsEditor::retranslateUi()
 void DlgDefaultTagsEditor::loadStringList()
 {
     listWidget->clear();
-    QStringList tags = SettingsCache::instance().getVisualDeckStorageDefaultTagsList();
+    QStringList tags = SettingsCache::instance().visualDeckStorage().getVisualDeckStorageDefaultTagsList();
     for (const QString &tag : tags) {
         auto *item = new QListWidgetItem(); // Create item but don't insert yet
 
@@ -95,8 +108,9 @@ void DlgDefaultTagsEditor::addItem()
     // Prevent duplicate tags
     for (int i = 0; i < listWidget->count(); ++i) {
         QWidget *widget = listWidget->itemWidget(listWidget->item(i));
-        if (!widget)
+        if (!widget) {
             continue;
+        }
         QLineEdit *lineEdit = widget->findChild<QLineEdit *>();
         if (lineEdit && lineEdit->text() == newTag) {
             QMessageBox::warning(this, tr("Duplicate Tag"), tr("This tag already exists."));
@@ -107,8 +121,7 @@ void DlgDefaultTagsEditor::addItem()
     // Add new tag
     auto *item = new QListWidgetItem(listWidget);
     QWidget *widget = new QWidget(this);
-    QHBoxLayout *layout = new QHBoxLayout(widget);
-    layout->setContentsMargins(0, 0, 0, 0);
+    QHBoxLayout *layout = QtUtils::makeLayout<QHBoxLayout>(widget);
 
     // Editable tag label
     QLineEdit *lineEdit = new QLineEdit(newTag, this);
@@ -138,13 +151,14 @@ void DlgDefaultTagsEditor::confirmChanges()
     QStringList updatedList;
     for (int i = 0; i < listWidget->count(); ++i) {
         QWidget *widget = listWidget->itemWidget(listWidget->item(i));
-        if (!widget)
+        if (!widget) {
             continue;
+        }
         QLineEdit *lineEdit = widget->findChild<QLineEdit *>();
         if (lineEdit) {
             updatedList.append(lineEdit->text());
         }
     }
-    SettingsCache::instance().setVisualDeckStorageDefaultTagsList(updatedList);
+    SettingsCache::instance().visualDeckStorage().setVisualDeckStorageDefaultTagsList(updatedList);
     accept(); // Close dialog and confirm changes
 }

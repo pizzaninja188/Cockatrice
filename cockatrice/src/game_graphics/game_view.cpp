@@ -1,0 +1,365 @@
+#include "game_view.h"
+
+#include "../client/settings/cache_settings.h"
+#include "../client/settings/shortcuts_settings.h"
+#include "../interface/theme_manager.h"
+#include "game_scene.h"
+
+#include <QAction>
+#include <QBrush>
+#include <QColor>
+#include <QEvent>
+#include <QFont>
+#include <QGraphicsScene>
+#include <QGridLayout>
+#include <QLabel>
+#include <QMargins>
+#include <QPainter>
+#include <QPoint>
+#include <QResizeEvent>
+#include <QRubberBand>
+#include <QString>
+#include <QStringLiteral>
+#include <QWidget>
+#include <QtGlobal>
+#include <libcockatrice/settings/interface_settings.h>
+#include <libcockatrice/utility/qt_utils.h>
+#include <qnamespace.h>
+
+namespace
+{
+QFont deckOverlayFont(int pixelSize, bool bold)
+{
+    // The drag/total counters and the tally columns are in-game overlays, not
+    // deck list text: keep the monospace family the stylesheets used to set so
+    // digit widths stay stable as counts tick and `white-space: pre` lines up.
+    QFont font(QStringLiteral("monospace"));
+    font.setStyleHint(QFont::Monospace);
+    font.setPixelSize(pixelSize);
+    font.setBold(bold);
+    return font;
+}
+} // namespace
+
+// QRubberBand calls raise() in showEvent() and changeEvent() to stay on top of siblings.
+// This subclass disables that behavior so dragCountLabel can appear above it.
+class SelectionRubberBand : public QRubberBand
+{
+public:
+    using QRubberBand::QRubberBand;
+
+protected:
+    void showEvent(QShowEvent *event) override
+    {
+        QWidget::showEvent(event); // Skip QRubberBand's raise()
+    }
+
+    void changeEvent(QEvent *event) override
+    {
+        if (event->type() == QEvent::ZOrderChange) {
+            return; // Skip QRubberBand's raise() on z-order changes
+        }
+        QRubberBand::changeEvent(event);
+    }
+};
+
+GameView::GameView(GameScene *scene, QWidget *parent) : QGraphicsView(scene, parent), rubberBand(0)
+{
+    setObjectName("gameView");
+    setBackgroundBrush(QBrush(QColor(0, 0, 0)));
+    setRenderHints(QPainter::TextAntialiasing | QPainter::Antialiasing);
+    setViewportUpdateMode(BoundingRectViewportUpdate);
+
+    connect(scene, &GameScene::sceneRectChanged, this, &GameView::updateSceneRect);
+
+    connect(scene, &GameScene::sigStartRubberBand, this, &GameView::startRubberBand);
+    connect(scene, &GameScene::sigResizeRubberBand, this, &GameView::resizeRubberBand);
+    connect(scene, &GameScene::sigStopRubberBand, this, &GameView::stopRubberBand);
+    connect(scene, &QGraphicsScene::selectionChanged, this, [this]() { updateTotalSelectionCount(); });
+    connect(&SettingsCache::instance().userInterface(), &InterfaceSettings::tallyTypeChanged, this,
+            [this] { updateTotalSelectionCount(); });
+
+    setFocusDisabled(SettingsCache::instance().userInterface().getKeepGameChatFocus());
+    connect(&SettingsCache::instance().userInterface(), &InterfaceSettings::keepGameChatFocusChanged, this,
+            &GameView::setFocusDisabled);
+
+    aCloseMostRecentZoneView = new QAction(this);
+
+    connect(aCloseMostRecentZoneView, &QAction::triggered, scene, &GameScene::closeMostRecentZoneView);
+    addAction(aCloseMostRecentZoneView);
+    connect(&SettingsCache::instance().shortcuts(), &ShortcutsSettings::shortCutChanged, this,
+            &GameView::refreshShortcuts);
+    refreshShortcuts();
+    rubberBand = new SelectionRubberBand(QRubberBand::Rectangle, this);
+
+    const QString baseProperties = "color: white; "
+                                   "background-color: rgba(0, 0, 0, 160); "
+                                   "border-radius: 3px; "
+                                   "padding: 1px 2px; "
+                                   "white-space: pre;";
+
+    const QString dragCountLabelStyle = baseProperties;
+    const QString totalCountLabelStyle = baseProperties;
+    const QString subtypeTallyLabelStyle = baseProperties;
+
+    dragCountLabel = new QLabel(this);
+    dragCountLabel->setStyleSheet(dragCountLabelStyle);
+    dragCountLabel->hide();
+    dragCountLabel->raise();
+
+    totalCountLabel = new QLabel(this);
+    totalCountLabel->setStyleSheet(totalCountLabelStyle);
+    totalCountLabel->hide();
+
+    tallyContainer = new QWidget(this);
+    tallyContainer->setStyleSheet(subtypeTallyLabelStyle);
+    tallyLayout = new QGridLayout(tallyContainer);
+    tallyLayout->setContentsMargins(2, 2, 2, 2);
+    tallyLayout->setSpacing(2);
+    tallyContainer->hide();
+
+    applyDeckOverlayFonts();
+}
+
+void GameView::applyDeckOverlayFonts()
+{
+    dragCountLabel->setFont(deckOverlayFont(14, true));
+    totalCountLabel->setFont(deckOverlayFont(16, true));
+    tallyContainer->setFont(deckOverlayFont(12, false));
+    for (int i = 0; i < tallyLayout->count(); ++i) {
+        if (auto *label = qobject_cast<QLabel *>(tallyLayout->itemAt(i)->widget())) {
+            // Count column (odd positions) keeps the bold emphasis.
+            const bool count = i % 2 == 1;
+            label->setFont(deckOverlayFont(count ? 14 : 12, count));
+        }
+    }
+
+    // The container keeps the size computed from the previous fonts, so force
+    // rebuildTallyLabels() to re-measure it instead of reusing cachedTallyRows.
+    cachedTallyRows.clear();
+    updateTotalSelectionCount();
+}
+
+void GameView::resizeEvent(QResizeEvent *event)
+{
+    QGraphicsView::resizeEvent(event);
+
+    GameScene *s = static_cast<GameScene *>(scene());
+    s->processViewSizeChange(event->size());
+
+    updateSceneRect(scene()->sceneRect());
+    updateTotalSelectionCount(event->size());
+}
+
+void GameView::updateSceneRect(const QRectF &rect)
+{
+    fitInView(rect, Qt::KeepAspectRatio);
+}
+
+void GameView::startRubberBand(const QPointF &_selectionOrigin)
+{
+    if (!rubberBand) {
+        return;
+    }
+
+    selectionOrigin = _selectionOrigin;
+    previousBandRect = QRect();
+    rubberBand->setGeometry(QRect(mapFromScene(selectionOrigin), QSize(0, 0)));
+    rubberBand->raise();
+    rubberBand->show();
+}
+
+void GameView::resizeRubberBand(const QPointF &cursorPoint, int selectedCount)
+{
+    if (!rubberBand) {
+        return;
+    }
+
+    constexpr int kLabelPaddingInPixels = 4;
+
+    QPoint cursor = cursorPoint.toPoint();
+    QRect rect = QRect(mapFromScene(selectionOrigin), cursor).normalized();
+
+    rubberBand->setGeometry(rect);
+    if (viewport()) {
+        // Repaint the union of the previous and current band rects: the vacated
+        // strip of a child widget is not reliably invalidated on all platforms
+        // (notably macOS), leaving stale pixels under the selection.
+        QRect dirty = previousBandRect.isNull() ? rect : previousBandRect.united(rect);
+        dirty.adjust(-1, -1, 1, 1);
+        viewport()->update(dirty);
+        previousBandRect = rect;
+    }
+
+    if (!SettingsCache::instance().userInterface().getShowDragSelectionCount()) {
+        dragCountLabel->hide();
+        return;
+    }
+
+    if (selectedCount > 0) {
+        dragCountLabel->setText(QString::number(selectedCount));
+        dragCountLabel->adjustSize();
+        QSize labelSize = dragCountLabel->size();
+
+        if (rect.width() < labelSize.width() + 2 * kLabelPaddingInPixels ||
+            rect.height() < labelSize.height() + 2 * kLabelPaddingInPixels) {
+            dragCountLabel->hide();
+            return;
+        }
+
+        const int minX = rect.left() + kLabelPaddingInPixels;
+        const int minY = rect.top() + kLabelPaddingInPixels;
+
+        int x = qMax(minX, cursor.x() - labelSize.width() - kLabelPaddingInPixels);
+        int y = qMax(minY, cursor.y() - labelSize.height() - kLabelPaddingInPixels);
+
+        bool isAtTopLeftCorner = (x == minX) && (y == minY);
+        if (isAtTopLeftCorner) {
+            constexpr int kCursorClearanceInPixels = 16;
+            x = qMin(cursor.x() + kCursorClearanceInPixels, rect.right() - labelSize.width() - kLabelPaddingInPixels);
+        }
+
+        dragCountLabel->move(x, y);
+        dragCountLabel->show();
+    } else {
+        dragCountLabel->hide();
+    }
+}
+
+void GameView::stopRubberBand()
+{
+    if (!rubberBand) {
+        return;
+    }
+
+    // Same rationale as resizeRubberBand: repaint the last known band area
+    // since hiding a child widget doesn't reliably invalidate its region.
+    rubberBand->hide();
+    if (viewport() && !previousBandRect.isNull()) {
+        viewport()->update(previousBandRect.adjusted(-1, -1, 1, 1));
+        previousBandRect = QRect();
+    }
+    dragCountLabel->hide();
+}
+
+void GameView::refreshShortcuts()
+{
+    aCloseMostRecentZoneView->setShortcuts(
+        SettingsCache::instance().shortcuts().getShortcut("Player/aCloseMostRecentZoneView"));
+}
+
+void GameView::clearTallyLabels()
+{
+    QtUtils::clearLayoutRec(tallyLayout);
+}
+
+QSize GameView::rebuildTallyLabels(const QList<TallyRow> &entries)
+{
+    clearTallyLabels();
+
+    const QString nameStyle = QStringLiteral("color: white; background: transparent;");
+    const QString countStyle = QStringLiteral("color: white; background: transparent;");
+
+    int totalHeight = 0;
+    int maxNameWidth = 0;
+    int maxCountWidth = 0;
+
+    int row = 0;
+    for (const TallyRow &entry : entries) {
+        auto *nameLabel = new QLabel(entry.name, tallyContainer);
+        nameLabel->setStyleSheet(nameStyle);
+        nameLabel->setFont(deckOverlayFont(12, false));
+        nameLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        tallyLayout->addWidget(nameLabel, row, 0);
+
+        auto *countLabel = new QLabel(entry.value, tallyContainer);
+        countLabel->setStyleSheet(countStyle);
+        countLabel->setFont(deckOverlayFont(14, true));
+        countLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        tallyLayout->addWidget(countLabel, row, 1);
+
+        QSize nameSize = nameLabel->sizeHint();
+        QSize countSize = countLabel->sizeHint();
+        maxNameWidth = qMax(maxNameWidth, nameSize.width());
+        maxCountWidth = qMax(maxCountWidth, countSize.width());
+        totalHeight += qMax(nameSize.height(), countSize.height());
+
+        ++row;
+    }
+
+    int spacing = tallyLayout->spacing();
+    int margins = tallyLayout->contentsMargins().left() + tallyLayout->contentsMargins().right();
+    int verticalMargins = tallyLayout->contentsMargins().top() + tallyLayout->contentsMargins().bottom();
+
+    int width = maxNameWidth + spacing + maxCountWidth + margins;
+    int height = totalHeight + (row - 1) * spacing + verticalMargins;
+
+    return QSize(width, height);
+}
+
+void GameView::updateTotalSelectionCount(const QSize &viewSize)
+{
+    constexpr int kMarginInPixels = 10;
+    constexpr int kSpacingBetweenLabels = 4;
+
+    int availableWidth = viewSize.isValid() ? viewSize.width() : viewport()->width();
+    int availableHeight = viewSize.isValid() ? viewSize.height() : viewport()->height();
+
+    int count = scene()->selectedItems().count();
+
+    if (!SettingsCache::instance().userInterface().getShowTotalSelectionCount() || count <= 1) {
+        totalCountLabel->hide();
+    } else {
+        totalCountLabel->setText(QString::number(count));
+        totalCountLabel->adjustSize();
+
+        int x = availableWidth - totalCountLabel->width() - kMarginInPixels;
+        int y = availableHeight - totalCountLabel->height() - kMarginInPixels;
+        totalCountLabel->move(x, y);
+        totalCountLabel->show();
+    }
+
+    TallyType tallyType = Tally::intToType(SettingsCache::instance().userInterface().getTallyType());
+
+    GameScene *gameScene = static_cast<GameScene *>(scene());
+    QList<TallyRow> entries = Tally::compute(gameScene->selectedCards(), tallyType);
+
+    if (entries.isEmpty()) {
+        tallyContainer->hide();
+        cachedTallyRows.clear();
+        return;
+    }
+
+    // Only rebuild labels if entries changed
+    QSize containerSize;
+    if (entries != cachedTallyRows) {
+        cachedTallyRows = entries;
+        containerSize = rebuildTallyLabels(entries);
+        tallyContainer->resize(containerSize);
+    } else {
+        containerSize = tallyContainer->size();
+    }
+
+    int x = availableWidth - containerSize.width() - kMarginInPixels;
+    int y;
+
+    if (totalCountLabel->isVisible()) {
+        y = totalCountLabel->y() - containerSize.height() - kSpacingBetweenLabels;
+    } else {
+        y = availableHeight - containerSize.height() - kMarginInPixels;
+    }
+
+    y = qMax(kMarginInPixels, y);
+
+    tallyContainer->move(x, y);
+    tallyContainer->show();
+}
+
+/**
+ * Disabling focus on the game view will allow chat to maintain the autofocusing behavior of pre 2.10.3,
+ * at the cost of disabling the zone view search bar.
+ */
+void GameView::setFocusDisabled(bool disabled)
+{
+    setFocusPolicy(disabled ? Qt::NoFocus : Qt::ClickFocus);
+}

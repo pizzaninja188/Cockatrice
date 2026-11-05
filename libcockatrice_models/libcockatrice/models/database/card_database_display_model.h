@@ -8,11 +8,24 @@
 #ifndef COCKATRICE_CARD_DATABASE_DISPLAY_MODEL_H
 #define COCKATRICE_CARD_DATABASE_DISPLAY_MODEL_H
 
-#include <QSortFilterProxyModel>
-#include <QTimer>
-#include <libcockatrice/filters/filter_string.h>
+#include "libcockatrice/card/card_info.h"
 
+#include <QCollator>
+#include <QModelIndex>
+#include <QSet>
+#include <QSortFilterProxyModel>
+#include <QString>
+#include <QStringView>
+#include <QTimer>
+#include <libcockatrice/card/card_localization.h>
+#include <libcockatrice/filters/filter_string.h>
+#include <qtmetamacros.h>
+
+class CardDatabaseModel;
 class FilterTree;
+class QObject;
+template <class Key, class T> class QMap;
+
 class CardDatabaseDisplayModel : public QSortFilterProxyModel
 {
     Q_OBJECT
@@ -24,25 +37,42 @@ public:
         ShowAll
     };
 
+    enum Role
+    {
+        /**
+         * @brief The CardInfoPtr behind a proxy row.
+         *
+         * Saves views from looking the card up again through its name, and keeps
+         * them from depending on the source model's column layout.
+         */
+        CardInfoRole = Qt::UserRole + 1
+    };
+
 private:
     FilterBool isToken;
     QString cardName, cardText;
     QSet<QString> cardNameSet, cardTypes, cardColors;
     FilterTree *filterTree;
     FilterString *filterString;
-    int loadedRowCount;
+    /// The source model, kept typed so CardInfoRole does not cast per row.
+    CardDatabaseModel *cardModel;
     QTimer dirtyTimer;
+    CardSearchLanguage searchLanguage;
+    QString searchText;
 
     /** The translation table that will be used for sanitizeCardName. */
     static QMap<wchar_t, wchar_t> characterTranslation;
 
+    /** Natural, locale-aware comparison shared by every sort in this model. */
+    QCollator collator;
+
 public:
     explicit CardDatabaseDisplayModel(QObject *parent = nullptr);
+    void setSourceModel(QAbstractItemModel *model) override;
     void setFilterTree(FilterTree *_filterTree);
     void setIsToken(FilterBool _isToken)
     {
         isToken = _isToken;
-        emit modelDirty();
         dirty();
     }
 
@@ -53,37 +83,37 @@ public:
             filterString = nullptr;
         }
         cardName = sanitizeCardName(_cardName, characterTranslation);
-        emit modelDirty();
         dirty();
     }
-    void setStringFilter(const QString &_src)
-    {
-        delete filterString;
-        filterString = new FilterString(_src);
-        emit modelDirty();
-        dirty();
-    }
+    void setStringFilter(const QString &_src);
     void setCardNameSet(const QSet<QString> &_cardNameSet)
     {
         cardNameSet = _cardNameSet;
-        emit modelDirty();
         dirty();
     }
+    void setSearchLanguage(const CardSearchLanguage &searchLang);
 
     void dirty()
     {
         dirtyTimer.start(20);
     }
     void clearFilterAll();
-    [[nodiscard]] int rowCount(const QModelIndex &parent = QModelIndex()) const override;
-    [[nodiscard]] bool canFetchMore(const QModelIndex &parent) const override;
-    void fetchMore(const QModelIndex &parent) override;
+    [[nodiscard]] QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
+
+    /**
+     * @brief Returns the card behind a proxy row, without the QVariant wrapper of CardInfoRole.
+     *
+     * The visual grid calls this for every row on each rebuild; CardInfoRole stays the
+     * generic way in for consumers that only see the model through data().
+     */
+    [[nodiscard]] CardInfoPtr cardInfoAt(const QModelIndex &index) const;
+
 signals:
     void modelDirty();
 
 protected:
     [[nodiscard]] bool lessThan(const QModelIndex &left, const QModelIndex &right) const override;
-    static int lessThanNumerically(const QString &left, const QString &right);
+    int lessThanNumerically(QStringView left, QStringView right) const;
     [[nodiscard]] bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const override;
     [[nodiscard]] bool rowMatchesCardName(CardInfoPtr info) const;
 

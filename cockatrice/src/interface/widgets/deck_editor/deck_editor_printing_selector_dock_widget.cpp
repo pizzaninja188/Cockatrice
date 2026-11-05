@@ -2,9 +2,15 @@
 
 #include "../../../client/settings/cache_settings.h"
 #include "../../../interface/widgets/tabs/abstract_tab_deck_editor.h"
+#include "../printing_selector/printing_selector.h"
+#include "deck_editor_deck_dock_widget.h"
 #include "printing_disabled_info_widget.h"
 
+#include <QFlags>
 #include <QVBoxLayout>
+#include <QWidget>
+#include <libcockatrice/settings/cards_display_settings.h>
+#include <qnamespace.h>
 
 DeckEditorPrintingSelectorDockWidget::DeckEditorPrintingSelectorDockWidget(AbstractTabDeckEditor *parent)
     : QDockWidget(parent), deckEditor(parent)
@@ -18,8 +24,9 @@ DeckEditorPrintingSelectorDockWidget::DeckEditorPrintingSelectorDockWidget(Abstr
     createPrintingSelectorDock();
     printingDisabledInfoWidget = new PrintingDisabledInfoWidget(this);
 
-    setVisibleWidget(SettingsCache::instance().getOverrideAllCardArtWithPersonalPreference());
-    connect(&SettingsCache::instance(), &SettingsCache::overrideAllCardArtWithPersonalPreferenceChanged, this,
+    setVisibleWidget(SettingsCache::instance().cardsDisplay().getOverrideAllCardArtWithPersonalPreference());
+    connect(&SettingsCache::instance().cardsDisplay(),
+            &CardsDisplaySettings::overrideAllCardArtWithPersonalPreferenceChanged, this,
             &DeckEditorPrintingSelectorDockWidget::setVisibleWidget);
 
     retranslateUi();

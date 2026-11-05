@@ -1,6 +1,10 @@
 #include "overlap_control_widget.h"
 
+#include "../display/labeled_input.h"
 #include "overlap_widget.h"
+
+#include <QHBoxLayout>
+#include <QSlider>
 
 OverlapControlWidget::OverlapControlWidget(int overlapPercentage,
                                            int maxColumns,
@@ -33,7 +37,7 @@ OverlapControlWidget::OverlapControlWidget(int overlapPercentage,
     layout->addWidget(overlap_percentage_input);
     layout->addWidget(overlap_direction);
 
-    // TODO probably connect this to the parent
+    //! \todo Probably connect this to the parent.
     // connect(card_size_slider, &QSlider::valueChanged, display, &CardPicture::setScaleFactor);
 }
 

@@ -1,33 +1,42 @@
 /**
  * @file printing_selector.h
  * @ingroup PrintingWidgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef PRINTING_SELECTOR_H
 #define PRINTING_SELECTOR_H
 
-#include "../cards/card_size_widget.h"
-#include "../general/layout_containers/flow_widget.h"
-#include "../quick_settings/settings_button_widget.h"
-#include "printing_selector_placeholder_widget.h"
-
-#include <QCheckBox>
-#include <QLabel>
-#include <QTreeView>
-#include <QVBoxLayout>
 #include <QWidget>
 #include <libcockatrice/card/card_info.h>
-#include <libcockatrice/models/deck_list/deck_list_model.h>
+#include <qtmetamacros.h>
+
+class CardSizeWidget;
+class FlowWidget;
+class PrintingSelectorPlaceholderWidget;
+class QCheckBox;
+class QHBoxLayout;
+class QString;
+class QTimer;
+class QVBoxLayout;
+class SettingsButtonWidget;
+template <class Key, class T> class QMap;
 
 #define BATCH_SIZE 10
+
+struct ZoneCounts
+{
+    int mainboard = 0;
+    int sideboard = 0;
+    int tokensboard = 0;
+};
 
 class DeckStateManager;
 class PrintingSelectorCardSearchWidget;
 class PrintingSelectorCardSelectionWidget;
 class PrintingSelectorCardSortingWidget;
-class PrintingSelectorViewOptionsWidget;
 class AbstractTabDeckEditor;
+
 class PrintingSelector : public QWidget
 {
     Q_OBJECT
@@ -59,9 +68,9 @@ signals:
 
     /**
      * The amounts of the printings in the deck has changed
-     * @param uuidToAmounts Map of uuids to the amounts (maindeck, sideboard) in the deck
+     * @param uuidToAmounts Map of uuids to the amounts (maindeck, sideboard, tokensboard) in the deck
      */
-    void cardAmountsChanged(const QMap<QString, QPair<int, int>> &uuidToAmounts);
+    void cardAmountsChanged(const QMap<QString, ZoneCounts> &uuidToAmounts);
 
 private:
     QVBoxLayout *layout;

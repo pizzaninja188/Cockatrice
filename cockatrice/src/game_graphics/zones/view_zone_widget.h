@@ -1,0 +1,154 @@
+/**
+ * @file view_zone_widget.h
+ * @ingroup GameGraphicsZones
+ */
+//! \todo Document this file.
+#ifndef ZONEVIEWWIDGET_H
+#define ZONEVIEWWIDGET_H
+
+#include <QCheckBox>
+#include <QComboBox>
+#include <QGraphicsProxyWidget>
+#include <QGraphicsWidget>
+#include <QLineEdit>
+#include <QList>
+#include <QPoint>
+#include <QPointF>
+#include <QPointer>
+#include <QRectF>
+#include <QtGlobal>
+#include <libcockatrice/utility/macros.h>
+#include <qtmetamacros.h>
+
+// IWYU pragma: keep
+// ServerInfo_Card appears inside QList<...> in signal and slot
+// signatures, which the moc-generated code needs to be complete.
+#include <libcockatrice/protocol/pb/serverinfo_card.pb.h>
+
+class ZoneViewZone;
+class PlayerLogic;
+class QScrollBar;
+class ServerInfo_Card;
+class QGraphicsSceneMouseEvent;
+class QGraphicsSceneWheelEvent;
+class QGraphicsView;
+class QWidget;
+class CardZoneLogic;
+
+class ScrollableGraphicsProxyWidget : public QGraphicsProxyWidget
+{
+    Q_OBJECT
+public slots:
+    void recieveWheelEvent(QGraphicsSceneWheelEvent *event)
+    {
+        wheelEvent(event);
+    }
+};
+
+/**
+ * A QGraphicsWidget that holds a ZoneViewZone.
+ *
+ * Some zone views allow sorting.
+ * This widget will display the sort options when relevant, and forward the values of the options to the ZoneViewZone.
+ */
+class ZoneViewWidget : public QGraphicsWidget
+{
+    Q_OBJECT
+
+private:
+    ZoneViewZone *zone;
+    QGraphicsWidget *zoneContainer;
+
+    QScrollBar *scrollBar;
+    ScrollableGraphicsProxyWidget *scrollBarProxy;
+
+    QLineEdit searchEdit;
+    QComboBox groupBySelector;
+    QComboBox sortBySelector;
+    QCheckBox shuffleCheckBox;
+    QCheckBox pileViewCheckBox;
+
+    bool canBeShuffled;
+    bool closeable;
+    int extraHeight;
+    PlayerLogic *player;
+    qreal contentMinimumWidth = 0;
+
+    bool draggingWindow = false;
+    QPoint dragStartScreenPos;
+    QPointF dragStartItemPos;
+    QPointer<QGraphicsView> dragView;
+
+    void stopWindowDrag();
+    void startWindowDrag(QGraphicsSceneMouseEvent *event);
+    QRectF closeButtonRect(QWidget *styleWidget) const;
+    /**
+     * @brief Resolves the QGraphicsView to use for drag coordinate mapping
+     *
+     * @param eventWidget QWidget that originated the mouse event
+     * @return The resolved QGraphicsView
+     */
+    QGraphicsView *findDragView(QWidget *eventWidget) const;
+    /**
+     * @brief Calculates the desired widget position while dragging
+     *
+     * @param screenPos Global screen coordinates of the current mouse position
+     * @param scenePos Scene coordinates of the current mouse position
+     * @param buttonDownScenePos Scene coordinates of the initial mouse press position
+     *
+     * @return The new widget position in scene coordinates
+     */
+    QPointF
+    calcDraggedWindowPos(const QPoint &screenPos, const QPointF &scenePos, const QPointF &buttonDownScenePos) const;
+
+    void resizeScrollbar(qreal newZoneHeight);
+signals:
+    void closePressed(ZoneViewWidget *zv);
+private slots:
+    void processGroupBy(int value);
+    void processSortBy(int value);
+    void processSetPileView(QT_STATE_CHANGED_T value);
+    void resizeToZoneContents(bool forceInitialHeight = false);
+    void handleScrollBarChange(int value);
+    void zoneDeleted();
+    void resizeEvent(QGraphicsSceneResizeEvent * /* event */) override;
+    void expandWindow();
+
+public:
+    ZoneViewWidget(PlayerLogic *_player,
+                   CardZoneLogic *_origZone,
+                   int numberCards = 0,
+                   bool _revealZone = false,
+                   bool _writeableRevealZone = false,
+                   const QList<const ServerInfo_Card *> &cardList = QList<const ServerInfo_Card *>(),
+                   bool _isReversed = false,
+                   bool _showControls = true,
+                   bool forStackWindow = false,
+                   bool _closeable = true);
+    ZoneViewZone *getZone() const
+    {
+        return zone;
+    }
+    PlayerLogic *getPlayer() const
+    {
+        return player;
+    }
+    bool isCloseable() const { return closeable; }
+    void setCloseable(bool enabled);
+    void retranslateUi();
+    /** Re-run layout from zone optimum size (e.g. after restoring a saved window size narrower than content). */
+    void refreshContentLayout();
+    /** Keep specialized compact views wide enough for presentation such as a descriptive title. */
+    void setContentMinimumWidth(qreal width);
+
+protected:
+    void closeEvent(QCloseEvent *event) override;
+    void initStyleOption(QStyleOption *option) const override;
+    bool windowFrameEvent(QEvent *event) override;
+    QVariant itemChange(GraphicsItemChange change, const QVariant &value) override;
+    void mouseMoveEvent(QGraphicsSceneMouseEvent *event) override;
+    void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
+    void mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event) override;
+};
+
+#endif

@@ -1,5 +1,12 @@
 #include "visual_deck_editor_placeholder_widget.h"
 
+#include "../interface/theme_manager.h"
+
+#include <QFont>
+#include <QLabel>
+#include <QVBoxLayout>
+#include <qnamespace.h>
+
 VisualDeckEditorPlaceholderWidget::VisualDeckEditorPlaceholderWidget(QWidget *parent) : QWidget(parent)
 {
     mainLayout = new QVBoxLayout(this);
@@ -24,10 +31,12 @@ VisualDeckEditorPlaceholderWidget::VisualDeckEditorPlaceholderWidget(QWidget *pa
     textLabel->setStyleSheet(R"(
         QLabel {
             color: palette(mid);
-            font-size: 14px;
             padding: 10px;
         }
     )");
+    applyInterfaceDefaultFont();
+    connect(themeManager, &ThemeManager::fontsChanged, this,
+            &VisualDeckEditorPlaceholderWidget::applyInterfaceDefaultFont);
 
     mainLayout->addWidget(imageLabel);
     mainLayout->addWidget(textLabel);
@@ -38,4 +47,12 @@ VisualDeckEditorPlaceholderWidget::VisualDeckEditorPlaceholderWidget(QWidget *pa
 void VisualDeckEditorPlaceholderWidget::retranslateUi()
 {
     textLabel->setText(tr("Add cards using the search bar or database tab to have them appear here"));
+}
+
+void VisualDeckEditorPlaceholderWidget::applyInterfaceDefaultFont()
+{
+    // Family comes from the InterfaceDefault theme role; the 14px size stays caller-side.
+    QFont placeholderFont = themeManager->appFont(AppFont::InterfaceDefault);
+    placeholderFont.setPixelSize(14);
+    textLabel->setFont(placeholderFont);
 }

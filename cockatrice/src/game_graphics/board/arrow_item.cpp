@@ -1,0 +1,560 @@
+#define _USE_MATH_DEFINES
+#include "arrow_item.h"
+
+#include "../../client/settings/cache_settings.h"
+#include "../game_scene.h"
+#include "../player/player_target.h"
+#include "../z_values.h"
+#include "card_item.h"
+#include "libcockatrice/card/printing/exact_card.h"
+#include "libcockatrice/protocol/pb/color.pb.h"
+
+#include <QBrush>
+#include <QElapsedTimer>
+#include <QGraphicsScene>
+#include <QGraphicsSceneMouseEvent>
+#include <QLineF>
+#include <QLinearGradient>
+#include <QPainter>
+#include <QPen>
+#include <QPoint>
+#include <QString>
+#include <QTransform>
+#include <QtGlobal>
+#include <QtMath>
+#include <libcockatrice/game/board/arrow_data.h>
+#include <libcockatrice/game/player/player_actions.h>
+#include <libcockatrice/game/player/player_info.h>
+#include <libcockatrice/game/player/player_logic.h>
+#include <libcockatrice/game/zones/card_zone_logic.h>
+#include <libcockatrice/settings/cards_display_settings.h>
+#include <libcockatrice/utility/zone_names.h>
+#include <math.h>
+#include <qnamespace.h>
+#include <string>
+#include <utility>
+
+namespace
+{
+constexpr qreal kMinStrokeDurationMs = 200.0;
+constexpr qreal kMaxStrokeDurationMs = 450.0;
+constexpr qreal kMsPerPixel = 0.8;
+constexpr qreal kGlowFadeDurationMs = 120.0;
+constexpr qreal kSheenHalfWidth = 14.0;
+
+/// @brief Ease-out cubic, for a natural "slow in / slow out" reveal.
+qreal easeOutCubic(qreal t)
+{
+    const qreal inverse = 1.0 - t;
+    return 1.0 - inverse * inverse * inverse;
+}
+} // namespace
+
+ArrowItem::ArrowItem(QSharedPointer<const ArrowData> _data, ArrowTarget *_startItem, ArrowTarget *_targetItem)
+    : data(std::move(_data)), startItem(_startItem), targetItem(_targetItem)
+{
+    setZValue(ZValues::ARROWS);
+
+    auto doUpdate = [this]() {
+        if (startItem && targetItem) {
+            updatePath();
+        }
+    };
+
+    if (startItem) {
+        connect(startItem, &ArrowTarget::scenePositionChanged, this, doUpdate);
+        connect(startItem, &QObject::destroyed, this, &ArrowItem::onTargetDestroyed);
+    }
+    if (targetItem) {
+        connect(targetItem, &ArrowTarget::scenePositionChanged, this, doUpdate);
+        connect(targetItem, &QObject::destroyed, this, &ArrowItem::onTargetDestroyed);
+    }
+
+    if (startItem && targetItem) {
+        updatePath();
+    }
+}
+
+ArrowItem::~ArrowItem()
+{
+    if (auto *scene = qobject_cast<GameScene *>(this->scene())) {
+        scene->unregisterAnimationItem(this);
+    }
+}
+
+void ArrowItem::onTargetDestroyed()
+{
+    if (data->id == -1) {
+        // Drag and attach arrows are never inserted into the arrow registry and
+        // have no server-side counterpart, so no deletion event can clean them
+        // up. Delete them locally when either endpoint is destroyed.
+        delArrow();
+        return;
+    }
+
+    emit requestDeletion(data->creatorId, data->id);
+}
+
+void ArrowItem::delArrow()
+{
+    if (targetItem) {
+        targetItem->setBeingPointedAt(false);
+    }
+    deleteLater();
+}
+
+void ArrowItem::updatePath()
+{
+    if (!targetItem) {
+        return;
+    }
+
+    QPointF endPoint = targetItem->mapToScene(
+        QPointF(targetItem->boundingRect().width() / 2, targetItem->boundingRect().height() / 2));
+    updatePath(endPoint);
+}
+
+void ArrowItem::updatePath(const QPointF &endPoint)
+{
+    const double arrowWidth = 15.0;
+    const double headWidth = 40.0;
+    const double headLength =
+        headWidth / qPow(2, 0.5); // aka headWidth / sqrt (2) but this produces a compile error with MSVC++
+    const double phi = 15;
+
+    if (!startItem) {
+        return;
+    }
+
+    QPointF startPoint =
+        startItem->mapToScene(QPointF(startItem->boundingRect().width() / 2, startItem->boundingRect().height() / 2));
+    QLineF line(startPoint, endPoint);
+    qreal lineLength = line.length();
+
+    prepareGeometryChange();
+    // Curved arrow math needs lineLength > headLength (~28px) for a valid body/head split. The stack fan uses ~20px
+    // between adjacent spell centers, so Counterspell → another spell on the stack was invisible (old threshold 30
+    // cleared the path entirely).
+    const qreal minLineForCurved = headLength + 6.0;
+    if (lineLength < 3.0) {
+        path = QPainterPath();
+    } else if (lineLength < minLineForCurved) {
+        const qreal hl = qMin(headLength * 0.42, lineLength * 0.48);
+        const qreal body = qMax(0.0, lineLength - hl);
+        const qreal sw = qMin(arrowWidth * 0.45, qMax(2.5, body * 0.14));
+        const qreal hb = qMin(headWidth * 0.32, qMax(sw + 1.0, hl * 0.55));
+        path = QPainterPath();
+        path.moveTo(0, -sw);
+        path.lineTo(body, -sw);
+        path.lineTo(body, -hb);
+        path.lineTo(lineLength, 0);
+        path.lineTo(body, hb);
+        path.lineTo(body, sw);
+        path.lineTo(0, sw);
+        path.closeSubpath();
+    } else {
+        QPointF c(lineLength / 2, qTan(phi * M_PI / 180) * lineLength);
+
+        centerLine = QPainterPath();
+        centerLine.moveTo(0, 0);
+        centerLine.quadTo(c, QPointF(lineLength, 0));
+
+        headBaseFraction = 1 - headLength / lineLength;
+        QPointF arrowBodyEndPoint = centerLine.pointAtPercent(headBaseFraction);
+        QLineF testLine(arrowBodyEndPoint, centerLine.pointAtPercent(headBaseFraction + 0.001));
+        qreal alpha = testLine.angle() - 90;
+        QPointF endPoint1 =
+            arrowBodyEndPoint + arrowWidth / 2 * QPointF(qCos(alpha * M_PI / 180), -qSin(alpha * M_PI / 180));
+        QPointF endPoint2 =
+            arrowBodyEndPoint + arrowWidth / 2 * QPointF(-qCos(alpha * M_PI / 180), qSin(alpha * M_PI / 180));
+        QPointF point1 =
+            endPoint1 + (headWidth - arrowWidth) / 2 * QPointF(qCos(alpha * M_PI / 180), -qSin(alpha * M_PI / 180));
+        QPointF point2 =
+            endPoint2 + (headWidth - arrowWidth) / 2 * QPointF(-qCos(alpha * M_PI / 180), qSin(alpha * M_PI / 180));
+
+        QPointF start1 = -arrowWidth / 2 * QPointF(qCos((phi - 90) * M_PI / 180), qSin((phi - 90) * M_PI / 180));
+        QPointF start2 = arrowWidth / 2 * QPointF(qCos((phi - 90) * M_PI / 180), qSin((phi - 90) * M_PI / 180));
+
+        path = QPainterPath(start1);
+        path.quadTo(c, endPoint1);
+        path.lineTo(point1);
+        path.lineTo(QPointF(lineLength, 0));
+        path.lineTo(point2);
+        path.lineTo(endPoint2);
+        path.quadTo(c, start2);
+        path.lineTo(start1);
+
+        bodyPath = QPainterPath(start1);
+        bodyPath.quadTo(c, endPoint1);
+        bodyPath.lineTo(endPoint2);
+        bodyPath.quadTo(c, start2);
+        bodyPath.lineTo(start1);
+
+        headPath = QPainterPath(endPoint1);
+        headPath.lineTo(point1);
+        headPath.lineTo(QPointF(lineLength, 0));
+        headPath.lineTo(point2);
+        headPath.lineTo(endPoint2);
+
+        shaftOutlinePath = QPainterPath(start1);
+        shaftOutlinePath.quadTo(c, endPoint1);
+        shaftOutlinePath.moveTo(endPoint2);
+        shaftOutlinePath.quadTo(c, start2);
+        shaftOutlinePath.lineTo(start1);
+    }
+
+    setPos(startPoint);
+    setTransform(QTransform().rotate(-line.angle()));
+}
+
+void ArrowItem::startDrawAnimation()
+{
+    if (!SettingsCache::instance().cardsDisplay().getArrowDrawAnimation() || centerLine.isEmpty()) {
+        return;
+    }
+
+    strokeDurationMs = qBound(kMinStrokeDurationMs, centerLine.length() * kMsPerPixel, kMaxStrokeDurationMs);
+    glowFadeDurationMs = kGlowFadeDurationMs;
+    // The clock is started on the first animationEvent() tick so that t=0
+    // corresponds to the first rendered frame. Starting it here would count
+    // the time spent before the item's first paint (event-loop delays, bursts
+    // of arrows created together), making the arrow appear already partway
+    // drawn when it first shows up.
+    animationStarted = false;
+    drawProgress = 0.0;
+    glowAlpha = 1.0;
+    update();
+    if (auto *scene = qobject_cast<GameScene *>(this->scene())) {
+        scene->registerAnimationItem(this);
+    }
+}
+
+bool ArrowItem::animationEvent()
+{
+    if (!animationStarted) {
+        animationClock.start();
+        animationStarted = true;
+    }
+
+    const qint64 elapsed = animationClock.elapsed();
+    if (elapsed >= strokeDurationMs + glowFadeDurationMs) {
+        drawProgress = 1.0;
+        glowAlpha = 0.0;
+        update();
+        return false;
+    }
+
+    if (elapsed < strokeDurationMs) {
+        drawProgress = easeOutCubic(qBound<qreal>(0.0, elapsed / strokeDurationMs, 1.0));
+        glowAlpha = 1.0;
+    } else {
+        drawProgress = 1.0;
+        glowAlpha = 1.0 - (elapsed - strokeDurationMs) / glowFadeDurationMs;
+    }
+    update();
+    return true;
+}
+
+void ArrowItem::paint(QPainter *painter, const QStyleOptionGraphicsItem * /*option*/, QWidget * /*widget*/)
+{
+    QColor paintColor(data->color);
+    if (fullColor) {
+        paintColor.setAlpha(200);
+    } else {
+        paintColor.setAlpha(150);
+    }
+
+    painter->save();
+    const QPen outlinePen = painter->pen();
+    painter->setBrush(paintColor);
+
+    const auto drawShaft = [this, painter, &outlinePen, paintColor]() {
+        painter->setPen(Qt::NoPen);
+        painter->drawPath(bodyPath);
+        painter->setPen(outlinePen);
+        painter->setBrush(Qt::NoBrush);
+        painter->drawPath(shaftOutlinePath);
+        painter->setBrush(paintColor);
+    };
+
+    if (drawProgress >= 1.0 || path.isEmpty()) {
+        painter->drawPath(path);
+    } else if (drawProgress < headBaseFraction) {
+        // The reveal edge and the sheen share the same arc-length parameterization,
+        // so the stroke stays exactly in sync with the trailing sheen.
+        const qreal revealX = centerLine.pointAtPercent(drawProgress).x();
+        QPainterPath clip;
+        clip.addRect(QRectF(-glowExtent, path.boundingRect().top() - glowExtent, revealX + glowExtent,
+                            path.boundingRect().height() + 2 * glowExtent));
+        painter->setClipPath(clip);
+        drawShaft();
+    } else {
+        // Once the reveal reaches the head base, pop the whole head in with a fade
+        // instead of slicing the triangle into a growing stub.
+        drawShaft();
+        const qreal headFadeIn = (drawProgress - headBaseFraction) / (1.0 - headBaseFraction);
+        painter->setOpacity(headFadeIn);
+        painter->setPen(Qt::NoPen);
+        painter->drawPath(headPath);
+        painter->setPen(outlinePen);
+        painter->setBrush(Qt::NoBrush);
+        painter->drawPath(headPath);
+        painter->setOpacity(1.0);
+        painter->setBrush(paintColor);
+    }
+
+    if (glowAlpha > 0.0 && !centerLine.isEmpty()) {
+        // Sweep a bright band across the arrow. Clipping to the
+        // silhouette keeps it flat against the shaft so it reads as a light reflection.
+        const qreal anticipation = qMin<qreal>(1.0, drawProgress / 0.08);
+        const QPointF sweep = centerLine.pointAtPercent(qMin<qreal>(drawProgress, 1.0));
+        QLinearGradient sheen(sweep.x() - kSheenHalfWidth, 0.0, sweep.x() + kSheenHalfWidth, 0.0);
+        sheen.setColorAt(0.0, QColor(paintColor.red(), paintColor.green(), paintColor.blue(), 0));
+        sheen.setColorAt(0.5, QColor(255, 255, 255, 200));
+        sheen.setColorAt(1.0, QColor(paintColor.red(), paintColor.green(), paintColor.blue(), 0));
+        painter->save();
+        painter->setPen(Qt::NoPen);
+        painter->setClipPath(path);
+        painter->setBrush(sheen);
+        painter->setOpacity(glowAlpha * anticipation);
+        painter->drawRect(QRectF(sweep.x() - kSheenHalfWidth - glowExtent, path.boundingRect().top() - glowExtent,
+                                 (kSheenHalfWidth + glowExtent) * 2.0,
+                                 path.boundingRect().height() + glowExtent * 2.0));
+        painter->restore();
+    }
+    painter->restore();
+}
+
+void ArrowItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
+{
+    if (!data->isLocalCreator) {
+        event->ignore();
+        return;
+    }
+
+    for (auto *item : scene()->items(event->scenePos())) {
+        if (qgraphicsitem_cast<CardItem *>(item)) {
+            event->ignore();
+            return;
+        }
+    }
+
+    event->accept();
+    if (event->button() == Qt::RightButton) {
+        emit requestDeletion(data->creatorId, data->id);
+    }
+}
+
+// ArrowDragItem
+
+ArrowDragItem::ArrowDragItem(PlayerLogic *_owner, ArrowTarget *_startItem, const QColor &_color, int _deleteInPhase)
+    : ArrowItem(QSharedPointer<ArrowData>::create(ArrowData{.creatorId = _owner->getPlayerInfo()->getId(),
+                                                            .isLocalCreator = true,
+                                                            .id = -1,
+                                                            .color = _color}),
+                _startItem,
+                nullptr),
+      player(_owner), deleteInPhase(_deleteInPhase)
+{
+}
+
+void ArrowDragItem::addChildArrow(ArrowDragItem *child)
+{
+    childArrows.append(child);
+}
+
+void ArrowDragItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
+{
+    if (targetLocked || !startItem) {
+        return;
+    }
+
+    const QPointF endPos = event->scenePos();
+
+    ArrowTarget *cursorItem = nullptr;
+    qreal cursorItemZ = -1;
+    for (auto *item : scene()->items(endPos)) {
+        ArrowTarget *candidate = nullptr;
+        if (auto *card = qgraphicsitem_cast<CardItem *>(item)) {
+            candidate = card;
+        } else if (auto *pt = qgraphicsitem_cast<PlayerTarget *>(item)) {
+            candidate = pt;
+        }
+
+        if (candidate && candidate->zValue() > cursorItemZ) {
+            cursorItem = candidate;
+            cursorItemZ = candidate->zValue();
+        }
+    }
+
+    if (cursorItem != targetItem) {
+        if (targetItem) {
+            disconnect(positionConnection);
+            targetItem->setBeingPointedAt(false);
+        }
+
+        targetItem = cursorItem;
+        fullColor = (cursorItem != nullptr);
+
+        if (cursorItem && cursorItem != startItem) {
+            cursorItem->setBeingPointedAt(true);
+            positionConnection =
+                connect(cursorItem, &ArrowTarget::scenePositionChanged, this, [this]() { updatePath(); });
+        }
+    }
+
+    targetItem ? updatePath() : updatePath(endPos);
+    update();
+
+    for (auto *child : childArrows) {
+        child->mouseMoveEvent(event);
+    }
+}
+
+void ArrowDragItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
+{
+    if (!startItem) {
+        // The source card was destroyed while the arrow was being drawn.
+        // Clean up the arrow and its children instead of leaking them.
+        delArrow();
+        for (auto *child : childArrows) {
+            child->mouseReleaseEvent(event);
+        }
+        return;
+    }
+
+    if (targetItem && targetItem != startItem) {
+        CardItem *startCard = qgraphicsitem_cast<CardItem *>(startItem);
+        // For now, we can safely assume that the start item is always a card.
+        // The target item can be a player as well.
+        if (!startCard) {
+            delArrow();
+            return;
+        }
+
+        CardZoneLogic *startZone = startCard->getZone();
+
+        ArrowData arrow;
+        arrow.color = data->color;
+        arrow.startPlayerId = startZone->getPlayer()->getPlayerInfo()->getId();
+        arrow.startZone = startZone->getName();
+        arrow.startCardId = startCard->getId();
+
+        if (auto *targetCard = qgraphicsitem_cast<CardItem *>(targetItem)) {
+            CardZoneLogic *targetZone = targetCard->getZone();
+            arrow.targetPlayerId = targetZone->getPlayer()->getPlayerInfo()->getId();
+            arrow.targetZone = targetZone->getName();
+            arrow.targetCardId = targetCard->getId();
+        } else if (auto *targetPlayer = qgraphicsitem_cast<PlayerTarget *>(targetItem)) {
+            arrow.targetPlayerId = targetPlayer->getOwner()->getPlayerInfo()->getId();
+        } else {
+            delArrow();
+            return;
+        }
+
+        // if the card is in hand then we will move the card to stack or table as part of drawing the arrow
+        if (startZone->getName() == ZoneNames::HAND) {
+            startCard->playCard(false);
+        }
+
+        player->getPlayerActions()->createArrow(startCard->getState(), arrow, deleteInPhase);
+    }
+
+    delArrow();
+    for (auto *child : childArrows) {
+        child->mouseReleaseEvent(event);
+    }
+}
+
+// ArrowAttachItem
+ArrowAttachItem::ArrowAttachItem(ArrowTarget *_startItem)
+    : ArrowItem(
+          QSharedPointer<ArrowData>::create(ArrowData{.creatorId = _startItem->getOwner()->getPlayerInfo()->getId(),
+                                                      .isLocalCreator = true,
+                                                      .id = -1,
+                                                      .color = Qt::green}),
+          _startItem,
+          nullptr),
+      player(_startItem->getOwner())
+{
+}
+
+void ArrowAttachItem::addChildArrow(ArrowAttachItem *child)
+{
+    childArrows.append(child);
+}
+
+void ArrowAttachItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
+{
+    if (targetLocked || !startItem) {
+        return;
+    }
+
+    const QPointF endPos = event->scenePos();
+
+    ArrowTarget *cursorItem = nullptr;
+    qreal cursorItemZ = -1;
+    for (auto *item : scene()->items(endPos)) {
+        if (auto *card = qgraphicsitem_cast<CardItem *>(item)) {
+            if (card->zValue() > cursorItemZ) {
+                cursorItem = card;
+                cursorItemZ = card->zValue();
+            }
+        }
+    }
+
+    if (cursorItem != targetItem) {
+        if (targetItem) {
+            disconnect(positionConnection);
+            targetItem->setBeingPointedAt(false);
+        }
+
+        targetItem = cursorItem;
+        fullColor = (cursorItem != nullptr);
+
+        if (cursorItem && cursorItem != startItem) {
+            cursorItem->setBeingPointedAt(true);
+            positionConnection =
+                connect(cursorItem, &ArrowTarget::scenePositionChanged, this, [this]() { updatePath(); });
+        }
+    }
+
+    targetItem ? updatePath() : updatePath(endPos);
+    update();
+
+    for (auto *child : childArrows) {
+        child->mouseMoveEvent(event);
+    }
+}
+
+void ArrowAttachItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
+{
+    if (!startItem) {
+        // The source card was destroyed while the arrow was being drawn.
+        // Clean up the arrow and its children instead of leaking them.
+        delArrow();
+        for (auto *child : childArrows) {
+            child->mouseReleaseEvent(event);
+        }
+        return;
+    }
+
+    // Attaching could move startItem under the current cursor position, causing all children to retarget to it right
+    // before they are processed. Prevent that.
+    for (auto *child : childArrows) {
+        child->setTargetLocked(true);
+    }
+
+    if (targetItem && targetItem != startItem) {
+        auto *startCard = qgraphicsitem_cast<CardItem *>(startItem);
+        auto *targetCard = qgraphicsitem_cast<CardItem *>(targetItem);
+        if (startCard && targetCard) {
+            player->getPlayerActions()->attachCards(startCard->getState(), targetCard->getState());
+        }
+    }
+
+    delArrow();
+    for (auto *child : childArrows) {
+        child->mouseReleaseEvent(event);
+    }
+}

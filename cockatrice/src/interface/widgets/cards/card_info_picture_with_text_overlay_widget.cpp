@@ -1,8 +1,26 @@
 #include "card_info_picture_with_text_overlay_widget.h"
 
+#include "../../theme_manager.h"
+
+#include <QBrush>
+#include <QChar>
+#include <QFont>
 #include <QFontMetrics>
+#include <QList>
+#include <QPainter>
 #include <QPainterPath>
+#include <QPalette>
+#include <QPen>
+#include <QPixmap>
+#include <QPoint>
+#include <QRect>
+#include <QSize>
+#include <QSizePolicy>
+#include <QStringList>
 #include <QStylePainter>
+#include <algorithm>
+
+class QWidget;
 
 /**
  * @brief Constructs a CardPictureWithTextOverlay widget.
@@ -27,6 +45,7 @@ CardInfoPictureWithTextOverlayWidget::CardInfoPictureWithTextOverlayWidget(QWidg
       fontSize(fontSize), textAlignment(alignment), highlighted(false)
 {
     this->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    connect(themeManager, &ThemeManager::fontsChanged, this, &CardInfoPictureWithTextOverlayWidget::applyCardTextFont);
 }
 
 /**
@@ -81,6 +100,13 @@ void CardInfoPictureWithTextOverlayWidget::setTextAlignment(const Qt::Alignment 
     update();
 }
 
+void CardInfoPictureWithTextOverlayWidget::applyCardTextFont()
+{
+    // The overlay paint reads the CardText role font at paint time, so a
+    // theme font change only needs a repaint here.
+    update();
+}
+
 void CardInfoPictureWithTextOverlayWidget::setHighlighted(bool _highlighted)
 {
     if (highlighted == _highlighted) {
@@ -93,7 +119,7 @@ void CardInfoPictureWithTextOverlayWidget::setHighlighted(bool _highlighted)
 
 void CardInfoPictureWithTextOverlayWidget::mousePressEvent(QMouseEvent *event)
 {
-    emit imageClicked(event, this);
+    emit cardClicked(event, getCard());
 }
 
 /**
@@ -133,12 +159,14 @@ void CardInfoPictureWithTextOverlayWidget::paintEvent(QPaintEvent *event)
         path.addRoundedRect(glowRect, radius, radius);
 
         // Soft outer glow
-        QColor glowColor(0, 150, 255, 80); // subtle blu
+        QColor glowColor = palette().color(QPalette::Highlight);
+        glowColor.setAlpha(80);
         painter.setPen(QPen(glowColor, 6));
         painter.drawPath(path);
 
         // Thin inner border for crispness
-        QColor borderColor(0, 150, 255, 200);
+        QColor borderColor = palette().color(QPalette::Highlight);
+        borderColor.setAlpha(200);
         painter.setPen(QPen(borderColor, 2));
         painter.drawRoundedRect(pixmapRect, radius, radius);
 
@@ -150,8 +178,10 @@ void CardInfoPictureWithTextOverlayWidget::paintEvent(QPaintEvent *event)
         return;
     }
 
-    // Calculate the optimal font size
-    QFont font = painter.font();
+    // Calculate the optimal font size. The family comes from the CardText
+    // theme role; the fontSize member stays the starting size and the
+    // shrink-to-fit logic below is unchanged.
+    QFont font = themeManager->appFont(AppFont::CardText);
     int optimalFontSize = fontSize; // Start with the user-defined font size
     const QFontMetrics baseMetrics(font);
     int textWidth = pixmapRect.width();
@@ -266,7 +296,7 @@ QSize CardInfoPictureWithTextOverlayWidget::minimumSizeHint() const
     const QSize pixmapSize = pixmap.isNull() ? QSize(0, 0) : pixmap.size();
 
     // Get the font metrics for the overlay text
-    QFont font;
+    QFont font = themeManager->appFont(AppFont::CardText);
     font.setPointSize(fontSize);
     const QFontMetrics fontMetrics(font);
 

@@ -2,16 +2,20 @@
  * @file all_zones_card_amount_widget.h
  * @ingroup CardExtraInfoWidgets
  * @ingroup PrintingWidgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef ALL_ZONES_CARD_AMOUNT_WIDGET_H
 #define ALL_ZONES_CARD_AMOUNT_WIDGET_H
-#include "../../deck_loader/deck_loader.h"
-#include "card_amount_widget.h"
-
 #include <QWidget>
-#include <libcockatrice/models/deck_list/deck_list_model.h>
+#include <qtmetamacros.h>
+
+class CardAmountWidget;
+class DeckStateManager;
+class ExactCard;
+class QLabel;
+class QSlider;
+class QVBoxLayout;
 
 class AllZonesCardAmountWidget : public QWidget
 {
@@ -23,17 +27,17 @@ public:
                                       const ExactCard &rootCard);
     int getMainboardAmount();
     int getSideboardAmount();
+    int getTokensboardAmount();
     bool isNonZero();
 
-#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
     void enterEvent(QEnterEvent *event) override;
-#else
-    void enterEvent(QEvent *event) override;
-#endif
 
 public slots:
     void adjustFontSize(int scalePercentage);
-    void setAmounts(int mainboardAmount, int sideboardAmount);
+    void setAmounts(int mainboardAmount, int sideboardAmount, int tokensboardAmount);
+
+private slots:
+    void applyCardTextFont();
 
 private:
     QVBoxLayout *layout;
@@ -42,6 +46,8 @@ private:
     CardAmountWidget *buttonBoxMainboard;
     QLabel *zoneLabelSideboard;
     CardAmountWidget *buttonBoxSideboard;
+    QLabel *zoneLabelTokensboard;
+    CardAmountWidget *buttonBoxTokensboard;
 };
 
 #endif // ALL_ZONES_CARD_AMOUNT_WIDGET_H

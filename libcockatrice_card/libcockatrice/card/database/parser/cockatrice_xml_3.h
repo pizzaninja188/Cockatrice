@@ -2,9 +2,14 @@
 #define COCKATRICE_XML3_H
 
 #include "card_database_parser.h"
+#include "libcockatrice/card/card_info.h"
 
 #include <QLoggingCategory>
-#include <QXmlStreamReader>
+#include <QString>
+#include <qtmetamacros.h>
+
+class ICardSetPriorityController;
+class QXmlStreamReader;
 
 inline Q_LOGGING_CATEGORY(CockatriceXml3Log, "cockatrice_xml.xml_3_parser");
 
@@ -42,6 +47,13 @@ public:
      * @param device Open QIODevice positioned at start of file.
      */
     void parseFile(QIODevice &device) override;
+
+    /**
+     * @brief Parse the XML database into the given snapshot.
+     * @param device Open QIODevice positioned at start of file.
+     * @param data Target snapshot to populate.
+     */
+    void parseFileInto(QIODevice &device, CardDatabaseData &data) override;
 
     /**
      * @brief Save sets and cards back to an XML3 file.

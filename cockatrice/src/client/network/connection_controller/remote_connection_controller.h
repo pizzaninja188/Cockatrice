@@ -1,0 +1,123 @@
+#ifndef COCKATRICE_REMOTE_CONNECTION_CONTROLLER_H
+#define COCKATRICE_REMOTE_CONNECTION_CONTROLLER_H
+
+#include "abstract_client.h"
+#include "latency_tracker.h"
+
+#include <QMessageBox>
+#include <QObject>
+#include <QString>
+#include <QtGlobal>
+#include <qtmetamacros.h>
+
+class RemoteClient;
+class ServerInfo_User;
+class DlgConnect;
+class Event_ConnectionClosed;
+class Event_ServerShutdown;
+class QThread;
+class QWidget;
+template <typename T> class QList;
+
+/**
+ * Owns the RemoteClient and its worker thread.
+ * Encapsulates all connection, authentication, and registration logic so that
+ * MainWindow only needs to react to high-level signals.
+ */
+class ConnectionController : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit ConnectionController(QWidget *dialogParent, QObject *parent = nullptr);
+    ~ConnectionController() override;
+
+    RemoteClient *client() const
+    {
+        return remoteClient;
+    }
+
+    void registerToServer();
+    void forgotPasswordRequest();
+    void connectToServer();
+    void connectToServerDirect(const QString &host,
+                               unsigned int port,
+                               const QString &playerName,
+                               const QString &password,
+                               const QString &storedVerifier = QString(),
+                               const QString &saveName = QString(),
+                               bool savePassword = false);
+    void disconnectFromServer();
+
+    void refreshWindowTitle()
+    {
+        updateWindowTitle();
+    }
+
+signals:
+    void windowTitleChanged(const QString &title);
+
+    void tabSupervisorStartRequested(const ServerInfo_User &info);
+    void tabSupervisorStopRequested();
+
+    // Passes the raw ClientStatus through so MainWindow can drive its own
+    // action enable/disable logic
+    void statusChanged(ClientStatus status);
+
+    // Forwarded from AbstractClient::pingStatsUpdated. See that signal for the
+    // meaning of the parameters.
+    void pingStatsUpdated(const LatencyTracker::Stats &stats, const QList<int> &samplesMs);
+
+private slots:
+    // Slots wired directly to RemoteClient signals
+    void onStatusChanged(ClientStatus status);
+    void onUserInfoReceived(const ServerInfo_User &info);
+    void onLoginError(int r, QString reasonStr, quint32 endTime, const QList<QString> &missingFeatures);
+    void onRegisterAccepted();
+    void onRegisterAcceptedNeedsActivate();
+    void onRegisterError(int r, QString reasonStr, quint32 endTime);
+    void onActivateAccepted();
+    void onActivateError();
+    void onProtocolVersionMismatch(int localVersion, int remoteVersion);
+    void onNotifyUserAboutUpdate();
+    void onConnectionClosedEvent(const Event_ConnectionClosed &event);
+    void onServerShutdownEvent(const Event_ServerShutdown &event);
+    void onSocketError(const QString &errorStr);
+    void onServerTimeout();
+
+    // Forgot-password flow
+    void onForgotPasswordSuccess();
+    void onForgotPasswordError(int responseCode);
+    void onPromptForgotPasswordReset();
+    void onPromptForgotPasswordChallenge();
+
+    // Persists the derived scrypt verifier after a successful challenge-response login
+    void onPasswordVerifierReady(const QString &verifier);
+
+    // Completes the forced password change the server demanded at login
+    void onPasswordChangeSuccess();
+    void onPasswordChangeError(int responseCode);
+
+private:
+    void wireClientSignals();
+    void updateWindowTitle();
+
+    /** Parse the server's pipe-delimited username-rule string into HTML. */
+    static QString extractInvalidUsernameMessage(QString &in);
+
+    RemoteClient *remoteClient{nullptr};
+    QThread *clientThread{nullptr};
+    QWidget *dialogParent{nullptr}; // used as parent for QMessageBox / dialog calls
+
+    // Persistent so it can be updated in-place by onServerShutdownEvent
+    QMessageBox serverShutdownMessageBox;
+
+    // Kept as a member so the forgot-password signal can be wired to it
+    DlgConnect *dlgConnect{nullptr};
+
+    // Captured from the connect dialog when a connection is initiated
+    QString pendingSaveName;
+    bool pendingSavePassword{false};
+};
+
+#endif // COCKATRICE_REMOTE_CONNECTION_CONTROLLER_H

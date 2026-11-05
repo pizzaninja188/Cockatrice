@@ -1,32 +1,39 @@
 /**
  * @file visual_database_display_widget.h
  * @ingroup VisualCardDatabaseWidgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef VISUAL_DATABASE_DISPLAY_WIDGET_H
 #define VISUAL_DATABASE_DISPLAY_WIDGET_H
 
-#include "../../../filters/filter_tree_model.h"
-#include "../../../interface/widgets/tabs/abstract_tab_deck_editor.h"
-#include "../../key_signals.h"
-#include "../cards/card_info_picture_with_text_overlay_widget.h"
-#include "../cards/card_size_widget.h"
-#include "../general/layout_containers/flow_widget.h"
-#include "../general/layout_containers/overlap_control_widget.h"
-#include "../utility/custom_line_edit.h"
-#include "visual_database_display_color_filter_widget.h"
-#include "visual_database_display_filter_toolbar_widget.h"
+#include "libcockatrice/card/card_info.h"
 
-#include <QLoggingCategory>
-#include <QVBoxLayout>
-#include <QWheelEvent>
+#include <QString>
+#include <QStringList>
 #include <QWidget>
-#include <libcockatrice/models/database/card_database_model.h>
-#include <libcockatrice/models/deck_list/deck_list_model.h>
-#include <qscrollarea.h>
+#include <functional>
+#include <qnamespace.h>
+#include <qtmetamacros.h>
 
-inline Q_LOGGING_CATEGORY(VisualDatabaseDisplayLog, "visual_database_display");
+class CardDatabaseDisplayModel;
+class CardDatabaseModel;
+class CardDatabaseView;
+class CardDatabaseVisualDisplayModel;
+class CardDatabaseVisualView;
+class CardSizeWidget;
+class DeckListModel;
+class ExactCard;
+class FilterTreeModel;
+class FlowWidget;
+class QLabel;
+class QMouseEvent;
+class QPushButton;
+class QToolButton;
+class QVBoxLayout;
+class SearchLineEdit;
+class VisualDatabaseDisplayColorFilterWidget;
+class VisualDatabaseDisplayFilterToolbarWidget;
 
 class VisualDatabaseDisplayWidget : public QWidget
 {
@@ -34,86 +41,93 @@ class VisualDatabaseDisplayWidget : public QWidget
 
 public:
     explicit VisualDatabaseDisplayWidget(QWidget *parent,
-                                         AbstractTabDeckEditor *deckEditor,
                                          CardDatabaseModel *database_model,
-                                         CardDatabaseDisplayModel *database_display_model);
+                                         DeckListModel *deckListModel = nullptr);
     void retranslateUi();
 
-    void adjustCardsPerPage();
-    void populateCards();
-    void loadPage(int start, int end);
-    void loadNextPage();
-    void loadCurrentPage();
-    void sortCardList(const QStringList &properties, Qt::SortOrder order) const;
-    void setDeckList(const DeckList &new_deck_list_model);
-
-    AbstractTabDeckEditor *getDeckEditor()
-    {
-        return deckEditor;
-    }
+    /**
+     * @brief Sets the callback used to create a custom zone from the add-to-zone menu.
+     * The callback returns the name of the created zone, or an empty string if creation was cancelled.
+     */
+    void setNewZoneCreator(const std::function<QString()> &creator);
 
     CardDatabaseDisplayModel *getDatabaseDisplayModel()
     {
         return databaseDisplayModel;
     }
 
-    QTreeView *getDatabaseView()
+    CardDatabaseView *getDatabaseView()
     {
         return databaseView;
     }
 
-    QWidget *searchContainer;
-    QHBoxLayout *searchLayout;
+    FilterTreeModel *getFilterModel()
+    {
+        return filterModel;
+    }
+
+    /**
+     * @return False if the widget is in database display mode and true if it's in visual display mode
+     */
+    bool isVisualDisplayMode() const;
+
+public slots:
+    /**
+     * @brief Pushes the active set filters to the visual grid.
+     *
+     * The grid's rows follow the display model's filter and sort signals on their
+     * own; this only forwards the set filters, which decide which printings the
+     * grid shows.
+     */
+    void onSearchModelChanged();
+
+signals:
+    void cardClickedDatabaseDisplay(QMouseEvent *event, const ExactCard &card);
+    void cardHoveredDatabaseDisplay(const ExactCard &hoveredCard);
+
+    void cardAdded(const ExactCard &card, const QString &zoneName);
+    void cardDecremented(const ExactCard &card, const QString &zoneName);
+    void edhrecRequested(const CardInfoPtr &cardInfo, bool isCommander);
+    void printingSelectorRequested();
+    void cardInfoRequested(const ExactCard &cardName);
+
+protected slots:
+    void initialize();
+    void onDisplayModeChanged(bool checked);
+
+    void onSelectedCardChanged(const QString &cardName);
+    void actAddCard(const QString &cardName, const QString &zoneName);
+    void actDecrementCard(const QString &cardName, const QString &zoneName);
+    void onRelatedCardClicked(const QString &relatedCard);
+
+private:
+    FlowWidget *searchContainer;
     SearchLineEdit *searchEdit;
     QPushButton *displayModeButton;
     FilterTreeModel *filterModel;
     VisualDatabaseDisplayColorFilterWidget *colorFilterWidget;
 
-public slots:
-    void onSearchModelChanged();
-
-signals:
-    void cardClickedDatabaseDisplay(QMouseEvent *event, CardInfoPictureWithTextOverlayWidget *instance);
-    void cardHoveredDatabaseDisplay(const ExactCard &hoveredCard);
-
-protected slots:
-    void initialize();
-    void onClick(QMouseEvent *event, CardInfoPictureWithTextOverlayWidget *instance);
-    void onHover(const ExactCard &hoveredCard);
-    void addCard(const ExactCard &cardToAdd);
-    void databaseDataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight);
-    void wheelEvent(QWheelEvent *event) override;
-    void modelDirty() const;
-    void updateSearch(const QString &search) const;
-    void onDisplayModeChanged(bool checked);
-
-private:
     QLabel *databaseLoadIndicator;
 
     QToolButton *clearFilterWidget;
     VisualDatabaseDisplayFilterToolbarWidget *filterContainer;
-    KeySignals searchKeySignals;
-    AbstractTabDeckEditor *deckEditor;
-    CardDatabaseModel *databaseModel;
     CardDatabaseDisplayModel *databaseDisplayModel;
-    QTreeView *databaseView;
-    QList<ExactCard> *cards;
+    CardDatabaseVisualDisplayModel *visualDisplayModel;
+    CardDatabaseView *databaseView;
+    CardDatabaseVisualView *cardView;
+    std::function<QString()> newZoneCreator;
     QVBoxLayout *mainLayout;
-    QScrollArea *scrollArea;
-    FlowWidget *flowWidget;
-    QWidget *overlapCategories;
-    QVBoxLayout *overlapCategoriesLayout;
-    OverlapControlWidget *overlapControlWidget;
     CardSizeWidget *cardSizeWidget;
-    QTimer *debounceTimer;
-    QTimer *loadCardsTimer;
 
-    int debounceTime = 300; // in Ms
-    int currentPage = 0;    // Current page index
-    int cardsPerPage = 100; // Number of cards per page
+    bool filtersInitialized = false;
+
+    void initializeFilters();
+    void highlightAllSearchEdit();
+    void updateDisplayModeButton();
+    [[nodiscard]] QStringList collectSetFilterTerms() const;
 
 protected:
-    void resizeEvent(QResizeEvent *event) override;
+    void showEvent(QShowEvent *event) override;
 };
 
 #endif // VISUAL_DATABASE_DISPLAY_WIDGET_H

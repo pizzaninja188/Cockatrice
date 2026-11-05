@@ -2,10 +2,19 @@
 
 #include <QDate>
 #include <QFile>
-#include <QMessageBox>
+#include <QIODevice>
+#include <QList>
+#include <QSharedPointer>
+#include <QStringView>
 #include <QTextStream>
+#include <QVariant>
 #include <QXmlStreamReader>
+#include <QtGlobal>
+#include <qnamespace.h>
+#include <stdio.h>
 #include <utility>
+
+class QObject;
 
 #define TIPDDBMODEL_COLUMNS 3
 
@@ -73,8 +82,9 @@ TipsOfTheDay::~TipsOfTheDay()
 
 QVariant TipsOfTheDay::data(const QModelIndex &index, int /*role*/) const
 {
-    if (!index.isValid() || index.row() >= tipList->size() || index.column() >= TIPDDBMODEL_COLUMNS)
+    if (!index.isValid() || index.row() >= tipList->size() || index.column() >= TIPDDBMODEL_COLUMNS) {
         return QVariant();
+    }
 
     TipOfTheDay tip = tipList->at(index.row());
     switch (index.column()) {

@@ -2,10 +2,15 @@
 #define COCKATRICE_XML4_H
 
 #include "card_database_parser.h"
+#include "libcockatrice/card/card_info.h"
 
+#include <QHash>
 #include <QLoggingCategory>
-#include <QXmlStreamReader>
-#include <libcockatrice/interfaces/interface_card_preference_provider.h>
+#include <QString>
+#include <qtmetamacros.h>
+
+class ICardSetPriorityController;
+class QXmlStreamReader;
 
 inline Q_LOGGING_CATEGORY(CockatriceXml4Log, "cockatrice_xml.xml_4_parser");
 
@@ -19,9 +24,8 @@ inline Q_LOGGING_CATEGORY(CockatriceXml4Log, "cockatrice_xml.xml_4_parser");
  * making the parser more extensible and schema-compliant.
  *
  * @note Differences from v3:
- * - Card properties are stored in <prop> blocks as a QVariantHash.
+ * - Card properties are stored in <prop> blocks as a QHash<QString, QString>.
  * - Sets can include a <priority> element.
- * - Supports user preferences via ICardPreferenceProvider (e.g., skipping rebalanced cards).
  * - Related cards support persistent relations and multiple attach types (e.g., transform).
  * - More robust serialization; easier to extend schema in the future.
  */
@@ -29,8 +33,7 @@ class CockatriceXml4Parser : public ICardDatabaseParser
 {
     Q_OBJECT
 public:
-    explicit CockatriceXml4Parser(ICardPreferenceProvider *cardPreferenceProvider,
-                                  ICardSetPriorityController *cardSetPriorityController);
+    explicit CockatriceXml4Parser(ICardSetPriorityController *cardSetPriorityController);
     ~CockatriceXml4Parser() override = default;
 
     /**
@@ -48,6 +51,13 @@ public:
     void parseFile(QIODevice &device) override;
 
     /**
+     * @brief Parse the XML database into the given snapshot.
+     * @param device Open QIODevice positioned at start of file.
+     * @param data Target snapshot to populate.
+     */
+    void parseFileInto(QIODevice &device, CardDatabaseData &data) override;
+
+    /**
      * @brief Save sets and cards back to an XML4 file.
      */
     bool saveToFile(FormatRulesNameMap _formats,
@@ -58,19 +68,16 @@ public:
                     const QString &sourceVersion = "unknown") override;
 
 private:
-    ICardPreferenceProvider *cardPreferenceProvider; ///< Interface to handle user preferences
-
     /**
      * @brief Loads a generic <prop> block from a <card> element.
      * @param xml The open QXmlStreamReader positioned at a <prop> element.
-     * @return A QVariantHash mapping property names to values.
+     * @return A QHash<QString, QString> mapping property names to values.
      */
-    QVariantHash loadCardPropertiesFromXml(QXmlStreamReader &xml);
+    QHash<QString, QString> loadCardPropertiesFromXml(QXmlStreamReader &xml);
 
     /**
      * @brief Load all <card> elements from the XML stream.
      * @param xml The open QXmlStreamReader positioned at the <cards> element.
-     * Honors the user's preference regarding rebalanced cards.
      */
     void loadCardsFromXml(QXmlStreamReader &xml);
 

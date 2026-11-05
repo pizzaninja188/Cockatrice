@@ -1,0 +1,160 @@
+#include "report_utils.h"
+
+#include "../../theme_manager.h"
+#include "libcockatrice/protocol/pb/serverinfo_report.pb.h"
+
+#include <QApplication>
+#include <QBrush>
+#include <QChar>
+#include <QColor>
+#include <QDateTime>
+#include <QFontDatabase>
+#include <QPalette>
+#include <QSharedPointer>
+#include <QTableWidget>
+#include <QTableWidgetItem>
+#include <QTextCursor>
+#include <QTextEdit>
+#include <qnamespace.h>
+#include <string>
+
+namespace report_utils
+{
+
+QFont reportLogFont()
+{
+    if (themeManager->hasAppFont(AppFont::ChatLog)) {
+        return themeManager->appFont(AppFont::ChatLog);
+    }
+    QFont monoFont(QStringLiteral("monospace"));
+    monoFont.setStyleHint(QFont::Monospace);
+    const int systemPointSize = QFontDatabase::systemFont(QFontDatabase::GeneralFont).pointSize();
+    if (systemPointSize > 0) {
+        monoFont.setPointSize(systemPointSize);
+    }
+    return monoFont;
+}
+
+namespace
+{
+QColor reportStatusColor(const QString &status)
+{
+    const QColor text = qApp->palette().color(QPalette::Text);
+    const int luminance = (299 * text.red() + 587 * text.green() + 114 * text.blue()) / 1000;
+    const bool dark = luminance < 128;
+
+    if (status == "open") {
+        return dark ? QColor("#e06060") : QColor("#c0392b");
+    }
+    if (status == "assigned") {
+        return dark ? QColor("#e0a030") : QColor("#d68910");
+    }
+    if (status == "resolved") {
+        return dark ? QColor("#50c878") : QColor("#1e8449");
+    }
+    if (status == "dismissed") {
+        return qApp->palette().color(QPalette::PlaceholderText);
+    }
+    return QColor();
+}
+
+void setReportStatusItemColor(QTableWidgetItem *item, const QString &status)
+{
+    const QColor color = reportStatusColor(status);
+    if (color.isValid()) {
+        item->setForeground(QBrush(color));
+    }
+}
+} // namespace
+
+QString formatReportCategory(const QString &category)
+{
+    QString result = category;
+    result.replace('_', ' ');
+    return result.left(1).toUpper() + result.mid(1);
+}
+
+QString formatReportTime(qint64 secondsSinceEpoch)
+{
+    const QDateTime dt = QDateTime::fromSecsSinceEpoch(secondsSinceEpoch);
+    return dt.toString("yyyy-MM-dd hh:mm");
+}
+
+void fillReportTableRow(QTableWidget *table,
+                        int row,
+                        const ServerInfo_Report &report,
+                        int idColumn,
+                        int timeColumn,
+                        int reportedColumn,
+                        int categoryColumn,
+                        int gameIdColumn,
+                        int statusColumn,
+                        int assignedColumn)
+{
+    auto *idItem = new QTableWidgetItem(QString::number(report.report_id()));
+    idItem->setData(Qt::UserRole, report.report_id());
+    table->setItem(row, idColumn, idItem);
+
+    table->setItem(row, timeColumn, new QTableWidgetItem(formatReportTime(report.report_time())));
+    table->setItem(row, reportedColumn, new QTableWidgetItem(QString::fromStdString(report.reported_user_name())));
+    table->setItem(row, categoryColumn,
+                   new QTableWidgetItem(formatReportCategory(QString::fromStdString(report.category()))));
+    table->setItem(row, gameIdColumn,
+                   new QTableWidgetItem(report.game_id() > 0 ? QString::number(report.game_id()) : QString()));
+
+    auto *statusItem = new QTableWidgetItem(QString::fromStdString(report.status()));
+    setReportStatusItemColor(statusItem, QString::fromStdString(report.status()));
+    table->setItem(row, statusColumn, statusItem);
+
+    table->setItem(row, assignedColumn, new QTableWidgetItem(QString::fromStdString(report.assigned_mod_name())));
+}
+
+void renderReportDetails(QTextEdit *chatLogEdit,
+                         QTextEdit *commentsEdit,
+                         const ServerInfo_Report &report,
+                         const QString &commentsEmptyText,
+                         const QString &moderatorPrefix,
+                         const QString &nonModeratorPrefix)
+{
+    QString details;
+    if (report.has_resolution_note() && !report.resolution_note().empty()) {
+        details = QObject::tr("Resolution note: %1").arg(QString::fromStdString(report.resolution_note()));
+    }
+    if (report.has_resolution_time()) {
+        QString resolvedBy = QObject::tr("unknown");
+        if (report.has_resolved_by_name() && !report.resolved_by_name().empty()) {
+            resolvedBy = QString::fromStdString(report.resolved_by_name());
+        }
+        if (!details.isEmpty()) {
+            details += "\n";
+        }
+        details += QObject::tr("Resolved at %1 by %2").arg(formatReportTime(report.resolution_time()), resolvedBy);
+    }
+
+    if (report.has_chat_log() && !report.chat_log().empty()) {
+        const QString chatLog = QString::fromStdString(report.chat_log());
+        chatLogEdit->setPlainText(
+            details.isEmpty() ? chatLog : details + "\n\n" + QObject::tr("=== Chat Log ===") + "\n" + chatLog);
+    } else {
+        chatLogEdit->setPlainText(details);
+    }
+
+    commentsEdit->clear();
+
+    if (report.comments_size() == 0) {
+        commentsEdit->setPlainText(commentsEmptyText);
+        return;
+    }
+
+    for (int i = 0; i < report.comments_size(); ++i) {
+        const ServerInfo_ReportComment &c = report.comments(i);
+        const QString author = QString::fromStdString(c.author_name());
+        const QString text = QString::fromStdString(c.comment_text());
+        const QString prefix = c.is_moderator() ? moderatorPrefix : nonModeratorPrefix;
+        commentsEdit->moveCursor(QTextCursor::End);
+        commentsEdit->insertPlainText(
+            QString("[%1] %2 %3:\n%4\n\n").arg(formatReportTime(c.comment_time()), prefix, author, text));
+    }
+}
+
+} // namespace report_utils

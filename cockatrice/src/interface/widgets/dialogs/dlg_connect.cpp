@@ -1,26 +1,44 @@
 #include "dlg_connect.h"
 
 #include "../../../client/settings/cache_settings.h"
+#include "../../theme_icon.h"
+#include "../server/handle_public_servers.h"
+#include "../server/user/user_info_connection.h"
+#include "libcockatrice/utility/macros.h"
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDebug>
 #include <QDialogButtonBox>
 #include <QGridLayout>
 #include <QGroupBox>
-#include <QKeyEvent>
+#include <QHBoxLayout>
+#include <QIntValidator>
 #include <QLabel>
+#include <QList>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QRadioButton>
-#include <libcockatrice/utility/trice_limits.h>
+#include <QSharedPointer>
+#include <QSize>
+#include <QStringList>
+#include <QStringLiteral>
+#include <QVBoxLayout>
+#include <QtGlobal>
+#include <libcockatrice/settings/servers_settings.h>
+#include <libcockatrice/utility/string_limits.h>
+#include <qnamespace.h>
+
+class QWidget;
 
 DlgConnect::DlgConnect(QWidget *parent) : QDialog(parent)
 {
+    setObjectName("connectDialog");
     previousHostButton = new QRadioButton(tr("Known Hosts"), this);
     previousHosts = new QComboBox(this);
 
     btnDeleteServer = new QPushButton(this);
-    btnDeleteServer->setIcon(QPixmap("theme:icons/remove_row"));
+    btnDeleteServer->setIcon(loadThemedIcon(QStringLiteral("icons/remove_row")));
     btnDeleteServer->setToolTip(tr("Delete the currently selected saved server"));
     btnDeleteServer->setFixedWidth(30);
 
@@ -28,7 +46,7 @@ DlgConnect::DlgConnect(QWidget *parent) : QDialog(parent)
 
     hps = new HandlePublicServers(this);
     btnRefreshServers = new QPushButton(this);
-    btnRefreshServers->setIcon(QPixmap("theme:icons/sync"));
+    btnRefreshServers->setIcon(loadThemedIcon(QStringLiteral("icons/sync")));
     btnRefreshServers->setToolTip(tr("Refresh the server list with known public servers"));
     btnRefreshServers->setFixedWidth(30);
 
@@ -68,6 +86,11 @@ DlgConnect::DlgConnect(QWidget *parent) : QDialog(parent)
     passwordLabel->setBuddy(passwordEdit);
     passwordEdit->setEchoMode(QLineEdit::Password);
 
+    hostEdit->setObjectName("connectHostEdit");
+    portEdit->setObjectName("connectPortEdit");
+    playernameEdit->setObjectName("connectPlayernameEdit");
+    passwordEdit->setObjectName("connectPasswordEdit");
+
     savePasswordCheckBox = new QCheckBox(tr("&Save password"));
 
     autoConnectCheckBox = new QCheckBox(tr("A&uto connect"));
@@ -98,7 +121,7 @@ DlgConnect::DlgConnect(QWidget *parent) : QDialog(parent)
     updateDisplayInfo(previousHosts->currentText());
 
     btnForgotPassword = new QPushButton(this);
-    btnForgotPassword->setIcon(QPixmap("theme:icons/forgot_password"));
+    btnForgotPassword->setIcon(loadThemedIcon(QStringLiteral("icons/forgot_password")));
     btnForgotPassword->setToolTip(tr("Reset Password"));
     btnForgotPassword->setFixedWidth(30);
     connect(btnForgotPassword, &QPushButton::released, this, &DlgConnect::actForgotPassword);
@@ -261,13 +284,7 @@ void DlgConnect::updateDisplayInfo(const QString &saveName)
     QStringList _data = uci.getServerInfo(saveName);
 
     if (_data.isEmpty()) {
-        _data << ""
-              << ""
-              << ""
-              << ""
-              << ""
-              << ""
-              << "";
+        _data << "" << "" << "" << "" << "" << "" << "";
     }
 
     bool savePasswordStatus = (_data.at(5) == "1");
@@ -276,10 +293,25 @@ void DlgConnect::updateDisplayInfo(const QString &saveName)
     hostEdit->setText(_data.at(1));
     portEdit->setText(_data.at(2));
     playernameEdit->setText(_data.at(3));
+    playernameEdit->setFocus();
     savePasswordCheckBox->setChecked(savePasswordStatus);
+    storedVerifier.clear();
+    savedVerifier.clear();
 
     if (savePasswordStatus) {
-        passwordEdit->setText(_data.at(4));
+        const QString stored = _data.at(4);
+        if (stored.startsWith("$")) {
+            storedVerifier = stored;
+            savedVerifier = stored;
+            passwordEdit->clear();
+            passwordEdit->setPlaceholderText(tr("Password saved"));
+        } else {
+            passwordEdit->setText(stored);
+            passwordEdit->setPlaceholderText(QString());
+        }
+    } else {
+        passwordEdit->clear();
+        passwordEdit->setPlaceholderText(QString());
     }
 
     if (!_data.at(6).isEmpty()) {
@@ -305,6 +337,9 @@ void DlgConnect::newHostSelected(bool state)
         portEdit->setDisabled(false);
         playernameEdit->clear();
         passwordEdit->clear();
+        passwordEdit->setPlaceholderText(QString());
+        storedVerifier.clear();
+        savedVerifier.clear();
         saveEdit->clear();
         saveEdit->setPlaceholderText(tr("Unique Server Name"));
         saveEdit->setDisabled(false);
@@ -320,15 +355,31 @@ void DlgConnect::passwordSaved(QT_STATE_CHANGED_T state)
     Q_UNUSED(state);
     if (savePasswordCheckBox->isChecked()) {
         autoConnectCheckBox->setEnabled(true);
+        // Re-ticking keeps a password the user has started typing; otherwise restore the saved
+        // login this dialog was opened with, so unticking and changing your mind is harmless.
+        if (passwordEdit->text().isEmpty()) {
+            storedVerifier = savedVerifier;
+            passwordEdit->setPlaceholderText(savedVerifier.isEmpty() ? QString() : tr("Password saved"));
+        }
     } else {
         autoConnectCheckBox->setChecked(false);
         autoConnectCheckBox->setEnabled(false);
+        // Unticking means the password typed below is sent for this connection: stop sending the
+        // saved verifier instead, and stop claiming a password is saved.
+        storedVerifier.clear();
+        passwordEdit->setPlaceholderText(QString());
     }
 }
 
 void DlgConnect::actOk()
 {
     ServersSettings &servers = SettingsCache::instance().servers();
+
+    // Never write a newly typed plaintext password to disk when a verifier is available: the
+    // typed value is used for this connection and a fresh verifier is persisted after a
+    // successful login. Without any verifier we keep the previous (plaintext legacy) behavior.
+    const QString verifierToSave = storedVerifier.isEmpty() ? savedVerifier : storedVerifier;
+    const QString passwordToSave = verifierToSave.isEmpty() ? passwordEdit->text() : verifierToSave;
 
     if (newHostButton->isChecked()) {
         if (saveEdit->text().isEmpty()) {
@@ -337,10 +388,10 @@ void DlgConnect::actOk()
         }
 
         servers.addNewServer(saveEdit->text().trimmed(), hostEdit->text().trimmed(), portEdit->text().trimmed(),
-                             playernameEdit->text().trimmed(), passwordEdit->text(), savePasswordCheckBox->isChecked());
+                             playernameEdit->text().trimmed(), passwordToSave, savePasswordCheckBox->isChecked());
     } else {
         servers.updateExistingServer(saveEdit->text().trimmed(), hostEdit->text().trimmed(), portEdit->text().trimmed(),
-                                     playernameEdit->text().trimmed(), passwordEdit->text(),
+                                     playernameEdit->text().trimmed(), passwordToSave,
                                      savePasswordCheckBox->isChecked());
     }
 

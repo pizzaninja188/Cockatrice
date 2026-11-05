@@ -1,8 +1,26 @@
 #include "printing_selector_card_sorting_widget.h"
 
 #include "../../../client/settings/cache_settings.h"
+#include "deck_list_model.h"
+#include "libcockatrice/card/set/card_set.h"
+#include "libcockatrice/deck_list/tree/inner_deck_list_node.h"
+#include "printing_selector.h"
 
+#include <QComboBox>
+#include <QDate>
+#include <QHBoxLayout>
+#include <QModelIndex>
+#include <QPair>
+#include <QPushButton>
+#include <QSharedPointer>
+#include <QVariant>
+#include <algorithm>
 #include <libcockatrice/card/set/card_set_comparator.h>
+#include <libcockatrice/settings/card_database_settings.h>
+#include <libcockatrice/settings/card_override_settings.h>
+#include <libcockatrice/settings/cards_display_settings.h>
+#include <qnamespace.h>
+#include <utility>
 
 const QString PrintingSelectorCardSortingWidget::SORT_OPTIONS_ALPHABETICAL = tr("Alphabetical");
 const QString PrintingSelectorCardSortingWidget::SORT_OPTIONS_PREFERENCE = tr("Preference");
@@ -26,7 +44,7 @@ PrintingSelectorCardSortingWidget::PrintingSelectorCardSortingWidget(PrintingSel
     sortOptionsSelector = new QComboBox(this);
     sortOptionsSelector->setFocusPolicy(Qt::StrongFocus);
     sortOptionsSelector->addItems(SORT_OPTIONS);
-    sortOptionsSelector->setCurrentIndex(SettingsCache::instance().getPrintingSelectorSortOrder());
+    sortOptionsSelector->setCurrentIndex(SettingsCache::instance().cardsDisplay().getPrintingSelectorSortOrder());
     connect(sortOptionsSelector, &QComboBox::currentTextChanged, this,
             &PrintingSelectorCardSortingWidget::updateSortSetting);
     connect(sortOptionsSelector, &QComboBox::currentTextChanged, parent, &PrintingSelector::updateDisplay);
@@ -62,7 +80,7 @@ void PrintingSelectorCardSortingWidget::updateSortOrder()
  */
 void PrintingSelectorCardSortingWidget::updateSortSetting()
 {
-    SettingsCache::instance().setPrintingSelectorSortOrder(sortOptionsSelector->currentIndex());
+    SettingsCache::instance().cardsDisplay().setPrintingSelectorSortOrder(sortOptionsSelector->currentIndex());
 }
 
 /**
@@ -90,7 +108,7 @@ QList<PrintingInfo> PrintingSelectorCardSortingWidget::sortSets(const SetToPrint
     }
 
     if (sortedSets.empty()) {
-        sortedSets << CardSet::newInstance(SettingsCache::instance().cardDatabase(), "", "", "", QDate());
+        sortedSets << CardSet::newInstance(&SettingsCache::instance().cardDatabase(), "", "", "", QDate());
     }
 
     if (sortOptionsSelector->currentText() == SORT_OPTIONS_PREFERENCE) {
@@ -190,7 +208,7 @@ QList<PrintingInfo> PrintingSelectorCardSortingWidget::prependPrintingsInDeck(co
         return {};
     }
 
-    SetToPrintingsMap setMap = selectedCard->getSets();
+    const auto &setMap = selectedCard->getSets();
     QList<QPair<PrintingInfo, int>> countList;
 
     // Collect sets with their counts

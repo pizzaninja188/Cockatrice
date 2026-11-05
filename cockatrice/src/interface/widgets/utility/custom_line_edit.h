@@ -1,13 +1,14 @@
 /**
  * @file custom_line_edit.h
  * @ingroup UI
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef CUSTOMLINEEDIT_H
 #define CUSTOMLINEEDIT_H
 
 #include <QLineEdit>
+#include <qtmetamacros.h>
 
 class QTreeView;
 class QKeyEvent;

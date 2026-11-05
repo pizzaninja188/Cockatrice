@@ -1,13 +1,28 @@
 #include "card_sets_model.h"
 
+#include "../../natural_sort_collator.h"
+#include "libcockatrice/card/database/card_database.h"
+#include "libcockatrice/card/set/card_set.h"
+#include "libcockatrice/interfaces/interface_card_set_priority_controller.h"
+
+#include <QAbstractItemModel>
+#include <QChar>
+#include <QDate>
+#include <QFlags>
+#include <QMultiMap>
+#include <QObject>
+#include <QSharedPointer>
 #include <QSortFilterProxyModel>
+#include <QVariant>
+#include <QVector>
 
 SetsModel::SetsModel(CardDatabase *_db, QObject *parent) : QAbstractTableModel(parent), sets(_db->getSetList())
 {
     sets.sortByKey();
     for (const CardSetPtr &set : sets) {
-        if (set->getEnabled())
+        if (set->getEnabled()) {
             enabledSets.insert(set);
+        }
     }
 }
 
@@ -15,16 +30,18 @@ SetsModel::~SetsModel() = default;
 
 int SetsModel::rowCount(const QModelIndex &parent) const
 {
-    if (parent.isValid())
+    if (parent.isValid()) {
         return 0;
-    else
+    } else {
         return sets.size();
+    }
 }
 
 QVariant SetsModel::data(const QModelIndex &index, int role) const
 {
-    if (!index.isValid() || (index.column() >= NUM_COLS) || (index.row() >= rowCount()))
+    if (!index.isValid() || (index.column() >= NUM_COLS) || (index.row() >= rowCount())) {
         return QVariant();
+    }
 
     CardSetPtr set = sets[index.row()];
 
@@ -40,8 +57,9 @@ QVariant SetsModel::data(const QModelIndex &index, int role) const
         }
     }
 
-    if (role != Qt::DisplayRole && role != SortRole)
+    if (role != Qt::DisplayRole && role != SortRole) {
         return QVariant();
+    }
 
     switch (index.column()) {
         case SortKeyCol:
@@ -72,8 +90,9 @@ bool SetsModel::setData(const QModelIndex &index, const QVariant &value, int rol
 
 QVariant SetsModel::headerData(int section, Qt::Orientation orientation, int role) const
 {
-    if ((role != Qt::DisplayRole) || (orientation != Qt::Horizontal))
+    if ((role != Qt::DisplayRole) || (orientation != Qt::Horizontal)) {
         return QVariant();
+    }
     switch (section) {
         case SortKeyCol:
             return QString("Key"); /* no tr() for translations needed, column just used for sorting --> hidden */
@@ -97,13 +116,15 @@ QVariant SetsModel::headerData(int section, Qt::Orientation orientation, int rol
 
 Qt::ItemFlags SetsModel::flags(const QModelIndex &index) const
 {
-    if (!index.isValid())
+    if (!index.isValid()) {
         return Qt::NoItemFlags;
+    }
 
     Qt::ItemFlags flags = QAbstractTableModel::flags(index) | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled;
 
-    if (index.column() == EnabledCol)
+    if (index.column() == EnabledCol) {
         flags |= Qt::ItemIsUserCheckable;
+    }
 
     return flags;
 }
@@ -115,8 +136,9 @@ Qt::DropActions SetsModel::supportedDropActions() const
 
 QMimeData *SetsModel::mimeData(const QModelIndexList &indexes) const
 {
-    if (indexes.isEmpty())
+    if (indexes.isEmpty()) {
         return 0;
+    }
 
     SetsMimeData *result = new SetsMimeData(indexes[0].row());
     return qobject_cast<QMimeData *>(result);
@@ -128,16 +150,19 @@ bool SetsModel::dropMimeData(const QMimeData *data,
                              int /*column*/,
                              const QModelIndex &parent)
 {
-    if (action != Qt::MoveAction)
+    if (action != Qt::MoveAction) {
         return false;
+    }
     if (row == -1) {
-        if (!parent.isValid())
+        if (!parent.isValid()) {
             return false;
+        }
         row = parent.row();
     }
     int oldRow = qobject_cast<const SetsMimeData *>(data)->getOldRow();
-    if (oldRow < row)
+    if (oldRow < row) {
         row--;
+    }
 
     swapRows(oldRow, row);
 
@@ -148,10 +173,11 @@ void SetsModel::toggleRow(int row, bool enable)
 {
     CardSetPtr temp = sets.at(row);
 
-    if (enable)
+    if (enable) {
         enabledSets.insert(temp);
-    else
+    } else {
         enabledSets.remove(temp);
+    }
 
     emit dataChanged(index(row, EnabledCol), index(row, EnabledCol));
 }
@@ -160,13 +186,15 @@ void SetsModel::toggleRow(int row)
 {
     CardSetPtr tmp = sets.at(row);
 
-    if (tmp == nullptr)
+    if (tmp == nullptr) {
         return;
+    }
 
-    if (enabledSets.contains(tmp))
+    if (enabledSets.contains(tmp)) {
         enabledSets.remove(tmp);
-    else
+    } else {
         enabledSets.insert(tmp);
+    }
 
     emit dataChanged(index(row, EnabledCol), index(row, EnabledCol));
 }
@@ -175,9 +203,11 @@ void SetsModel::toggleAll(bool enabled)
 {
     enabledSets.clear();
 
-    if (enabled)
-        for (CardSetPtr set : sets)
+    if (enabled) {
+        for (CardSetPtr set : sets) {
             enabledSets.insert(set);
+        }
+    }
 
     emit dataChanged(index(0, 0), index(rowCount() - 1, columnCount() - 1));
 }
@@ -208,8 +238,9 @@ void SetsModel::sort(int column, Qt::SortOrder order)
     int numRows = rowCount();
     int row;
 
-    for (row = 0; row < numRows; ++row)
+    for (row = 0; row < numRows; ++row) {
         setMap.insert(index(row, column).data(SetsModel::SortRole).toString(), sets.at(row));
+    }
 
     QList<CardSetPtr> tmp = setMap.values();
     sets.clear();
@@ -228,16 +259,19 @@ void SetsModel::sort(int column, Qt::SortOrder order)
 
 void SetsModel::save(CardDatabase *db)
 {
-    // order
-    for (int i = 0; i < sets.size(); i++)
-        sets[i]->setSortKey(static_cast<unsigned int>(i + 1));
+    QVector<ICardSetPriorityController::SetSaveData> saveData;
+    saveData.reserve(sets.size());
 
-    // enabled sets
-    for (const CardSetPtr &set : sets)
-        set->setEnabled(enabledSets.contains(set));
+    for (int i = 0; i < sets.size(); ++i) {
+        const unsigned int sortKey = static_cast<unsigned int>(i + 1);
+        const bool enabled = enabledSets.contains(sets[i]);
+        sets[i]->setSortKeyInMemory(sortKey);
+        sets[i]->setEnabledInMemory(enabled);
+        saveData.append({sets[i]->getShortName(), sortKey, enabled, sets[i]->getIsKnown()});
+    }
 
+    db->getPriorityController()->saveSets(saveData);
     sets.sortByKey();
-
     db->notifyEnabledSetsChanged();
 }
 
@@ -250,8 +284,9 @@ void SetsModel::restore(CardDatabase *db)
     // enabled sets
     enabledSets.clear();
     for (const CardSetPtr &set : sets) {
-        if (set->getEnabled())
+        if (set->getEnabled()) {
             enabledSets.insert(set);
+        }
     }
 
     emit dataChanged(index(0, 0), index(rowCount() - 1, columnCount() - 1));
@@ -262,7 +297,8 @@ QStringList SetsModel::mimeTypes() const
     return QStringList() << "application/x-cockatricecardset";
 }
 
-SetsDisplayModel::SetsDisplayModel(QObject *parent) : QSortFilterProxyModel(parent)
+SetsDisplayModel::SetsDisplayModel(QObject *parent)
+    : QSortFilterProxyModel(parent), collator(NaturalSort::makeNaturalSortCollator())
 {
     setFilterCaseSensitivity(Qt::CaseInsensitive);
     setSortCaseSensitivity(Qt::CaseInsensitive);
@@ -282,12 +318,14 @@ bool SetsDisplayModel::filterAcceptsRow(int sourceRow, const QModelIndex &source
     auto typeIndex = sourceModel()->index(sourceRow, SetsModel::SetTypeCol, sourceParent);
     auto nameIndex = sourceModel()->index(sourceRow, SetsModel::LongNameCol, sourceParent);
     auto shortNameIndex = sourceModel()->index(sourceRow, SetsModel::ShortNameCol, sourceParent);
+    auto dateIndex = sourceModel()->index(sourceRow, SetsModel::ReleaseDateCol, sourceParent);
 
     const auto filter = filterRegularExpression();
 
     return (sourceModel()->data(typeIndex).toString().contains(filter) ||
             sourceModel()->data(nameIndex).toString().contains(filter) ||
-            sourceModel()->data(shortNameIndex).toString().contains(filter));
+            sourceModel()->data(shortNameIndex).toString().contains(filter) ||
+            sourceModel()->data(dateIndex).toString().contains(filter));
 }
 
 bool SetsDisplayModel::lessThan(const QModelIndex &left, const QModelIndex &right) const
@@ -295,5 +333,5 @@ bool SetsDisplayModel::lessThan(const QModelIndex &left, const QModelIndex &righ
     QString leftString = sourceModel()->data(left, SetsModel::SortRole).toString();
     QString rightString = sourceModel()->data(right, SetsModel::SortRole).toString();
 
-    return QString::localeAwareCompare(leftString, rightString) < 0;
+    return collator.compare(leftString, rightString) < 0;
 }

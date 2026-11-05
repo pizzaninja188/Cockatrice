@@ -1,22 +1,51 @@
 #include "tab_replays.h"
 
 #include "../../../client/settings/cache_settings.h"
+#include "../../theme_icon.h"
 #include "../interface/widgets/server/remote/remote_replay_list_tree_widget.h"
-#include "tab_game.h"
+#include "libcockatrice/protocol/pb/commands.pb.h"
+#include "libcockatrice/protocol/pb/serverinfo_replay.pb.h"
+#include "libcockatrice/protocol/pb/serverinfo_replay_match.pb.h"
+#include "libcockatrice/protocol/pb/serverinfo_user.pb.h"
+#include "libcockatrice/protocol/pb/session_commands.pb.h"
 
+#include <QAbstractItemModel>
+#include <QAbstractItemView>
 #include <QAction>
 #include <QApplication>
+#include <QByteArray>
 #include <QClipboard>
-#include <QDesktopServices>
+#include <QDebug>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QFileSystemModel>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QIODevice>
 #include <QInputDialog>
+#include <QItemSelectionModel>
+#include <QLineEdit>
+#include <QList>
+#include <QLoggingCategory>
 #include <QMessageBox>
+#include <QMessageLogger>
+#include <QModelIndex>
+#include <QModelIndexList>
+#include <QPushButton>
+#include <QSet>
+#include <QSharedPointer>
+#include <QSize>
+#include <QSizePolicy>
+#include <QStringList>
+#include <QStringLiteral>
+#include <QStyle>
 #include <QToolBar>
 #include <QTreeView>
-#include <QUrl>
+#include <QVBoxLayout>
+#include <QWidget>
 #include <libcockatrice/network/client/abstract/abstract_client.h>
 #include <libcockatrice/protocol/pb/command_replay_delete_match.pb.h>
 #include <libcockatrice/protocol/pb/command_replay_download.pb.h>
@@ -29,8 +58,21 @@
 #include <libcockatrice/protocol/pb/response_replay_download.pb.h>
 #include <libcockatrice/protocol/pb/response_replay_get_code.pb.h>
 #include <libcockatrice/protocol/pending_command.h>
+#include <libcockatrice/settings/paths_settings.h>
+#include <libcockatrice/utility/qt_utils.h>
+#include <qlogging.h>
+#include <qnamespace.h>
+#include <string>
+
+class TabSupervisor;
 
 inline Q_LOGGING_CATEGORY(TabReplaysLog, "replays_tab");
+
+namespace
+{
+// File name filters for the local replay files Cockatrice can load.
+const QStringList REPLAY_FILE_NAME_FILTERS = {"*.cor"};
+} // namespace
 
 TabReplays::TabReplays(TabSupervisor *_tabSupervisor, AbstractClient *_client, const ServerInfo_User *currentUserInfo)
     : Tab(_tabSupervisor), client(_client)
@@ -59,7 +101,9 @@ TabReplays::TabReplays(TabSupervisor *_tabSupervisor, AbstractClient *_client, c
 QGroupBox *TabReplays::createLeftLayout()
 {
     localDirModel = new QFileSystemModel(this);
-    localDirModel->setRootPath(SettingsCache::instance().getReplaysPath());
+    localDirModel->setRootPath(SettingsCache::instance().paths().getReplaysPath());
+    localDirModel->setNameFilters(REPLAY_FILE_NAME_FILTERS);
+    localDirModel->setNameFilterDisables(false);
     localDirModel->sort(0, Qt::AscendingOrder);
 
     localDirView = new QTreeView;
@@ -101,17 +145,17 @@ QGroupBox *TabReplays::createLeftLayout()
 
     // Left side actions
     aOpenLocalReplay = new QAction(this);
-    aOpenLocalReplay->setIcon(QPixmap("theme:icons/view"));
+    aOpenLocalReplay->setIcon(loadThemedIcon(QStringLiteral("icons/view")));
     connect(aOpenLocalReplay, &QAction::triggered, this, &TabReplays::actOpenLocalReplay);
     connect(localDirView, &QTreeView::doubleClicked, this, &TabReplays::actOpenLocalReplay);
     aRenameLocal = new QAction(this);
-    aRenameLocal->setIcon(QPixmap("theme:icons/rename"));
+    aRenameLocal->setIcon(loadThemedIcon(QStringLiteral("icons/rename")));
     connect(aRenameLocal, &QAction::triggered, this, &TabReplays::actRenameLocal);
     aNewLocalFolder = new QAction(this);
     aNewLocalFolder->setIcon(qApp->style()->standardIcon(QStyle::SP_FileDialogNewFolder));
     connect(aNewLocalFolder, &QAction::triggered, this, &TabReplays::actNewLocalFolder);
     aDeleteLocalReplay = new QAction(this);
-    aDeleteLocalReplay->setIcon(QPixmap("theme:icons/remove_row"));
+    aDeleteLocalReplay->setIcon(loadThemedIcon(QStringLiteral("icons/remove_row")));
     connect(aDeleteLocalReplay, &QAction::triggered, this, &TabReplays::actDeleteLocalReplay);
 
     aOpenReplaysFolder = new QAction(this);
@@ -163,24 +207,24 @@ QGroupBox *TabReplays::createRightLayout()
 
     // Right side actions
     aOpenRemoteReplay = new QAction(this);
-    aOpenRemoteReplay->setIcon(QPixmap("theme:icons/view"));
+    aOpenRemoteReplay->setIcon(loadThemedIcon(QStringLiteral("icons/view")));
     connect(aOpenRemoteReplay, &QAction::triggered, this, &TabReplays::actOpenRemoteReplay);
     connect(serverDirView, &QTreeView::doubleClicked, this, &TabReplays::actOpenRemoteReplay);
     aDownload = new QAction(this);
-    aDownload->setIcon(QPixmap("theme:icons/arrow_left_green"));
+    aDownload->setIcon(loadThemedIcon(QStringLiteral("icons/arrow_left")));
     connect(aDownload, &QAction::triggered, this, &TabReplays::actDownload);
     aKeep = new QAction(this);
-    aKeep->setIcon(QPixmap("theme:icons/lock"));
+    aKeep->setIcon(loadThemedIcon(QStringLiteral("icons/lock")));
     connect(aKeep, &QAction::triggered, this, &TabReplays::actKeepRemoteReplay);
     aDeleteRemoteReplay = new QAction(this);
-    aDeleteRemoteReplay->setIcon(QPixmap("theme:icons/remove_row"));
+    aDeleteRemoteReplay->setIcon(loadThemedIcon(QStringLiteral("icons/remove_row")));
     connect(aDeleteRemoteReplay, &QAction::triggered, this, &TabReplays::actDeleteRemoteReplay);
     aGetReplayCode = new QAction(this);
-    aGetReplayCode->setIcon(QPixmap("theme:icons/share"));
+    aGetReplayCode->setIcon(loadThemedIcon(QStringLiteral("icons/share")));
     connect(aGetReplayCode, &QAction::triggered, this, &TabReplays::actGetReplayCode);
 
     aSubmitReplayCode = new QAction(this);
-    aSubmitReplayCode->setIcon(QPixmap("theme:icons/search"));
+    aSubmitReplayCode->setIcon(loadThemedIcon(QStringLiteral("icons/search")));
     connect(aSubmitReplayCode, &QAction::triggered, this, &TabReplays::actSubmitReplayCode);
 
     // Add actions to toolbars
@@ -256,13 +300,19 @@ void TabReplays::actOpenLocalReplay()
 {
     QModelIndexList curLefts = localDirView->selectionModel()->selectedRows();
     for (const auto &curLeft : curLefts) {
-        if (localDirModel->isDir(curLeft))
+        if (localDirModel->isDir(curLeft)) {
             continue;
+        }
         QString filePath = localDirModel->filePath(curLeft);
 
-        QFile f(filePath);
-        if (!f.open(QIODevice::ReadOnly))
+        if (!QDir::match(REPLAY_FILE_NAME_FILTERS, QFileInfo(filePath).fileName())) {
             continue;
+        }
+
+        QFile f(filePath);
+        if (!f.open(QIODevice::ReadOnly)) {
+            continue;
+        }
         QByteArray _data = f.readAll();
         f.close();
 
@@ -319,8 +369,9 @@ void TabReplays::actNewLocalFolder()
     bool ok;
     QString folderName =
         QInputDialog::getText(this, tr("New folder"), tr("Name of new folder:"), QLineEdit::Normal, "", &ok);
-    if (!ok || folderName.isEmpty())
+    if (!ok || folderName.isEmpty()) {
         return;
+    }
 
     localDirModel->mkdir(dirIndex, folderName);
 }
@@ -348,7 +399,7 @@ void TabReplays::actDeleteLocalReplay()
 void TabReplays::actOpenReplaysFolder()
 {
     QString dir = localDirModel->rootPath();
-    QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
+    QtUtils::openPathInFileManager(dir);
 }
 
 void TabReplays::actRemoteDoubleClick(const QModelIndex &curRight)
@@ -378,8 +429,9 @@ void TabReplays::actOpenRemoteReplay()
 
 void TabReplays::openRemoteReplayFinished(const Response &r)
 {
-    if (r.response_code() != Response::RespOk)
+    if (r.response_code() != Response::RespOk) {
         return;
+    }
 
     const Response_ReplayDownload &resp = r.GetExtension(Response_ReplayDownload::ext);
     GameReplay *replay = new GameReplay;
@@ -438,8 +490,9 @@ void TabReplays::downloadFinished(const Response &r,
                                   const CommandContainer & /* commandContainer */,
                                   const QVariant &extraData)
 {
-    if (r.response_code() != Response::RespOk)
+    if (r.response_code() != Response::RespOk) {
         return;
+    }
 
     const Response_ReplayDownload &resp = r.GetExtension(Response_ReplayDownload::ext);
     QString filePath = extraData.toString();
@@ -475,8 +528,9 @@ void TabReplays::actKeepRemoteReplay()
 
 void TabReplays::keepRemoteReplayFinished(const Response &r, const CommandContainer &commandContainer)
 {
-    if (r.response_code() != Response::RespOk)
+    if (r.response_code() != Response::RespOk) {
         return;
+    }
 
     const Command_ReplayModifyMatch &cmd =
         commandContainer.session_command(0).GetExtension(Command_ReplayModifyMatch::ext);
@@ -513,8 +567,9 @@ void TabReplays::actDeleteRemoteReplay()
 
 void TabReplays::deleteRemoteReplayFinished(const Response &r, const CommandContainer &commandContainer)
 {
-    if (r.response_code() != Response::RespOk)
+    if (r.response_code() != Response::RespOk) {
         return;
+    }
 
     const Command_ReplayDeleteMatch &cmd =
         commandContainer.session_command(0).GetExtension(Command_ReplayDeleteMatch::ext);

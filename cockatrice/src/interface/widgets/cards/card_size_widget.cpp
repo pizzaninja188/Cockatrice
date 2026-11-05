@@ -1,7 +1,20 @@
 #include "card_size_widget.h"
 
-#include "../printing_selector/printing_selector.h"
-#include "../visual_deck_storage/visual_deck_storage_widget.h"
+#include "../general/layout_containers/flow_widget.h"
+
+#include <QAbstractScrollArea>
+#include <QEvent>
+#include <QFlags>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QList>
+#include <QPoint>
+#include <QScrollArea>
+#include <QSizePolicy>
+#include <QSlider>
+#include <QWheelEvent>
+#include <QtGlobal>
+#include <qnamespace.h>
 
 /**
  * @class CardSizeWidget
@@ -21,8 +34,8 @@ CardSizeWidget::CardSizeWidget(QWidget *parent, FlowWidget *_flowWidget, int def
     cardSizeLabel->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
 
     cardSizeSlider = new QSlider(Qt::Horizontal, this);
-    cardSizeSlider->setRange(50, 250);      ///< Slider range for card size adjustment.
-    cardSizeSlider->setValue(defaultValue); ///< Initial slider value.
+    cardSizeSlider->setRange(MIN_CARD_SIZE, MAX_CARD_SIZE); ///< Slider range for card size adjustment.
+    cardSizeSlider->setValue(defaultValue);                 ///< Initial slider value.
 
     cardSizeLayout->addWidget(cardSizeLabel);
     cardSizeLayout->addWidget(cardSizeSlider);
@@ -57,4 +70,53 @@ void CardSizeWidget::updateCardSizeSetting(int newValue)
 QSlider *CardSizeWidget::getSlider() const
 {
     return cardSizeSlider;
+}
+
+void CardSizeWidget::enableCtrlScrollResize(QWidget *host)
+{
+    const auto watchScrollArea = [this](QAbstractScrollArea *scrollArea) {
+        if (scrollArea == nullptr) {
+            return;
+        }
+        if (QWidget *viewport = scrollArea->viewport()) {
+            viewport->installEventFilter(this);
+        }
+        if (auto *contentScrollArea = qobject_cast<QScrollArea *>(scrollArea)) {
+            if (QWidget *content = contentScrollArea->widget()) {
+                content->installEventFilter(this);
+            }
+        }
+    };
+
+    host->installEventFilter(this);
+    watchScrollArea(qobject_cast<QAbstractScrollArea *>(host));
+
+    const auto scrollAreas = host->findChildren<QAbstractScrollArea *>();
+    for (QAbstractScrollArea *scrollArea : scrollAreas) {
+        watchScrollArea(scrollArea);
+    }
+}
+
+bool CardSizeWidget::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::Wheel && adjustSliderForWheel(static_cast<QWheelEvent *>(event))) {
+        return true;
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
+bool CardSizeWidget::adjustSliderForWheel(QWheelEvent *event)
+{
+    if (!(event->modifiers() & Qt::ControlModifier)) {
+        return false;
+    }
+
+    const int angleDelta = event->angleDelta().y();
+    if (angleDelta == 0) {
+        return false;
+    }
+
+    const int wheelSteps = angleDelta > 0 ? qMax(1, angleDelta / 120) : qMin(-1, angleDelta / 120);
+    cardSizeSlider->setValue(cardSizeSlider->value() + wheelSteps * CARD_SIZE_WHEEL_STEP);
+    return true;
 }

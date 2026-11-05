@@ -1,28 +1,46 @@
 #include "dlg_edit_tokens.h"
 
+#include "../../theme_icon.h"
 #include "../interface/widgets/utility/get_text_with_max.h"
+#include "card_database_display_model.h"
+#include "libcockatrice/card/card_info.h"
+#include "libcockatrice/card/database/card_database_querier.h"
+#include "libcockatrice/card/printing/printing_info.h"
+#include "libcockatrice/card/set/card_set.h"
 
 #include <QAction>
+#include <QChar>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QHash>
 #include <QHeaderView>
-#include <QInputDialog>
+#include <QItemSelectionModel>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QModelIndex>
+#include <QSharedPointer>
+#include <QStringLiteral>
 #include <QToolBar>
 #include <QTreeView>
+#include <QVBoxLayout>
+#include <QVariant>
+#include <QtGlobal>
 #include <libcockatrice/card/database/card_database.h>
 #include <libcockatrice/card/database/card_database_manager.h>
 #include <libcockatrice/models/database/card_database_model.h>
 #include <libcockatrice/models/database/token/token_edit_model.h>
-#include <libcockatrice/utility/trice_limits.h>
+#include <libcockatrice/utility/string_limits.h>
+#include <qnamespace.h>
+
+class QWidget;
 
 DlgEditTokens::DlgEditTokens(QWidget *parent) : QDialog(parent), currentCard(nullptr)
 {
+    setObjectName("editTokensDialog");
     nameLabel = new QLabel(tr("&Name:"));
     nameEdit = new QLineEdit;
     nameEdit->setMaxLength(MAX_NAME_LENGTH);
@@ -90,10 +108,10 @@ DlgEditTokens::DlgEditTokens(QWidget *parent) : QDialog(parent), currentCard(nul
             &DlgEditTokens::tokenSelectionChanged);
 
     QAction *aAddToken = new QAction(tr("Add token"), this);
-    aAddToken->setIcon(QPixmap("theme:icons/increment"));
+    aAddToken->setIcon(loadThemedIcon(QStringLiteral("icons/increment")));
     connect(aAddToken, &QAction::triggered, this, &DlgEditTokens::actAddToken);
     QAction *aRemoveToken = new QAction(tr("Remove token"), this);
-    aRemoveToken->setIcon(QPixmap("theme:icons/decrement"));
+    aRemoveToken->setIcon(loadThemedIcon(QStringLiteral("icons/decrement")));
     connect(aRemoveToken, &QAction::triggered, this, &DlgEditTokens::actRemoveToken);
 
     auto *databaseToolBar = new QToolBar;
@@ -149,8 +167,9 @@ void DlgEditTokens::actAddToken()
     QString name;
     for (;;) {
         name = getTextWithMax(this, tr("Add token"), tr("Please enter the name of the token:"));
-        if (name.isEmpty())
+        if (name.isEmpty()) {
             return;
+        }
         if (databaseModel->getDatabase()->query()->getCardInfo(name)) {
             QMessageBox::critical(this, tr("Error"),
                                   tr("The chosen name conflicts with an existing card or token.\nMake sure to enable "
@@ -181,18 +200,21 @@ void DlgEditTokens::actRemoveToken()
 
 void DlgEditTokens::colorChanged(int colorIndex)
 {
-    if (currentCard)
+    if (currentCard) {
         currentCard->setColors(QString(colorEdit->itemData(colorIndex).toChar()));
+    }
 }
 
 void DlgEditTokens::ptChanged(const QString &_pt)
 {
-    if (currentCard)
+    if (currentCard) {
         currentCard->setPowTough(_pt);
+    }
 }
 
 void DlgEditTokens::annotationChanged(const QString &_annotation)
 {
-    if (currentCard)
+    if (currentCard) {
         currentCard->setText(_annotation);
+    }
 }

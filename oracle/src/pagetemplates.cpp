@@ -1,19 +1,35 @@
 #include "pagetemplates.h"
 
+#include "database_writer.h"
 #include "oraclewizard.h"
 
 #include <QCheckBox>
+#include <QDebug>
 #include <QDir>
+#include <QFile>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QGridLayout>
+#include <QIODevice>
 #include <QLabel>
 #include <QLineEdit>
+#include <QList>
 #include <QMessageBox>
+#include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QObject>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QRadioButton>
-#include <QtGui>
+#include <QSettings>
+#include <QSharedPointer>
+#include <QUrl>
+#include <QVariant>
+#include <qlogging.h>
+#include <qnamespace.h>
+
+class QWidget;
 
 SimpleDownloadFilePage::SimpleDownloadFilePage(QWidget *parent) : OracleWizardPage(parent)
 {
@@ -112,7 +128,7 @@ bool SimpleDownloadFilePage::validatePage()
             return false;
         }
 
-        progressLabel->setText(tr("Downloading (0MB)"));
+        progressLabel->setText(tr("Downloading (0 MB)"));
         // show an infinite progressbar
         progressBar->setMaximum(0);
         progressBar->setMinimum(0);
@@ -163,11 +179,23 @@ void SimpleDownloadFilePage::actDownloadFinished()
 {
     // check for a reply
     auto *reply = dynamic_cast<QNetworkReply *>(sender());
+    if (wizard()->wasCancelled()) {
+        reply->deleteLater();
+        return;
+    }
     QNetworkReply::NetworkError errorCode = reply->error();
     if (errorCode != QNetworkReply::NoError) {
-        QMessageBox::critical(this, tr("Error"), tr("Network error: %1.").arg(reply->errorString()));
-        wizard()->enableButtons();
+        const QString message = tr("Network error: %1.").arg(reply->errorString());
         reply->deleteLater();
+        // A hidden wizard cannot show a modal box: without an explicit stop it would sit
+        // here forever and the hosting client would wait with no timeout.
+        if (wizard()->backgroundMode) {
+            qWarning() << message;
+            wizard()->reject();
+            return;
+        }
+        QMessageBox::critical(this, tr("Error"), message);
+        wizard()->enableButtons();
         return;
     }
 
@@ -199,6 +227,15 @@ void SimpleDownloadFilePage::actDownloadFinished()
 
 bool SimpleDownloadFilePage::saveToFile()
 {
+    const auto failSave = [this](const QString &message) {
+        qWarning() << message;
+        if (wizard()->backgroundMode) {
+            wizard()->reject();
+        } else {
+            QMessageBox::critical(this, tr("Error"), message);
+        }
+        return false;
+    };
     QString defaultPath = getDefaultSavePath();
     QString windowName = getWindowTitle();
     QString fileType = getFileType();
@@ -217,32 +254,25 @@ bool SimpleDownloadFilePage::saveToFile()
     QFileInfo fi(fileName);
     QDir fileDir(fi.path());
     if (!fileDir.exists() && !fileDir.mkpath(fileDir.absolutePath())) {
-        return false;
+        return failSave(tr("The database directory could not be created: %1").arg(fileDir.absolutePath()));
     }
 
     if (!internalSaveToFile(fileName)) {
-        QMessageBox::critical(this, tr("Error"), tr("The file could not be saved to %1").arg(fileName));
-        return false;
+        return failSave(tr("The file could not be saved to %1").arg(fileName));
     }
 
     // clean saved downloadData
     downloadData = QByteArray();
+    wizard()->markDatabaseSaved();
     return true;
 }
 
 bool SimpleDownloadFilePage::internalSaveToFile(const QString &fileName)
 {
-    QFile file(fileName);
-    if (!file.open(QIODevice::WriteOnly)) {
-        qDebug() << "File open (w) failed for" << fileName;
+    QString error;
+    if (!OracleDatabase::saveXml(fileName, downloadData, &error)) {
+        qWarning() << error;
         return false;
     }
-
-    if (file.write(downloadData) == -1) {
-        qDebug() << "File write (w) failed for" << fileName;
-        return false;
-    }
-
-    file.close();
     return true;
 }

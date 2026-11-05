@@ -2,6 +2,8 @@
 
 #include "abstract_analytics_panel_widget.h"
 
+#include <QSharedPointer>
+
 AnalyticsPanelWidgetFactory &AnalyticsPanelWidgetFactory::instance()
 {
     static AnalyticsPanelWidgetFactory f;
@@ -17,8 +19,9 @@ AbstractAnalyticsPanelWidget *
 AnalyticsPanelWidgetFactory::create(const QString &type, QWidget *parent, DeckListStatisticsAnalyzer *analyzer) const
 {
     auto it = widgets.find(type);
-    if (it == widgets.end())
+    if (it == widgets.end()) {
         return nullptr;
+    }
 
     auto w = it->creator(parent, analyzer);
 

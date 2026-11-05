@@ -1,16 +1,25 @@
 /**
  * @file shortcuts_settings.h
  * @ingroup CoreSettings
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef SHORTCUTSSETTINGS_H
 #define SHORTCUTSSETTINGS_H
 
 #include <QApplication>
+#include <QByteArray>
+#include <QChar>
+#include <QHash>
 #include <QKeySequence>
+#include <QList>
 #include <QLoggingCategory>
-#include <QSettings>
+#include <QObject>
+#include <QString>
+#include <QStringList>
+#include <QtGlobal>
+#include <qtmetamacros.h>
+#include <utility>
 
 inline Q_LOGGING_CATEGORY(ShortcutsSettingsLog, "shortcuts_settings");
 
@@ -223,6 +232,10 @@ private:
         {"TabDeckEditor/aLoadDeck", ShortcutKey(QT_TRANSLATE_NOOP("shortcutsTab", "Load Deck..."),
                                                 parseSequenceString("Ctrl+O"),
                                                 ShortcutGroup::Deck_Editor)},
+        {"TabDeckEditor/aLoadDeckFromWebsite",
+         ShortcutKey(QT_TRANSLATE_NOOP("shortcutsTab", "Load deck from online service..."),
+                     parseSequenceString("Ctrl+Shift+O"),
+                     ShortcutGroup::Deck_Editor)},
         {"TabDeckEditor/aLoadDeckFromClipboard",
          ShortcutKey(QT_TRANSLATE_NOOP("shortcutsTab", "Load Deck from Clipboard..."),
                      parseSequenceString("Ctrl+Shift+V"),
@@ -282,6 +295,10 @@ private:
         {"DeckViewContainer/loadFromClipboardButton",
          ShortcutKey(QT_TRANSLATE_NOOP("shortcutsTab", "Load Deck from Clipboard..."),
                      parseSequenceString("Ctrl+Shift+V"),
+                     ShortcutGroup::Game_Lobby)},
+        {"DeckViewContainer/loadFromWebsiteButton",
+         ShortcutKey(QT_TRANSLATE_NOOP("shortcutsTab", "Load from website..."),
+                     parseSequenceString("Ctrl+Shift+O"),
                      ShortcutGroup::Game_Lobby)},
         {"DeckViewContainer/unloadDeckButton", ShortcutKey(QT_TRANSLATE_NOOP("shortcutsTab", "Unload Deck"),
                                                            parseSequenceString("Ctrl+Alt+U"),
@@ -537,6 +554,9 @@ private:
         {"Player/aSetAnnotation", ShortcutKey(QT_TRANSLATE_NOOP("shortcutsTab", "Set Annotation..."),
                                               parseSequenceString("Alt+N"),
                                               ShortcutGroup::Playing_Area)},
+        {"Player/aReduceLifeByPower", ShortcutKey(QT_TRANSLATE_NOOP("shortcutsTab", "Reduce Life by Power"),
+                                                  parseSequenceString("Ctrl+Shift+L"),
+                                                  ShortcutGroup::Playing_Area)},
         {"Player/aSelectAll", ShortcutKey(QT_TRANSLATE_NOOP("shortcutsTab", "Select All Cards in Zone"),
                                           parseSequenceString("Ctrl+A"),
                                           ShortcutGroup::Playing_Area)},
@@ -664,6 +684,9 @@ private:
         {"Player/aRollDie", ShortcutKey(QT_TRANSLATE_NOOP("shortcutsTab", "Roll Dice..."),
                                         parseSequenceString("Ctrl+I"),
                                         ShortcutGroup::Gameplay)},
+        {"Player/aFlipCoin", ShortcutKey(QT_TRANSLATE_NOOP("shortcutsTab", "Flip Coin"),
+                                         parseSequenceString("Ctrl+Shift+I"),
+                                         ShortcutGroup::Gameplay)},
         {"Player/aShuffle", ShortcutKey(QT_TRANSLATE_NOOP("shortcutsTab", "Shuffle Library"),
                                         parseSequenceString("Ctrl+S"),
                                         ShortcutGroup::Gameplay)},
@@ -772,6 +795,10 @@ private:
                                        ShortcutGroup::Tabs)},
         {"Tabs/aTabLogs",
          ShortcutKey(QT_TRANSLATE_NOOP("shortcutsTab", "Logs"), parseSequenceString(""), ShortcutGroup::Tabs)},
+        {"Tabs/aTabReport",
+         ShortcutKey(QT_TRANSLATE_NOOP("shortcutsTab", "Report Queue"), parseSequenceString(""), ShortcutGroup::Tabs)},
+        {"Tabs/aTabModeration",
+         ShortcutKey(QT_TRANSLATE_NOOP("shortcutsTab", "Moderation"), parseSequenceString(""), ShortcutGroup::Tabs)},
     };
 };
 

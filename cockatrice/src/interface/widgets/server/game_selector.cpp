@@ -1,26 +1,55 @@
 #include "game_selector.h"
 
+#include "../../../client/settings/cache_settings.h"
+#include "../../theme_icon.h"
 #include "../interface/widgets/dialogs/dlg_create_game.h"
 #include "../interface/widgets/dialogs/dlg_filter_games.h"
-#include "../interface/widgets/tabs/tab_account.h"
-#include "../interface/widgets/tabs/tab_game.h"
 #include "../interface/widgets/tabs/tab_room.h"
 #include "../interface/widgets/tabs/tab_supervisor.h"
 #include "../interface/widgets/utility/get_text_with_max.h"
+#include "game_link.h"
+#include "game_selector_quick_filter_toolbar.h"
 #include "games_model.h"
+#include "libcockatrice/protocol/pb/event_add_to_list.pb.h"
+#include "libcockatrice/protocol/pb/event_remove_from_list.pb.h"
+#include "libcockatrice/protocol/pb/serverinfo_user.pb.h"
 #include "user/user_list_manager.h"
 
+#include <QAction>
+#include <QClipboard>
 #include <QDebug>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QItemSelectionModel>
+#include <QLineEdit>
+#include <QMap>
+#include <QMenu>
 #include <QMessageBox>
+#include <QModelIndex>
 #include <QPushButton>
+#include <QSize>
+#include <QString>
+#include <QStringLiteral>
 #include <QTreeView>
+#include <QVBoxLayout>
+#include <QVariant>
+#include <QtGlobal>
 #include <libcockatrice/network/client/abstract/abstract_client.h>
 #include <libcockatrice/protocol/pb/response.pb.h>
 #include <libcockatrice/protocol/pb/room_commands.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_game.pb.h>
 #include <libcockatrice/protocol/pending_command.h>
+#include <libcockatrice/settings/interface_settings.h>
+#include <libcockatrice/utility/qt_utils.h>
+#include <qlogging.h>
+#include <qnamespace.h>
+#include <string>
+
+class QModelIndex;
+class QPoint;
+class QWidget;
+template <typename T> class QList;
 
 GameSelector::GameSelector(AbstractClient *_client,
                            TabSupervisor *_tabSupervisor,
@@ -37,8 +66,9 @@ GameSelector::GameSelector(AbstractClient *_client,
     connect(gameListView, &QTreeView::customContextMenuRequested, this, &GameSelector::customContextMenu);
 
     gameListModel = new GamesModel(_rooms, _gameTypes, this);
+    gameListProxyModel = new GamesProxyModel(this, tabSupervisor->getUserListManager());
+
     if (showFilters) {
-        gameListProxyModel = new GamesProxyModel(this, tabSupervisor->getUserListManager());
         gameListProxyModel->setSourceModel(gameListModel);
         gameListProxyModel->setSortCaseSensitivity(Qt::CaseInsensitive);
         gameListView->setModel(gameListProxyModel);
@@ -60,34 +90,50 @@ GameSelector::GameSelector(AbstractClient *_client,
     gameListView->setColumnWidth(3, gameListView->columnWidth(3) * 1.2);
     // game type width
     gameListView->setColumnWidth(4, gameListView->columnWidth(4) * 1.4);
-    if (_room)
+    if (_room) {
         gameListView->header()->hideSection(gameListModel->roomColIndex());
+    }
 
-    if (room)
+    if (room) {
         gameTypeMap = gameListModel->getGameTypes().value(room->getRoomId());
+    }
 
-    if (showFilters && restoresettings)
+    if (showFilters && restoresettings) {
         gameListProxyModel->loadFilterParameters(gameTypeMap);
+    }
 
     gameListView->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
 
     if (showFilters && restoresettings) {
         quickFilterToolBar = new GameSelectorQuickFilterToolBar(this, tabSupervisor, gameListProxyModel, gameTypeMap);
         quickFilterToolBar->setVisible(showFilters && restoresettings &&
-                                       SettingsCache::instance().getShowGameSelectorFilterToolbar());
+                                       SettingsCache::instance().userInterface().getShowGameSelectorFilterToolbar());
 
-        connect(&SettingsCache::instance(), &SettingsCache::showGameSelectorFilterToolbarChanged, this, [this] {
-            quickFilterToolBar->setVisible(SettingsCache::instance().getShowGameSelectorFilterToolbar());
-        });
+        connect(&SettingsCache::instance().userInterface(), &InterfaceSettings::showGameSelectorFilterToolbarChanged,
+                this, [this] {
+                    quickFilterToolBar->setVisible(
+                        SettingsCache::instance().userInterface().getShowGameSelectorFilterToolbar());
+                });
+        // The quick-filter toolbar only updates the in-memory model, so persist every change.
+        // Otherwise each new GameSelector (room switch, reconnect, restart) would revert to stale
+        // saved values and e.g. hide full/started games the user had unchecked. The save is
+        // debounced so typing in the search field does not rewrite the settings file on every
+        // keystroke; a pending save is flushed in the destructor.
+        filterSaveDebounceTimer.setSingleShot(true);
+        filterSaveDebounceTimer.setInterval(500);
+        connect(&filterSaveDebounceTimer, &QTimer::timeout, this,
+                [this] { gameListProxyModel->saveFilterParameters(gameTypeMap); });
+        connect(gameListProxyModel, &GamesProxyModel::filtersChanged, this,
+                [this] { filterSaveDebounceTimer.start(); });
     } else {
         quickFilterToolBar = nullptr;
     }
 
     filterButton = new QPushButton;
-    filterButton->setIcon(QPixmap("theme:icons/search"));
+    filterButton->setIcon(loadThemedIcon(QStringLiteral("icons/search")));
     connect(filterButton, &QPushButton::clicked, this, &GameSelector::actSetFilter);
     clearFilterButton = new QPushButton;
-    clearFilterButton->setIcon(QPixmap("theme:icons/clearsearch"));
+    clearFilterButton->setIcon(loadThemedIcon(QStringLiteral("icons/clearsearch")));
     bool filtersSetToDefault = showFilters && gameListProxyModel->areFilterParametersSetToDefaults();
     clearFilterButton->setEnabled(!filtersSetToDefault);
     connect(clearFilterButton, &QPushButton::clicked, this, &GameSelector::actClearFilter);
@@ -110,8 +156,9 @@ GameSelector::GameSelector(AbstractClient *_client,
         buttonLayout->addWidget(clearFilterButton);
     }
     buttonLayout->addStretch();
-    if (room)
+    if (room) {
         buttonLayout->addWidget(createButton);
+    }
     buttonLayout->addWidget(joinButton);
     if (tabSupervisor->getUserInfo()->user_level() & ServerInfo_User::IsJudge) {
         buttonLayout->addWidget(joinAsJudgeButton);
@@ -152,6 +199,18 @@ GameSelector::GameSelector(AbstractClient *_client,
     connect(client, &AbstractClient::removeFromListEventReceived, this, &GameSelector::processRemoveFromListEvent);
 }
 
+GameSelector::~GameSelector()
+{
+    // Nothing else persists quick-filter toolbar edits: the toolbar only updates the in-memory model,
+    // and the debounced timer above is the sole writer for that path (actSetFilter/actClearFilter save
+    // synchronously, but the toolbar does not). Flush a pending debounced save so edits made within
+    // the debounce interval before destruction are not lost on room switch, reconnect, or close.
+    if (filterSaveDebounceTimer.isActive()) {
+        filterSaveDebounceTimer.stop();
+        gameListProxyModel->saveFilterParameters(gameTypeMap);
+    }
+}
+
 void GameSelector::ignoreListReceived(const QList<ServerInfo_User> &)
 {
     gameListProxyModel->refresh();
@@ -177,16 +236,11 @@ void GameSelector::actSetFilter()
 {
     DlgFilterGames dlg(gameTypeMap, gameListProxyModel, this);
 
-    if (!dlg.exec())
+    if (!dlg.exec()) {
         return;
+    }
 
-    gameListProxyModel->setGameFilters(
-        dlg.getHideBuddiesOnlyGames(), dlg.getHideIgnoredUserGames(), dlg.getHideFullGames(),
-        dlg.getHideGamesThatStarted(), dlg.getHidePasswordProtectedGames(), dlg.getHideNotBuddyCreatedGames(),
-        dlg.getHideOpenDecklistGames(), dlg.getGameNameFilter(), dlg.getCreatorNameFilters(), dlg.getGameTypeFilter(),
-        dlg.getMaxPlayersFilterMin(), dlg.getMaxPlayersFilterMax(), dlg.getMaxGameAge(),
-        dlg.getShowOnlyIfSpectatorsCanWatch(), dlg.getShowSpectatorPasswordProtected(),
-        dlg.getShowOnlyIfSpectatorsCanChat(), dlg.getShowOnlyIfSpectatorsCanSeeHands());
+    gameListProxyModel->setGameFilters(dlg.getFilters());
     gameListProxyModel->saveFilterParameters(gameTypeMap);
 
     updateTitle();
@@ -312,6 +366,14 @@ void GameSelector::customContextMenu(const QPoint &point)
         dlg.exec();
     });
 
+    QAction copyLink(tr("Cop&y game link"));
+    connect(&copyLink, &QAction::triggered, this, [=, this]() {
+        const ServerInfo_Game &gameInfo = gameListModel->getGame(index.data(Qt::UserRole).toInt());
+        QGuiApplication::clipboard()->setText(makeGameJoinLink(client->serverName(), client->serverPort(),
+                                                               gameInfo.room_id(), gameInfo.game_id(),
+                                                               QString::fromStdString(gameInfo.description())));
+    });
+
     QMenu menu;
     menu.addAction(&joinGame);
 
@@ -329,6 +391,11 @@ void GameSelector::customContextMenu(const QPoint &point)
 
     menu.addAction(&spectateGame);
     menu.addAction(&getGameInfo);
+
+    if (!client->serverName().isEmpty()) {
+        menu.addAction(&copyLink);
+    }
+
     menu.exec(gameListView->mapToGlobal(point));
 }
 
@@ -339,18 +406,38 @@ void GameSelector::joinGame(const bool asSpectator, const bool asJudge)
         return;
     }
 
-    const ServerInfo_Game &game = gameListModel->getGame(ind.data(Qt::UserRole).toInt());
+    joinGame(gameListModel->getGame(ind.data(Qt::UserRole).toInt()), asSpectator, asJudge);
+}
+
+void GameSelector::joinGame(const ServerInfo_Game &game, const bool asSpectator, const bool asJudge)
+{
     if (tabSupervisor->switchToGameTabIfAlreadyExists(game.game_id())) {
         return;
     }
 
-    bool spectator = asSpectator || game.player_count() == game.max_players();
+    bool overrideRestrictions = tabSupervisor->canOverrideGameRestrictions();
 
-    bool overrideRestrictions = !tabSupervisor->getAdminLocked();
+    // Joining a full game without override privileges silently becomes a
+    // spectator join, so ask first instead of surprising the player.
+    const bool gameFull = game.player_count() == game.max_players();
+    if (gameFull && !asSpectator && !asJudge && !overrideRestrictions) {
+        if (!QtUtils::confirm(this, tr("Join game"), tr("The game is full. Join as a spectator instead?"),
+                              QMessageBox::No)) {
+            return;
+        }
+    }
+
+    bool spectator = asSpectator || gameFull;
+
     QString password;
     if (game.with_password() && !(spectator && !game.spectators_need_password()) && !overrideRestrictions) {
         bool ok;
-        password = getTextWithMax(this, tr("Join game"), tr("Password:"), QLineEdit::Password, QString(), &ok);
+        // Games without a description have no sensible label — fall back to the
+        // game id so the prompt still tells the user which game they're entering.
+        const QString gameLabel = QString::fromStdString(game.description());
+        const QString prompt = gameLabel.isEmpty() ? tr("Password for game #%1:").arg(game.game_id())
+                                                   : tr("Password for \"%1\":").arg(gameLabel);
+        password = getTextWithMax(this, tr("Join game"), prompt, QLineEdit::Password, QString(), &ok);
         if (!ok) {
             return;
         }
@@ -376,10 +463,27 @@ void GameSelector::joinGame(const bool asSpectator, const bool asJudge)
     disableButtons();
 }
 
+bool GameSelector::joinGameById(const int gameId, const bool asSpectator)
+{
+    for (int row = 0; row < gameListModel->rowCount(); ++row) {
+        const ServerInfo_Game &game = gameListModel->getGame(row);
+        if (game.game_id() != gameId) {
+            continue;
+        }
+
+        joinGame(game, asSpectator);
+        return true;
+    }
+
+    qWarning() << "Game" << gameId << "not found";
+    return false;
+}
+
 void GameSelector::disableButtons()
 {
-    if (createButton)
+    if (createButton) {
         createButton->setEnabled(false);
+    }
 
     joinButton->setEnabled(false);
     spectateButton->setEnabled(false);
@@ -387,8 +491,9 @@ void GameSelector::disableButtons()
 
 void GameSelector::enableButtons()
 {
-    if (createButton)
+    if (createButton) {
         createButton->setEnabled(true);
+    }
 
     // Enable buttons for the currently selected game
     enableButtonsForIndex(gameListView->currentIndex());
@@ -396,11 +501,12 @@ void GameSelector::enableButtons()
 
 void GameSelector::enableButtonsForIndex(const QModelIndex &current)
 {
-    if (!current.isValid())
+    if (!current.isValid()) {
         return;
+    }
 
     const ServerInfo_Game &game = gameListModel->getGame(current.data(Qt::UserRole).toInt());
-    bool overrideRestrictions = !tabSupervisor->getAdminLocked();
+    bool overrideRestrictions = tabSupervisor->canOverrideGameRestrictions();
 
     spectateButton->setEnabled(game.spectators_allowed() || overrideRestrictions);
     joinButton->setEnabled(game.player_count() < game.max_players() || overrideRestrictions);
@@ -410,8 +516,9 @@ void GameSelector::retranslateUi()
 {
     filterButton->setText(tr("&Filter games"));
     clearFilterButton->setText(tr("C&lear filter"));
-    if (createButton)
+    if (createButton) {
         createButton->setText(tr("C&reate"));
+    }
     joinButton->setText(tr("&Join"));
     joinAsJudgeButton->setText(tr("Join as judge"));
     spectateButton->setText(tr("J&oin as spectator"));

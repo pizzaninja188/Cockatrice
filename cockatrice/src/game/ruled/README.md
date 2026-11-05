@@ -23,20 +23,32 @@ this a legal target, is this a creature — is answered from what the engine sen
 ```
              RuledEventBatch (Event_RuledPayload)
                         │
-          GameEventHandler ── one-line RULED_PAYLOAD case
+          GameEventHandler ── RuledGameHooks ── RuledGameController
                         │
              RuledEventDispatcher ──writes──► RuledClientState ──signals──► TabGame /
                         │                            ▲                      GamePromptWidget /
                         └──────────┬─────────────────┘                      CardItem / PlayerTarget
                                    ▼
-                            RuledClientHost  (implemented by GameEventHandler)
+                            RuledClientHost  (implemented by RuledGameController)
                                    ▲
                             RuledActions ── clicks, CardItem lookup, isRuledGame()
 ```
 
+### Upstream model and graphics adapters
+
+Upstream now keeps game state under `libcockatrice_game/libcockatrice/game/` and graphics
+under `cockatrice/src/game_graphics/`. `RuledGameController` implements the model-facing
+`RuledGameHooks` and the headless state-facing `RuledClientHost`; the tab owns its lifetime.
+It routes transport, payloads, snapshot transitions, mana-counter projections and synthetic graphics.
+`RuledPlayerActions` subclasses the primary upstream `PlayerActions` object and keeps payment
+and targeting entry points on that one QObject. `ruled_client_ui` maps `PlayerLogic` / `CardState`
+to their existing graphics objects, without creating duplicate model or action objects.
+`RuledActions::isRuledGame` is defined in the model-only `ruled_game_mode.cpp`, so core guards
+do not pull widgets into the game library.
+
 ### `ruled_client_state.{h,cpp}` — `RuledClientState`
 
-A `QObject` parented to `GameEventHandler`; the client's whole picture of the ruled game.
+A `QObject` parented to `RuledGameController`; the client's whole picture of the ruled game.
 Reach it with `game->getGameEventHandler()->ruled()`.
 
 Holds: legal hand actions per `HandActionKind`, engine targeting tables (by hand slot/face and by
@@ -103,12 +115,12 @@ mana abilities. Previews never tap cards or spend mana. Historical Waterbend acc
 `ruled_payment_progression.cpp` implements the same `RuledPaymentUi` bridge's cast/activation
 entry and face/cast-method selection, initialization, cost-group progression, cost-object clicks,
 X/flexible-mana dialogs, cancellation, submission, and resolution-payment integration.
-`PlayerActions` retains thin entry points and
+`RuledPlayerActions` retains thin entry points and
 host signals; it does not own a second progression controller. The two cost-click hooks remain
 on either side of the existing trigger/permanent-choice handlers to preserve their precedence.
 `RuledTargetUi` owns target reconciliation, eligibility, card/player click dispatch, target-group
 and mode prompt progression, and damage-allocation UI notifications. It hands completed staging
-directly to `RuledPaymentUi`; `TabGame` selects prompt modes. The bridges keep `PlayerActions`
+directly to `RuledPaymentUi`; `TabGame` selects prompt modes. The bridges keep `RuledPlayerActions`
 as the QObject connection context and preserve existing translation contexts, acknowledgement
 behavior, and nested-payment lifetimes.
 
@@ -135,10 +147,10 @@ event kind → `finishBatch(ctx)` emits everything the batch accumulated, in the
 
 The pure-virtual seam the state and dispatcher use to reach the Qt UI: local seat id, turn/phase
 writes, synthetic stack cards, the P/T fallback, command transport (with and without an ack), the
-modal-choice fallback, and arrow resync. `GameEventHandler` implements it.
+modal-choice fallback, and arrow resync. `RuledGameController` implements it.
 
 > **Keep `ruled_client_state.cpp` and `ruled_event_dispatcher.cpp` free of `AbstractGame`,
-> `Player` and `CardItem`.** Anything new they need goes on this interface. That is the only
+> `PlayerLogic` and `CardItem`.** Anything new they need goes on this interface. That is the only
 > reason `tests/ruled_client_tests/` can link and run headless with a `FakeHost`; adding a UI
 > include there silently breaks the test target's link.
 >
@@ -147,7 +159,7 @@ modal-choice fallback, and arrow resync. `GameEventHandler` implements it.
 
 ### `ruled_actions.{h,cpp}` — `namespace RuledActions`
 
-The bridge to the UI, and the one unit that *may* depend on `AbstractGame` / `Player` / `CardItem`,
+The click bridge to the UI; together with the adapters above it may depend on `AbstractGame` / `PlayerLogic` / `CardItem`,
 because resolving a click is a UI concern. Free functions, so upstream call sites stay guards:
 
 ```cpp
@@ -466,3 +478,43 @@ discard with count-only announcements and private identities; Abundance's public
 with private bottom ordering; Tomorrow's private selection; reconnect at pending stages;
 source/drawer/controller concession; exact physical movement and effect tail once. These steps
 are retained from the architecture delivery; later card-level evidence must be checked separately.
+
+
+### Upstream integration — user acceptance pending
+
+On 2026-11-04 the user confirmed priority passing after casting, nonempty live-stack close
+protection, and debug-replay stack visibility through backward/forward seeks. Remaining payment,
+identity, privacy, resolution-choice and broader playback checks below are pending.
+
+The ruled stack is an engine-owned view: while it has published objects, its close button and
+View-menu dismissal are disabled. Replay tabs create the same stack action and automatically
+restore physical spells and synthetic ability tiles when seeking. Mandatory choice windows keep
+their close protection; resolution dialogs also reject Escape/window-close dismissal. Their UI
+owners can still close them when the engine completes or replaces the choice. Completed reveals
+and optional exile-cast permission views retain local dismissal.
+
+The live-stack close protection and debug-replay seek checks are user-confirmed. For the remaining
+resolution-choice check, Escape must keep an unanswered choice open, while a legal choice (or
+explicit Decline when offered) advances normally. That hands-on check remains pending; automated
+offscreen tests cover dismissal and a replay containing both a spell and a triggered ability.
+
+Use matching protocol-10014 fork clients and Servatrice. From the integration checkout, run
+`scripts/launch-ruled-game.ps1 -Dev` in the interactive user session. Complete the opening prompts.
+The integration build uses the short `X:` drive alias; keep that alias while using its build cache.
+
+1. Conjure `Lightning Bolt` in the first seat's hand and `Grizzly Bears` on the other battlefield;
+   add `R` to the first seat. Use the card's context-menu Play action, select the opposing Bears,
+   pay and submit. Both clients must show one physical spell on the stack, with an arrow to the
+   selected permanent; resolving it must remove that exact creature and move the spell once.
+2. Repeat with multiple spells or abilities pending. The stack window must retain every item in
+   engine order, with arrows anchored to the visible stack copies. Payment counters, restricted
+   mana rows and cancel/retry prompts must update on the same primary action controller.
+3. Reconnect a registered seat during a pending choice or payment. Its hand, public zones,
+   command-zone view, priority and current prompt must match the other seat's permitted view;
+   private choices and face-down identities must remain recipient-only. Repeat with a spectator
+   whose omniscient permission is disabled.
+4. Open an exported ruled report, seek backward and forward repeatedly, and confirm that prompts,
+   stack items, player graphics and zone views rebuild without duplicates or stale windows.
+
+These are requested user checks, not evidence of completed GUI acceptance. Automated offscreen
+playback, model, relay and network tests establish their own narrower contracts.

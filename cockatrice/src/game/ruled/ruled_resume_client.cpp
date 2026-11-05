@@ -1,6 +1,6 @@
 #include "ruled_resume_client.h"
 
-#include "../phases_toolbar.h"
+#include "../../game_graphics/phases_toolbar.h"
 #include "ruled_auto_pass_policy.h"
 
 #include <QDebug>

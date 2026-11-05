@@ -1,7 +1,24 @@
 #include "tab_deck_editor_visual_tab_widget.h"
 
+#include "../../deck_analytics/deck_analytics_widget.h"
+#include "../../deck_analytics/deck_list_statistics_analyzer.h"
+#include "../../deck_editor/deck_editor_deck_dock_widget.h"
 #include "../../interface/widgets/visual_database_display/visual_database_display_widget.h"
+#include "../../visual_deck_editor/visual_deck_editor_sample_hand_widget.h"
+#include "../../visual_deck_editor/visual_deck_editor_widget.h"
 #include "../abstract_tab_deck_editor.h"
+#include "libcockatrice/card/printing/exact_card.h"
+#include "libcockatrice/deck_list/tree/inner_deck_list_node.h"
+
+#include <QApplication>
+#include <QFlags>
+#include <QVBoxLayout>
+#include <QWidget>
+#include <qnamespace.h>
+
+class CardDatabaseModel;
+class DeckListModel;
+class QMouseEvent;
 
 /**
  * @brief Constructs the TabDeckEditorVisualTabWidget.
@@ -9,7 +26,6 @@
  * @param _deckEditor Pointer to the associated deck editor.
  * @param _deckModel Pointer to the deck list model.
  * @param _cardDatabaseModel Pointer to the card database model.
- * @param _cardDatabaseDisplayModel Pointer to the card database display model.
  *
  * Initializes all sub-widgets (visual deck view, database display, deck analytics,
  * sample hand) and sets up the tab layout and signal connections.
@@ -17,10 +33,8 @@
 TabDeckEditorVisualTabWidget::TabDeckEditorVisualTabWidget(QWidget *parent,
                                                            AbstractTabDeckEditor *_deckEditor,
                                                            DeckListModel *_deckModel,
-                                                           CardDatabaseModel *_cardDatabaseModel,
-                                                           CardDatabaseDisplayModel *_cardDatabaseDisplayModel)
-    : QTabWidget(parent), deckEditor(_deckEditor), deckModel(_deckModel), cardDatabaseModel(_cardDatabaseModel),
-      cardDatabaseDisplayModel(_cardDatabaseDisplayModel)
+                                                           CardDatabaseModel *_cardDatabaseModel)
+    : QTabWidget(parent), deckEditor(_deckEditor), deckModel(_deckModel), cardDatabaseModel(_cardDatabaseModel)
 {
     this->setTabsClosable(true); // Enable tab closing
     connect(this, &QTabWidget::tabCloseRequested, this, &TabDeckEditorVisualTabWidget::handleTabClose);
@@ -28,22 +42,32 @@ TabDeckEditorVisualTabWidget::TabDeckEditorVisualTabWidget(QWidget *parent,
     layout = new QVBoxLayout(this);
     setLayout(layout);
 
-    visualDeckView = new VisualDeckEditorWidget(this, deckModel, _deckEditor->deckDockWidget->getSelectionModel());
+    visualDeckView = new VisualDeckEditorWidget(this, deckModel, _deckEditor->deckDockWidget->getSelectionModel(),
+                                                _cardDatabaseModel);
     visualDeckView->setObjectName("visualDeckView");
     connect(visualDeckView, &VisualDeckEditorWidget::activeCardChanged, this,
             &TabDeckEditorVisualTabWidget::onCardChanged);
     connect(visualDeckView, &VisualDeckEditorWidget::cardClicked, this,
             &TabDeckEditorVisualTabWidget::onCardClickedDeckEditor);
-    connect(visualDeckView, &VisualDeckEditorWidget::cardAdditionRequested, deckEditor,
-            &AbstractTabDeckEditor::actAddCard);
+    connect(visualDeckView, &VisualDeckEditorWidget::cardAdditionRequested, this,
+            &TabDeckEditorVisualTabWidget::actAddCard);
 
-    visualDatabaseDisplay =
-        new VisualDatabaseDisplayWidget(this, deckEditor, _cardDatabaseModel, _cardDatabaseDisplayModel);
+    visualDatabaseDisplay = new VisualDatabaseDisplayWidget(this, _cardDatabaseModel, deckModel);
     visualDatabaseDisplay->setObjectName("visualDatabaseView");
     connect(visualDatabaseDisplay, &VisualDatabaseDisplayWidget::cardHoveredDatabaseDisplay, this,
             &TabDeckEditorVisualTabWidget::onCardChangedDatabaseDisplay);
     connect(visualDatabaseDisplay, &VisualDatabaseDisplayWidget::cardClickedDatabaseDisplay, this,
             &TabDeckEditorVisualTabWidget::onCardClickedDatabaseDisplay);
+    connect(visualDatabaseDisplay, &VisualDatabaseDisplayWidget::cardAdded, this,
+            &TabDeckEditorVisualTabWidget::cardAdded);
+    connect(visualDatabaseDisplay, &VisualDatabaseDisplayWidget::cardDecremented, this,
+            &TabDeckEditorVisualTabWidget::cardDecremented);
+    connect(visualDatabaseDisplay, &VisualDatabaseDisplayWidget::edhrecRequested, this,
+            &TabDeckEditorVisualTabWidget::edhrecRequested);
+    connect(visualDatabaseDisplay, &VisualDatabaseDisplayWidget::printingSelectorRequested, this,
+            &TabDeckEditorVisualTabWidget::printingSelectorRequested);
+    connect(visualDatabaseDisplay, &VisualDatabaseDisplayWidget::cardInfoRequested, this,
+            &TabDeckEditorVisualTabWidget::cardInfoRequested);
 
     statsAnalyzer = new DeckListStatisticsAnalyzer(this, deckModel);
     statsAnalyzer->analyze();
@@ -57,6 +81,8 @@ TabDeckEditorVisualTabWidget::TabDeckEditorVisualTabWidget(QWidget *parent,
     this->addNewTab(visualDatabaseDisplay, tr("Visual Database Display"));
     this->addNewTab(deckAnalytics, tr("Deck Analytics"));
     this->addNewTab(sampleHandWidget, tr("Sample Hand"));
+
+    setTabsClosable(false);
 }
 
 /**
@@ -80,25 +106,24 @@ void TabDeckEditorVisualTabWidget::onCardChangedDatabaseDisplay(const ExactCard 
 /**
  * @brief Emits the cardClicked signal when a card is clicked in the visual deck view.
  * @param event The mouse event.
- * @param instance The widget instance of the clicked card.
+ * @param card The clicked card.
  * @param zoneName The zone of the deck where the card is located.
  */
 void TabDeckEditorVisualTabWidget::onCardClickedDeckEditor(QMouseEvent *event,
-                                                           CardInfoPictureWithTextOverlayWidget *instance,
-                                                           QString zoneName)
+                                                           const ExactCard &card,
+                                                           const QString &zoneName)
 {
-    emit cardClicked(event, instance, zoneName);
+    emit cardClicked(event, card, zoneName);
 }
 
 /**
  * @brief Emits the cardClickedDatabaseDisplay signal when a card is clicked in the database display.
  * @param event The mouse event.
- * @param instance The widget instance of the clicked card.
+ * @param card The clicked card.
  */
-void TabDeckEditorVisualTabWidget::onCardClickedDatabaseDisplay(QMouseEvent *event,
-                                                                CardInfoPictureWithTextOverlayWidget *instance)
+void TabDeckEditorVisualTabWidget::onCardClickedDatabaseDisplay(QMouseEvent *event, const ExactCard &card)
 {
-    emit cardClickedDatabaseDisplay(event, instance);
+    emit cardClickedDatabaseDisplay(event, card);
 }
 
 /**
@@ -163,4 +188,16 @@ void TabDeckEditorVisualTabWidget::handleTabClose(int index)
     QWidget *tab = this->widget(index);
     this->removeTab(index);
     delete tab;
+}
+
+void TabDeckEditorVisualTabWidget::actAddCard(const ExactCard &card)
+{
+    QString zoneName;
+    if (QApplication::keyboardModifiers() & Qt::ControlModifier) {
+        zoneName = DECK_ZONE_SIDE;
+    } else {
+        zoneName = DECK_ZONE_MAIN;
+    }
+
+    deckEditor->addCard(card, zoneName);
 }

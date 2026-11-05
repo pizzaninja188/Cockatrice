@@ -1,18 +1,18 @@
 /**
  * @file visual_database_filter_display_widget.h
  * @ingroup VisualCardDatabaseWidgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef VISUAL_DATABASE_FILTER_DISPLAY_WIDGET_H
 #define VISUAL_DATABASE_FILTER_DISPLAY_WIDGET_H
 
-#include <QMouseEvent>
-#include <QPushButton>
 #include <QString>
 #include <QWidget>
+#include <qtmetamacros.h>
 
 class FilterTreeModel;
+class QPushButton;
 
 class FilterDisplayWidget : public QWidget
 {

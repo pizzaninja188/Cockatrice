@@ -1,13 +1,18 @@
 /**
  * @file token_edit_model.h
  * @ingroup CardDatabaseModels
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef COCKATRICE_TOKEN_EDIT_MODEL_H
 #define COCKATRICE_TOKEN_EDIT_MODEL_H
 
 #include "../card_database_display_model.h"
+
+#include <QModelIndex>
+#include <qtmetamacros.h>
+
+class QObject;
 
 class TokenEditModel : public CardDatabaseDisplayModel
 {

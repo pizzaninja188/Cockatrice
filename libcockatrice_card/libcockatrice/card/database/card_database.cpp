@@ -1,15 +1,27 @@
 #include "card_database.h"
 
 #include "../relation/card_relation.h"
-#include "parser/cockatrice_xml_4.h"
+#include "libcockatrice/card/database/card_database_data.h"
+#include "libcockatrice/card/database/card_database_loader.h"
+#include "libcockatrice/card/database/card_database_querier.h"
+#include "libcockatrice/card/database/parser/card_database_parser.h"
+#include "libcockatrice/card/format/format_legality_rules.h"
+#include "libcockatrice/card/printing/printing_info.h"
+#include "libcockatrice/card/set/card_set.h"
+#include "libcockatrice/card/set/card_set_list.h"
 
-#include <QCryptographicHash>
 #include <QDebug>
-#include <QDirIterator>
-#include <QFile>
-#include <QRegularExpression>
-#include <algorithm>
+#include <QList>
+#include <QMessageLogger>
+#include <QMetaObject>
+#include <QMetaType>
+#include <QMutexLocker>
+#include <QSharedPointer>
 #include <utility>
+
+class ICardDatabasePathProvider;
+class ICardPreferenceProvider;
+class ICardSetPriorityController;
 
 CardDatabase::CardDatabase(QObject *parent,
                            ICardPreferenceProvider *prefs,
@@ -19,14 +31,19 @@ CardDatabase::CardDatabase(QObject *parent,
 {
     qRegisterMetaType<CardInfoPtr>("CardInfoPtr");
     qRegisterMetaType<CardInfoPtr>("CardSetPtr");
+    qRegisterMetaType<CardDatabaseData>("CardDatabaseData");
 
     // create loader and wire it up
-    loader = new CardDatabaseLoader(this, this, pathProvider, prefs, setPriorityController);
+    loader = new CardDatabaseLoader(this, this, pathProvider, setPriorityController);
     // re-emit loader signals (so other code doesn't need to know about internals)
     connect(loader, &CardDatabaseLoader::loadingFinished, this, &CardDatabase::cardDatabaseLoadingFinished);
     connect(loader, &CardDatabaseLoader::loadingFailed, this, &CardDatabase::cardDatabaseLoadingFailed);
     connect(loader, &CardDatabaseLoader::newSetsFound, this, &CardDatabase::cardDatabaseNewSetsFound);
     connect(loader, &CardDatabaseLoader::allNewSetsEnabled, this, &CardDatabase::cardDatabaseAllNewSetsEnabled);
+    // swap the finished snapshot into the live database. Uses AutoConnection so
+    // that cross-thread loads are delivered via the event loop while same-thread/
+    // synchronous callers get the swap immediately.
+    connect(loader, &CardDatabaseLoader::databaseDataReady, this, &CardDatabase::swapInDatabaseData);
 
     querier = new CardDatabaseQuerier(this, this, prefs);
 }
@@ -36,13 +53,26 @@ CardDatabase::~CardDatabase()
     clear();
 }
 
+void CardDatabase::detachSetMembership()
+{
+    for (const auto &set : sets) {
+        if (set) {
+            set->clear();
+        }
+    }
+}
+
 void CardDatabase::clear()
 {
     QMutexLocker locker(clearDatabaseMutex);
 
+    // The sets hold strong card references, so empty them before dropping the cards: this breaks the
+    // CardInfo <-> CardSet cycle and spares the per-card detach over the whole database.
+    detachSetMembership();
+
     for (const auto &card : cards.values()) {
         if (card) {
-            removeCard(card);
+            unindexCard(card);
         }
     }
 
@@ -60,6 +90,24 @@ void CardDatabase::loadCardDatabases()
     loadStatus = loader->loadCardDatabases();
 }
 
+void CardDatabase::reloadCardDatabasesAndNotify()
+{
+    // An explicit reload bypasses the binary cache so the files on disk are
+    // always re-read, even when their size/mtime hash still matches the cache.
+    // Models refresh from the swap's cardDatabaseReset in a single batch, so
+    // no cardDatabaseEnabledSetsChanged is emitted here: that rebuilt the
+    // 36k-card models a second time on the GUI thread, which froze startup
+    // after enabling new/custom sets. The follow-up unknown-sets check is
+    // queued to the GUI thread so it sees the swapped-in data (this may run
+    // on a worker via QtConcurrent::run); it is silent unless new sets
+    // appeared mid-reload.
+    loadStatus = loader->loadCardDatabases(/* ignoreCache */ true);
+
+    if (loadStatus == Ok) {
+        QMetaObject::invokeMethod(this, &CardDatabase::checkUnknownSets, Qt::AutoConnection);
+    }
+}
+
 bool CardDatabase::saveCustomTokensToFile()
 {
     return loader->saveCustomTokensToFile();
@@ -67,22 +115,28 @@ bool CardDatabase::saveCustomTokensToFile()
 
 void CardDatabase::refreshCachedReverseRelatedCards()
 {
-    for (const auto &card : cards) {
+    refreshCachedReverseRelatedCards(cards);
+}
+
+void CardDatabase::refreshCachedReverseRelatedCards(CardNameMap &cardMap)
+{
+    for (const auto &card : cardMap) {
         card->resetReverseRelatedCards2Me();
     }
 
-    for (const auto &card : cards) {
+    for (const auto &card : cardMap) {
         for (auto *rel : card->getReverseRelatedCards()) {
-            if (auto target = cards.value(rel->getName())) {
+            if (auto target = cardMap.value(rel->getName())) {
                 auto *newRel = new CardRelation(card->getName(), rel->getAttachType(), rel->getIsCreateAllExclusion(),
-                                                rel->getIsVariable(), rel->getDefaultCount(), rel->getIsPersistent());
+                                                rel->getIsVariable(), rel->getDefaultCount(), rel->getIsPersistent(),
+                                                rel->getIsFaceDown());
                 target->addReverseRelatedCards2Me(newRel);
             }
         }
     }
 }
 
-void CardDatabase::addCard(CardInfoPtr card)
+void CardDatabase::addCard(const CardInfoPtr &card)
 {
     if (card == nullptr) {
         qCWarning(CardDatabaseLog) << "CardDatabase::addCard(nullptr)";
@@ -93,9 +147,11 @@ void CardDatabase::addCard(CardInfoPtr card)
 
     // If a card already exists, just add the new set property.
     if (auto existing = cards.value(name)) {
-        for (const auto &printings : card->getSets())
-            for (const auto &printing : printings)
+        for (const auto &printings : card->getSets()) {
+            for (const auto &printing : printings) {
                 existing->addToSet(printing.getSet(), printing);
+            }
+        }
         return;
     }
 
@@ -106,21 +162,45 @@ void CardDatabase::addCard(CardInfoPtr card)
     emit cardAdded(card);
 }
 
-void CardDatabase::removeCard(CardInfoPtr card)
+void CardDatabase::removeCard(const CardInfoPtr &card)
 {
     if (card.isNull()) {
         qCWarning(CardDatabaseLog) << "CardDatabase::removeCard(nullptr)";
         return;
     }
 
-    for (auto *cardRelation : card->getRelatedCards())
-        cardRelation->deleteLater();
+    // The set holds a strong reference back to the card, so detach it: leaving it there keeps both
+    // objects alive after the database drops the card. newInstance() appends through the first
+    // printing of every set, so detaching through that same printing mirrors the append.
+    for (const auto &printings : card->getSets()) {
+        if (printings.isEmpty()) {
+            continue;
+        }
+        if (const CardSetPtr set = printings.first().getSet()) {
+            set->removeAll(card);
+        }
+    }
 
-    for (auto *cardRelation : card->getReverseRelatedCards())
-        cardRelation->deleteLater();
+    unindexCard(card);
+}
 
-    for (auto *cardRelation : card->getReverseRelatedCards2Me())
+void CardDatabase::unindexCard(const CardInfoPtr &card)
+{
+    for (auto *cardRelation : card->getRelatedCards()) {
         cardRelation->deleteLater();
+    }
+
+    for (auto *cardRelation : card->getReverseRelatedCards()) {
+        cardRelation->deleteLater();
+    }
+
+    for (auto *cardRelation : card->getReverseRelatedCards2Me()) {
+        cardRelation->deleteLater();
+    }
+
+    // The relations are only scheduled for deletion; the CardInfo may outlive
+    // them through an external shared pointer, so drop the raw pointers now.
+    card->clearDirectRelations();
 
     QMutexLocker locker(removeCardMutex);
     cards.remove(card->getName());
@@ -128,7 +208,7 @@ void CardDatabase::removeCard(CardInfoPtr card)
     emit cardRemoved(card);
 }
 
-void CardDatabase::addSet(CardSetPtr set)
+void CardDatabase::addSet(const CardSetPtr &set)
 {
     sets.insert(set->getShortName(), set);
 }
@@ -164,15 +244,19 @@ void CardDatabase::checkUnknownSets()
         if (numUnknownSets > 0) {
             emit cardDatabaseNewSetsFound(numUnknownSets, unknownSetNames);
         } else {
-            _sets.markAllAsKnown();
+            _sets.markAllAsKnownBatched(setPriorityController);
         }
     } else {
         // No set enabled. Probably this is the first time running trice
-        _sets.guessSortKeys();
+        _sets.enableAllBatched(setPriorityController);
         _sets.sortByKey();
-        _sets.enableAll();
-        notifyEnabledSetsChanged();
 
+        // No cardDatabaseEnabledSetsChanged here: the reload chained off
+        // cardDatabaseAllNewSetsEnabled re-parses with the sets enabled and its
+        // swap's cardDatabaseReset rebuilds the models in one batch. Emitting
+        // both back-to-back rebuilt the 36k-card models twice on the GUI thread,
+        // stalling startup. (When the card list is empty the slot returns early
+        // without reloading, but there is nothing to display either.)
         emit cardDatabaseAllNewSetsEnabled();
     }
 }
@@ -180,27 +264,65 @@ void CardDatabase::checkUnknownSets()
 void CardDatabase::enableAllUnknownSets()
 {
     auto _sets = getSetList();
-    _sets.enableAllUnknown();
+    _sets.enableAllUnknownBatched(setPriorityController);
 }
 
 void CardDatabase::markAllSetsAsKnown()
 {
     auto _sets = getSetList();
-    _sets.markAllAsKnown();
+    _sets.markAllAsKnownBatched(setPriorityController);
 }
 
-void CardDatabase::notifyEnabledSetsChanged()
+void CardDatabase::notifyEnabledSetsChanged(bool recomputeCachedSets)
 {
-    // refresh the list of cached set names
-    for (const CardInfoPtr &card : cards) {
-        card->refreshCachedSets();
+    if (recomputeCachedSets) {
+        // refresh the list of cached set names / alt names for every card; this is
+        // only needed when the enabled-set state actually changed (e.g. the user
+        // toggled a set in the settings UI).
+        for (const CardInfoPtr &card : cards) {
+            card->refreshCachedSets();
+        }
     }
 
     // inform the carddatabasemodels that they need to re-check their list of cards
     emit cardDatabaseEnabledSetsChanged();
 }
 
-void CardDatabase::addFormat(FormatRulesPtr format)
+void CardDatabase::addFormat(const FormatRulesPtr &format)
 {
     formats.insert(format->formatName.toLower(), format);
+}
+
+void CardDatabase::swapInDatabaseData(CardDatabaseData data)
+{
+    for (const auto &card : cards) {
+        for (auto *rel : card->getRelatedCards()) {
+            rel->deleteLater();
+        }
+        for (auto *rel : card->getReverseRelatedCards()) {
+            rel->deleteLater();
+        }
+        for (auto *rel : card->getReverseRelatedCards2Me()) {
+            rel->deleteLater();
+        }
+        // Replacement cards take over the database; old CardInfo objects may
+        // still be referenced by the UI, so clear their dangling relations.
+        card->clearDirectRelations();
+    }
+
+    // Break the CardSet <-> CardInfo cycle before replacing the containers, otherwise the previous
+    // snapshot survives the reload through the sets' strong card lists.
+    detachSetMembership();
+
+    cards = std::move(data.cards);
+    simpleNameCards = std::move(data.simpleNameCards);
+    sets = std::move(data.sets);
+    formats = std::move(data.formats);
+
+    loadStatus = cards.isEmpty() ? NotLoaded : Ok;
+
+    // inform listeners that the whole database was replaced; they should
+    // rebuild from the live containers in a single batch instead of reacting
+    // to individual card additions.
+    emit cardDatabaseReset();
 }

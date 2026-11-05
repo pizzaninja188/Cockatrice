@@ -1,9 +1,21 @@
 #include "deck_preview_tag_display_widget.h"
 
+#include "../../interface/theme_manager.h"
+
+#include <QBrush>
+#include <QColor>
+#include <QFlags>
+#include <QFont>
 #include <QFontMetrics>
 #include <QHBoxLayout>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPen>
+#include <QRect>
+#include <QSize>
+#include <QSizePolicy>
+#include <algorithm>
+#include <qnamespace.h>
 
 DeckPreviewTagDisplayWidget::DeckPreviewTagDisplayWidget(QWidget *parent, const QString &_tagName)
     : QWidget(parent), tagName(_tagName), state(TagState::NotSelected)
@@ -31,6 +43,10 @@ DeckPreviewTagDisplayWidget::DeckPreviewTagDisplayWidget(QWidget *parent, const 
     // Adjust widget size
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
 
+    // The tag text reads the InterfaceDefault role at paint time, so a font
+    // change only needs a repaint.
+    connect(themeManager, &ThemeManager::fontsChanged, this, [this] { update(); });
+
     // Connect close button to the remove signal
     // connect(closeButton, &QPushButton::clicked, this, &DeckPreviewTagDisplayWidget::tagClosed);
 }
@@ -48,6 +64,7 @@ QSize DeckPreviewTagDisplayWidget::sizeHint() const
 
 void DeckPreviewTagDisplayWidget::mousePressEvent(QMouseEvent *event)
 {
+    const TagState previousState = state;
     switch (event->button()) {
         case Qt::LeftButton:
             setState(state != TagState::Selected ? TagState::Selected : TagState::NotSelected);
@@ -62,7 +79,12 @@ void DeckPreviewTagDisplayWidget::mousePressEvent(QMouseEvent *event)
             break;
     }
 
-    emit tagClicked();
+    // Only announce a change when the state was actually toggled, so a click that falls
+    // through the switch (e.g. a button the widget does not react to) does not drive a
+    // full tag-filter update and layout pass for nothing.
+    if (state != previousState) {
+        emit tagClicked();
+    }
     QWidget::mousePressEvent(event);
 }
 
@@ -101,8 +123,9 @@ void DeckPreviewTagDisplayWidget::paintEvent(QPaintEvent *event)
     painter.setPen(borderPen);
     painter.drawRect(rect().adjusted(0, 0, -1, -1));
 
-    // Calculate font size based on widget height
-    QFont font = painter.font();
+    // Calculate font size based on widget height. Family comes from the
+    // InterfaceDefault theme role; the height-derived size stays as before.
+    QFont font = themeManager->appFont(AppFont::InterfaceDefault);
     int fontSize = std::max(10, height() / 2); // Ensure a minimum font size of 10
     font.setPointSize(fontSize);
     painter.setFont(font);

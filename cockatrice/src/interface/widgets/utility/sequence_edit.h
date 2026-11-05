@@ -1,16 +1,21 @@
 /**
  * @file sequence_edit.h
  * @ingroup UI
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef SEQUENCEEDIT_H
 #define SEQUENCEEDIT_H
 
-#include <QEvent>
-#include <QLineEdit>
-#include <QPushButton>
+#include <QKeySequence>
+#include <QString>
 #include <QWidget>
+#include <qnamespace.h>
+#include <qtmetamacros.h>
+
+class QKeyEvent;
+class QLineEdit;
+class QPushButton;
 
 class SequenceEdit : public QWidget
 {

@@ -1,18 +1,25 @@
 /**
  * @file pixel_map_generator.h
  * @ingroup UI
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef PIXMAPGENERATOR_H
 #define PIXMAPGENERATOR_H
 
+#include "libcockatrice/protocol/pb/serverinfo_user.pb.h"
+
+#include <QHash>
 #include <QIcon>
 #include <QLoggingCategory>
 #include <QMap>
 #include <QPixmap>
+#include <QString>
+#include <QStringView>
 #include <libcockatrice/network/server/remote/user_level.h>
 #include <optional>
+
+class QSize;
 
 inline Q_LOGGING_CATEGORY(PixelMapGeneratorLog, "pixel_map_generator");
 
@@ -99,19 +106,6 @@ public:
     }
 };
 
-class LockPixmapGenerator
-{
-private:
-    static QMap<int, QPixmap> pmCache;
-
-public:
-    static QPixmap generatePixmap(int height);
-    static void clear()
-    {
-        pmCache.clear();
-    }
-};
-
 class DropdownIconPixmapGenerator
 {
 private:
@@ -125,6 +119,43 @@ public:
     }
 };
 
-QPixmap loadColorAdjustedPixmap(const QString &name);
+class ManaSymbolPixmapGenerator
+{
+private:
+    static QHash<QString, QPixmap> masterCache;
+    static QHash<QString, QPixmap> scaledCache;
+
+    /**
+     * @brief Renders \a symbol once at a fixed moderate size, so repeated scalings never
+     * re-rasterize the source file (SVG sources can be very expensive to rasterize).
+     */
+    static const QPixmap &masterIcon(const QString &symbol);
+
+public:
+    /**
+     * @brief Returns a smooth-scaled rendering of the given mana symbol icon.
+     *
+     * Results are shared between all callers via a process-wide cache keyed by symbol
+     * and size, so scaling work is done once per distinct combination instead of once
+     * per widget creation or resize.
+     */
+    static QPixmap generatePixmap(const QString &symbol, const QSize &size);
+    static void clear()
+    {
+        masterCache.clear();
+        scaledCache.clear();
+    }
+};
+
+// Returns a "theme:" asset (with no file extension in prefix), preferring the
+// scheme-qualified variant (prefix-dark / prefix-light, resolved via
+// ThemeManager::assetPath) and falling back to the plain asset. Token-driven
+// SVGs resolve their `currentColor` sentinel from the palette. Use for
+// scheme-sensitive pixmaps like backgrounds, the card back, and the app logo.
+QPixmap themePixmap(QStringView prefix);
+
+// Clears every PixmapGenerator's static cache so scheme variants are
+// re-resolved when the active theme or color scheme changes.
+void clearPixmapGeneratorCaches();
 
 #endif

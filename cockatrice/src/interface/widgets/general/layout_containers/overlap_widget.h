@@ -1,15 +1,18 @@
 /**
  * @file overlap_widget.h
  * @ingroup UI
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef OVERLAP_WIDGET_H
 #define OVERLAP_WIDGET_H
 
-#include "../../../layouts/overlap_layout.h"
-
+#include <QString>
 #include <QWidget>
+#include <qnamespace.h>
+#include <qtmetamacros.h>
+
+class OverlapLayout;
 
 class OverlapWidget final : public QWidget
 {

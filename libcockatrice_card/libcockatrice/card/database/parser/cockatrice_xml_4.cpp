@@ -1,22 +1,45 @@
 #include "cockatrice_xml_4.h"
 
 #include "../../relation/card_relation.h"
+#include "libcockatrice/card/database/card_database_data.h"
+#include "libcockatrice/card/database/parser/card_database_parser.h"
+#include "libcockatrice/card/lazy_properties_hash.h"
+#include "libcockatrice/card/printing/printing_info.h"
+#include "libcockatrice/card/relation/card_relation_type.h"
+#include "libcockatrice/card/set/card_set.h"
+#include "libcockatrice/interfaces/interface_card_preference_provider.h"
 
 #include <QCoreApplication>
+#include <QDate>
+#include <QDateTime>
 #include <QDebug>
 #include <QFile>
+#include <QIODevice>
+#include <QList>
+#include <QMap>
+#include <QMessageLogger>
+#include <QSaveFile>
+#include <QSharedPointer>
+#include <QStringList>
+#include <QStringView>
+#include <QXmlStreamAttribute>
+#include <QXmlStreamAttributes>
 #include <QXmlStreamReader>
+#include <QXmlStreamWriter>
 #include <libcockatrice/card/format/format_legality_rules.h>
+#include <qnamespace.h>
+#include <utility>
 #include <version_string.h>
+
+class ICardSetPriorityController;
 
 #define COCKATRICE_XML4_TAGNAME "cockatrice_carddatabase"
 #define COCKATRICE_XML4_TAGVER 4
 #define COCKATRICE_XML4_SCHEMALOCATION                                                                                 \
     "https://raw.githubusercontent.com/Cockatrice/Cockatrice/master/doc/carddatabase_v4/cards.xsd"
 
-CockatriceXml4Parser::CockatriceXml4Parser(ICardPreferenceProvider *_cardPreferenceProvider,
-                                           ICardSetPriorityController *_cardSetPriorityController)
-    : ICardDatabaseParser(_cardSetPriorityController), cardPreferenceProvider(_cardPreferenceProvider)
+CockatriceXml4Parser::CockatriceXml4Parser(ICardSetPriorityController *_cardSetPriorityController)
+    : ICardDatabaseParser(_cardSetPriorityController)
 {
 }
 
@@ -80,6 +103,13 @@ void CockatriceXml4Parser::parseFile(QIODevice &device)
         QString preamble = tr("Parse error at line %1 col %2:").arg(xml.lineNumber()).arg(xml.columnNumber());
         qCWarning(CockatriceXml4Log).noquote() << preamble << xml.errorString();
     }
+}
+
+void CockatriceXml4Parser::parseFileInto(QIODevice &device, CardDatabaseData &data)
+{
+    targetData = &data;
+    parseFile(device);
+    targetData = nullptr;
 }
 
 static QSharedPointer<FormatRules> parseFormat(QXmlStreamReader &xml)
@@ -187,7 +217,11 @@ void CockatriceXml4Parser::loadFormats(QXmlStreamReader &xml)
 
         if (xml.name().toString() == "format") {
             auto rulesPtr = parseFormat(xml);
-            emit addFormat(rulesPtr);
+            if (targetData) {
+                targetData->formats.insert(rulesPtr->formatName.toLower(), rulesPtr);
+            } else {
+                emit addFormat(rulesPtr);
+            }
         }
     }
 }
@@ -232,9 +266,9 @@ void CockatriceXml4Parser::loadSetsFromXml(QXmlStreamReader &xml)
     }
 }
 
-QVariantHash CockatriceXml4Parser::loadCardPropertiesFromXml(QXmlStreamReader &xml)
+QHash<QString, QString> CockatriceXml4Parser::loadCardPropertiesFromXml(QXmlStreamReader &xml)
 {
-    QVariantHash properties = QVariantHash();
+    QHash<QString, QString> properties;
     while (!xml.atEnd()) {
         if (xml.readNext() == QXmlStreamReader::EndElement) {
             break;
@@ -250,7 +284,6 @@ QVariantHash CockatriceXml4Parser::loadCardPropertiesFromXml(QXmlStreamReader &x
 
 void CockatriceXml4Parser::loadCardsFromXml(QXmlStreamReader &xml)
 {
-    bool includeRebalancedCards = cardPreferenceProvider->getIncludeRebalancedCards();
     while (!xml.atEnd()) {
         if (xml.readNext() == QXmlStreamReader::EndElement) {
             break;
@@ -262,7 +295,9 @@ void CockatriceXml4Parser::loadCardsFromXml(QXmlStreamReader &xml)
             QString name = QString("");
             QString text = QString("");
             RuledOracleText ruledOracle;
-            QVariantHash properties = QVariantHash();
+            QHash<QString, QString> properties;
+            QMap<QString, QString> localizedNames;
+            QMap<QString, QString> localizedTexts;
             QList<CardRelation *> relatedCards, reverseRelatedCards;
             auto _sets = SetToPrintingsMap();
             int tableRow = 0;
@@ -290,6 +325,44 @@ void CockatriceXml4Parser::loadCardsFromXml(QXmlStreamReader &xml)
                     // generic properties
                 } else if (xmlName == "prop") {
                     properties = loadCardPropertiesFromXml(xml);
+                    // localized card data
+                } else if (xmlName == "localizations") {
+                    while (!xml.atEnd()) {
+                        if (xml.readNextStartElement()) {
+                            const QString elementName = xml.name().toString();
+                            if (elementName == "localization") {
+                                const QString lang = xml.attributes().value("lang").toString();
+                                QString localizedName;
+                                QString localizedText;
+                                while (!xml.atEnd()) {
+                                    if (xml.readNext() == QXmlStreamReader::EndElement) {
+                                        break;
+                                    }
+                                    if (xml.isStartElement()) {
+                                        const QString childName = xml.name().toString();
+                                        QString value = xml.readElementText(QXmlStreamReader::IncludeChildElements);
+                                        if (childName == "name") {
+                                            localizedName = value;
+                                        } else if (childName == "text") {
+                                            localizedText = value;
+                                        }
+                                    }
+                                }
+                                if (!lang.isEmpty()) {
+                                    if (!localizedName.isEmpty()) {
+                                        localizedNames.insert(lang, localizedName);
+                                    }
+                                    if (!localizedText.isEmpty()) {
+                                        localizedTexts.insert(lang, localizedText);
+                                    }
+                                }
+                            } else {
+                                xml.skipCurrentElement();
+                            }
+                        } else {
+                            break;
+                        }
+                    }
                     // positioning info
                 } else if (xmlName == "tablerow") {
                     tableRow = xml.readElementText(QXmlStreamReader::IncludeChildElements).toInt();
@@ -306,24 +379,16 @@ void CockatriceXml4Parser::loadCardsFromXml(QXmlStreamReader &xml)
                     QString setName = xml.readElementText(QXmlStreamReader::IncludeChildElements);
                     auto set = internalAddSet(setName);
                     if (set->getEnabled()) {
-                        PrintingInfo printingInfo(set);
+                        QHash<QString, QString> printingProps;
                         for (QXmlStreamAttribute attr : attrs) {
                             QString attrName = attr.name().toString();
-                            if (attrName == "picURL")
+                            if (attrName == "picURL") {
                                 attrName = "picurl";
-                            printingInfo.setProperty(attrName, attr.value().toString());
+                            }
+                            printingProps.insert(attrName, attr.value().toString());
                         }
-
-                        // This is very much a hack and not the right place to
-                        // put this check, as it requires a reload of Cockatrice
-                        // to be apply.
-                        //
-                        // However, this is also true of the `set->getEnabled()`
-                        // check above (which is currently bugged as well), so
-                        // we'll fix both at the same time.
-                        if (includeRebalancedCards || printingInfo.getProperty("isRebalanced") != "true") {
-                            _sets[setName].append(printingInfo);
-                        }
+                        PrintingInfo printingInfo(set, LazyPropertiesHash::serializedFrom(printingProps));
+                        _sets[setName].append(printingInfo);
                     }
                     // related cards
                 } else if (xmlName == "related" || xmlName == "reverse-related") {
@@ -331,6 +396,7 @@ void CockatriceXml4Parser::loadCardsFromXml(QXmlStreamReader &xml)
                     bool exclude = false;
                     bool variable = false;
                     bool persistent = false;
+                    bool facedown = false;
                     int count = 1;
                     QXmlStreamAttributes attrs = xml.attributes();
                     QString cardName = xml.readElementText(QXmlStreamReader::IncludeChildElements);
@@ -362,7 +428,12 @@ void CockatriceXml4Parser::loadCardsFromXml(QXmlStreamReader &xml)
                         persistent = true;
                     }
 
-                    auto *relation = new CardRelation(cardName, attachType, exclude, variable, count, persistent);
+                    if (attrs.hasAttribute("facedown")) {
+                        facedown = true;
+                    }
+
+                    auto *relation =
+                        new CardRelation(cardName, attachType, exclude, variable, count, persistent, facedown);
                     if (xmlName == "reverse-related") {
                         reverseRelatedCards << relation;
                     } else {
@@ -383,10 +454,26 @@ void CockatriceXml4Parser::loadCardsFromXml(QXmlStreamReader &xml)
                                                  .landscapeOrientation = landscapeOrientation,
                                                  .tableRow = tableRow,
                                                  .upsideDownArt = upsideDown};
-            CardInfoPtr newCard = CardInfo::newInstance(name, text, isToken, properties, relatedCards,
-                                                        reverseRelatedCards, _sets, attributes);
+            CardInfoPtr newCard = CardInfo::newInstance(name, text, isToken, LazyPropertiesHash::serialize(properties),
+                                                        relatedCards, reverseRelatedCards, _sets, attributes, {}, {},
+                                                        true, std::move(localizedNames), std::move(localizedTexts));
             newCard->ruled() = std::move(ruledOracle);
-            emit addCard(newCard);
+            if (targetData) {
+                // Mirror CardDatabase::addCard: if a card with this name already
+                // exists, merge the new printings into it instead of replacing.
+                if (auto existing = targetData->cards.value(name)) {
+                    for (const auto &printings : newCard->getSets()) {
+                        for (const auto &printing : printings) {
+                            existing->addToSet(printing.getSet(), printing);
+                        }
+                    }
+                } else {
+                    targetData->cards.insert(name, newCard);
+                    targetData->simpleNameCards.insert(newCard->getSimpleName(), newCard);
+                }
+            } else {
+                emit addCard(newCard);
+            }
         }
     }
 }
@@ -488,6 +575,26 @@ static QXmlStreamWriter &operator<<(QXmlStreamWriter &xml, const CardInfoPtr &in
     }
     xml.writeEndElement();
 
+    // localized card data
+    const QStringList localizedLanguages = info->localizationLanguages();
+    if (!localizedLanguages.isEmpty()) {
+        xml.writeStartElement("localizations");
+        const QMap<QString, QString> &localizedNames = info->getLocalizedNames();
+        const QMap<QString, QString> &localizedTexts = info->getLocalizedTexts();
+        for (const QString &lang : localizedLanguages) {
+            xml.writeStartElement("localization");
+            xml.writeAttribute("lang", lang);
+            if (localizedNames.contains(lang)) {
+                xml.writeTextElement("name", localizedNames.value(lang));
+            }
+            if (localizedTexts.contains(lang)) {
+                xml.writeTextElement("text", localizedTexts.value(lang));
+            }
+            xml.writeEndElement();
+        }
+        xml.writeEndElement();
+    }
+
     // sets
     for (const auto &printings : info->getSets()) {
         for (const PrintingInfo &set : printings) {
@@ -513,6 +620,9 @@ static QXmlStreamWriter &operator<<(QXmlStreamWriter &xml, const CardInfoPtr &in
         }
         if (i->getIsPersistent()) {
             xml.writeAttribute("persistent", "persistent");
+        }
+        if (i->getIsFaceDown()) {
+            xml.writeAttribute("facedown", "facedown");
         }
         if (i->getIsVariable()) {
             if (1 == i->getDefaultCount()) {
@@ -578,7 +688,7 @@ bool CockatriceXml4Parser::saveToFile(FormatRulesNameMap _formats,
                                       const QString &sourceUrl,
                                       const QString &sourceVersion)
 {
-    QFile file(fileName);
+    QSaveFile file(fileName);
     if (!file.open(QIODevice::WriteOnly)) {
         return false;
     }
@@ -626,5 +736,5 @@ bool CockatriceXml4Parser::saveToFile(FormatRulesNameMap _formats,
     xml.writeEndElement(); // cockatrice_carddatabase
     xml.writeEndDocument();
 
-    return true;
+    return !xml.hasError() && file.commit();
 }

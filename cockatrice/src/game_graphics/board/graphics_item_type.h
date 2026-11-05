@@ -1,8 +1,8 @@
 /**
  * @file graphics_item_type.h
  * @ingroup GameGraphics
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef COCKATRICE_GRAPHICS_ITEM_TYPE_H
 #define COCKATRICE_GRAPHICS_ITEM_TYPE_H
@@ -16,7 +16,8 @@ enum GraphicsItemType
     typeZone = QGraphicsItem::UserType + 3,
     typePlayerTarget = QGraphicsItem::UserType + 4,
     typeDeckViewCardContainer = QGraphicsItem::UserType + 5,
-    typeOther = QGraphicsItem::UserType + 6
+    typeOther = QGraphicsItem::UserType + 6,
+    typeArrow = QGraphicsItem::UserType + 7
 };
 
 #endif // COCKATRICE_GRAPHICS_ITEM_TYPE_H

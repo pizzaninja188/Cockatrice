@@ -3,6 +3,7 @@
 
 #include <gtest/gtest.h>
 #include <libcockatrice/card/database/card_database.h>
+#include <libcockatrice/card/database/card_database_querier.h>
 #include <libcockatrice/interfaces/noop_card_preference_provider.h>
 #include <libcockatrice/interfaces/noop_card_set_priority_controller.h>
 #include <memory>

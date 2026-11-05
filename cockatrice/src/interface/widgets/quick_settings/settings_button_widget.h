@@ -2,16 +2,20 @@
  * @file settings_button_widget.h
  * @ingroup Widgets
  * @ingroup Settings
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef SETTINGS_BUTTON_WIDGET_H
 #define SETTINGS_BUTTON_WIDGET_H
 
-#include "settings_popup_widget.h"
-
-#include <QToolButton>
+#include <QString>
 #include <QWidget>
+#include <qtmetamacros.h>
+
+class QHBoxLayout;
+class QIcon;
+class QToolButton;
+class SettingsPopupWidget;
 
 class SettingsButtonWidget : public QWidget
 {
@@ -19,10 +23,18 @@ class SettingsButtonWidget : public QWidget
 
 public:
     explicit SettingsButtonWidget(QWidget *parent = nullptr);
+
+    ~SettingsButtonWidget() override;
+
     void addSettingsWidget(QWidget *toAdd) const;
     void removeSettingsWidget(QWidget *toRemove) const;
-    void setButtonIcon(QPixmap iconMap);
+    void setButtonIcon(const QIcon &icon);
     void setButtonText(const QString &buttonText);
+    void setCompact(bool compact);
+    bool isCompact() const
+    {
+        return compact;
+    }
 
 protected:
     void mousePressEvent(QMouseEvent *event) override;
@@ -34,6 +46,8 @@ private slots:
 private:
     QHBoxLayout *layout;
     QToolButton *button;
+    QString buttonText;
+    bool compact;
 
 public:
     SettingsPopupWidget *popup;

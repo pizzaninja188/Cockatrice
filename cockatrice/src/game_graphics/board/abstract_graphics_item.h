@@ -1,13 +1,18 @@
 /**
  * @file abstract_graphics_item.h
  * @ingroup GameGraphics
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef ABSTRACTGRAPHICSITEM_H
 #define ABSTRACTGRAPHICSITEM_H
 
-#include <QGraphicsItem>
+#include <QColor>
+#include <QGraphicsObject>
+#include <qtmetamacros.h>
+
+class QGraphicsItem;
+class QPainter;
 
 /**
  * Parent class of all objects that appear in a game.

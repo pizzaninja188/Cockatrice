@@ -1,18 +1,30 @@
 /**
  * @file remote_client.h
  * @ingroup Client
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef REMOTECLIENT_H
 #define REMOTECLIENT_H
 
 #include "../abstract/abstract_client.h"
+#include "libcockatrice/protocol/pb/response.pb.h"
+#include "libcockatrice/protocol/pb/session_commands.pb.h"
 
+#include <QAbstractSocket>
+#include <QByteArray>
 #include <QLoggingCategory>
+#include <QString>
+#include <QTcpSocket>
 #include <QWebSocket>
-#include <libcockatrice/interfaces/interface_network_settings_provider.h>
-#include <libcockatrice/protocol/pb/commands.pb.h>
+#include <QtGlobal>
+#include <qtmetamacros.h>
+
+class Event_ConnectionClosed;
+class Event_ServerIdentification;
+class INetworkSettingsProvider;
+class QObject;
+template <typename T> class QList;
 
 inline Q_LOGGING_CATEGORY(RemoteClientLog, "remote_client");
 
@@ -42,7 +54,7 @@ signals:
     void notifyUserAboutUpdate();
     void sigRequestForgotPasswordToServer(const QString &hostname, unsigned int port, const QString &_userName);
     void sigForgotPasswordSuccess();
-    void sigForgotPasswordError();
+    void sigForgotPasswordError(int responseCode);
     void sigPromptForForgotPasswordReset();
     void sigSubmitForgotPasswordResetToServer(const QString &hostname,
                                               unsigned int port,
@@ -54,6 +66,16 @@ signals:
                                                   unsigned int port,
                                                   const QString &_userName,
                                                   const QString &_email);
+    //! \brief Emitted once a scrypt verifier for the given account is known and
+    //! can be persisted instead of the plaintext password. The receiving side
+    //! should only store it for the connection it is currently negotiating, so
+    //! the hostname and user name are intentionally not part of the signal.
+    void sigPasswordVerifierReady(const QString &verifier);
+    //! \brief Outcome of the password change the server demanded at login.
+    void sigPasswordChangeSuccess();
+    void sigPasswordChangeError(int responseCode);
+    //! \brief Request a password change; queued to the client thread like the other requests.
+    void sigChangePasswordToServer(const QString &oldPassword, const QString &newPassword);
 private slots:
     void slotConnected();
     void readData();
@@ -80,6 +102,10 @@ private slots:
     void doLogin();
     void doHashedLogin();
     Command_Login generateCommandLogin();
+    void doSubmitPasswordVerifier();
+    void submitPasswordVerifierResponse(const Response &response);
+    void accountPasswordResponse(const Response &response);
+    void doChangePasswordToServer(const QString &oldPassword, const QString &newPassword);
     void doDisconnectFromServer();
     void doActivateToServer(const QString &_token);
     void doRequestForgotPasswordToServer(const QString &hostname, unsigned int port, const QString &_userName);
@@ -111,6 +137,14 @@ private:
     QString lastHostname;
     unsigned int lastPort;
     QString hashedPassword;
+    bool passwordNeedsMigration;
+    //! \brief A previously stored "$scrypt$..." verifier used to authenticate
+    //! without the plaintext password.
+    QString storedVerifier;
+    //! \brief Verifier derived during the current login, persisted after success.
+    QString derivedVerifier;
+    //! \brief Verifier sent for migration, persisted once the server accepts it.
+    QString pendingVerifier;
 
     QString getSrvClientID(const QString &_hostname);
     bool newMissingFeatureFound(const QString &_serversMissingFeatures);
@@ -131,8 +165,30 @@ public:
             return socket->peerName();
         }
     }
+    quint16 peerPort() const
+    {
+        if (usingWebSocket) {
+            return websocket->peerPort();
+        } else {
+            return socket->peerPort();
+        }
+    }
+    QString serverName() const override
+    {
+        return lastHostname;
+    }
+    quint16 serverPort() const override
+    {
+        return static_cast<quint16>(lastPort);
+    }
     void
     connectToServer(const QString &hostname, unsigned int port, const QString &_userName, const QString &_password);
+    //! \brief Provide a stored "$scrypt$..." verifier so the client can
+    //! authenticate without the plaintext password.
+    void setStoredVerifier(const QString &verifier)
+    {
+        storedVerifier = verifier;
+    }
     void registerToServer(const QString &hostname,
                           unsigned int port,
                           const QString &_userName,
@@ -152,6 +208,10 @@ public:
                                                unsigned int port,
                                                const QString &_userName,
                                                const QString &_email);
+    //! \brief Change the password of the account that just logged in, following the
+    //! server's forced-password-change reply. Emits sigPasswordChangeSuccess or
+    //! sigPasswordChangeError when the server answers.
+    void changePasswordToServer(const QString &oldPassword, const QString &newPassword);
 };
 
 #endif

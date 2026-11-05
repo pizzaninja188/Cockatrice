@@ -28,6 +28,20 @@ public:
     {
         return true;
     }
+
+    SetOptions getSetOptions(QString /* shortName */) const override
+    {
+        return {0, true, true};
+    }
+
+    QStringList getEnabledSetNames() const override
+    {
+        return {};
+    }
+
+    void saveSets(const QVector<SetSaveData> & /* data */) override
+    {
+    }
 };
 
 #endif // COCKATRICE_NOOP_CARD_SET_PRIORITY_CONTROLLER_H

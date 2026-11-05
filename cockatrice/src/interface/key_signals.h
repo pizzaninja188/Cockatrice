@@ -2,14 +2,14 @@
  * @file key_signals.h
  * @ingroup Core
  * @ingroup UI
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef KEYSIGNALS_H
 #define KEYSIGNALS_H
 
-#include <QEvent>
 #include <QObject>
+#include <qtmetamacros.h>
 
 class KeySignals : public QObject
 {

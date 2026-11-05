@@ -1,12 +1,28 @@
 #include "visual_database_display_filter_save_load_widget.h"
 
 #include "../../../client/settings/cache_settings.h"
+#include "../general/layout_containers/flow_widget.h"
+#include "filter_tree_model.h"
+#include "libcockatrice/filters/filter_card.h"
 #include "visual_database_filter_display_widget.h"
 
-#include <QHBoxLayout>
+#include <QByteArray>
+#include <QChar>
+#include <QDir>
+#include <QFile>
+#include <QIODevice>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonValue>
+#include <QJsonValueRef>
+#include <QLineEdit>
+#include <QPushButton>
+#include <QRegularExpression>
+#include <QVBoxLayout>
 #include <libcockatrice/filters/filter_tree.h>
+#include <libcockatrice/settings/paths_settings.h>
+#include <qnamespace.h>
 
 VisualDatabaseDisplayFilterSaveLoadWidget::VisualDatabaseDisplayFilterSaveLoadWidget(QWidget *parent,
                                                                                      FilterTreeModel *_filterModel)
@@ -57,10 +73,11 @@ void VisualDatabaseDisplayFilterSaveLoadWidget::retranslateUi()
 void VisualDatabaseDisplayFilterSaveLoadWidget::saveFilter()
 {
     QString filename = filenameInput->text().trimmed();
-    if (filename.isEmpty())
+    if (filename.isEmpty()) {
         return;
+    }
 
-    QString filePath = SettingsCache::instance().getFiltersPath() + QDir::separator() + filename + ".json";
+    QString filePath = SettingsCache::instance().paths().getFiltersPath() + QDir::separator() + filename + ".json";
 
     // Serialize the filter model to JSON
     QJsonArray filtersArray;
@@ -85,22 +102,25 @@ void VisualDatabaseDisplayFilterSaveLoadWidget::saveFilter()
 
 void VisualDatabaseDisplayFilterSaveLoadWidget::loadFilter(const QString &filename)
 {
-    QString filePath = SettingsCache::instance().getFiltersPath() + QDir::separator() + filename;
+    QString filePath = SettingsCache::instance().paths().getFiltersPath() + QDir::separator() + filename;
 
     QFile file(filePath);
-    if (!file.open(QIODevice::ReadOnly))
+    if (!file.open(QIODevice::ReadOnly)) {
         return;
+    }
 
     QByteArray jsonData = file.readAll();
     file.close();
 
     QJsonDocument doc = QJsonDocument::fromJson(jsonData);
-    if (!doc.isObject())
+    if (!doc.isObject()) {
         return;
+    }
 
     QJsonObject root = doc.object();
-    if (!root.contains("filters") || !root["filters"].isArray())
+    if (!root.contains("filters") || !root["filters"].isArray()) {
         return;
+    }
 
     QJsonArray filtersArray = root["filters"].toArray();
 
@@ -152,7 +172,7 @@ void VisualDatabaseDisplayFilterSaveLoadWidget::refreshFilterList()
     fileListWidget->clearLayout();
     fileButtons.clear();
 
-    QDir dir(SettingsCache::instance().getFiltersPath());
+    QDir dir(SettingsCache::instance().paths().getFiltersPath());
     allFilterFiles = dir.entryList({"*.json"}, QDir::Files, QDir::Name);
 
     applySearchFilter(searchInput->text());

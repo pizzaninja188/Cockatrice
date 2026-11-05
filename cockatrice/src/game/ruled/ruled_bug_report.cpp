@@ -1,9 +1,11 @@
+#include <libcockatrice/game/game_event_handler.h>
+#include <libcockatrice/game/game_meta_info.h>
 #include "ruled_bug_report.h"
 
 #include "../../interface/widgets/tabs/tab_game.h"
 #include "../../interface/widgets/tabs/tab_supervisor.h"
 #include "../../interface/window_main.h"
-#include "../abstract_game.h"
+#include <libcockatrice/game/abstract_game.h>
 #include "ruled_actions.h"
 #include "ruled_client_diagnostics.h"
 #include "ruled_diagnostic_viewer.h"

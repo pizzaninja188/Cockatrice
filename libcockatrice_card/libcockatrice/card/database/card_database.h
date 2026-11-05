@@ -3,16 +3,25 @@
 
 #include "../set/card_set_list.h"
 #include "card_database_loader.h"
-#include "card_database_querier.h"
+
+// IWYU pragma: keep
+// CardDatabaseData is passed by value to the swapInDatabaseData() slot, and
+// CardInfoPtr is passed by value to the cardAdded()/cardRemoved() signals, so
+// the moc-generated code needs the complete types.
+#include "card_database_data.h"
+#include "libcockatrice/card/card_info.h"
 
 #include <QBasicMutex>
-#include <QDate>
-#include <QHash>
-#include <QList>
 #include <QLoggingCategory>
-#include <QVector>
-#include <libcockatrice/interfaces/interface_card_database_path_provider.h>
-#include <utility>
+#include <QObject>
+#include <QString>
+#include <QStringList>
+#include <qtmetamacros.h>
+
+class CardDatabaseQuerier;
+class ICardDatabasePathProvider;
+class ICardPreferenceProvider;
+class ICardSetPriorityController;
 
 inline Q_LOGGING_CATEGORY(CardDatabaseLog, "card_database");
 
@@ -30,41 +39,59 @@ class CardDatabase : public QObject
     Q_OBJECT
 
 protected:
-    /// Controller to determine set priority when choosing preferred printings.
+    /** @brief Controller to determine set priority when choosing preferred printings. */
     ICardSetPriorityController *setPriorityController;
 
-    /// Cards indexed by exact name
+    /** @brief Cards indexed by exact name. */
     CardNameMap cards;
 
-    /// Cards indexed by simplified name (normalized)
+    /** @brief Cards indexed by simplified name (normalized). */
     CardNameMap simpleNameCards;
 
-    /// Sets indexed by short name
+    /** @brief Sets indexed by short name. */
     SetNameMap sets;
 
     FormatRulesNameMap formats;
 
-    /// Loader responsible for file discovery and parsing
+    /** @brief Loader responsible for file discovery and parsing. */
     CardDatabaseLoader *loader;
 
-    /// Current load status of the database
+    /** @brief Current load status of the database. */
     LoadStatus loadStatus;
 
-    /// Querier for higher-level card lookups
+    /** @brief Querier for higher-level card lookups. */
     CardDatabaseQuerier *querier;
 
 private:
-    /**
-     * @brief Check for sets that are unknown and emit signals if needed.
-     */
-    void checkUnknownSets();
-
     /**
      * @brief Refreshes the cached reverse-related cards for all cards.
      */
     void refreshCachedReverseRelatedCards();
 
-    /// Mutexes for thread safety
+    /**
+     * @brief Refreshes the cached reverse-related cards for the given card map.
+     * @param cardMap Map of cards to process.
+     */
+    void refreshCachedReverseRelatedCards(CardNameMap &cardMap);
+
+    /**
+     * @brief Empties every set, dropping the strong card references they hold.
+     *
+     * A card keeps a CardSetPtr through its printings while its set keeps a strong CardInfoPtr, so the
+     * two form a reference cycle. Dropping a whole snapshot has to break that cycle once, up front,
+     * instead of relying on the per-card detach in removeCard().
+     */
+    void detachSetMembership();
+
+    /**
+     * @brief Drops a card from the database indexes and notifies observers.
+     *
+     * Callers are responsible for detaching the card from its sets first.
+     * @param card Pointer to the card to unindex.
+     */
+    void unindexCard(const CardInfoPtr &card);
+
+    /** @brief Mutexes for thread safety. */
     QBasicMutex *clearDatabaseMutex = new QBasicMutex(), *addCardMutex = new QBasicMutex(),
                 *removeCardMutex = new QBasicMutex();
 
@@ -88,7 +115,7 @@ public:
      * @brief Removes a card from the database.
      * @param card Pointer to the card to remove.
      */
-    void removeCard(CardInfoPtr card);
+    void removeCard(const CardInfoPtr &card);
 
     /** @brief Clears all cards, sets, and internal state. */
     void clear();
@@ -127,35 +154,78 @@ public:
     /** @brief Marks all sets as known. */
     void markAllSetsAsKnown();
 
-    /** @brief Notifies listeners that enabled sets changed. */
-    void notifyEnabledSetsChanged();
+    /**
+     * @brief Notifies listeners that enabled sets changed.
+     * @param recomputeCachedSets When true, every card's cached set-name / alt-name
+     *        data is recomputed (needed only when enabled-set state actually
+     *        changed). Pass false after a plain reload, where enabled-set state is
+     *        unchanged and the cached data is still valid.
+     */
+    void notifyEnabledSetsChanged(bool recomputeCachedSets = true);
+
+    /**
+     * @brief Check for sets that are unknown and emit signals if needed.
+     *
+     * Called from MainWindow::startupConfigCheck() after signal connections are
+     * live (the front-loaded parse in main() runs before MainWindow exists, so
+     * signals emitted there would have no receivers).  May also be called by
+     * the loader via the friend declaration.  Has side effects: enables all
+     * sets when none are enabled (first-run), marks all sets as known.
+     */
+    void checkUnknownSets();
+
+    ICardSetPriorityController *getPriorityController()
+    {
+        return setPriorityController;
+    }
 
 public slots:
     /**
      * @brief Adds a card to the database.
      * @param card CardInfoPtr to add.
      */
-    void addCard(CardInfoPtr card);
+    void addCard(const CardInfoPtr &card);
 
     /**
      * @brief Adds a set to the database.
      * @param set Pointer to CardSet to add.
      */
-    void addSet(CardSetPtr set);
+    void addSet(const CardSetPtr &set);
 
-    void addFormat(FormatRulesPtr format);
+    void addFormat(const FormatRulesPtr &format);
 
-    /** @brief Loads card databases from configured paths. */
+    /** @brief Loads card databases from configured paths, using the binary cache when valid. */
     void loadCardDatabases();
+    /**
+     * @brief Reloads card databases from disk, bypassing the binary cache,
+     *        and notifies observers of the fresh state.
+     */
+    void reloadCardDatabasesAndNotify();
 
     /** @brief Saves custom tokens to file.
      * @return True if successful.
      */
     bool saveCustomTokensToFile();
 
+    /**
+     * @brief Replaces the entire contents of the database with the provided
+     *        snapshot in a single operation. Intended to be called once a
+     *        background load has finished building a CardDatabaseData, so that
+     *        observers never see a partially-populated database.
+     * @param data The fully-built snapshot to adopt.
+     */
+    void swapInDatabaseData(CardDatabaseData data);
+
 signals:
     /** @brief Emitted when the card database has finished loading successfully. */
     void cardDatabaseLoadingFinished();
+
+    /**
+     * @brief Emitted once after the live database contents have been replaced
+     *        by a freshly loaded snapshot. Models should rebuild from the
+     *        database in a single batch rather than reacting to per-card adds.
+     */
+    void cardDatabaseReset();
 
     /** @brief Emitted when the card database fails to load. */
     void cardDatabaseLoadingFailed();

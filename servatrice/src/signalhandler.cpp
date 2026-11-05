@@ -5,6 +5,10 @@
 #include "settingscache.h"
 
 #include <QSocketNotifier>
+#include <QThread>
+#include <QtGlobal>
+#include <qobjectdefs.h>
+#include <qsystemdetection.h>
 
 #ifdef Q_OS_UNIX
 #include <cstdio>
@@ -69,6 +73,8 @@ void SignalHandler::internalSigHupHandler()
     logger->rotateLogs();
 
     settingsCache->sync();
+    logger->reloadConfig(settingsCache->value("server/writelog", 1).toBool(),
+                         settingsCache->value("server/logfilters").toString());
 
     snHup->setEnabled(true);
 }
@@ -86,10 +92,11 @@ void SignalHandler::sigSegvHandler(int sig)
     fprintf(stderr, "Error: signal %d:\n", sig);
     backtrace_symbols_fd(array, size, STDERR_FILENO);
 
-    if (sig == SIGSEGV)
+    if (sig == SIGSEGV) {
         logger->logMessage("CRASH: SIGSEGV");
-    else if (sig == SIGABRT)
+    } else if (sig == SIGABRT) {
         logger->logMessage("CRASH: SIGABRT");
+    }
 
     logger->deleteLater();
     loggerThread->wait();

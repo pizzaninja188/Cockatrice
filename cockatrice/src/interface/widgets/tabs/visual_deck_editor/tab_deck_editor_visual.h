@@ -1,8 +1,19 @@
 #ifndef WINDOW_DECKEDITORVISUAL_H
 #define WINDOW_DECKEDITORVISUAL_H
 
-#include "../tab.h"
-#include "tab_deck_editor_visual_tab_widget.h"
+#include "../abstract_tab_deck_editor.h"
+
+#include <QMouseEvent>
+#include <QString>
+#include <qtmetamacros.h>
+
+class ExactCard;
+class QDockWidget;
+class QHBoxLayout;
+class QVBoxLayout;
+class QWidget;
+class TabDeckEditorVisualTabWidget;
+class TabSupervisor;
 
 /**
  * @class TabDeckEditorVisual
@@ -41,7 +52,7 @@
  * - changeModelIndexAndCardInfo(const ExactCard &card) — Updates deck model selection and card info.
  * - changeModelIndexToCard(const ExactCard &card) — Selects the card in the deck view.
  * - processMainboardCardClick(QMouseEvent *event, ...) — Handles clicks on mainboard cards.
- * - processCardClickDatabaseDisplay(QMouseEvent *event, ...) — Handles clicks on database cards.
+ * - processDatabaseCardClick(QMouseEvent *event, ...) — Handles clicks on database cards.
  * - actSaveDeckAs() — Overrides save action with temporary UI adjustments.
  * - showPrintingSelector() — Opens the printing selector dock for the current card.
  * - freeDocksSize() — Frees constraints on dock widget sizes.
@@ -145,32 +156,40 @@ public slots:
     void onDeckChanged() override;
 
     /**
-     * @brief Show the printing selector dock for the currently active card.
-     */
-    void showPrintingSelector() override;
-
-    /**
      * @brief Handle card clicks in the mainboard visual deck.
      * @param event Mouse event triggering the action.
-     * @param instance Widget representing the clicked card.
+     * @param card The clicked card.
      * @param zoneName Deck zone of the card.
      */
-    void processMainboardCardClick(QMouseEvent *event,
-                                   CardInfoPictureWithTextOverlayWidget *instance,
-                                   const QString &zoneName);
+    void processMainboardCardClick(const QMouseEvent *event, const ExactCard &card, const QString &zoneName);
 
     /**
      * @brief Handle card clicks in the database visual display.
      * @param event Mouse event triggering the action.
-     * @param instance Widget representing the clicked card.
+     * @param card  The clicked card.
      */
-    void processCardClickDatabaseDisplay(QMouseEvent *event, CardInfoPictureWithTextOverlayWidget *instance);
+    void processDatabaseCardClick(const QMouseEvent *event, const ExactCard &card);
 
     /**
      * @brief Save the deck under a new name.
      * @return true if successful, false otherwise.
      */
     bool actSaveDeckAs() override;
+
+    /**
+     * @brief Prompts for and creates a new custom deck zone.
+     * @return The name of the created zone, or an empty string if creation was cancelled.
+     */
+    QString createNewZone();
+
+private:
+    /**
+     * @brief Sets the deck for this tab and selects the sub-tab to open on
+     * startup, per the "Visual deck editor startup tab" setting (Context /
+     * Deck display / Database display).
+     * @param _deck The deck object.
+     */
+    void setDeck(const LoadedDeck &_deck) override;
 };
 
 #endif

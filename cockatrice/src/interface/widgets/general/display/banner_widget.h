@@ -3,15 +3,17 @@
  * @ingroup Widgets
  * @ingroup DeckEditorCardGroupWidgets
  * @ingroup DeckStorageWidgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef BANNER_WIDGET_H
 #define BANNER_WIDGET_H
 
 #include <QLabel>
-#include <QVBoxLayout>
+#include <QString>
 #include <QWidget>
+#include <qnamespace.h>
+#include <qtmetamacros.h>
 
 class BannerWidget : public QWidget
 {
@@ -46,6 +48,7 @@ signals:
 private slots:
     void toggleBuddyVisibility() const;
     void updateDropdownIconState() const;
+    void applyInterfaceDefaultFont();
 };
 
 #endif // BANNER_WIDGET_H

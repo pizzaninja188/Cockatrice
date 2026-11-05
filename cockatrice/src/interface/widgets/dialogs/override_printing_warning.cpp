@@ -3,6 +3,14 @@
 #include "../../card_picture_loader/card_picture_loader.h"
 #include "../../client/settings/cache_settings.h"
 
+#include <QMessageBox>
+#include <QObject>
+#include <QString>
+#include <libcockatrice/settings/cards_display_settings.h>
+#include <libcockatrice/utility/qt_utils.h>
+
+class QWidget;
+
 bool OverridePrintingWarning::execMessageBox(QWidget *parent, bool enable)
 {
     QString message;
@@ -23,11 +31,8 @@ bool OverridePrintingWarning::execMessageBox(QWidget *parent, bool enable)
             "Are you sure you would like to disable this feature?");
     }
 
-    QMessageBox::StandardButton result =
-        QMessageBox::question(parent, QObject::tr("Confirm Change"), message, QMessageBox::Yes | QMessageBox::No);
-
-    if (result == QMessageBox::Yes) {
-        SettingsCache::instance().setOverrideAllCardArtWithPersonalPreference(static_cast<Qt::CheckState>(enable));
+    if (QtUtils::confirm(parent, QObject::tr("Confirm Change"), message)) {
+        SettingsCache::instance().cardsDisplay().setOverrideAllCardArtWithPersonalPreference(enable);
         // Caches are now invalid.
         CardPictureLoader::clearPixmapCache();
         CardPictureLoader::clearNetworkCache();

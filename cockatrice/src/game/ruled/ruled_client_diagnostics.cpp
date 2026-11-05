@@ -1,16 +1,26 @@
+#include <libcockatrice/protocol/pb/response.pb.h>
+#include <libcockatrice/game/game_event_handler.h>
+#include <libcockatrice/game/game_meta_info.h>
+#include <libcockatrice/game/game_state.h>
+#include <libcockatrice/game/player/player_manager.h>
+#include <libcockatrice/game/board/counter_state.h>
+#include "ruled_client_ui.h"
 #include "ruled_client_diagnostics.h"
 
 #include "../../client/settings/cache_settings.h"
 #include "../../interface/widgets/tabs/tab_game.h"
-#include "../abstract_game.h"
-#include "../board/card_item.h"
-#include "../player/player.h"
-#include "../player/player_actions.h"
-#include "../player/player_info.h"
+#include <libcockatrice/game/abstract_game.h>
+#include "../../game_graphics/board/card_item.h"
+#include <libcockatrice/game/player/player_logic.h>
+#include "ruled_player_actions.h"
+#include <libcockatrice/game/player/player_info.h>
 #include "../prompt/game_prompt_widget.h"
-#include "../replay.h"
+#include <libcockatrice/game/replay.h>
 #include "ruled_actions.h"
 #include "ruled_client_state.h"
+#include "../../game_graphics/game_scene.h"
+#include "../../game_graphics/zones/view_zone.h"
+#include "../../game_graphics/zones/view_zone_widget.h"
 #include "ruled_diagnostic_values.h"
 #include "ruled_payment_ui.h"
 
@@ -57,7 +67,7 @@ bool RuledClientDiagnostics::ensure()
         metadata.insert("display_database_sha256", database.open(QIODevice::ReadOnly) && hash.addData(&database)
                                                        ? QJsonValue(QString::fromLatin1(hash.result().toHex()))
                                                        : QJsonValue());
-        if (auto *screen = game->getTab()->screen())
+        if (auto *screen = RuledActions::tab(game)->screen())
             metadata.insert("display", QJsonObject{{"logical_dpi", screen->logicalDotsPerInch()},
                                                    {"device_pixel_ratio", screen->devicePixelRatio()},
                                                    {"width", screen->size().width()},
@@ -131,13 +141,26 @@ QJsonObject RuledClientDiagnostics::currentState() const
     result.insert("priority_player_id", game->getGameState()->getPriorityPlayer());
     result.insert("toolbar_phase", game->getGameState()->getCurrentPhase());
     QJsonArray prompts;
-    for (const auto *prompt : game->getTab()->findChildren<GamePromptWidget *>())
+    for (const auto *prompt : RuledActions::tab(game)->findChildren<GamePromptWidget *>())
         prompts.append(prompt->diagnosticSnapshot());
     result.insert("prompts", prompts);
+    QJsonArray windows;
+    for (auto *item : RuledActions::scene(game)->items()) {
+        const auto *view = dynamic_cast<ZoneViewWidget *>(item);
+        if (!view || !view->getZone()) {
+            continue;
+        }
+        windows.append(QJsonObject{{"zone", view->getZone()->getLogic()->getName()},
+                                   {"visible", view->isVisible()},
+                                   {"card_count", view->getZone()->getLogic()->getCards().size()},
+                                   {"closeable", view->isCloseable()},
+                                   {"close_button", bool(view->windowFlags() & Qt::WindowCloseButtonHint)}});
+    }
+    result.insert("zone_windows", windows);
     QJsonArray cards;
     QJsonArray transactions;
     for (const auto *player : game->getPlayerManager()->getPlayers()) {
-        const auto *actions = player->getPlayerActions();
+        const auto *actions = RuledActions::actions(player);
         if (actions && actions->ruledPendingCast) {
             transactions.append(QJsonObject{
                 {"player_id", player->getPlayerInfo()->getId()},
@@ -147,7 +170,7 @@ QJsonObject RuledClientDiagnostics::currentState() const
                  actions->ruledPayment ? QJsonValue(actions->ruledPayment->diagnosticSnapshot()) : QJsonValue()}});
         }
         for (const auto *zone : player->getZones()) {
-            for (const auto *card : zone->getCards()) {
+            for (const auto *card : RuledActions::cardItems(zone->getCards())) {
                 const auto owner = player->getPlayerInfo()->getId();
                 const auto *state = game->getGameEventHandler()->ruled();
                 const auto oid =
@@ -191,7 +214,7 @@ bool RuledClientDiagnostics::eventFilter(QObject *watched, QEvent *event)
         event->type() != QEvent::KeyPress)
         return false;
     auto *widget = qobject_cast<QWidget *>(watched);
-    auto *tab = game->getTab();
+    auto *tab = RuledActions::tab(game);
     if (!widget || (widget != tab && !tab->isAncestorOf(widget)) || !ensure())
         return false;
     QJsonObject action{{"widget_class", widget->metaObject()->className()},

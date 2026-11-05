@@ -1,33 +1,57 @@
 #include "visual_database_display_filter_toolbar_widget.h"
 
+#include "../../theme_icon.h"
+#include "../deck_editor/card_database_view.h"
+#include "../quick_settings/settings_button_widget.h"
+#include "card_database_display_model.h"
+#include "visual_database_display_filter_save_load_widget.h"
+#include "visual_database_display_format_legality_filter_widget.h"
+#include "visual_database_display_main_type_filter_widget.h"
+#include "visual_database_display_name_filter_widget.h"
+#include "visual_database_display_set_filter_widget.h"
+#include "visual_database_display_sub_type_filter_widget.h"
 #include "visual_database_display_widget.h"
 
+#include <QAbstractItemView>
+#include <QComboBox>
 #include <QGroupBox>
+#include <QHBoxLayout>
+#include <QIcon>
+#include <QLabel>
+#include <QLayout>
+#include <QList>
+#include <QPixmap>
+#include <QResizeEvent>
+#include <QSize>
+#include <QSizePolicy>
+#include <QString>
+#include <QStringLiteral>
+#include <QVariant>
+#include <QWidget>
+#include <QtGlobal>
+#include <libcockatrice/utility/qt_utils.h>
+#include <qnamespace.h>
 
-VisualDatabaseDisplayFilterToolbarWidget::VisualDatabaseDisplayFilterToolbarWidget(VisualDatabaseDisplayWidget *_parent)
-    : QWidget(_parent), visualDatabaseDisplay(_parent)
+class DeckListModel;
+
+VisualDatabaseDisplayFilterToolbarWidget::VisualDatabaseDisplayFilterToolbarWidget(VisualDatabaseDisplayWidget *_parent,
+                                                                                   DeckListModel *deckListModel)
+    : FlowWidget(_parent, Qt::Horizontal, Qt::ScrollBarAlwaysOff, Qt::ScrollBarAlwaysOff),
+      visualDatabaseDisplay(_parent), deckListModel(deckListModel)
 {
-    filterContainerLayout = new QHBoxLayout(this);
-    filterContainerLayout->setContentsMargins(11, 0, 11, 0);
-    filterContainerLayout->setSpacing(2);
-    setLayout(filterContainerLayout);
-    filterContainerLayout->setAlignment(Qt::AlignLeft);
-
-    setMaximumHeight(80);
-
     connect(this, &VisualDatabaseDisplayFilterToolbarWidget::searchModelChanged, visualDatabaseDisplay,
             &VisualDatabaseDisplayWidget::onSearchModelChanged);
 
     sortGroupBox = new QGroupBox(this);
     filterGroupBox = new QGroupBox(this);
 
-    auto scalePixmap = [](const QString &fileName) { return QIcon(QPixmap(fileName)).pixmap({20, 20}); };
+    auto scalePixmap = [](const QString &prefix) { return loadThemedIcon(prefix).pixmap({20, 20}); };
 
     sortByLabel = new QLabel(this);
-    sortByLabel->setPixmap(scalePixmap("theme:icons/sort_arrow_down"));
+    sortByLabel->setPixmap(scalePixmap("icons/sort_arrow_down"));
 
     filterByLabel = new QLabel(this);
-    filterByLabel->setPixmap(scalePixmap("theme:icons/filter"));
+    filterByLabel->setPixmap(scalePixmap("icons/filter"));
 
     sortColumnCombo = new QComboBox(this);
     sortColumnCombo->setSizeAdjustPolicy(QComboBox::SizeAdjustPolicy::AdjustToContents);
@@ -65,47 +89,39 @@ VisualDatabaseDisplayFilterToolbarWidget::VisualDatabaseDisplayFilterToolbarWidg
     });
 
     quickFilterSaveLoadWidget = new SettingsButtonWidget(this);
-    quickFilterSaveLoadWidget->setButtonIcon(QPixmap("theme:icons/floppy_disk"));
+    quickFilterSaveLoadWidget->setButtonIcon(loadThemedIcon(QStringLiteral("icons/floppy_disk")));
 
     quickFilterNameWidget = new SettingsButtonWidget(this);
-    quickFilterNameWidget->setButtonIcon(QPixmap("theme:icons/pen_to_square"));
+    quickFilterNameWidget->setButtonIcon(loadThemedIcon(QStringLiteral("icons/pen_to_square")));
 
     quickFilterMainTypeWidget = new SettingsButtonWidget(this);
-    quickFilterMainTypeWidget->setButtonIcon(QPixmap("theme:icons/circle_half_stroke"));
+    quickFilterMainTypeWidget->setButtonIcon(loadThemedIcon(QStringLiteral("icons/circle_half_stroke")));
 
     quickFilterSubTypeWidget = new SettingsButtonWidget(this);
-    quickFilterSubTypeWidget->setButtonIcon(QPixmap("theme:icons/dragon"));
+    quickFilterSubTypeWidget->setButtonIcon(loadThemedIcon(QStringLiteral("icons/dragon")));
 
     quickFilterSetWidget = new SettingsButtonWidget(this);
-    quickFilterSetWidget->setButtonIcon(QPixmap("theme:icons/scroll"));
+    quickFilterSetWidget->setButtonIcon(loadThemedIcon(QStringLiteral("icons/scroll")));
 
     quickFilterFormatLegalityWidget = new SettingsButtonWidget(this);
-    quickFilterFormatLegalityWidget->setButtonIcon(QPixmap("theme:icons/scale_balanced"));
+    quickFilterFormatLegalityWidget->setButtonIcon(loadThemedIcon(QStringLiteral("icons/scales")));
 
     retranslateUi();
 }
 
 void VisualDatabaseDisplayFilterToolbarWidget::initialize()
 {
-    // create groupbox layouts
-    auto sortLayout = new QHBoxLayout(this);
-    sortLayout->setContentsMargins(0, 0, 0, 0);
-    sortLayout->setSpacing(0);
-    sortGroupBox->setLayout(sortLayout);
+    auto sortLayout = QtUtils::makeLayout<QHBoxLayout>(sortGroupBox, 0);
     sortLayout->setAlignment(Qt::AlignLeft);
 
-    auto filterLayout = new QHBoxLayout(this);
-    filterLayout->setContentsMargins(0, 0, 0, 0);
-    filterLayout->setSpacing(2);
-    filterGroupBox->setLayout(filterLayout);
+    auto filterLayout = QtUtils::makeLayout<QHBoxLayout>(filterGroupBox, 2);
     filterLayout->setAlignment(Qt::AlignLeft);
 
     // create settings widgets
-    auto filterModel = visualDatabaseDisplay->filterModel;
+    auto filterModel = visualDatabaseDisplay->getFilterModel();
 
     saveLoadWidget = new VisualDatabaseDisplayFilterSaveLoadWidget(this, filterModel);
-    nameFilterWidget =
-        new VisualDatabaseDisplayNameFilterWidget(this, visualDatabaseDisplay->getDeckEditor(), filterModel);
+    nameFilterWidget = new VisualDatabaseDisplayNameFilterWidget(this, filterModel, deckListModel);
     mainTypeFilterWidget = new VisualDatabaseDisplayMainTypeFilterWidget(this, filterModel);
     formatLegalityWidget = new VisualDatabaseDisplayFormatLegalityFilterWidget(this, filterModel);
     subTypeFilterWidget = new VisualDatabaseDisplaySubTypeFilterWidget(this, filterModel);
@@ -131,10 +147,18 @@ void VisualDatabaseDisplayFilterToolbarWidget::initialize()
     filterLayout->addWidget(quickFilterFormatLegalityWidget);
 
     // put everything into main layout
-    filterContainerLayout->addWidget(sortGroupBox);
-    filterContainerLayout->addWidget(filterGroupBox);
-    filterContainerLayout->addStretch();
-    filterContainerLayout->addWidget(quickFilterSaveLoadWidget);
+    addWidget(sortGroupBox);
+    addWidget(filterGroupBox);
+    auto *spacer = new QWidget(this);
+    spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    spacer->setAttribute(Qt::WA_TransparentForMouseEvents);
+    addWidget(spacer);
+    addWidget(quickFilterSaveLoadWidget);
+    addWidget(quickFilterSaveLoadWidget);
+
+    // Force a layout pass so sizeHint() is accurate
+    layout()->activate();
+    fullWidthHint = sizeHint().width();
 }
 
 void VisualDatabaseDisplayFilterToolbarWidget::retranslateUi()
@@ -155,4 +179,26 @@ void VisualDatabaseDisplayFilterToolbarWidget::retranslateUi()
     quickFilterSubTypeWidget->setButtonText(tr("Sub Type"));
     quickFilterSetWidget->setButtonText(tr("Sets"));
     quickFilterFormatLegalityWidget->setButtonText(tr("Formats"));
+}
+
+void VisualDatabaseDisplayFilterToolbarWidget::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    updateCompactMode(event->size().width());
+}
+
+void VisualDatabaseDisplayFilterToolbarWidget::updateCompactMode(int availableWidth)
+{
+    const bool compact = availableWidth < fullWidthHint;
+
+    const QList<SettingsButtonWidget *> filterButtons = {
+        quickFilterSaveLoadWidget, quickFilterNameWidget, quickFilterMainTypeWidget,
+        quickFilterSubTypeWidget,  quickFilterSetWidget,  quickFilterFormatLegalityWidget,
+    };
+
+    for (auto *btn : filterButtons) {
+        if (btn->isCompact() != compact) { // only act on transitions
+            btn->setCompact(compact);
+        }
+    }
 }

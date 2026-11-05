@@ -3,46 +3,69 @@
  * @ingroup Tabs
  * @ingroup GameWidgets
  * @ingroup Lobby
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef TAB_GAME_H
 #define TAB_GAME_H
 
-#include "../game/abstract_game.h"
-#include "../game/log/message_log_widget.h"
+#include <libcockatrice/game/abstract_game.h>
+#include "../../../game_graphics/log/message_log_widget.h"
 // For GamePromptWidget::PromptMode on refreshRuledPromptState() — ruled prompt panel (fork).
-#include "../game/prompt/game_prompt_widget.h"
+#include "../../../game/prompt/game_prompt_widget.h"
 // For RuledTriggerOrderCandidate on the CR 603.3b ordering signal (fork).
-#include "../game/player/player.h"
-#include "../game/ruled/ruled_client_state.h"
-#include "../interface/widgets/menus/tearoff_menu.h"
-#include "../interface/widgets/replay/replay_manager.h"
+#include <libcockatrice/game/player/player_logic.h>
+#include "../../../game/ruled/ruled_client_state.h"
+#include "../menus/tearoff_menu.h"
+#include "../replay/replay_manager.h"
 #include "tab.h"
 
-#include <QCompleter>
+#include <QList>
 #include <QLoggingCategory>
 #include <QMap>
 #include <QPointF>
 #include <QPointer>
 #include <QSizeF>
+#include <QPair>
+#include <QSize>
+#include <QString>
+#include <QStringList>
+#include <QVector>
+#include <qtmetamacros.h>
+// IWYU pragma: keep
+// ServerInfo_User appears by value and inside QList in slot signatures, so the
+// moc-generated code needs the complete type.
+#include <libcockatrice/protocol/pb/serverinfo_user.pb.h>
 
-class ServerInfo_PlayerProperties;
+class CardMenu;
 class TabbedDeckViewContainer;
+class AbstractGame;
+class Event_GameJoined;
+class GameEventContext;
+class MessageLogWidget;
+class PlayerLogic;
+class QAction;
+class QCompleter;
+class QStringListModel;
+class QWidget;
+class ServerInfo_Player;
+class ServerInfo_User;
+class TabSupervisor;
+class TearOffMenu;
+struct CardRef;
+struct LoadedDeck;
+
 inline Q_LOGGING_CATEGORY(TabGameLog, "tab_game");
 
 class UserListProxy;
-class DeckViewContainer;
 class AbstractClient;
-class CardDatabase;
 class GameView;
 class GameScene;
-class ReplayManager;
+class ReplayWidget;
+class ReplayEventSidebar;
 class CardInfoFrameWidget;
-class QTimer;
-class QSplitter;
 class QLabel;
-class QToolButton;
+class QPushButton;
 class QMenu;
 class ZoneViewLayout;
 class ZoneViewWidget;
@@ -50,19 +73,17 @@ class RuledRevealWindows;
 class CardZoneLogic;
 class PhasesToolbar;
 class PlayerListWidget;
-class ReplayTimelineWidget;
-class CardZone;
 class AbstractCardItem;
 class CardItem;
 class ArrowItem;
 class QVBoxLayout;
-class QHBoxLayout;
 class GameReplay;
 class LineEditCompleter;
 class QDockWidget;
 class QStackedWidget;
 class GamePromptWidget;
 class RuledDevConsoleWidget;
+class RuledGameController;
 
 class TabGame : public Tab
 {
@@ -73,15 +94,18 @@ class TabGame : public Tab
 
 private:
     AbstractGame *game;
+    RuledGameController *ruledController = nullptr;
     const UserListProxy *userListProxy;
-    ReplayManager *replayManager = nullptr;
+    ReplayWidget *replayWidget = nullptr;
     QStringList gameTypes;
-    QCompleter *completer;
+    QCompleter *mentionCompleter;
+    QStringListModel *mentionModel;
     QStringList autocompleteUserList;
     QStackedWidget *mainWidget;
 
     CardInfoFrameWidget *cardInfoFrameWidget;
     PlayerListWidget *playerListWidget;
+    QPushButton *inviteButton = nullptr;
     QLabel *timeElapsedLabel;
     MessageLogWidget *messageLog;
     QLabel *sayLabel;
@@ -92,8 +116,8 @@ private:
     QMap<int, TabbedDeckViewContainer *> deckViewContainers;
     QVBoxLayout *deckViewContainerLayout;
     QWidget *gamePlayAreaWidget, *deckViewContainerWidget;
-    QDockWidget *cardInfoDock, *messageLayoutDock, *playerListDock, *replayDock;
-    GamePromptWidget *gamePromptWidget;
+    QDockWidget *cardInfoDock, *messageLayoutDock, *playerListDock, *replayDock, *historyDock;
+    GamePromptWidget *gamePromptWidget = nullptr;
     /// Owner-private current library top and engine-offered actions for it.
     QWidget *ruledLibraryTopWidget = nullptr;
     QLabel *ruledLibraryTopLabel = nullptr;
@@ -101,7 +125,7 @@ private:
     QToolButton *ruledLibraryTopActions = nullptr;
     /// Fork: dev-loop command entry. Null unless --dev-console was passed on a ruled, non-replay
     /// game — guard every use, the way replayDock is guarded.
-    RuledDevConsoleWidget *devConsoleWidget;
+    RuledDevConsoleWidget *devConsoleWidget = nullptr;
     QList<QPointer<ArrowItem>> ruledCombatArrows;
     /// Graveyard views a pending trigger or cast opened for us, keyed by the player whose
     /// graveyard it is, so each can be closed again without touching one the player opened
@@ -134,10 +158,12 @@ private:
     QAction *playersSeparator;
     QMenu *gameMenu, *viewMenu;
     TearOffMenu *phasesMenu;
-    QAction *aGameInfo, *aConcede, *aLeaveGame, *aNextPhase, *aNextPhaseAction, *aNextTurn, *aReverseTurn,
-        *aRemoveLocalArrows, *aRotateViewCW, *aRotateViewCCW, *aResetLayout, *aResetReplayLayout;
+    QAction *aGameInfo, *aConcede, *aCopyGameLink, *aLeaveGame, *aNextPhase, *aNextPhaseAction, *aNextTurn,
+        *aReverseTurn, *aTurnOrder, *aRemoveLocalArrows, *aRotateViewCW, *aRotateViewCCW, *aResetLayout,
+        *aResetReplayLayout;
     QAction *aFocusChat;
     QAction *aToggleStackWindow;
+    QAction *aInviteToGame = nullptr;
     QList<QAction *> phaseActions;
     QAction *aCardMenu;
 
@@ -154,23 +180,24 @@ private:
 
     QMap<QDockWidget *, DockActions> dockToActions;
 
-    Player *addPlayer(Player *newPlayer);
-    void addLocalPlayer(Player *newPlayer, int playerId);
+    PlayerLogic *addPlayer(PlayerLogic *newPlayer);
+    void addLocalPlayer(PlayerLogic *newPlayer, int playerId);
     void processRemotePlayerDeckSelect(QString deckList, int playerId, QString playerName);
     void processMultipleRemotePlayerDeckSelect(QVector<QPair<int, QPair<QString, QString>>> playerIdDeckMap);
-    void processLocalPlayerDeckSelect(Player *localPlayer, int playerId, ServerInfo_Player playerInfo);
-    void loadDeckForLocalPlayer(Player *localPlayer, int playerId, ServerInfo_Player playerInfo);
+    void processLocalPlayerDeckSelect(PlayerLogic *localPlayer, int playerId, ServerInfo_Player playerInfo);
+    void loadDeckForLocalPlayer(PlayerLogic *localPlayer, int playerId, ServerInfo_Player playerInfo);
     void processLocalPlayerReady(int playerId, ServerInfo_Player playerInfo);
-    void createZoneForPlayer(Player *newPlayer, int playerId);
+    void createZoneForPlayer(PlayerLogic *newPlayer, int playerId);
 
     void startGame(bool resuming);
     void stopGame();
     void closeGame();
     bool leaveGame();
 
-    Player *setActivePlayer(int id);
-    Player *setPriorityPlayer(int id);
+    PlayerLogic *setActivePlayer(int id);
+    PlayerLogic *setPriorityPlayer(int id);
     void setActivePhase(int phase);
+    bool canSetTurnOrder() const;
     void createMenuItems();
     void createReplayMenuItems();
     void createViewMenuItems();
@@ -192,6 +219,7 @@ private:
     void saveStackWindowLayout();
     CardZoneLogic *findVisibleStackZone() const;
     void syncStackWindowVisibility();
+    void updateInviteButtonState();
 signals:
     void gameClosing(TabGame *tab);
     void containerProcessingStarted(const GameEventContext &context);
@@ -204,15 +232,18 @@ signals:
     void gameLeft();
     void chatMessageSent(QString chatMessage);
     void turnAdvanced();
-    void arrowDeletionRequested(int arrowId);
 
 private slots:
     void adminLockChanged(bool lock);
     void newCardAdded(AbstractCardItem *card);
-    void setCardMenu(QMenu *menu);
+    void setCardMenu(CardMenu *menu);
 
     void actGameInfo();
+    void actInviteToGame();
     void actConcede();
+    void actCopyGameLink();
+    void actTurnOrder();
+    void updateTurnOrderAction();
     void actRemoveLocalArrows();
     void actRotateViewCW();
     void actRotateViewCCW();
@@ -231,7 +262,7 @@ private slots:
     void actCompleterChanged();
     void notifyPlayerJoin(QString playerName);
     void notifyPlayerKicked();
-    void processPlayerLeave(Player *leavingPlayer);
+    void processPlayerLeave(PlayerLogic *leavingPlayer);
     void actResetLayout();
 
     void hideEvent(QHideEvent *event) override;
@@ -267,6 +298,8 @@ public:
 
     [[nodiscard]] QString getTabText() const override;
 
+    GameScene *getGameScene() const { return scene; }
+    MessageLogWidget *getMessageLog() const { return messageLog; }
     [[nodiscard]] AbstractGame *getGame() const
     {
         return game;
@@ -283,7 +316,7 @@ public:
 
 public slots:
     void viewCardInfo(const CardRef &cardRef = {}) const;
-    void resetChatAndPhase();
+    void resetForRewind();
     void updateTimeElapsedLabel(QString newTime);
     void addPlayerToAutoCompleteList(QString playerName);
     void removePlayerFromAutoCompleteList(QString playerName);

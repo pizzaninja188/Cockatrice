@@ -10,40 +10,62 @@
 #include "abstract_tab_deck_editor.h"
 
 #include "../../../client/settings/cache_settings.h"
+#include "../../../client/settings/shortcuts_settings.h"
+#include "../../deck_loader/deck_loader.h"
+#include "../cards/additional_info/deck_color_identity.h"
+#include "../cards/card_info_frame_widget.h"
 #include "../client/network/interfaces/deck_stats_interface.h"
 #include "../client/network/interfaces/tapped_out_interface.h"
+#include "../deck_editor/deck_editor_card_database_dock_widget.h"
+#include "../deck_editor/deck_editor_card_info_dock_widget.h"
+#include "../deck_editor/deck_editor_deck_dock_widget.h"
+#include "../deck_editor/deck_editor_filter_dock_widget.h"
+#include "../deck_editor/deck_editor_printing_selector_dock_widget.h"
 #include "../deck_editor/deck_state_manager.h"
 #include "../interface/card_picture_loader/card_picture_loader.h"
-#include "../interface/pixel_map_generator.h"
 #include "../interface/widgets/dialogs/dlg_load_deck.h"
 #include "../interface/widgets/dialogs/dlg_load_deck_from_clipboard.h"
 #include "../interface/widgets/dialogs/dlg_load_deck_from_website.h"
+#include "../interface/widgets/dialogs/dlg_share_deck.h"
+#include "../menus/deck_editor_menu.h"
+#include "../printing_selector/printing_selector.h"
 #include "../utility/visibility_change_listener.h"
+#include "libcockatrice/card/database/card_database_querier.h"
+#include "libcockatrice/card/printing/exact_card.h"
+#include "libcockatrice/deck_list/deck_list.h"
+#include "libcockatrice/utility/card_ref.h"
 #include "tab_supervisor.h"
 
 #include <QAction>
-#include <QApplication>
 #include <QCloseEvent>
 #include <QDesktopServices>
+#include <QDockWidget>
 #include <QFileDialog>
-#include <QHeaderView>
-#include <QLineEdit>
+#include <QFlags>
+#include <QList>
+#include <QMainWindow>
+#include <QMenu>
 #include <QMessageBox>
 #include <QPrintPreviewDialog>
 #include <QPrinter>
-#include <QProcessEnvironment>
 #include <QPushButton>
-#include <QRegularExpression>
-#include <QSplitter>
-#include <QTreeView>
+#include <QSharedPointer>
 #include <QUrl>
+#include <google/protobuf/stubs/port.h>
 #include <libcockatrice/card/database/card_database_manager.h>
+#include <libcockatrice/deck_list/deck_file_format.h>
+#include <libcockatrice/deck_list/loaded_deck.h>
 #include <libcockatrice/models/database/card_database_model.h>
 #include <libcockatrice/network/client/abstract/abstract_client.h>
 #include <libcockatrice/protocol/pb/command_deck_upload.pb.h>
 #include <libcockatrice/protocol/pb/response.pb.h>
 #include <libcockatrice/protocol/pending_command.h>
-#include <libcockatrice/utility/trice_limits.h>
+#include <libcockatrice/settings/deck_editor_settings.h>
+#include <libcockatrice/settings/paths_settings.h>
+#include <libcockatrice/settings/recents_settings.h>
+#include <libcockatrice/utility/string_limits.h>
+#include <optional>
+#include <string>
 
 /**
  * @brief Constructs the AbstractTabDeckEditor.
@@ -55,6 +77,9 @@ AbstractTabDeckEditor::AbstractTabDeckEditor(TabSupervisor *_tabSupervisor) : Ta
     setDockOptions(QMainWindow::AnimatedDocks | QMainWindow::AllowNestedDocks | QMainWindow::AllowTabbedDocks);
 
     deckStateManager = new DeckStateManager(this);
+
+    databaseModel = new CardDatabaseModel(CardDatabaseManager::getInstance(), true, this);
+    databaseModel->setObjectName("databaseModel");
 
     cardDatabaseDockWidget = new DeckEditorCardDatabaseDockWidget(this);
     deckDockWidget = new DeckEditorDeckDockWidget(this);
@@ -105,14 +130,15 @@ void AbstractTabDeckEditor::registerDockWidget(QMenu *_viewMenu, QDockWidget *wi
     dockToActions.insert(widget, {menu, aVisible, aFloating, defaultSize});
 }
 
-/**
- * @brief Updates the card info dock and printing selector.
- * @param card The card to display.
- */
 void AbstractTabDeckEditor::updateCard(const ExactCard &card)
 {
     cardInfoDockWidget->updateCard(card);
     printingSelectorDockWidget->printingSelector->setCard(card.getCardPtr());
+}
+
+void AbstractTabDeckEditor::updateCardInfo(const ExactCard &card)
+{
+    cardInfoDockWidget->updateCard(card);
 }
 
 /** @brief Placeholder: called when the deck changes. */
@@ -129,48 +155,14 @@ void AbstractTabDeckEditor::onDeckModified()
     emit tabTextChanged(this, getTabText());
 }
 
-/**
- * @brief Helper for adding a card to a deck zone.
- * @param card Card to add.
- * @param zoneName Zone to add the card to.
- */
-void AbstractTabDeckEditor::addCardHelper(const ExactCard &card, const QString &zoneName)
+void AbstractTabDeckEditor::addCard(const ExactCard &card, const QString &zoneName)
 {
     deckStateManager->addCard(card, zoneName);
-
-    cardDatabaseDockWidget->highlightAllSearchEdit();
 }
 
-/**
- * @brief Adds a card to the main deck or sideboard depending on Ctrl key.
- */
-void AbstractTabDeckEditor::actAddCard(const ExactCard &card)
+void AbstractTabDeckEditor::decrementCard(const ExactCard &card, const QString &zoneName)
 {
-    if (QApplication::keyboardModifiers() & Qt::ControlModifier)
-        actAddCardToSideboard(card);
-    else
-        addCardHelper(card, DECK_ZONE_MAIN);
-
-    deckMenu->setSaveStatus(true);
-}
-
-/** @brief Adds a card to the sideboard explicitly. */
-void AbstractTabDeckEditor::actAddCardToSideboard(const ExactCard &card)
-{
-    addCardHelper(card, DECK_ZONE_SIDE);
-    deckMenu->setSaveStatus(true);
-}
-
-/** @brief Decrements a card from the main deck. */
-void AbstractTabDeckEditor::actDecrementCard(const ExactCard &card)
-{
-    deckStateManager->decrementCard(card, DECK_ZONE_MAIN);
-}
-
-/** @brief Decrements a card from the sideboard. */
-void AbstractTabDeckEditor::actDecrementCardFromSideboard(const ExactCard &card)
-{
-    deckStateManager->decrementCard(card, DECK_ZONE_SIDE);
+    deckStateManager->decrementCard(card, zoneName);
 }
 
 /**
@@ -203,8 +195,9 @@ void AbstractTabDeckEditor::setDeck(const LoadedDeck &_deck)
 void AbstractTabDeckEditor::actNewDeck()
 {
     auto deckOpenLocation = confirmOpen(false);
-    if (deckOpenLocation == CANCELLED)
+    if (deckOpenLocation == CANCELLED) {
         return;
+    }
 
     if (deckOpenLocation == NEW_TAB) {
         emit openDeckEditor(LoadedDeck());
@@ -228,23 +221,26 @@ void AbstractTabDeckEditor::cleanDeckAndResetModified()
  */
 AbstractTabDeckEditor::DeckOpenLocation AbstractTabDeckEditor::confirmOpen(const bool openInSameTabIfBlank)
 {
-    if (SettingsCache::instance().getOpenDeckInNewTab()) {
-        if (openInSameTabIfBlank && deckStateManager->isBlankNewDeck())
+    if (SettingsCache::instance().deckEditor().getOpenDeckInNewTab()) {
+        if (openInSameTabIfBlank && deckStateManager->isBlankNewDeck()) {
             return SAME_TAB;
-        else
+        } else {
             return NEW_TAB;
+        }
     }
 
-    if (!deckStateManager->isModified())
+    if (!deckStateManager->isModified()) {
         return SAME_TAB;
+    }
 
     tabSupervisor->setCurrentWidget(this);
     QMessageBox *msgBox = createSaveConfirmationWindow();
     QPushButton *newTabButton = msgBox->addButton(tr("Open in new tab"), QMessageBox::ApplyRole);
     int ret = msgBox->exec();
 
-    if (msgBox->clickedButton() == newTabButton)
+    if (msgBox->clickedButton() == newTabButton) {
         return NEW_TAB;
+    }
 
     switch (ret) {
         case QMessageBox::Save:
@@ -277,12 +273,14 @@ QMessageBox *AbstractTabDeckEditor::createSaveConfirmationWindow()
 void AbstractTabDeckEditor::actLoadDeck()
 {
     auto deckOpenLocation = confirmOpen();
-    if (deckOpenLocation == CANCELLED)
+    if (deckOpenLocation == CANCELLED) {
         return;
+    }
 
     DlgLoadDeck dialog(this);
-    if (!dialog.exec())
+    if (!dialog.exec()) {
         return;
+    }
 
     QString fileName = dialog.selectedFiles().at(0);
     openDeckFromFile(fileName, deckOpenLocation);
@@ -295,8 +293,9 @@ void AbstractTabDeckEditor::actLoadDeck()
 void AbstractTabDeckEditor::actOpenRecent(const QString &fileName)
 {
     auto deckOpenLocation = confirmOpen();
-    if (deckOpenLocation == CANCELLED)
+    if (deckOpenLocation == CANCELLED) {
         return;
+    }
 
     openDeckFromFile(fileName, deckOpenLocation);
 }
@@ -342,6 +341,7 @@ bool AbstractTabDeckEditor::actSaveDeck()
         Command_DeckUpload cmd;
         cmd.set_deck_id(static_cast<google::protobuf::uint32>(loadedDeck.lastLoadInfo.remoteDeckId));
         cmd.set_deck_list(deckString.toStdString());
+        cmd.set_color_identity(getDeckColorIdentity(loadedDeck.deckList, CardDatabaseManager::query()).toStdString());
 
         PendingCommand *pend = AbstractClient::prepareSessionCommand(cmd);
         connect(pend, &PendingCommand::finished, this, &AbstractTabDeckEditor::saveDeckRemoteFinished);
@@ -349,8 +349,9 @@ bool AbstractTabDeckEditor::actSaveDeck()
 
         return true;
     }
-    if (loadedDeck.lastLoadInfo.fileName.isEmpty())
+    if (loadedDeck.lastLoadInfo.fileName.isEmpty()) {
         return actSaveDeckAs();
+    }
 
     if (DeckLoader::saveToFile(loadedDeck)) {
         deckStateManager->setModified(false);
@@ -372,14 +373,15 @@ bool AbstractTabDeckEditor::actSaveDeckAs()
     DeckList deckList = deckStateManager->getDeckList();
 
     QFileDialog dialog(this, tr("Save deck"));
-    dialog.setDirectory(SettingsCache::instance().getDeckPath());
+    dialog.setDirectory(SettingsCache::instance().paths().getDeckPath());
     dialog.setAcceptMode(QFileDialog::AcceptSave);
     dialog.setDefaultSuffix("cod");
     dialog.setNameFilters(DeckLoader::FILE_NAME_FILTERS);
     dialog.selectFile(deckList.getName().trimmed());
 
-    if (!dialog.exec())
+    if (!dialog.exec()) {
         return false;
+    }
 
     QString fileName = dialog.selectedFiles().at(0);
     DeckFileFormat::Format fmt = DeckFileFormat::getFormatFromName(fileName);
@@ -400,15 +402,37 @@ bool AbstractTabDeckEditor::actSaveDeckAs()
 }
 
 /**
+ * @brief Opens the deck share dialog with the current deck preselected.
+ */
+void AbstractTabDeckEditor::actShareDeck()
+{
+    AbstractClient *client = tabSupervisor->getServerClient();
+    if (client->getStatus() != StatusLoggedIn) {
+        QMessageBox::information(this, tr("Share deck"), tr("You must be connected to the server to share a deck."));
+        return;
+    }
+
+    const QSharedPointer<DeckList> deck = deckStateManager->getDeckListShared();
+    if (deck->isBlankDeck()) {
+        QMessageBox::information(this, tr("Share deck"), tr("The deck is empty. Add cards before sharing it."));
+        return;
+    }
+
+    DlgShareDeck shareDialog(client, deck, this);
+    shareDialog.exec();
+}
+
+/**
  * @brief Callback for remote deck save completion.
  * @param response Server response.
  */
 void AbstractTabDeckEditor::saveDeckRemoteFinished(const Response &response)
 {
-    if (response.response_code() != Response::RespOk)
+    if (response.response_code() != Response::RespOk) {
         QMessageBox::critical(this, tr("Error"), tr("The deck could not be saved."));
-    else
+    } else {
         deckStateManager->setModified(false);
+    }
 }
 
 /**
@@ -418,12 +442,14 @@ void AbstractTabDeckEditor::saveDeckRemoteFinished(const Response &response)
 void AbstractTabDeckEditor::actLoadDeckFromClipboard()
 {
     auto deckOpenLocation = confirmOpen();
-    if (deckOpenLocation == CANCELLED)
+    if (deckOpenLocation == CANCELLED) {
         return;
+    }
 
     DlgLoadDeckFromClipboard dlg(this);
-    if (!dlg.exec())
+    if (!dlg.exec()) {
         return;
+    }
 
     if (deckOpenLocation == NEW_TAB) {
         emit openDeckEditor({.deckList = dlg.getDeckList()});
@@ -443,8 +469,9 @@ void AbstractTabDeckEditor::editDeckInClipboard(bool annotated)
 {
     LoadedDeck loadedDeck = deckStateManager->toLoadedDeck();
     DlgEditDeckInClipboard dlg(loadedDeck.deckList, annotated, this);
-    if (!dlg.exec())
+    if (!dlg.exec()) {
         return;
+    }
 
     setDeck({dlg.getDeckList(), loadedDeck.lastLoadInfo});
     deckStateManager->setModified(true);
@@ -502,12 +529,14 @@ void AbstractTabDeckEditor::actPrintDeck()
 void AbstractTabDeckEditor::actLoadDeckFromWebsite()
 {
     auto deckOpenLocation = confirmOpen();
-    if (deckOpenLocation == CANCELLED)
+    if (deckOpenLocation == CANCELLED) {
         return;
+    }
 
     DlgLoadDeckFromWebsite dlg(this);
-    if (!dlg.exec())
+    if (!dlg.exec()) {
         return;
+    }
 
     if (deckOpenLocation == NEW_TAB) {
         emit openDeckEditor({.deckList = dlg.getDeck()});
@@ -557,14 +586,14 @@ void AbstractTabDeckEditor::actExportDeckDecklistXyz()
 /** @brief Analyzes the deck using DeckStats. */
 void AbstractTabDeckEditor::actAnalyzeDeckDeckstats()
 {
-    auto *interface = new DeckStatsInterface(*cardDatabaseDockWidget->getDatabase(), this);
+    auto *interface = new DeckStatsInterface(this);
     interface->analyzeDeck(deckStateManager->getDeckList());
 }
 
 /** @brief Analyzes the deck using TappedOut. */
 void AbstractTabDeckEditor::actAnalyzeDeckTappedout()
 {
-    auto *interface = new TappedOutInterface(*cardDatabaseDockWidget->getDatabase(), this);
+    auto *interface = new TappedOutInterface(this);
     interface->analyzeDeck(deckStateManager->getDeckList());
 }
 
@@ -590,10 +619,11 @@ bool AbstractTabDeckEditor::confirmClose()
     if (deckStateManager->isModified()) {
         tabSupervisor->setCurrentWidget(this);
         int ret = createSaveConfirmationWindow()->exec();
-        if (ret == QMessageBox::Save)
+        if (ret == QMessageBox::Save) {
             return actSaveDeck();
-        else if (ret == QMessageBox::Cancel)
+        } else if (ret == QMessageBox::Cancel) {
             return false;
+        }
     }
     return true;
 }
@@ -601,7 +631,20 @@ bool AbstractTabDeckEditor::confirmClose()
 /** @brief Handles close requests from outside (tab manager). */
 bool AbstractTabDeckEditor::closeRequest()
 {
-    if (!confirmClose())
+    if (!confirmClose()) {
         return false;
+    }
     return close();
+}
+
+void AbstractTabDeckEditor::showPrintingSelector()
+{
+    printingSelectorDockWidget->printingSelector->setCard(cardInfoDockWidget->cardInfo->getCard().getCardPtr());
+    printingSelectorDockWidget->printingSelector->updateDisplay();
+    printingSelectorDockWidget->setVisible(true);
+}
+
+void AbstractTabDeckEditor::openEdhrecTab(const CardInfoPtr &info, bool isCommander)
+{
+    getTabSupervisor()->addEdhrecTab(info, isCommander);
 }

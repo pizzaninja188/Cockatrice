@@ -1,5 +1,13 @@
 #include "printing_selector_placeholder_widget.h"
 
+#include "../interface/theme_manager.h"
+
+#include <QFont>
+#include <QLabel>
+#include <QSizePolicy>
+#include <QVBoxLayout>
+#include <qnamespace.h>
+
 PrintingSelectorPlaceholderWidget::PrintingSelectorPlaceholderWidget(QWidget *parent) : QWidget(parent)
 {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
@@ -25,10 +33,12 @@ PrintingSelectorPlaceholderWidget::PrintingSelectorPlaceholderWidget(QWidget *pa
     textLabel->setStyleSheet(R"(
         QLabel {
             color: palette(mid);
-            font-size: 14px;
             padding: 10px;
         }
     )");
+    applyInterfaceDefaultFont();
+    connect(themeManager, &ThemeManager::fontsChanged, this,
+            &PrintingSelectorPlaceholderWidget::applyInterfaceDefaultFont);
 
     mainLayout->addWidget(imageLabel);
     mainLayout->addWidget(textLabel);
@@ -39,4 +49,12 @@ PrintingSelectorPlaceholderWidget::PrintingSelectorPlaceholderWidget(QWidget *pa
 void PrintingSelectorPlaceholderWidget::retranslateUi()
 {
     textLabel->setText(tr("Select a card to view its available printings"));
+}
+
+void PrintingSelectorPlaceholderWidget::applyInterfaceDefaultFont()
+{
+    // Family comes from the InterfaceDefault theme role; the 14px size stays caller-side.
+    QFont placeholderFont = themeManager->appFont(AppFont::InterfaceDefault);
+    placeholderFont.setPixelSize(14);
+    textLabel->setFont(placeholderFont);
 }

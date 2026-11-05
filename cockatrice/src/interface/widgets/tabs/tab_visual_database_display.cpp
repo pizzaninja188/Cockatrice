@@ -1,14 +1,20 @@
 #include "tab_visual_database_display.h"
 
-#include "tab_deck_editor.h"
+#include "../visual_database_display/visual_database_display_widget.h"
+#include "card_database_model.h"
+#include "tab_supervisor.h"
+
+#include <libcockatrice/card/database/card_database_manager.h>
 
 TabVisualDatabaseDisplay::TabVisualDatabaseDisplay(TabSupervisor *_tabSupervisor) : Tab(_tabSupervisor)
 {
-    deckEditor = new TabDeckEditor(_tabSupervisor);
-    deckEditor->setHidden(true);
-    visualDatabaseDisplayWidget = new VisualDatabaseDisplayWidget(
-        this, deckEditor, deckEditor->cardDatabaseDockWidget->databaseDisplayWidget->databaseModel,
-        deckEditor->cardDatabaseDockWidget->databaseDisplayWidget->databaseDisplayModel);
+    auto databaseModel = new CardDatabaseModel(CardDatabaseManager::getInstance(), true, this);
+    databaseModel->setObjectName("databaseModel");
+
+    visualDatabaseDisplayWidget = new VisualDatabaseDisplayWidget(this, databaseModel);
+
+    connect(visualDatabaseDisplayWidget, &VisualDatabaseDisplayWidget::edhrecRequested, this,
+            &TabVisualDatabaseDisplay::openEdhrecTab);
 
     setCentralWidget(visualDatabaseDisplayWidget);
 
@@ -17,4 +23,10 @@ TabVisualDatabaseDisplay::TabVisualDatabaseDisplay(TabSupervisor *_tabSupervisor
 
 void TabVisualDatabaseDisplay::retranslateUi()
 {
+    visualDatabaseDisplayWidget->retranslateUi();
+}
+
+void TabVisualDatabaseDisplay::openEdhrecTab(const CardInfoPtr &info, bool isCommander) const
+{
+    getTabSupervisor()->addEdhrecTab(info, isCommander);
 }

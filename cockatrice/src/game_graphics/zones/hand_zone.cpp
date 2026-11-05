@@ -1,0 +1,148 @@
+#include "hand_zone.h"
+
+#include "../../client/settings/cache_settings.h"
+#include "../../interface/theme_manager.h"
+#include "../board/card_drag_item.h"
+#include "../board/card_item.h"
+#include "../card_dimensions.h"
+
+#include <QBrush>
+#include <QList>
+#include <QPainter>
+#include <QPoint>
+#include <QPointF>
+#include <QRectF>
+#include <QString>
+#include <libcockatrice/game/player/player_actions.h>
+#include <libcockatrice/game/player/player_info.h>
+#include <libcockatrice/game/player/player_logic.h>
+#include <libcockatrice/game/zones/card_zone_logic.h>
+#include <libcockatrice/game/zones/hand_zone_logic.h>
+#include <libcockatrice/settings/interface_settings.h>
+#include <string>
+
+class QGraphicsItem;
+
+HandZone::HandZone(HandZoneLogic *_logic, int _zoneHeight, QGraphicsItem *parent)
+    : SelectZone(_logic, parent), zoneHeight(_zoneHeight)
+{
+    connect(themeManager, &ThemeManager::themeChanged, this, &HandZone::updateBg);
+    updateBg();
+    setCacheMode(DeviceCoordinateCache);
+}
+
+void HandZone::updateBg()
+{
+    update();
+}
+
+void HandZone::handleDropEvent(const QList<CardDragItem *> &dragItems,
+                               CardZoneLogic *startZone,
+                               const QPoint &dropPoint)
+{
+    if (startZone == nullptr || startZone->getPlayer() == nullptr || dragItems.isEmpty()) {
+        return;
+    }
+
+    QPoint point = dropPoint + scenePos().toPoint();
+    int x = -1;
+    if (SettingsCache::instance().userInterface().getHorizontalHand()) {
+        for (x = 0; x < cardItems().size(); x++) {
+            if (point.x() < cardItems().at(x)->scenePos().x()) {
+                break;
+            }
+        }
+    } else {
+        bool sameZone = startZone == getLogic();
+        x = calcDropIndexFromY(dropPoint.y(), !sameZone);
+    }
+
+    QList<CardMoveRequest> cards;
+    cards.reserve(dragItems.size());
+    for (const CardDragItem *item : dragItems) {
+        cards.append(CardMoveRequest{item->getId()});
+    }
+
+    getLogic()->getPlayer()->getPlayerActions()->moveCards(startZone, getLogic(), x, -1, cards);
+}
+
+QRectF HandZone::boundingRect() const
+{
+    if (SettingsCache::instance().userInterface().getHorizontalHand()) {
+        return QRectF(0, 0, width, CardDimensions::HEIGHT_F + 10);
+    } else {
+        return QRectF(0, 0, CardDimensions::WIDTH_F * 1.5, zoneHeight);
+    }
+}
+
+void HandZone::paint(QPainter *painter, const QStyleOptionGraphicsItem * /*option*/, QWidget * /*widget*/)
+{
+    QBrush brush = themeManager->getExtraBgBrush(ThemeManager::Hand, getLogic()->getPlayer()->getZoneId());
+    painter->fillRect(boundingRect(), brush);
+}
+
+void HandZone::reorganizeCards()
+{
+    if (!cardItems().isEmpty()) {
+        const int cardCount = cardItems().size();
+        if (SettingsCache::instance().userInterface().getHorizontalHand()) {
+            bool leftJustified = SettingsCache::instance().userInterface().getLeftJustified();
+            qreal cardWidth = cardItems().at(0)->boundingRect().width();
+            const int xPadding = leftJustified ? cardWidth * 1.4 : 5;
+            qreal totalWidth =
+                leftJustified ? boundingRect().width() - (1 * xPadding) - 5 : boundingRect().width() - 2 * xPadding;
+
+            if (cardCount == 1) {
+                CardItem *c = cardItems().at(0);
+                qreal xPosition = leftJustified ? xPadding : xPadding + (totalWidth - cardWidth) / 2;
+                c->setPos(xPosition, 5);
+                c->setRealZValue(0);
+            } else {
+                for (int i = 0; i < cardCount; i++) {
+                    CardItem *c = cardItems().at(i);
+                    // If the total width of the cards is smaller than the available width,
+                    // the cards do not need to overlap and are displayed in the center of the area.
+                    if (cardWidth * cardCount > totalWidth) {
+                        c->setPos(xPadding + ((qreal)i) * (totalWidth - cardWidth) / (cardCount - 1), 5);
+                    } else {
+                        qreal xPosition = leftJustified ? xPadding + ((qreal)i) * cardWidth
+                                                        : xPadding + ((qreal)i) * cardWidth +
+                                                              (totalWidth - cardCount * cardWidth) / 2;
+                        c->setPos(xPosition, 5);
+                    }
+                    c->setRealZValue(i);
+                }
+            }
+        } else {
+            // No clip container: hand cards should always be visible to the player.
+            const auto params = buildStackParams();
+            layoutCardsVertically(params);
+        }
+    }
+    update();
+}
+
+void HandZone::sortHand(const QList<CardList::SortOption> &options)
+{
+    if (cardItems().isEmpty()) {
+        return;
+    }
+
+    getLogic()->sortCards(options);
+    reorganizeCards();
+}
+
+void HandZone::setWidth(qreal _width)
+{
+    if (SettingsCache::instance().userInterface().getHorizontalHand()) {
+        prepareGeometryChange();
+        width = _width;
+        reorganizeCards();
+    }
+}
+
+void HandZone::updateOrientation()
+{
+    prepareGeometryChange();
+    reorganizeCards();
+}

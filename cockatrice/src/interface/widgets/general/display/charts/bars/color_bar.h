@@ -2,9 +2,13 @@
 #define COCKATRICE_COLOR_BAR_H
 
 #include <QColor>
-#include <QMap>
+#include <QList>
+#include <QPair>
 #include <QString>
 #include <QWidget>
+#include <qtmetamacros.h>
+
+template <class Key, class T> class QMap;
 
 /**
  * @class ColorBar
@@ -76,17 +80,10 @@ protected:
      */
     void paintEvent(QPaintEvent *event) override;
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     /**
-     * @brief Handles mouse hover entering (Qt6 version).
+     * @brief Handles mouse hover entering.
      */
     void enterEvent(QEnterEvent *event) override;
-#else
-    /**
-     * @brief Handles mouse hover entering (Qt5 version).
-     */
-    void enterEvent(QEvent *event) override;
-#endif
 
     /**
      * @brief Handles mouse hover leaving.
@@ -99,13 +96,13 @@ protected:
     void mouseMoveEvent(QMouseEvent *event) override;
 
 private:
-    /// Map of color keys to counts used for rendering.
+    /** @brief Map of color keys to counts used for rendering. */
     QList<QPair<QString, int>> colors;
 
-    /// True if the mouse is currently inside the widget.
+    /** @brief True if the mouse is currently inside the widget. */
     bool isHovered = false;
 
-    /// Minimum ratio a segment must exceed to be drawn.
+    /** @brief Minimum ratio a segment must exceed to be drawn. */
     double minRatioThreshold = 0.0;
 
     /**

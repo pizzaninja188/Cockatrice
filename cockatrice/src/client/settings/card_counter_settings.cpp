@@ -1,11 +1,18 @@
 #include "card_counter_settings.h"
 
+#include "libcockatrice/settings/settings_manager.h"
+
+#include <QChar>
 #include <QColor>
 #include <QSettings>
+#include <QVariant>
 #include <QtMath>
+#include <iterator>
+
+class QObject;
 
 CardCounterSettings::CardCounterSettings(const QString &settingsPath, QObject *parent)
-    : SettingsManager(settingsPath + "global.ini", "cards", "counters", parent)
+    : SettingsManager(settingsPath + "card_counters.ini", "cards", "counters", parent)
 {
 }
 
@@ -15,8 +22,9 @@ void CardCounterSettings::setColor(int counterId, const QColor &color)
 
     QString key = QString("cards/counters/%1/color").arg(counterId);
 
-    if (settings.value(key).value<QColor>() == color)
+    if (settings.value(key).value<QColor>() == color) {
         return;
+    }
 
     settings.setValue(key, color);
     emit colorChanged(counterId, color);

@@ -1,31 +1,41 @@
 /**
  * @file visual_deck_editor_widget.h
  * @ingroup DeckEditors
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef VISUAL_DECK_EDITOR_H
 #define VISUAL_DECK_EDITOR_H
 
-#include "../cards/card_info_picture_with_text_overlay_widget.h"
-#include "../cards/card_size_widget.h"
-#include "../general/layout_containers/overlap_control_widget.h"
-#include "../quick_settings/settings_button_widget.h"
-#include "visual_deck_editor_placeholder_widget.h"
-
-#include <QCheckBox>
-#include <QListWidget>
-#include <QPushButton>
+#include <QHash>
+#include <QMouseEvent>
+#include <QPersistentModelIndex>
+#include <QString>
+#include <QStringList>
 #include <QWidget>
-#include <libcockatrice/card/database/card_database.h>
-#include <libcockatrice/models/database/card/card_completer_proxy_model.h>
-#include <libcockatrice/models/database/card_database_display_model.h>
-#include <libcockatrice/models/database/card_database_model.h>
-#include <libcockatrice/models/deck_list/deck_list_model.h>
-#include <qscrollarea.h>
+#include <qtmetamacros.h>
 
 class VisualDeckDisplayOptionsWidget;
 class DeckCardZoneDisplayWidget;
+class CardCompleterProxyModel;
+class CardDatabaseDisplayModel;
+class CardDatabaseModel;
+class CardSizeWidget;
+class CompactPushButton;
+class DeckList;
+class DeckListModel;
+class ExactCard;
+class FlowWidget;
+class QCompleter;
+class QHBoxLayout;
+class QItemSelection;
+class QItemSelectionModel;
+class QLineEdit;
+class QModelIndex;
+class QScrollArea;
+class QVBoxLayout;
+class VisualDeckEditorPlaceholderWidget;
+
 enum class DisplayType
 {
     Flat,
@@ -37,8 +47,12 @@ class VisualDeckEditorWidget : public QWidget
     Q_OBJECT
 
 public:
-    explicit VisualDeckEditorWidget(QWidget *parent, DeckListModel *deckListModel, QItemSelectionModel *selectionModel);
+    explicit VisualDeckEditorWidget(QWidget *parent,
+                                    DeckListModel *deckListModel,
+                                    QItemSelectionModel *selectionModel,
+                                    CardDatabaseModel *_cardDatabaseModel = nullptr);
     void retranslateUi();
+    void updateCompactMode();
     void clearAllDisplayWidgets();
 
     void setDeckList(const DeckList &_deckListModel);
@@ -67,12 +81,13 @@ signals:
     void activeCardChanged(const ExactCard &activeCard);
     void activeGroupCriteriaChanged(QString activeGroupCriteria);
     void activeSortCriteriaChanged(QStringList activeSortCriteria);
-    void cardClicked(QMouseEvent *event, CardInfoPictureWithTextOverlayWidget *instance, QString zoneName);
+    void cardClicked(QMouseEvent *event, const ExactCard &card, const QString &zoneName);
     void cardAdditionRequested(const ExactCard &card);
     void displayTypeChanged(DisplayType displayType);
 
 protected:
     void initializeSearchBarAndCompleter();
+    void addCardFromSearch();
     void initializeDisplayOptionsWidget();
     void initializeDisplayOptionsAndSearchWidget();
     void initializeScrollAreaAndZoneContainer();
@@ -80,21 +95,24 @@ protected:
 
 protected slots:
     void onHover(const ExactCard &hoveredCard);
-    void onCardClick(QMouseEvent *event, CardInfoPictureWithTextOverlayWidget *instance, QString zoneName);
     void decklistModelReset();
+    void resizeEvent(QResizeEvent *event) override;
 
 private:
+    int expandedWidthAll = -1;
+    int expandedWidthDisplayCompact = -1;
     DeckListModel *deckListModel;
     QItemSelectionModel *selectionModel;
     QVBoxLayout *mainLayout;
     CardDatabaseModel *cardDatabaseModel;
     CardDatabaseDisplayModel *cardDatabaseDisplayModel;
     CardCompleterProxyModel *proxyModel;
+    QWidget *searchContainer;
+    QHBoxLayout *searchLayout;
     QCompleter *completer;
-    QWidget *displayOptionsAndSearch;
-    QHBoxLayout *displayOptionsAndSearchLayout;
+    FlowWidget *displayOptionsAndSearch;
     VisualDeckDisplayOptionsWidget *displayOptionsWidget;
-    QPushButton *searchPushButton;
+    CompactPushButton *searchPushButton;
     QScrollArea *scrollArea;
     QWidget *zoneContainer;
     QVBoxLayout *zoneContainerLayout;

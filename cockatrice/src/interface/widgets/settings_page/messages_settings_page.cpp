@@ -1,0 +1,358 @@
+#include "messages_settings_page.h"
+
+#include "../../../client/settings/cache_settings.h"
+#include "../../theme_icon.h"
+#include "../interface/widgets/utility/get_text_with_max.h"
+#include "libcockatrice/utility/macros.h"
+
+#include <QAction>
+#include <QColor>
+#include <QDebug>
+#include <QGridLayout>
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QLineEdit>
+#include <QListWidget>
+#include <QListWidgetItem>
+#include <QSizePolicy>
+#include <QStringLiteral>
+#include <QToolBar>
+#include <QVBoxLayout>
+#include <QtGlobal>
+#include <libcockatrice/settings/chat_settings.h>
+#include <libcockatrice/settings/message_settings.h>
+#include <libcockatrice/settings/personal_settings.h>
+#include <libcockatrice/utility/string_limits.h>
+#include <qnamespace.h>
+
+MessagesSettingsPage::MessagesSettingsPage()
+{
+    chatMentionCheckBox.setChecked(SettingsCache::instance().chat().getChatMention());
+    connect(&chatMentionCheckBox, &QCheckBox::QT_STATE_CHANGED, &SettingsCache::instance().chat(),
+            &ChatSettings::setChatMention);
+
+    chatMentionCompleterCheckbox.setChecked(SettingsCache::instance().chat().getChatMentionCompleter());
+    connect(&chatMentionCompleterCheckbox, &QCheckBox::QT_STATE_CHANGED, &SettingsCache::instance().chat(),
+            &ChatSettings::setChatMentionCompleter);
+
+    explainMessagesLabel.setTextInteractionFlags(Qt::LinksAccessibleByMouse);
+    explainMessagesLabel.setOpenExternalLinks(true);
+
+    ignoreUnregUsersMainChat.setChecked(SettingsCache::instance().chat().getIgnoreUnregisteredUsers());
+    ignoreUnregUserMessages.setChecked(SettingsCache::instance().chat().getIgnoreUnregisteredUserMessages());
+    ignoreNonBuddyUserMessages.setChecked(SettingsCache::instance().chat().getIgnoreNonBuddyUserMessages());
+
+    connect(&ignoreUnregUsersMainChat, &QCheckBox::QT_STATE_CHANGED, &SettingsCache::instance().chat(),
+            &ChatSettings::setIgnoreUnregisteredUsers);
+    connect(&ignoreUnregUserMessages, &QCheckBox::QT_STATE_CHANGED, &SettingsCache::instance().chat(),
+            &ChatSettings::setIgnoreUnregisteredUserMessages);
+    connect(&ignoreNonBuddyUserMessages, &QCheckBox::QT_STATE_CHANGED, &SettingsCache::instance().chat(),
+            &ChatSettings::setIgnoreNonBuddyUserMessages);
+
+    invertMentionForeground.setChecked(SettingsCache::instance().chat().getChatMentionForeground());
+    connect(&invertMentionForeground, &QCheckBox::QT_STATE_CHANGED, this, &MessagesSettingsPage::updateTextColor);
+
+    invertHighlightForeground.setChecked(SettingsCache::instance().chat().getChatHighlightForeground());
+    connect(&invertHighlightForeground, &QCheckBox::QT_STATE_CHANGED, this,
+            &MessagesSettingsPage::updateTextHighlightColor);
+
+    mentionColor = new QLineEdit();
+    mentionColor->setText(SettingsCache::instance().chat().getChatMentionColor());
+    updateMentionPreview();
+    connect(mentionColor, &QLineEdit::textChanged, this, &MessagesSettingsPage::updateColor);
+
+    messagePopups.setChecked(SettingsCache::instance().chat().getShowMessagePopup());
+    connect(&messagePopups, &QCheckBox::QT_STATE_CHANGED, &SettingsCache::instance().chat(),
+            &ChatSettings::setShowMessagePopups);
+
+    mentionPopups.setChecked(SettingsCache::instance().chat().getShowMentionPopup());
+    connect(&mentionPopups, &QCheckBox::QT_STATE_CHANGED, &SettingsCache::instance().chat(),
+            &ChatSettings::setShowMentionPopups);
+
+    roomHistory.setChecked(SettingsCache::instance().chat().getRoomHistory());
+    connect(&roomHistory, &QCheckBox::QT_STATE_CHANGED, &SettingsCache::instance().chat(),
+            &ChatSettings::setRoomHistory);
+
+    ignoreAllPrivateMessagesCheckBox.setChecked(SettingsCache::instance().chat().getIgnoreAllPrivateMessages());
+    connect(&ignoreAllPrivateMessagesCheckBox, &QCheckBox::QT_STATE_CHANGED, &SettingsCache::instance().chat(),
+            &ChatSettings::setIgnoreAllPrivateMessages);
+
+    useGameTimeCheckBox.setChecked(SettingsCache::instance().chat().getUseGameTime());
+    connect(&useGameTimeCheckBox, &QCheckBox::QT_STATE_CHANGED, &SettingsCache::instance().chat(),
+            &ChatSettings::setUseGameTime);
+
+    customAlertString = new QLineEdit();
+    customAlertString->setText(SettingsCache::instance().chat().getHighlightWords());
+    connect(customAlertString, &QLineEdit::textChanged, &SettingsCache::instance().chat(),
+            &ChatSettings::setHighlightWords);
+
+    auto *chatGrid = new QGridLayout;
+    chatGrid->addWidget(&chatMentionCheckBox, 0, 0);
+    chatGrid->addWidget(&invertMentionForeground, 0, 1);
+    chatGrid->addWidget(mentionColor, 0, 2);
+    chatGrid->addWidget(&chatMentionCompleterCheckbox, 1, 0);
+    chatGrid->addWidget(&ignoreUnregUsersMainChat, 2, 0);
+    chatGrid->addWidget(&hexLabel, 1, 2);
+    chatGrid->addWidget(&ignoreUnregUserMessages, 3, 0);
+    chatGrid->addWidget(&ignoreNonBuddyUserMessages, 4, 0);
+    chatGrid->addWidget(&messagePopups, 5, 0);
+    chatGrid->addWidget(&mentionPopups, 6, 0);
+    chatGrid->addWidget(&roomHistory, 7, 0);
+    chatGrid->addWidget(&ignoreAllPrivateMessagesCheckBox, 8, 0);
+    chatGrid->addWidget(&useGameTimeCheckBox, 9, 0);
+    chatGroupBox = new QGroupBox;
+    chatGroupBox->setLayout(chatGrid);
+
+    highlightColor = new QLineEdit();
+    highlightColor->setText(SettingsCache::instance().chat().getChatHighlightColor());
+    updateHighlightPreview();
+    connect(highlightColor, &QLineEdit::textChanged, this, &MessagesSettingsPage::updateHighlightColor);
+
+    auto *highlightNotice = new QGridLayout;
+    highlightNotice->addWidget(highlightColor, 0, 2);
+    highlightNotice->addWidget(&invertHighlightForeground, 0, 1);
+    highlightNotice->addWidget(&hexHighlightLabel, 1, 2);
+    highlightNotice->addWidget(customAlertString, 0, 0);
+    highlightNotice->addWidget(&customAlertStringLabel, 1, 0);
+    customAlertStringLabel.setBuddy(customAlertString);
+    highlightGroupBox = new QGroupBox;
+    highlightGroupBox->setLayout(highlightNotice);
+
+    channelUnreadColor = new QLineEdit();
+    channelUnreadColor->setText(SettingsCache::instance().chat().getChannelUnreadColor());
+    updateChannelUnreadPreview();
+    connect(channelUnreadColor, &QLineEdit::textChanged, this, &MessagesSettingsPage::updateChannelUnreadColor);
+
+    channelMentionColor = new QLineEdit();
+    channelMentionColor->setText(SettingsCache::instance().chat().getChannelMentionColor());
+    updateChannelMentionPreview();
+    connect(channelMentionColor, &QLineEdit::textChanged, this, &MessagesSettingsPage::updateChannelMentionColor);
+
+    auto *channelGrid = new QGridLayout;
+    channelGrid->addWidget(&channelUnreadColorLabel, 0, 0);
+    channelGrid->addWidget(channelUnreadColor, 0, 1);
+    channelGrid->addWidget(&hexChannelUnreadLabel, 0, 2);
+    channelGrid->addWidget(&channelMentionColorLabel, 1, 0);
+    channelGrid->addWidget(channelMentionColor, 1, 1);
+    channelGrid->addWidget(&hexChannelMentionLabel, 1, 2);
+    channelGroupBox = new QGroupBox;
+    channelGroupBox->setLayout(channelGrid);
+
+    messageList = new QListWidget;
+
+    int count = SettingsCache::instance().messages().getCount();
+    for (int i = 0; i < count; i++) {
+        messageList->addItem(SettingsCache::instance().messages().getMessageAt(i));
+    }
+
+    aAdd = new QAction(this);
+    aAdd->setIcon(loadThemedIcon(QStringLiteral("icons/increment")));
+    connect(aAdd, &QAction::triggered, this, &MessagesSettingsPage::actAdd);
+
+    aEdit = new QAction(this);
+    aEdit->setIcon(loadThemedIcon(QStringLiteral("icons/pencil")));
+    connect(aEdit, &QAction::triggered, this, &MessagesSettingsPage::actEdit);
+
+    aRemove = new QAction(this);
+    aRemove->setIcon(loadThemedIcon(QStringLiteral("icons/decrement")));
+    connect(aRemove, &QAction::triggered, this, &MessagesSettingsPage::actRemove);
+
+    auto *messageToolBar = new QToolBar;
+    messageToolBar->setOrientation(Qt::Vertical);
+    messageToolBar->addAction(aAdd);
+    messageToolBar->addAction(aRemove);
+    messageToolBar->addAction(aEdit);
+    messageToolBar->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::MinimumExpanding);
+
+    auto *messageListLayout = new QHBoxLayout;
+    messageListLayout->addWidget(messageToolBar);
+    messageListLayout->addWidget(messageList);
+
+    auto *messagesLayout = new QVBoxLayout; // combines the explainer label with the actual messages widget pieces
+    messagesLayout->addLayout(messageListLayout);
+    messagesLayout->addWidget(&explainMessagesLabel);
+
+    messageGroupBox = new QGroupBox; // draws a box around the above layout and allows it to be titled
+    messageGroupBox->setLayout(messagesLayout);
+
+    auto *mainLayout = new QVBoxLayout; // combines the messages groupbox with the rest of the menu
+    mainLayout->addWidget(messageGroupBox);
+    mainLayout->addWidget(chatGroupBox);
+    mainLayout->addWidget(highlightGroupBox);
+    mainLayout->addWidget(channelGroupBox);
+
+    setLayout(mainLayout);
+
+    connect(&SettingsCache::instance().personal(), &PersonalSettings::langChanged, this,
+            &MessagesSettingsPage::retranslateUi);
+    retranslateUi();
+}
+
+void MessagesSettingsPage::updateColor(const QString &value)
+{
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 4, 0))
+    QColor colorToSet = QColor::fromString("#" + value);
+#else
+    QColor colorToSet;
+    colorToSet.setNamedColor("#" + value);
+#endif
+    if (colorToSet.isValid()) {
+        SettingsCache::instance().chat().setChatMentionColor(value);
+        updateMentionPreview();
+    }
+}
+
+void MessagesSettingsPage::updateHighlightColor(const QString &value)
+{
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 4, 0))
+    QColor colorToSet = QColor::fromString("#" + value);
+#else
+    QColor colorToSet;
+    colorToSet.setNamedColor("#" + value);
+#endif
+    if (colorToSet.isValid()) {
+        SettingsCache::instance().chat().setChatHighlightColor(value);
+        updateHighlightPreview();
+    }
+}
+
+void MessagesSettingsPage::updateChannelUnreadColor(const QString &value)
+{
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 4, 0))
+    QColor colorToSet = QColor::fromString("#" + value);
+#else
+    QColor colorToSet;
+    colorToSet.setNamedColor("#" + value);
+#endif
+    if (colorToSet.isValid()) {
+        SettingsCache::instance().chat().setChannelUnreadColor(value);
+        updateChannelUnreadPreview();
+    }
+}
+
+void MessagesSettingsPage::updateChannelMentionColor(const QString &value)
+{
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 4, 0))
+    QColor colorToSet = QColor::fromString("#" + value);
+#else
+    QColor colorToSet;
+    colorToSet.setNamedColor("#" + value);
+#endif
+    if (colorToSet.isValid()) {
+        SettingsCache::instance().chat().setChannelMentionColor(value);
+        updateChannelMentionPreview();
+    }
+}
+
+void MessagesSettingsPage::updateTextColor(QT_STATE_CHANGED_T value)
+{
+    SettingsCache::instance().chat().setChatMentionForeground(value);
+    updateMentionPreview();
+}
+
+void MessagesSettingsPage::updateTextHighlightColor(QT_STATE_CHANGED_T value)
+{
+    SettingsCache::instance().chat().setChatHighlightForeground(value);
+    updateHighlightPreview();
+}
+
+void MessagesSettingsPage::updateMentionPreview()
+{
+    mentionColor->setStyleSheet(
+        "QLineEdit{background:#" + SettingsCache::instance().chat().getChatMentionColor() +
+        ";color: " + (SettingsCache::instance().chat().getChatMentionForeground() ? "white" : "black") + ";}");
+}
+
+void MessagesSettingsPage::updateHighlightPreview()
+{
+    highlightColor->setStyleSheet(
+        "QLineEdit{background:#" + SettingsCache::instance().chat().getChatHighlightColor() +
+        ";color: " + (SettingsCache::instance().chat().getChatHighlightForeground() ? "white" : "black") + ";}");
+}
+
+void MessagesSettingsPage::updateChannelUnreadPreview()
+{
+    channelUnreadColor->setStyleSheet("QLineEdit{background:#" +
+                                      SettingsCache::instance().chat().getChannelUnreadColor() + ";}");
+}
+
+void MessagesSettingsPage::updateChannelMentionPreview()
+{
+    channelMentionColor->setStyleSheet("QLineEdit{background:#" +
+                                       SettingsCache::instance().chat().getChannelMentionColor() + ";}");
+}
+
+void MessagesSettingsPage::storeSettings()
+{
+    SettingsCache::instance().messages().setCount(messageList->count());
+    for (int i = 0; i < messageList->count(); i++) {
+        SettingsCache::instance().messages().setMessageAt(i, messageList->item(i)->text());
+    }
+    emit SettingsCache::instance().messages().messageMacrosChanged();
+}
+
+void MessagesSettingsPage::actAdd()
+{
+    bool ok;
+    QString msg =
+        getTextWithMax(this, tr("Add message"), tr("Message:"), QLineEdit::Normal, QString(), &ok, MAX_TEXT_LENGTH);
+    if (ok) {
+        messageList->addItem(msg);
+        storeSettings();
+    }
+}
+
+void MessagesSettingsPage::actEdit()
+{
+    if (messageList->currentItem()) {
+        QString oldText = messageList->currentItem()->text();
+        bool ok;
+        QString msg =
+            getTextWithMax(this, tr("Edit message"), tr("Message:"), QLineEdit::Normal, oldText, &ok, MAX_TEXT_LENGTH);
+        if (ok) {
+            messageList->currentItem()->setText(msg);
+            storeSettings();
+        }
+    }
+}
+
+void MessagesSettingsPage::actRemove()
+{
+    if (messageList->currentItem() != nullptr) {
+        delete messageList->takeItem(messageList->currentRow());
+        storeSettings();
+    }
+}
+
+void MessagesSettingsPage::retranslateUi()
+{
+    chatGroupBox->setTitle(tr("Chat settings"));
+    highlightGroupBox->setTitle(tr("Custom alert words"));
+    channelGroupBox->setTitle(tr("Room channel tabs"));
+    channelUnreadColorLabel.setText(tr("Unread messages color"));
+    channelMentionColorLabel.setText(tr("Mentioned messages color"));
+    chatMentionCheckBox.setText(tr("Enable chat mentions"));
+    chatMentionCompleterCheckbox.setText(tr("Enable mention completer"));
+    messageGroupBox->setTitle(tr("In-game message macros"));
+    explainMessagesLabel.setText(
+        QString("<a href='%1'>%2</a>").arg(WIKI_CUSTOM_SHORTCUTS).arg(tr("How to use in-game message macros")));
+    ignoreUnregUsersMainChat.setText(tr("Ignore chat room messages sent by unregistered users"));
+    ignoreUnregUserMessages.setText(tr("Ignore private messages sent by unregistered users"));
+    ignoreNonBuddyUserMessages.setText(tr("Ignore private messages sent by non-buddy users"));
+    invertMentionForeground.setText(tr("Invert text color"));
+    invertHighlightForeground.setText(tr("Invert text color"));
+    messagePopups.setText(tr("Enable desktop notifications for private messages"));
+    mentionPopups.setText(tr("Enable desktop notification for mentions"));
+    roomHistory.setText(tr("Enable room message history on join"));
+    ignoreAllPrivateMessagesCheckBox.setText(tr("Ignore all private messages"));
+    useGameTimeCheckBox.setText(tr("Use game time instead of local time in game logs"));
+    hexLabel.setText(tr("(Color is hexadecimal)"));
+    hexHighlightLabel.setText(tr("(Color is hexadecimal)"));
+    hexChannelUnreadLabel.setText(tr("(Color is hexadecimal)"));
+    hexChannelMentionLabel.setText(tr("(Color is hexadecimal)"));
+    customAlertStringLabel.setText(tr("Separate words with a space, alphanumeric characters only"));
+    customAlertString->setPlaceholderText(tr("Word1 Word2 Word3"));
+    aAdd->setText(tr("Add New Message"));
+    aEdit->setText(tr("Edit Message"));
+    aRemove->setText(tr("Remove Message"));
+}

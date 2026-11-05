@@ -1,5 +1,9 @@
 #include "mana_distribution_config.h"
 
+#include <QJsonArray>
+#include <QJsonValue>
+#include <QJsonValueRef>
+
 QJsonObject ManaDistributionConfig::toJson() const
 {
     QJsonObject o;
@@ -24,8 +28,9 @@ ManaDistributionConfig ManaDistributionConfig::fromJson(const QJsonObject &o)
 
     if (o.contains("filters")) {
         config.filters.clear();
-        for (auto v : o["filters"].toArray())
+        for (auto v : o["filters"].toArray()) {
             config.filters << v.toString();
+        }
     }
 
     if (o.contains("showColorRows")) {

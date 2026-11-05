@@ -1,16 +1,19 @@
 /**
  * @file local_server.h
  * @ingroup Server
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef LOCALSERVER_H
 #define LOCALSERVER_H
 
 #include <../remote/server.h>
 #include <../remote/server_database_interface.h>
+#include <QString>
+#include <qtmetamacros.h>
 
 class LocalServerInterface;
+class QObject;
 
 class LocalServer : public Server
 {

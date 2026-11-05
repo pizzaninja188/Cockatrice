@@ -1,48 +1,84 @@
+#include "../../../game_graphics/player/player_target.h"
+#include "../../../game/ruled/ruled_game_controller.h"
 #include "tab_game.h"
 #include "../../../game/ruled/ruled_diagnostic_viewer.h"
 
 #include "../../../client/settings/cache_settings.h"
-#include "../game/board/arrow_item.h"
-#include "../game/board/card_item.h"
-#include "../game/deckview/deck_view_container.h"
-#include "../game/deckview/tabbed_deck_view_container.h"
-#include "../game/game.h"
-#include "../game/game_scene.h"
-#include "../game/game_view.h"
-#include "../game/log/message_log_widget.h"
-#include "../game/phases_toolbar.h"
-#include "../game/player/player.h"
-#include "../game/player/player_actions.h"
-#include "../game/player/player_list_widget.h"
+#include "../../../game_graphics/board/arrow_item.h"
+#include "../../../game_graphics/board/card_item.h"
+#include "../../../game_graphics/deckview/deck_view_container.h"
+#include "../../../game_graphics/deckview/tabbed_deck_view_container.h"
+#include <libcockatrice/game/game.h>
+#include "../../../game_graphics/game_scene.h"
+#include "../../../game_graphics/game_view.h"
+#include "../../../game_graphics/log/message_log_widget.h"
+#include "../../../game_graphics/phases_toolbar.h"
+#include <libcockatrice/game/player/player_logic.h>
+#include "../../../game/ruled/ruled_player_actions.h"
+#include "../../../game_graphics/player/player_list_widget.h"
 #include "../game/prompt/game_prompt_widget.h"
-#include "../game/replay.h"
-#include "../game/ruled/ruled_actions.h"
-#include "../game/ruled/ruled_activation_prompt.h"
-#include "../game/ruled/ruled_auto_pass_policy.h"
-#include "../game/ruled/ruled_card_display_identity.h"
-#include "../game/ruled/ruled_card_popup.h"
-#include "../game/ruled/ruled_client_state.h"
-#include "../game/ruled/ruled_dev_console.h"
-#include "../game/ruled/ruled_dev_console_game.h"
-#include "../game/ruled/ruled_payment_ui.h"
-#include "../game/ruled/ruled_replacement_picker.h"
-#include "../game/ruled/ruled_resume_client.h"
-#include "../game/ruled/ruled_reveal_windows.h"
-#include "../game/ruled/ruled_token_display.h"
-#include "../game/ruled/ruled_zone_view_policy.h"
-#include "../game/zones/view_zone.h"
-#include "../game/zones/view_zone_widget.h"
-#include "../interface/card_picture_loader/card_picture_loader.h"
-#include "../interface/widgets/cards/card_info_frame_widget.h"
-#include "../interface/widgets/dialogs/dlg_create_game.h"
-#include "../interface/widgets/server/user/user_list_manager.h"
-#include "../interface/widgets/utility/line_edit_completer.h"
-#include "../interface/window_main.h"
+#include <libcockatrice/game/replay.h>
+#include "../../../game/ruled/ruled_actions.h"
+#include "../../../game/ruled/ruled_activation_prompt.h"
+#include "../../../game/ruled/ruled_auto_pass_policy.h"
+#include "../../../game/ruled/ruled_card_display_identity.h"
+#include "../../../game/ruled/ruled_card_popup.h"
+#include "../../../game/ruled/ruled_client_state.h"
+#include "../../../game/ruled/ruled_dev_console.h"
+#include "../../../game/ruled/ruled_dev_console_game.h"
+#include "../../../game/ruled/ruled_payment_ui.h"
+#include "../../../game/ruled/ruled_replacement_picker.h"
+#include "../../../game/ruled/ruled_resume_client.h"
+#include "../../../game/ruled/ruled_reveal_windows.h"
+#include "../../../game/ruled/ruled_token_display.h"
+#include "../../../game/ruled/ruled_zone_view_policy.h"
+#include "../../../game_graphics/zones/view_zone.h"
+#include "../../../game_graphics/zones/view_zone_widget.h"
+#include "../../../client/settings/shortcuts_settings.h"
+#include "../../../database/interface/settings_card_preference_provider.h"
+#include "../../../game_graphics/board/abstract_card_item.h"
+#include "../../../game_graphics/board/arrow_item.h"
+#include "../../../game_graphics/board/card_item.h"
+#include "../../../game_graphics/deckview/deck_view_container.h"
+#include "../../../game_graphics/deckview/tabbed_deck_view_container.h"
+#include "../../../game_graphics/game_scene.h"
+#include "../../../game_graphics/game_view.h"
+#include "../../../game_graphics/log/message_log_widget.h"
+#include "../../../game_graphics/phases_toolbar.h"
+#include "../../../game_graphics/player/menu/card_menu.h"
+#include "../../../game_graphics/player/menu/player_menu.h"
+#include "../../../game_graphics/player/player_graphics_item.h"
+#include "../../../game_graphics/player/player_list_widget.h"
+#include "../../card_picture_loader/card_picture_loader.h"
+#include "../cards/card_info_frame_widget.h"
+#include "../dialogs/dlg_create_game.h"
+#include "../dialogs/dlg_invite_to_game.h"
+#include "../dialogs/dlg_turn_order.h"
+#include "../server/game_link.h"
+#include "../server/user/user_list_manager.h"
+#include "../utility/completer_utils.h"
+#include "../utility/line_edit_completer.h"
 #include "../main.h"
+#include "../menus/tearoff_menu.h"
+#include "../replay/replay_event_sidebar.h"
+#include "../replay/replay_widget.h"
 #include "../utility/visibility_change_listener.h"
+#include "card/card_completer_proxy_model.h"
+#include "card/card_search_model.h"
+#include "card_database_display_model.h"
+#include "card_database_model.h"
+#include "libcockatrice/card/database/card_database_querier.h"
+#include "libcockatrice/card/printing/exact_card.h"
+#include "libcockatrice/deck_list/deck_list.h"
+#include "libcockatrice/protocol/pb/serverinfo_game.pb.h"
+#include "libcockatrice/protocol/pb/serverinfo_playerproperties.pb.h"
+#include "libcockatrice/utility/card_ref.h"
 #include "tab_supervisor.h"
 
 #include <QAction>
+#include <QApplication>
+#include <QClipboard>
+#include <QCloseEvent>
 #include <QCompleter>
 #include <QDateTime>
 #include <QDebug>
@@ -51,10 +87,16 @@
 #include <QFile>
 #include <QFontMetrics>
 #include <QGraphicsSceneMouseEvent>
+#include <QFlags>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMapIterator>
 #include <QMenu>
 #include <QMessageBox>
+#include <QPoint>
+#include <QPushButton>
+#include <QRegularExpression>
+#include <QSharedPointer>
 #include <QStackedWidget>
 #include <QTextStream>
 #include <QTimer>
@@ -79,21 +121,51 @@ static void tgDbgLog(const QString &msg)
     }
 }
 #include <libcockatrice/card/database/card_database.h>
+#include <QStringListModel>
+#include <QSystemTrayIcon>
+#include <QTimer>
+#include <QVBoxLayout>
+#include <QWidget>
+#include <QtGlobal>
 #include <libcockatrice/card/database/card_database_manager.h>
+#include <libcockatrice/game/abstract_game.h>
+#include <libcockatrice/game/game.h>
+#include <libcockatrice/game/game_event_handler.h>
+#include <libcockatrice/game/game_meta_info.h>
+#include <libcockatrice/game/game_state.h>
+#include <libcockatrice/game/player/player_info.h>
+#include <libcockatrice/game/player/player_logic.h>
+#include <libcockatrice/game/player/player_manager.h>
+#include <libcockatrice/game/replay.h>
 #include <libcockatrice/network/client/abstract/abstract_client.h>
-#include <libcockatrice/protocol/pb/event_game_joined.pb.h>
-#include <libcockatrice/protocol/pb/game_replay.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_player.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_user.pb.h>
-#include <libcockatrice/utility/trice_limits.h>
+#include <libcockatrice/settings/chat_settings.h>
+#include <libcockatrice/settings/debug_settings.h>
+#include <libcockatrice/settings/interface_settings.h>
+#include <libcockatrice/settings/layouts_settings.h>
+#include <libcockatrice/utility/qt_utils.h>
+#include <libcockatrice/utility/string_limits.h>
+#include <qnamespace.h>
+#include <qobjectdefs.h>
+#include <utility>
+
+class Event_GameJoined;
+namespace google
+{
+namespace protobuf
+{
+class Message;
+} // namespace protobuf
+} // namespace google
 
 namespace
 {
 class RuledCombatArrowItem : public ArrowItem
 {
 public:
-    RuledCombatArrowItem(Player *player, ArrowTarget *startItem, ArrowTarget *targetItem, const QColor &color)
-        : ArrowItem(player, -1, startItem, targetItem, color)
+    RuledCombatArrowItem(PlayerLogic *player, ArrowTarget *startItem, ArrowTarget *targetItem, const QColor &color)
+        : ArrowItem(RuledActions::arrowData(player, -1, color), startItem, targetItem)
     {
     }
 
@@ -113,11 +185,11 @@ CardItem *findOwnedTableCard(AbstractGame *game, int ownerPlayerId, int cardId)
     if (!game || cardId < 0 || ownerPlayerId < 0) {
         return nullptr;
     }
-    Player *player = game->getPlayerManager()->getPlayers().value(ownerPlayerId, nullptr);
+    PlayerLogic *player = game->getPlayerManager()->getPlayers().value(ownerPlayerId, nullptr);
     if (!player) {
         return nullptr;
     }
-    return player->getTableZone()->getCard(cardId);
+    return RuledActions::card(game, ownerPlayerId, QString::fromLatin1(ZoneNames::TABLE), cardId);
 }
 
 // Resolve an engine ObjectId to the table CardItem owned by that object's controller.
@@ -134,8 +206,8 @@ ArrowTarget *findPlayerTarget(AbstractGame *game, int playerId)
     if (!game) {
         return nullptr;
     }
-    Player *player = game->getPlayerManager()->getPlayers().value(playerId, nullptr);
-    return player ? player->getGraphicsItem()->getPlayerTarget() : nullptr;
+    PlayerLogic *player = game->getPlayerManager()->getPlayers().value(playerId, nullptr);
+    return player ? RuledActions::graphics(player)->getPlayerTarget() : nullptr;
 }
 
 ArrowTarget *findAttackAssignmentTarget(AbstractGame *game,
@@ -156,10 +228,13 @@ ArrowTarget *findAttackAssignmentTarget(AbstractGame *game,
 } // namespace
 
 TabGame::TabGame(TabSupervisor *_tabSupervisor, GameReplay *_replay)
-    : Tab(_tabSupervisor), sayLabel(nullptr), sayEdit(nullptr), gamePromptWidget(nullptr)
+    : Tab(_tabSupervisor), sayLabel(nullptr), sayEdit(nullptr), replayDock(nullptr), historyDock(nullptr)
 {
+    setObjectName("TabGame");
     // THIS CTOR IS USED ON REPLAY
-    game = new Replay(this, _replay);
+    game = new Replay(this, _replay, tabSupervisor->getIsLocalGame(), &SettingsCache::instance().userInterface(),
+                      new SettingsCardPreferenceProvider(this));
+    ruledController = new RuledGameController(game);
 
     createCardInfoDock(true);
     createPlayerListDock(true);
@@ -171,9 +246,11 @@ TabGame::TabGame(TabSupervisor *_tabSupervisor, GameReplay *_replay)
     addDockWidget(Qt::RightDockWidgetArea, cardInfoDock);
     addDockWidget(Qt::RightDockWidgetArea, playerListDock);
     addDockWidget(Qt::RightDockWidgetArea, messageLayoutDock);
+    addDockWidget(Qt::LeftDockWidgetArea, historyDock);
     addDockWidget(Qt::BottomDockWidgetArea, replayDock);
 
     mainWidget = new QStackedWidget(this);
+    mainWidget->setObjectName("mainWidget");
     mainWidget->addWidget(deckViewContainerWidget);
     mainWidget->addWidget(gamePlayAreaWidget);
     setCentralWidget(mainWidget);
@@ -202,8 +279,11 @@ TabGame::TabGame(TabSupervisor *_tabSupervisor,
                  const QMap<int, QString> &_roomGameTypes)
     : Tab(_tabSupervisor), userListProxy(_tabSupervisor->getUserListManager()), gamePromptWidget(nullptr)
 {
+    setObjectName("TabGame");
     // THIS CTOR IS USED ON GAMES
-    game = new Game(this, _clients, event, _roomGameTypes);
+    game = new Game(this, tabSupervisor->getIsLocalGame(), _clients, event, _roomGameTypes,
+                    &SettingsCache::instance().userInterface(), new SettingsCardPreferenceProvider(this));
+    ruledController = new RuledGameController(game);
 
     createCardInfoDock();
     createPlayerListDock();
@@ -211,12 +291,14 @@ TabGame::TabGame(TabSupervisor *_tabSupervisor,
     createPlayAreaWidget();
     createDeckViewContainerWidget();
     replayDock = nullptr;
+    historyDock = nullptr;
 
     addDockWidget(Qt::RightDockWidgetArea, cardInfoDock);
     addDockWidget(Qt::RightDockWidgetArea, playerListDock);
     addDockWidget(Qt::RightDockWidgetArea, messageLayoutDock);
 
     mainWidget = new QStackedWidget(this);
+    mainWidget->setObjectName("mainWidget");
     mainWidget->addWidget(deckViewContainerWidget);
     mainWidget->addWidget(gamePlayAreaWidget);
     mainWidget->setContentsMargins(0, 0, 0, 0);
@@ -237,8 +319,9 @@ TabGame::TabGame(TabSupervisor *_tabSupervisor,
     refreshShortcuts();
 
     // append game to rooms game list for others to see
-    for (int i = game->getGameMetaInfo()->gameTypesSize() - 1; i >= 0; i--)
+    for (int i = game->getGameMetaInfo()->gameTypesSize() - 1; i >= 0; i--) {
         gameTypes.append(game->getGameMetaInfo()->findRoomGameType(i));
+    }
 
     QTimer::singleShot(0, this, &TabGame::loadLayout);
 }
@@ -247,6 +330,7 @@ void TabGame::connectToGameState()
 {
     connect(game->getGameState(), &GameState::gameStarted, this, &TabGame::startGame);
     connect(game->getGameState(), &GameState::gameStopped, this, &TabGame::stopGame);
+    connect(game->getGameState(), &GameState::hostChanged, this, &TabGame::updateTurnOrderAction);
     connect(game->getGameState(), &GameState::activePhaseChanged, this, &TabGame::setActivePhase);
     connect(game->getGameState(), &GameState::activePlayerChanged, this, &TabGame::setActivePlayer);
     connect(game->getGameState(), &GameState::priorityPlayerChanged, this, &TabGame::setPriorityPlayer);
@@ -339,7 +423,7 @@ void TabGame::connectToGameEventHandler()
                     if (ruledAutoOpenedGraveyardViews.contains(pid)) {
                         continue;
                     }
-                    Player *owner = game->getPlayerManager()->getPlayer(pid);
+                    PlayerLogic *owner = game->getPlayerManager()->getPlayer(pid);
                     if (!owner || scene->isZoneViewOpen(owner, graveName)) {
                         continue;
                     }
@@ -354,7 +438,7 @@ void TabGame::connectToGameEventHandler()
                         ++it;
                         continue;
                     }
-                    Player *owner = game->getPlayerManager()->getPlayer(it.key());
+                    PlayerLogic *owner = game->getPlayerManager()->getPlayer(it.key());
                     if (owner && it.value() && scene->zoneViewWidgetFor(owner, graveName) == it.value()) {
                         it.value()->close();
                     }
@@ -375,14 +459,14 @@ void TabGame::connectToGameEventHandler()
                         return;
                     }
                     const int localId = game->getPlayerManager()->getLocalPlayerId();
-                    Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
-                    if (localPlayer && localPlayer->getPlayerActions()) {
-                        const QString spellPrompt = localPlayer->getPlayerActions()->pendingRuledSpellPromptText();
+                    PlayerLogic *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+                    if (localPlayer && RuledActions::actions(localPlayer)) {
+                        const QString spellPrompt = RuledActions::actions(localPlayer)->pendingRuledSpellPromptText();
                         if (!spellPrompt.isEmpty()) {
                             gamePromptWidget->setPromptText(spellPrompt);
                             return;
                         }
-                        const QString abilityPrompt = localPlayer->getPlayerActions()->pendingRuledAbilityPromptText();
+                        const QString abilityPrompt = RuledActions::actions(localPlayer)->pendingRuledAbilityPromptText();
                         if (!abilityPrompt.isEmpty()) {
                             gamePromptWidget->setPromptText(abilityPrompt);
                             return;
@@ -399,9 +483,9 @@ void TabGame::connectToGameEventHandler()
                     refreshRuledPromptState();
                     if (required > 0 && selected == required) {
                         const int localId = game->getPlayerManager()->getLocalPlayerId();
-                        Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
-                        if (localPlayer && localPlayer->getPlayerActions()) {
-                            localPlayer->getPlayerActions()->sendRuledCleanupDiscardBatchIfComplete();
+                        PlayerLogic *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+                        if (localPlayer && RuledActions::actions(localPlayer)) {
+                            RuledActions::actions(localPlayer)->sendRuledCleanupDiscardBatchIfComplete();
                         }
                     }
                 });
@@ -442,9 +526,9 @@ void TabGame::connectToGameEventHandler()
                         return;
                     }
                     const int localId = game->getPlayerManager()->getLocalPlayerId();
-                    Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
-                    if (localPlayer && localPlayer->getPlayerActions()) {
-                        localPlayer->getPlayerActions()->retryRuledCounterGroupPayment(transactionId, revision);
+                    PlayerLogic *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+                    if (localPlayer && RuledActions::actions(localPlayer)) {
+                        RuledActions::actions(localPlayer)->retryRuledCounterGroupPayment(transactionId, revision);
                     }
                 });
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::resolutionCostSelectionChanged,
@@ -464,12 +548,12 @@ void TabGame::connectToGameEventHandler()
                 return;
             }
             const int localId = game->getPlayerManager()->getLocalPlayerId();
-            if (Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr)) {
-                if (local->getPlayerActions()->isAwaitingRuledCounterGroupSelection()) {
-                    local->getPlayerActions()->confirmRuledCounterGroupSelection();
+            if (PlayerLogic *local = game->getPlayerManager()->getPlayers().value(localId, nullptr)) {
+                if (RuledActions::actions(local)->isAwaitingRuledCounterGroupSelection()) {
+                    RuledActions::actions(local)->confirmRuledCounterGroupSelection();
                     return;
                 }
-                local->getPlayerActions()->confirmRuledGraveyardCostSelection();
+                RuledActions::actions(local)->confirmRuledGraveyardCostSelection();
             }
         });
         connect(gamePromptWidget, &GamePromptWidget::ruledCostSelectionCancelRequested, this, [this]() {
@@ -480,29 +564,29 @@ void TabGame::connectToGameEventHandler()
                 return;
             }
             const int localId = game->getPlayerManager()->getLocalPlayerId();
-            if (Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr)) {
-                if (local->getPlayerActions()->isAwaitingRuledCounterGroupSelection()) {
-                    local->getPlayerActions()->cancelRuledCounterGroupSelection();
+            if (PlayerLogic *local = game->getPlayerManager()->getPlayers().value(localId, nullptr)) {
+                if (RuledActions::actions(local)->isAwaitingRuledCounterGroupSelection()) {
+                    RuledActions::actions(local)->cancelRuledCounterGroupSelection();
                     return;
                 }
-                local->getPlayerActions()->cancelRuledGraveyardCostSelection();
+                RuledActions::actions(local)->cancelRuledGraveyardCostSelection();
             }
         });
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::resolutionPaymentUiChanged, this,
                 [this](bool active) {
                     const int localId = game->getPlayerManager()->getLocalPlayerId();
-                    Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
-                    if (localPlayer && localPlayer->getPlayerActions()) {
-                        localPlayer->getPlayerActions()->syncRuledResolutionPayment(
+                    PlayerLogic *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+                    if (localPlayer && RuledActions::actions(localPlayer)) {
+                        RuledActions::actions(localPlayer)->syncRuledResolutionPayment(
                             active, game->getGameEventHandler()->ruled()->resolutionPaymentGenericCost());
                     }
                     refreshRuledPromptState();
                 });
         connect(gamePromptWidget, &GamePromptWidget::ruledResolutionPaymentDeclineRequested, this, [this]() {
             const int localId = game->getPlayerManager()->getLocalPlayerId();
-            Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
-            if (localPlayer && localPlayer->getPlayerActions()) {
-                localPlayer->getPlayerActions()->declineRuledResolutionPayment();
+            PlayerLogic *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+            if (localPlayer && RuledActions::actions(localPlayer)) {
+                RuledActions::actions(localPlayer)->declineRuledResolutionPayment();
             }
         });
         connect(gamePromptWidget, &GamePromptWidget::ruledResolutionPaymentConfirmRequested, this, [this]() {
@@ -512,15 +596,15 @@ void TabGame::connectToGameEventHandler()
         });
         connect(gamePromptWidget, &GamePromptWidget::ruledAttackPaymentCancelRequested, this, [this]() {
             const int localId = game->getPlayerManager()->getLocalPlayerId();
-            Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
-            if (localPlayer && localPlayer->getPlayerActions())
-                localPlayer->getPlayerActions()->cancelRuledAttackDeclaration();
+            PlayerLogic *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+            if (localPlayer && RuledActions::actions(localPlayer))
+                RuledActions::actions(localPlayer)->cancelRuledAttackDeclaration();
         });
         connect(gamePromptWidget, &GamePromptWidget::ruledResolutionPaymentClearRequested, this, [this]() {
             const int localId = game->getPlayerManager()->getLocalPlayerId();
-            if (Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr)) {
-                if (localPlayer->getPlayerActions()) {
-                    localPlayer->getPlayerActions()->clearVariableManaContributionSelection();
+            if (PlayerLogic *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr)) {
+                if (RuledActions::actions(localPlayer)) {
+                    RuledActions::actions(localPlayer)->clearVariableManaContributionSelection();
                 }
             }
         });
@@ -531,9 +615,9 @@ void TabGame::connectToGameEventHandler()
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::resolutionPaymentSubmissionFinished, this,
                 [this](bool accepted) {
                     const int localId = game->getPlayerManager()->getLocalPlayerId();
-                    Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
-                    if (localPlayer && localPlayer->getPlayerActions()) {
-                        localPlayer->getPlayerActions()->finishRuledResolutionPaymentSubmission(accepted);
+                    PlayerLogic *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+                    if (localPlayer && RuledActions::actions(localPlayer)) {
+                        RuledActions::actions(localPlayer)->finishRuledResolutionPaymentSubmission(accepted);
                     }
                 });
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::librarySearchPickStarted, this,
@@ -555,7 +639,7 @@ void TabGame::connectToGameEventHandler()
         connect(game->getGameState(), &GameState::activePhaseChanged, gamePromptWidget,
                 &GamePromptWidget::setActivePhase);
         connect(game->getGameEventHandler(), &GameEventHandler::logActivePlayer, gamePromptWidget,
-                [this](Player *player) {
+                [this](PlayerLogic *player) {
                     if (player) {
                         gamePromptWidget->setActivePlayerName(player->getPlayerInfo()->getName());
                     }
@@ -622,8 +706,8 @@ void TabGame::connectToGameEventHandler()
                     if (!gamePromptWidget || !RuledActions::isRuledGame(game))
                         return;
                     const int localId = game->getPlayerManager()->getLocalPlayerId();
-                    Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr);
-                    auto *actions = local ? local->getPlayerActions() : nullptr;
+                    PlayerLogic *local = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+                    auto *actions = local ? RuledActions::actions(local) : nullptr;
                     if (!actions)
                         return;
                     const bool active = actions->isInSpellDamageAllocationMode();
@@ -644,12 +728,12 @@ void TabGame::connectToGameEventHandler()
                 return;
             }
             const int localPlayerId = game->getPlayerManager()->getLocalPlayerId();
-            Player *localPlayer = game->getPlayerManager()->getPlayers().value(localPlayerId, nullptr);
-            if (!localPlayer || !localPlayer->getPlayerActions()) {
+            PlayerLogic *localPlayer = game->getPlayerManager()->getPlayers().value(localPlayerId, nullptr);
+            if (!localPlayer || !RuledActions::actions(localPlayer)) {
                 return;
             }
-            localPlayer->getPlayerActions()->cancelPendingRuledSpellCast();
-            localPlayer->getPlayerActions()->cancelPendingActivatedAbility();
+            RuledActions::actions(localPlayer)->cancelPendingRuledSpellCast();
+            RuledActions::actions(localPlayer)->cancelPendingActivatedAbility();
         });
         connect(gamePromptWidget, &GamePromptWidget::declineClickChoiceRequested, game->getGameEventHandler()->ruled(),
                 &RuledClientState::declinePendingClickChoice);
@@ -706,6 +790,8 @@ void TabGame::connectMessageLogToGameEventHandler()
 
     connect(game->getGameEventHandler(), &GameEventHandler::logTurnReversed, messageLog,
             &MessageLogWidget::logReverseTurn);
+    connect(game->getGameEventHandler(), &GameEventHandler::logTurnOrderChanged, messageLog,
+            &MessageLogWidget::logTurnOrderChanged);
 
     connect(game->getGameEventHandler(), &GameEventHandler::logConcede, messageLog, &MessageLogWidget::logConcede);
     connect(game->getGameEventHandler(), &GameEventHandler::logUnconcede, messageLog, &MessageLogWidget::logUnconcede);
@@ -744,31 +830,37 @@ void TabGame::linkCardToChat(const QString &cardName)
     sayEdit->setFocus();
 }
 
-void TabGame::resetChatAndPhase()
+void TabGame::resetForRewind()
 {
     // reset chat log
     messageLog->clearChat();
 
     // reset phase markers
     game->getGameState()->setCurrentPhase(-1);
+
+    // reset view zones
+    static_cast<GameScene *>(gameView->scene())->emptyActiveViews();
+
+    // reset spectator state so the replay can rebuild it from the start
+    game->getPlayerManager()->clearSpectators();
+    playerListWidget->clearSpectators();
 }
 
 void TabGame::emitUserEvent()
 {
-    bool globalEvent =
-        !game->getPlayerManager()->isSpectator() || SettingsCache::instance().getSpectatorNotificationsEnabled();
+    bool globalEvent = !game->getPlayerManager()->isSpectator() ||
+                       SettingsCache::instance().userInterface().getSpectatorNotificationsEnabled();
     emit userEvent(globalEvent);
     updatePlayerListDockTitle();
 }
 
 TabGame::~TabGame()
 {
+    delete ruledController;
+    ruledController = nullptr;
     clearRuledCombatArrows();
     for (const auto &cards : std::as_const(exilePlayPermissionCards)) {
         qDeleteAll(cards);
-    }
-    if (replayManager) {
-        delete replayManager->replay;
     }
     for (auto &player : game->getPlayerManager()->getPlayers()) {
         player->clear();
@@ -788,8 +880,8 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         return state.mode;
     }
     const int localPlayerId = game->getPlayerManager()->getLocalPlayerId();
-    Player *localPlayer = game->getPlayerManager()->getPlayers().value(localPlayerId, nullptr);
-    PlayerActions *localActions = localPlayer ? localPlayer->getPlayerActions() : nullptr;
+    PlayerLogic *localPlayer = game->getPlayerManager()->getPlayers().value(localPlayerId, nullptr);
+    RuledPlayerActions *localActions = localPlayer ? RuledActions::actions(localPlayer) : nullptr;
     const auto setCounterGroupCostSelectionPrompt = [&]() {
         if (!localActions || !localActions->isAwaitingRuledCounterGroupSelection()) {
             return false;
@@ -915,7 +1007,7 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         }
     } else if (h->isWaitingForChoice()) {
         state.mode = PromptMode::WaitingForChoice;
-        if (Player *decider = game->getPlayerManager()->getPlayer(h->choiceWaitingPlayer())) {
+        if (PlayerLogic *decider = game->getPlayerManager()->getPlayer(h->choiceWaitingPlayer())) {
             state.text = tr("Waiting for %1...").arg(decider->getPlayerInfo()->getName());
         } else {
             state.text = tr("Waiting for opponent...");
@@ -941,7 +1033,7 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.mode = PromptMode::OpeningChooseFirst;
         state.openingPickSeatIds = h->getOpeningPickSeatIds();
         for (const int seatId : state.openingPickSeatIds) {
-            const Player *seat = game->getPlayerManager()->getPlayer(seatId);
+            const PlayerLogic *seat = game->getPlayerManager()->getPlayer(seatId);
             state.openingPickSeatNames.append(seat ? seat->getPlayerInfo()->getName() : tr("Player %1").arg(seatId));
         }
     } else if (opening == OpeningKind::MulliganChoice) {
@@ -1097,7 +1189,7 @@ void TabGame::refreshRuledCombatArrows()
     }
 
     const int localPlayerId = game->getPlayerManager()->getLocalPlayerId();
-    Player *arrowOwner = game->getPlayerManager()->getPlayers().value(localPlayerId, nullptr);
+    PlayerLogic *arrowOwner = game->getPlayerManager()->getPlayers().value(localPlayerId, nullptr);
     if (!arrowOwner) {
         return;
     }
@@ -1164,14 +1256,22 @@ void TabGame::retranslateUi()
     QString tabText = " | " + type + " #" + QString::number(game->getGameMetaInfo()->gameId());
 
     updatePlayerListDockTitle();
+    if (inviteButton) {
+        inviteButton->setText(tr("Invite"));
+    }
     cardInfoDock->setWindowTitle(tr("Card Info") + (cardInfoDock->isWindow() ? tabText : QString()));
     messageLayoutDock->setWindowTitle(tr("Messages") + (messageLayoutDock->isWindow() ? tabText : QString()));
-    if (replayDock)
+    if (historyDock) {
+        historyDock->setWindowTitle(tr("Game History") + (historyDock->isWindow() ? tabText : QString()));
+    }
+    if (replayDock) {
         replayDock->setWindowTitle(tr("Replay Timeline") + (replayDock->isWindow() ? tabText : QString()));
+    }
 
     if (phasesMenu) {
-        for (int i = 0; i < phaseActions.size(); ++i)
+        for (int i = 0; i < phaseActions.size(); ++i) {
             phaseActions[i]->setText(phasesToolbar->getLongPhaseName(i));
+        }
         phasesMenu->setTitle(tr("&Phases"));
     }
 
@@ -1188,6 +1288,9 @@ void TabGame::retranslateUi()
     if (aReverseTurn) {
         aReverseTurn->setText(tr("Reverse turn order"));
     }
+    if (aTurnOrder) {
+        aTurnOrder->setText(tr("&Set turn order..."));
+    }
     if (aRemoveLocalArrows) {
         aRemoveLocalArrows->setText(tr("&Remove all local arrows"));
     }
@@ -1197,8 +1300,15 @@ void TabGame::retranslateUi()
     if (aRotateViewCCW) {
         aRotateViewCCW->setText(tr("Rotate View Co&unterclockwise"));
     }
-    if (aGameInfo)
+    if (aGameInfo) {
         aGameInfo->setText(tr("Game &information"));
+    }
+    if (aCopyGameLink) {
+        aCopyGameLink->setText(tr("Cop&y game link"));
+    }
+    if (aInviteToGame) {
+        aInviteToGame->setText(tr("Invite to Game..."));
+    }
     if (aConcede) {
         if (game->getPlayerManager()->isMainPlayerConceded()) {
             if (RuledActions::isRuledGame(game)) {
@@ -1238,6 +1348,9 @@ void TabGame::retranslateUi()
     dockToActions[messageLayoutDock].menu->setTitle(tr("Messages"));
     dockToActions[playerListDock].menu->setTitle(tr("Player List"));
 
+    if (historyDock) {
+        dockToActions[historyDock].menu->setTitle(tr("Game History"));
+    }
     if (replayDock) {
         dockToActions[replayDock].menu->setTitle(tr("Replay Timeline"));
     }
@@ -1254,13 +1367,14 @@ void TabGame::retranslateUi()
         gamePromptWidget->retranslateUi();
     }
 
-    QMapIterator<int, Player *> i(game->getPlayerManager()->getPlayers());
+    for (auto playerView : scene->getPlayers().values()) {
+        playerView->retranslateUi();
+    }
 
-    while (i.hasNext())
-        i.next().value()->getGraphicsItem()->retranslateUi();
     QMapIterator<int, TabbedDeckViewContainer *> j(deckViewContainers);
-    while (j.hasNext())
+    while (j.hasNext()) {
         j.next().value()->playerDeckView->retranslateUi();
+    }
 
     scene->retranslateUi();
 }
@@ -1376,25 +1490,143 @@ void TabGame::actGameInfo()
     dlg.exec();
 }
 
+void TabGame::actCopyGameLink()
+{
+    const QString link =
+        makeGameJoinLink(tabSupervisor->getClient()->serverName(), tabSupervisor->getClient()->serverPort(),
+                         game->getGameMetaInfo()->proto().room_id(), game->getGameMetaInfo()->gameId(),
+                         QString::fromStdString(game->getGameMetaInfo()->proto().description()));
+    QApplication::clipboard()->setText(link);
+}
+
+void TabGame::updateInviteButtonState()
+{
+    // The dock button stays conservative (pre-start, not full); the menu action
+    // additionally covers started/full games, which are legitimate spectate
+    // invites, so it only needs the server-linked + not-closed conditions.
+    const bool canInvite = !tabSupervisor->getIsLocalGame() && !game->getGameState()->isGameClosed() &&
+                           !game->getGameMetaInfo()->started() &&
+                           game->getPlayerManager()->getPlayerCount() < game->getGameMetaInfo()->maxPlayers();
+    if (inviteButton) {
+        inviteButton->setVisible(canInvite);
+    }
+    if (aInviteToGame) {
+        aInviteToGame->setEnabled(!tabSupervisor->getIsLocalGame() && !game->getGameState()->isGameClosed());
+    }
+}
+
+void TabGame::actInviteToGame()
+{
+    if (!tabSupervisor || tabSupervisor->getIsLocalGame()) {
+        return;
+    }
+
+    GameMetaInfo *metaInfo = game->getGameMetaInfo();
+    const QString inviteUrl = makeGameJoinLink(
+        tabSupervisor->getClient()->serverName(), tabSupervisor->getClient()->serverPort(), metaInfo->proto().room_id(),
+        metaInfo->gameId(), QString::fromStdString(metaInfo->proto().description()));
+
+    QStringList excludeUserNames;
+    excludeUserNames << tabSupervisor->getUserListManager()->getOwnUsername();
+    for (auto player : game->getPlayerManager()->getPlayers()) {
+        excludeUserNames << player->getPlayerInfo()->getName();
+    }
+    for (auto it = game->getPlayerManager()->getSpectators().cbegin();
+         it != game->getPlayerManager()->getSpectators().cend(); ++it) {
+        excludeUserNames << QString::fromStdString(it.value().name());
+    }
+
+    DlgInviteToGame dlg(tabSupervisor, inviteUrl, metaInfo->proto().only_buddies(), excludeUserNames, this);
+    dlg.exec();
+}
+
 void TabGame::actConcede()
 {
-    Player *player = game->getPlayerManager()->getActiveLocalPlayer(game->getGameState()->getActivePlayer());
-    if (player == nullptr)
+    PlayerLogic *player = game->getPlayerManager()->getActiveLocalPlayer(game->getGameState()->getActivePlayer());
+    if (player == nullptr) {
         return;
+    }
     if (!player->getConceded()) {
-        if (QMessageBox::question(this, tr("Concede"), tr("Are you sure you want to concede this game?"),
-                                  QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+        if (!QtUtils::confirm(this, tr("Concede"), tr("Are you sure you want to concede this game?"),
+                              QMessageBox::No)) {
             return;
+        }
         emit game->getPlayerManager()->activeLocalPlayerConceded();
     } else {
-        if (RuledActions::isRuledGame(game))
+        if (RuledActions::isRuledGame(game)) return;
+        if (!QtUtils::confirm(this, tr("Unconcede"),
+                              tr("You have already conceded.  Do you want to return to this game?"), QMessageBox::No)) {
             return;
-        if (QMessageBox::question(this, tr("Unconcede"),
-                                  tr("You have already conceded.  Do you want to return to this game?"),
-                                  QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
-            return;
+        }
         emit game->getPlayerManager()->activeLocalPlayerUnconceded();
     }
+}
+
+void TabGame::actTurnOrder()
+{
+    if (!canSetTurnOrder()) {
+        return;
+    }
+
+    QStringList playerNames;
+    const QList<int> seatOrder = game->getGameState()->getSeatOrder();
+    const auto &players = game->getPlayerManager()->getPlayers();
+    if (!seatOrder.isEmpty()) {
+        for (int playerId : seatOrder) {
+            if (PlayerLogic *player = players.value(playerId, nullptr)) {
+                playerNames.append(player->getPlayerInfo()->getName());
+            }
+        }
+        // Include any players missing from the tracked order rather than dropping them.
+        for (auto it = players.constBegin(); it != players.constEnd(); ++it) {
+            const QString name = it.value()->getPlayerInfo()->getName();
+            if (!playerNames.contains(name)) {
+                playerNames.append(name);
+            }
+        }
+    } else {
+        for (PlayerLogic *player : players) {
+            playerNames.append(player->getPlayerInfo()->getName());
+        }
+    }
+
+    DlgTurnOrder dlg(playerNames, this);
+    if (dlg.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    game->getGameEventHandler()->handleSetPlayerOrder(dlg.order(), dlg.isRandomizeRequested());
+}
+
+/**
+ * Whether the local user may change the seating order: only while the game has
+ * not started, and only as the host or a moderator - the server allows both
+ * (Server_AbstractParticipant::cmdSetPlayerOrder).
+ */
+bool TabGame::canSetTurnOrder() const
+{
+    if (game->getGameMetaInfo()->started()) {
+        return false;
+    }
+    if (game->isHost()) {
+        return true;
+    }
+    const ServerInfo_User *userInfo = tabSupervisor->getUserInfo();
+    return userInfo != nullptr && (userInfo->user_level() & ServerInfo_User::IsModerator);
+}
+
+/**
+ * Shows the turn order action only when it can actually change anything: the
+ * player must be allowed to set the order and the game must not have started.
+ * Called whenever either condition may have changed (game start/stop, host
+ * change).
+ */
+void TabGame::updateTurnOrderAction()
+{
+    if (aTurnOrder == nullptr) {
+        return;
+    }
+    aTurnOrder->setVisible(canSetTurnOrder());
 }
 
 /**
@@ -1407,21 +1639,25 @@ bool TabGame::leaveGame()
     if (!game->getGameState()->isGameClosed()) {
         if (!game->getPlayerManager()->isSpectator()) {
             tabSupervisor->setCurrentWidget(this);
-            if (QMessageBox::question(this, tr("Leave game"), tr("Are you sure you want to leave this game?"),
-                                      QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+            if (!QtUtils::confirm(this, tr("Leave game"), tr("Are you sure you want to leave this game?"),
+                                  QMessageBox::No)) {
                 return false;
+            }
         }
 
-        if (!replayDock)
+        if (!replayDock) {
             emit gameLeft();
+        }
     }
     return true;
 }
 
 void TabGame::actSay()
 {
-    if (completer->popup()->isVisible())
+    if (sayEdit->hasVisibleCompleterPopup()) {
+        sayEdit->hideCompleterPopups();
         return;
+    }
 
     if (sayEdit->text().startsWith("/card ")) {
         cardInfoFrameWidget->setCard(sayEdit->text().mid(6));
@@ -1439,14 +1675,14 @@ void TabGame::addPlayerToAutoCompleteList(QString playerName)
 {
     if (sayEdit && !autocompleteUserList.contains(playerName)) {
         autocompleteUserList << playerName;
-        sayEdit->setCompletionList(autocompleteUserList);
+        mentionModel->setStringList(autocompleteUserList);
     }
 }
 
 void TabGame::removePlayerFromAutoCompleteList(QString playerName)
 {
     if (sayEdit && autocompleteUserList.removeOne(playerName)) {
-        sayEdit->setCompletionList(autocompleteUserList);
+        mentionModel->setStringList(autocompleteUserList);
     }
 }
 
@@ -1466,8 +1702,9 @@ void TabGame::actPhaseAction()
 void TabGame::actNextPhase()
 {
     int phase = game->getGameState()->getCurrentPhase();
-    if (++phase >= phasesToolbar->phaseCount())
+    if (++phase >= phasesToolbar->phaseCount()) {
         phase = 0;
+    }
 
     emit phaseChanged(phase);
 }
@@ -1490,16 +1727,9 @@ void TabGame::actNextPhaseAction()
 
 void TabGame::actRemoveLocalArrows()
 {
-    QMapIterator<int, Player *> playerIterator(game->getPlayerManager()->getPlayers());
-    while (playerIterator.hasNext()) {
-        Player *player = playerIterator.next().value();
-        if (!player->getPlayerInfo()->getLocal())
-            continue;
-        QMapIterator<int, ArrowItem *> arrowIterator(player->getArrows());
-        while (arrowIterator.hasNext()) {
-            ArrowItem *a = arrowIterator.next().value();
-            emit arrowDeletionRequested(a->getId());
-        }
+    auto *local = game->getPlayerManager()->getActiveLocalPlayer(game->getGameState()->getActivePlayer());
+    if (local) {
+        scene->clearArrowsForPlayer(local->getPlayerInfo()->getId());
     }
 }
 
@@ -1519,7 +1749,7 @@ void TabGame::actToggleStackWindow()
         return;
     }
 
-    if (aToggleStackWindow->isChecked()) {
+    if (RuledActions::isRuledGame(game) || aToggleStackWindow->isChecked()) {
         syncStackWindowVisibility();
     } else if (stackView) {
         stackView->close();
@@ -1532,31 +1762,31 @@ CardZoneLogic *TabGame::findVisibleStackZone() const
         return nullptr;
     }
     PlayerManager *pm = game->getPlayerManager();
-    const QMap<int, Player *> &players = pm->getPlayers();
+    const QMap<int, PlayerLogic *> &players = pm->getPlayers();
     // Prefer the non-empty stack with the most objects (the zone that is actually accumulating spells in 1v1 ruled
     // play). QMap iteration alone can pick another player's stale single card while the active stack grows elsewhere.
     CardZoneLogic *best = nullptr;
     int bestCount = -1;
-    Player *localPlayer = pm->isSpectator() ? nullptr : pm->getPlayer(pm->getLocalPlayerId());
+    PlayerLogic *localPlayer = pm->isSpectator() ? nullptr : pm->getPlayer(pm->getLocalPlayerId());
     const RuledClientState *ruledState =
         RuledActions::isRuledGame(game) ? game->getGameEventHandler()->ruled() : nullptr;
     // --- DIAG H2/H3: log all zones and their sizes to see which one gets picked. ---
     {
         QString zoneInfo;
-        for (Player *p : players) {
+        for (PlayerLogic *p : players) {
             if (!p || !p->getStackZone())
                 continue;
             if (!zoneInfo.isEmpty())
                 zoneInfo += QLatin1Char(';');
             zoneInfo += QStringLiteral("pid=%1 n=%2 isLocal=%3")
                             .arg(p->getPlayerInfo()->getId())
-                            .arg(p->getStackZone()->getCards().size())
+                            .arg(RuledActions::cardItems(p->getStackZone()->getCards()).size())
                             .arg(localPlayer == p);
         }
         tgDbgLog(
             QStringLiteral("findVisibleStackZone localPid=%1 zones=[%2]").arg(pm->getLocalPlayerId()).arg(zoneInfo));
     }
-    for (Player *player : players) {
+    for (PlayerLogic *player : players) {
         if (!player || !player->getStackZone()) {
             continue;
         }
@@ -1564,13 +1794,13 @@ CardZoneLogic *TabGame::findVisibleStackZone() const
         int n = 0;
         if (ruledState) {
             const int stackOwnerId = player->getPlayerInfo()->getId();
-            for (CardItem *card : zs->getCards()) {
+            for (CardItem *card : RuledActions::cardItems(zs->getCards())) {
                 if (card && ruledState->isPublishedStackCard(stackOwnerId, card->getId())) {
                     ++n;
                 }
             }
         } else {
-            n = zs->getCards().size();
+            n = RuledActions::cardItems(zs->getCards()).size();
         }
         if (n == 0) {
             continue;
@@ -1620,7 +1850,7 @@ CardItem *TabGame::findVisibleStackSpellCardItem(int serverCardId) const
     }
     // --- DIAG H4: log which zone the stack window is showing and whether the card is found. ---
     const int windowPid = logic->getPlayer() ? logic->getPlayer()->getPlayerInfo()->getId() : -1;
-    for (CardItem *c : logic->getCards()) {
+    for (CardItem *c : RuledActions::cardItems(logic->getCards())) {
         if (c && c->getId() == serverCardId) {
             tgDbgLog(QStringLiteral("findVisibleStackSpellCardItem sid=%1 windowPid=%2 HIT scenePos=(%3,%4)")
                          .arg(serverCardId)
@@ -1644,7 +1874,7 @@ CardItem *TabGame::findVisibleGraveyardCardItem(int playerId, int serverCardId) 
     if (serverCardId < 0 || !game || !scene) {
         return nullptr;
     }
-    Player *owner = game->getPlayerManager()->getPlayer(playerId);
+    PlayerLogic *owner = game->getPlayerManager()->getPlayer(playerId);
     if (!owner) {
         return nullptr;
     }
@@ -1656,7 +1886,7 @@ CardItem *TabGame::findVisibleGraveyardCardItem(int playerId, int serverCardId) 
     if (!logic) {
         return nullptr;
     }
-    for (CardItem *c : logic->getCards()) {
+    for (CardItem *c : RuledActions::cardItems(logic->getCards())) {
         if (c && c->getId() == serverCardId) {
             return c;
         }
@@ -1675,6 +1905,7 @@ void TabGame::syncStackWindowVisibility()
             stackView->close();
         }
         aToggleStackWindow->setChecked(false);
+        aToggleStackWindow->setEnabled(true);
         return;
     }
 
@@ -1717,6 +1948,7 @@ void TabGame::ensureStackWindow()
             geh->refreshRuledSpellTargetArrows();
         }
         aToggleStackWindow->setChecked(true);
+        aToggleStackWindow->setEnabled(false);
         return;
     }
 
@@ -1724,12 +1956,12 @@ void TabGame::ensureStackWindow()
         stackView->close();
     }
 
-    Player *stackOwner = visibleStackZone->getPlayer();
+    PlayerLogic *stackOwner = visibleStackZone->getPlayer();
     if (!stackOwner) {
         return;
     }
 
-    stackView = new ZoneViewWidget(stackOwner, visibleStackZone, -1, true, true, {}, false, false, true);
+    stackView = new ZoneViewWidget(stackOwner, visibleStackZone, -1, true, true, {}, false, false, true, false);
     stackViewZone = visibleStackZone;
     stackView->setWindowFlags(stackView->windowFlags() | Qt::WindowStaysOnTopHint);
     scene->addItem(stackView);
@@ -1748,9 +1980,11 @@ void TabGame::ensureStackWindow()
         stackViewZone = nullptr;
         if (aToggleStackWindow) {
             aToggleStackWindow->setChecked(false);
+            aToggleStackWindow->setEnabled(true);
         }
     });
     aToggleStackWindow->setChecked(true);
+    aToggleStackWindow->setEnabled(false);
 }
 
 void TabGame::saveStackWindowLayout()
@@ -1764,8 +1998,8 @@ void TabGame::saveStackWindowLayout()
 
 void TabGame::actCompleterChanged()
 {
-    SettingsCache::instance().getChatMentionCompleter() ? completer->setCompletionRole(2)
-                                                        : completer->setCompletionRole(1);
+    SettingsCache::instance().chat().getChatMentionCompleter() ? mentionCompleter->setCompletionRole(2)
+                                                               : mentionCompleter->setCompletionRole(1);
 }
 
 void TabGame::notifyPlayerJoin(QString playerName)
@@ -1787,15 +2021,19 @@ void TabGame::notifyPlayerKicked()
     msgBox.exec();
 }
 
-Player *TabGame::addPlayer(Player *newPlayer)
+PlayerLogic *TabGame::addPlayer(PlayerLogic *newPlayer)
 {
     QString newPlayerName = "@" + newPlayer->getPlayerInfo()->getName();
     addPlayerToAutoCompleteList(newPlayerName);
 
     scene->addPlayer(newPlayer);
 
-    connect(newPlayer, &Player::newCardAdded, this, &TabGame::newCardAdded);
-    connect(newPlayer->getPlayerMenu(), &PlayerMenu::cardMenuUpdated, this, &TabGame::setCardMenu);
+    auto *view = scene->viewForPlayer(newPlayer->getPlayerInfo()->getId());
+
+    connect(newPlayer, &PlayerLogic::newCardAdded, this, &TabGame::newCardAdded);
+    connect(newPlayer, &PlayerLogic::openDeckEditor, this, &TabGame::openDeckEditor);
+    connect(view->getPlayerMenu(), &PlayerMenu::cardMenuUpdated, this, &TabGame::setCardMenu);
+    connect(view, &PlayerGraphicsItem::cardInfoRequested, this, &TabGame::viewCardInfo);
     connect(newPlayer->getStackZone(), &StackZoneLogic::cardCountChanged, this, &TabGame::syncStackWindowVisibility);
 
     messageLog->connectToPlayerEventHandler(newPlayer->getPlayerEventHandler());
@@ -1813,20 +2051,20 @@ Player *TabGame::addPlayer(Player *newPlayer)
         }
     }
 
-    gameMenu->insertMenu(playersSeparator, newPlayer->getPlayerMenu()->getPlayerMenu());
+    gameMenu->insertMenu(playersSeparator, view->getPlayerMenu()->getPlayerMenu());
 
     createZoneForPlayer(newPlayer, newPlayer->getPlayerInfo()->getId());
 
     return newPlayer;
 }
 
-void TabGame::addLocalPlayer(Player *newPlayer, int playerId)
+void TabGame::addLocalPlayer(PlayerLogic *newPlayer, int playerId)
 {
     if (RuledDiagnosticViewer::isPlayback(game)) {
         return;
     }
     if (game->getGameState()->getClients().size() == 1) {
-        newPlayer->getPlayerMenu()->setShortcutsActive();
+        scene->viewForPlayer(playerId)->getPlayerMenu()->setShortcutsActive();
     }
 
     auto *deckView = new TabbedDeckViewContainer(playerId, this);
@@ -1834,56 +2072,56 @@ void TabGame::addLocalPlayer(Player *newPlayer, int playerId)
     deckViewContainers.insert(playerId, deckView);
     deckViewContainerLayout->addWidget(deckView);
 
-    if (gamePromptWidget && newPlayer->getPlayerActions()) {
-        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledSpellTargetingChanged, gamePromptWidget,
+    if (gamePromptWidget && RuledActions::actions(newPlayer)) {
+        connect(RuledActions::actions(newPlayer), &RuledPlayerActions::ruledSpellTargetingChanged, gamePromptWidget,
                 &GamePromptWidget::setTargetingMode);
-        connect(gamePromptWidget, &GamePromptWidget::confirmSpellDamageRequested, newPlayer->getPlayerActions(),
-                &PlayerActions::confirmSpellDamageAllocation);
-        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledMultiTargetSelectionUpdated, gamePromptWidget,
+        connect(gamePromptWidget, &GamePromptWidget::confirmSpellDamageRequested, RuledActions::actions(newPlayer),
+                &RuledPlayerActions::confirmSpellDamageAllocation);
+        connect(RuledActions::actions(newPlayer), &RuledPlayerActions::ruledMultiTargetSelectionUpdated, gamePromptWidget,
                 &GamePromptWidget::setMultiTargetSelectionCount);
-        connect(gamePromptWidget, &GamePromptWidget::confirmTargetsRequested, newPlayer->getPlayerActions(),
-                &PlayerActions::confirmMultiTargetSelection);
-        connect(newPlayer->getPlayerActions(), &PlayerActions::landTapUndoAvailableChanged, gamePromptWidget,
+        connect(gamePromptWidget, &GamePromptWidget::confirmTargetsRequested, RuledActions::actions(newPlayer),
+                &RuledPlayerActions::confirmMultiTargetSelection);
+        connect(RuledActions::actions(newPlayer), &RuledPlayerActions::landTapUndoAvailableChanged, gamePromptWidget,
                 &GamePromptWidget::setLandTapUndoAvailable);
-        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledSpellCastPendingChanged, gamePromptWidget,
+        connect(RuledActions::actions(newPlayer), &RuledPlayerActions::ruledSpellCastPendingChanged, gamePromptWidget,
                 &GamePromptWidget::setSpellCastPending);
         // `pending` remains true while a cast advances from a cast-cost option to its object
         // picker (for example, Behold -> click a Dragon). Re-derive the prompt on every emission;
         // GamePromptWidget's targeting-source setter intentionally ignores repeated bool values.
-        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledSpellCastPendingChanged, this,
+        connect(RuledActions::actions(newPlayer), &RuledPlayerActions::ruledSpellCastPendingChanged, this,
                 [this](bool /*pending*/) { refreshRuledPromptState(); });
-        connect(gamePromptWidget, &GamePromptWidget::ruledCastCostOptionRequested, newPlayer->getPlayerActions(),
-                &PlayerActions::selectPendingRuledCastCostOption);
-        connect(gamePromptWidget, &GamePromptWidget::ruledCastCostConfirmRequested, newPlayer->getPlayerActions(),
-                &PlayerActions::confirmPendingRuledCastCostGroup);
-        connect(gamePromptWidget, &GamePromptWidget::ruledCastCostBackRequested, newPlayer->getPlayerActions(),
-                &PlayerActions::backPendingRuledCastCostObject);
-        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledSpellManaPromptChanged, this, [this, newPlayer]() {
+        connect(gamePromptWidget, &GamePromptWidget::ruledCastCostOptionRequested, RuledActions::actions(newPlayer),
+                &RuledPlayerActions::selectPendingRuledCastCostOption);
+        connect(gamePromptWidget, &GamePromptWidget::ruledCastCostConfirmRequested, RuledActions::actions(newPlayer),
+                &RuledPlayerActions::confirmPendingRuledCastCostGroup);
+        connect(gamePromptWidget, &GamePromptWidget::ruledCastCostBackRequested, RuledActions::actions(newPlayer),
+                &RuledPlayerActions::backPendingRuledCastCostObject);
+        connect(RuledActions::actions(newPlayer), &RuledPlayerActions::ruledSpellManaPromptChanged, this, [this, newPlayer]() {
             if (!gamePromptWidget || !newPlayer->getPlayerInfo()->getLocal()) {
                 return;
             }
-            const QString t = newPlayer->getPlayerActions()->pendingRuledSpellPromptText();
+            const QString t = RuledActions::actions(newPlayer)->pendingRuledSpellPromptText();
             if (!t.isEmpty()) {
                 gamePromptWidget->setPromptText(t);
             }
         });
-        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledAbilityActivationPendingChanged, gamePromptWidget,
+        connect(RuledActions::actions(newPlayer), &RuledPlayerActions::ruledAbilityActivationPendingChanged, gamePromptWidget,
                 &GamePromptWidget::setSpellCastPending);
-        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledActivatedAbilityTargetPendingChanged,
+        connect(RuledActions::actions(newPlayer), &RuledPlayerActions::ruledActivatedAbilityTargetPendingChanged,
                 gamePromptWidget, &GamePromptWidget::setActivatedAbilityTargetPending);
-        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledAbilityManaPromptChanged, this,
+        connect(RuledActions::actions(newPlayer), &RuledPlayerActions::ruledAbilityManaPromptChanged, this,
                 [this, newPlayer]() {
                     if (!gamePromptWidget || !newPlayer->getPlayerInfo()->getLocal()) {
                         return;
                     }
-                    const QString t = newPlayer->getPlayerActions()->pendingRuledAbilityPromptText();
+                    const QString t = RuledActions::actions(newPlayer)->pendingRuledAbilityPromptText();
                     if (!t.isEmpty()) {
                         gamePromptWidget->setPromptText(t);
                     }
                 });
-        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledAbilityCostPromptChanged, this,
+        connect(RuledActions::actions(newPlayer), &RuledPlayerActions::ruledAbilityCostPromptChanged, this,
                 [this]() { refreshRuledPromptState(); });
-        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledGraveyardCostSelectionChanged, this,
+        connect(RuledActions::actions(newPlayer), &RuledPlayerActions::ruledGraveyardCostSelectionChanged, this,
                 [this, newPlayer](bool active, int required, int selected) {
                     if (!newPlayer->getPlayerInfo()->getLocal() || !game || !scene) {
                         return;
@@ -1902,7 +2140,7 @@ void TabGame::addLocalPlayer(Player *newPlayer, int playerId)
                         prompt.canDecline = true;
                         prompt.required = required;
                         prompt.selected = selected;
-                        prompt.text = newPlayer->getPlayerActions()->pendingRuledAbilityCostPromptText();
+                        prompt.text = RuledActions::actions(newPlayer)->pendingRuledAbilityCostPromptText();
                         gamePromptWidget->setRuledPromptState(prompt);
                     } else {
                         auto it = ruledAutoOpenedGraveyardViews.find(playerId);
@@ -1916,14 +2154,14 @@ void TabGame::addLocalPlayer(Player *newPlayer, int playerId)
                     }
                     scene->update();
                 });
-        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledResolutionManaPromptChanged, this,
+        connect(RuledActions::actions(newPlayer), &RuledPlayerActions::ruledResolutionManaPromptChanged, this,
                 [this]() { refreshRuledPromptState(); });
-        connect(gamePromptWidget, &GamePromptWidget::undoLandTapRequested, newPlayer->getPlayerActions(),
-                &PlayerActions::undoLastLandTap);
+        connect(gamePromptWidget, &GamePromptWidget::undoLandTapRequested, RuledActions::actions(newPlayer),
+                &RuledPlayerActions::undoLastLandTap);
         // CR 605 float courtesy: in ruled mode the Undo button reflects the engine's authoritative
         // undoable-mana count (per local player), which re-emits landTapUndoAvailableChanged.
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::undoableManaAbilitiesChanged,
-                newPlayer->getPlayerActions(), &PlayerActions::setRuledUndoableManaCount);
+                RuledActions::actions(newPlayer), &RuledPlayerActions::setRuledUndoableManaCount);
     }
 
     // auto load deck for player if that debug setting is enabled
@@ -1936,29 +2174,35 @@ void TabGame::addLocalPlayer(Player *newPlayer, int playerId)
     }
 }
 
-void TabGame::processPlayerLeave(Player *leavingPlayer)
+void TabGame::processPlayerLeave(PlayerLogic *leavingPlayer)
 {
-    QString playerName = "@" + leavingPlayer->getPlayerInfo()->getName();
-    removePlayerFromAutoCompleteList(playerName);
-
-    scene->removePlayer(leavingPlayer);
+    removePlayerFromAutoCompleteList("@" + leavingPlayer->getPlayerInfo()->getName());
 
     // When we inserted the playerMenu into the gameMenu earlier, Qt wrapped the playerMenu into a QAction*, which lives
     // independently and does not get cleaned up when the source menu gets destroyed. We have to manually clean here.
-    if (leavingPlayer->getPlayerMenu()) {
-        QMenu *menu = leavingPlayer->getPlayerMenu()->getPlayerMenu();
-        if (menu) {
-            // Find and remove the QAction pointing to this menu
-            QList<QAction *> actions = gameMenu->actions();
-            for (QAction *act : actions) {
-                if (act->menu() == menu) {
-                    gameMenu->removeAction(act);
-                    delete act; // deletes the QAction wrapper around the submenu
-                    break;
-                }
+    auto *view = scene->viewForPlayer(leavingPlayer->getPlayerInfo()->getId());
+    if (view) {
+        // Find and remove the QAction pointing to this menu
+        QMenu *menu = view->getPlayerMenu()->getPlayerMenu();
+        for (QAction *act : gameMenu->actions()) {
+            if (act->menu() == menu) {
+                gameMenu->removeAction(act);
+                delete act;
+                break;
             }
         }
     }
+
+    // A shuffled local player has their seat changed, so the deck view container
+    // keyed by their previous id must be cleaned up alongside the leaving player.
+    int leavingPlayerId = leavingPlayer->getPlayerInfo()->getId();
+    if (deckViewContainers.contains(leavingPlayerId)) {
+        TabbedDeckViewContainer *deckView = deckViewContainers.take(leavingPlayerId);
+        deckViewContainerLayout->removeWidget(deckView);
+        deckView->deleteLater();
+    }
+
+    scene->removePlayer(leavingPlayer);
 }
 
 void TabGame::processRemotePlayerDeckSelect(QString deckList, int playerId, QString playerName)
@@ -1983,13 +2227,13 @@ void TabGame::processMultipleRemotePlayerDeckSelect(QVector<QPair<int, QPair<QSt
     }
 }
 
-void TabGame::processLocalPlayerDeckSelect(Player *localPlayer, int playerId, ServerInfo_Player playerInfo)
+void TabGame::processLocalPlayerDeckSelect(PlayerLogic *localPlayer, int playerId, ServerInfo_Player playerInfo)
 {
     loadDeckForLocalPlayer(localPlayer, playerId, playerInfo);
     processLocalPlayerReady(playerId, playerInfo);
 }
 
-void TabGame::loadDeckForLocalPlayer(Player *localPlayer, int playerId, ServerInfo_Player playerInfo)
+void TabGame::loadDeckForLocalPlayer(PlayerLogic *localPlayer, int playerId, ServerInfo_Player playerInfo)
 {
     TabbedDeckViewContainer *deckViewContainer = deckViewContainers.value(playerId);
     if (playerInfo.has_deck_list()) {
@@ -2016,7 +2260,7 @@ void TabGame::processLocalPlayerReadyStateChanged(int playerId, bool ready)
     deckViewContainers.value(playerId)->playerDeckView->setReadyStart(ready);
 }
 
-void TabGame::createZoneForPlayer(Player *newPlayer, int playerId)
+void TabGame::createZoneForPlayer(PlayerLogic *newPlayer, int playerId)
 {
     if (!game->getPlayerManager()->getSpectators().contains(playerId)) {
 
@@ -2052,9 +2296,10 @@ void TabGame::startGame(bool _resuming)
     mainWidget->setCurrentWidget(gamePlayAreaWidget);
 
     if (!_resuming) {
-        QMapIterator<int, Player *> playerIterator(game->getPlayerManager()->getPlayers());
-        while (playerIterator.hasNext())
+        QMapIterator<int, PlayerLogic *> playerIterator(game->getPlayerManager()->getPlayers());
+        while (playerIterator.hasNext()) {
             playerIterator.next().value()->setGameStarted();
+        }
     }
 
     playerListWidget->setGameStarted(true, game->getGameState()->isResuming());
@@ -2066,6 +2311,7 @@ void TabGame::startGame(bool _resuming)
         aConcede->setText(tr("&Concede"));
         aConcede->setEnabled(true);
     }
+    updateTurnOrderAction();
 }
 
 void TabGame::stopGame()
@@ -2074,6 +2320,7 @@ void TabGame::stopGame()
     QMapIterator<int, TabbedDeckViewContainer *> i(deckViewContainers);
     while (i.hasNext()) {
         i.next();
+        i.value()->playerDeckView->advancePlaymatRotation();
         i.value()->show();
     }
 
@@ -2098,6 +2345,7 @@ void TabGame::stopGame()
         aConcede->setText(tr("&Concede"));
         aConcede->setEnabled(false);
     }
+    updateTurnOrderAction();
 }
 
 void TabGame::closeGame()
@@ -2106,10 +2354,10 @@ void TabGame::closeGame()
     gameMenu->addAction(aLeaveGame);
 }
 
-Player *TabGame::setActivePlayer(int id)
+PlayerLogic *TabGame::setActivePlayer(int id)
 {
-    Player *player = game->getPlayerManager()->getPlayer(id);
-    QMapIterator<int, Player *> i(game->getPlayerManager()->getPlayers());
+    PlayerLogic *player = game->getPlayerManager()->getPlayer(id);
+    QMapIterator<int, PlayerLogic *> i(game->getPlayerManager()->getPlayers());
     while (i.hasNext()) {
         i.next();
         i.value()->setActive(i.value() == player);
@@ -2124,9 +2372,9 @@ Player *TabGame::setActivePlayer(int id)
     return player;
 }
 
-Player *TabGame::setPriorityPlayer(int id)
+PlayerLogic *TabGame::setPriorityPlayer(int id)
 {
-    Player *priorityPlayer = game->getPlayerManager()->getPlayer(id);
+    PlayerLogic *priorityPlayer = game->getPlayerManager()->getPlayer(id);
     const int localPlayerId = game->getPlayerManager()->getLocalPlayerId();
     if (gamePromptWidget && RuledActions::isRuledGame(game)) {
         const bool localHasPriority = (id == localPlayerId);
@@ -2135,23 +2383,23 @@ Player *TabGame::setPriorityPlayer(int id)
             gamePromptWidget->setPriorityPlayerName(priorityPlayer->getPlayerInfo()->getName());
         }
         if (!localHasPriority) {
-            Player *localPlayer = game->getPlayerManager()->getPlayers().value(localPlayerId, nullptr);
-            if (localPlayer && localPlayer->getPlayerActions()) {
-                localPlayer->getPlayerActions()->clearLandTapUndoStack();
+            PlayerLogic *localPlayer = game->getPlayerManager()->getPlayers().value(localPlayerId, nullptr);
+            if (localPlayer && RuledActions::actions(localPlayer)) {
+                RuledActions::actions(localPlayer)->clearLandTapUndoStack();
             }
         }
     }
     playerListWidget->setActivePlayer(id);
-    QMapIterator<int, Player *> i(game->getPlayerManager()->getPlayers());
+    QMapIterator<int, PlayerLogic *> i(game->getPlayerManager()->getPlayers());
     while (i.hasNext()) {
         i.next();
         const bool isPriorityPlayer = (i.value() == priorityPlayer);
-        i.value()->getGraphicsItem()->setPriorityHighlighted(isPriorityPlayer);
+        RuledActions::graphics(i.value())->setPriorityHighlighted(isPriorityPlayer);
         if (game->getGameState()->getClients().size() > 1) {
             if (isPriorityPlayer) {
-                i.value()->getPlayerMenu()->setShortcutsActive();
+                RuledActions::graphics(i.value())->getPlayerMenu()->setShortcutsActive();
             } else {
-                i.value()->getPlayerMenu()->setShortcutsInactive();
+                RuledActions::graphics(i.value())->getPlayerMenu()->setShortcutsInactive();
             }
         }
     }
@@ -2169,7 +2417,7 @@ void TabGame::newCardAdded(AbstractCardItem *card)
         auto *cardItem = dynamic_cast<CardItem *>(hovered);
         if (cardItem && cardItem->getFaceDown() && RuledActions::isRuledGame(game)) {
             RuledClientState *state = game->getGameEventHandler()->ruled();
-            Player *const zonePlayer = cardItem->getZone() ? cardItem->getZone()->getPlayer() : nullptr;
+            PlayerLogic *const zonePlayer = cardItem->getZone() ? cardItem->getZone()->getPlayer() : nullptr;
             const int zonePlayerId = zonePlayer ? zonePlayer->getPlayerInfo()->getId() : -1;
             const QString privateName =
                 state ? state->privateFaceDownNameForCard(zonePlayerId, cardItem->getId()) : QString{};
@@ -2183,6 +2431,11 @@ void TabGame::newCardAdded(AbstractCardItem *card)
     connectRuledCardPopup(game, card, this, [this](const QPoint &pos, const CardRef &ref) {
         showCardInfoPopup(pos, ref);
     }, [this](const QString &name) { deleteCardInfoPopup(name); });
+    connect(card, &AbstractCardItem::rightClicked, scene, &GameScene::onCardRightClicked);
+    connect(card, &AbstractCardItem::playSelected, scene, &GameScene::playSelected);
+    connect(card, &AbstractCardItem::playSelectedFaceDown, scene, &GameScene::playSelectedFaceDown);
+    connect(card, &AbstractCardItem::hideSelected, scene, &GameScene::hideSelected);
+    connect(card, &AbstractCardItem::selectionChanged, scene, &GameScene::onCardSelectionChanged);
     connect(card, &AbstractCardItem::cardShiftClicked, this, &TabGame::linkCardToChat);
 }
 
@@ -2191,26 +2444,31 @@ QString TabGame::getTabText() const
     QString gameTypeInfo;
     if (!gameTypes.empty()) {
         gameTypeInfo = gameTypes.at(0);
-        if (gameTypes.size() > 1)
+        if (gameTypes.size() > 1) {
             gameTypeInfo.append("...");
+        }
     }
 
     QString gameDesc(game->getGameMetaInfo()->description());
     QString gameId(QString::number(game->getGameMetaInfo()->gameId()));
 
     QString tabText;
-    if (replayDock)
+    if (replayDock) {
         tabText.append(tr("Replay") + " ");
-    if (!gameTypeInfo.isEmpty())
-        tabText.append(gameTypeInfo + " ");
-    if (!gameDesc.isEmpty()) {
-        if (gameDesc.length() >= 15)
-            tabText.append("| " + gameDesc.left(15) + "... ");
-        else
-            tabText.append("| " + gameDesc + " ");
     }
-    if (!tabText.isEmpty())
+    if (!gameTypeInfo.isEmpty()) {
+        tabText.append(gameTypeInfo + " ");
+    }
+    if (!gameDesc.isEmpty()) {
+        if (gameDesc.length() >= 15) {
+            tabText.append("| " + gameDesc.left(15) + "... ");
+        } else {
+            tabText.append("| " + gameDesc + " ");
+        }
+    }
+    if (!tabText.isEmpty()) {
         tabText.append("| ");
+    }
     tabText.append("#" + gameId);
 
     return tabText;
@@ -2219,12 +2477,18 @@ QString TabGame::getTabText() const
 /**
  * @param menu The menu to set. Pass in nullptr to set the menu to empty.
  */
-void TabGame::setCardMenu(QMenu *menu)
+void TabGame::setCardMenu(CardMenu *menu)
 {
     if (!aCardMenu) {
         return;
     }
 
+    if (aCardMenu->menu() && aCardMenu->menu()->isVisible()) {
+        aCardMenu->menu()->hide();
+        if (gameView && gameView->viewport()) {
+            gameView->viewport()->update();
+        }
+    }
     if (menu) {
         aCardMenu->setMenu(menu);
     } else {
@@ -2244,10 +2508,11 @@ void TabGame::createMenuItems()
     connect(aNextTurn, &QAction::triggered, game->getGameEventHandler(), &GameEventHandler::handleNextTurn);
     aReverseTurn = new QAction(this);
     connect(aReverseTurn, &QAction::triggered, game->getGameEventHandler(), &GameEventHandler::handleReverseTurn);
+    aTurnOrder = new QAction(this);
+    connect(aTurnOrder, &QAction::triggered, this, &TabGame::actTurnOrder);
+    updateTurnOrderAction();
     aRemoveLocalArrows = new QAction(this);
     connect(aRemoveLocalArrows, &QAction::triggered, this, &TabGame::actRemoveLocalArrows);
-    connect(this, &TabGame::arrowDeletionRequested, game->getGameEventHandler(),
-            &GameEventHandler::handleArrowDeletion);
     aRotateViewCW = new QAction(this);
     connect(aRotateViewCW, &QAction::triggered, this, &TabGame::actRotateViewCW);
     aRotateViewCCW = new QAction(this);
@@ -2257,6 +2522,11 @@ void TabGame::createMenuItems()
     connect(aToggleStackWindow, &QAction::triggered, this, &TabGame::actToggleStackWindow);
     aGameInfo = new QAction(this);
     connect(aGameInfo, &QAction::triggered, this, &TabGame::actGameInfo);
+    aCopyGameLink = new QAction(this);
+    aCopyGameLink->setEnabled(!tabSupervisor->getIsLocalGame() && !tabSupervisor->getClient()->serverName().isEmpty());
+    connect(aCopyGameLink, &QAction::triggered, this, &TabGame::actCopyGameLink);
+    aInviteToGame = new QAction(this);
+    connect(aInviteToGame, &QAction::triggered, this, &TabGame::actInviteToGame);
     aConcede = new QAction(this);
     connect(aConcede, &QAction::triggered, this, &TabGame::actConcede);
     if (!game->getGameMetaInfo()->started()) {
@@ -2272,6 +2542,7 @@ void TabGame::createMenuItems()
     connect(aFocusChat, &QAction::triggered, sayEdit, qOverload<>(&LineEditCompleter::setFocus));
 
     phasesMenu = new TearOffMenu(this);
+    phasesMenu->setObjectName("phasesMenu");
 
     for (int i = 0; i < phasesToolbar->phaseCount(); ++i) {
         auto *temp = new QAction(QString(), this);
@@ -2282,19 +2553,26 @@ void TabGame::createMenuItems()
 
     phasesMenu->addSeparator();
     phasesMenu->addAction(aNextPhase);
+    aNextPhase->setObjectName("aNextPhase");
     phasesMenu->addAction(aNextPhaseAction);
+    aNextPhaseAction->setObjectName("aNextPhaseAction");
 
     gameMenu = new QMenu(this);
+    gameMenu->setObjectName("gameMenu");
     playersSeparator = gameMenu->addSeparator();
     gameMenu->addMenu(phasesMenu);
     gameMenu->addAction(aNextTurn);
+    aNextTurn->setObjectName("aNextTurn");
     gameMenu->addAction(aReverseTurn);
+    gameMenu->addAction(aTurnOrder);
     gameMenu->addSeparator();
     gameMenu->addAction(aRemoveLocalArrows);
     gameMenu->addAction(aRotateViewCW);
     gameMenu->addAction(aRotateViewCCW);
     gameMenu->addSeparator();
     gameMenu->addAction(aGameInfo);
+    gameMenu->addAction(aCopyGameLink);
+    gameMenu->addAction(aInviteToGame);
     gameMenu->addAction(aConcede);
     gameMenu->addAction(aFocusChat);
     gameMenu->addAction(aLeaveGame);
@@ -2302,6 +2580,9 @@ void TabGame::createMenuItems()
     gameMenu->addSeparator();
 
     aCardMenu = gameMenu->addMenu(new QMenu(this));
+
+    // Sync the new action with the same state the dock button already shows.
+    updateInviteButtonState();
 
     addTabMenu(gameMenu);
 }
@@ -2312,14 +2593,22 @@ void TabGame::createReplayMenuItems()
     aNextPhaseAction = nullptr;
     aNextTurn = nullptr;
     aReverseTurn = nullptr;
+    aTurnOrder = nullptr;
     aRemoveLocalArrows = nullptr;
     aRotateViewCW = nullptr;
     aRotateViewCCW = nullptr;
     aResetLayout = nullptr;
     aGameInfo = nullptr;
+    aCopyGameLink = nullptr;
+    aInviteToGame = nullptr;
     aConcede = nullptr;
     aFocusChat = nullptr;
     aToggleStackWindow = nullptr;
+    if (RuledActions::isRuledGame(game)) {
+        aToggleStackWindow = new QAction(this);
+        aToggleStackWindow->setCheckable(true);
+        connect(aToggleStackWindow, &QAction::triggered, this, &TabGame::actToggleStackWindow);
+    }
     aLeaveGame = new QAction(this);
     connect(aLeaveGame, &QAction::triggered, this, &TabGame::closeRequest);
 
@@ -2339,6 +2628,10 @@ void TabGame::createViewMenuItems()
     registerDockWidget(viewMenu, cardInfoDock, {250, 360});
     registerDockWidget(viewMenu, messageLayoutDock, {250, 200});
     registerDockWidget(viewMenu, playerListDock, {250, 50});
+
+    if (historyDock) {
+        registerDockWidget(viewMenu, historyDock, {280, 400});
+    }
 
     if (replayDock) {
         registerDockWidget(viewMenu, replayDock, {900, 100});
@@ -2416,6 +2709,12 @@ void TabGame::actResetLayout()
     addDockWidget(Qt::RightDockWidgetArea, playerListDock);
     addDockWidget(Qt::RightDockWidgetArea, messageLayoutDock);
 
+    if (historyDock) {
+        historyDock->setVisible(true);
+        historyDock->setFloating(false);
+        addDockWidget(Qt::LeftDockWidgetArea, historyDock);
+    }
+
     if (replayDock) {
         replayDock->setVisible(true);
         replayDock->setFloating(false);
@@ -2424,6 +2723,9 @@ void TabGame::actResetLayout()
         cardInfoDock->resize(250, 360);
         messageLayoutDock->resize(250, 200);
         playerListDock->resize(250, 50);
+        if (historyDock) {
+            historyDock->resize(280, 400);
+        }
         replayDock->resize(900, 100);
     } else {
         cardInfoDock->resize(250, 360);
@@ -2439,18 +2741,27 @@ void TabGame::createPlayAreaWidget(bool bReplay)
         RuledResumeClient::restoreToolbar(phasesToolbar, game->getPlayerManager()->getLocalPlayerId());
     }
     if (!bReplay) {
-        connect(phasesToolbar, &PhasesToolbar::sendGameCommand, game->getGameEventHandler(),
-                qOverload<const ::google::protobuf::Message &, int>(&GameEventHandler::sendGameCommand));
+        connect(phasesToolbar, &PhasesToolbar::setActivePhaseRequested, game->getGameEventHandler(),
+                &GameEventHandler::handleActivePhaseChanged);
+        connect(phasesToolbar, &PhasesToolbar::nextTurnRequested, game->getGameEventHandler(),
+                &GameEventHandler::handleNextTurn);
+        connect(phasesToolbar, &PhasesToolbar::untapAllRequested, game->getGameEventHandler(),
+                &GameEventHandler::handleUntapAll);
+        connect(phasesToolbar, &PhasesToolbar::drawCardRequested, game->getGameEventHandler(),
+                &GameEventHandler::handleDrawCard);
         connect(phasesToolbar, &PhasesToolbar::phaseStopsChanged, this, &TabGame::publishRuledAutoPassPolicy);
         QTimer::singleShot(0, this, &TabGame::publishRuledAutoPassPolicy);
     }
     scene = new GameScene(phasesToolbar, this);
     connect(game->getPlayerManager(), &PlayerManager::playerConceded, scene, &GameScene::rearrange);
     connect(game->getPlayerManager(), &PlayerManager::playerCountChanged, scene, &GameScene::rearrange);
+    connect(game->getGameState(), &GameState::seatOrderChanged, scene, &GameScene::rearrange);
+    connect(scene, &GameScene::arrowDeletionRequested, game->getGameEventHandler(),
+            &GameEventHandler::handleArrowDeletion);
+    connect(game->getGameEventHandler(), &GameEventHandler::arrowDeleted, scene, &GameScene::deleteArrow);
     gameView = new GameView(scene);
 
-    auto gamePlayAreaVBox = new QVBoxLayout;
-    gamePlayAreaVBox->setContentsMargins(0, 0, 0, 0);
+    auto gamePlayAreaVBox = QtUtils::makeLayout<QVBoxLayout>();
     gamePlayAreaVBox->addWidget(gameView);
 
     gamePlayAreaWidget = new QWidget;
@@ -2471,14 +2782,36 @@ void TabGame::publishRuledAutoPassPolicy()
 
 void TabGame::createReplayDock(GameReplay *replay)
 {
-    replayManager = new ReplayManager(this, replay);
+    replayWidget = new ReplayWidget(this, replay);
 
     replayDock = new QDockWidget(this);
     replayDock->setObjectName("replayDock");
     replayDock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable |
                             QDockWidget::DockWidgetMovable);
-    replayDock->setWidget(replayManager);
+    replayDock->setWidget(replayWidget);
     replayDock->setFloating(false);
+
+    connect(replayWidget, &ReplayWidget::rewound, this, &TabGame::resetForRewind);
+    connect(replayWidget, &ReplayWidget::eventReplayed, game->getGameEventHandler(),
+            [this](const auto &event, auto options) {
+                game->getGameEventHandler()->processGameEventContainer(event, nullptr, options);
+            });
+
+    auto *historySidebar = new ReplayEventSidebar(nullptr, replay, replayWidget->getReplayTimeline());
+    historyDock = new QDockWidget(this);
+    historyDock->setObjectName("historyDock");
+    historyDock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable |
+                             QDockWidget::DockWidgetMovable);
+    historyDock->setWidget(historySidebar);
+    historyDock->setFloating(false);
+
+    connect(historySidebar, &ReplayEventSidebar::eventSelected, replayWidget, &ReplayWidget::seekToEvent);
+    // The sidebar highlights events rather than times, so ask the manager which event the game state has reached.
+    connect(replayWidget, &ReplayWidget::timeChanged, historySidebar,
+            [this, historySidebar] { historySidebar->setCurrentEvent(replayWidget->getLastProcessedEventIndex()); });
+
+    // No event has been replayed yet when the sidebar is connected, so apply the initial state explicitly.
+    historySidebar->setCurrentEvent(replayWidget->getLastProcessedEventIndex());
 }
 
 void TabGame::createDeckViewContainerWidget(bool bReplay)
@@ -2487,8 +2820,7 @@ void TabGame::createDeckViewContainerWidget(bool bReplay)
 
     deckViewContainerWidget = new QWidget();
     deckViewContainerWidget->setObjectName("deckViewContainerWidget");
-    deckViewContainerLayout = new QVBoxLayout;
-    deckViewContainerLayout->setContentsMargins(0, 0, 0, 0);
+    deckViewContainerLayout = QtUtils::makeLayout<QVBoxLayout>();
     deckViewContainerWidget->setLayout(deckViewContainerLayout);
 }
 
@@ -2503,8 +2835,7 @@ void TabGame::createCardInfoDock(bool bReplay)
 
     cardInfoFrameWidget = new CardInfoFrameWidget();
     auto cardHInfoLayout = new QHBoxLayout;
-    auto cardVInfoLayout = new QVBoxLayout;
-    cardVInfoLayout->setContentsMargins(0, 0, 0, 0);
+    auto cardVInfoLayout = QtUtils::makeLayout<QVBoxLayout>();
     cardVInfoLayout->addWidget(cardInfoFrameWidget);
     cardVInfoLayout->addLayout(cardHInfoLayout);
 
@@ -2530,18 +2861,33 @@ void TabGame::createPlayerListDock(bool bReplay)
     }
     playerListWidget->setFocusPolicy(Qt::NoFocus);
 
+    auto *playerListBox = new QWidget(this);
+    auto *vbox = QtUtils::makeLayout<QVBoxLayout>(playerListBox, 0);
+
+    vbox->addWidget(playerListWidget);
+
+    if (!bReplay) {
+        inviteButton = new QPushButton(tr("Invite"), playerListBox);
+        inviteButton->setVisible(false);
+        connect(inviteButton, &QPushButton::clicked, this, &TabGame::actInviteToGame);
+        vbox->addWidget(inviteButton);
+
+        connect(game->getGameMetaInfo(), &GameMetaInfo::startedChanged, this, &TabGame::updateInviteButtonState);
+        connect(game->getPlayerManager(), &PlayerManager::playerCountChanged, this, &TabGame::updateInviteButtonState);
+        updateInviteButtonState();
+    }
+
     playerListDock = new QDockWidget(this);
     playerListDock->setObjectName("playerListDock");
     playerListDock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable |
                                 QDockWidget::DockWidgetMovable);
-    playerListDock->setWidget(playerListWidget);
+    playerListDock->setWidget(playerListBox);
     playerListDock->setFloating(false);
 }
 
 void TabGame::createMessageDock(bool bReplay)
 {
-    auto messageLogLayout = new QVBoxLayout;
-    messageLogLayout->setContentsMargins(0, 0, 0, 0);
+    auto messageLogLayout = QtUtils::makeLayout<QVBoxLayout>();
 
     // clock
     if (!bReplay) {
@@ -2562,10 +2908,10 @@ void TabGame::createMessageDock(bool bReplay)
             const int activeId = game->getGameState()->getActivePlayer();
             gamePromptWidget->setLocalPlayerHasPriority(priorityId == localId);
             gamePromptWidget->setLocalPlayerIsActive(activeId == localId);
-            if (Player *ap = game->getPlayerManager()->getPlayer(activeId)) {
+            if (PlayerLogic *ap = game->getPlayerManager()->getPlayer(activeId)) {
                 gamePromptWidget->setActivePlayerName(ap->getPlayerInfo()->getName());
             }
-            if (Player *pp = game->getPlayerManager()->getPlayer(priorityId)) {
+            if (PlayerLogic *pp = game->getPlayerManager()->getPlayer(priorityId)) {
                 gamePromptWidget->setPriorityPlayerName(pp->getPlayerInfo()->getName());
             }
         }
@@ -2621,11 +2967,12 @@ void TabGame::createMessageDock(bool bReplay)
             qOverload<const QString &>(&CardInfoFrameWidget::setCard));
     connect(messageLog, &MessageLogWidget::showCardInfoPopup, this, &TabGame::showCardInfoPopup);
     connect(messageLog, &MessageLogWidget::deleteCardInfoPopup, this, &TabGame::deleteCardInfoPopup);
+    connect(messageLog, &MessageLogWidget::cockatriceLinkActivated, this, &TabGame::cockatriceLinkActivated);
 
     if (!bReplay) {
         connect(messageLog, &MessageLogWidget::openMessageDialog, this, &TabGame::openMessageDialog);
         connect(messageLog, &MessageLogWidget::addMentionTag, this, &TabGame::addMentionTag);
-        connect(&SettingsCache::instance(), &SettingsCache::chatMentionCompleterChanged, this,
+        connect(&SettingsCache::instance().chat(), &ChatSettings::chatMentionCompleterChanged, this,
                 &TabGame::actCompleterChanged);
     }
 
@@ -2638,12 +2985,25 @@ void TabGame::createMessageDock(bool bReplay)
         sayEdit->setMaxLength(MAX_TEXT_LENGTH);
         sayLabel->setBuddy(sayEdit);
         connect(this, &TabGame::chatMessageSent, game->getGameEventHandler(), &GameEventHandler::handleChatMessageSent);
-        completer = new QCompleter(autocompleteUserList, sayEdit);
-        completer->setCaseSensitivity(Qt::CaseInsensitive);
-        completer->setMaxVisibleItems(5);
-        completer->setFilterMode(Qt::MatchStartsWith);
+        mentionModel = new QStringListModel(autocompleteUserList, sayEdit);
+        mentionCompleter = createMentionCompleter(mentionModel, sayEdit);
+        sayEdit->addCompleter(mentionCompleter, CompleterTrigger::Mention);
 
-        sayEdit->setCompleter(completer);
+        auto *cardDatabaseModel = new CardDatabaseModel(CardDatabaseManager::getInstance(), false, sayEdit);
+        auto *displayModel = new CardDatabaseDisplayModel(sayEdit);
+        displayModel->setSourceModel(cardDatabaseModel);
+        const CardCompleterSetup cardSetup = createCardCompleter(displayModel, sayEdit);
+        sayEdit->addCompleter(cardSetup.completer, CompleterTrigger::Card);
+
+        connect(sayEdit, &LineEditCompleter::cardPartialChanged, this, [this, cardSetup](const QString &text) {
+            cardSetup.searchModel->updateSearchResults(text);
+            cardSetup.proxyModel->setFilterRegularExpression(
+                QRegularExpression(QRegularExpression::escape(text), QRegularExpression::CaseInsensitiveOption));
+            if (sayEdit->hasFocus()) {
+                cardSetup.completer->complete();
+            }
+        });
+
         actCompleterChanged();
 
         if (game->getPlayerManager()->isSpectator()) {
@@ -2705,7 +3065,7 @@ void TabGame::onRuledLibrarySearchPickStarted(QStringList candidateNames, QVecto
         return;
     }
     const int localId = game->getPlayerManager()->getLocalPlayerId();
-    Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+    PlayerLogic *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
     if (!localPlayer) {
         return;
     }
@@ -2778,7 +3138,7 @@ void TabGame::onRuledTriggerOrderUiChanged(bool active, QVector<RuledTriggerOrde
         return;
     }
     const int localId = game->getPlayerManager()->getLocalPlayerId();
-    Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+    PlayerLogic *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
     if (!localPlayer) {
         refreshRuledPromptState();
         return;
@@ -2855,7 +3215,7 @@ void TabGame::onRuledRevealedPickChanged(bool started,
         return;
     }
     const int localId = game->getPlayerManager()->getLocalPlayerId();
-    Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+    PlayerLogic *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
     if (!localPlayer) {
         return;
     }
@@ -2928,14 +3288,14 @@ void TabGame::onRuledExilePlayPermissionGroupsChanged()
         }
         QList<const ServerInfo_Card *> cardList;
         QList<ServerInfo_Card *> newCards;
-        Player *scaffoldPlayer = nullptr;
+        PlayerLogic *scaffoldPlayer = nullptr;
         CardZoneLogic *exileZone = nullptr;
         for (const quint32 objectId : group.objectIds) {
             const int ownerId = state->exileOidToPlayerId.value(objectId, -1);
             const int serverCardId = state->exileOidToServerCardId.value(objectId, -1);
-            Player *owner = game->getPlayerManager()->getPlayers().value(ownerId, nullptr);
+            PlayerLogic *owner = game->getPlayerManager()->getPlayers().value(ownerId, nullptr);
             CardItem *physical = ownerId >= 0 && serverCardId >= 0
-                                     ? game->getCard(ownerId, QString::fromLatin1(ZoneNames::EXILE), serverCardId)
+                                     ? RuledActions::card(game, ownerId, QString::fromLatin1(ZoneNames::EXILE), serverCardId)
                                      : nullptr;
             if (!owner || !physical) {
                 continue;
@@ -3016,11 +3376,11 @@ void TabGame::refreshRuledLibraryTopUi()
                 return;
             }
             const int localId = game->getPlayerManager()->getLocalPlayerId();
-            Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
-            if (!localPlayer || !localPlayer->getPlayerActions()) {
+            PlayerLogic *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+            if (!localPlayer || !RuledActions::actions(localPlayer)) {
                 return;
             }
-            localPlayer->getPlayerActions()->tryRuledLibraryTopCast(top, offer);
+            RuledActions::actions(localPlayer)->tryRuledLibraryTopCast(top, offer);
         });
     }
     for (const RuledFaceOption &offer : state->zoneLandFaceOptions(top.objectId, RuledCastSource::Library)) {
@@ -3030,10 +3390,10 @@ void TabGame::refreshRuledLibraryTopUi()
             if (!game || RuledActions::gameplayInputLocked(game)) {
                 return;
             }
-            if (Player *localPlayer = game->getPlayerManager()->getPlayers().value(
+            if (PlayerLogic *localPlayer = game->getPlayerManager()->getPlayers().value(
                     game->getPlayerManager()->getLocalPlayerId(), nullptr)) {
-                if (localPlayer->getPlayerActions()) {
-                    localPlayer->getPlayerActions()->tryRuledLibraryTopLand(top, offer);
+                if (RuledActions::actions(localPlayer)) {
+                    RuledActions::actions(localPlayer)->tryRuledLibraryTopLand(top, offer);
                 }
             }
         });

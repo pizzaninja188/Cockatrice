@@ -1,8 +1,8 @@
 /**
  * @file dlg_edit user.h
  * @ingroup NetworkDialogs
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef DLG_EDITUSER_H
 #define DLG_EDITUSER_H
@@ -10,10 +10,11 @@
 #include <QComboBox>
 #include <QDialog>
 #include <QLineEdit>
+#include <QString>
+#include <qtmetamacros.h>
 
 class QLabel;
-class QPushButton;
-class QCheckBox;
+class QWidget;
 
 class DlgEditUser : public QDialog
 {

@@ -1,19 +1,19 @@
 /**
  * @file dlg_forgot_password_reset.h
  * @ingroup AccountDialogs
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef DLG_FORGOTPASSWORDRESET_H
 #define DLG_FORGOTPASSWORDRESET_H
 
-#include <QComboBox>
 #include <QDialog>
 #include <QLineEdit>
+#include <QString>
+#include <qtmetamacros.h>
 
 class QLabel;
-class QPushButton;
-class QCheckBox;
+class QWidget;
 
 class DlgForgotPasswordReset : public QDialog
 {

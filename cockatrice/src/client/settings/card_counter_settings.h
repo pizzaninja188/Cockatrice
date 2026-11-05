@@ -1,16 +1,18 @@
 /**
  * @file card_counter_settings.h
  * @ingroup GameSettings
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef CARD_COUNTER_SETTINGS_H
 #define CARD_COUNTER_SETTINGS_H
 
+#include <QString>
 #include <libcockatrice/settings/settings_manager.h>
+#include <qtmetamacros.h>
 
-class QSettings;
 class QColor;
+class QObject;
 
 class CardCounterSettings : public SettingsManager
 {

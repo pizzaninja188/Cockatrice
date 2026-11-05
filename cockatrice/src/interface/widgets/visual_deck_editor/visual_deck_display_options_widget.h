@@ -3,12 +3,19 @@
 
 #include "visual_deck_editor_widget.h"
 
-#include <QComboBox>
-#include <QHBoxLayout>
-#include <QLabel>
-#include <QListWidget>
-#include <QPushButton>
+#include <QList>
+#include <QString>
+#include <QStringList>
 #include <QWidget>
+#include <qtmetamacros.h>
+
+class CompactPushButton;
+class QComboBox;
+class QEvent;
+class QHBoxLayout;
+class QLabel;
+class QListWidget;
+class SettingsButtonWidget;
 
 /**
  * @class VisualDeckDisplayOptionsWidget
@@ -51,8 +58,12 @@ public slots:
      * @brief Updates all UI text for retranslation/localization.
      *
      * Called when the application language changes.
+     * Also refreshes the layout toggle button text for the current display type.
      */
     void retranslateUi();
+    void updateCompactMode(bool mode);
+    int expandedWidth() const;
+    int compactWidth() const;
 
 public:
     /**
@@ -85,6 +96,10 @@ public:
         return activeSortCriteria;
     }
 
+protected:
+    /** @brief Retranslates on QEvent::LanguageChange. */
+    void changeEvent(QEvent *event) override;
+
 private slots:
     /**
      * @brief Slot triggered whenever the sort list is reordered.
@@ -101,37 +116,39 @@ private slots:
     void updateDisplayType();
 
 private:
-    /// Layout for grouping and sorting UI elements.
+    /** @brief Updates the layout toggle button's text and icon for the current display type. */
+    void updateDisplayTypeButton();
+    /** @brief Layout for grouping and sorting UI elements. */
     QHBoxLayout *groupAndSortLayout;
 
-    /// Current deck display type.
+    /** @brief Current deck display type. */
     DisplayType currentDisplayType = DisplayType::Overlap;
 
-    /// Button used to toggle the display layout.
-    QPushButton *displayTypeButton;
+    /** @brief Button used to toggle the display layout. */
+    CompactPushButton *displayTypeButton;
 
-    /// Label for the group-by selector.
+    /** @brief Label for the group-by selector. */
     QLabel *groupByLabel;
 
-    /// Combo box listing group-by criteria.
+    /** @brief Combo box listing group-by criteria. */
     QComboBox *groupByComboBox;
 
-    /// Currently active group-by criterion.
+    /** @brief Currently active group-by criterion. */
     QString activeGroupCriteria = "maintype";
 
-    /// Encapsulates the sort settings widgets (label + list).
+    /** @brief Encapsulates the sort settings widgets (label + list). */
     SettingsButtonWidget *sortCriteriaButton;
 
-    /// Label for “Sort by”.
+    /** @brief Label for "Sort by". */
     QLabel *sortByLabel;
 
-    /// Descriptive label inside the sort criteria button.
+    /** @brief Descriptive label inside the sort criteria button. */
     QLabel *sortLabel;
 
-    /// Draggable list of sort criteria.
+    /** @brief Draggable list of sort criteria. */
     QListWidget *sortByListWidget;
 
-    /// Ordered list of current sort criteria.
+    /** @brief Ordered list of current sort criteria. */
     QStringList activeSortCriteria = {"name", "cmc", "colors", "maintype"};
 };
 

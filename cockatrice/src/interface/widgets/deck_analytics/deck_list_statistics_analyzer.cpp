@@ -1,11 +1,19 @@
 #include "deck_list_statistics_analyzer.h"
 
 #include "deck_list_model.h"
-#include "deck_list_statistics_analyzer.h"
+#include "libcockatrice/card/card_info.h"
+#include "libcockatrice/card/database/card_database_querier.h"
+#include "libcockatrice/deck_list/tree/deck_list_card_node.h"
+#include "libcockatrice/deck_list/tree/inner_deck_list_node.h"
 
+#include <QChar>
 #include <QRegularExpression>
+#include <QRegularExpressionMatch>
+#include <QSharedPointer>
+#include <QStringLiteral>
+#include <initializer_list>
 #include <libcockatrice/card/database/card_database_manager.h>
-#include <libcockatrice/deck_list/deck_list.h>
+#include <utility>
 
 DeckListStatisticsAnalyzer::DeckListStatisticsAnalyzer(QObject *parent,
                                                        DeckListModel *_model,
@@ -191,10 +199,12 @@ double DeckListStatisticsAnalyzer::hypergeometric(int N, int K, int n, int k)
     }
 
     auto choose = [](int n, int r) -> double {
-        if (r > n)
+        if (r > n) {
             return 0.0;
-        if (r == 0 || r == n)
+        }
+        if (r == 0 || r == n) {
             return 1.0;
+        }
         double res = 1.0;
         for (int i = 1; i <= r; ++i) {
             res *= (n - r + i);

@@ -64,6 +64,15 @@ checkout. This establishes the dependency boundary, not an end-to-end authoring 
 Primitive/engine edits still require recompiling engine code, and actual-card test executables
 still depend on the embedded corpus.
 
+### Fork wire compatibility
+
+The upstream integration uses the shared `kRuledProtocolVersion` (10014) on both client and
+server. Deploy matching updated fork clients and Servatrice together; protocol 14 peers are
+rejected before login. `Command_CreateGame.ruled_game` keeps field 15 and upstream
+`shuffle_players` uses field 16. The create-game UI and relay disable player shuffling for ruled
+games so the engine and physical seat bindings retain the same player identities.
+The inner `ruled_v1.proto` sidecar contract is unchanged by this upstream merge.
+
 ### Where things live
 
 | Area | Path |
@@ -86,7 +95,7 @@ the engine entry point differ.
 `if (RuledActions::tryHandle…(this)) return;`. `RuledActions::resolveHandActionIndex(state,
 HAND_ACTION_CAST_SPELL, card)` maps the clicked `CardItem` to an **engine hand slot** using the
 `RuledHandActionSet` the last batch delivered. `handActionNeedsTarget(kind, slot)` says Bolt
-needs a target, so `PlayerActions` delegates entry to `RuledPaymentUi`, with `RuledPendingCast`
+needs a target, so `RuledPlayerActions` delegates entry to `RuledPaymentUi`, with `RuledPendingCast`
 owning the transaction. `RuledTargetUi` handles target clicks and checks
 `currentRuledSpellTargetGroup` against the latest client state — the legal target set
 is engine-supplied (`LegalActions.valid_targets_by_hand_slot`), never re-derived from Oracle text.
@@ -95,7 +104,7 @@ is engine-supplied (`LegalActions.valid_targets_by_hand_slot`), never re-derived
 mana ability), relayed and broadcast the same way; the mana pool the client shows is the engine's
 `ManaPoolUpdated` snapshot, not a local tally. On confirm, `RuledPaymentUi` builds
 `ruled::v1::RuledCommand{ cast_spell: { hand_card_index, targets, x_value, flex_payments,
-face_index } }`, and `GameEventHandler::sendRuledCommand` wraps the serialized bytes in
+face_index } }`, and `RuledGameController::sendRuledCommand` wraps the serialized bytes in
 `Command_RuledPayload` (a `GameCommand` extension).
 
 **3 — Admit (Servatrice, upstream hook).**
@@ -516,8 +525,10 @@ Conventions that make this greppable:
 
 Representative residual hooks, so you know what "small" looks like: `Server_Game` keeps the flag +
 `unique_ptr` + friend + accessor + two delegators; `Server_AbstractPlayer` keeps one
-`friend struct RuledPlayerBinding`; `GameEventHandler` keeps `ruled()`, the dispatcher pointer, and
-the one-line `RULED_PAYLOAD` case, and implements `RuledClientHost`.
+`friend struct RuledPlayerBinding`; `GameEventHandler` keeps a `RuledGameHooks` pointer and short delegators. The tab-owned
+`RuledGameController` implements those hooks and `RuledClientHost`, owns the dispatcher and
+view state, and bridges upstream model objects to graphics through `ruled_client_ui`.
+`RuledPlayerActions` extends the single upstream `PlayerActions` instance.
 
 ---
 

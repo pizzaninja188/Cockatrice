@@ -2,19 +2,24 @@
  * @file dlg_load_deck_from_clipboard.h
  * @ingroup LocalDeckStorageDialogs
  * @ingroup Lobby
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef DLG_LOAD_DECK_FROM_CLIPBOARD_H
 #define DLG_LOAD_DECK_FROM_CLIPBOARD_H
 
-#include "../../deck_loader/loaded_deck.h"
+#include "libcockatrice/deck_list/deck_list.h"
 
 #include <QCheckBox>
 #include <QDialog>
+#include <QString>
+#include <libcockatrice/deck_list/loaded_deck.h>
+#include <qtmetamacros.h>
 
 class QPlainTextEdit;
 class QPushButton;
+class QCheckBox;
+class QWidget;
 
 /**
  * Base class for dialog windows for actions that involve loading decks from text input.

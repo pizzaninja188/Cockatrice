@@ -1,6 +1,15 @@
 #include "edhrec_commander_api_response_navigation_widget.h"
 
+#include "../../interface/theme_manager.h"
 #include "../../tab_edhrec_main.h"
+#include "edhrec_commander_api_response_bracket_navigation_widget.h"
+#include "edhrec_commander_api_response_budget_navigation_widget.h"
+
+#include <QFont>
+#include <QGridLayout>
+#include <QObject>
+#include <QPushButton>
+#include <libcockatrice/utility/qt_utils.h>
 
 EdhrecCommanderApiResponseNavigationWidget::EdhrecCommanderApiResponseNavigationWidget(
     QWidget *parent,
@@ -23,10 +32,14 @@ EdhrecCommanderApiResponseNavigationWidget::EdhrecCommanderApiResponseNavigation
 
     comboPushButton = new QPushButton(this);
     comboPushButton->setMinimumHeight(84);
-    comboPushButton->setStyleSheet("font-size: 24px");
+    comboPushButton->setStyleSheet(QString());
     averageDeckPushButton = new QPushButton(this);
     averageDeckPushButton->setMinimumHeight(84);
-    averageDeckPushButton->setStyleSheet("font-size: 24px");
+    averageDeckPushButton->setStyleSheet(QString());
+
+    applyInterfaceDefaultFont();
+    connect(themeManager, &ThemeManager::fontsChanged, this,
+            &EdhrecCommanderApiResponseNavigationWidget::applyInterfaceDefaultFont);
 
     layout->addWidget(comboPushButton, 0, 0, 1, 1);
     layout->addWidget(averageDeckPushButton, 0, 1, 1, 1);
@@ -34,15 +47,7 @@ EdhrecCommanderApiResponseNavigationWidget::EdhrecCommanderApiResponseNavigation
     layout->addWidget(bracketNavigationWidget, 1, 0, 1, 2);
     layout->addWidget(budgetNavigationWidget, 2, 0, 1, 2);
 
-    QWidget *currentParent = parentWidget();
-    TabEdhRecMain *parentTab = nullptr;
-
-    while (currentParent) {
-        if ((parentTab = qobject_cast<TabEdhRecMain *>(currentParent))) {
-            break;
-        }
-        currentParent = currentParent->parentWidget();
-    }
+    auto *parentTab = QtUtils::findParentOfType<TabEdhRecMain>(this);
 
     if (parentTab) {
         connect(comboPushButton, &QPushButton::clicked, this,
@@ -60,6 +65,15 @@ void EdhrecCommanderApiResponseNavigationWidget::retranslateUi()
 {
     comboPushButton->setText(tr("Combos"));
     averageDeckPushButton->setText(tr("Average Deck"));
+}
+
+void EdhrecCommanderApiResponseNavigationWidget::applyInterfaceDefaultFont()
+{
+    // Family comes from the InterfaceDefault theme role; the 24px size stays caller-side.
+    QFont navFont = themeManager->appFont(AppFont::InterfaceDefault);
+    navFont.setPixelSize(24);
+    comboPushButton->setFont(navFont);
+    averageDeckPushButton->setFont(navFont);
 }
 
 QString EdhrecCommanderApiResponseNavigationWidget::addNavigationOptionsToUrl(QString baseUrl)

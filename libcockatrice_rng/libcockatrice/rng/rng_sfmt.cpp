@@ -1,9 +1,13 @@
 #include "rng_sfmt.h"
 
-#include <QDateTime>
-#include <algorithm>
-#include <climits>
+#include "libcockatrice/rng/rng_abstract.h"
+#include "libcockatrice/rng/sfmt/SFMT.h"
+
+#include <QString>
 #include <stdexcept>
+#include <string>
+
+class QObject;
 
 // This is from gcc sources, namely from fixincludes/inclhack.def
 // On C++11 systems, <cstdint> could be included instead.
@@ -11,10 +15,11 @@
 #define UINT64_MAX (~(uint64_t)0)
 #endif
 
-RNG_SFMT::RNG_SFMT(QObject *parent) : RNG_Abstract(parent)
+RNG_SFMT::RNG_SFMT(uint64_t seed, QObject *parent) : RNG_Abstract(parent)
 {
-    // initialize the random number generator with a 32bit integer seed (timestamp)
-    sfmt_init_gen_rand(&sfmt, QDateTime::currentDateTime().toSecsSinceEpoch());
+    // initialize the random number generator with a 64bit seed, e.g. from a CSPRNG
+    uint32_t seedArray[2] = {static_cast<uint32_t>(seed), static_cast<uint32_t>(seed >> 32)};
+    sfmt_init_by_array(&sfmt, seedArray, 2);
 }
 
 /**
@@ -40,8 +45,9 @@ unsigned int RNG_SFMT::rand(int min, int max)
     }
 
     // For complete fairness and equal timing, this should be a roll, but let's skip it anyway
-    if (min == max)
+    if (min == max) {
         return max;
+    }
 
     // This is actually not used in Cockatrice:
     // Someone wants rand() % -foo, so we should compute -rand(0, +foo)

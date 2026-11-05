@@ -2,10 +2,21 @@
 
 #include "libcockatrice/utility/color.h"
 
+#include <QBrush>
 #include <QLinearGradient>
+#include <QMap>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPen>
+#include <QPoint>
+#include <QPointF>
+#include <QRect>
+#include <QRectF>
+#include <QSize>
 #include <QToolTip>
+#include <QtGlobal>
+#include <qnamespace.h>
+#include <utility>
 
 ColorBar::ColorBar(const QMap<QString, int> &_colors, QWidget *parent)
     : QWidget(parent), colors(GameSpecificColors::MTG::sortManaMapWUBRGCFirst(_colors))
@@ -26,16 +37,19 @@ QSize ColorBar::minimumSizeHint() const
 
 void ColorBar::paintEvent(QPaintEvent *)
 {
-    if (colors.isEmpty())
+    if (colors.isEmpty()) {
         return;
+    }
 
     int total = 0;
-    for (const auto &pair : colors)
+    for (const auto &pair : colors) {
         total += pair.second;
+    }
 
     // Prevent divide-by-zero
-    if (total == 0)
+    if (total == 0) {
         return;
+    }
 
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
@@ -63,8 +77,9 @@ void ColorBar::paintEvent(QPaintEvent *)
         int segmentWidth = int(ratio * w);
 
         // Ensure the segment width is at least 1 to avoid degenerate rectangles
-        if (segmentWidth < 1)
+        if (segmentWidth < 1) {
             segmentWidth = 1;
+        }
 
         QColor base = colorFromName(key);
 
@@ -79,19 +94,11 @@ void ColorBar::paintEvent(QPaintEvent *)
     }
 }
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 void ColorBar::enterEvent(QEnterEvent *event)
 {
     Q_UNUSED(event);
     isHovered = true;
 }
-#else
-void ColorBar::enterEvent(QEvent *event)
-{
-    Q_UNUSED(event);
-    isHovered = true;
-}
-#endif
 
 void ColorBar::leaveEvent(QEvent *)
 {
@@ -100,30 +107,29 @@ void ColorBar::leaveEvent(QEvent *)
 
 void ColorBar::mouseMoveEvent(QMouseEvent *event)
 {
-    if (!isHovered || colors.isEmpty())
+    if (!isHovered || colors.isEmpty()) {
         return;
+    }
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     int x = int(event->position().x());
     QPoint gp = event->globalPosition().toPoint();
-#else
-    int x = event->pos().x();
-    QPoint gp = event->globalPos();
-#endif
 
     QString text = tooltipForPosition(x);
-    if (!text.isEmpty())
+    if (!text.isEmpty()) {
         QToolTip::showText(gp, text, this);
+    }
 }
 
 QString ColorBar::tooltipForPosition(int x) const
 {
     int total = 0;
-    for (const auto &pair : colors)
+    for (const auto &pair : colors) {
         total += pair.second;
+    }
 
-    if (total == 0)
+    if (total == 0) {
         return {};
+    }
 
     int pos = 0;
 
@@ -149,12 +155,14 @@ QColor ColorBar::colorFromName(const QString &name) const
         {"W", QColor(235, 235, 230)}, {"B", QColor(30, 30, 30)},
     };
 
-    if (map.contains(name))
+    if (map.contains(name)) {
         return map[name];
+    }
 
     QColor c(name);
-    if (!c.isValid())
+    if (!c.isValid()) {
         c = Qt::gray;
+    }
 
     return c;
 }

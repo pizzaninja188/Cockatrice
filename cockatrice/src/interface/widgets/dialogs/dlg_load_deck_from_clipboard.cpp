@@ -1,32 +1,43 @@
 #include "dlg_load_deck_from_clipboard.h"
 
 #include "../../../client/settings/cache_settings.h"
+#include "../../../client/settings/shortcuts_settings.h"
 #include "../../deck_loader/card_node_function.h"
 #include "../../deck_loader/deck_loader.h"
-#include "dlg_settings.h"
 
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
 #include <QDialogButtonBox>
+#include <QFlags>
+#include <QHBoxLayout>
+#include <QKeyEvent>
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QTextStream>
 #include <QVBoxLayout>
+#include <functional>
 #include <libcockatrice/card/import/card_name_normalizer.h>
+#include <qnamespace.h>
+
+class QWidget;
 
 /**
  * Creates the main layout and connects the signals that are common to all versions of this window
  */
 AbstractDlgDeckTextEdit::AbstractDlgDeckTextEdit(QWidget *parent) : QDialog(parent)
 {
+    setObjectName("dlgDeckTextEdit");
+
     contentsEdit = new QPlainTextEdit;
+    contentsEdit->setObjectName("contentsEdit");
 
     refreshButton = new QPushButton(tr("&Refresh"));
     connect(refreshButton, &QPushButton::clicked, this, &AbstractDlgDeckTextEdit::actRefresh);
 
     auto *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    buttonBox->setObjectName("buttonBox");
     buttonBox->addButton(refreshButton, QDialogButtonBox::ActionRole);
     connect(buttonBox, &QDialogButtonBox::accepted, this, &AbstractDlgDeckTextEdit::actOK);
     connect(buttonBox, &QDialogButtonBox::rejected, this, &AbstractDlgDeckTextEdit::reject);

@@ -1,16 +1,25 @@
 /**
  * @file handle_public_servers.h
  * @ingroup Server
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef COCKATRICE_HANDLE_PUBLIC_SERVERS_H
 #define COCKATRICE_HANDLE_PUBLIC_SERVERS_H
 
 #include "user/user_info_connection.h"
 
+#include <QList>
+#include <QMap>
+#include <QObject>
+#include <QString>
+#include <QStringList>
+#include <qtmetamacros.h>
+#include <utility>
+
 class QNetworkReply;
 class QNetworkAccessManager;
+class QVariant;
 
 /**
  * This class is used to update the servers.ini file and ensure

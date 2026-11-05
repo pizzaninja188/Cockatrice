@@ -1,6 +1,11 @@
 #include "card_database_parser.h"
 
-#include <libcockatrice/interfaces/noop_card_set_priority_controller.h>
+#include "libcockatrice/card/card_info.h"
+#include "libcockatrice/card/database/card_database_data.h"
+
+#include <QSharedPointer>
+
+class ICardSetPriorityController;
 
 SetNameMap ICardDatabaseParser::sets;
 
@@ -30,6 +35,10 @@ CardSetPtr ICardDatabaseParser::internalAddSet(const QString &setName,
     newSet->setPriority(priority);
 
     sets.insert(setName, newSet);
-    emit addSet(newSet);
+    if (targetData) {
+        targetData->sets.insert(setName, newSet);
+    } else {
+        emit addSet(newSet);
+    }
     return newSet;
 }

@@ -1,22 +1,22 @@
 /**
  * @file sound_engine.h
  * @ingroup Core
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef SOUNDENGINE_H
 #define SOUNDENGINE_H
 
-#include <QAudioOutput>
 #include <QLoggingCategory>
 #include <QMap>
-#include <QMediaPlayer>
 #include <QObject>
 #include <QString>
+#include <qtmetamacros.h>
+
+class QAudioOutput;
+class QMediaPlayer;
 
 inline Q_LOGGING_CATEGORY(SoundEngineLog, "sound_engine");
-
-class QBuffer;
 
 typedef QMap<QString, QString> QStringMap;
 

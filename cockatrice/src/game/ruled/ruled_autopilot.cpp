@@ -4,10 +4,10 @@
 #include "../../interface/widgets/tabs/tab_supervisor.h"
 #include "../../interface/deck_loader/deck_loader.h"
 #include "../../interface/window_main.h"
-#include "../abstract_game.h"
-#include "../deckview/deck_view_container.h"
-#include "../deckview/tabbed_deck_view_container.h"
-#include "../game_event_handler.h"
+#include <libcockatrice/game/abstract_game.h>
+#include "../../game_graphics/deckview/deck_view_container.h"
+#include "../../game_graphics/deckview/tabbed_deck_view_container.h"
+#include <libcockatrice/game/game_event_handler.h>
 
 #include <QFileInfo>
 #include <QTimer>

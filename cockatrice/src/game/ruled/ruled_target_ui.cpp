@@ -1,10 +1,12 @@
-#include "../abstract_game.h"
-#include "../board/card_item.h"
-#include "../game_event_handler.h"
-#include "../player/player.h"
-#include "../player/player_actions.h"
-#include "../player/player_info.h"
-#include "../zones/logic/card_zone_logic.h"
+#include "../../game_graphics/game_scene.h"
+#include "ruled_client_ui.h"
+#include <libcockatrice/game/abstract_game.h>
+#include "../../game_graphics/board/card_item.h"
+#include <libcockatrice/game/game_event_handler.h>
+#include <libcockatrice/game/player/player_logic.h>
+#include "ruled_player_actions.h"
+#include <libcockatrice/game/player/player_info.h>
+#include <libcockatrice/game/zones/card_zone_logic.h>
 #include "ruled_actions.h"
 #include "ruled_activation.h"
 #include "ruled_payment_ui.h"
@@ -12,7 +14,7 @@
 
 #include <libcockatrice/utility/zone_names.h>
 
-void RuledTargetUi::emitPendingAbilityTargetSelectionCount(PlayerActions *actions, const RuledClientState &state)
+void RuledTargetUi::emitPendingAbilityTargetSelectionCount(RuledPlayerActions *actions, const RuledClientState &state)
 {
     const auto &ability = actions->pendingActivatedAbility;
     const auto data = currentRuledPendingAbilityTargetData(ability, state);
@@ -28,7 +30,7 @@ void RuledTargetUi::emitPendingAbilityTargetSelectionCount(PlayerActions *action
 
 /// Shared card/player click staging. Each surface has already resolved its ID domain and current
 /// incarnation before calling here; legality remains checked against the engine's current offer.
-bool RuledTargetUi::stageActivatedAbilityTargetClick(PlayerActions *actions,
+bool RuledTargetUi::stageActivatedAbilityTargetClick(RuledPlayerActions *actions,
                                                      RuledClientState *state,
                                                      RuledTargetCandidateKind kind,
                                                      quint32 targetOid,
@@ -79,7 +81,7 @@ bool RuledTargetUi::stageActivatedAbilityTargetClick(PlayerActions *actions,
 
     const auto staged = ruledStageActivatedAbilityTarget(ability, *group, target);
     if (staged == RuledActivatedTargetStageResult::AtMaximum) {
-        state->emitLocalLog(PlayerActions::tr("That target group has reached its maximum of %1.")
+        state->emitLocalLog(RuledPlayerActions::tr("That target group has reached its maximum of %1.")
                                 .arg(group->maxTargets));
         return true;
     }
@@ -112,7 +114,7 @@ bool RuledTargetUi::stageActivatedAbilityTargetClick(PlayerActions *actions,
     return true;
 }
 
-void RuledTargetUi::ensureRefreshConnection(PlayerActions *actions)
+void RuledTargetUi::ensureRefreshConnection(RuledPlayerActions *actions)
 {
     if (!actions || !actions->player || !actions->player->getGame()) {
         return;
@@ -122,10 +124,10 @@ void RuledTargetUi::ensureRefreshConnection(PlayerActions *actions)
         return;
     }
     QObject::connect(state, &RuledClientState::legalActionsChanged, actions,
-                     &PlayerActions::reconcilePendingRuledTargetSelections, Qt::UniqueConnection);
+                     &RuledPlayerActions::reconcilePendingRuledTargetSelections, Qt::UniqueConnection);
 }
 
-void RuledTargetUi::reconcile(PlayerActions *actions)
+void RuledTargetUi::reconcile(RuledPlayerActions *actions)
 {
     if (!actions || !actions->player || !actions->player->getGame()) {
         return;
@@ -178,7 +180,7 @@ void RuledTargetUi::reconcile(PlayerActions *actions)
     state->emitSpellDamageAllocationUiChanged();
 }
 
-RuledTargetClickEligibility RuledTargetUi::cardEligibility(const PlayerActions *actions, CardItem *card)
+RuledTargetClickEligibility RuledTargetUi::cardEligibility(const RuledPlayerActions *actions, CardItem *card)
 {
     if (!actions || !actions->player || !actions->player->getGame()) {
         return RuledTargetClickEligibility::NotTargeting;
@@ -196,7 +198,7 @@ RuledTargetClickEligibility RuledTargetUi::cardEligibility(const PlayerActions *
         }
         const QString zoneName = card->getZone()->getName();
         if (zoneName == ZoneNames::HAND) {
-            Player *const handPlayer = card->getZone()->getPlayer();
+            PlayerLogic *const handPlayer = card->getZone()->getPlayer();
             if (handPlayer != actions->player || !handPlayer->getPlayerInfo()) {
                 return RuledTargetClickEligibility::Illegal;
             }
@@ -241,7 +243,7 @@ RuledTargetClickEligibility RuledTargetUi::cardEligibility(const PlayerActions *
                : eligibility;
 }
 
-RuledTargetClickEligibility RuledTargetUi::playerEligibility(const PlayerActions *actions, Player *target)
+RuledTargetClickEligibility RuledTargetUi::playerEligibility(const RuledPlayerActions *actions, PlayerLogic *target)
 {
     if (!actions || !actions->player || !actions->player->getGame()) {
         return RuledTargetClickEligibility::NotTargeting;
@@ -266,7 +268,7 @@ RuledTargetClickEligibility RuledTargetUi::playerEligibility(const PlayerActions
                : eligibility;
 }
 
-bool RuledTargetUi::tryHandleRuledSpellTargetClick(PlayerActions *actions, CardItem *card)
+bool RuledTargetUi::tryHandleRuledSpellTargetClick(RuledPlayerActions *actions, CardItem *card)
 {
     if (!actions->pendingRuledSpellCast.valid || !actions->pendingRuledSpellCast.waitingForTarget) {
         return false;
@@ -291,7 +293,7 @@ bool RuledTargetUi::tryHandleRuledSpellTargetClick(PlayerActions *actions, CardI
     const bool isOnGraveyard = (zoneName == ZoneNames::GRAVE);
     if (!isOnBattlefield && !isOnStack && !isOnGraveyard) {
         actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            PlayerActions::tr("Select a target on the battlefield, stack, or a graveyard, or press Cancel."));
+            RuledPlayerActions::tr("Select a target on the battlefield, stack, or a graveyard, or press Cancel."));
         return true;
     }
 
@@ -309,7 +311,7 @@ bool RuledTargetUi::tryHandleRuledSpellTargetClick(PlayerActions *actions, CardI
     }
     if (targetOid == 0) {
         actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            PlayerActions::tr("That target is not selectable yet. Select another target or cancel %1.")
+            RuledPlayerActions::tr("That target is not selectable yet. Select another target or cancel %1.")
                 .arg(actions->pendingRuledSpellCast.cardName));
         return true;
     }
@@ -324,12 +326,12 @@ bool RuledTargetUi::tryHandleRuledSpellTargetClick(PlayerActions *actions, CardI
                                       RuledTargetClickEligibility::Legal;
     if (!valid) {
         actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            PlayerActions::tr("That is not a legal target for %1.").arg(actions->pendingRuledSpellCast.cardName));
+            RuledPlayerActions::tr("That is not a legal target for %1.").arg(actions->pendingRuledSpellCast.cardName));
         return true;
     }
     for (const int otherGroup : activeGroup->distinctFromGroupIndices) {
         if (actions->pendingRuledSpellCast.selectedTargetOidsByGroup.value(otherGroup).contains(targetOid)) {
-            handler->emitLocalLog(PlayerActions::tr("That object is already selected in a distinct target group."));
+            handler->emitLocalLog(RuledPlayerActions::tr("That object is already selected in a distinct target group."));
             return true;
         }
     }
@@ -344,7 +346,7 @@ bool RuledTargetUi::tryHandleRuledSpellTargetClick(PlayerActions *actions, CardI
         actions->pendingRuledSpellCast.selectedTargetOids.removeOne(targetOid);
         const int chosen = actions->pendingRuledSpellCast.selectedTargetOids.size();
         actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            PlayerActions::tr("Target deselected. %1 target(s) chosen for %2.")
+            RuledPlayerActions::tr("Target deselected. %1 target(s) chosen for %2.")
                 .arg(chosen)
                 .arg(actions->pendingRuledSpellCast.cardName));
         emit actions->ruledMultiTargetSelectionUpdated(chosen, actions->pendingRuledSpellCast.minTargets,
@@ -366,7 +368,7 @@ bool RuledTargetUi::tryHandleRuledSpellTargetClick(PlayerActions *actions, CardI
     // explicitly (click the spell again, or the Confirm Targets button).
     if (actions->pendingRuledSpellCast.maxTargets != 1 && (effMax <= 0 || chosen < effMax)) {
         actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            PlayerActions::tr("Target %1%2 chosen for %3. Click another target, or click %3 again to confirm.")
+            RuledPlayerActions::tr("Target %1%2 chosen for %3. Click another target, or click %3 again to confirm.")
                 .arg(chosen)
                 .arg(effMax > 0 ? QStringLiteral("/%1").arg(effMax) : QString())
                 .arg(actions->pendingRuledSpellCast.cardName));
@@ -378,12 +380,12 @@ bool RuledTargetUi::tryHandleRuledSpellTargetClick(PlayerActions *actions, CardI
     return RuledTargetUi::finalizeTargetSelectionAndContinue(actions);
 }
 
-bool RuledTargetUi::isPlayerSelectedAsPendingSpellTarget(const PlayerActions *actions, int playerId)
+bool RuledTargetUi::isPlayerSelectedAsPendingSpellTarget(const RuledPlayerActions *actions, int playerId)
 {
     return actions->ruledPendingCast->isTargetSelectedForPendingSpell(static_cast<quint32>(playerId));
 }
 
-void RuledTargetUi::confirmMultiTargetSelection(PlayerActions *actions)
+void RuledTargetUi::confirmMultiTargetSelection(RuledPlayerActions *actions)
 {
     if (ruledPendingTargetSelectionCanConfirm(actions->pendingRuledSpellCast)) {
         RuledTargetUi::finalizeTargetSelectionAndContinue(actions);
@@ -411,16 +413,16 @@ void RuledTargetUi::confirmMultiTargetSelection(PlayerActions *actions)
         emit actions->ruledActivatedAbilityTargetPendingChanged(true, prompt);
         emitPendingAbilityTargetSelectionCount(actions, *state);
         state->emitLocalLog(prompt);
-        actions->player->getGameScene()->update();
+        RuledActions::scene(actions->player)->update();
         return;
     }
     emit actions->ruledActivatedAbilityTargetPendingChanged(false, {});
     emit actions->ruledMultiTargetSelectionUpdated(0, 0, -1);
-    actions->player->getGameScene()->update();
+    RuledActions::scene(actions->player)->update();
     actions->ruledPayment->continuePendingActivatedAbilityAfterChoice();
 }
 
-bool RuledTargetUi::isAwaitingRuledPlayerTargetSelection(const PlayerActions *actions)
+bool RuledTargetUi::isAwaitingRuledPlayerTargetSelection(const RuledPlayerActions *actions)
 {
     if (!actions->pendingRuledSpellCast.valid || !actions->pendingRuledSpellCast.waitingForTarget) {
         return false;
@@ -433,7 +435,7 @@ bool RuledTargetUi::isAwaitingRuledPlayerTargetSelection(const PlayerActions *ac
     return group.has_value() && (group->canTargetSelf || group->canTargetOpponent);
 }
 
-bool RuledTargetUi::isAwaitingRuledAbilityOrTriggerPlayerTarget(const PlayerActions *actions)
+bool RuledTargetUi::isAwaitingRuledAbilityOrTriggerPlayerTarget(const RuledPlayerActions *actions)
 {
     if (actions->pendingActivatedAbility.valid && actions->pendingActivatedAbility.waitingForTarget) {
         return true;
@@ -443,7 +445,7 @@ bool RuledTargetUi::isAwaitingRuledAbilityOrTriggerPlayerTarget(const PlayerActi
                        handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));
 }
 
-bool RuledTargetUi::tryHandleRuledSpellTargetPlayerClick(PlayerActions *actions, Player *targetPlayer)
+bool RuledTargetUi::tryHandleRuledSpellTargetPlayerClick(RuledPlayerActions *actions, PlayerLogic *targetPlayer)
 {
     if (!actions->pendingRuledSpellCast.valid || !actions->pendingRuledSpellCast.waitingForTarget) {
         return false;
@@ -458,7 +460,7 @@ bool RuledTargetUi::tryHandleRuledSpellTargetPlayerClick(PlayerActions *actions,
 
     if (!RuledTargetUi::isAwaitingRuledPlayerTargetSelection(actions)) {
         actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            PlayerActions::tr("%1 does not target players.").arg(actions->pendingRuledSpellCast.cardName));
+            RuledPlayerActions::tr("%1 does not target players.").arg(actions->pendingRuledSpellCast.cardName));
         return true;
     }
 
@@ -474,12 +476,12 @@ bool RuledTargetUi::tryHandleRuledSpellTargetPlayerClick(PlayerActions *actions,
     const bool canTargetOpponent = activeGroup.has_value() && activeGroup->canTargetOpponent;
     if (isSelf && !canTargetSelf) {
         actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            PlayerActions::tr("%1 must target an opponent.").arg(actions->pendingRuledSpellCast.cardName));
+            RuledPlayerActions::tr("%1 must target an opponent.").arg(actions->pendingRuledSpellCast.cardName));
         return true;
     }
     if (!isSelf && !canTargetOpponent) {
         actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            PlayerActions::tr("%1 cannot target opponents.").arg(actions->pendingRuledSpellCast.cardName));
+            RuledPlayerActions::tr("%1 cannot target opponents.").arg(actions->pendingRuledSpellCast.cardName));
         return true;
     }
 
@@ -491,7 +493,7 @@ bool RuledTargetUi::tryHandleRuledSpellTargetPlayerClick(PlayerActions *actions,
     }
     for (const int otherGroup : activeGroup->distinctFromGroupIndices) {
         if (actions->pendingRuledSpellCast.selectedTargetOidsByGroup.value(otherGroup).contains(targetOid)) {
-            handler->emitLocalLog(PlayerActions::tr("That player is already selected in a distinct target group."));
+            handler->emitLocalLog(RuledPlayerActions::tr("That player is already selected in a distinct target group."));
             return true;
         }
     }
@@ -499,7 +501,7 @@ bool RuledTargetUi::tryHandleRuledSpellTargetPlayerClick(PlayerActions *actions,
         actions->pendingRuledSpellCast.selectedTargetOids.removeOne(targetOid);
         const int chosen = actions->pendingRuledSpellCast.selectedTargetOids.size();
         actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            PlayerActions::tr("Target deselected. %1 target(s) chosen for %2.")
+            RuledPlayerActions::tr("Target deselected. %1 target(s) chosen for %2.")
                 .arg(chosen)
                 .arg(actions->pendingRuledSpellCast.cardName));
         emit actions->ruledMultiTargetSelectionUpdated(chosen, actions->pendingRuledSpellCast.minTargets,
@@ -520,7 +522,7 @@ bool RuledTargetUi::tryHandleRuledSpellTargetPlayerClick(PlayerActions *actions,
     // explicitly (click the spell again, or the Confirm Targets button).
     if (actions->pendingRuledSpellCast.maxTargets != 1 && (effMax <= 0 || chosen < effMax)) {
         actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            PlayerActions::tr("Target %1%2 chosen for %3. Click another target, or click %3 again to confirm.")
+            RuledPlayerActions::tr("Target %1%2 chosen for %3. Click another target, or click %3 again to confirm.")
                 .arg(chosen)
                 .arg(effMax > 0 ? QStringLiteral("/%1").arg(effMax) : QString())
                 .arg(actions->pendingRuledSpellCast.cardName));
@@ -532,14 +534,14 @@ bool RuledTargetUi::tryHandleRuledSpellTargetPlayerClick(PlayerActions *actions,
     return RuledTargetUi::finalizeTargetSelectionAndContinue(actions);
 }
 
-void RuledTargetUi::loadCurrentTargetGroup(PlayerActions *actions)
+void RuledTargetUi::loadCurrentTargetGroup(RuledPlayerActions *actions)
 {
     const auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     if (state)
         actions->ruledPendingCast->loadCurrentTargetGroup(*state);
 }
 
-bool RuledTargetUi::storeCurrentTargetGroupAndAdvance(PlayerActions *actions)
+bool RuledTargetUi::storeCurrentTargetGroupAndAdvance(RuledPlayerActions *actions)
 {
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     if (!state || !actions->ruledPendingCast->storeCurrentTargetGroupAndAdvance(*state))
@@ -554,11 +556,11 @@ bool RuledTargetUi::storeCurrentTargetGroupAndAdvance(PlayerActions *actions)
                                             actions->pendingRuledSpellCast.faceIndex);
     state->emitLocalLog(prompt);
     state->emitSpellTargetSelectionChanged();
-    actions->player->getGameScene()->update();
+    RuledActions::scene(actions->player)->update();
     return true;
 }
 
-bool RuledTargetUi::storeCurrentModalTargetsAndAdvance(PlayerActions *actions)
+bool RuledTargetUi::storeCurrentModalTargetsAndAdvance(RuledPlayerActions *actions)
 {
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     if (!state || !actions->ruledPendingCast->storeCurrentModalTargetsAndAdvance(*state))
@@ -577,11 +579,11 @@ bool RuledTargetUi::storeCurrentModalTargetsAndAdvance(PlayerActions *actions)
                                             actions->pendingRuledSpellCast.faceIndex);
     actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(prompt);
     actions->player->getGame()->getGameEventHandler()->ruled()->emitSpellTargetSelectionChanged();
-    actions->player->getGameScene()->update();
+    RuledActions::scene(actions->player)->update();
     return true;
 }
 
-bool RuledTargetUi::finalizeTargetSelectionAndContinue(PlayerActions *actions)
+bool RuledTargetUi::finalizeTargetSelectionAndContinue(RuledPlayerActions *actions)
 {
     if (!actions->pendingRuledSpellCast.isDamageTargets && RuledTargetUi::storeCurrentTargetGroupAndAdvance(actions)) {
         return true;
@@ -590,7 +592,7 @@ bool RuledTargetUi::finalizeTargetSelectionAndContinue(PlayerActions *actions)
     actions->pendingRuledSpellCast.waitingForTarget = false;
     emit actions->ruledSpellTargetingChanged(false, {});
     emit actions->ruledMultiTargetSelectionUpdated(0, 0, -1);
-    actions->player->getGameScene()->update();
+    RuledActions::scene(actions->player)->update();
 
     // CR 601.2f cost increases are finalized after every group and selected mode is stored below.
     // DamageTargets: allocate damage among chosen targets interactively.
@@ -601,7 +603,7 @@ bool RuledTargetUi::finalizeTargetSelectionAndContinue(PlayerActions *actions)
         const auto allocation = actions->ruledPendingCast->prepareSpellDamageAllocation();
         if (allocation == RuledPendingCast::DamageAllocationStep::Invalid) {
             actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-                PlayerActions::tr(
+                RuledPlayerActions::tr(
                     "Cannot assign at least 1 damage to each target (%1 targets, %2 total). Cast cancelled.")
                     .arg(numTargets)
                     .arg(total));
@@ -611,7 +613,7 @@ bool RuledTargetUi::finalizeTargetSelectionAndContinue(PlayerActions *actions)
         if (allocation == RuledPendingCast::DamageAllocationStep::Allocating) {
             actions->player->getGame()->getGameEventHandler()->ruled()->emitSpellDamageAllocationUiChanged();
             actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-                PlayerActions::tr("Assign %1 damage among %2 targets (min 1 each). "
+                RuledPlayerActions::tr("Assign %1 damage among %2 targets (min 1 each). "
                                   "Click to add, right-click to reduce. Confirm when done.")
                     .arg(total)
                     .arg(numTargets));
@@ -634,12 +636,12 @@ bool RuledTargetUi::finalizeTargetSelectionAndContinue(PlayerActions *actions)
     return true;
 }
 
-int RuledTargetUi::spellDamageAllocationForPlayerId(const PlayerActions *actions, int playerId)
+int RuledTargetUi::spellDamageAllocationForPlayerId(const RuledPlayerActions *actions, int playerId)
 {
     return actions->ruledPendingCast->spellDamageAllocationForOid(static_cast<quint32>(playerId));
 }
 
-bool RuledTargetUi::tryBumpSpellDamageAllocationForOid(PlayerActions *actions, quint32 oid, int delta)
+bool RuledTargetUi::tryBumpSpellDamageAllocationForOid(RuledPlayerActions *actions, quint32 oid, int delta)
 {
     const auto change = actions->ruledPendingCast->bumpSpellDamageAllocation(oid, delta);
     if (change == RuledPendingCast::DamageAllocationChange::Changed)
@@ -647,7 +649,7 @@ bool RuledTargetUi::tryBumpSpellDamageAllocationForOid(PlayerActions *actions, q
     return change != RuledPendingCast::DamageAllocationChange::Unavailable;
 }
 
-bool RuledTargetUi::tryBumpSpellDamageAllocationForCard(PlayerActions *actions, CardItem *card, int delta)
+bool RuledTargetUi::tryBumpSpellDamageAllocationForCard(RuledPlayerActions *actions, CardItem *card, int delta)
 {
     if (!actions->ruledPendingCast->isInSpellDamageAllocationMode() || !card)
         return false;
@@ -664,7 +666,7 @@ bool RuledTargetUi::tryBumpSpellDamageAllocationForCard(PlayerActions *actions, 
     return RuledTargetUi::tryBumpSpellDamageAllocationForOid(actions, oid, delta);
 }
 
-bool RuledTargetUi::tryBumpSpellDamageAllocationForPlayer(PlayerActions *actions, Player *targetPlayer, int delta)
+bool RuledTargetUi::tryBumpSpellDamageAllocationForPlayer(RuledPlayerActions *actions, PlayerLogic *targetPlayer, int delta)
 {
     if (!actions->ruledPendingCast->isInSpellDamageAllocationMode() || !targetPlayer)
         return false;
@@ -672,7 +674,7 @@ bool RuledTargetUi::tryBumpSpellDamageAllocationForPlayer(PlayerActions *actions
         actions, static_cast<quint32>(targetPlayer->getPlayerInfo()->getId()), delta);
 }
 
-void RuledTargetUi::confirmSpellDamageAllocation(PlayerActions *actions)
+void RuledTargetUi::confirmSpellDamageAllocation(RuledPlayerActions *actions)
 {
     if (!actions->ruledPendingCast->confirmSpellDamageAllocation())
         return;
@@ -687,7 +689,7 @@ void RuledTargetUi::confirmSpellDamageAllocation(PlayerActions *actions)
     actions->ruledPayment->continuePendingSpellAfterChoice();
 }
 
-bool RuledTargetUi::tryHandleRuledAbilityTargetClick(PlayerActions *actions, CardItem *card)
+bool RuledTargetUi::tryHandleRuledAbilityTargetClick(RuledPlayerActions *actions, CardItem *card)
 {
     RuledClientState *handler = actions->player->getGame()->getGameEventHandler()->ruled();
     if (handler && handler->isEngineCommandPending()) {
@@ -702,13 +704,13 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetClick(PlayerActions *actions, Car
             return false;
         }
         if (card->getZone()->getName() != ZoneNames::TABLE) {
-            handler->emitLocalLog(PlayerActions::tr("Choose a highlighted permanent with counters."));
+            handler->emitLocalLog(RuledPlayerActions::tr("Choose a highlighted permanent with counters."));
             return true;
         }
         const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
         const quint32 objectId = handler->engineOidForCardId(ownerPlayerId, card->getId());
         if (objectId == 0 || !handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::Proliferate, objectId)) {
-            handler->emitLocalLog(PlayerActions::tr("That permanent is not an eligible Proliferate choice."));
+            handler->emitLocalLog(RuledPlayerActions::tr("That permanent is not an eligible Proliferate choice."));
             return true;
         }
         handler->toggleProliferateObject(objectId);
@@ -725,14 +727,14 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetClick(PlayerActions *actions, Car
             return false;
         }
         if (card->getZone()->getName() != ZoneNames::TABLE) {
-            handler->emitLocalLog(PlayerActions::tr("Choose a permanent on the battlefield."));
+            handler->emitLocalLog(RuledPlayerActions::tr("Choose a permanent on the battlefield."));
             return true;
         }
         const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
         const quint32 chosenOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
         if (chosenOid == 0 ||
             !handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::PermanentChoice, chosenOid)) {
-            handler->emitLocalLog(PlayerActions::tr("That permanent is not a legal choice."));
+            handler->emitLocalLog(RuledPlayerActions::tr("That permanent is not a legal choice."));
             return true;
         }
         handler->submitPendingChoiceObject(chosenOid);
@@ -744,13 +746,13 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetClick(PlayerActions *actions, Car
             return false;
         }
         if (card->getZone()->getName() != ZoneNames::TABLE) {
-            handler->emitLocalLog(PlayerActions::tr("Choose a creature on the battlefield for Clone to copy."));
+            handler->emitLocalLog(RuledPlayerActions::tr("Choose a creature on the battlefield for Clone to copy."));
             return true;
         }
         const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
         const quint32 sourceOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
         if (sourceOid == 0 || !handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopySource, sourceOid)) {
-            handler->emitLocalLog(PlayerActions::tr("That is not a creature Clone can copy."));
+            handler->emitLocalLog(RuledPlayerActions::tr("That is not a creature Clone can copy."));
             return true;
         }
         handler->submitPendingChoiceObject(sourceOid);
@@ -762,14 +764,14 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetClick(PlayerActions *actions, Car
             return false;
         }
         if (card->getZone()->getName() != ZoneNames::TABLE) {
-            handler->emitLocalLog(PlayerActions::tr("Choose a permanent on the battlefield for the Aura to enchant."));
+            handler->emitLocalLog(RuledPlayerActions::tr("Choose a permanent on the battlefield for the Aura to enchant."));
             return true;
         }
         const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
         const quint32 recipientOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
         if (recipientOid == 0 ||
             !handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::AuraPermanent, recipientOid)) {
-            handler->emitLocalLog(PlayerActions::tr("That permanent cannot be enchanted by the returning Aura."));
+            handler->emitLocalLog(RuledPlayerActions::tr("That permanent cannot be enchanted by the returning Aura."));
             return true;
         }
         handler->submitPendingChoiceObject(recipientOid);
@@ -785,7 +787,7 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetClick(PlayerActions *actions, Car
         const bool isGraveyard = zoneName == ZoneNames::GRAVE;
         if (zoneName != ZoneNames::TABLE && zoneName != ZoneNames::STACK && !isGraveyard) {
             handler->emitLocalLog(
-                PlayerActions::tr("Select a target on the battlefield, stack, or graveyard for the copy."));
+                RuledPlayerActions::tr("Select a target on the battlefield, stack, or graveyard for the copy."));
             return true;
         }
         const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
@@ -793,7 +795,7 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetClick(PlayerActions *actions, Car
                                       ? handler->graveyardEngineOidForOwnedCard(ownerPlayerId, card->getId())
                                       : handler->engineOidForCardId(ownerPlayerId, card->getId());
         if (targetOid == 0 || !handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopyTarget, targetOid)) {
-            handler->emitLocalLog(PlayerActions::tr("That is not a valid target for the copy."));
+            handler->emitLocalLog(RuledPlayerActions::tr("That is not a valid target for the copy."));
             return true;
         }
         handler->submitPendingChoiceObject(targetOid);
@@ -806,13 +808,13 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetClick(PlayerActions *actions, Car
             return false;
         }
         if (card->getZone()->getName() != ZoneNames::TABLE) {
-            handler->emitLocalLog(PlayerActions::tr("Click the legendary permanent to keep on the battlefield."));
+            handler->emitLocalLog(RuledPlayerActions::tr("Click the legendary permanent to keep on the battlefield."));
             return true;
         }
         const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
         const quint32 keepOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
         if (keepOid == 0 || !handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::LegendKeep, keepOid)) {
-            handler->emitLocalLog(PlayerActions::tr("That is not one of the legends you must choose between."));
+            handler->emitLocalLog(RuledPlayerActions::tr("That is not one of the legends you must choose between."));
             return true;
         }
         handler->submitPendingChoiceObject(keepOid);
@@ -843,7 +845,7 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetClick(PlayerActions *actions, Car
                           : zoneName == ZoneNames::STACK ? ruled::v1::TARGET_REF_KIND_STACK
                                                          : ruled::v1::TARGET_REF_KIND_PERMANENT;
         if (!handler->stagePendingTriggerTarget(kind, targetOid, ownerPlayerId)) {
-            handler->emitLocalLog(PlayerActions::tr("That is not a legal target for the current target group."));
+            handler->emitLocalLog(RuledPlayerActions::tr("That is not a legal target for the current target group."));
         }
         return true;
     }
@@ -891,7 +893,7 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetClick(PlayerActions *actions, Car
     return RuledTargetUi::stageActivatedAbilityTargetClick(actions, handler, kind, targetOid, generation);
 }
 
-bool RuledTargetUi::tryHandleRuledAbilityTargetPlayerClick(PlayerActions *actions, Player *targetPlayer)
+bool RuledTargetUi::tryHandleRuledAbilityTargetPlayerClick(RuledPlayerActions *actions, PlayerLogic *targetPlayer)
 {
     RuledClientState *handler = actions->player->getGame()->getGameEventHandler()->ruled();
     if (handler && handler->isEngineCommandPending()) {
@@ -904,7 +906,7 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetPlayerClick(PlayerActions *action
         }
         const int playerId = targetPlayer->getPlayerInfo()->getId();
         if (playerId < 0 || !handler->isProliferatePlayerCandidate(static_cast<quint32>(playerId))) {
-            handler->emitLocalLog(PlayerActions::tr("That player is not an eligible Proliferate choice."));
+            handler->emitLocalLog(RuledPlayerActions::tr("That player is not an eligible Proliferate choice."));
             return true;
         }
         handler->toggleProliferatePlayer(static_cast<quint32>(playerId));
@@ -917,7 +919,7 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetPlayerClick(PlayerActions *action
         }
         const int playerId = targetPlayer->getPlayerInfo()->getId();
         if (!handler->isLegalAttackPlayerDefender(playerId)) {
-            handler->emitLocalLog(PlayerActions::tr("That player is not a legal defender for the entering token."));
+            handler->emitLocalLog(RuledPlayerActions::tr("That player is not a legal defender for the entering token."));
             return true;
         }
         handler->chooseAttackPlayerDefender(playerId);
@@ -931,7 +933,7 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetPlayerClick(PlayerActions *action
         }
         const quint32 targetPlayerId = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
         if (!handler->isPendingCopyTargetPlayerCandidate(targetPlayerId)) {
-            handler->emitLocalLog(PlayerActions::tr("That player is not a valid target for the copy."));
+            handler->emitLocalLog(RuledPlayerActions::tr("That player is not a valid target for the copy."));
             return true;
         }
         handler->submitPendingCopyTargetPlayer(targetPlayerId);
@@ -944,7 +946,7 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetPlayerClick(PlayerActions *action
         }
         const quint32 playerId = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
         if (!handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::AuraPlayer, playerId)) {
-            handler->emitLocalLog(PlayerActions::tr("That player cannot be enchanted by the returning Aura."));
+            handler->emitLocalLog(RuledPlayerActions::tr("That player cannot be enchanted by the returning Aura."));
             return true;
         }
         handler->submitPendingChoiceObject(playerId);
@@ -957,7 +959,7 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetPlayerClick(PlayerActions *action
         }
         const quint32 playerId = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
         if (!handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::BattleProtector, playerId)) {
-            handler->emitLocalLog(PlayerActions::tr("That player cannot protect this Battle."));
+            handler->emitLocalLog(RuledPlayerActions::tr("That player cannot protect this Battle."));
             return true;
         }
         handler->submitPendingChoiceObject(playerId);
@@ -971,7 +973,7 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetPlayerClick(PlayerActions *action
         const quint32 targetOid = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
         if (!handler->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PLAYER, targetOid,
                                                 targetPlayer->getPlayerInfo()->getId())) {
-            handler->emitLocalLog(PlayerActions::tr("That player is not a legal target for the current target group."));
+            handler->emitLocalLog(RuledPlayerActions::tr("That player is not a legal target for the current target group."));
         }
         return true;
     }

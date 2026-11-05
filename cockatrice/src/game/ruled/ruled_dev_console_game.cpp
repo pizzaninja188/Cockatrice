@@ -1,6 +1,10 @@
+#include <libcockatrice/game/game_event_handler.h>
+#include <libcockatrice/game/player/player_manager.h>
+#include <libcockatrice/game/player/player_info.h>
+#include <libcockatrice/game/game_state.h>
 #include "ruled_dev_console_game.h"
 
-#include "../abstract_game.h"
+#include <libcockatrice/game/abstract_game.h>
 #include "ruled_actions.h"
 #include "ruled_client_state.h"
 #include "ruled_dev_console.h"

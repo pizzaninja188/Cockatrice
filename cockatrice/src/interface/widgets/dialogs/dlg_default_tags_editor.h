@@ -2,16 +2,22 @@
  * @file dlg_default_tags_editor.h
  * @ingroup Dialogs
  * @ingroup DeckStorageWidgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef DLG_DEFAULT_TAGS_EDITOR_H
 #define DLG_DEFAULT_TAGS_EDITOR_H
 
 #include <QDialog>
-#include <QLineEdit>
-#include <QListWidget>
-#include <QVBoxLayout>
+#include <qtmetamacros.h>
+
+class QHBoxLayout;
+class QLineEdit;
+class QListWidget;
+class QListWidgetItem;
+class QPushButton;
+class QVBoxLayout;
+class QWidget;
 
 class DlgDefaultTagsEditor : public QDialog
 {

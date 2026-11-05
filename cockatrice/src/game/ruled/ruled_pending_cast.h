@@ -31,8 +31,8 @@
 
 class QWidget;
 class CardItem;
-class Player;
-class PlayerActions;
+class PlayerLogic;
+class RuledPlayerActions;
 
 struct RuledCardActionMenuOption
 {
@@ -2189,35 +2189,35 @@ private:
 class RuledTargetUi
 {
 private:
-    static void emitPendingAbilityTargetSelectionCount(PlayerActions *actions, const RuledClientState &state);
-    static bool stageActivatedAbilityTargetClick(PlayerActions *actions,
+    static void emitPendingAbilityTargetSelectionCount(RuledPlayerActions *actions, const RuledClientState &state);
+    static bool stageActivatedAbilityTargetClick(RuledPlayerActions *actions,
                                                  RuledClientState *state,
                                                  RuledTargetCandidateKind kind,
                                                  quint32 targetOid,
                                                  quint64 zoneChangeGeneration);
 
 public:
-    static bool tryHandleRuledSpellTargetClick(PlayerActions *actions, CardItem *card);
-    static bool isPlayerSelectedAsPendingSpellTarget(const PlayerActions *actions, int playerId);
-    static void confirmMultiTargetSelection(PlayerActions *actions);
-    static bool isAwaitingRuledPlayerTargetSelection(const PlayerActions *actions);
-    static bool isAwaitingRuledAbilityOrTriggerPlayerTarget(const PlayerActions *actions);
-    static bool tryHandleRuledSpellTargetPlayerClick(PlayerActions *actions, Player *targetPlayer);
-    static void loadCurrentTargetGroup(PlayerActions *actions);
-    static bool storeCurrentTargetGroupAndAdvance(PlayerActions *actions);
-    static bool storeCurrentModalTargetsAndAdvance(PlayerActions *actions);
-    static bool finalizeTargetSelectionAndContinue(PlayerActions *actions);
-    static int spellDamageAllocationForPlayerId(const PlayerActions *actions, int playerId);
-    static bool tryBumpSpellDamageAllocationForOid(PlayerActions *actions, quint32 oid, int delta);
-    static bool tryBumpSpellDamageAllocationForCard(PlayerActions *actions, CardItem *card, int delta);
-    static bool tryBumpSpellDamageAllocationForPlayer(PlayerActions *actions, Player *targetPlayer, int delta);
-    static void confirmSpellDamageAllocation(PlayerActions *actions);
-    static bool tryHandleRuledAbilityTargetClick(PlayerActions *actions, CardItem *card);
-    static bool tryHandleRuledAbilityTargetPlayerClick(PlayerActions *actions, Player *targetPlayer);
-    static void ensureRefreshConnection(PlayerActions *actions);
-    static void reconcile(PlayerActions *actions);
-    [[nodiscard]] static RuledTargetClickEligibility cardEligibility(const PlayerActions *actions, CardItem *card);
-    [[nodiscard]] static RuledTargetClickEligibility playerEligibility(const PlayerActions *actions, Player *target);
+    static bool tryHandleRuledSpellTargetClick(RuledPlayerActions *actions, CardItem *card);
+    static bool isPlayerSelectedAsPendingSpellTarget(const RuledPlayerActions *actions, int playerId);
+    static void confirmMultiTargetSelection(RuledPlayerActions *actions);
+    static bool isAwaitingRuledPlayerTargetSelection(const RuledPlayerActions *actions);
+    static bool isAwaitingRuledAbilityOrTriggerPlayerTarget(const RuledPlayerActions *actions);
+    static bool tryHandleRuledSpellTargetPlayerClick(RuledPlayerActions *actions, PlayerLogic *targetPlayer);
+    static void loadCurrentTargetGroup(RuledPlayerActions *actions);
+    static bool storeCurrentTargetGroupAndAdvance(RuledPlayerActions *actions);
+    static bool storeCurrentModalTargetsAndAdvance(RuledPlayerActions *actions);
+    static bool finalizeTargetSelectionAndContinue(RuledPlayerActions *actions);
+    static int spellDamageAllocationForPlayerId(const RuledPlayerActions *actions, int playerId);
+    static bool tryBumpSpellDamageAllocationForOid(RuledPlayerActions *actions, quint32 oid, int delta);
+    static bool tryBumpSpellDamageAllocationForCard(RuledPlayerActions *actions, CardItem *card, int delta);
+    static bool tryBumpSpellDamageAllocationForPlayer(RuledPlayerActions *actions, PlayerLogic *targetPlayer, int delta);
+    static void confirmSpellDamageAllocation(RuledPlayerActions *actions);
+    static bool tryHandleRuledAbilityTargetClick(RuledPlayerActions *actions, CardItem *card);
+    static bool tryHandleRuledAbilityTargetPlayerClick(RuledPlayerActions *actions, PlayerLogic *targetPlayer);
+    static void ensureRefreshConnection(RuledPlayerActions *actions);
+    static void reconcile(RuledPlayerActions *actions);
+    [[nodiscard]] static RuledTargetClickEligibility cardEligibility(const RuledPlayerActions *actions, CardItem *card);
+    [[nodiscard]] static RuledTargetClickEligibility playerEligibility(const RuledPlayerActions *actions, PlayerLogic *target);
 };
 
 #endif // COCKATRICE_RULED_PENDING_CAST_H

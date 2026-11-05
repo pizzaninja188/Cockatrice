@@ -12,6 +12,7 @@ add_executable(ruled_e2e_smoke_test ${VERSION_STRING_CPP}
   ruled_e2e_harness_test.cpp
   ruled_e2e_seeded_game_test.cpp
   ruled_e2e_opening_diagnostics_test.cpp
+  ruled_e2e_stack_windows_test.cpp
   ruled_e2e_casting_payments_test.cpp
   ruled_e2e_tamiyo_test.cpp
   ruled_e2e_kaya_test.cpp
@@ -44,10 +45,11 @@ if(NOT TRICERULES_BIN)
     set(TRICERULES_BIN "${CMAKE_SOURCE_DIR}/tricerules/target/release/tricerules-server")
   endif()
 endif()
+get_filename_component(TRICERULES_RELEASE_DIR "${TRICERULES_BIN}" DIRECTORY)
 target_compile_definitions(
   ruled_e2e_smoke_test PRIVATE RULED_E2E_SERVATRICE_PATH="$<TARGET_FILE:servatrice>"
                                RULED_E2E_TRICERULES_PATH="${TRICERULES_BIN}"
-                               RULED_E2E_REPLAY_PATH="${CMAKE_SOURCE_DIR}/tricerules/target/release/tricerules-replay${CMAKE_EXECUTABLE_SUFFIX}"
+                               RULED_E2E_REPLAY_PATH="${TRICERULES_RELEASE_DIR}/tricerules-replay${CMAKE_EXECUTABLE_SUFFIX}"
                                RULED_E2E_CAPTURE_TOOL_PATH="$<TARGET_FILE:ruled-capture-tool>"
                                RULED_E2E_CLIENT_PATH="$<TARGET_FILE:cockatrice>"
                                RULED_E2E_QT_PLATFORMS="$<TARGET_FILE_DIR:${COCKATRICE_QT_VERSION_NAME}::Core>/../plugins/platforms"

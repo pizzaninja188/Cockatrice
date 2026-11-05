@@ -1,6 +1,38 @@
 #include "sideboard_plan.h"
 
+#include "libcockatrice/protocol/pb/move_card_to_zone.pb.h"
+
+#include <QSharedPointer>
+#include <QStringView>
 #include <QXmlStreamReader>
+#include <QXmlStreamWriter>
+#include <string>
+
+namespace
+{
+
+void readMoveCardToZone(QXmlStreamReader *xml, QList<MoveCard_ToZone> &moveList)
+{
+    MoveCard_ToZone move;
+    while (!xml->atEnd()) {
+        xml->readNext();
+        const QString childName = xml->name().toString();
+        if (xml->isStartElement()) {
+            if (childName == "card_name") {
+                move.set_card_name(xml->readElementText().toStdString());
+            } else if (childName == "start_zone") {
+                move.set_start_zone(xml->readElementText().toStdString());
+            } else if (childName == "target_zone") {
+                move.set_target_zone(xml->readElementText().toStdString());
+            }
+        } else if (xml->isEndElement() && (childName == "move_card_to_zone")) {
+            moveList.append(move);
+            return;
+        }
+    }
+}
+
+} // namespace
 
 SideboardPlan::SideboardPlan(const QString &_name, const QList<MoveCard_ToZone> &_moveList)
     : name(_name), moveList(_moveList)
@@ -18,28 +50,14 @@ bool SideboardPlan::readElement(QXmlStreamReader *xml)
         xml->readNext();
         const QString childName = xml->name().toString();
         if (xml->isStartElement()) {
-            if (childName == "name")
+            if (childName == "name") {
                 name = xml->readElementText();
-            else if (childName == "move_card_to_zone") {
-                MoveCard_ToZone m;
-                while (!xml->atEnd()) {
-                    xml->readNext();
-                    const QString childName2 = xml->name().toString();
-                    if (xml->isStartElement()) {
-                        if (childName2 == "card_name")
-                            m.set_card_name(xml->readElementText().toStdString());
-                        else if (childName2 == "start_zone")
-                            m.set_start_zone(xml->readElementText().toStdString());
-                        else if (childName2 == "target_zone")
-                            m.set_target_zone(xml->readElementText().toStdString());
-                    } else if (xml->isEndElement() && (childName2 == "move_card_to_zone")) {
-                        moveList.append(m);
-                        break;
-                    }
-                }
+            } else if (childName == "move_card_to_zone") {
+                readMoveCardToZone(xml, moveList);
             }
-        } else if (xml->isEndElement() && (childName == "sideboard_plan"))
+        } else if (xml->isEndElement() && (childName == "sideboard_plan")) {
             return true;
+        }
     }
     return false;
 }

@@ -1455,6 +1455,33 @@ TEST(RuledResolutionChoiceDialogTest, DeclineClearsSelectionOnlyWhenEmptyAnswerI
     }
 }
 
+TEST(RuledResolutionChoiceDialogTest, EscapeAndWindowCloseCannotDiscardAnUnansweredChoice)
+{
+    bool survivedEscape = false;
+    bool survivedClose = false;
+    QTimer::singleShot(0, [&] {
+        auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        ASSERT_NE(dialog, nullptr);
+        EXPECT_FALSE(dialog->windowFlags() & Qt::WindowCloseButtonHint);
+        QTest::keyClick(dialog, Qt::Key_Escape);
+        survivedEscape = dialog->isVisible();
+        dialog->close();
+        survivedClose = dialog->isVisible();
+        if (survivedClose) {
+            auto *list = dialog->findChild<QListWidget *>();
+            ASSERT_NE(list, nullptr);
+            emit list->itemClicked(list->item(0));
+            auto *buttons = dialog->findChild<QDialogButtonBox *>();
+            ASSERT_NE(buttons, nullptr);
+            buttons->button(QDialogButtonBox::Ok)->click();
+        }
+    });
+    const auto result = askRuledResolutionChoice("Choose a card", {101}, {"Test card"}, 1, 1, false, false);
+    EXPECT_TRUE(survivedEscape);
+    EXPECT_TRUE(survivedClose);
+    EXPECT_EQ(result, QVector<quint32>{101});
+}
+
 TEST(RuledCounterQuantityDialogTest, CounterQuantityDialogEditsTwoKindsOnTheSameObject)
 {
     CounterContext context = basicCounterContext();

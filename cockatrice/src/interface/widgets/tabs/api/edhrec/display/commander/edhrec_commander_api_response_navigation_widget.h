@@ -1,20 +1,22 @@
 /**
  * @file edhrec_commander_api_response_navigation_widget.h
  * @ingroup ApiResponseDisplayWidgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef EDHREC_COMMANDER_API_RESPONSE_NAVIGATION_WIDGET_H
 #define EDHREC_COMMANDER_API_RESPONSE_NAVIGATION_WIDGET_H
 
-#include "edhrec_api_response_commander_details_display_widget.h"
-#include "edhrec_commander_api_response_bracket_navigation_widget.h"
-#include "edhrec_commander_api_response_budget_navigation_widget.h"
+#include "../../api_response/cards/edhrec_commander_api_response_commander_details.h"
 
-#include <QGridLayout>
-#include <QLabel>
-#include <QPushButton>
+#include <QString>
 #include <QWidget>
+#include <qtmetamacros.h>
+
+class EdhrecCommanderApiResponseBracketNavigationWidget;
+class EdhrecCommanderApiResponseBudgetNavigationWidget;
+class QGridLayout;
+class QPushButton;
 
 class EdhrecCommanderApiResponseNavigationWidget : public QWidget
 {
@@ -32,6 +34,9 @@ public slots:
     void actRequestAverageDeckNavigation();
 signals:
     void requestUrl(QString url);
+
+private slots:
+    void applyInterfaceDefaultFont();
 
 private:
     QGridLayout *layout;

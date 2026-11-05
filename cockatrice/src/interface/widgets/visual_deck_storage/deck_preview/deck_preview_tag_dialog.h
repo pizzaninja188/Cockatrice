@@ -2,17 +2,25 @@
  * @file deck_preview_tag_dialog.h
  * @ingroup VisualDeckPreviewWidgets
  * @ingroup Dialogs
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef DECK_PREVIEW_TAG_DIALOG_H
 #define DECK_PREVIEW_TAG_DIALOG_H
 
 #include <QDialog>
-#include <QLabel>
-#include <QLineEdit>
-#include <QListWidget>
-#include <QVBoxLayout>
+#include <QList>
+#include <QString>
+#include <QStringList>
+#include <qtmetamacros.h>
+
+class QHBoxLayout;
+class QLabel;
+class QLineEdit;
+class QListWidget;
+class QPushButton;
+class QVBoxLayout;
+class QWidget;
 
 class DeckPreviewTagDialog : public QDialog
 {

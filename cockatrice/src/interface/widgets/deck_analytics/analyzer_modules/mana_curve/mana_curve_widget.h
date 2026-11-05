@@ -1,21 +1,24 @@
 /**
  * @file mana_curve_widget.h
  * @ingroup DeckEditorAnalyticsWidgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef MANA_CURVE_WIDGET_H
 #define MANA_CURVE_WIDGET_H
 
 #include "../../abstract_analytics_panel_widget.h"
-#include "mana_curve_category_widget.h"
 #include "mana_curve_config.h"
-#include "mana_curve_total_widget.h"
 
-#include <QVBoxLayout>
+#include <QJsonObject>
+#include <QList>
+#include <QString>
+#include <qtmetamacros.h>
 
-class SegmentedBarWidget;
 class DeckListStatisticsAnalyzer;
+class ManaCurveCategoryWidget;
+class ManaCurveTotalWidget;
+class QWidget;
 
 class ManaCurveWidget : public AbstractAnalyticsPanelWidget
 {
@@ -37,7 +40,7 @@ public:
     {
         config = ManaCurveConfig::fromJson(o);
         updateDisplay();
-    };
+    }
 
     QJsonObject extractConfigFromDialog(QDialog *dlg) const override;
 

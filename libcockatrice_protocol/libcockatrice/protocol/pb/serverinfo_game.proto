@@ -48,6 +48,9 @@ message ServerInfo_Game {
     // decklists are sent to all players when loaded
     optional bool share_decklists_on_load = 15;
 
+    // players are shuffled into new seats before each game starts
+    optional bool shuffle_players = 16;
+
     // the current player count
     optional uint32 player_count = 30;
 
@@ -65,4 +68,6 @@ message ServerInfo_Game {
 
     // MTGO-style rules engine (Servatrice + tricerules sidecar)
     optional bool ruled_game = 60 [default = false];
+    // the current host of the game, which may differ from the creator after a host transfer
+    optional ServerInfo_User host_info = 53;
 }

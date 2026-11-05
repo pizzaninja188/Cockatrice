@@ -1,41 +1,81 @@
 #include "card_picture_loader_local.h"
 
 #include "../../client/settings/cache_settings.h"
-#include "card_picture_to_load.h"
+#include "card_picture_loader_local_schemes.h"
+#include "libcockatrice/card/card_info.h"
+#include "libcockatrice/card/printing/exact_card.h"
+#include "libcockatrice/card/printing/printing_info.h"
+#include "libcockatrice/card/set/card_set.h"
 
+#include <QDebug>
+#include <QDir>
 #include <QDirIterator>
-#include <QMovie>
-#include <libcockatrice/card/database/card_database_manager.h>
+#include <QFileInfo>
+#include <QFileSystemWatcher>
+#include <QImageReader>
+#include <QList>
+#include <QMessageLogger>
+#include <QSharedPointer>
+#include <QStringList>
+#include <QTimer>
+#include <libcockatrice/settings/paths_settings.h>
 
-static constexpr int REFRESH_INTERVAL_MS = 10 * 1000;
+static constexpr int REFRESH_DEBOUNCE_MS = 500;
+// Watching can fail on network and FUSE mounts; the slow poll still picks those
+// changes up without the old ten-second full rescan.
+static constexpr int FALLBACK_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 CardPictureLoaderLocal::CardPictureLoaderLocal(QObject *parent)
-    : QObject(parent), picsPath(SettingsCache::instance().getPicsPath()),
-      customPicsPath(SettingsCache::instance().getCustomPicsPath())
+    : CardPictureLoaderLocal(parent,
+                             SettingsCache::instance().paths().getPicsPath(),
+                             SettingsCache::instance().paths().getCustomPicsPath())
 {
     // Hook up signals to settings
-    connect(&SettingsCache::instance(), &SettingsCache::picsPathChanged, this,
+    connect(&SettingsCache::instance().paths(), &PathsSettings::picsPathChanged, this,
             &CardPictureLoaderLocal::picsPathChanged);
+}
+
+CardPictureLoaderLocal::CardPictureLoaderLocal(QObject *parent,
+                                               const QString &_picsPath,
+                                               const QString &_customPicsPath)
+    : QObject(parent), picsPath(_picsPath), customPicsPath(_customPicsPath),
+      folderWatcher(new QFileSystemWatcher(this)), indexRefreshTimer(new QTimer(this)),
+      fallbackRefreshTimer(new QTimer(this))
+{
+    indexRefreshTimer->setSingleShot(true);
+    indexRefreshTimer->setInterval(REFRESH_DEBOUNCE_MS);
+    connect(indexRefreshTimer, &QTimer::timeout, this, &CardPictureLoaderLocal::refreshIndex);
+
+    connect(folderWatcher, &QFileSystemWatcher::directoryChanged, indexRefreshTimer, qOverload<>(&QTimer::start));
+    connect(folderWatcher, &QFileSystemWatcher::fileChanged, indexRefreshTimer, qOverload<>(&QTimer::start));
+
+    fallbackRefreshTimer->setInterval(FALLBACK_REFRESH_INTERVAL_MS);
+    connect(fallbackRefreshTimer, &QTimer::timeout, this, &CardPictureLoaderLocal::refreshIndex);
+    fallbackRefreshTimer->start();
 
     refreshIndex();
-
-    refreshTimer = new QTimer(this);
-    connect(refreshTimer, &QTimer::timeout, this, &CardPictureLoaderLocal::refreshIndex);
-    refreshTimer->start(REFRESH_INTERVAL_MS);
 }
 
 void CardPictureLoaderLocal::refreshIndex()
 {
     customFolderIndex.clear();
+    QSet<QString> directories;
+
+    QDir customDir(customPicsPath);
+    if (customDir.exists()) {
+        directories.insert(customDir.absolutePath());
+    }
 
     QDirIterator it(customPicsPath, QDirIterator::Subdirectories | QDirIterator::FollowSymlinks);
 
     // Recursively check all subdirectories of the CUSTOM folder
     while (it.hasNext()) {
-        QString thisPath(it.next());
-        QFileInfo thisFileInfo(thisPath);
+        const QString thisPath = it.next();
+        const QFileInfo thisFileInfo = it.fileInfo();
 
-        if (thisFileInfo.isFile()) {
+        if (thisFileInfo.isDir()) {
+            directories.insert(thisFileInfo.absoluteFilePath());
+        } else if (thisFileInfo.isFile()) {
             // We don't know which name is the correctedName because there might be '.'s in the cardName.
             // Just add all possibilities to be sure.
             customFolderIndex.insert(thisFileInfo.baseName(), thisFileInfo.absoluteFilePath());
@@ -43,8 +83,34 @@ void CardPictureLoaderLocal::refreshIndex()
         }
     }
 
+    updateWatchedDirectories(directories);
+
     qCDebug(CardPictureLoaderLocalLog) << "Finished indexing local image folder CUSTOM; map now has"
                                        << customFolderIndex.size() << "entries.";
+    emit indexChanged();
+}
+
+void CardPictureLoaderLocal::updateWatchedDirectories(const QSet<QString> &directories)
+{
+    const QSet<QString> stale = watchedDirectories - directories;
+    if (!stale.isEmpty()) {
+        folderWatcher->removePaths(QStringList(stale.begin(), stale.end()));
+    }
+
+    const QSet<QString> added = directories - watchedDirectories;
+    if (!added.isEmpty()) {
+        const QStringList failed = folderWatcher->addPaths(QStringList(added.begin(), added.end()));
+        if (!failed.isEmpty()) {
+            qCDebug(CardPictureLoaderLocalLog) << "Could not watch custom picture directories:" << failed;
+        }
+    }
+
+    watchedDirectories = directories;
+}
+
+QStringList CardPictureLoaderLocal::indexedPaths(const QString &baseName) const
+{
+    return customFolderIndex.values(baseName);
 }
 
 QImage CardPictureLoaderLocal::tryLoad(const ExactCard &toLoad) const
@@ -77,26 +143,8 @@ QImage CardPictureLoaderLocal::tryLoadCardImageFromDisk(const QString &setName,
     imgReader.setDecideFormatFromContent(true);
 
     // Most-to-least specific, these will fall through in order.
-    QStringList nameVariants;
-
-    // cardName_providerId
-    if (!providerId.isEmpty()) {
-        nameVariants << QString("%1-%2").arg(correctedCardName, providerId)
-                     << QString("%1_%2").arg(correctedCardName, providerId);
-    }
-    // cardName_setName_collectorNumber & setName-collectorNumber-cardName
-    if (!setName.isEmpty() && !collectorNumber.isEmpty()) {
-        nameVariants << QString("%1_%2_%3").arg(correctedCardName, setName, collectorNumber)
-                     << QString("%1-%2-%3").arg(setName, collectorNumber, correctedCardName);
-    }
-    // cardName_setName
-    if (!setName.isEmpty()) {
-        nameVariants << QString("%1_%2").arg(correctedCardName, setName)
-                     << QString("%1-%2").arg(setName, correctedCardName);
-    }
-
-    // cardName
-    nameVariants << correctedCardName;
+    QStringList nameVariants =
+        CardPictureLoaderLocalSchemes::generateImportVariants(correctedCardName, setName, collectorNumber, providerId);
 
     for (const QString &nameVariant : nameVariants) {
         if (nameVariant.isEmpty()) {
@@ -110,10 +158,14 @@ QImage CardPictureLoaderLocal::tryLoadCardImageFromDisk(const QString &setName,
             candidatePaths << picsPath + "/downloadedPics/" + setName + "/" + nameVariant;
         }
 
+        // Non-set-folder export schemes (e.g., Name_Set_Collector) write straight into
+        // downloadedPics/; check there as a fallback so local overrides round-trip.
+        candidatePaths << picsPath + "/downloadedPics/" + nameVariant;
+
         for (const QString &path : candidatePaths) {
             QFileInfo fileInfo(path);
             QDir dir = fileInfo.dir();
-            QString baseName = fileInfo.fileName();
+            QString baseName = fileInfo.completeBaseName();
 
             if (!dir.exists()) {
                 continue;
@@ -121,7 +173,8 @@ QImage CardPictureLoaderLocal::tryLoadCardImageFromDisk(const QString &setName,
 
             QStringList files = dir.entryList(QDir::Files);
             for (const QString &file : files) {
-                if (!file.startsWith(baseName)) {
+                QFileInfo fi(file);
+                if (fi.completeBaseName() != baseName) {
                     continue;
                 }
 
@@ -144,6 +197,7 @@ QImage CardPictureLoaderLocal::tryLoadCardImageFromDisk(const QString &setName,
 
 void CardPictureLoaderLocal::picsPathChanged()
 {
-    picsPath = SettingsCache::instance().getPicsPath();
-    customPicsPath = SettingsCache::instance().getCustomPicsPath();
+    picsPath = SettingsCache::instance().paths().getPicsPath();
+    customPicsPath = SettingsCache::instance().paths().getCustomPicsPath();
+    refreshIndex();
 }

@@ -21,18 +21,28 @@
 #define SERVERGAME_H
 
 #include "../server_response_containers.h"
+#include "libcockatrice/protocol/pb/game_event_context.pb.h"
 
+// IWYU pragma: keep
+// ServerInfo_Game is passed by value to the gameInfoChanged() signal, so the
+// moc-generated code needs the complete type.
 #include <QDateTime>
 #include <QHash>
+#include <QList>
 #include <QMap>
-#include <QMutex>
 #include <QObject>
+#include <QRecursiveMutex>
+#include <QScopedPointer>
 #include <QSet>
 #include <QStringList>
 #include <QVector>
+#include <QString>
+#include <QtGlobal>
+#include <atomic>
 #include <libcockatrice/protocol/pb/event_leave.pb.h>
 #include <libcockatrice/protocol/pb/response.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_game.pb.h>
+#include <qtmetamacros.h>
 
 #include <memory>
 
@@ -48,6 +58,18 @@ class Server_AbstractUserInterface;
 class Event_GameStateChanged;
 class Command_RuledPayload;
 class RuledGameDriver;
+class Server_DeckValidationStrategy;
+class Server_GameLifecycleStrategy;
+class Server_MatchResultStrategy;
+namespace google
+{
+namespace protobuf
+{
+class Message;
+} // namespace protobuf
+} // namespace google
+struct GameConfig;
+struct RoleInfo;
 
 class Server_Game : public QObject
 {
@@ -55,9 +77,15 @@ class Server_Game : public QObject
 private:
     Server_Room *room;
     int nextPlayerId;
+    std::atomic<qint64> nextArrowId = 1;
     int hostId;
     ServerInfo_User *creatorInfo;
     QMap<int, Server_AbstractParticipant *> participants;
+    // Seating/turn order as an ordered list of player ids. Player ids themselves
+    // are stable for the lifetime of the participant; shuffling or reordering
+    // only permutes this list so old clients, ISL routes and persistent
+    // references (all keyed by player id) keep working.
+    QList<int> seatOrder;
     QSet<QString> allPlayersEver, allSpectatorsEver;
     bool gameStarted;
     bool gameClosed;
@@ -74,6 +102,7 @@ private:
     bool spectatorsSeeEverything;
     int startingLifeTotal;
     bool shareDecklistsOnLoad;
+    bool shufflePlayers;
     int inactivityCounter;
     int startTimeOfThisGame, secondsElapsed;
     bool firstGameStarted;
@@ -88,11 +117,20 @@ private:
     std::unique_ptr<RuledGameDriver> ruledDriver;
     friend class RuledGameDriver; // covers participants / currentReplay
 
+    QScopedPointer<Server_DeckValidationStrategy> deckValidationStrategy;
+
+    QScopedPointer<Server_GameLifecycleStrategy> lifecycleStrategy;
+
+    QScopedPointer<Server_MatchResultStrategy> matchResultStrategy;
+
     void createGameStateChangedEvent(Event_GameStateChanged *event,
                                      Server_AbstractParticipant *recipient,
                                      bool omniscient,
                                      bool withUserInfo);
+    QList<Server_AbstractParticipant *> getParticipantsInSeatOrder() const;
+    void reseatPlayers(const QList<Server_AbstractParticipant *> &orderedParticipants, bool randomized);
     void storeGameInformation();
+    bool canSeePrivateEventsFor(const Server_AbstractParticipant *participant, int privatePlayerId) const;
 signals:
     void sigStartGameIfReady(bool override);
     void gameInfoChanged(ServerInfo_Game gameInfo);
@@ -102,22 +140,7 @@ private slots:
 
 public:
     mutable QRecursiveMutex gameMutex;
-    Server_Game(const ServerInfo_User &_creatorInfo,
-                int _gameId,
-                const QString &_description,
-                const QString &_password,
-                int _maxPlayers,
-                const QList<int> &_gameTypes,
-                bool _onlyBuddies,
-                bool _onlyRegistered,
-                bool _spectatorsAllowed,
-                bool _spectatorsNeedPassword,
-                bool _spectatorsCanTalk,
-                bool _spectatorsSeeEverything,
-                int _startingLifeTotal,
-                bool _shareDecklistsOnLoad,
-                bool _ruledGame,
-                Server_Room *parent);
+    Server_Game(const GameConfig &config, Server_Room *parent);
     ~Server_Game() override;
     Server_Room *getRoom() const
     {
@@ -137,12 +160,18 @@ public:
         return gameStarted;
     }
     int getPlayerCount() const;
+    /// Total cards across all players' zones. Takes gameMutex itself.
+    int getCardsInGame() const;
     int getSpectatorCount() const;
     QMap<int, Server_AbstractPlayer *> getPlayers() const;
     Server_AbstractPlayer *getPlayer(int id) const;
     const QMap<int, Server_AbstractParticipant *> &getParticipants() const
     {
         return participants;
+    }
+    QList<int> getSeatOrder() const
+    {
+        return seatOrder;
     }
     int getGameId() const
     {
@@ -193,13 +222,16 @@ public:
     {
         return ruledDriver.get();
     }
+    bool getShufflePlayers() const
+    {
+        return shufflePlayers;
+    }
     Response::ResponseCode
-    checkJoin(ServerInfo_User *user, const QString &_password, bool spectator, bool overrideRestrictions, bool asJudge);
+    checkJoin(ServerInfo_User *user, const QString &_password, const RoleInfo &roleInfo, bool overrideRestrictions);
     bool containsUser(const QString &userName) const;
     void addPlayer(Server_AbstractUserInterface *userInterface,
                    ResponseContainer &rc,
-                   bool spectator,
-                   bool judge,
+                   const RoleInfo &roleInfo,
                    bool broadcastUpdate = true);
     void removeParticipant(Server_AbstractParticipant *participant, Event_Leave::LeaveReason reason);
     void removeArrowsRelatedToPlayer(GameEventStorage &ges, Server_AbstractPlayer *player);
@@ -207,6 +239,8 @@ public:
     bool kickParticipant(int playerId);
     void startGameIfReady(bool forceStartGame);
     void stopGameIfFinished();
+    void shufflePlayerSeats();
+    void reorderPlayerSeats(const QList<QString> &orderedNames);
     int getActivePlayer() const
     {
         return activePlayer;
@@ -218,6 +252,7 @@ public:
     int getRuledPriorityPlayer() const;
     void setActivePlayer(int newPlayer);
     void setActivePhase(int newPhase);
+    qint64 generateArrowId();
     void removeArrows(int newPhase, bool force = false);
     void nextTurn();
     int getSecondsElapsed() const
@@ -244,6 +279,20 @@ public:
                                                                                    GameEventStorageItem::SendToOthers,
                                 int privatePlayerId = -1);
     void returnCardsFromPlayer(GameEventStorage &ges, Server_AbstractPlayer *player);
+
+    /** @brief Get the current deck validation strategy (non-owning). */
+    Server_DeckValidationStrategy *getDeckValidationStrategy() const
+    {
+        return deckValidationStrategy.data();
+    }
+    /** @brief Replace the deck validation strategy; takes ownership of @p strategy. */
+    void setDeckValidationStrategy(Server_DeckValidationStrategy *strategy);
+
+    /** @brief Get the current game lifecycle strategy (non-owning). */
+    Server_GameLifecycleStrategy *getLifecycleStrategy() const
+    {
+        return lifecycleStrategy.data();
+    }
 };
 
 #endif

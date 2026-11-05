@@ -1,18 +1,26 @@
 name: Generate Docs
 
+permissions:
+  contents: read    # write permission to the destination repo come from 'deploy_key'
+
 on:
-  push:
-    tags:
-      - '*'   # Only re-generate docs when a new tagged version is pushed
   pull_request:
     paths:
       - 'doc/doxygen/**'
       - '.github/workflows/documentation-build.yml'
       - 'Doxyfile'
+  release:
+    types:
+      - published    # publishing of stable releases and pre-releases
   workflow_dispatch:
 
+# Cancel earlier, unfinished runs of this workflow on the same branch (unless on release)
+concurrency:
+  group: "${{ github.workflow }} @ ${{ github.ref_name }}"
+  cancel-in-progress: ${{ github.event_name != 'release' }}
+
 env:
-  COCKATRICE_REF: ${{ github.ref_name }}    # Tag name if the commit is tagged, otherwise branch name
+  COCKATRICE_REF: ${{ github.ref_name }}    # tag name if the commit is tagged, otherwise branch name
 
 jobs:
   docs:
@@ -20,22 +28,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
+      - name: "Checkout"
+        uses: actions/checkout@v7
         with:
           submodules: recursive
 
-      - name: Install Graphviz
+      - name: "Install Graphviz"
+        shell: bash
         run: |
           sudo apt-get install -y graphviz
           dot -V
 
-      - name: Install Doxygen
+      - name: "Install Doxygen"
         uses: ssciwr/doxygen-install@v2
         with:
-          version: "1.14.0"
+          version: "1.18.0"
 
-      - name: Update Doxygen Configuration
+      - name: "Update Doxygen Configuration"
+        shell: bash
         run: |
           git diff Doxyfile
           doxygen -u Doxyfile
@@ -48,16 +58,22 @@ jobs:
             exit 1
           fi
 
-      - name: Generate Documentation
+      - name: "Generate Documentation"
         if: always()
+        shell: bash
         run: doxygen Doxyfile
 
-      - name: Deploy to cockatrice.github.io
-        if: github.event_name != 'pull_request'
+      - name: "Deploy to cockatrice.github.io/docs"
+        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
         uses: peaceiris/actions-gh-pages@v4
         with:
           deploy_key: ${{ secrets.DOCS_DEPLOY_KEY }}
+          destination_dir: docs    # docs will be available at https://cockatrice.github.io/docs/
           external_repository: Cockatrice/cockatrice.github.io
           publish_branch: master
           publish_dir: ./docs/html
-          destination_dir: docs   # Docs will live under https://cockatrice.github.io/docs/
+
+      - name: Link to Documentation Page
+        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: echo "::notice title=New documentation published::Shortly available at https://cockatrice.github.io/docs/"

@@ -1,25 +1,32 @@
 #ifndef ABSTRACT_PLAYER_H
 #define ABSTRACT_PLAYER_H
 
-#include "../serverinfo_user_container.h"
+#include "libcockatrice/protocol/pb/response.pb.h"
 #include "server_abstract_participant.h"
 
 #include <QMap>
 #include <QString>
+#include <qtmetamacros.h>
 
 class CardToMove;
 class DeckList;
 class Server_Arrow;
 class Server_Card;
 class Server_CardZone;
-class Server_Counter;
 struct MoveCardStruct;
+class GameEventStorage;
+class ServerInfo_User;
+class Server_AbstractUserInterface;
+class Server_Game;
+enum CardAttribute : int;
+template <typename T> class QList;
 
 class Server_AbstractPlayer : public Server_AbstractParticipant
 {
     Q_OBJECT
 private:
     class MoveCardCompareFunctor;
+
     QMap<int, Server_Arrow *> arrows;
 
     void getPlayerProperties(ServerInfo_PlayerProperties &result) override;
@@ -46,9 +53,15 @@ public:
                           Server_AbstractUserInterface *_handler);
     ~Server_AbstractPlayer() override;
     void prepareDestroy() override;
+    /// Total cards across all of this player's zones. The caller must hold the game's mutex.
+    int getCardCount() const;
     const DeckList *getDeckList() const
     {
         return deck;
+    }
+    bool getSideboardLocked() const
+    {
+        return sideboardLocked;
     }
     bool getReadyStart() const
     {
@@ -77,7 +90,6 @@ public:
     }
 
     int newCardId();
-    int newArrowId() const;
 
     void addZone(Server_CardZone *zone);
     void addArrow(Server_Arrow *arrow);

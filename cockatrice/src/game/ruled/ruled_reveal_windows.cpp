@@ -1,10 +1,12 @@
+#include <libcockatrice/game/player/player_manager.h>
+#include <libcockatrice/game/player/player_info.h>
 #include "ruled_reveal_windows.h"
 
-#include "../abstract_game.h"
-#include "../game_scene.h"
-#include "../player/player.h"
-#include "../zones/view_zone.h"
-#include "../zones/view_zone_widget.h"
+#include <libcockatrice/game/abstract_game.h>
+#include "../../game_graphics/game_scene.h"
+#include <libcockatrice/game/player/player_logic.h>
+#include "../../game_graphics/zones/view_zone.h"
+#include "../../game_graphics/zones/view_zone_widget.h"
 #include "ruled_client_state.h"
 
 #include <libcockatrice/protocol/pb/serverinfo_card.pb.h>
@@ -64,7 +66,7 @@ void RuledRevealWindows::refresh()
     int position = 0;
     for (const QString &id : state->reveals.order()) {
         const auto &entry = entries[id];
-        Player *owner = game->getPlayerManager()->getPlayers().value(entry.owner, nullptr);
+        PlayerLogic *owner = game->getPlayerManager()->getPlayers().value(entry.owner, nullptr);
         // The hand is only a layout scaffold; the engine snapshot supplies all display data.
         auto *scaffold = owner ? owner->getZones().value(ZoneNames::HAND) : nullptr;
         if (!scaffold)
@@ -126,11 +128,8 @@ void RuledRevealWindows::refresh()
             view->getZone()->getLogic()->clearContents();
             view->getZone()->initializeCards(cards);
         }
-        // Fork-owned lifecycle control through the single friend seam, without adding ruled
-        // behavior to the generic zone widget. Resolution completion enables local dismissal.
-        view->closeable = entry.phase == RuledRevealState::Phase::Completed;
-        view->setWindowFlags(view->closeable ? view->windowFlags() | Qt::WindowCloseButtonHint
-                                             : view->windowFlags() & ~Qt::WindowCloseButtonHint);
+        // Active reveals stay engine-owned; resolution completion enables local dismissal.
+        view->setCloseable(entry.phase == RuledRevealState::Phase::Completed);
         view->getZone()->getLogic()->setProperty("ruledRevealId", interactive ? id : QString{});
         view->getZone()->getLogic()->setProperty("ruledRevealSnapshot", true);
         QString title = tr("%1's revealed %2").arg(owner->getPlayerInfo()->getName(), zone);
@@ -141,7 +140,7 @@ void RuledRevealWindows::refresh()
     }
 
     for (auto it = publicHands.cbegin(); it != publicHands.cend(); ++it) {
-        Player *owner = game->getPlayerManager()->getPlayers().value(it.key(), nullptr);
+        PlayerLogic *owner = game->getPlayerManager()->getPlayers().value(it.key(), nullptr);
         auto *scaffold = owner ? owner->getZones().value(ZoneNames::HAND) : nullptr;
         if (!owner || !scaffold) {
             auto view = publicHandWindows.take(it.key());
@@ -175,8 +174,7 @@ void RuledRevealWindows::refresh()
             view->getZone()->getLogic()->clearContents();
             view->getZone()->initializeCards(cards);
         }
-        view->closeable = false;
-        view->setWindowFlags(view->windowFlags() & ~Qt::WindowCloseButtonHint);
+        view->setCloseable(false);
         view->getZone()->getLogic()->setProperty("ruledPublicHandPlayerId", it.key());
         view->getZone()->getLogic()->setProperty("ruledPublicHandSnapshot", true);
         view->setWindowTitle(tr("%1's publicly revealed hand").arg(owner->getPlayerInfo()->getName()));

@@ -1,0 +1,69 @@
+/**
+ * @file replay_widget.h
+ * @ingroup Core
+ * @ingroup Replay
+ */
+//! \todo Document this file.
+
+#ifndef REPLAY_WIDGET_H
+#define REPLAY_WIDGET_H
+
+#include <QList>
+#include <QWidget>
+#include <libcockatrice/game/player/event_processing_options.h>
+#include <qtmetamacros.h>
+
+class ReplayManager;
+class ReplayQuickSettingsWidget;
+class GameEventContainer;
+class GameReplay;
+class QAction;
+class QToolButton;
+class ReplayTimelineWidget;
+
+/**
+ * @brief The top-level widget that is put in the replay dock widget.
+ * Contains the replay timeline as well as the buttons.
+ */
+class ReplayWidget : public QWidget
+{
+    Q_OBJECT
+
+public:
+    /**
+     * @param parent The parent widget
+     * @param replay Cannot be null. Takes ownership of the replay.
+     */
+    ReplayWidget(QWidget *parent, GameReplay *replay);
+
+    [[nodiscard]] const QList<int> &getReplayTimeline() const;
+
+    /**
+     * @brief Index of the last replay event the game state has processed, or -1 before the first event.
+     */
+    [[nodiscard]] int getLastProcessedEventIndex() const;
+
+public slots:
+    void seekToEvent(int eventIndex);
+
+signals:
+    void rewound();
+    void timeChanged(int time);
+    void eventReplayed(const GameEventContainer &cont, EventProcessingOptions options);
+
+private:
+    ReplayManager *replayManager;
+
+    ReplayTimelineWidget *timelineWidget;
+    QToolButton *replayPlayButton, *replayFastForwardButton;
+    ReplayQuickSettingsWidget *settingsWidget;
+    QAction *aReplaySkipForward, *aReplaySkipBackward, *aReplaySkipForwardBig, *aReplaySkipBackwardBig;
+
+private slots:
+    void replayFinished();
+    void replayPlayButtonToggled(bool checked);
+    void updateTimeScaleFactor(bool checked);
+    void refreshShortcuts();
+};
+
+#endif // REPLAY_WIDGET_H

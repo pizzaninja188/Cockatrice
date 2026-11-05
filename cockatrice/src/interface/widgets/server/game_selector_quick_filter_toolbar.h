@@ -1,12 +1,19 @@
 #ifndef COCKATRICE_GAME_SELECTOR_QUICK_FILTER_TOOLBAR_H
 #define COCKATRICE_GAME_SELECTOR_QUICK_FILTER_TOOLBAR_H
 
-#include "../tabs/tab_supervisor.h"
-#include "games_model.h"
-
-#include <QHBoxLayout>
-#include <QLineEdit>
 #include <QWidget>
+#include <functional>
+#include <qtmetamacros.h>
+
+class GamesProxyModel;
+class QCheckBox;
+class QComboBox;
+class QHBoxLayout;
+class QLineEdit;
+class QString;
+class TabSupervisor;
+struct GameFilterConfigs;
+template <class Key, class T> class QMap;
 
 class GameSelectorQuickFilterToolBar : public QWidget
 {
@@ -19,23 +26,7 @@ public:
                                             GamesProxyModel *model,
                                             const QMap<int, QString> &allGameTypes);
     void syncFromModel();
-    void applyFilters(std::function<void(bool &,
-                                         bool &,
-                                         bool &,
-                                         bool &,
-                                         bool &,
-                                         bool &,
-                                         bool &,
-                                         QString &,
-                                         QStringList &,
-                                         QSet<int> &,
-                                         int &,
-                                         int &,
-                                         QTime &,
-                                         bool &,
-                                         bool &,
-                                         bool &,
-                                         bool &)> mutator);
+    void applyFilters(std::function<void(GameFilterConfigs &)> mutator);
     void retranslateUi();
 
 private:

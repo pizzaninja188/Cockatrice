@@ -1,9 +1,9 @@
 #include "ruled_public_zone_order.h"
 
-#include "../board/card_item.h"
-#include "../zones/logic/card_zone_logic.h"
-#include "../zones/logic/view_zone_logic.h"
-#include "../zones/view_zone.h"
+#include <libcockatrice/game/board/card_state.h>
+#include <libcockatrice/game/zones/card_zone_logic.h>
+#include <libcockatrice/game/zones/view_zone_logic.h>
+
 #include "ruled_public_zone_order_plan.h"
 
 #include <QPointer>
@@ -19,18 +19,17 @@ void RuledPublicZoneOrder::apply(CardZoneLogic *zone, const ServerInfo_Zone &inf
         return;
     }
     QList<int> ids;
-    for (CardItem *card : *ordered) {
+    for (CardState *card : *ordered) {
         ids.append(card->getId());
     }
     struct ViewUpdate
     {
         QPointer<ZoneViewZoneLogic> logic;
-        std::optional<QList<CardItem *>> ordered;
+        std::optional<QList<CardState *>> ordered;
         bool changed;
     };
     QList<ViewUpdate> updates;
-    for (ZoneViewZone *window : zone->getViews()) {
-        auto *logic = window ? qobject_cast<ZoneViewZoneLogic *>(window->getLogic()) : nullptr;
+    for (ZoneViewZoneLogic *logic : zone->getViews()) {
         if (!logic || logic->getOriginalZone() != zone ||
             (logic->getRevealZone() && !logic->getWriteableRevealZone())) {
             continue;

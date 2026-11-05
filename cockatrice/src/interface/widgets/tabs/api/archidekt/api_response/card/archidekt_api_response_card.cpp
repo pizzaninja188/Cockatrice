@@ -1,5 +1,9 @@
 #include "archidekt_api_response_card.h"
 
+#include <QDebug>
+#include <QJsonValue>
+#include <qlogging.h>
+
 void ArchidektApiResponseCard::fromJson(const QJsonObject &json)
 {
     id = json.value("id").toInt();
@@ -21,16 +25,16 @@ void ArchidektApiResponseCard::fromJson(const QJsonObject &json)
     edition.fromJson(json.value("edition").toObject());
 
     flavor = json.value("flavor").toString();
-    //! \todo but not really important
-    //! \todo games = {""};
-    //! \todo options = {""};
+    //! \todo Parse games and options fields (not really important).
+    // games = {""};
+    // options = {""};
     scryfallImageHash = json.value("scryfallImageHash").toString();
     oracleCard = json.value("oracleCard").toObject();
     owned = json.value("owned").toInt();
     pinnedStatus = json.value("pinnedStatus").toInt();
     rarity = json.value("rarity").toString();
-    //! \todo but not really important
-    //! \todo globalCategories = {""};
+    //! \todo Parse globalCategories field (not really important).
+    // globalCategories = {""};
 }
 
 void ArchidektApiResponseCard::debugPrint() const

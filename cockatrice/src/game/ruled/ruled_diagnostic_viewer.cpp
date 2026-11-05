@@ -1,11 +1,22 @@
+#include <libcockatrice/protocol/pb/game_replay.pb.h>
+#include <libcockatrice/protocol/pb/game_event_container.pb.h>
+#include <libcockatrice/protocol/pb/serverinfo_game.pb.h>
+#include <libcockatrice/game/game_meta_info.h>
+#include <libcockatrice/game/game_state.h>
+#include <libcockatrice/game/game_event_handler.h>
+#include <libcockatrice/game/player/player_manager.h>
+#include <libcockatrice/game/player/player_info.h>
+#include "ruled_game_controller.h"
 #include "ruled_diagnostic_viewer.h"
 
-#include "../../interface/widgets/replay/replay_timeline_widget.h"
+#include "../../interface/widgets/replay/replay_manager.h"
+#include "../../game_graphics/player/player_graphics_item.h"
+#include "ruled_client_ui.h"
 #include "../../interface/widgets/tabs/tab_game.h"
 #include "../../interface/widgets/tabs/tab_supervisor.h"
 #include "../../interface/window_main.h"
-#include "../abstract_game.h"
-#include "../player/player.h"
+#include <libcockatrice/game/abstract_game.h>
+#include <libcockatrice/game/player/player_logic.h>
 #include "../prompt/game_prompt_widget.h"
 #include "ruled_client_diagnostics.h"
 #include "ruled_client_state.h"
@@ -120,7 +131,9 @@ RuledDiagnosticViewer::openPath(MainWindow *window, const QString &archive, int 
             if (const auto *gameInfo = dynamic_cast<ServerInfo_Game *>(message.get()))
                 replay->mutable_game_info()->CopyFrom(*gameInfo);
         } else if (const auto *event = dynamic_cast<GameEventContainer *>(message.get())) {
-            replay->add_event_list()->CopyFrom(*event);
+            auto *recordedEvent = replay->add_event_list();
+            recordedEvent->CopyFrom(*event);
+            recordedEvent->set_seconds_elapsed(sequences.size() + 1);
             sequences.append(row.value("sequence").toString().toULongLong());
         }
     }
@@ -238,9 +251,9 @@ void RuledDiagnosticViewer::openFromCommandLine(MainWindow *window, const QComma
             // Exercise separate user seeks, including the deferred player destruction between clicks.
             // A single synchronous rewind/forward pair can conceal stale signal receivers.
             for (int pass = 0; pass < 2; ++pass) {
-                QList<QPair<QPointer<Player>, QPointer<PlayerGraphicsItem>>> retiredGraphics;
+                QList<QPair<QPointer<PlayerLogic>, QPointer<PlayerGraphicsItem>>> retiredGraphics;
                 for (auto *player : viewer->tab->getGame()->getPlayerManager()->getPlayers())
-                    retiredGraphics.append({player, player->getGraphicsItem()});
+                    retiredGraphics.append({player, RuledActions::graphics(player)});
                 viewer->seek(viewer->reader->rows.first().value("sequence").toString().toULongLong());
                 QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
                 if (!stableLayout())
@@ -268,7 +281,7 @@ void RuledDiagnosticViewer::openFromCommandLine(MainWindow *window, const QComma
 RuledDiagnosticViewer::RuledDiagnosticViewer(TabGame *tab,
                                              std::shared_ptr<RuledDiagnosticReader> reader,
                                              const QList<quint64> &sequences)
-    : QObject(tab), tab(tab), timeline(tab->findChild<ReplayTimelineWidget *>()), reader(std::move(reader)),
+    : QObject(tab), tab(tab), replayManager(tab->findChild<ReplayManager *>()), reader(std::move(reader)),
       eventSequences(sequences)
 {
     qApp->installEventFilter(this);
@@ -358,16 +371,12 @@ RuledDiagnosticViewer::RuledDiagnosticViewer(TabGame *tab,
     });
     dock->setWidget(panel);
     tab->addDockWidget(Qt::BottomDockWidgetArea, dock);
-    if (timeline) {
-        QList<int> positions;
-        for (int i = 0; i < eventSequences.size(); ++i)
-            positions.append(i * 1000);
-        timeline->setTimeline(positions);
-        timeline->maxTime += 200;
-        connect(timeline, &ReplayTimelineWidget::rewound, this, [this] { reset(); });
-        connect(timeline, &ReplayTimelineWidget::processNextEvent, this, [this](EventProcessingOptions) {
-            if (!seeking && timeline->getCurrentEvent() < eventSequences.size()) {
-                const auto index = timeline->getCurrentEvent();
+    if (replayManager) {
+        connect(replayManager, &ReplayManager::rewound, this, [this] { reset(); });
+        connect(replayManager, &ReplayManager::eventReplayed, this,
+                [this](const GameEventContainer &, EventProcessingOptions) {
+            const auto index = replayManager->getLastProcessedEventIndex() + 1;
+            if (!seeking && index < eventSequences.size()) {
                 const auto sequence = index + 1 < eventSequences.size()
                                           ? eventSequences[index + 1] - 1
                                           : this->reader->rows.last().value("sequence").toString().toULongLong();
@@ -383,14 +392,15 @@ RuledDiagnosticViewer::RuledDiagnosticViewer(TabGame *tab,
 void RuledDiagnosticViewer::reset()
 {
     auto *game = tab->getGame();
-    game->getGameEventHandler()->clearRuledSessionState(RuledSessionResetScope::All);
+    RuledActions::controller(game)->clearRuledSessionState(RuledSessionResetScope::All);
     const auto players = game->getPlayerManager()->getPlayers();
     for (auto it = players.begin(); it != players.end(); ++it) {
         it.value()->clear();
+        auto *graphics = RuledActions::graphics(it.value());
         game->getPlayerManager()->removePlayer(it.key());
         // removePlayer detaches the graphics from the scene, but only queues the Player's deletion.
         // Retire the detached graphics now: their ruled-state connections must not outlive the player.
-        delete it.value()->getGraphicsItem();
+        delete graphics;
     }
     game->getPlayerManager()->spectators.clear();
     game->getGameMetaInfo()->setStarted(false);
@@ -400,12 +410,13 @@ void RuledDiagnosticViewer::reset()
 }
 void RuledDiagnosticViewer::seek(quint64 sequence)
 {
-    if (timeline) {
-        timeline->stopReplay();
+    if (replayManager) {
+        replayManager->stopReplay();
         const auto next = std::upper_bound(eventSequences.begin(), eventSequences.end(), sequence);
         const auto count = std::distance(eventSequences.begin(), next);
         seeking = true;
-        timeline->skipToTime(count == 0 ? 0 : int((count - 1) * 1000 + 200), false);
+        if (count == 0) replayManager->setTime(0);
+        else replayManager->setTimeToEvent(static_cast<int>(count - 1));
         seeking = false;
     }
     display(sequence);

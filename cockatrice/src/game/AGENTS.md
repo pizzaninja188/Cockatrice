@@ -9,9 +9,13 @@ All substantial ruled client logic belongs under `cockatrice/src/game/ruled/`; u
 - **`RuledClientState`** mirrors the engine view: identity maps, legal actions, combat staging, stack tracking, pending choices, and ruled signals.
 - **`RuledEventDispatcher`** applies one `RuledEventBatch`. Add one private method per event kind plus one `has_*()` dispatch line; do not add large inline event blocks.
 - **`RuledActions`** owns click interpretation and `CardItem` lookup. `RuledActions::isRuledGame(game)` is the only place that reads the ruled-game flag.
-- **`RuledClientHost`** is the UI seam implemented by `GameEventHandler`. Keep `ruled_client_state.cpp` and `ruled_event_dispatcher.cpp` free of `AbstractGame`, `Player`, and `CardItem`; expose required UI operations through the host interface so headless client tests remain linkable.
+- **`RuledClientHost`** is the UI seam implemented by `RuledGameController`. Keep `ruled_client_state.cpp` and `ruled_event_dispatcher.cpp` free of `AbstractGame`, `PlayerLogic`, and `CardItem`; expose required UI operations through the host interface so headless client tests remain linkable.
 
 Engine legal actions, targets, prompts, and object identities are authoritative. The client may display Oracle data but must not infer ruled legality or reconstruct engine IDs from names.
+
+`RuledGameController` installs `RuledGameHooks` on the upstream model-only `GameEventHandler`.
+`RuledPlayerActions` extends upstream `PlayerActions`; `ruled_client_ui` resolves model objects
+to graphics objects. Keep widget dependencies out of `libcockatrice_game`.
 
 ## Prompt UI
 

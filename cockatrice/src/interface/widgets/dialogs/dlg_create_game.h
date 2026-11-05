@@ -1,15 +1,17 @@
 /**
  * @file dlg_create_game.h
  * @ingroup RoomDialogs
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef DLG_CREATEGAME_H
 #define DLG_CREATEGAME_H
 
 #include <QDialog>
 #include <QMap>
+#include <QString>
 #include <libcockatrice/utility/macros.h>
+#include <qtmetamacros.h>
 
 class QCheckBox;
 class QDialogButtonBox;
@@ -22,6 +24,7 @@ class QSpinBox;
 class Response;
 class ServerInfo_Game;
 class TabRoom;
+class QWidget;
 
 class DlgCreateGame : public QDialog
 {
@@ -49,6 +52,7 @@ private:
         *spectatorsSeeEverythingCheckBox, *createGameAsJudgeCheckBox, *createGameAsSpectatorCheckBox;
     QCheckBox *shareDecklistsOnLoadCheckBox;
     QCheckBox *ruledGameCheckBox;
+    QCheckBox *shufflePlayersCheckBox;
     QDialogButtonBox *buttonBox;
     QPushButton *clearButton;
     QCheckBox *rememberGameSettings;

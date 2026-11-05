@@ -1,13 +1,17 @@
 /**
  * @file shadow_background_label.h
  * @ingroup PrintingWidgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef STYLEDLABEL_H
 #define STYLEDLABEL_H
 
 #include <QLabel>
+#include <QString>
+#include <qtmetamacros.h>
+
+class QWidget;
 
 class ShadowBackgroundLabel : public QLabel
 {

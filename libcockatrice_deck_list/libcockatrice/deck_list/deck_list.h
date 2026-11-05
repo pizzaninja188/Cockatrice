@@ -12,20 +12,24 @@
 
 #include "deck_list_memento.h"
 #include "deck_list_node_tree.h"
+#include "libcockatrice/protocol/pb/move_card_to_zone.pb.h"
+#include "libcockatrice/utility/card_ref.h"
 #include "sideboard_plan.h"
 #include "tree/inner_deck_list_node.h"
 
+#include <QList>
 #include <QMap>
-#include <QVector>
-#include <QtCore/QXmlStreamReader>
-#include <libcockatrice/utility/card_ref.h>
+#include <QSet>
+#include <QString>
+#include <QStringList>
+#include <functional>
+#include <libcockatrice/utility/playmat_params.h>
 
-class AbstractDecklistNode;
 class DecklistCardNode;
-class CardDatabase;
 class QIODevice;
 class QTextStream;
-class InnerDecklistNode;
+class QXmlStreamReader;
+class QXmlStreamWriter;
 
 /**
  * @class DeckList
@@ -71,11 +75,29 @@ public:
         QList<CardRef> commanders;   ///< Declared Commander cards, distinct from mainboard and banner.
         QStringList tags;            ///< User-defined tags for deck classification.
         QString lastLoadedTimestamp; ///< Timestamp string of last load.
+        PlaymatInfo playmat;         ///< Optional playmat background for table+stack zones.
 
         /**
          * @brief Checks if all values (except for lastLoadedTimestamp) in the metadata is empty.
          */
         bool isEmpty() const;
+
+        /**
+         * @brief Reads a single deck metadata element from a Cockatrice deck XML stream.
+         *
+         * @param xml Reader positioned at the element.
+         * @param childName Name of the current element.
+         * @return true if a metadata element was consumed, false if @p childName is
+         *         not a metadata element.
+         */
+        bool readElement(QXmlStreamReader *xml, const QString &childName);
+
+        /**
+         * @brief Writes the deck metadata section of a Cockatrice deck XML file.
+         *
+         * @param xml Writer to append the metadata elements to.
+         */
+        void write(QXmlStreamWriter *xml) const;
     };
 
 private:
@@ -89,8 +111,24 @@ private:
      */
     mutable QString cachedDeckHash;
 
+    /** @name XML load helpers */
+    ///@{
+    /**
+     * @brief Advances to the next element in the XML stream.
+     * @param xml Reader to advance past non-element tokens.
+     * @return true when a start element was reached, false at end of stream.
+     */
+    bool seekToNextElement(QXmlStreamReader *xml);
+
+    /**
+     * @brief Reads the contents of a `cockatrice_deck` element into this deck.
+     * @param xml Reader positioned at the deck element, stopped at its end.
+     */
+    void readDeckBody(QXmlStreamReader *xml);
+    ///@}
+
 public:
-    /// @name Metadata setters
+    /** @name Metadata setters */
     ///@{
     void setName(const QString &_name = QString())
     {
@@ -120,6 +158,10 @@ public:
     {
         metadata.commanders = _commanders;
     }
+    void setPlaymat(const PlaymatInfo &_playmat = {})
+    {
+        metadata.playmat = _playmat;
+    }
     void setLastLoadedTimestamp(const QString &_lastLoadedTimestamp = QString())
     {
         metadata.lastLoadedTimestamp = _lastLoadedTimestamp;
@@ -130,11 +172,11 @@ public:
     }
     ///@}
 
-    /// @brief Construct an empty deck.
+    /** @brief Construct an empty deck. */
     explicit DeckList();
-    /// @brief Construct from a serialized native-format string.
+    /** @brief Construct from a serialized native-format string. */
     explicit DeckList(const QString &nativeString);
-    /// @brief Construct from components
+    /** @brief Construct from components. */
     DeckList(const Metadata &metadata,
              const DecklistNodeTree &tree,
              const QMap<QString, SideboardPlan> &sideboardPlans = {});
@@ -149,8 +191,10 @@ public:
         return &tree;
     }
 
-    /// @name Metadata getters
-    /// The individual metadata getters still exist for backwards compatibility.
+    /**
+     * @name Metadata getters
+     * The individual metadata getters still exist for backwards compatibility.
+     */
     ///@{
     //! \todo Figure out when we can remove them.
     const Metadata &getMetadata() const
@@ -177,6 +221,10 @@ public:
     {
         return metadata.commanders;
     }
+    PlaymatInfo getPlaymat() const
+    {
+        return metadata.playmat;
+    }
     QString getLastLoadedTimestamp() const
     {
         return metadata.lastLoadedTimestamp;
@@ -192,7 +240,7 @@ public:
         return metadata.isEmpty() && getCardList().isEmpty();
     }
 
-    /// @name Sideboard plans
+    /** @name Sideboard plans */
     ///@{
     QList<MoveCard_ToZone> getCurrentSideboardPlan() const;
     void setCurrentSideboardPlan(const QList<MoveCard_ToZone> &plan);
@@ -202,7 +250,7 @@ public:
     }
     ///@}
 
-    /// @name Serialization (XML)
+    /** @name Serialization (XML) */
     ///@{
     bool readElement(QXmlStreamReader *xml);
     void write(QXmlStreamWriter *xml) const;
@@ -213,7 +261,7 @@ public:
     bool saveToFile_Native(QIODevice *device) const;
     ///@}
 
-    /// @name Serialization (Plain text)
+    /** @name Serialization (Plain text) */
     ///@{
     bool loadFromStream_Plain(QTextStream &stream,
                               bool preserveMetadata,
@@ -225,7 +273,7 @@ public:
     QString writeToString_Plain(bool prefixSideboardCards = true, bool slashTappedOutSplitCards = false) const;
     ///@}
 
-    /// @name Deck manipulation
+    /** @name Deck manipulation */
     ///@{
     void cleanList(bool preserveMetadata = false);
     bool isEmpty() const
@@ -245,9 +293,17 @@ public:
                               const QString &cardSetCollectorNumber = QString(),
                               const QString &cardProviderId = QString(),
                               const bool formatLegal = true);
+    DecklistCardNode *addCards(const QString &cardName,
+                               int amount,
+                               const QString &zoneName,
+                               int position = -1,
+                               const QString &cardSetName = QString(),
+                               const QString &cardSetCollectorNumber = QString(),
+                               const QString &cardProviderId = QString(),
+                               const bool formatLegal = true);
     ///@}
 
-    /// @name Deck identity
+    /** @name Deck identity */
     ///@{
     QString getDeckHash() const;
     void refreshDeckHash();

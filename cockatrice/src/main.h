@@ -1,8 +1,8 @@
 /**
  * @file main.h
  * @ingroup Core
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef MAIN_H
 #define MAIN_H
@@ -10,13 +10,11 @@
 #include <QLoggingCategory>
 
 inline Q_LOGGING_CATEGORY(MainLog, "main");
-inline Q_LOGGING_CATEGORY(QtTranslatorDebug, "qt_translator");
 
 class CardDatabase;
 class QString;
 class QSystemTrayIcon;
 class QTranslator;
-class SoundEngine;
 
 extern CardDatabase *db;
 

@@ -2,35 +2,94 @@
 
 #include "../../../client/settings/cache_settings.h"
 #include "../../../interface/widgets/tabs/tab_supervisor.h"
+#include "../../deck_loader/deck_loader.h"
+#include "../../pixel_map_generator.h"
+#include "../../theme_config.h"
+#include "../../theme_manager.h"
 #include "../../window_main.h"
+#include "../cards/art_crop_attribution.h"
+#include "../cards/card_info_picture_art_crop_widget.h"
+#include "abstract_client.h"
 #include "background_sources.h"
 #include "home_styled_button.h"
+#include "home_tab_button_color.h"
+#include "libcockatrice/card/card_info.h"
+#include "libcockatrice/card/database/card_database.h"
+#include "libcockatrice/card/database/card_database_loader.h"
+#include "libcockatrice/card/database/card_database_querier.h"
+#include "libcockatrice/card/printing/exact_card.h"
+#include "libcockatrice/card/printing/printing_info.h"
+#include "libcockatrice/card/set/card_set.h"
+#include "libcockatrice/utility/card_ref.h"
 
+#include <QBrush>
+#include <QDebug>
+#include <QFlags>
+#include <QFont>
+#include <QFontMetrics>
+#include <QFrame>
 #include <QGroupBox>
+#include <QImage>
+#include <QLabel>
+#include <QLayout>
+#include <QLinearGradient>
+#include <QList>
+#include <QMap>
+#include <QObject>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPoint>
+#include <QPointF>
 #include <QPushButton>
+#include <QRandomGenerator>
+#include <QRect>
+#include <QRectF>
+#include <QRgb>
+#include <QScrollArea>
+#include <QSharedPointer>
+#include <QSize>
+#include <QString>
+#include <QStringLiteral>
+#include <QTimer>
 #include <QVBoxLayout>
+#include <QVector>
+#include <QtGlobal>
+#include <algorithm>
 #include <libcockatrice/card/database/card_database_manager.h>
+#include <libcockatrice/deck_list/deck_file_format.h>
+#include <libcockatrice/deck_list/loaded_deck.h>
 #include <libcockatrice/network/client/remote/remote_client.h>
+#include <libcockatrice/settings/appearance_settings.h>
+#include <libcockatrice/settings/paths_settings.h>
+#include <libcockatrice/utility/qt_utils.h>
+#include <optional>
+#include <qlogging.h>
+#include <qnamespace.h>
+#include <utility>
 
 HomeWidget::HomeWidget(QWidget *parent, TabSupervisor *_tabSupervisor)
-    : QWidget(parent), tabSupervisor(_tabSupervisor), background("theme:backgrounds/home"), overlay("theme:cockatrice")
+    : QWidget(parent), tabSupervisor(_tabSupervisor), background(themePixmap(QStringLiteral("backgrounds/home")))
 {
-    layout = new QGridLayout(this);
+    setObjectName("homeWidget");
 
     backgroundSourceCard = new CardInfoPictureArtCropWidget(this);
 
-    gradientColors = extractDominantColors(background);
+    gradientColors = determineButtonColor();
 
-    layout->addWidget(createButtons(), 1, 1, Qt::AlignVCenter | Qt::AlignHCenter);
+    // The launcher keeps its natural size on a large display and stays centred in the
+    // viewport. On a small window it scrolls, instead of its combined minimum height
+    // becoming the minimum height of the entire application.
+    auto *scrollArea = QtUtils::makeScrollArea(this, Qt::ScrollBarAsNeeded, Qt::ScrollBarAsNeeded);
+    scrollArea->setObjectName("homeActionsScrollArea");
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setWidgetResizable(false);
+    scrollArea->setAlignment(Qt::AlignCenter);
+    // The home background is painted by this widget, so let it show through the viewport.
+    scrollArea->viewport()->setAutoFillBackground(false);
+    scrollArea->setWidget(createButtons());
 
-    layout->setRowStretch(0, 1);
-    layout->setRowStretch(2, 1);
-    layout->setColumnStretch(0, 1);
-    layout->setColumnStretch(2, 1);
-
-    setLayout(layout);
+    auto *layout = new QVBoxLayout(this);
+    layout->addWidget(scrollArea);
 
     cardChangeTimer = new QTimer(this);
     connect(cardChangeTimer, &QTimer::timeout, this, &HomeWidget::updateRandomCard);
@@ -40,30 +99,73 @@ HomeWidget::HomeWidget(QWidget *parent, TabSupervisor *_tabSupervisor)
     updateConnectButton(tabSupervisor->getClient()->getStatus());
 
     connect(tabSupervisor->getClient(), &RemoteClient::statusChanged, this, &HomeWidget::updateConnectButton);
-    connect(&SettingsCache::instance(), &SettingsCache::homeTabBackgroundSourceChanged, this,
+    connect(&SettingsCache::instance().appearance(), &AppearanceSettings::homeTabBackgroundSourceChanged, this,
             &HomeWidget::initializeBackgroundFromSource);
-    connect(&SettingsCache::instance(), &SettingsCache::homeTabBackgroundShuffleFrequencyChanged, this,
-            &HomeWidget::onBackgroundShuffleFrequencyChanged);
+    connect(&SettingsCache::instance().appearance(), &AppearanceSettings::homeTabBackgroundShuffleFrequencyChanged,
+            this, &HomeWidget::onBackgroundShuffleFrequencyChanged);
     // Lambda is cleaner to read than overloading this
-    connect(&SettingsCache::instance(), &SettingsCache::homeTabDisplayCardNameChanged, this, [this] { repaint(); });
+    connect(&SettingsCache::instance().appearance(), &AppearanceSettings::homeTabDisplayCardNameChanged, this,
+            [this] { repaint(); });
+    connect(&SettingsCache::instance().appearance(), &AppearanceSettings::homeTabBackgroundDimChanged, this,
+            [this] { repaint(); });
+    connect(&SettingsCache::instance(), &SettingsCache::themeChanged, this,
+            &HomeWidget::initializeBackgroundFromSource);
     connect(&SettingsCache::instance(), &SettingsCache::themeChanged, this,
             &HomeWidget::updateButtonsToBackgroundColor);
+    // Scheme flips (light/dark/system with an OS switch) fire on themeManager,
+    // not on SettingsCache::themeChanged, so re-resolve the variant background.
+    connect(themeManager, &ThemeManager::themeChanged, this, &HomeWidget::initializeBackgroundFromSource);
+    connect(themeManager, &ThemeManager::paletteChanged, this, &HomeWidget::updateButtonsToBackgroundColor);
+    connect(themeManager, &ThemeManager::paletteChanged, this, &HomeWidget::updateLogoOverlay);
+    connect(&SettingsCache::instance().appearance(), &AppearanceSettings::homeTabButtonColorChanged, this,
+            &HomeWidget::updateButtonsToBackgroundColor);
+}
+
+void HomeWidget::retranslateUi()
+{
+    visualDeckEditorButton->setText(tr("Create New Deck"));
+    visualDeckStorageButton->setText(tr("Browse Decks"));
+    visualDatabaseDisplayButton->setText(tr("Browse Card Database"));
+    edhrecButton->setText(tr("Browse EDHRec"));
+    archidektButton->setText(tr("Browse Archidekt"));
+    replayButton->setText(tr("View Replays"));
+    if (exitButton) {
+        exitButton->setText(tr("Quit"));
+    }
+
+    switch (connectionStatus) {
+        case StatusDisconnected:
+            connectButton->setText(tr("Connect"));
+            break;
+        case StatusLoggedIn:
+            connectButton->setText(tr("Play"));
+            break;
+        default:
+            // Connecting, registering, activating, logging in, etc.
+            connectButton->setText(tr("Connecting..."));
+            break;
+    }
 }
 
 void HomeWidget::initializeBackgroundFromSource()
 {
+    // The featured logo is theme/scheme-derived too; reload it alongside the
+    // background so a theme or appearance switch doesn't leave it stale.
+    updateLogoOverlay();
+
     if (CardDatabaseManager::getInstance()->getLoadStatus() != LoadStatus::Ok) {
         connect(CardDatabaseManager::getInstance(), &CardDatabase::cardDatabaseLoadingFinished, this,
                 &HomeWidget::initializeBackgroundFromSource);
         return;
     }
 
-    auto backgroundSourceType = BackgroundSources::fromId(SettingsCache::instance().getHomeTabBackgroundSource());
+    auto backgroundSourceType =
+        BackgroundSources::fromId(SettingsCache::instance().appearance().getHomeTabBackgroundSource());
 
     switch (backgroundSourceType) {
         case BackgroundSources::Theme:
             cardChangeTimer->stop();
-            background = QPixmap("theme:backgrounds/home");
+            background = themePixmap(QStringLiteral("backgrounds/home"));
             backgroundSourceDeck = DeckList();
             backgroundSourceCard->setCard(ExactCard());
             updateButtonsToBackgroundColor();
@@ -85,8 +187,28 @@ void HomeWidget::initializeBackgroundFromSource()
 void HomeWidget::loadBackgroundSourceDeck()
 {
     std::optional<LoadedDeck> deckOpt = DeckLoader::loadFromFile(
-        SettingsCache::instance().getDeckPath() + "background.cod", DeckFileFormat::Cockatrice, false);
+        SettingsCache::instance().paths().getDeckPath() + "background.cod", DeckFileFormat::Cockatrice, false);
     backgroundSourceDeck = deckOpt.has_value() ? deckOpt.value().deckList : DeckList();
+}
+
+static QPair<QColor, QColor> paletteDerivedButtonColors()
+{
+    return {themeManager->appColor(AppColor::AccentStrong), themeManager->appColor(AppColor::AccentSoft)};
+}
+
+QPair<QColor, QColor> HomeWidget::determineButtonColor() const
+{
+    auto colorSource =
+        HomeTabButtonColor::intToSource(SettingsCache::instance().appearance().getHomeTabButtonColorSourceIndex());
+
+    switch (colorSource) {
+        case HomeTabButtonColor::FromThemeColors:
+            return paletteDerivedButtonColors();
+        case HomeTabButtonColor::FromBackground:
+            return extractDominantColors(background);
+    }
+
+    return paletteDerivedButtonColors();
 }
 
 void HomeWidget::setRandomCard(ExactCard &newCard)
@@ -105,7 +227,8 @@ void HomeWidget::setRandomCard(ExactCard &newCard)
 
 void HomeWidget::updateRandomCard()
 {
-    auto backgroundSourceType = BackgroundSources::fromId(SettingsCache::instance().getHomeTabBackgroundSource());
+    auto backgroundSourceType =
+        BackgroundSources::fromId(SettingsCache::instance().appearance().getHomeTabBackgroundSource());
 
     ExactCard newCard;
 
@@ -136,8 +259,9 @@ void HomeWidget::updateRandomCard()
             }
             break;
     }
-    if (!newCard)
+    if (!newCard) {
         return;
+    }
 
     connect(newCard.getCardPtr().data(), &CardInfo::pixmapUpdated, this, &HomeWidget::updateBackgroundProperties);
     backgroundSourceCard->setCard(newCard);
@@ -147,8 +271,8 @@ void HomeWidget::updateRandomCard()
 void HomeWidget::onBackgroundShuffleFrequencyChanged()
 {
     cardChangeTimer->stop();
-    if (SettingsCache::instance().getHomeTabBackgroundShuffleFrequency() > 0) {
-        cardChangeTimer->start(SettingsCache::instance().getHomeTabBackgroundShuffleFrequency() * 1000);
+    if (SettingsCache::instance().appearance().getHomeTabBackgroundShuffleFrequency() > 0) {
+        cardChangeTimer->start(SettingsCache::instance().appearance().getHomeTabBackgroundShuffleFrequency() * 1000);
     }
 }
 
@@ -161,7 +285,7 @@ void HomeWidget::updateBackgroundProperties()
 
 void HomeWidget::updateButtonsToBackgroundColor()
 {
-    gradientColors = extractDominantColors(background);
+    gradientColors = determineButtonColor();
     for (HomeStyledButton *button : findChildren<HomeStyledButton *>()) {
         button->updateStylesheet(gradientColors);
         button->update();
@@ -171,55 +295,65 @@ void HomeWidget::updateButtonsToBackgroundColor()
 QGroupBox *HomeWidget::createButtons()
 {
     QGroupBox *box = new QGroupBox(this);
-    box->setStyleSheet(R"(
-    QGroupBox {
-        font-size: 20px;
-        color: white;         /* Title text color */
-        background: transparent;
-    }
-
-    QGroupBox::title {
-        color: white;
-        subcontrol-origin: margin;
-        subcontrol-position: top center;  /* or top left / right */
-    }
-)");
-    box->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    box->setObjectName("homeButtonsBox");
+    // The box only stacks the logo and the actions: no frame, and no background of its
+    // own, so the home background art stays visible. It never shows a title. The rule is
+    // load-bearing: QScrollArea::setWidget() turns autoFillBackground on for its widget.
+    box->setStyleSheet("QGroupBox { background: transparent; border: none; }");
+    // Family comes from the InterfaceDefault theme role; the 20px size stays caller-side.
+    auto applyBoxFont = [box]() {
+        QFont boxFont = themeManager->appFont(AppFont::InterfaceDefault);
+        boxFont.setPixelSize(20);
+        box->setFont(boxFont);
+    };
+    applyBoxFont();
+    connect(themeManager, &ThemeManager::fontsChanged, this, applyBoxFont);
     QVBoxLayout *boxLayout = new QVBoxLayout;
     boxLayout->setAlignment(Qt::AlignHCenter);
+    // The scroll area is not resizable, so the box has to size itself: SetFixedSize keeps
+    // it at its content size and re-fixes it whenever the labels or fonts change, which is
+    // what makes the scroll area's scroll bars follow the content.
+    boxLayout->setSizeConstraint(QLayout::SetFixedSize);
 
-    QLabel *logoLabel = new QLabel;
-    logoLabel->setPixmap(overlay.scaledToWidth(200, Qt::SmoothTransformation));
+    logoLabel = new QLabel;
     logoLabel->setAlignment(Qt::AlignCenter);
     boxLayout->addWidget(logoLabel);
+    updateLogoOverlay();
     boxLayout->addSpacing(25);
 
-    connectButton = new HomeStyledButton("Connect/Play", gradientColors);
+    connectButton = new HomeStyledButton(QString(), gradientColors);
+    connectButton->setObjectName("homeConnectButton");
     boxLayout->addWidget(connectButton);
 
-    auto visualDeckEditorButton = new HomeStyledButton(tr("Create New Deck"), gradientColors);
+    visualDeckEditorButton = new HomeStyledButton(QString(), gradientColors);
+    visualDeckEditorButton->setObjectName("homeCreateNewDeckButton");
     connect(visualDeckEditorButton, &QPushButton::clicked, tabSupervisor,
             [this] { tabSupervisor->openDeckInNewTab(LoadedDeck()); });
     boxLayout->addWidget(visualDeckEditorButton);
-    auto visualDeckStorageButton = new HomeStyledButton(tr("Browse Decks"), gradientColors);
+    visualDeckStorageButton = new HomeStyledButton(QString(), gradientColors);
+    visualDeckStorageButton->setObjectName("homeBrowseDecksButton");
     connect(visualDeckStorageButton, &QPushButton::clicked, tabSupervisor,
             [this] { tabSupervisor->actTabVisualDeckStorage(true); });
     boxLayout->addWidget(visualDeckStorageButton);
-    auto visualDatabaseDisplayButton = new HomeStyledButton(tr("Browse Card Database"), gradientColors);
+    visualDatabaseDisplayButton = new HomeStyledButton(QString(), gradientColors);
+    visualDatabaseDisplayButton->setObjectName("homeBrowseCardDatabaseButton");
     connect(visualDatabaseDisplayButton, &QPushButton::clicked, tabSupervisor,
             &TabSupervisor::addVisualDatabaseDisplayTab);
     boxLayout->addWidget(visualDatabaseDisplayButton);
-    auto edhrecButton = new HomeStyledButton(tr("Browse EDHRec"), gradientColors);
+    edhrecButton = new HomeStyledButton(QString(), gradientColors);
+    edhrecButton->setObjectName("homeBrowseEdhrecButton");
     connect(edhrecButton, &QPushButton::clicked, tabSupervisor, &TabSupervisor::addEdhrecMainTab);
     boxLayout->addWidget(edhrecButton);
-    auto archidektButton = new HomeStyledButton(tr("Browse Archidekt"), gradientColors);
+    archidektButton = new HomeStyledButton(QString(), gradientColors);
+    archidektButton->setObjectName("homeBrowseArchidektButton");
     connect(archidektButton, &QPushButton::clicked, tabSupervisor, &TabSupervisor::addArchidektTab);
     boxLayout->addWidget(archidektButton);
-    auto replaybutton = new HomeStyledButton(tr("View Replays"), gradientColors);
-    connect(replaybutton, &QPushButton::clicked, tabSupervisor, [this] { tabSupervisor->actTabReplays(true); });
-    boxLayout->addWidget(replaybutton);
+    replayButton = new HomeStyledButton(QString(), gradientColors);
+    replayButton->setObjectName("homeViewReplaysButton");
+    connect(replayButton, &QPushButton::clicked, tabSupervisor, [this] { tabSupervisor->actTabReplays(true); });
+    boxLayout->addWidget(replayButton);
     if (qobject_cast<MainWindow *>(tabSupervisor->parentWidget())) {
-        auto exitButton = new HomeStyledButton(tr("Quit"), gradientColors);
+        exitButton = new HomeStyledButton(QString(), gradientColors);
         connect(exitButton, &QPushButton::clicked, qobject_cast<MainWindow *>(tabSupervisor->parentWidget()),
                 &MainWindow::actExit);
         boxLayout->addWidget(exitButton);
@@ -231,20 +365,18 @@ QGroupBox *HomeWidget::createButtons()
 
 void HomeWidget::updateConnectButton(const ClientStatus status)
 {
+    connectionStatus = status;
     disconnect(connectButton, &QPushButton::clicked, nullptr, nullptr);
     switch (status) {
         case StatusConnecting:
-            connectButton->setText(tr("Connecting..."));
             connectButton->setEnabled(false);
             break;
         case StatusDisconnected:
-            connectButton->setText(tr("Connect"));
             connectButton->setEnabled(true);
             connect(connectButton, &QPushButton::clicked, qobject_cast<MainWindow *>(tabSupervisor->parentWidget()),
                     &MainWindow::actConnect);
             break;
         case StatusLoggedIn:
-            connectButton->setText(tr("Play"));
             connectButton->setEnabled(true);
             connect(connectButton, &QPushButton::clicked, tabSupervisor,
                     &TabSupervisor::switchToFirstAvailableNetworkTab);
@@ -252,15 +384,11 @@ void HomeWidget::updateConnectButton(const ClientStatus status)
         default:
             break;
     }
+    retranslateUi();
 }
 
 QPair<QColor, QColor> HomeWidget::extractDominantColors(const QPixmap &pixmap)
 {
-    if (SettingsCache::instance().getThemeName() == "Default" &&
-        SettingsCache::instance().getHomeTabBackgroundSource() == BackgroundSources::toId(BackgroundSources::Theme)) {
-        return QPair<QColor, QColor>(QColor::fromRgb(20, 140, 60), QColor::fromRgb(120, 200, 80));
-    }
-
     // Step 1: Downscale image for performance
     QImage image = pixmap.toImage()
                        .scaled(64, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation)
@@ -324,16 +452,19 @@ void HomeWidget::paintEvent(QPaintEvent *event)
         painter.drawPixmap(topLeft, toDraw);
     }
 
-    // Draw translucent black overlay with rounded corners
-    QRectF overlayRect(5, 5, width() - 10, height() - 10);
-    QPainterPath roundedRectPath;
-    roundedRectPath.addRoundedRect(overlayRect, 20, 20);
+    if (SettingsCache::instance().appearance().getHomeTabBackgroundDim()) {
+        // Draw translucent black overlay with rounded corners
+        QRectF overlayRect(5, 5, width() - 10, height() - 10);
+        QPainterPath roundedRectPath;
+        roundedRectPath.addRoundedRect(overlayRect, 20, 20);
 
-    QColor semiTransparentBlack(0, 0, 0, static_cast<int>(255 * 0.33));
-    painter.fillPath(roundedRectPath, semiTransparentBlack);
+        QColor semiTransparentBlack(0, 0, 0, static_cast<int>(255 * 0.33));
+        painter.fillPath(roundedRectPath, semiTransparentBlack);
+    }
 
-    // Card name overlay (bottom-right)
+    // Card name overlay (above the attribution, bottom-right)
     QString cardName;
+    QString attribution;
     ExactCard card = backgroundSourceCard->getCard();
     if (card) {
         cardName = card.getCardPtr()->getName();
@@ -341,34 +472,111 @@ void HomeWidget::paintEvent(QPaintEvent *event)
             cardName += " (" + card.getPrinting().getSet()->getCorrectedShortName() + ") " +
                         card.getPrinting().getProperty("num");
         }
+        attribution = buildArtAttribution(card);
     }
 
-    if (!cardName.isEmpty() && SettingsCache::instance().getHomeTabDisplayCardName()) {
-        QFont font = painter.font();
+    // Scryfall requires artist attribution wherever card art is shown cropped.
+    // Pin it to the bottom-right corner, using the same font as the card name pill,
+    // and align its right edge with the card name pill's right edge.
+    constexpr int margin = 15;
+    constexpr qreal attributionMargin = 4.0;
+
+    // Family comes from the InterfaceDefault theme role; the 14px sizes and
+    // bold weights stay caller-side as before.
+    QFont attributionFont = themeManager->appFont(AppFont::InterfaceDefault);
+    attributionFont.setPointSize(14);
+    attributionFont.setBold(true);
+    painter.setFont(attributionFont);
+
+    // paintArtAttribution insets the pill 4px from the given rect's right edge,
+    // so nudge the rect's right edge to land exactly on the pill's right edge.
+    QRectF attributionArea = rect();
+    attributionArea.setRight(width() - margin + attributionMargin);
+    const QRectF attributionRect = paintArtAttribution(painter, attributionArea, attribution);
+
+    // Card name bubble above the attribution (when enabled).
+    if (!cardName.isEmpty() && SettingsCache::instance().appearance().getHomeTabDisplayCardName()) {
+        QFont font = themeManager->appFont(AppFont::InterfaceDefault);
         font.setPointSize(14);
         font.setBold(true);
         painter.setFont(font);
 
         QFontMetrics fm(font);
         constexpr int padding = 10;
-        constexpr int margin = 15;
 
         QRect textRect = fm.boundingRect(cardName);
 
-        QRect bgRect(width() - textRect.width() - padding * 2 - margin,
-                     height() - textRect.height() - padding * 2 - margin, textRect.width() + padding * 2,
-                     textRect.height() + padding * 2);
+        int bubbleBottom = height() - margin;
+        if (!attributionRect.isEmpty()) {
+            bubbleBottom = attributionRect.top() - 6;
+        }
+        const QRect nameBubbleRect(width() - textRect.width() - padding * 2 - margin,
+                                   bubbleBottom - textRect.height() - padding * 2, textRect.width() + padding * 2,
+                                   textRect.height() + padding * 2);
 
         // Background bubble
         painter.setPen(Qt::NoPen);
         painter.setBrush(QColor(0, 0, 0, 160));
-        painter.drawRoundedRect(bgRect, 8, 8);
+        painter.drawRoundedRect(nameBubbleRect, 8, 8);
 
         // Text
         painter.setPen(Qt::white);
-        painter.drawText(bgRect.adjusted(padding, padding, -padding, -padding), Qt::AlignRight | Qt::AlignVCenter,
-                         cardName);
+        painter.drawText(nameBubbleRect.adjusted(padding, padding, -padding, -padding),
+                         Qt::AlignRight | Qt::AlignVCenter, cardName);
     }
 
     QWidget::paintEvent(event);
+}
+
+void HomeWidget::updateLogoOverlay()
+{
+    // Emulate cockatrice.svg in Qt rather than rendering the baked-in SVG.
+    // The SVG has no separate plate: the gradient fills the bird's silhouette
+    // paths (light #c9fd62/AccentSoft at the top-left, dark #139740/AccentStrong
+    // toward the bottom-right — the SVG's linearGradient4265-7-8 stops along
+    // its userSpaceOnUse axis), and the white highlight path
+    // (cockatrice-logo-white) sits on top. So we paint that gradient clipped to
+    // the full logo silhouette (the full-color logo's alpha), then overlay the
+    // white mark. Colours stay fully theme-driven and independent of the static
+    // greens baked into the SVG.
+    const QColor strong = themeManager->appColor(AppColor::AccentStrong);
+    const QColor soft = themeManager->appColor(AppColor::AccentSoft);
+
+    const QPixmap silhouette = themePixmap(QStringLiteral("cockatrice")).scaledToWidth(200, Qt::SmoothTransformation);
+    const QPixmap whiteMark =
+        themePixmap(QStringLiteral("cockatrice-logo-white")).scaledToWidth(200, Qt::SmoothTransformation);
+    if (silhouette.isNull() || whiteMark.isNull()) {
+        return;
+    }
+
+    QPixmap composite(silhouette.size());
+    composite.fill(Qt::transparent);
+
+    {
+        QPainter painter(&composite);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform);
+
+        // Recreate cockatrice.svg's own gradient geometry (linearGradient
+        // 4265-7-8, userSpaceOnUse): light AccentSoft at S=(-8.097,-97.746),
+        // dark AccentStrong at E=(162.455,295.208), on the SVG's 300x300
+        // canvas. Scale those coordinates to this composite's size.
+        const qreal scale = composite.width() / 300.0;
+        QLinearGradient gradient(QPointF(-8.097, -97.746) * scale, QPointF(162.455, 295.208) * scale);
+        gradient.setColorAt(0.0, soft);
+        gradient.setColorAt(1.0, strong);
+        painter.fillRect(composite.rect(), gradient);
+
+        // Clip the gradient to the full logo silhouette exactly as the SVG's
+        // gradient paths are confined to the bird.
+        painter.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+        painter.drawPixmap(0, 0, silhouette);
+
+        painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+        painter.drawPixmap(0, 0, whiteMark);
+    }
+
+    if (logoLabel) {
+        logoLabel->setPixmap(composite);
+    }
 }

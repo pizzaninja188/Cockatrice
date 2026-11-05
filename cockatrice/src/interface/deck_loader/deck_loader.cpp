@@ -1,25 +1,53 @@
 #include "deck_loader.h"
 
+#include "../theme_manager.h"
+#include "libcockatrice/card/card_info.h"
+#include "libcockatrice/card/database/card_database_querier.h"
+#include "libcockatrice/deck_list/tree/abstract_deck_list_card_node.h"
+#include "libcockatrice/deck_list/tree/abstract_deck_list_node.h"
+#include "libcockatrice/deck_list/tree/inner_deck_list_node.h"
+
 #include <QApplication>
 #include <QClipboard>
+#include <QDateTime>
 #include <QDebug>
 #include <QDir>
 #include <QFile>
+#include <QFileDevice>
 #include <QFileInfo>
-#include <QFutureWatcher>
+#include <QFont>
+#include <QFuture>
+#include <QIODevice>
+#include <QList>
+#include <QMap>
+#include <QMessageLogger>
+#include <QMultiMap>
 #include <QPrinter>
 #include <QRegularExpression>
+#include <QSaveFile>
+#include <QSet>
+#include <QSharedPointer>
 #include <QStringList>
+#include <QTextBlockFormat>
+#include <QTextCharFormat>
 #include <QTextCursor>
 #include <QTextDocument>
+#include <QTextLength>
 #include <QTextStream>
 #include <QTextTable>
+#include <QTextTableCell>
+#include <QTextTableFormat>
+#include <QVector>
 #include <QtConcurrentRun>
-#include <libcockatrice/card/database/card_database.h>
+#include <algorithm>
+#include <functional>
 #include <libcockatrice/card/database/card_database_manager.h>
 #include <libcockatrice/card/import/card_name_normalizer.h>
 #include <libcockatrice/deck_list/deck_list.h>
 #include <libcockatrice/deck_list/tree/deck_list_card_node.h>
+#include <qnamespace.h>
+
+class QTextLength;
 
 const QStringList DeckLoader::ACCEPTED_FILE_EXTENSIONS = {"*.cod", "*.dec", "*.dek", "*.txt", "*.mwDeck"};
 
@@ -49,7 +77,7 @@ DeckLoader::loadFromFile(const QString &fileName, DeckFileFormat::Format fmt, bo
             result = deckList.loadFromFile_Native(&file);
             if (!result) {
                 qCInfo(DeckLoaderLog) << "Failed to load " << fileName
-                                      << "as cockatrice format; retrying as plain format";
+                                      << "as Cockatrice format; retrying as plain format";
                 file.seek(0);
                 result = deckList.loadFromFile_Plain(&file, CardNameNormalizer());
                 fmt = DeckFileFormat::PlainText;
@@ -129,7 +157,10 @@ std::optional<LoadedDeck> DeckLoader::loadFromRemote(const QString &nativeString
 std::optional<LoadedDeck::LoadInfo>
 DeckLoader::saveToFile(const DeckList &deck, const QString &fileName, DeckFileFormat::Format fmt)
 {
-    QFile file(fileName);
+    // Use QSaveFile so that a failed write (e.g. a full disk) leaves the existing deck untouched
+    // instead of truncating it to a 0-byte file. The target is only replaced once every byte has
+    // been flushed successfully in commit().
+    QSaveFile file(fileName);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         qCWarning(DeckLoaderLog) << "Could not create or open file:" << fileName;
         return std::nullopt;
@@ -145,14 +176,18 @@ DeckLoader::saveToFile(const DeckList &deck, const QString &fileName, DeckFileFo
             break;
     }
 
-    file.flush();
-    file.close();
-
-    qCInfo(DeckLoaderLog) << "Saved deck to " << fileName << "with format" << fmt << "-" << success;
-
     if (!success) {
+        file.cancelWriting();
+        qCWarning(DeckLoaderLog) << "Failed to serialize deck for file:" << fileName;
         return std::nullopt;
     }
+
+    if (!file.commit()) {
+        qCWarning(DeckLoaderLog) << "Failed to save deck to " << fileName << ":" << file.errorString();
+        return std::nullopt;
+    }
+
+    qCInfo(DeckLoaderLog) << "Saved deck to " << fileName << "with format" << fmt;
 
     LoadedDeck::LoadInfo lastLoadInfo = {fileName, fmt};
     return lastLoadInfo;
@@ -181,6 +216,11 @@ bool DeckLoader::saveToNewFile(LoadedDeck &deck, const QString &fileName, DeckFi
  */
 bool DeckLoader::updateLastLoadedTimestamp(LoadedDeck &deck)
 {
+    // text format doesn't support lastLoadedTimestamp, so there's no point in proceeding
+    if (deck.lastLoadInfo.fileFormat != DeckFileFormat::Cockatrice) {
+        return false;
+    }
+
     QString fileName = deck.lastLoadInfo.fileName;
 
     QFileInfo fileInfo(fileName);
@@ -191,45 +231,44 @@ bool DeckLoader::updateLastLoadedTimestamp(LoadedDeck &deck)
 
     QDateTime originalTimestamp = fileInfo.lastModified();
 
-    // Open the file for writing
-    QFile file(fileName);
+    // Use QSaveFile so that a failed write (e.g. a full disk) cannot truncate an existing deck to a
+    // 0-byte file while merely bumping its timestamp.
+    QSaveFile file(fileName);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         qCWarning(DeckLoaderLog) << "Failed to open file for writing:" << fileName;
         return false;
     }
 
-    bool result = false;
-
     // Perform file modifications
-    switch (deck.lastLoadInfo.fileFormat) {
-        case DeckFileFormat::PlainText:
-            result = deck.deckList.saveToFile_Plain(&file);
-            break;
-        case DeckFileFormat::Cockatrice:
-            deck.deckList.setLastLoadedTimestamp(QDateTime::currentDateTime().toString());
-            result = deck.deckList.saveToFile_Native(&file);
-            break;
+    deck.deckList.setLastLoadedTimestamp(QDateTime::currentDateTime().toString());
+
+    if (!deck.deckList.saveToFile_Native(&file)) {
+        file.cancelWriting();
+        qCWarning(DeckLoaderLog) << "Failed to serialize deck for file:" << fileName;
+        return false;
     }
 
-    file.close(); // Close the file to ensure changes are flushed
-
-    if (result) {
-        // Re-open the file and set the original timestamp
-        if (!file.open(QIODevice::ReadWrite)) {
-            qCWarning(DeckLoaderLog) << "Failed to re-open file to set timestamp:" << fileName;
-            return false;
-        }
-
-        if (!file.setFileTime(originalTimestamp, QFileDevice::FileModificationTime)) {
-            qCWarning(DeckLoaderLog) << "Failed to set modification time for file:" << fileName;
-            file.close();
-            return false;
-        }
-
-        file.close();
+    if (!file.commit()) {
+        qCWarning(DeckLoaderLog) << "Failed to update timestamp for file:" << fileName << ":" << file.errorString();
+        return false;
     }
 
-    return result;
+    // Re-open the file and restore the original timestamp, so that updating the lastLoadedTimestamp
+    // does not change the file's modification time.
+    QFile timestampFile(fileName);
+    if (!timestampFile.open(QIODevice::ReadWrite)) {
+        qCWarning(DeckLoaderLog) << "Failed to re-open file to set timestamp:" << fileName;
+        return false;
+    }
+
+    if (!timestampFile.setFileTime(originalTimestamp, QFileDevice::FileModificationTime)) {
+        qCWarning(DeckLoaderLog) << "Failed to set modification time for file:" << fileName;
+        timestampFile.close();
+        return false;
+    }
+
+    timestampFile.close();
+    return true;
 }
 
 static QString getDomainForWebsite(DeckLoader::DecklistWebsite website)
@@ -334,8 +373,12 @@ bool DeckLoader::saveToStream_Plain(QTextStream &out,
         saveToStream_DeckHeader(out, deckList);
     }
 
-    // loop zones
-    for (auto zoneNode : deckList.getZoneNodes()) {
+    // Plain deck readers expect the main deck before the sideboard. Reorder a
+    // copy so native saves and the relative order of other zones stay intact.
+    auto zones = deckList.getZoneNodes();
+    std::stable_partition(zones.begin(), zones.end(),
+                          [](const auto *zone) { return zone->getName() == DECK_ZONE_MAIN; });
+    for (auto zoneNode : zones) {
         saveToStream_DeckZone(out, zoneNode, addComments, addSetNameAndNumber);
 
         // end of zone
@@ -363,15 +406,32 @@ void DeckLoader::saveToStream_DeckHeader(QTextStream &out, const DeckList &deckL
 void DeckLoader::saveToStream_DeckZone(QTextStream &out,
                                        const InnerDecklistNode *zoneNode,
                                        bool addComments,
-                                       bool addSetNameAndNumber)
+                                       bool addSetNameAndNumber,
+                                       const QString &boardZoneName)
 {
+    // Nested sub-zones keep their owning board's identity: the top-level call
+    // passes no board, so the zone's own name is used; recursive calls carry the
+    // owning board down so the sideboard marker survives sub-zone nesting.
+    const QString owningBoardZoneName = boardZoneName.isEmpty() ? zoneNode->getName() : boardZoneName;
+
     // group cards by card type and count the subtotals
     QMultiMap<QString, DecklistCardNode *> cardsByType;
     QMap<QString, int> cardTotalByType;
     int cardTotal = 0;
+    QList<const InnerDecklistNode *> subZones;
 
     for (int j = 0; j < zoneNode->size(); j++) {
         auto *card = dynamic_cast<DecklistCardNode *>(zoneNode->at(j));
+        if (!card) {
+            // Cards collected in nested sub-zones are exported by recursion so
+            // they don't end up invisible in the plain text output. They are
+            // deferred until after this zone's own header and cards so they read
+            // as part of this zone's block.
+            if (auto *subZone = dynamic_cast<const InnerDecklistNode *>(zoneNode->at(j))) {
+                subZones.append(subZone);
+            }
+            continue;
+        }
 
         CardInfoPtr info = CardDatabaseManager::query()->getCardInfo(card->getName());
         QString cardType = info ? info->getMainCardType() : "unknown";
@@ -399,25 +459,30 @@ void DeckLoader::saveToStream_DeckZone(QTextStream &out,
 
         QList<DecklistCardNode *> cards = cardsByType.values(cardType);
 
-        saveToStream_DeckZoneCards(out, zoneNode, cards, addComments, addSetNameAndNumber);
+        saveToStream_DeckZoneCards(out, cards, addComments, addSetNameAndNumber, owningBoardZoneName);
 
         if (addComments) {
             out << "\n";
         }
     }
+
+    // Nested sub-zones come last, after the parent's own header and cards.
+    for (const auto *subZone : subZones) {
+        saveToStream_DeckZone(out, subZone, addComments, addSetNameAndNumber, owningBoardZoneName);
+    }
 }
 
 void DeckLoader::saveToStream_DeckZoneCards(QTextStream &out,
-                                            const InnerDecklistNode *zoneNode,
                                             QList<DecklistCardNode *> cards,
                                             bool addComments,
-                                            bool addSetNameAndNumber)
+                                            bool addSetNameAndNumber,
+                                            const QString &boardZoneName)
 {
     // QMultiMap sorts values in reverse order
     for (int i = cards.size() - 1; i >= 0; --i) {
         DecklistCardNode *card = cards[i];
 
-        if (zoneNode->getName() == DECK_ZONE_SIDE && addComments) {
+        if (boardZoneName == DECK_ZONE_SIDE && addComments) {
             out << "SB: ";
         }
 
@@ -429,8 +494,7 @@ void DeckLoader::saveToStream_DeckZoneCards(QTextStream &out,
         }
         if (addSetNameAndNumber) {
             if (!card->getCardSetShortName().isNull() && !card->getCardSetShortName().isEmpty()) {
-                out << " "
-                    << "(" << card->getCardSetShortName() << ")";
+                out << " " << "(" << card->getCardSetShortName() << ")";
             }
             if (!card->getCardCollectorNumber().isNull()) {
                 out << " " << card->getCardCollectorNumber();
@@ -447,60 +511,82 @@ bool DeckLoader::convertToCockatriceFormat(LoadedDeck &deck)
         return false;
     }
 
+    // Determine the format before touching any file, so an already-converted or
+    // unsupported deck never truncates or deletes anything.
+    switch (DeckFileFormat::getFormatFromName(fileName)) {
+        case DeckFileFormat::PlainText:
+            break;
+        case DeckFileFormat::Cockatrice:
+            qCInfo(DeckLoaderLog) << "File is already in Cockatrice format. No conversion needed.";
+            return true;
+        default:
+            qCWarning(DeckLoaderLog) << "Unsupported file format for conversion:" << fileName;
+            return false;
+    }
+
     // Change the file extension to .cod
     QFileInfo fileInfo(fileName);
     QString newFileName = QDir::toNativeSeparators(fileInfo.path() + "/" + fileInfo.completeBaseName() + ".cod");
 
-    // Open the new file for writing
-    QFile file(newFileName);
+    // Use QSaveFile so a failed write (e.g. a full disk) cannot leave a 0-byte .cod
+    // behind and then delete the original deck.
+    QSaveFile file(newFileName);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         qCWarning(DeckLoaderLog) << "Failed to open file for writing:" << newFileName;
         return false;
     }
 
-    bool result = false;
-
-    // Perform file modifications based on the detected format
-    switch (DeckFileFormat::getFormatFromName(fileName)) {
-        case DeckFileFormat::PlainText:
-            // Save in Cockatrice's native format
-            result = deck.deckList.saveToFile_Native(&file);
-            break;
-        case DeckFileFormat::Cockatrice:
-            qCInfo(DeckLoaderLog) << "File is already in Cockatrice format. No conversion needed.";
-            result = true;
-            break;
-        default:
-            qCWarning(DeckLoaderLog) << "Unsupported file format for conversion:" << fileName;
-            result = false;
-            break;
+    if (!deck.deckList.saveToFile_Native(&file)) {
+        file.cancelWriting();
+        qCWarning(DeckLoaderLog) << "Failed to serialize deck for file:" << newFileName;
+        return false;
     }
 
-    file.close();
-
-    // Delete the old file if conversion was successful
-    if (result) {
-        if (!QFile::remove(fileName)) {
-            qCWarning(DeckLoaderLog) << "Failed to delete original file:" << fileName;
-        } else {
-            qCInfo(DeckLoaderLog) << "Original file deleted successfully:" << fileName;
-        }
-        deck.lastLoadInfo = {
-            .fileName = newFileName,
-            .fileFormat = DeckFileFormat::Cockatrice,
-        };
+    if (!file.commit()) {
+        qCWarning(DeckLoaderLog) << "Failed to convert deck to " << newFileName << ":" << file.errorString();
+        return false;
     }
 
-    return result;
+    // Conversion succeeded: delete the original file.
+    if (!QFile::remove(fileName)) {
+        qCWarning(DeckLoaderLog) << "Failed to delete original file:" << fileName;
+    } else {
+        qCInfo(DeckLoaderLog) << "Original file deleted successfully:" << fileName;
+    }
+    deck.lastLoadInfo = {
+        .fileName = newFileName,
+        .fileFormat = DeckFileFormat::Cockatrice,
+    };
+
+    return true;
 }
 
 void DeckLoader::printDeckListNode(QTextCursor *cursor, const InnerDecklistNode *node)
 {
+    if (!node || node->isEmpty()) {
+        return;
+    }
+
     const int totalColumns = 2;
 
-    if (node->height() == 1) {
+    // Dispatch children by type instead of trusting a whole-node height: a deck
+    // node may hold direct cards and nested zones side by side (custom zones),
+    // and an empty node would previously crash on at(0).
+    QVector<const AbstractDecklistCardNode *> cards;
+    QVector<const InnerDecklistNode *> subZones;
+    for (int i = 0; i < node->size(); i++) {
+        if (auto *card = dynamic_cast<const AbstractDecklistCardNode *>(node->at(i))) {
+            cards.append(card);
+        } else if (auto *zone = dynamic_cast<const InnerDecklistNode *>(node->at(i))) {
+            subZones.append(zone);
+        }
+    }
+
+    if (!cards.isEmpty()) {
         QTextBlockFormat blockFormat;
         QTextCharFormat charFormat;
+        // Family comes from the DeckList theme role; sizes/weights unchanged.
+        charFormat.setFontFamilies({themeManager->deckListFont().family()});
         charFormat.setFontPointSize(11);
         charFormat.setFontWeight(QFont::Bold);
         cursor->insertBlock(blockFormat, charFormat);
@@ -509,11 +595,12 @@ void DeckLoader::printDeckListNode(QTextCursor *cursor, const InnerDecklistNode 
         tableFormat.setCellPadding(0);
         tableFormat.setCellSpacing(0);
         tableFormat.setBorder(0);
-        QTextTable *table = cursor->insertTable(node->size() + 1, totalColumns, tableFormat);
-        for (int i = 0; i < node->size(); i++) {
-            auto *card = dynamic_cast<AbstractDecklistCardNode *>(node->at(i));
+        QTextTable *table = cursor->insertTable(cards.size() + 1, totalColumns, tableFormat);
+        for (int i = 0; i < cards.size(); i++) {
+            const AbstractDecklistCardNode *card = cards[i];
 
             QTextCharFormat cellCharFormat;
+            cellCharFormat.setFontFamilies({themeManager->deckListFont().family()});
             cellCharFormat.setFontPointSize(9);
 
             QTextTableCell cell = table->cellAt(i, 0);
@@ -526,9 +613,16 @@ void DeckLoader::printDeckListNode(QTextCursor *cursor, const InnerDecklistNode 
             cellCursor = cell.firstCursorPosition();
             cellCursor.insertText(card->getName());
         }
-    } else if (node->height() == 2) {
+    }
+
+    for (const InnerDecklistNode *subZone : subZones) {
+        if (subZone->isEmpty()) {
+            continue;
+        }
+
         QTextBlockFormat blockFormat;
         QTextCharFormat charFormat;
+        charFormat.setFontFamilies({themeManager->deckListFont().family()});
         charFormat.setFontPointSize(14);
         charFormat.setFontWeight(QFont::Bold);
 
@@ -545,10 +639,8 @@ void DeckLoader::printDeckListNode(QTextCursor *cursor, const InnerDecklistNode 
         tableFormat.setColumnWidthConstraints(constraints);
 
         QTextTable *table = cursor->insertTable(1, totalColumns, tableFormat);
-        for (int i = 0; i < node->size(); i++) {
-            QTextCursor cellCursor = table->cellAt(0, (i * totalColumns) / node->size()).lastCursorPosition();
-            printDeckListNode(&cellCursor, dynamic_cast<InnerDecklistNode *>(node->at(i)));
-        }
+        QTextCursor cellCursor = table->cellAt(0, 0).firstCursorPosition();
+        printDeckListNode(&cellCursor, subZone);
     }
 
     cursor->movePosition(QTextCursor::End);
@@ -558,14 +650,18 @@ void DeckLoader::printDeckList(QPrinter *printer, const DeckList &deckList)
 {
     QTextDocument doc;
 
-    QFont font("Serif");
-    font.setStyleHint(QFont::Serif);
+    // Family comes from the DeckList theme role; the print sizes/weights below stay unchanged.
+    // Print output is a one-shot snapshot and intentionally does not subscribe
+    // to fontsChanged (there is no live view to repaint); reprinting picks up
+    // the current role font.
+    QFont font = themeManager->deckListFont();
     doc.setDefaultFont(font);
 
     QTextCursor cursor(&doc);
 
     QTextBlockFormat headerBlockFormat;
     QTextCharFormat headerCharFormat;
+    headerCharFormat.setFontFamilies({themeManager->deckListFont().family()});
     headerCharFormat.setFontPointSize(16);
     headerCharFormat.setFontWeight(QFont::Bold);
 

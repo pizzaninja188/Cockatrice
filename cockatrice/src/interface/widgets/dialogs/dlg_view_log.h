@@ -1,17 +1,20 @@
 /**
  * @file dlg_view_log.h
  * @ingroup ServerLogDialogs
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef DLG_VIEWLOG_H
 #define DLG_VIEWLOG_H
 
-#include <QCheckBox>
 #include <QDialog>
+#include <QString>
+#include <qtmetamacros.h>
 
 class QPlainTextEdit;
-class QCloseEvent;
+class QCheckBox;
+class QPushButton;
+class QWidget;
 
 class DlgViewLog : public QDialog
 {

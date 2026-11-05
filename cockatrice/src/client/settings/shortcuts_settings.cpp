@@ -2,9 +2,13 @@
 
 #include <QDebug>
 #include <QFile>
+#include <QMap>
 #include <QMessageBox>
+#include <QMessageLogger>
+#include <QSettings>
+#include <QSharedPointer>
 #include <QStringList>
-#include <utility>
+#include <QVariant>
 
 ShortcutKey::ShortcutKey(const QString &_name, QList<QKeySequence> _sequence, ShortcutGroup::Groups _group)
     : QList<QKeySequence>(_sequence), name(_name), group(_group)
@@ -64,8 +68,13 @@ ShortcutsSettings::ShortcutsSettings(const QString &settingsPath, QObject *paren
     }
 }
 
-/// PR 5079 changes Textbox/unfocusTextBox to Player/unfocusTextBox and tab_game/aFocusChat to Player/aFocusChat.
-/// A migration is necessary to let players keep their already configured shortcuts.
+/**
+ * @brief Migrates legacy shortcut key names to current naming scheme.
+ *
+ * PR 5079 changed Textbox/unfocusTextBox to Player/unfocusTextBox and
+ * tab_game/aFocusChat to Player/aFocusChat. This migration allows players
+ * to keep their already configured shortcuts.
+ */
 void ShortcutsSettings::migrateShortcuts()
 {
     if (QFile(settingsFilePath).exists()) {
@@ -236,9 +245,7 @@ bool ShortcutsSettings::isValid(const QString &name, const QString &sequences) c
     return findOverlaps(name, sequences).isEmpty();
 }
 
-/**
- * Checks if the shortcut is a shortcut that is active in all windows
- */
+/** @brief Checks if the shortcut is a shortcut that is active in all windows. */
 static bool isAlwaysActiveShortcut(const QString &shortcutName)
 {
     return shortcutName.startsWith("MainWindow") || shortcutName.startsWith("Tabs");

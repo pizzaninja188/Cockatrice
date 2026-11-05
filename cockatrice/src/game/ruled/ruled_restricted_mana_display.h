@@ -9,14 +9,14 @@
 
 #include <QGraphicsObject>
 
-class Player;
+class PlayerLogic;
 
 class RuledRestrictedManaDisplay : public QGraphicsObject
 {
     Q_OBJECT
 
 public:
-    explicit RuledRestrictedManaDisplay(Player *player, QGraphicsItem *parent = nullptr);
+    explicit RuledRestrictedManaDisplay(PlayerLogic *player, QGraphicsItem *parent = nullptr);
 
     [[nodiscard]] QRectF boundingRect() const override;
     void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) override;
@@ -29,7 +29,7 @@ signals:
     void widthChanged();
 
 private:
-    Player *player;
+    PlayerLogic *player;
     QRectF bounds;
 };
 

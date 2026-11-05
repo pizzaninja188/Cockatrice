@@ -1,0 +1,491 @@
+#include "palette_editor_dialog.h"
+
+#include "../theme_config.h"
+#include "../theme_manager.h"
+#include "font_grid_widget.h"
+#include "palette_generator.h"
+#include "palette_grid_widget.h"
+#include "quick_setup_panel.h"
+
+#include <QApplication>
+#include <QComboBox>
+#include <QDialogButtonBox>
+#include <QDir>
+#include <QEvent>
+#include <QFile>
+#include <QFrame>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QList>
+#include <QMessageBox>
+#include <QPalette>
+#include <QPushButton>
+#include <QSharedPointer>
+#include <QStringList>
+#include <QTimer>
+#include <QVBoxLayout>
+#include <QWidget>
+#include <initializer_list>
+#include <libcockatrice/utility/qt_utils.h>
+#include <qnamespace.h>
+
+PaletteEditorDialog::PaletteEditorDialog(const QString &_themeDirPath, const QString &_themeName, QWidget *parent)
+    : QDialog(parent), themeDirPath(_themeDirPath), themeName(_themeName)
+{
+    setMinimumSize(740, 220);
+    setupUi();
+
+    // Resolve a writable directory for saving. Built-in (Default / Fusion) and
+    // other read-only theme directories must be customised in the user-writable
+    // themes directory; otherwise the write would fail or be lost on upgrade.
+    saveDir = ThemeManager::writableThemeDir(themeName);
+
+    // Load both scheme configs upfront so switching is instant
+    loadSchemes();
+    loadFonts();
+
+    loadedScheme = themeManager->isDarkMode(themeDirPath) ? "Dark" : "Light";
+
+    schemeComboBox->blockSignals(true);
+    schemeComboBox->setCurrentText(loadedScheme);
+    schemeComboBox->blockSignals(false);
+
+    paletteGrid->blockSignals(true);
+    paletteGrid->loadPalette(workingConfig[loadedScheme]);
+    paletteGrid->blockSignals(false);
+    seedAccentFromScheme(loadedScheme);
+
+    retranslateUi();
+}
+
+void PaletteEditorDialog::setupUi()
+{
+    auto *root = QtUtils::makeLayout<QVBoxLayout>(this, 0, 0);
+
+    // Header
+    header = new QWidget;
+    header->setAutoFillBackground(true);
+    {
+        QPalette hp = header->palette();
+        hp.setColor(QPalette::Window, qApp->palette().color(QPalette::Window).darker(108));
+        header->setPalette(hp);
+    }
+    auto *headerLayout = new QHBoxLayout(header);
+    headerLayout->setContentsMargins(12, 8, 12, 8);
+
+    titleLabel = new QLabel(this);
+    titleLabel->setTextFormat(Qt::RichText);
+
+    editingLabel = new QLabel(this);
+
+    schemeComboBox = new QComboBox;
+    schemeComboBox->addItems({"Light", "Dark"});
+    schemeComboBox->setFixedWidth(90);
+
+    headerLayout->addWidget(titleLabel);
+    headerLayout->addStretch();
+    headerLayout->addWidget(editingLabel);
+    headerLayout->addWidget(schemeComboBox);
+    root->addWidget(header);
+
+    auto makeSeparator = [&]() {
+        auto *sep = new QFrame;
+        sep->setFrameShape(QFrame::HLine);
+        sep->setFrameShadow(QFrame::Plain);
+        sep->setFixedHeight(1);
+        return sep;
+    };
+
+    root->addWidget(makeSeparator());
+
+    // Quick Setup panel
+    quickSetupPanel = new QuickSetupPanel;
+    quickSetupPanel->setAutoFillBackground(true);
+
+    QPalette sp = quickSetupPanel->palette();
+    sp.setColor(QPalette::Window, qApp->palette().color(QPalette::Window).darker(102));
+    quickSetupPanel->setPalette(sp);
+
+    root->addWidget(quickSetupPanel);
+    root->addWidget(makeSeparator());
+
+    // Toggle button — acts as a section header for the advanced area
+    paletteGridToggleButton = new QPushButton(this);
+    paletteGridToggleButton->setCheckable(true);
+    paletteGridToggleButton->setChecked(false);
+    paletteGridToggleButton->setFlat(true);
+    paletteGridToggleButton->setStyleSheet("QPushButton { text-align: left; padding: 5px 12px; font-weight: bold; }"
+                                           "QPushButton:checked { }");
+    root->addWidget(paletteGridToggleButton);
+
+    // Separator + grid start hidden; revealed by the toggle
+    paletteGridSeparator = makeSeparator();
+    paletteGridSeparator->setVisible(false);
+    root->addWidget(paletteGridSeparator);
+
+    paletteGrid = new PaletteGridWidget;
+    paletteGrid->setVisible(false);
+    root->addWidget(paletteGrid, 1);
+
+    // Font section — sibling to the palette grid, sharing its collapsible
+    // advanced area pattern. Fonts are shared per theme, not split by scheme.
+    fontToggleButton = new QPushButton(this);
+    fontToggleButton->setCheckable(true);
+    fontToggleButton->setChecked(false);
+    fontToggleButton->setFlat(true);
+    fontToggleButton->setStyleSheet("QPushButton { text-align: left; padding: 5px 12px; font-weight: bold; }"
+                                    "QPushButton:checked { }");
+    root->addWidget(fontToggleButton);
+
+    fontSeparator = makeSeparator();
+    fontSeparator->setVisible(false);
+    root->addWidget(fontSeparator);
+
+    fontSection = new QWidget;
+    auto *fontSectionLayout = new QVBoxLayout(fontSection);
+    fontSectionLayout->setContentsMargins(0, 0, 0, 0);
+    fontSectionLayout->setSpacing(0);
+    fontNoteLabel = new QLabel(fontSection);
+    fontNoteLabel->setContentsMargins(12, 4, 12, 0);
+    fontNoteLabel->setWordWrap(true);
+    fontSectionLayout->addWidget(fontNoteLabel);
+    fontGrid = new FontGridWidget(fontSection);
+    fontSectionLayout->addWidget(fontGrid);
+    fontSection->setVisible(false);
+    root->addWidget(fontSection);
+
+    // Footer
+    root->addWidget(makeSeparator());
+    footer = new QWidget;
+    footer->setAutoFillBackground(true);
+    {
+        QPalette fp = footer->palette();
+        fp.setColor(QPalette::Window, qApp->palette().color(QPalette::Window).darker(104));
+        footer->setPalette(fp);
+    }
+    auto *footerLayout = new QHBoxLayout(footer);
+    footerLayout->setContentsMargins(12, 8, 12, 8);
+
+    revertButton = new QPushButton(this);
+
+    buttonBox = new QDialogButtonBox;
+    resetBtn = buttonBox->addButton(tr("Reset"), QDialogButtonBox::ResetRole);
+    saveBtn = buttonBox->addButton(tr("Save"), QDialogButtonBox::AcceptRole);
+    closeBtn = buttonBox->addButton(QDialogButtonBox::Close);
+
+    footerLayout->addWidget(revertButton);
+    footerLayout->addStretch();
+    footerLayout->addWidget(buttonBox);
+    root->addWidget(footer);
+
+    // Connections
+    connect(schemeComboBox, &QComboBox::currentTextChanged, this, &PaletteEditorDialog::onSchemeChanged);
+    autoApplyTimer = new QTimer(this);
+    autoApplyTimer->setSingleShot(true);
+    autoApplyTimer->setInterval(150);
+    connect(autoApplyTimer, &QTimer::timeout, this, &PaletteEditorDialog::onApply);
+    connect(quickSetupPanel, &QuickSetupPanel::valueChanged, this, &PaletteEditorDialog::onGenerateFromAccent);
+    connect(paletteGrid, &PaletteGridWidget::paletteChanged, this, [this] { autoApplyTimer->start(); });
+    connect(fontGrid, &FontGridWidget::fontsChanged, this, [this] {
+        fontsDirty = true;
+        autoApplyTimer->start();
+    });
+    connect(revertButton, &QPushButton::clicked, this, &PaletteEditorDialog::onRevertToDefault);
+    connect(resetBtn, &QPushButton::clicked, this, &PaletteEditorDialog::onReset);
+    connect(saveBtn, &QPushButton::clicked, this, &PaletteEditorDialog::onSave);
+    connect(closeBtn, &QPushButton::clicked, this, &QDialog::reject);
+
+    connect(paletteGridToggleButton, &QPushButton::toggled, this, [this](bool open) {
+        paletteGridToggleButton->setText(open ? tr("▼  Edit Palette") : tr("▶  Edit Palette"));
+        paletteGridSeparator->setVisible(open);
+        paletteGrid->setVisible(open);
+        updateAdvancedHeight();
+    });
+    connect(fontToggleButton, &QPushButton::toggled, this, [this](bool open) {
+        fontToggleButton->setText(open ? tr("▼  Edit Fonts") : tr("▶  Edit Fonts"));
+        fontSeparator->setVisible(open);
+        fontSection->setVisible(open);
+        updateAdvancedHeight();
+    });
+}
+
+void PaletteEditorDialog::updateAdvancedHeight()
+{
+    int height = 220;
+    if (paletteGridToggleButton->isChecked()) {
+        height += 460;
+    }
+    if (fontToggleButton->isChecked()) {
+        height += 200;
+    }
+    setMinimumHeight(height);
+
+    if (paletteGrid->isVisible() || fontSection->isVisible()) {
+        resize(width(), height);
+    } else {
+        adjustSize(); // shrinks to fit just the visible content
+    }
+}
+
+void PaletteEditorDialog::retranslateUi()
+{
+    setWindowTitle(tr("Palette Editor — %1").arg(themeName));
+    titleLabel->setText(tr("<b>Palette Editor</b> &nbsp;·&nbsp; %1").arg(themeName));
+
+    revertButton->setToolTip(
+        tr("Delete this scheme's custom palette and revert to the theme default (or the application palette)"));
+
+    schemeComboBox->setToolTip(tr("Switch between the light and dark palette files"));
+    editingLabel->setText(tr("Editing:"));
+    paletteGridToggleButton->setText(tr("▶  Edit Palette"));
+    paletteGridToggleButton->setToolTip(tr("Show or hide the per-role colour grid for manual tweaks"));
+    fontToggleButton->setText(fontSection->isVisible() ? tr("▼  Edit Fonts") : tr("▶  Edit Fonts"));
+    fontToggleButton->setToolTip(tr("Show or hide the per-purpose font settings for this theme"));
+    fontNoteLabel->setText(tr("Fonts belong to theme %1 (shared by Light and Dark schemes)").arg(themeName));
+    fontGrid->retranslateUi();
+    revertButton->setText(tr("↺  Revert to theme default"));
+
+    resetBtn->setText(tr("Reset"));
+    saveBtn->setText(tr("Save"));
+    resetBtn->setToolTip(tr("Discard unsaved edits and restore the last saved palette and fonts"));
+    saveBtn->setToolTip(tr("Write palette-%1.toml and fonts.toml, then reload the theme").arg(loadedScheme.toLower()));
+
+    if (saveDir.isEmpty() || !ThemeManager::isDirReallyWritable(saveDir)) {
+        saveBtn->setEnabled(false);
+        saveBtn->setToolTip(tr("Cannot save: this theme has no writable directory"));
+    }
+}
+
+void PaletteEditorDialog::loadSchemes()
+{
+    const QStringList schemes = {"Light", "Dark"};
+    for (const QString &scheme : schemes) {
+        PaletteConfig cfg = PaletteConfig::fromScheme(themeDirPath, scheme);
+
+        if (!cfg.hasPalette()) {
+            cfg = ThemeManager::loadDefaultPaletteConfig(themeDirPath, themeName, scheme);
+        }
+
+        if (!cfg.hasPalette()) {
+            const QPalette appPal = qApp->palette();
+            for (auto group : {QPalette::Active, QPalette::Disabled, QPalette::Inactive}) {
+                for (int i = 0; i < QPalette::NColorRoles; ++i) {
+                    auto role = static_cast<QPalette::ColorRole>(i);
+                    if (role != QPalette::NoRole) {
+                        cfg.colors[group][role] = appPal.color(group, role);
+                    }
+                }
+            }
+        }
+        savedConfig[scheme] = cfg;
+        workingConfig[scheme] = cfg;
+    }
+}
+
+void PaletteEditorDialog::loadFonts()
+{
+    savedFontConfig = ThemeManager::loadDefaultFontConfig(themeDirPath, themeName);
+    fontGrid->loadFonts(savedFontConfig);
+    fontsDirty = false;
+}
+
+void PaletteEditorDialog::seedAccentFromScheme(const QString &scheme)
+{
+    QColor seed = workingConfig.value(scheme).colors.value(QPalette::Active).value(QPalette::Highlight);
+    if (seed.isValid()) {
+        quickSetupPanel->setAccentColor(seed);
+    }
+}
+
+void PaletteEditorDialog::onSchemeChanged(const QString &scheme)
+{
+    // Snapshot unsaved edits for the scheme we're leaving
+    if (!loadedScheme.isEmpty()) {
+        workingConfig[loadedScheme] = paletteGrid->currentPaletteConfig();
+    }
+
+    loadedScheme = scheme;
+    paletteGrid->loadPalette(workingConfig.value(scheme));
+    seedAccentFromScheme(scheme);
+}
+
+void PaletteEditorDialog::onGenerateFromAccent(const QColor &accent, int intensity)
+{
+    PaletteConfig cfg = PaletteGenerator::fromAccent(accent, intensity, loadedScheme);
+    workingConfig[loadedScheme] = cfg;
+    paletteGrid->loadPalette(cfg);
+}
+
+void PaletteEditorDialog::onApply()
+{
+    themeManager->previewPalette(paletteGrid->currentPaletteConfig(), loadedScheme);
+    if (fontsDirty) {
+        themeManager->previewFonts(fontGrid->currentFontConfig());
+    }
+}
+
+void PaletteEditorDialog::onSave()
+{
+    if (loadedScheme.isEmpty()) {
+        return;
+    }
+
+    // Snapshot the currently displayed scheme so unsaved edits are not lost.
+    workingConfig[loadedScheme] = paletteGrid->currentPaletteConfig();
+
+    // Persist every scheme that changed, not just the one on screen. Each scheme
+    // has its own file, so edits to the non-active scheme would otherwise be
+    // silently discarded when the dialog closes.
+    //
+    // Save the loaded scheme last so commitPalette's global colour-scheme
+    // update (ThemeConfig::colorScheme) points at the active scheme.
+    for (auto it = workingConfig.begin(); it != workingConfig.end(); ++it) {
+        if (it.key() == loadedScheme) {
+            continue;
+        }
+        if (it.value() == savedConfig.value(it.key())) {
+            continue;
+        }
+        if (!ThemeManager::commitPalette(saveDir, it.key(), it.value())) {
+            QMessageBox::warning(this, tr("Save failed"),
+                                 tr("Could not write %1 to:\n%2").arg(PaletteConfig::fileName(it.key()), saveDir));
+            return;
+        }
+    }
+
+    // Commit the active scheme last so the global colour scheme matches.
+    if (workingConfig[loadedScheme] != savedConfig.value(loadedScheme)) {
+        if (!ThemeManager::commitPalette(saveDir, loadedScheme, workingConfig[loadedScheme])) {
+            QMessageBox::warning(this, tr("Save failed"),
+                                 tr("Could not write %1 to:\n%2").arg(PaletteConfig::fileName(loadedScheme), saveDir));
+            return;
+        }
+    } else {
+        // No palette change but scheme may have switched -- still update global config.
+        ThemeConfig globalCfg = ThemeConfig::fromThemeDir(saveDir);
+        globalCfg.colorScheme = loadedScheme;
+        globalCfg.save(saveDir);
+    }
+
+    // Keep the saved snapshot in sync so Reset behaves correctly afterwards.
+    for (auto it = workingConfig.begin(); it != workingConfig.end(); ++it) {
+        savedConfig[it.key()] = it.value();
+    }
+
+    // Persist the shared per-theme fonts when they changed.
+    if (fontsDirty) {
+        const FontConfig fontCfg = fontGrid->currentFontConfig();
+        if (fontCfg != savedFontConfig) {
+            if (!ThemeManager::saveFontConfig(saveDir, fontCfg)) {
+                QMessageBox::warning(this, tr("Save failed"),
+                                     tr("Could not write %1 to:\n%2").arg(FontConfig::fileName(), saveDir));
+                return;
+            }
+            savedFontConfig = fontCfg;
+        }
+        fontsDirty = false;
+    }
+
+    themeManager->reloadCurrentTheme();
+    accept();
+}
+
+void PaletteEditorDialog::onReset()
+{
+    workingConfig[loadedScheme] = savedConfig[loadedScheme];
+    paletteGrid->loadPalette(savedConfig[loadedScheme]);
+    // Restore the live theme before re-reading the grid: loadFonts resolves
+    // unset roles, and the preview has currentFonts pointing at the edited
+    // config until the theme is reloaded.
+    themeManager->reloadCurrentTheme();
+    fontGrid->loadFonts(savedFontConfig);
+    fontsDirty = false;
+    seedAccentFromScheme(loadedScheme);
+}
+
+void PaletteEditorDialog::onRevertToDefault()
+{
+    // Delete this scheme's custom palette file so the theme falls back to its
+    // default (or, when it ships none, the application palette).
+    // Note: shipped defaults use palette-default-<scheme>.toml so this only
+    // removes user-written custom palette files; the theme author's defaults
+    // are left untouched.
+    QFile::remove(QDir(saveDir).absoluteFilePath(PaletteConfig::fileName(loadedScheme)));
+
+    // Reload the live theme so the revert takes effect immediately.
+    themeManager->reloadCurrentTheme();
+
+    // Reflect the resolved palette (theme default, else current app palette) in
+    // the editor so it no longer shows the deleted custom colours.
+    PaletteConfig def = ThemeManager::loadDefaultPaletteConfig(themeDirPath, themeName, loadedScheme);
+    if (!def.hasPalette()) {
+        const QPalette appPal = qApp->palette();
+        for (auto group : {QPalette::Active, QPalette::Disabled, QPalette::Inactive}) {
+            for (int i = 0; i < QPalette::NColorRoles; ++i) {
+                auto role = static_cast<QPalette::ColorRole>(i);
+                if (role != QPalette::NoRole) {
+                    def.colors[group][role] = appPal.color(group, role);
+                }
+            }
+        }
+    }
+
+    savedConfig[loadedScheme] = def;
+    workingConfig[loadedScheme] = def;
+    paletteGrid->loadPalette(def);
+    seedAccentFromScheme(loadedScheme);
+
+    // Revert the shared per-theme fonts the same way: delete the user-written
+    // fonts.toml so the theme falls back to its shipped default, then reflect
+    // the resolved fonts in the editor.
+    QFile::remove(QDir(saveDir).absoluteFilePath(FontConfig::fileName()));
+
+    // Reload the live theme so the font revert takes effect immediately.
+    themeManager->reloadCurrentTheme();
+
+    const FontConfig fontDef = ThemeManager::loadDefaultFontConfig(themeDirPath, themeName);
+    savedFontConfig = fontDef;
+    fontGrid->loadFonts(fontDef);
+    fontsDirty = false;
+}
+
+void PaletteEditorDialog::reject()
+{
+    // Discard any unsaved live preview (palette and fonts) so closing without
+    // Save restores the active theme instead of leaking the preview globally.
+    themeManager->reloadCurrentTheme();
+    QDialog::reject();
+}
+
+void PaletteEditorDialog::changeEvent(QEvent *e)
+{
+    if (e->type() == QEvent::PaletteChange) {
+        QTimer::singleShot(0, this, &PaletteEditorDialog::refreshChromePalettes);
+    }
+
+    QDialog::changeEvent(e);
+}
+
+void PaletteEditorDialog::refreshChromePalettes()
+{
+    const QPalette base = qApp->palette();
+
+    if (header) {
+        QPalette hp = header->palette();
+        hp.setColor(QPalette::Window, base.color(QPalette::Window).darker(108));
+        header->setPalette(hp);
+        header->update();
+    }
+    if (footer) {
+        QPalette fp = footer->palette();
+        fp.setColor(QPalette::Window, base.color(QPalette::Window).darker(104));
+        footer->setPalette(fp);
+        footer->update();
+    }
+    if (quickSetupPanel) {
+        QPalette sp = quickSetupPanel->palette();
+        sp.setColor(QPalette::Window, base.color(QPalette::Window).darker(102));
+        quickSetupPanel->setPalette(sp);
+        quickSetupPanel->update();
+    }
+}

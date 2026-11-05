@@ -5,7 +5,7 @@
 #include <memory>
 class MainWindow;
 class TabGame;
-class ReplayTimelineWidget;
+class ReplayManager;
 class QPlainTextEdit;
 class QListWidget;
 class RuledDiagnosticReader;
@@ -30,7 +30,7 @@ private:
     void seek(quint64 sequence);
     void display(quint64 sequence);
     TabGame *tab;
-    ReplayTimelineWidget *timeline;
+    ReplayManager *replayManager;
     QPlainTextEdit *recordedText, *currentText;
     QListWidget *events;
     std::shared_ptr<RuledDiagnosticReader> reader;

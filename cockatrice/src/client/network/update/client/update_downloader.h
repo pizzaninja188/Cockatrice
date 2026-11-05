@@ -1,14 +1,20 @@
 /**
  * @file update_downloader.h
  * @ingroup ClientUpdate
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef COCKATRICE_UPDATEDOWNLOADER_H
 #define COCKATRICE_UPDATEDOWNLOADER_H
 
+#include <QNetworkReply>
 #include <QObject>
-#include <QtNetwork>
+#include <QString>
+#include <QUrl>
+#include <QtGlobal>
+#include <qtmetamacros.h>
+
+class QNetworkAccessManager;
 
 class UpdateDownloader : public QObject
 {

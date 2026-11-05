@@ -17,7 +17,9 @@
 #ifndef COCKATRICE_ABSTRACT_DECK_LIST_NODE_H
 #define COCKATRICE_ABSTRACT_DECK_LIST_NODE_H
 
-#include <QtCore/QXmlStreamWriter>
+#include <QString>
+
+class QXmlStreamWriter;
 
 /**
  * @enum DeckSortMethod
@@ -101,7 +103,7 @@ public:
      */
     explicit AbstractDecklistNode(InnerDecklistNode *_parent = nullptr, int position = -1);
 
-    /// Virtual destructor. Child classes must clean up their resources.
+    /** @brief Virtual destructor. Child classes must clean up their resources. */
     virtual ~AbstractDecklistNode() = default;
 
     /**
@@ -136,10 +138,16 @@ public:
      */
     [[nodiscard]] virtual bool isDeckHeader() const = 0;
 
-    /// @return The parent node, or nullptr if this is the root.
+    /** @return The parent node, or nullptr if this is the root. */
     [[nodiscard]] InnerDecklistNode *getParent() const
     {
         return parent;
+    }
+
+    /** @param newParent Reparent this node. The new parent takes ownership. */
+    void setParent(InnerDecklistNode *newParent)
+    {
+        parent = newParent;
     }
 
     /**
@@ -173,11 +181,10 @@ public:
 
     /**
      * @name XML serialization
-     * These methods support reading and writing decks from/to
+     * This method supports writing this node and its children to the
      * Cockatrice deck XML format.
      * @{
      */
-    virtual bool readElement(QXmlStreamReader *xml) = 0;
     virtual void writeElement(QXmlStreamWriter *xml) = 0;
     /// @}
 };

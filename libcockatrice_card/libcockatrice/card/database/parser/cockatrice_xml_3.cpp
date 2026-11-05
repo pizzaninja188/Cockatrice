@@ -2,12 +2,33 @@
 
 #include "../../relation/card_relation.h"
 #include "../../relation/card_relation_type.h"
+#include "libcockatrice/card/database/card_database_data.h"
+#include "libcockatrice/card/database/parser/card_database_parser.h"
+#include "libcockatrice/card/lazy_properties_hash.h"
+#include "libcockatrice/card/printing/printing_info.h"
+#include "libcockatrice/card/set/card_set.h"
 
+#include <QChar>
 #include <QCoreApplication>
+#include <QDate>
+#include <QDateTime>
 #include <QDebug>
 #include <QFile>
+#include <QHash>
+#include <QIODevice>
+#include <QList>
+#include <QMessageLogger>
+#include <QSaveFile>
+#include <QSharedPointer>
+#include <QStringView>
+#include <QXmlStreamAttributes>
 #include <QXmlStreamReader>
+#include <QXmlStreamWriter>
+#include <QtGlobal>
+#include <qnamespace.h>
 #include <version_string.h>
+
+class ICardSetPriorityController;
 
 #define COCKATRICE_XML3_TAGNAME "cockatrice_carddatabase"
 #define COCKATRICE_XML3_TAGVER 3
@@ -77,6 +98,13 @@ void CockatriceXml3Parser::parseFile(QIODevice &device)
         QString preamble = tr("Parse error at line %1 col %2:").arg(xml.lineNumber()).arg(xml.columnNumber());
         qCWarning(CockatriceXml3Log).noquote() << preamble << xml.errorString();
     }
+}
+
+void CockatriceXml3Parser::parseFileInto(QIODevice &device, CardDatabaseData &data)
+{
+    targetData = &data;
+    parseFile(device);
+    targetData = nullptr;
 }
 
 void CockatriceXml3Parser::loadSetsFromXml(QXmlStreamReader &xml)
@@ -165,7 +193,7 @@ void CockatriceXml3Parser::loadCardsFromXml(QXmlStreamReader &xml)
         if (xmlName == "card") {
             QString name = QString("");
             QString text = QString("");
-            QVariantHash properties = QVariantHash();
+            QHash<QString, QString> properties;
             QString colors = QString("");
             QList<CardRelation *> relatedCards, reverseRelatedCards;
             auto _sets = SetToPrintingsMap();
@@ -217,27 +245,33 @@ void CockatriceXml3Parser::loadCardsFromXml(QXmlStreamReader &xml)
                     // NOTE: attributes must be read before readElementText()
                     QXmlStreamAttributes attrs = xml.attributes();
                     QString setName = xml.readElementText(QXmlStreamReader::IncludeChildElements);
-                    PrintingInfo setInfo(internalAddSet(setName));
-                    if (attrs.hasAttribute("muId")) {
-                        setInfo.setProperty("muid", attrs.value("muId").toString());
-                    }
+                    auto set = internalAddSet(setName);
+                    // Only load printings from sets the user has enabled, matching the v4 loader's
+                    // behaviour. Without this check, disabling a set has no effect on v3 databases.
+                    if (set->getEnabled()) {
+                        QHash<QString, QString> printingProps;
+                        if (attrs.hasAttribute("muId")) {
+                            printingProps.insert("muid", attrs.value("muId").toString());
+                        }
 
-                    if (attrs.hasAttribute("muId")) {
-                        setInfo.setProperty("uuid", attrs.value("uuId").toString());
-                    }
+                        if (attrs.hasAttribute("uuId")) {
+                            printingProps.insert("uuid", attrs.value("uuId").toString());
+                        }
 
-                    if (attrs.hasAttribute("picURL")) {
-                        setInfo.setProperty("picurl", attrs.value("picURL").toString());
-                    }
+                        if (attrs.hasAttribute("picURL")) {
+                            printingProps.insert("picurl", attrs.value("picURL").toString());
+                        }
 
-                    if (attrs.hasAttribute("num")) {
-                        setInfo.setProperty("num", attrs.value("num").toString());
-                    }
+                        if (attrs.hasAttribute("num")) {
+                            printingProps.insert("num", attrs.value("num").toString());
+                        }
 
-                    if (attrs.hasAttribute("rarity")) {
-                        setInfo.setProperty("rarity", attrs.value("rarity").toString());
+                        if (attrs.hasAttribute("rarity")) {
+                            printingProps.insert("rarity", attrs.value("rarity").toString());
+                        }
+                        PrintingInfo setInfo(set, LazyPropertiesHash::serializedFrom(printingProps));
+                        _sets[setName].append(setInfo);
                     }
-                    _sets[setName].append(setInfo);
                     // related cards
                 } else if (xmlName == "related" || xmlName == "reverse-related") {
                     CardRelationType attach = CardRelationType::DoesNotAttach;
@@ -292,9 +326,23 @@ void CockatriceXml3Parser::loadCardsFromXml(QXmlStreamReader &xml)
                                                  .landscapeOrientation = landscapeOrientation,
                                                  .tableRow = tableRow,
                                                  .upsideDownArt = upsideDown};
-            CardInfoPtr newCard = CardInfo::newInstance(name, text, isToken, properties, relatedCards,
-                                                        reverseRelatedCards, _sets, attributes);
-            emit addCard(newCard);
+            CardInfoPtr newCard =
+                CardInfo::newInstance(name, text, isToken, LazyPropertiesHash::serialize(properties), relatedCards,
+                                      reverseRelatedCards, _sets, attributes, {}, {}, true);
+            if (targetData) {
+                if (auto existing = targetData->cards.value(name)) {
+                    for (const auto &printings : newCard->getSets()) {
+                        for (const auto &printing : printings) {
+                            existing->addToSet(printing.getSet(), printing);
+                        }
+                    }
+                } else {
+                    targetData->cards.insert(name, newCard);
+                    targetData->simpleNameCards.insert(newCard->getSimpleName(), newCard);
+                }
+            } else {
+                emit addCard(newCard);
+            }
         }
     }
 }
@@ -355,7 +403,7 @@ static QXmlStreamWriter &operator<<(QXmlStreamWriter &xml, const CardInfoPtr &in
     }
 
     // sets
-    const SetToPrintingsMap setMap = info->getSets();
+    const auto &setMap = info->getSets();
     for (const auto &printings : setMap) {
         for (const PrintingInfo &set : printings) {
             xml.writeStartElement("set");
@@ -452,7 +500,7 @@ bool CockatriceXml3Parser::saveToFile(FormatRulesNameMap _formats,
 {
     Q_UNUSED(_formats);
 
-    QFile file(fileName);
+    QSaveFile file(fileName);
     if (!file.open(QIODevice::WriteOnly)) {
         return false;
     }
@@ -492,5 +540,5 @@ bool CockatriceXml3Parser::saveToFile(FormatRulesNameMap _formats,
     xml.writeEndElement(); // cockatrice_carddatabase
     xml.writeEndDocument();
 
-    return true;
+    return !xml.hasError() && file.commit();
 }

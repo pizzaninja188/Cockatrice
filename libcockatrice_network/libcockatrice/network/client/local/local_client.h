@@ -1,8 +1,8 @@
 /**
  * @file local_client.h
  * @ingroup Client
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef LOCALCLIENT_H
 #define LOCALCLIENT_H
@@ -10,6 +10,12 @@
 #include "../abstract/abstract_client.h"
 
 #include <QLoggingCategory>
+#include <QPointer>
+#include <QString>
+#include <qtmetamacros.h>
+
+class QObject;
+class ServerMessage;
 
 inline Q_LOGGING_CATEGORY(LocalClientLog, "local_client");
 
@@ -19,14 +25,15 @@ class LocalClient : public AbstractClient
 {
     Q_OBJECT
 private:
-    LocalServerInterface *lsi;
+    // Guarded pointer: the LocalServer (and its interfaces) may be destroyed while this client
+    // still has pending commands queued on the event loop.
+    QPointer<LocalServerInterface> lsi;
 
 public:
     LocalClient(LocalServerInterface *_lsi,
                 const QString &_playerName,
                 const QString &_clientId,
                 QObject *parent = nullptr);
-    ~LocalClient() override;
 
     void sendCommandContainer(const CommandContainer &cont) override;
 private slots:

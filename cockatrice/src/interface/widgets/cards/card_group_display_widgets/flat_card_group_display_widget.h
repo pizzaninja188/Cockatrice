@@ -1,14 +1,24 @@
 /**
  * @file flat_card_group_display_widget.h
  * @ingroup DeckEditorCardGroupWidgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef FLAT_CARD_GROUP_DISPLAY_WIDGET_H
 #define FLAT_CARD_GROUP_DISPLAY_WIDGET_H
 
 #include "../../general/layout_containers/flow_widget.h"
 #include "card_group_display_widget.h"
+
+#include <QPersistentModelIndex>
+#include <QString>
+#include <QStringList>
+#include <qtmetamacros.h>
+
+class CardSizeWidget;
+class DeckListModel;
+class QItemSelectionModel;
+class QWidget;
 
 class FlatCardGroupDisplayWidget : public CardGroupDisplayWidget
 {

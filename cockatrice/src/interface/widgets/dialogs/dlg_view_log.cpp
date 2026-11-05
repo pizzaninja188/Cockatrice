@@ -3,14 +3,22 @@
 #include "../../../client/settings/cache_settings.h"
 #include "../../logger.h"
 
+#include <QApplication>
+#include <QCheckBox>
 #include <QClipboard>
+#include <QHBoxLayout>
+#include <QList>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QVBoxLayout>
+#include <libcockatrice/settings/servers_settings.h>
+
+class QWidget;
 
 DlgViewLog::DlgViewLog(QWidget *parent) : QDialog(parent)
 {
+    setObjectName("viewLogDialog");
     logArea = new QPlainTextEdit;
     logArea->setReadOnly(true);
 
@@ -60,8 +68,9 @@ void DlgViewLog::actCopyToClipboard()
 void DlgViewLog::loadInitialLogBuffer()
 {
     QList<QString> logBuffer = Logger::getInstance().getLogBuffer();
-    for (const QString &message : logBuffer)
+    for (const QString &message : logBuffer) {
         appendLogEntry(message);
+    }
 }
 
 void DlgViewLog::appendLogEntry(const QString &message)

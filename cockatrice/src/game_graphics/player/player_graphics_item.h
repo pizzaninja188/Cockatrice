@@ -1,0 +1,196 @@
+/**
+ * @file player_graphics_item.h
+ * @ingroup GameGraphicsPlayers
+ */
+//! \todo Document this file.
+
+#ifndef COCKATRICE_PLAYER_GRAPHICS_ITEM_H
+#define COCKATRICE_PLAYER_GRAPHICS_ITEM_H
+#include "../board/graphics_item_type.h"
+#include "../game_scene.h"
+#include "libcockatrice/utility/playmat_params.h"
+
+#include <QGraphicsObject>
+#include <QMap>
+#include <QMetaObject>
+#include <QPixmap>
+#include <QRectF>
+#include <QSize>
+#include <QSizeF>
+#include <QString>
+#include <QtGlobal>
+#include <qtmetamacros.h>
+
+class HandZone;
+class HandCounter;
+class PileZone;
+class PlayerDialogs;
+class PlayerMenu;
+class PlayerTarget;
+class RuledRestrictedManaDisplay;
+class StackZone;
+class TableZone;
+class AbstractCounter;
+class CardZone;
+class CounterState;
+class PlayerArea;
+class PlayerLogic;
+struct CardRef;
+
+class PlayerGraphicsItem : public QGraphicsObject
+{
+    Q_OBJECT
+
+public:
+    enum
+    {
+        Type = typeOther
+    };
+    int type() const override
+    {
+        return Type;
+    }
+
+    static constexpr int counterAreaWidth = 55;
+
+    explicit PlayerGraphicsItem(PlayerLogic *player);
+    void initializeZones();
+
+    [[nodiscard]] QRectF boundingRect() const override;
+    qreal getMinimumWidth() const;
+    void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) override;
+    void processSceneSizeChange(int newPlayerWidth);
+
+    void setMirrored(bool _mirrored);
+
+    bool getMirrored() const
+    {
+        return mirrored;
+    }
+
+    GameScene *getGameScene() const
+    {
+        return static_cast<GameScene *>(scene());
+    }
+
+    PlayerLogic *getLogic() const
+    {
+        return player;
+    }
+
+    [[nodiscard]] PlayerMenu *getPlayerMenu() const
+    {
+        return playerMenu;
+    }
+
+    AbstractCounter *getCounterGraphicsItem(int counterId) const
+    {
+        return counterWidgets.value(counterId, nullptr);
+    }
+
+    PlayerArea *getPlayerArea() const
+    {
+        return playerArea;
+    }
+
+    PlayerTarget *getPlayerTarget() const
+    {
+        return playerTarget;
+    }
+
+    CardZone *getZoneGraphicsItem(const QString &name) const
+    {
+        return zoneGraphicsItems.value(name, nullptr);
+    }
+
+    [[nodiscard]] PileZone *getDeckZoneGraphicsItem() const
+    {
+        return deckZoneGraphicsItem;
+    }
+
+    [[nodiscard]] PileZone *getSideboardZoneGraphicsItem() const
+    {
+        return sideboardGraphicsItem;
+    }
+
+    [[nodiscard]] PileZone *getGraveyardZoneGraphicsItem() const
+    {
+        return graveyardZoneGraphicsItem;
+    }
+    [[nodiscard]] PileZone *getRfgZoneGraphicsItem() const
+    {
+        return rfgZoneGraphicsItem;
+    }
+    [[nodiscard]] TableZone *getTableZoneGraphicsItem() const
+    {
+        return tableZoneGraphicsItem;
+    }
+    [[nodiscard]] StackZone *getStackZoneGraphicsItem() const
+    {
+        return stackZoneGraphicsItem;
+    }
+    [[nodiscard]] HandZone *getHandZoneGraphicsItem() const
+    {
+        return handZoneGraphicsItem;
+    }
+
+public slots:
+    void onPlayerActiveChanged(bool _active);
+    void setPriorityHighlighted(bool highlighted);
+    void onCustomZoneAdded(QString customZoneName);
+    void onCounterAdded(CounterState *state);
+    void onCounterRemoved(int counterId);
+    void rearrangeCounters();
+    void retranslateUi();
+
+signals:
+    void sizeChanged();
+    void playerCountChanged();
+    void mirroredChanged(bool isMirrored);
+    void cardInfoRequested(const CardRef &cardRef);
+    void playmatChanged(bool hasPlaymat);
+
+private:
+    PlayerLogic *player;
+    PlayerMenu *playerMenu;
+    PlayerDialogs *playerDialogs;
+    PlayerArea *playerArea;
+    PlayerTarget *playerTarget;
+    QMap<int, AbstractCounter *> counterWidgets;
+    QMap<QString, CardZone *> zoneGraphicsItems;
+    PileZone *deckZoneGraphicsItem;
+    PileZone *sideboardGraphicsItem;
+    PileZone *graveyardZoneGraphicsItem;
+    PileZone *rfgZoneGraphicsItem;
+    TableZone *tableZoneGraphicsItem;
+    StackZone *stackZoneGraphicsItem;
+    HandZone *handZoneGraphicsItem;
+    HandCounter *handCounter;
+    RuledRestrictedManaDisplay *restrictedManaDisplay = nullptr;
+    QRectF bRect;
+    bool mirrored;
+    bool handVisible = false;
+
+    QPixmap playmatPixmap;
+    QPixmap scaledPlaymatPixmap; // down-scaled copy of playmatPixmap for the current render size
+    QSize scaledPlaymatKey;      // size bucket scaledPlaymatPixmap was rendered for
+    PlaymatParams playmatParams;
+    QString playmatAttribution;
+    bool hasPlaymat = false;
+    QMetaObject::Connection playmatPixmapConnection;
+
+    [[nodiscard]] qreal restrictedManaExtraWidth() const;
+    void rearrangeSidebar();
+
+private slots:
+    void updateBoundingRect();
+    void rearrangeZones();
+    void clearPlaymat();
+    void updatePlaymat();
+    void onPlaymatPixmapReady();
+
+private:
+    QPixmap scaledPlaymatFor(const QRectF &srcRect, const QSizeF &deviceDstSize);
+};
+
+#endif // COCKATRICE_PLAYER_GRAPHICS_ITEM_H

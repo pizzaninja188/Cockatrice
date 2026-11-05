@@ -1,0 +1,158 @@
+/**
+ * @file card_item.h
+ * @ingroup GameGraphicsCards
+ */
+//! \todo Document this file.
+
+#ifndef CARDITEM_H
+#define CARDITEM_H
+
+#include "abstract_card_item.h"
+#include "graphics_item_type.h"
+
+#include <QStringList>
+#include <libcockatrice/network/server/remote/game/server_card.h>
+#include <QList>
+#include <QPoint>
+#include <QPointF>
+#include <QString>
+#include <QVariantList>
+#include <libcockatrice/game/board/card_state.h>
+#include <qtmetamacros.h>
+
+class CardDragItem;
+class ServerInfo_Card;
+class PlayerLogic;
+class QColor;
+class CardZoneLogic;
+class QGraphicsItem;
+struct CardRef;
+template <class Key, class T> class QMap;
+
+const int ROTATION_DEGREES_PER_FRAME = 10;
+
+class CardItem : public AbstractCardItem
+{
+    Q_OBJECT
+private:
+    bool ruledTargetPressConsumed = false;
+    CardDragItem *dragItem;
+
+    void prepareDelete();
+    void handleClickedToPlay(bool shiftHeld);
+public slots:
+    void deleteLater();
+
+public:
+    enum
+    {
+        Type = typeCard
+    };
+    [[nodiscard]] int type() const override
+    {
+        return Type;
+    }
+    explicit CardItem(PlayerLogic *_owner,
+                      QGraphicsItem *parent = nullptr,
+                      const CardRef &cardRef = {},
+                      int _cardid = -1,
+                      CardZoneLogic *_zone = nullptr);
+
+    void retranslateUi();
+    [[nodiscard]] CardZoneLogic *getZone() const
+    {
+        return state->getZone();
+    }
+    void setZone(CardZoneLogic *_zone);
+    void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) override;
+    [[nodiscard]] QPoint getGridPoint() const
+    {
+        return state->getGridPoint();
+    }
+    void setGridPoint(const QPoint &_gridPoint)
+    {
+        state->setGridPoint(_gridPoint);
+    }
+    [[nodiscard]] QPoint getGridPos() const
+    {
+        return state->getGridPoint();
+    }
+    [[nodiscard]] PlayerLogic *getOwner() const
+    {
+        return owner;
+    }
+    void setOwner(PlayerLogic *_owner)
+    {
+        owner = _owner;
+    }
+    [[nodiscard]] bool getAttacking() const
+    {
+        return state->getAttacking();
+    }
+    void setAttacking(bool _attacking);
+    [[nodiscard]] const QMap<int, int> &getCounters() const
+    {
+        return state->getCounters();
+    }
+    void setCounter(int _id, int _value);
+    [[nodiscard]] QString getAnnotation() const
+    {
+        return state->getAnnotation();
+    }
+    void setAnnotation(const QString &_annotation);
+    [[nodiscard]] bool getDoesntUntap() const
+    {
+        return state->getDoesntUntap();
+    }
+    void setDoesntUntap(bool _doesntUntap);
+    [[nodiscard]] QString getPT() const
+    {
+        return state->getPT();
+    }
+    void setPT(const QString &_pt);
+    [[nodiscard]] bool getDestroyOnZoneChange() const
+    {
+        return state->getDestroyOnZoneChange();
+    }
+    void setDestroyOnZoneChange(bool _destroy)
+    {
+        state->setDestroyOnZoneChange(_destroy);
+    }
+    [[nodiscard]] CardState *getAttachedTo() const
+    {
+        return state->getAttachedTo();
+    }
+    void setAttachedTo(CardItem *_attachedTo);
+    void addAttachedCard(CardState *card)
+    {
+        state->addAttachedCard(card);
+    }
+    void removeAttachedCard(CardState *card)
+    {
+        state->removeAttachedCard(card);
+    }
+    [[nodiscard]] const QList<CardState *> &getAttachedCards() const
+    {
+        return state->getAttachedCards();
+    }
+    void resetState(bool keepAnnotations = false);
+    void processCardInfo(const ServerInfo_Card &_info);
+
+    bool animationEvent() override;
+    void triggerTapAnimationFrom(int startAngle);
+    CardDragItem *createDragItem(int _id, const QPointF &_pos, const QPointF &_scenePos, bool forceFaceDown);
+    void deleteDragItem();
+    void drawArrow(const QColor &arrowColor);
+    void drawAttachArrow();
+    void playCard(bool faceDown);
+
+protected:
+    void mousePressEvent(QGraphicsSceneMouseEvent *event) override;
+    void mouseMoveEvent(QGraphicsSceneMouseEvent *event) override;
+    void mouseReleaseEvent(QGraphicsSceneMouseEvent *event) override;
+    void mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event) override;
+    QVariant itemChange(GraphicsItemChange change, const QVariant &value) override;
+    bool doubleClickActsOnSelection() const override;
+};
+
+#endif

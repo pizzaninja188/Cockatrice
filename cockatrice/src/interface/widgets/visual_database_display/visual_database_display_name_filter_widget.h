@@ -1,28 +1,32 @@
 /**
  * @file visual_database_display_name_filter_widget.h
  * @ingroup VisualCardDatabaseWidgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef VISUAL_DATABASE_DISPLAY_NAME_FILTER_WIDGET_H
 #define VISUAL_DATABASE_DISPLAY_NAME_FILTER_WIDGET_H
 
-#include "../../../filters/filter_tree_model.h"
-#include "../../../interface/widgets/tabs/abstract_tab_deck_editor.h"
-#include "../general/layout_containers/flow_widget.h"
-
-#include <QLineEdit>
 #include <QMap>
-#include <QPushButton>
+#include <QString>
 #include <QWidget>
+#include <libcockatrice/utility/debouncer.h>
+#include <qtmetamacros.h>
+
+class DeckListModel;
+class FilterTreeModel;
+class FlowWidget;
+class QLineEdit;
+class QPushButton;
+class QVBoxLayout;
 
 class VisualDatabaseDisplayNameFilterWidget : public QWidget
 {
     Q_OBJECT
 public:
     explicit VisualDatabaseDisplayNameFilterWidget(QWidget *parent,
-                                                   AbstractTabDeckEditor *deckEditor,
-                                                   FilterTreeModel *filterModel);
+                                                   FilterTreeModel *filterModel,
+                                                   DeckListModel *deckListModel = nullptr);
 
     void createNameFilter(const QString &name);
     void removeNameFilter(const QString &name);
@@ -34,8 +38,8 @@ public slots:
     void retranslateUi();
 
 private:
-    AbstractTabDeckEditor *deckEditor;
     FilterTreeModel *filterModel;
+    DeckListModel *deckListModel;
     QVBoxLayout *layout;
     QLineEdit *searchBox;
     FlowWidget *flowWidget;
@@ -43,6 +47,7 @@ private:
     QPushButton *loadFromClipboardButton;
 
     QMap<QString, QPushButton *> activeFilters; // Store active name filter buttons
+    QtUtils::Debouncer syncDebouncer{100};
 
 private slots:
     void actLoadFromDeck();

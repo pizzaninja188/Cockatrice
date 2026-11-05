@@ -20,30 +20,48 @@
 #ifndef SERVATRICE_H
 #define SERVATRICE_H
 
+#include "metrics_registry.h"
+#include "ratelimiter.h"
+#include "smtpclient.h"
+
+#include <QByteArray>
+#include <QDateTime>
 #include <QHostAddress>
+#include <QList>
+#include <QMap>
 #include <QMetaType>
 #include <QMutex>
+#include <QMutexLocker>
 #include <QReadWriteLock>
-#include <QSqlDatabase>
 #include <QSslCertificate>
 #include <QSslKey>
+#include <QString>
+
+// IWYU pragma: keep
+// Q_DECLARE_METATYPE below needs the complete type.
+#include <QSqlDatabase>
 #include <QTcpServer>
 #include <QWebSocketServer>
+#include <QtGlobal>
+#include <atomic>
+#include <libcockatrice/protocol/pb/response_report_stats.pb.h>
+#include <memory>
+#include <qtmetamacros.h>
 #include <server.h>
 #include <utility>
 
+class QObject;
+class QThread;
+class SessionEvent;
+
 Q_DECLARE_METATYPE(QSqlDatabase)
 
-class QSqlQuery;
 class QTimer;
-
-class GameReplay;
 class Servatrice;
 class Servatrice_ConnectionPool;
 class Servatrice_DatabaseInterface;
 class AbstractServerSocketInterface;
 class IslInterface;
-class FeatureSet;
 
 class Servatrice_GameServer : public QTcpServer
 {
@@ -137,9 +155,17 @@ public:
         AuthenticationSql,
         AuthenticationPassword
     };
+    enum AuthenticationStrictness
+    {
+        AuthenticationLegacy,
+        AuthenticationMixed,
+        AuthenticationStrict
+    };
 private slots:
     void statusUpdate();
+    void sweepLegacyBackups();
     void shutdownTimeout();
+    void cleanupExpiredDeckShares();
 
 protected:
     void doSendIslMessage(const IslMessage &msg, int _serverId) override;
@@ -153,24 +179,41 @@ private:
     AuthenticationMethod authenticationMethod;
     DatabaseType databaseType;
     QTimer *pingClock, *statusUpdateClock;
+    QTimer *deckShareCleanupClock;
+    QTimer *legacyBackupSweepClock;
     Servatrice_GameServer *gameServer;
     Servatrice_WebsocketGameServer *websocketGameServer;
     Servatrice_IslServer *islServer;
     mutable QMutex loginMessageMutex;
     QString loginMessage;
+    mutable QMutex shutdownStateMutex;
     QString dbPrefix;
     QMap<QString, bool> serverRequiredFeatureList;
     QString officialWarnings;
     Servatrice_DatabaseInterface *servatriceDatabaseInterface;
+    bool cleanupDatabaseForEmail(const QString &userName, EmailType type, const QString &token, qint64 rowId);
     int serverId;
     int uptime;
     QMutex txBytesMutex, rxBytesMutex;
     quint64 txBytes, rxBytes;
+    MetricsRegistry metricsRegistry;
+    int metricsSlowCommandMs = 500;
+    int metricsStallWarnMs = 2000;
+    std::atomic<qint64> eventLoopStallsTotal{0}; ///< heartbeat overshoots past the warn threshold
+    std::atomic<qint64> eventLoopLastStallMs{0}; ///< overshoot of the most recent stall
+    std::atomic<qint64> eventLoopMaxStallMs{0};  ///< worst overshoot seen since process start
 
     QString shutdownReason;
     int shutdownMinutes;
     int nextShutdownMessageMinutes;
     QTimer *shutdownTimer;
+
+    mutable QMutex reportStatsMutex;
+    QDateTime reportStatsTimestamp;
+    std::shared_ptr<const Response_ReportStats> reportStatsCache;
+    static constexpr int reportStatsCacheTtlSeconds = 60;
+
+    RateLimiter rateLimiter;
 
     mutable QMutex serverListMutex;
     QList<ServerProperties> serverList;
@@ -201,6 +244,12 @@ public slots:
     void scheduleShutdown(const QString &reason, int minutes);
     void updateLoginMessage();
     void setRequiredFeatures(const QString &featureList);
+    void onEmailDelivered(const QString &userName, EmailType type, const QString &token, qint64 rowId);
+    void onEmailPermanentlyFailed(const QString &userName,
+                                  EmailType type,
+                                  FailureReason reason,
+                                  const QString &token,
+                                  qint64 rowId);
 
 public:
     explicit Servatrice(QObject *parent = nullptr);
@@ -210,12 +259,22 @@ public:
     {
         return serverRequiredFeatureList;
     }
+    bool requiresChallengeResponseAuth() const override
+    {
+        return getAuthenticationStrictness() == AuthenticationStrict;
+    }
+    /** @brief Key sealing legacy password backups, or empty when they are disabled. */
+    QByteArray getLegacyBackupKey() const;
+    /** @brief Days a legacy password backup may go unused before it is purged. */
+    int getLegacyBackupTtlDays() const;
     QString getServerName() const;
     QString getLoginMessage() const override
     {
         QMutexLocker locker(&loginMessageMutex);
         return loginMessage;
     }
+    SessionEvent *getLoginSessionEvent() const override;
+    SessionEvent *makeShutdownEvent() const;
     QString getRequiredFeatures() const override;
     QString getAuthenticationMethodString() const;
     QString getDBTypeString() const;
@@ -229,6 +288,7 @@ public:
     {
         return authenticationMethod;
     }
+    AuthenticationStrictness getAuthenticationStrictness() const;
     bool permitUnregisteredUsers() const override
     {
         return authenticationMethod != AuthenticationNone;
@@ -256,7 +316,13 @@ public:
     int getMaxGameInactivityTime() const override;
     int getMaxPlayerInactivityTime() const override;
     int getClientKeepAlive() const override;
+    int getDeckShareExpiryDays() const;
+    int getDeckShareCleanupInterval() const;
+    int getDeckShareMaxDecksPerShare() const;
+    int getDeckShareMaxSharesPerDay() const;
     int getMaxUsersPerAddress() const;
+    /// Raw security/trusted_sources list; match addresses against it with isTrustedSource().
+    QString getTrustedSources() const;
     int getMessageCountingInterval() const override;
     int getMaxMessageCountPerInterval() const override;
     int getMaxMessageSizePerInterval() const override;
@@ -275,10 +341,77 @@ public:
     void incRxBytes(quint64 num);
     void addDatabaseInterface(QThread *thread, Servatrice_DatabaseInterface *databaseInterface);
 
+    // Metrics (see [metrics] section in servatrice.ini.example)
+    MetricsRegistry &getMetricsRegistry()
+    {
+        return metricsRegistry;
+    }
+    /**
+     * Sums cards across all zones of all running games. Each game takes its
+     * own gameMutex -- the hot per-game lock every game action contends on --
+     * and then iterates every player's zones, so the scrape cost is really
+     * O(total cards in play) plus one mutex acquisition per live game. Keep
+     * scrapes infrequent in big multiplayer rooms.
+     */
+    qint64 getCardsInGamesTotal() const;
+    int getMetricsSlowCommandMs() const
+    {
+        return metricsSlowCommandMs;
+    }
+    /// Heartbeat overshoot that counts as a stall. A value of 0 disables the watchdogs.
+    int getMetricsStallWarnMs() const
+    {
+        return metricsStallWarnMs;
+    }
+    void observeGameStartDurationMs(qint64 elapsedMs) override;
+    qint64 getEventLoopStallsTotal() const
+    {
+        return eventLoopStallsTotal.load(std::memory_order_relaxed);
+    }
+    qint64 getEventLoopLastStallMs() const
+    {
+        return eventLoopLastStallMs.load(std::memory_order_relaxed);
+    }
+    qint64 getEventLoopMaxStallMs() const
+    {
+        return eventLoopMaxStallMs.load(std::memory_order_relaxed);
+    }
+    /// Records one heartbeat overshoot and logs a single warning for it.
+    void observeEventLoopStall(const QString &threadName, qint64 overshootMs);
+    /**
+     * Installs an EventLoopWatchdog in @p thread. Called once per socket pool
+     * thread right after it starts.
+     */
+    void watchWorkerThread(QThread *thread);
+
+    RateLimiter *getRateLimiter()
+    {
+        return &rateLimiter;
+    }
+    bool recordFailedLogin(const QString &ipAddress, const QString &userName) override;
+    bool isLoginRateLimited(const QString &ipAddress, const QString &userName) override;
+    int loginRateLimitRemainingSeconds(const QString &ipAddress, const QString &userName) override;
+    void clearFailedLogins(const QString &ipAddress, const QString &userName) override;
+    bool recordRegistrationAttempt(const QString &ipAddress);
+    bool recordForgotPasswordAttempt(const QString &ipAddress);
+    /// True when the address is in security/trusted_sources and therefore exempt from per-address limits.
+    bool isRateLimitExempt(const QString &ipAddress) const;
+    int getMaxLoginAttemptsPerIp() const;
+    int getLoginAttemptWindowSeconds() const;
+    int getMaxRegistrationsPerIp() const;
+    int getRegistrationWindowSeconds() const;
+    int getMaxForgotPasswordRequestsPerIp() const;
+    int getForgotPasswordWindowSeconds() const;
+
     bool islConnectionExists(int _serverId) const;
     void addIslInterface(int _serverId, IslInterface *interface);
     void removeIslInterface(int _serverId);
     QReadWriteLock islLock;
+
+    // The moderation queue statistics are shared between all connected moderators and
+    // cached briefly to avoid re-running several full-table queries on every refresh.
+    std::shared_ptr<const Response_ReportStats> getCachedReportStats() const;
+    void cacheReportStats(const Response_ReportStats &stats);
 
     QList<ServerProperties> getServerList() const;
 };

@@ -1,17 +1,19 @@
 /**
  * @file overlap_control_widget.h
  * @ingroup UI
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef OVERLAP_CONTROL_WIDGET_H
 #define OVERLAP_CONTROL_WIDGET_H
-#include "../display/labeled_input.h"
-#include "overlap_widget.h"
-
-#include <QHBoxLayout>
-#include <QSlider>
 #include <QWidget>
+#include <qnamespace.h>
+#include <qtmetamacros.h>
+
+class LabeledInput;
+class OverlapWidget;
+class QHBoxLayout;
+class QSlider;
 
 class OverlapControlWidget final : public QWidget
 {

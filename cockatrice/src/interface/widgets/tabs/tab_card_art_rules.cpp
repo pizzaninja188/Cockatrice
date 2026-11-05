@@ -1,0 +1,356 @@
+#include "tab_card_art_rules.h"
+
+#include "../utility/completer_utils.h"
+#include "card_database_display_model.h"
+#include "card_database_model.h"
+#include "libcockatrice/card/card_info.h"
+#include "libcockatrice/card/database/card_database_manager.h"
+#include "libcockatrice/card/database/card_database_querier.h"
+#include "libcockatrice/card/printing/exact_card.h"
+#include "libcockatrice/card/printing/printing_info.h"
+#include "libcockatrice/card/set/card_set.h"
+#include "libcockatrice/protocol/pb/response.pb.h"
+
+#include <QAbstractItemView>
+#include <QComboBox>
+#include <QCompleter>
+#include <QFormLayout>
+#include <QHBoxLayout>
+#include <QLineEdit>
+#include <QList>
+#include <QMessageBox>
+#include <QPushButton>
+#include <QSharedPointer>
+#include <QTableView>
+#include <QVBoxLayout>
+#include <QVariant>
+#include <QWidget>
+#include <QtGlobal>
+#include <google/protobuf/repeated_ptr_field.h>
+#include <libcockatrice/network/client/abstract/abstract_client.h>
+#include <libcockatrice/protocol/pb/moderator_commands.pb.h>
+#include <libcockatrice/protocol/pb/response_card_art_rule_entry.pb.h>
+#include <libcockatrice/protocol/pb/response_clear_blacklisted_banners.pb.h>
+#include <libcockatrice/protocol/pending_command.h>
+#include <libcockatrice/utility/qt_utils.h>
+#include <string>
+
+class QObject;
+class TabSupervisor;
+
+CardArtRulesModel::CardArtRulesModel(AbstractClient *client, QObject *parent)
+    : QAbstractTableModel(parent), client(client)
+{
+}
+
+int CardArtRulesModel::rowCount(const QModelIndex &parent) const
+{
+    if (parent.isValid()) {
+        return 0;
+    }
+    return static_cast<int>(entries.size());
+}
+
+int CardArtRulesModel::columnCount(const QModelIndex &parent) const
+{
+    Q_UNUSED(parent);
+    return 4;
+}
+
+QVariant CardArtRulesModel::data(const QModelIndex &index, int role) const
+{
+    if (!index.isValid()) {
+        return {};
+    }
+
+    const auto &e = entries.at(index.row());
+
+    if (role == Qt::DisplayRole) {
+        switch (index.column()) {
+            case 0:
+                return e.cardName;
+            case 1:
+                return e.cardProviderId;
+            case 2:
+                return e.mode;
+            case 3:
+                return e.reason;
+        }
+    }
+
+    return {};
+}
+
+QVariant CardArtRulesModel::headerData(int section, Qt::Orientation orientation, int role) const
+{
+    if (orientation != Qt::Horizontal || role != Qt::DisplayRole) {
+        return {};
+    }
+
+    switch (section) {
+        case 0:
+            return tr("Card");
+        case 1:
+            return tr("ProviderId");
+        case 2:
+            return tr("Mode");
+        case 3:
+            return tr("Reason");
+        default:
+            return {};
+    }
+}
+
+void CardArtRulesModel::refresh()
+{
+    Command_ListCardArtRules cmd;
+
+    PendingCommand *pend = client->prepareModeratorCommand(cmd);
+
+    connect(pend, &PendingCommand::finished, this, &CardArtRulesModel::onRefreshFinished);
+
+    client->sendCommand(pend);
+}
+
+void CardArtRulesModel::clear()
+{
+    beginResetModel();
+    entries.clear();
+    endResetModel();
+}
+
+QString CardArtRulesModel::cardAt(int row) const
+{
+    if (row < 0 || row >= static_cast<int>(entries.size())) {
+        return {};
+    }
+
+    return entries[row].cardName;
+}
+
+const CardArtRulesModel::Entry *CardArtRulesModel::entryAt(int row) const
+{
+    if (row < 0 || row >= static_cast<int>(entries.size())) {
+        return nullptr;
+    }
+
+    return &entries[row];
+}
+
+void CardArtRulesModel::onRefreshFinished(const Response &r)
+{
+    if (r.response_code() != Response::RespOk) {
+        return;
+    }
+
+    const auto &resp = r.GetExtension(Response_ListCardArtRules::ext);
+
+    beginResetModel();
+    entries.clear();
+
+    for (const auto &e : resp.entries()) {
+        entries.push_back({QString::fromStdString(e.card_name()), QString::fromStdString(e.card_provider_id()),
+                           QString::fromStdString(e.mode()), QString::fromStdString(e.reason())});
+    }
+
+    endResetModel();
+}
+
+TabCardArtRules::TabCardArtRules(TabSupervisor *parent, AbstractClient *_client) : Tab(parent), client(_client)
+{
+    setupUi();
+    refresh();
+}
+
+void TabCardArtRules::setupUi()
+{
+    auto *central = new QWidget(this);
+
+    initSearchBar();
+
+    providerComboBox = new QComboBox;
+    modeBox = new QComboBox;
+    reasonEdit = new QLineEdit;
+
+    addBtn = new QPushButton;
+    removeBtn = new QPushButton;
+    refreshBtn = new QPushButton;
+    clearBannedArtBtn = new QPushButton;
+
+    modeBox->addItems({"ALLOW", "DENY"});
+
+    tableModel = new CardArtRulesModel(client, this);
+
+    table = new QTableView;
+    table->setModel(tableModel);
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->setSelectionMode(QAbstractItemView::SingleSelection);
+
+    auto *form = new QFormLayout;
+    form->addRow(tr("Card:"), searchEdit);
+    form->addRow(tr("ProviderId:"), providerComboBox);
+    form->addRow(tr("Mode:"), modeBox);
+    form->addRow(tr("Reason:"), reasonEdit);
+
+    // The bulk clear acts on every user, so keep it visibly apart from the
+    // rules this tab edits.
+    auto *buttons = new QHBoxLayout;
+    buttons->addWidget(addBtn);
+    buttons->addWidget(removeBtn);
+    buttons->addWidget(refreshBtn);
+    buttons->addStretch();
+    buttons->addWidget(clearBannedArtBtn);
+
+    auto *layout = new QVBoxLayout;
+    layout->addLayout(form);
+    layout->addLayout(buttons);
+    layout->addWidget(table);
+
+    central->setLayout(layout);
+    setCentralWidget(central);
+
+    connect(addBtn, &QPushButton::clicked, this, &TabCardArtRules::addRule);
+
+    connect(removeBtn, &QPushButton::clicked, this, &TabCardArtRules::removeSelected);
+
+    connect(refreshBtn, &QPushButton::clicked, this, &TabCardArtRules::refresh);
+
+    connect(clearBannedArtBtn, &QPushButton::clicked, this, &TabCardArtRules::clearBlacklistedBanners);
+
+    retranslateUi();
+}
+
+void TabCardArtRules::initSearchBar()
+{
+    searchEdit = new QLineEdit;
+    searchEdit->setPlaceholderText(tr("Type a card name..."));
+
+    cardDbModel = new CardDatabaseModel(CardDatabaseManager::getInstance(), false, this);
+    cardDbDisplayModel = new CardDatabaseDisplayModel(this);
+    cardDbDisplayModel->setSourceModel(cardDbModel);
+
+    const CardCompleterSetup cardSetup = createCardCompleter(cardDbDisplayModel, this, 15);
+    cardSearchModel = cardSetup.searchModel;
+    cardProxyModel = cardSetup.proxyModel;
+    searchCompleter = cardSetup.completer;
+    searchEdit->setCompleter(searchCompleter);
+
+    connectCardCompleterSearch(searchEdit, cardSetup);
+    connect(searchCompleter, static_cast<void (QCompleter::*)(const QString &)>(&QCompleter::activated), this,
+            [this](const QString &name) { searchEdit->setText(name); });
+    connect(searchEdit, &QLineEdit::editingFinished, this,
+            [this]() { populateProviderCombo(searchEdit->text().trimmed()); });
+}
+
+void TabCardArtRules::populateProviderCombo(const QString &cardName)
+{
+    providerComboBox->clear();
+
+    auto card = CardDatabaseManager::query()->getCard({cardName});
+
+    const auto &sets = card.getInfo().getSets();
+
+    for (const auto &printings : sets) {
+        for (const auto &p : printings) {
+
+            QString setName = p.getSet()->getLongName();
+            QString collector = p.getProperty("num");
+            QString uuid = p.getUuid();
+
+            QString label = setName;
+
+            if (!collector.isEmpty()) {
+                label += " #" + collector;
+            }
+
+            providerComboBox->addItem(label, uuid);
+        }
+    }
+}
+
+void TabCardArtRules::retranslateUi()
+{
+    addBtn->setText(tr("Add rule"));
+    removeBtn->setText(tr("Remove rule"));
+    refreshBtn->setText(tr("Refresh"));
+    clearBannedArtBtn->setText(tr("Clear blacklisted banners"));
+}
+
+void TabCardArtRules::refresh()
+{
+    tableModel->refresh();
+}
+
+void TabCardArtRules::addRule()
+{
+    Command_AddCardArtRule cmd;
+    cmd.set_card_name(searchEdit->text().toStdString());
+    cmd.set_card_provider_id(providerComboBox->currentData().toString().toStdString());
+    cmd.set_mode(modeBox->currentText().toStdString());
+    cmd.set_reason(reasonEdit->text().toStdString());
+
+    client->sendCommand(client->prepareModeratorCommand(cmd));
+
+    refresh();
+}
+
+void TabCardArtRules::removeSelected()
+{
+    QModelIndex idx = table->currentIndex();
+    if (!idx.isValid()) {
+        return;
+    }
+
+    Command_RemoveCardArtRule cmd;
+    const auto e = tableModel->entryAt(idx.row());
+
+    cmd.set_card_name(e->cardName.toStdString());
+    cmd.set_card_provider_id(e->cardProviderId.toStdString());
+
+    client->sendCommand(client->prepareModeratorCommand(cmd));
+
+    refresh();
+}
+
+void TabCardArtRules::clearBlacklistedBanners()
+{
+    if (!QtUtils::confirm(this, tr("Clear blacklisted banners"),
+                          tr("Remove the banner card from every user whose current banner matches a DENY rule?\n\n"
+                             "Users who are online keep showing their banner until they log in again."),
+                          QMessageBox::No)) {
+        return;
+    }
+
+    Command_ClearBlacklistedBanners cmd;
+    PendingCommand *pend = client->prepareModeratorCommand(cmd);
+    connect(pend, &PendingCommand::finished, this, &TabCardArtRules::clearBlacklistedBannersResponse);
+    client->sendCommand(pend);
+}
+
+void TabCardArtRules::clearBlacklistedBannersResponse(const Response &r)
+{
+    switch (r.response_code()) {
+        case Response::RespOk:
+            break;
+        case Response::RespFunctionNotAllowed:
+            QMessageBox::warning(this, tr("Not supported"),
+                                 tr("This server does not support clearing blacklisted banners. It may be running an "
+                                    "older version."));
+            return;
+        case Response::RespInternalError:
+            QMessageBox::critical(this, tr("Error"),
+                                  tr("The server could not clear blacklisted banners because of a database error."));
+            return;
+        default:
+            QMessageBox::critical(this, tr("Error"),
+                                  tr("The server rejected the request: %1")
+                                      .arg(QString::fromStdString(Response_ResponseCode_Name(r.response_code()))));
+            return;
+    }
+
+    const auto &resp = r.GetExtension(Response_ClearBlacklistedBanners::ext);
+    QMessageBox::information(this, tr("Banners cleared"),
+                             tr("%n banner card(s) cleared.\n\n"
+                                "Users who are online keep showing their banner until they log in again.",
+                                "number of banners cleared", resp.cleared_count()));
+}

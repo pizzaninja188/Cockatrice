@@ -2,13 +2,16 @@
  * @file dlg_load_deck.h
  * @ingroup LocalDeckStorageDialogs
  * @ingroup Lobby
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef DLG_LOAD_DECK_H
 #define DLG_LOAD_DECK_H
 
 #include <QFileDialog>
+#include <qtmetamacros.h>
+
+class QWidget;
 
 /**
  * The file dialog for "Load Deck" operations.

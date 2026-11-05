@@ -1,14 +1,17 @@
 /**
  * @file card_info_comparator.h
  * @ingroup Cards
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef CARD_INFO_COMPARATOR_H
 #define CARD_INFO_COMPARATOR_H
 
 #include "card_info.h"
 
+#include <QList>
+#include <QString>
+#include <QStringList>
 #include <QVariant>
 #include <Qt>
 

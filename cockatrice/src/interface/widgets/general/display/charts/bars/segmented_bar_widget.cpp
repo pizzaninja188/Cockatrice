@@ -1,9 +1,21 @@
 #include "segmented_bar_widget.h"
 
+#include "../../interface/theme_manager.h"
+
+#include <QBrush>
+#include <QFont>
+#include <QLinearGradient>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPoint>
+#include <QPointF>
+#include <QRect>
+#include <QSize>
+#include <QSizePolicy>
 #include <QToolTip>
+#include <qnamespace.h>
+#include <utility>
 
 SegmentedBarWidget::SegmentedBarWidget(QString label, QVector<Segment> segments, int total, QWidget *parent)
     : QWidget(parent), label(std::move(label)), segments(std::move(segments)), total(total)
@@ -12,6 +24,10 @@ SegmentedBarWidget::SegmentedBarWidget(QString label, QVector<Segment> segments,
     setMinimumWidth(36);
     setMaximumWidth(50);
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+
+    // The label reads the InterfaceDefault role at paint time, so a font
+    // change only needs a repaint.
+    connect(themeManager, &ThemeManager::fontsChanged, this, [this] { update(); });
 }
 
 QSize SegmentedBarWidget::sizeHint() const
@@ -44,8 +60,9 @@ void SegmentedBarWidget::paintEvent(QPaintEvent *)
         const auto &seg = segments[i];
 
         int segHeight = total > 0 ? (seg.value * barHeight / total) : 0;
-        if (segHeight < 2)
+        if (segHeight < 2) {
             segHeight = 2;
+        }
 
         QRect r(barX, yCurrent - segHeight, barWidth, segHeight);
         bool isTop = (i == segments.size() - 1);
@@ -84,7 +101,8 @@ void SegmentedBarWidget::paintEvent(QPaintEvent *)
 
     // draw label
     QRect labelRect(0, h - LABEL_H, w, LABEL_H);
-    QFont f = p.font();
+    // Family comes from the InterfaceDefault theme role; bold stays caller-side.
+    QFont f = themeManager->appFont(AppFont::InterfaceDefault);
     f.setBold(true);
     p.setFont(f);
     p.setPen(Qt::black);
@@ -110,8 +128,9 @@ int SegmentedBarWidget::segmentAt(int y) const
         int top = currentTop - segHeight;
         int bottom = currentTop;
 
-        if (y >= top && y <= bottom)
+        if (y >= top && y <= bottom) {
             return i;
+        }
 
         currentTop -= segHeight;
     }
@@ -132,9 +151,5 @@ void SegmentedBarWidget::mouseMoveEvent(QMouseEvent *e)
     const Segment &s = segments[idx];
     QString text = QString("%1: %2 cards\n%3").arg(s.category).arg(s.value).arg(s.cards.join(", "));
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     QToolTip::showText(e->globalPosition().toPoint(), text, this);
-#else
-    QToolTip::showText(e->globalPos(), text, this);
-#endif
 }

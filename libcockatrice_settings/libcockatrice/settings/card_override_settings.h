@@ -1,16 +1,19 @@
 /**
  * @file card_override_settings.h
  * @ingroup CardSettings
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef COCKATRICE_CARD_OVERRIDE_SETTINGS_H
 #define COCKATRICE_CARD_OVERRIDE_SETTINGS_H
 
 #include "settings_manager.h"
 
-#include <QObject>
-#include <libcockatrice/utility/card_ref.h>
+#include <QString>
+#include <qtmetamacros.h>
+
+class QObject;
+struct CardRef;
 
 class CardOverrideSettings : public SettingsManager
 {

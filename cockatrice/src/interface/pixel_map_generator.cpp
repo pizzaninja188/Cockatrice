@@ -1,18 +1,69 @@
 #include "pixel_map_generator.h"
 
+#include "libcockatrice/network/server/remote/user_level.h"
+#include "theme_icon.h"
+#include "theme_manager.h"
+
 #include <QApplication>
+#include <QBrush>
+#include <QByteArray>
+#include <QChar>
+#include <QColor>
+#include <QDebug>
 #include <QDomDocument>
+#include <QDomElement>
+#include <QDomNode>
+#include <QDomNodeList>
 #include <QFile>
+#include <QIODevice>
+#include <QImageReader>
+#include <QLatin1Char>
+#include <QLatin1String>
+#include <QMessageLogger>
 #include <QPainter>
 #include <QPalette>
+#include <QPointF>
+#include <QRadialGradient>
+#include <QSharedPointer>
+#include <QSize>
+#include <QStringLiteral>
 #include <QSvgRenderer>
+#include <QtGlobal>
+#include <initializer_list>
 #include <libcockatrice/protocol/pb/serverinfo_user.pb.h>
+#include <qnamespace.h>
 
 #define DEFAULT_COLOR_UNREGISTERED "#32c8ec";
 #define DEFAULT_COLOR_REGISTERED "#5ed900";
 #define DEFAULT_COLOR_MODERATOR_LEFT "#ffffff";
 #define DEFAULT_COLOR_MODERATOR_RIGHT "#000000";
 #define DEFAULT_COLOR_ADMIN "#ff2701";
+
+/**
+ * Clamps an svg render size so that rendering does not exceed a multiple of the requested size.
+ *
+ * Rendering at the full native size of an svg just to scale it down afterwards wastes memory,
+ * and canvases with extreme coordinates can exceed Qt's rasterizer coordinate limit which makes
+ * Qt silently drop shapes from the rendered image.
+ *
+ * @param renderSize The size the svg would be rendered at.
+ * @param requestedSize The size that was actually requested.
+ *
+ * @return A size with the aspect ratio of renderSize whose longest side is at most four times
+ * the longest side of requestedSize.
+ */
+static QSize capRenderSize(const QSize &renderSize, const QSize &requestedSize)
+{
+    const int longestRequestedSide = qMax(requestedSize.width(), requestedSize.height());
+    if (longestRequestedSide <= 0) {
+        return renderSize;
+    }
+
+    const int longestRenderSide = qMax(renderSize.width(), renderSize.height());
+    const qreal scale = qMin<qreal>(1.0, static_cast<qreal>(longestRequestedSide * 4) / longestRenderSide);
+    return QSize(qMax(1, static_cast<int>(renderSize.width() * scale)),
+                 qMax(1, static_cast<int>(renderSize.height() * scale)));
+}
 
 /**
  * Loads in an svg from file and scales it without affecting image quality.
@@ -35,6 +86,9 @@ static QPixmap loadSvg(const QString &svgPath, const QSize &size, bool expandOnl
     // If expandOnly, make sure the pixmap is at least as large as the svg, so that we don't lose any detail.
     // QIcon.pixmap(size) will automatically scale down the image, but it won't scale it up.
     QSize pixmapSize = expandOnly ? svgRenderer.defaultSize().expandedTo(size) : size;
+    if (expandOnly) {
+        pixmapSize = capRenderSize(pixmapSize, size);
+    }
     QPixmap pix(pixmapSize);
     pix.fill(Qt::transparent);
 
@@ -52,7 +106,13 @@ static QPixmap loadSvg(const QString &svgPath, const QSize &size, bool expandOnl
 /**
  * Try to load path image from non-SVG formats, otherwise fall back to SVG.
  * This is to allow custom themes to support non-SVG format type overrides, since SVG requires custom loading.
- * @param path The path to the file, with no file extension. File formats will be automatically detected.
+ *
+ * The path may already carry the resolved file extension (e.g. via
+ * ThemeManager::assetPath); such paths are loaded directly. Otherwise a
+ * format-agnostic lookup probes png, jpg and finally svg.
+ *
+ * @param path The path to the file, with no file extension unless the caller
+ * already resolved it. File formats will be automatically detected.
  * @param size The desired size of the pixmap.
  * @param expandOnly If true, then keep the size of the initial pixmap to at least the size (Only relevant if SVG).
  *
@@ -60,6 +120,19 @@ static QPixmap loadSvg(const QString &svgPath, const QSize &size, bool expandOnl
  */
 static QPixmap tryLoadImage(const QString &path, const QSize &size, bool expandOnly = false)
 {
+    if (path.endsWith(QLatin1String(".svg"), Qt::CaseInsensitive)) {
+        return loadSvg(path, size, expandOnly);
+    }
+    if (path.endsWith(QLatin1String(".png"), Qt::CaseInsensitive) ||
+        path.endsWith(QLatin1String(".jpg"), Qt::CaseInsensitive) ||
+        path.endsWith(QLatin1String(".jpeg"), Qt::CaseInsensitive)) {
+        QPixmap pix(path);
+        if (!pix.isNull()) {
+            return pix.scaled(size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        }
+        return {};
+    }
+
     const auto formats = {"png", "jpg"};
 
     QPixmap returnPixmap;
@@ -77,10 +150,12 @@ QMap<QString, QPixmap> PhasePixmapGenerator::pmCache;
 QPixmap PhasePixmapGenerator::generatePixmap(int height, QString name)
 {
     QString key = name + QString::number(height);
-    if (pmCache.contains(key))
+    if (pmCache.contains(key)) {
         return pmCache.value(key);
+    }
 
-    QPixmap pixmap = tryLoadImage("theme:phases/" + name, QSize(height, height));
+    QPixmap pixmap = tryLoadImage(QStringLiteral("theme:") + themeManager->assetPath(QStringLiteral("phases/") + name),
+                                  QSize(height, height));
 
     pmCache.insert(key, pixmap);
     return pixmap;
@@ -95,19 +170,22 @@ QPixmap CounterPixmapGenerator::generatePixmap(int height, QString name, bool hi
         name = "general";
     }
 
-    if (highlight)
+    if (highlight) {
         name.append("_highlight");
+    }
     QString key = name + QString::number(height);
-    if (pmCache.contains(key))
+    if (pmCache.contains(key)) {
         return pmCache.value(key);
+    }
 
     QPixmap pixmap = tryLoadImage("theme:counters/" + name, QSize(height, height));
 
     // fall back to colorless counter if the name can't be found
     if (pixmap.isNull()) {
         name = "general";
-        if (highlight)
+        if (highlight) {
             name.append("_highlight");
+        }
         pixmap = tryLoadImage("theme:counters/" + name, QSize(height, height));
     }
 
@@ -118,17 +196,19 @@ QPixmap CounterPixmapGenerator::generatePixmap(int height, QString name, bool hi
 QPixmap PingPixmapGenerator::generatePixmap(int size, int value, int max)
 {
     int key = size * 1000000 + max * 1000 + value;
-    if (pmCache.contains(key))
+    if (pmCache.contains(key)) {
         return pmCache.value(key);
+    }
 
     QPixmap pixmap(size, size);
     pixmap.fill(Qt::transparent);
     QPainter painter(&pixmap);
     QColor color;
-    if ((max == -1) || (value == -1))
+    if ((max == -1) || (value == -1)) {
         color = Qt::black;
-    else
+    } else {
         color.setHsv(120 * (1.0 - ((double)value / max)), 255, 255);
+    }
 
     QRadialGradient g(QPointF((double)pixmap.width() / 2, (double)pixmap.height() / 2),
                       qMin(pixmap.width(), pixmap.height()) / 2.0);
@@ -145,11 +225,13 @@ QMap<int, QPixmap> PingPixmapGenerator::pmCache;
 
 QPixmap CountryPixmapGenerator::generatePixmap(int height, const QString &countryCode)
 {
-    if (countryCode.size() != 2)
+    if (countryCode.size() != 2) {
         return QPixmap();
+    }
     QString key = countryCode + QString::number(height);
-    if (pmCache.contains(key))
+    if (pmCache.contains(key)) {
         return pmCache.value(key);
+    }
 
     int width = height * 2;
     QPixmap pixmap = tryLoadImage("theme:countries/" + countryCode.toLower(), QSize(width, height), true);
@@ -239,7 +321,9 @@ static QIcon loadAndColorSvg(const QString &iconPath,
 
     QSvgRenderer svgRenderer(doc.toByteArray());
 
-    QPixmap pix(svgRenderer.defaultSize().expandedTo(QSize(minSize, minSize)));
+    const QSize pixmapSize =
+        capRenderSize(svgRenderer.defaultSize().expandedTo(QSize(minSize, minSize)), QSize(minSize, minSize));
+    QPixmap pix(pixmapSize);
     pix.fill(Qt::transparent);
 
     QPainter pixPainter(&pix);
@@ -299,6 +383,10 @@ static QString getIconType(const bool isBuddy, const UserLevelFlags &userLevelFl
         return "pawn_judge";
     }
 
+    if (userLevelFlags.testFlag(ServerInfo_User::IsDeveloper)) {
+        return "pawn_dev";
+    }
+
     if (!privLevel.isEmpty() && privLevel.toLower() != "none") {
         return QString("pawn_%1").arg(privLevel.toLower());
     }
@@ -348,44 +436,90 @@ QIcon UserLevelPixmapGenerator::generateIconWithColorOverride(int height,
 
 QMap<QString, QIcon> UserLevelPixmapGenerator::iconCache;
 
-QPixmap LockPixmapGenerator::generatePixmap(int height)
-{
-
-    int key = height;
-    if (pmCache.contains(key))
-        return pmCache.value(key);
-
-    QPixmap pixmap = tryLoadImage("theme:icons/lock", QSize(height, height), true);
-    pmCache.insert(key, pixmap);
-    return pixmap;
-}
-
-QMap<int, QPixmap> LockPixmapGenerator::pmCache;
-
 QPixmap DropdownIconPixmapGenerator::generatePixmap(int height, bool expanded)
 {
-    QString key = QString::number(expanded) + ":" + QString::number(height);
-    if (pmCache.contains(key))
+    const QString key = QString::number(expanded) + ":" + QString::number(height);
+    if (pmCache.contains(key)) {
         return pmCache.value(key);
+    }
 
-    QString name = expanded ? "dropdown_expanded" : "dropdown_collapsed";
-    QPixmap pixmap = tryLoadImage("theme:icons/" + name, QSize(height, height), true);
-
+    // Render through the themed icon engine: it keeps the glyph's aspect ratio,
+    // follows the palette, and renders at the device pixel ratio instead of
+    // handing a DPR-1 bitmap to a label that would upscale and blur it on a 2x
+    // display.
+    const QString prefix = QStringLiteral("icons/") + (expanded ? "dropdown_expanded" : "dropdown_collapsed");
+    const QPixmap pixmap = loadThemedIcon(prefix).pixmap(QSize(height, height), qApp->devicePixelRatio());
     pmCache.insert(key, pixmap);
     return pixmap;
 }
 
 QMap<QString, QPixmap> DropdownIconPixmapGenerator::pmCache;
 
-QPixmap loadColorAdjustedPixmap(const QString &name)
+namespace
 {
-    if (qApp->palette().windowText().color().lightness() > 200) {
-        QImage img(name);
-        img.invertPixels();
-        QPixmap result;
-        result.convertFromImage(img);
-        return result;
-    } else {
-        return QPixmap(name);
+/// Longest side mana symbols are rendered at before being scaled to their final size.
+constexpr int MASTER_ICON_SIZE = 128;
+
+QString manaSymbolCacheKey(const QString &symbol, const QSize &size)
+{
+    return symbol + QLatin1Char('|') + QString::number(size.width()) + QLatin1Char('x') +
+           QString::number(size.height());
+}
+} // namespace
+
+const QPixmap &ManaSymbolPixmapGenerator::masterIcon(const QString &symbol)
+{
+    auto it = masterCache.constFind(symbol);
+    if (it != masterCache.constEnd()) {
+        return it.value();
     }
+
+    QImageReader reader("theme:icons/mana/" + symbol);
+    QSize sourceSize = reader.size();
+    if (!sourceSize.isEmpty()) {
+        sourceSize.scale(QSize(MASTER_ICON_SIZE, MASTER_ICON_SIZE), Qt::KeepAspectRatio);
+        reader.setScaledSize(sourceSize);
+    }
+    const QPixmap rendered = QPixmap::fromImageReader(&reader);
+
+    return masterCache.insert(symbol, rendered).value();
+}
+
+QPixmap ManaSymbolPixmapGenerator::generatePixmap(const QString &symbol, const QSize &size)
+{
+    const QString key = manaSymbolCacheKey(symbol, size);
+    auto it = scaledCache.constFind(key);
+    if (it != scaledCache.constEnd()) {
+        return it.value();
+    }
+
+    const QPixmap &icon = masterIcon(symbol);
+    if (icon.isNull()) {
+        return {};
+    }
+
+    QPixmap scaled = icon.scaled(size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    scaledCache.insert(key, scaled);
+    return scaled;
+}
+
+QHash<QString, QPixmap> ManaSymbolPixmapGenerator::masterCache;
+QHash<QString, QPixmap> ManaSymbolPixmapGenerator::scaledCache;
+
+QPixmap themePixmap(QStringView prefix)
+{
+    const QString resolved = themeManager->assetPath(prefix);
+    const QPixmap sentinel = loadSentinelSvgPixmap(resolved);
+    return sentinel.isNull() ? QPixmap(QStringLiteral("theme:") + resolved) : sentinel;
+}
+
+void clearPixmapGeneratorCaches()
+{
+    PhasePixmapGenerator::clear();
+    CounterPixmapGenerator::clear();
+    PingPixmapGenerator::clear();
+    CountryPixmapGenerator::clear();
+    UserLevelPixmapGenerator::clear();
+    DropdownIconPixmapGenerator::clear();
+    ManaSymbolPixmapGenerator::clear();
 }

@@ -158,6 +158,9 @@ For automated current-client playback/export:
 Batch export uses a temporary client profile and exercises forward and backward seeking. For headless
 Windows execution, set `QT_QPA_PLATFORM=offscreen` and `QT_QPA_PLATFORM_PLUGIN_PATH` to the development
 Qt kit's `plugins/platforms` directory. The normal deployed Windows client carries the Windows plugin.
+Client snapshots include `zone_windows`: each visible/retained zone window's zone name, visibility,
+card count, local-dismissal policy, and close-button hint. This provides current-client UI evidence
+for stack and mandatory-choice windows without adding card identities to the window metadata.
 
 ## Resume locally with real clients
 

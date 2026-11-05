@@ -1,18 +1,19 @@
 /**
  * @file edhrec_top_commanders_api_response_display_widget.h
  * @ingroup ApiResponseDisplayWidgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef EDHREC_TOP_COMMANDERS_API_RESPONSE_DISPLAY_WIDGET_H
 #define EDHREC_TOP_COMMANDERS_API_RESPONSE_DISPLAY_WIDGET_H
 
-#include "../../api_response/top_commanders/edhrec_top_commanders_api_response.h"
-
-#include <QResizeEvent>
-#include <QScrollArea>
-#include <QVBoxLayout>
 #include <QWidget>
+#include <qtmetamacros.h>
+
+class EdhrecTopCommandersApiResponse;
+class QHBoxLayout;
+class QScrollArea;
+class QVBoxLayout;
 
 class EdhrecTopCommandersApiResponseDisplayWidget : public QWidget
 {

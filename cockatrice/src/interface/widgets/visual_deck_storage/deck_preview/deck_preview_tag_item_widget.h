@@ -1,15 +1,17 @@
 /**
  * @file deck_preview_tag_item_widget.h
  * @ingroup VisualDeckPreviewWidgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef DECK_PREVIEW_TAG_ITEM_WIDGET_H
 #define DECK_PREVIEW_TAG_ITEM_WIDGET_H
 
-#include <QCheckBox>
-#include <QHBoxLayout>
+#include <QString>
 #include <QWidget>
+#include <qtmetamacros.h>
+
+class QCheckBox;
 
 class DeckPreviewTagItemWidget : public QWidget
 {

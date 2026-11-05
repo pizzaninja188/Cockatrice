@@ -1,0 +1,684 @@
+#include "appearance_settings_page.h"
+
+#include "../../../client/settings/cache_settings.h"
+#include "../../client/settings/card_counter_settings.h"
+#include "../../palette_editor/palette_editor_dialog.h"
+#include "../../theme_config.h"
+#include "../dialogs/override_printing_warning.h"
+#include "../general/home_tab_button_color.h"
+#include "../interface/theme_manager.h"
+#include "../interface/widgets/general/background_sources.h"
+#include "../playmat/playmat_collection_dialog.h"
+#include "libcockatrice/interfaces/interface_interface_settings_provider.h"
+#include "libcockatrice/utility/macros.h"
+
+#include <QAbstractButton>
+#include <QApplication>
+#include <QColor>
+#include <QColorDialog>
+#include <QDebug>
+#include <QDir>
+#include <QGridLayout>
+#include <QGroupBox>
+#include <QMessageBox>
+#include <QObject>
+#include <QPushButton>
+#include <QSharedPointer>
+#include <QString>
+#include <QStringList>
+#include <QStringLiteral>
+#include <QStyleFactory>
+#include <QTimer>
+#include <QVBoxLayout>
+#include <QVariant>
+#include <QtGlobal>
+#include <libcockatrice/settings/appearance_settings.h>
+#include <libcockatrice/settings/cards_display_settings.h>
+#include <libcockatrice/settings/interface_settings.h>
+#include <libcockatrice/settings/paths_settings.h>
+#include <libcockatrice/settings/personal_settings.h>
+#include <libcockatrice/utility/qt_utils.h>
+#include <qnamespace.h>
+
+AppearanceSettingsPage::AppearanceSettingsPage()
+{
+    SettingsCache &settings = SettingsCache::instance();
+
+    // Theme settings
+    QString themeName = SettingsCache::instance().getThemeName();
+
+    QStringList themeDirs = themeManager->getAvailableThemes().keys();
+    for (int i = 0; i < themeDirs.size(); i++) {
+        themeBox.addItem(themeDirs[i]);
+        if (themeDirs[i] == themeName) {
+            themeBox.setCurrentIndex(i);
+        }
+    }
+
+    connect(&themeBox, qOverload<int>(&QComboBox::currentIndexChanged), this, &AppearanceSettingsPage::themeBoxChanged);
+    connect(&openThemeButton, &QPushButton::clicked, this, &AppearanceSettingsPage::openThemeLocation);
+
+    schemeCombo.addItem(tr("Light"), QStringLiteral("Light"));
+    schemeCombo.addItem(tr("Dark"), QStringLiteral("Dark"));
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    schemeCombo.addItem(tr("System"), QStringLiteral("System"));
+#endif
+
+    // Seed from whatever the current theme already has saved
+    const QString dirPath = themeManager->getAvailableThemes().value(SettingsCache::instance().getThemeName());
+    const ThemeConfig cfg = ThemeConfig::fromThemeDir(dirPath);
+    const QString current = cfg.colorScheme;
+    const int seedIdx = schemeCombo.findData(current);
+    schemeCombo.setCurrentIndex(seedIdx >= 0 ? seedIdx : 0);
+
+    connect(&schemeCombo, &QComboBox::currentIndexChanged, this,
+            [this] { themeManager->setColorScheme(schemeCombo.currentData().toString()); });
+
+    // Qt widget style; "System" lets the application decide. The broken Windows
+    // native styles are still offered, but selecting one raises a warning.
+    styleCombo.addItem(tr("System"), QStringLiteral("System"));
+    for (const QString &key : QStyleFactory::keys()) {
+        styleCombo.addItem(key, key);
+    }
+
+    const QString currentStyle = cfg.styleName;
+    const int styleSeedIdx = currentStyle.isEmpty() ? 0 : styleCombo.findData(currentStyle);
+    styleCombo.setCurrentIndex(styleSeedIdx >= 0 ? styleSeedIdx : 0);
+    previousStyle = styleCombo.currentData().toString();
+
+    connect(&styleCombo, &QComboBox::currentIndexChanged, this, &AppearanceSettingsPage::styleComboChanged);
+
+    connect(themeManager, &ThemeManager::themeChanged, this, [this, dirPath] {
+        const QString newDir = themeManager->getAvailableThemes().value(SettingsCache::instance().getThemeName());
+        const ThemeConfig cfg = ThemeConfig::fromThemeDir(newDir);
+        const QString current = cfg.colorScheme;
+
+        schemeCombo.blockSignals(true);
+        const int idx = schemeCombo.findData(current);
+        schemeCombo.setCurrentIndex(idx >= 0 ? idx : 0);
+        schemeCombo.blockSignals(false);
+
+        styleCombo.blockSignals(true);
+        const QString currentStyle = cfg.styleName;
+        const int styleIdx = currentStyle.isEmpty() ? 0 : styleCombo.findData(currentStyle);
+        styleCombo.setCurrentIndex(styleIdx >= 0 ? styleIdx : 0);
+        styleCombo.blockSignals(false);
+        previousStyle = styleCombo.currentData().toString();
+
+        updateStyleWarning();
+    });
+
+    connect(&editPaletteButton, &QPushButton::clicked, this, &AppearanceSettingsPage::editPalette);
+
+    auto *themeGrid = new QGridLayout;
+    themeGrid->addWidget(&themeLabel, 0, 0);
+    themeGrid->addWidget(&themeBox, 0, 1);
+    themeGrid->addWidget(&openThemeButton, 1, 1);
+    themeGrid->addWidget(&schemeComboLabel, 2, 0);
+    themeGrid->addWidget(&schemeCombo, 2, 1);
+    themeGrid->addWidget(&styleComboLabel, 3, 0);
+    themeGrid->addWidget(&styleCombo, 3, 1);
+    themeGrid->addWidget(&styleWarningLabel, 4, 0, 1, 2);
+    themeGrid->addWidget(&editPaletteButton, 5, 1);
+
+    styleWarningLabel.setWordWrap(true);
+    styleWarningLabel.setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+
+    themeGroupBox = new QGroupBox;
+    themeGroupBox->setLayout(themeGrid);
+
+    // Home tab settings
+    for (const auto &entry : BackgroundSources::all()) {
+        homeTabBackgroundSourceBox.addItem(QObject::tr(entry.trKey), QVariant::fromValue(entry.type));
+    }
+
+    QString homeTabBackgroundSource = settings.appearance().getHomeTabBackgroundSource();
+    int homeTabBackgroundSourceId =
+        homeTabBackgroundSourceBox.findData(BackgroundSources::fromId(homeTabBackgroundSource));
+    if (homeTabBackgroundSourceId != -1) {
+        homeTabBackgroundSourceBox.setCurrentIndex(homeTabBackgroundSourceId);
+    }
+
+    connect(&homeTabBackgroundSourceBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this]() {
+        auto type = homeTabBackgroundSourceBox.currentData().value<BackgroundSources::Type>();
+        SettingsCache::instance().appearance().setHomeTabBackgroundSource(BackgroundSources::toId(type));
+        updateHomeTabSettingsVisibility();
+    });
+
+    homeTabBackgroundShuffleFrequencySpinBox.setRange(0, 3600);
+    homeTabBackgroundShuffleFrequencySpinBox.setSuffix(tr(" seconds"));
+    homeTabBackgroundShuffleFrequencySpinBox.setValue(settings.appearance().getHomeTabBackgroundShuffleFrequency());
+    connect(&homeTabBackgroundShuffleFrequencySpinBox, qOverload<int>(&QSpinBox::valueChanged), &settings.appearance(),
+            &AppearanceSettings::setHomeTabBackgroundShuffleFrequency);
+
+    homeTabDisplayCardNameCheckBox.setChecked(settings.appearance().getHomeTabDisplayCardName());
+    connect(&homeTabDisplayCardNameCheckBox, &QCheckBox::QT_STATE_CHANGED, &settings.appearance(),
+            &AppearanceSettings::setHomeTabDisplayCardName);
+
+    homeTabBackgroundDimCheckBox.setChecked(settings.appearance().getHomeTabBackgroundDim());
+    connect(&homeTabBackgroundDimCheckBox, &QCheckBox::QT_STATE_CHANGED, &settings.appearance(),
+            &AppearanceSettings::setHomeTabBackgroundDim);
+
+    for (const auto &entry : HomeTabButtonColor::all()) {
+        homeTabButtonColorSourceBox.addItem(QObject::tr(entry.trKey));
+    }
+
+    homeTabButtonColorSourceBox.setCurrentIndex(settings.appearance().getHomeTabButtonColorSourceIndex());
+    connect(&homeTabButtonColorSourceBox, QOverload<int>::of(&QComboBox::currentIndexChanged), &settings.appearance(),
+            &AppearanceSettings::setHomeTabButtonColorSourceIndex);
+
+    updateHomeTabSettingsVisibility();
+
+    auto *homeTabGrid = new QGridLayout;
+    homeTabGrid->addWidget(&homeTabBackgroundSourceLabel, 0, 0);
+    homeTabGrid->addWidget(&homeTabBackgroundSourceBox, 0, 1);
+    homeTabGrid->addWidget(&homeTabBackgroundShuffleFrequencyLabel, 1, 0);
+    homeTabGrid->addWidget(&homeTabBackgroundShuffleFrequencySpinBox, 1, 1);
+    homeTabGrid->addWidget(&homeTabDisplayCardNameCheckBox, 2, 0, 1, 2);
+    homeTabGrid->addWidget(&homeTabButtonColorSourceLabel, 3, 0);
+    homeTabGrid->addWidget(&homeTabButtonColorSourceBox, 3, 1);
+    homeTabGrid->addWidget(&homeTabBackgroundDimCheckBox, 4, 0, 1, 2);
+
+    homeTabGroupBox = new QGroupBox;
+    homeTabGroupBox->setLayout(homeTabGrid);
+
+    // Playmat settings
+    playmatVisibilityCombo.addItem(tr("Show all playmats"), PlaymatVisibilityAll);
+    playmatVisibilityCombo.addItem(tr("Show own playmat only"), PlaymatVisibilityOwnOnly);
+    playmatVisibilityCombo.addItem(tr("Don't use playmats"), PlaymatVisibilityNone);
+    int visIdx = playmatVisibilityCombo.findData(settings.userInterface().getPlaymatVisibility());
+    if (visIdx >= 0) {
+        playmatVisibilityCombo.setCurrentIndex(visIdx);
+    }
+    connect(&playmatVisibilityCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        SettingsCache::instance().userInterface().setPlaymatVisibility(playmatVisibilityCombo.itemData(index).toInt());
+    });
+    playmatVisibilityLabel.setBuddy(&playmatVisibilityCombo);
+
+    // Playmat mode: Override / Fallback / Deck-only
+    playmatModeCombo.addItem(tr("Override deck playmat"), PlaymatModeOverrideDeck);
+    playmatModeCombo.addItem(tr("Fallback if deck has none"), PlaymatModeFallback);
+    playmatModeCombo.addItem(tr("Deck only, ignore collection"), PlaymatModeDeckOnly);
+    int modeIdx = playmatModeCombo.findData(settings.userInterface().getPlaymatMode());
+    if (modeIdx >= 0) {
+        playmatModeCombo.setCurrentIndex(modeIdx);
+    }
+    connect(&playmatModeCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        SettingsCache::instance().userInterface().setPlaymatMode(playmatModeCombo.itemData(index).toInt());
+    });
+    playmatModeLabel.setBuddy(&playmatModeCombo);
+
+    // User-level playmat settings: fallback collection.
+    connect(&playmatDefaultEditButton, &QPushButton::clicked, this,
+            &AppearanceSettingsPage::openPlaymatCollectionDialog);
+
+    auto *playmatGrid = new QGridLayout;
+    playmatGrid->addWidget(&playmatVisibilityLabel, 0, 0, 1, 1);
+    playmatGrid->addWidget(&playmatVisibilityCombo, 0, 1, 1, 1);
+    playmatGrid->addWidget(&playmatModeLabel, 1, 0, 1, 1);
+    playmatGrid->addWidget(&playmatModeCombo, 1, 1, 1, 1);
+    playmatGrid->addWidget(&playmatDefaultLabel, 2, 0, 1, 1);
+    playmatGrid->addWidget(&playmatDefaultEditButton, 2, 1, 1, 1);
+
+    playmatGroupBox = new QGroupBox;
+    playmatGroupBox->setLayout(playmatGrid);
+
+    // Styling settings
+    styleUserListCheckBox.setChecked(settings.appearance().getStyleUserList());
+    connect(&styleUserListCheckBox, &QCheckBox::QT_STATE_CHANGED, &settings.appearance(),
+            &AppearanceSettings::setStyleUserList);
+
+    auto stylingTabGrid = new QGridLayout;
+    stylingTabGrid->addWidget(&styleUserListCheckBox, 0, 0, 1, 2);
+
+    stylingGroupBox = new QGroupBox;
+    stylingGroupBox->setLayout(stylingTabGrid);
+
+    // Menu settings
+    showShortcutsCheckBox.setChecked(settings.userInterface().getShowShortcuts());
+    connect(&showShortcutsCheckBox, &QCheckBox::QT_STATE_CHANGED, this, &AppearanceSettingsPage::showShortcutsChanged);
+
+    showGameSelectorFilterToolbarCheckBox.setChecked(settings.userInterface().getShowGameSelectorFilterToolbar());
+    connect(&showGameSelectorFilterToolbarCheckBox, &QCheckBox::QT_STATE_CHANGED, &settings.userInterface(),
+            &InterfaceSettings::setShowGameSelectorFilterToolbar);
+
+    auto *menuGrid = new QGridLayout;
+    menuGrid->addWidget(&showShortcutsCheckBox, 0, 0);
+    menuGrid->addWidget(&showGameSelectorFilterToolbarCheckBox, 1, 0);
+
+    menuGroupBox = new QGroupBox;
+    menuGroupBox->setLayout(menuGrid);
+
+    // Printings settings
+    overrideAllCardArtWithPersonalPreferenceCheckBox.setChecked(
+        settings.cardsDisplay().getOverrideAllCardArtWithPersonalPreference());
+    connect(&overrideAllCardArtWithPersonalPreferenceCheckBox, &QCheckBox::QT_STATE_CHANGED, this,
+            &AppearanceSettingsPage::overrideAllCardArtWithPersonalPreferenceToggled);
+
+    bumpSetsWithCardsInDeckToTopCheckBox.setChecked(settings.cardsDisplay().getBumpSetsWithCardsInDeckToTop());
+    connect(&bumpSetsWithCardsInDeckToTopCheckBox, &QCheckBox::QT_STATE_CHANGED, &settings.cardsDisplay(),
+            &CardsDisplaySettings::setBumpSetsWithCardsInDeckToTop);
+
+    auto *printingsGrid = new QGridLayout;
+    printingsGrid->addWidget(&overrideAllCardArtWithPersonalPreferenceCheckBox, 0, 0, 1, 2);
+    printingsGrid->addWidget(&bumpSetsWithCardsInDeckToTopCheckBox, 1, 0, 1, 2);
+
+    printingsGroupBox = new QGroupBox;
+    printingsGroupBox->setLayout(printingsGrid);
+
+    // Card rendering
+    displayCardNamesCheckBox.setChecked(settings.cardsDisplay().getDisplayCardNames());
+    connect(&displayCardNamesCheckBox, &QCheckBox::QT_STATE_CHANGED, &settings.cardsDisplay(),
+            &CardsDisplaySettings::setDisplayCardNames);
+
+    autoRotateSidewaysLayoutCardsCheckBox.setChecked(settings.cardsDisplay().getAutoRotateSidewaysLayoutCards());
+    connect(&autoRotateSidewaysLayoutCardsCheckBox, &QCheckBox::QT_STATE_CHANGED, &settings.cardsDisplay(),
+            &CardsDisplaySettings::setAutoRotateSidewaysLayoutCards);
+
+    cardScalingCheckBox.setChecked(settings.cardsDisplay().getScaleCards());
+    connect(&cardScalingCheckBox, &QCheckBox::QT_STATE_CHANGED, &settings.cardsDisplay(),
+            &CardsDisplaySettings::setCardScaling);
+
+    roundCardCornersCheckBox.setChecked(settings.cardsDisplay().getRoundCardCorners());
+    connect(&roundCardCornersCheckBox, &QAbstractButton::toggled, &settings.cardsDisplay(),
+            &CardsDisplaySettings::setRoundCardCorners);
+
+    connect(&maxFontSizeForCardsEdit, qOverload<int>(&QSpinBox::valueChanged), &settings.appearance(),
+            &AppearanceSettings::setMaxFontSize);
+    maxFontSizeForCardsEdit.setValue(settings.appearance().getMaxFontSize());
+    maxFontSizeForCardsLabel.setBuddy(&maxFontSizeForCardsEdit);
+    maxFontSizeForCardsEdit.setMinimum(9);
+    maxFontSizeForCardsEdit.setMaximum(100);
+
+    auto *cardsGrid = new QGridLayout;
+    cardsGrid->addWidget(&displayCardNamesCheckBox, 0, 0, 1, 2);
+    cardsGrid->addWidget(&autoRotateSidewaysLayoutCardsCheckBox, 1, 0, 1, 2);
+    cardsGrid->addWidget(&cardScalingCheckBox, 2, 0, 1, 2);
+    cardsGrid->addWidget(&roundCardCornersCheckBox, 3, 0, 1, 2);
+    cardsGrid->addWidget(&maxFontSizeForCardsLabel, 4, 0, 1, 1);
+    cardsGrid->addWidget(&maxFontSizeForCardsEdit, 4, 1, 1, 1);
+
+    cardsGroupBox = new QGroupBox;
+    cardsGroupBox->setLayout(cardsGrid);
+
+    // Card layout
+    verticalCardOverlapPercentBox.setValue(settings.cardsDisplay().getStackCardOverlapPercent());
+    verticalCardOverlapPercentBox.setRange(0, 80);
+    connect(&verticalCardOverlapPercentBox, qOverload<int>(&QSpinBox::valueChanged), &settings.cardsDisplay(),
+            &CardsDisplaySettings::setStackCardOverlapPercent);
+
+    cardViewInitialRowsMaxBox.setRange(1, 999);
+    cardViewInitialRowsMaxBox.setValue(SettingsCache::instance().userInterface().getCardViewInitialRowsMax());
+    connect(&cardViewInitialRowsMaxBox, qOverload<int>(&QSpinBox::valueChanged), this,
+            &AppearanceSettingsPage::cardViewInitialRowsMaxChanged);
+
+    cardViewExpandedRowsMaxBox.setRange(1, 999);
+    cardViewExpandedRowsMaxBox.setValue(SettingsCache::instance().userInterface().getCardViewExpandedRowsMax());
+    connect(&cardViewExpandedRowsMaxBox, qOverload<int>(&QSpinBox::valueChanged), this,
+            &AppearanceSettingsPage::cardViewExpandedRowsMaxChanged);
+
+    auto *cardLayoutGrid = new QGridLayout;
+    cardLayoutGrid->addWidget(&verticalCardOverlapPercentLabel, 0, 0, 1, 1);
+    cardLayoutGrid->addWidget(&verticalCardOverlapPercentBox, 0, 1, 1, 1);
+    cardLayoutGrid->addWidget(&cardViewInitialRowsMaxLabel, 1, 0);
+    cardLayoutGrid->addWidget(&cardViewInitialRowsMaxBox, 1, 1);
+    cardLayoutGrid->addWidget(&cardViewExpandedRowsMaxLabel, 2, 0);
+    cardLayoutGrid->addWidget(&cardViewExpandedRowsMaxBox, 2, 1);
+
+    cardLayoutGroupBox = new QGroupBox;
+    cardLayoutGroupBox->setLayout(cardLayoutGrid);
+
+    // Card counter colors
+    auto *cardCounterColorsLayout = new QGridLayout;
+    cardCounterColorsLayout->setColumnStretch(1, 1);
+    cardCounterColorsLayout->setColumnStretch(3, 1);
+    cardCounterColorsLayout->setColumnStretch(5, 1);
+
+    auto &cardCounterSettings = SettingsCache::instance().cardCounters();
+    for (int index = 0; index < 6; ++index) {
+        auto *pushButton = new QPushButton;
+        pushButton->setStyleSheet(QString("background-color: %1").arg(cardCounterSettings.color(index).name()));
+
+        connect(&SettingsCache::instance().cardCounters(), &CardCounterSettings::colorChanged, pushButton,
+                [index, pushButton](int changedIndex, const QColor &color) {
+                    if (index == changedIndex) {
+                        pushButton->setStyleSheet(QString("background-color: %1").arg(color.name()));
+                    }
+                });
+
+        connect(pushButton, &QPushButton::clicked, this, [index, this]() {
+            auto &cardCounterSettings = SettingsCache::instance().cardCounters();
+
+            auto newColor = QColorDialog::getColor(cardCounterSettings.color(index), this);
+            if (!newColor.isValid()) {
+                return;
+            }
+
+            cardCounterSettings.setColor(index, newColor);
+        });
+
+        auto *colorName = new QLabel;
+        cardCounterNames.append(colorName);
+
+        int row = index / 3;
+        int column = 2 * (index % 3);
+
+        cardCounterColorsLayout->addWidget(pushButton, row, column);
+        cardCounterColorsLayout->addWidget(colorName, row, column + 1);
+    }
+
+    auto *cardCountersLayout = new QVBoxLayout;
+    cardCountersLayout->addLayout(cardCounterColorsLayout, 1);
+
+    cardCountersGroupBox = new QGroupBox;
+    cardCountersGroupBox->setLayout(cardCountersLayout);
+
+    // Hand layout
+    horizontalHandCheckBox.setChecked(settings.userInterface().getHorizontalHand());
+    connect(&horizontalHandCheckBox, &QCheckBox::QT_STATE_CHANGED, &settings.userInterface(),
+            &InterfaceSettings::setHorizontalHand);
+
+    leftJustifiedHandCheckBox.setChecked(settings.userInterface().getLeftJustified());
+    connect(&leftJustifiedHandCheckBox, &QCheckBox::QT_STATE_CHANGED, &settings.userInterface(),
+            &InterfaceSettings::setLeftJustified);
+
+    auto *handGrid = new QGridLayout;
+    handGrid->addWidget(&horizontalHandCheckBox, 0, 0, 1, 2);
+    handGrid->addWidget(&leftJustifiedHandCheckBox, 1, 0, 1, 2);
+
+    handGroupBox = new QGroupBox;
+    handGroupBox->setLayout(handGrid);
+
+    // table grid layout
+    invertVerticalCoordinateCheckBox.setChecked(settings.userInterface().getInvertVerticalCoordinate());
+    connect(&invertVerticalCoordinateCheckBox, &QCheckBox::QT_STATE_CHANGED, &settings.userInterface(),
+            &InterfaceSettings::setInvertVerticalCoordinate);
+
+    minPlayersForMultiColumnLayoutEdit.setMinimum(2);
+    minPlayersForMultiColumnLayoutEdit.setValue(settings.userInterface().getMinPlayersForMultiColumnLayout());
+    connect(&minPlayersForMultiColumnLayoutEdit, qOverload<int>(&QSpinBox::valueChanged), &settings.userInterface(),
+            &InterfaceSettings::setMinPlayersForMultiColumnLayout);
+    minPlayersForMultiColumnLayoutLabel.setBuddy(&minPlayersForMultiColumnLayoutEdit);
+
+    auto *tableGrid = new QGridLayout;
+    tableGrid->addWidget(&invertVerticalCoordinateCheckBox, 0, 0, 1, 2);
+    tableGrid->addWidget(&minPlayersForMultiColumnLayoutLabel, 1, 0, 1, 1);
+    tableGrid->addWidget(&minPlayersForMultiColumnLayoutEdit, 1, 1, 1, 1);
+
+    tableGroupBox = new QGroupBox;
+    tableGroupBox->setLayout(tableGrid);
+
+    // putting it all together
+    auto *mainLayout = new QVBoxLayout;
+    mainLayout->addWidget(themeGroupBox);
+    mainLayout->addWidget(homeTabGroupBox);
+    mainLayout->addWidget(playmatGroupBox);
+    mainLayout->addWidget(stylingGroupBox);
+    mainLayout->addWidget(menuGroupBox);
+    mainLayout->addWidget(printingsGroupBox);
+    mainLayout->addWidget(cardsGroupBox);
+    mainLayout->addWidget(cardLayoutGroupBox);
+    mainLayout->addWidget(cardCountersGroupBox);
+    mainLayout->addWidget(handGroupBox);
+    mainLayout->addWidget(tableGroupBox);
+    mainLayout->addStretch();
+
+    setLayout(mainLayout);
+
+    connect(&SettingsCache::instance().personal(), &PersonalSettings::langChanged, this,
+            &AppearanceSettingsPage::retranslateUi);
+    retranslateUi();
+}
+
+void AppearanceSettingsPage::themeBoxChanged(int index)
+{
+    QStringList themeDirs = themeManager->getAvailableThemes().keys();
+    if (index >= 0 && index < themeDirs.count()) {
+        SettingsCache::instance().setThemeName(themeDirs.at(index));
+    }
+}
+
+void AppearanceSettingsPage::openThemeLocation()
+{
+    QString dir = SettingsCache::instance().paths().getThemesPath();
+    QDir dirDir = dir;
+    dirDir.cdUp();
+    // open if dir exists, create if parent dir does exist
+    if (dirDir.exists() && dirDir.mkpath(dir)) {
+        QtUtils::openPathInFileManager(dir);
+    } else {
+        QMessageBox::critical(this, tr("Error"), tr("Could not create themes directory at '%1'.").arg(dir));
+    }
+}
+
+void AppearanceSettingsPage::editPalette()
+{
+    PaletteEditorDialog dlg(themeManager->getCurrentThemePath(), SettingsCache::instance().getThemeName(), this);
+    dlg.exec();
+}
+
+void AppearanceSettingsPage::updateHomeTabSettingsVisibility()
+{
+    QString sourceId = SettingsCache::instance().appearance().getHomeTabBackgroundSource();
+    bool visible = BackgroundSources::fromId(sourceId) != BackgroundSources::Theme;
+
+    homeTabBackgroundShuffleFrequencyLabel.setVisible(visible);
+    homeTabBackgroundShuffleFrequencySpinBox.setVisible(visible);
+    homeTabDisplayCardNameCheckBox.setVisible(visible);
+}
+
+static bool isBrokenStyle(const QString &style)
+{
+    return style.compare("windows11", Qt::CaseInsensitive) == 0 ||
+           style.compare("windowsvista", Qt::CaseInsensitive) == 0;
+}
+
+static int findFusionIndex(const QComboBox &combo)
+{
+    int fusionIdx = combo.findData(QStringLiteral("Fusion"));
+    if (fusionIdx >= 0) {
+        return fusionIdx;
+    }
+    for (int i = 0; i < combo.count(); ++i) {
+        if (combo.itemData(i).toString().compare(QStringLiteral("Fusion"), Qt::CaseInsensitive) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void AppearanceSettingsPage::updateStyleWarning()
+{
+    styleWarningLabel.setVisible(isBrokenStyle(styleCombo.currentData().toString()));
+}
+
+void AppearanceSettingsPage::styleComboChanged(int index)
+{
+    if (index < 0) {
+        return;
+    }
+
+    const QString newStyle = styleCombo.itemData(index).toString();
+    if (!isBrokenStyle(newStyle)) {
+        themeManager->setStyleName(newStyle);
+        previousStyle = newStyle;
+        updateStyleWarning();
+        return;
+    }
+
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle(tr("Broken style"));
+    msgBox.setIcon(QMessageBox::Warning);
+    msgBox.setText(tr("The \"%1\" style is broken and can break the game view: dragging cards across zones can "
+                      "shrink the board to a tiny grey window that can only be fixed by rejoining the game.")
+                       .arg(newStyle));
+    msgBox.setInformativeText(
+        tr("It can also render controls such as combo boxes unreadable, especially in dark mode.\n\n"
+           "Fusion is the recommended style on every platform. Switch to Fusion instead?"));
+
+    int fusionIdx = findFusionIndex(styleCombo);
+    QPushButton *fusionButton = nullptr;
+    if (fusionIdx >= 0) {
+        fusionButton = msgBox.addButton(tr("Use Fusion instead"), QMessageBox::AcceptRole);
+    }
+    QPushButton *keepButton = msgBox.addButton(tr("Use %1 anyway").arg(newStyle), QMessageBox::DestructiveRole);
+    msgBox.addButton(QMessageBox::Cancel);
+    if (fusionButton != nullptr) {
+        msgBox.setDefaultButton(fusionButton);
+    } else {
+        msgBox.setDefaultButton(keepButton);
+    }
+
+    msgBox.exec();
+
+    const QAbstractButton *clicked = msgBox.clickedButton();
+    if (fusionButton != nullptr && clicked == fusionButton) {
+        styleCombo.setCurrentIndex(fusionIdx);
+        return;
+    }
+    if (clicked == keepButton) {
+        themeManager->setStyleName(newStyle);
+        previousStyle = newStyle;
+        updateStyleWarning();
+        return;
+    }
+
+    // Cancel: revert to the previously applied style without re-prompting
+    styleCombo.blockSignals(true);
+    const int previousIdx = styleCombo.findData(previousStyle);
+    styleCombo.setCurrentIndex(previousIdx >= 0 ? previousIdx : 0);
+    styleCombo.blockSignals(false);
+    updateStyleWarning();
+}
+
+void AppearanceSettingsPage::showShortcutsChanged(QT_STATE_CHANGED_T value)
+{
+    SettingsCache::instance().userInterface().setShowShortcuts(value);
+    qApp->setAttribute(Qt::AA_DontShowShortcutsInContextMenus, value == 0); // 0 = unchecked
+}
+
+void AppearanceSettingsPage::overrideAllCardArtWithPersonalPreferenceToggled(QT_STATE_CHANGED_T value)
+{
+    bool enable = static_cast<bool>(value);
+
+    bool accepted = OverridePrintingWarning::execMessageBox(this, enable);
+
+    if (!accepted) {
+        // If user cancels, revert the checkbox/state back
+        QTimer::singleShot(0, this, [this, enable]() {
+            overrideAllCardArtWithPersonalPreferenceCheckBox.blockSignals(true);
+            overrideAllCardArtWithPersonalPreferenceCheckBox.setChecked(!enable);
+            overrideAllCardArtWithPersonalPreferenceCheckBox.blockSignals(false);
+        });
+    }
+}
+
+/**
+ * Updates the settings for cardViewInitialRowsMax.
+ * Forces expanded rows max to always be >= initial rows max
+ * @param value The new value
+ */
+void AppearanceSettingsPage::cardViewInitialRowsMaxChanged(int value)
+{
+    SettingsCache::instance().userInterface().setCardViewInitialRowsMax(value);
+    if (cardViewExpandedRowsMaxBox.value() < value) {
+        cardViewExpandedRowsMaxBox.setValue(value);
+    }
+}
+
+/**
+ * Updates the settings for cardViewExpandedRowsMax.
+ * Forces initial rows max to always be <= expanded rows max
+ * @param value The new value
+ */
+void AppearanceSettingsPage::cardViewExpandedRowsMaxChanged(int value)
+{
+    SettingsCache::instance().userInterface().setCardViewExpandedRowsMax(value);
+    if (cardViewInitialRowsMaxBox.value() > value) {
+        cardViewInitialRowsMaxBox.setValue(value);
+    }
+}
+
+void AppearanceSettingsPage::openPlaymatCollectionDialog()
+{
+    PlaymatCollectionDialog dialog(this);
+    dialog.exec();
+}
+
+void AppearanceSettingsPage::retranslateUi()
+{
+    themeGroupBox->setTitle(tr("Theme settings"));
+    themeLabel.setText(tr("Current theme:"));
+    openThemeButton.setText(tr("Open themes folder"));
+    schemeComboLabel.setText(tr("Active theme palette:"));
+    styleComboLabel.setText(tr("Active theme style:"));
+    styleCombo.setToolTip(tr("Qt widget style saved to this theme (\"System\" lets the application decide)"));
+    styleWarningLabel.setText(
+        tr("Warning: the Windows 11 and Windows Vista styles are broken and can break the game view (dragging "
+           "cards can shrink the board to a tiny grey window that requires rejoining to fix), and can render "
+           "controls such as combo boxes unreadable, especially in dark mode. Fusion is the recommended style on "
+           "every platform: it is Qt's cross-platform style and the one Cockatrice is developed against."));
+    updateStyleWarning();
+    editPaletteButton.setText(tr("Edit theme palette"));
+
+    homeTabGroupBox->setTitle(tr("Home tab settings"));
+    homeTabBackgroundSourceLabel.setText(tr("Home tab background source:"));
+    homeTabBackgroundShuffleFrequencyLabel.setText(tr("Home tab background shuffle frequency:"));
+    homeTabBackgroundShuffleFrequencySpinBox.setSpecialValueText(tr("Disabled"));
+    homeTabDisplayCardNameCheckBox.setText(tr("Display card name of background in bottom right"));
+    homeTabBackgroundDimCheckBox.setText(tr("Dim the home tab background"));
+    homeTabBackgroundDimCheckBox.setToolTip(
+        tr("Draw a translucent overlay over the home tab background so buttons and text stand out"));
+    homeTabButtonColorSourceLabel.setText(tr("Home tab button color:"));
+    homeTabButtonColorSourceBox.setToolTip(
+        tr("Use the theme's identity accent colors, or extract colors from the background image"));
+
+    playmatGroupBox->setTitle(tr("Playmat settings"));
+    playmatVisibilityLabel.setText(tr("Playmat visibility:"));
+    playmatModeLabel.setText(tr("Default collection behavior:"));
+    playmatDefaultLabel.setText(tr("Default playmat collection:"));
+    playmatDefaultEditButton.setText(tr("Edit..."));
+
+    stylingGroupBox->setTitle(tr("Styling settings"));
+    styleUserListCheckBox.setText(tr("Style user list"));
+
+    menuGroupBox->setTitle(tr("Menu settings"));
+    showShortcutsCheckBox.setText(tr("Show keyboard shortcuts in right-click menus"));
+    showGameSelectorFilterToolbarCheckBox.setText(tr("Show game filter toolbar above list in room tab"));
+
+    printingsGroupBox->setTitle(tr("Card printings"));
+    overrideAllCardArtWithPersonalPreferenceCheckBox.setText(
+        tr("Override all card art with personal set preference (Pre-ProviderID change behavior)"));
+    bumpSetsWithCardsInDeckToTopCheckBox.setText(
+        tr("Bump sets that the deck contains cards from to the top in the printing selector"));
+
+    cardsGroupBox->setTitle(tr("Card rendering"));
+    displayCardNamesCheckBox.setText(tr("Display card names on cards having a picture"));
+    autoRotateSidewaysLayoutCardsCheckBox.setText(tr("Auto-Rotate cards with sideways layout"));
+    cardScalingCheckBox.setText(tr("Scale cards on mouse over"));
+    roundCardCornersCheckBox.setText(tr("Use rounded card corners"));
+    maxFontSizeForCardsLabel.setText(tr("Maximum font size for information displayed on cards:"));
+
+    cardLayoutGroupBox->setTitle(tr("Card layout"));
+    verticalCardOverlapPercentLabel.setText(
+        tr("Minimum overlap percentage of cards on the stack and in vertical hand"));
+    cardViewInitialRowsMaxLabel.setText(tr("Maximum initial height for card view window:"));
+    cardViewInitialRowsMaxBox.setSuffix(tr(" rows"));
+    cardViewExpandedRowsMaxLabel.setText(tr("Maximum expanded height for card view window:"));
+    cardViewExpandedRowsMaxBox.setSuffix(tr(" rows"));
+
+    cardCountersGroupBox->setTitle(tr("Card counters"));
+
+    auto &cardCounterSettings = SettingsCache::instance().cardCounters();
+    for (int index = 0; index < cardCounterNames.size(); ++index) {
+        cardCounterNames[index]->setText(tr("Counter %1").arg(cardCounterSettings.displayName(index)));
+    }
+
+    handGroupBox->setTitle(tr("Hand layout"));
+    horizontalHandCheckBox.setText(tr("Display hand horizontally (wastes space)"));
+    leftJustifiedHandCheckBox.setText(tr("Enable left justification"));
+
+    tableGroupBox->setTitle(tr("Table grid layout"));
+    invertVerticalCoordinateCheckBox.setText(tr("Invert vertical coordinate"));
+    minPlayersForMultiColumnLayoutLabel.setText(tr("Minimum player count for multi-column layout:"));
+}

@@ -4,10 +4,17 @@
 
 #include <QDialogButtonBox>
 #include <QGridLayout>
-#include <QHBoxLayout>
+#include <QIntValidator>
 #include <QLabel>
 #include <QMessageBox>
-#include <libcockatrice/utility/trice_limits.h>
+#include <QSharedPointer>
+#include <QSize>
+#include <QVBoxLayout>
+#include <libcockatrice/settings/servers_settings.h>
+#include <libcockatrice/utility/string_limits.h>
+
+class QVBoxLayout;
+class QWidget;
 
 DlgForgotPasswordReset::DlgForgotPasswordReset(QWidget *parent) : QDialog(parent)
 {
@@ -121,7 +128,7 @@ void DlgForgotPasswordReset::actOk()
         return;
     }
 
-    //! \todo this stuff should be using qvalidators
+    //! \todo This stuff should be using QValidators.
     if (newpasswordEdit->text().length() < 8) {
         QMessageBox::critical(this, tr("Error"), tr("Your password is too short."));
         return;

@@ -1,16 +1,32 @@
 #include "visual_database_display_name_filter_widget.h"
 
 #include "../../../interface/widgets/dialogs/dlg_load_deck_from_clipboard.h"
-#include "../../../interface/widgets/tabs/abstract_tab_deck_editor.h"
-#include "../deck_editor/deck_state_manager.h"
+#include "../general/layout_containers/flow_widget.h"
+#include "deck_list_model.h"
+#include "filter_tree_model.h"
+#include "libcockatrice/deck_list/deck_list.h"
+#include "libcockatrice/filters/filter_card.h"
+#include "libcockatrice/filters/filter_tree.h"
 #include "visual_database_display_filter_button.h"
 
-#include <QHBoxLayout>
+#include <QAbstractItemModel>
+#include <QDebug>
+#include <QLineEdit>
+#include <QList>
+#include <QPersistentModelIndex>
+#include <QPushButton>
+#include <QSharedPointer>
+#include <QSignalBlocker>
+#include <QStringList>
+#include <QTimer>
+#include <QVBoxLayout>
+#include <algorithm>
+#include <qnamespace.h>
 
 VisualDatabaseDisplayNameFilterWidget::VisualDatabaseDisplayNameFilterWidget(QWidget *parent,
-                                                                             AbstractTabDeckEditor *_deckEditor,
-                                                                             FilterTreeModel *_filterModel)
-    : QWidget(parent), deckEditor(_deckEditor), filterModel(_filterModel)
+                                                                             FilterTreeModel *_filterModel,
+                                                                             DeckListModel *deckListModel)
+    : QWidget(parent), filterModel(_filterModel), deckListModel(deckListModel)
 {
     setMinimumWidth(300);
     setMaximumHeight(300);
@@ -46,7 +62,7 @@ VisualDatabaseDisplayNameFilterWidget::VisualDatabaseDisplayNameFilterWidget(QWi
             &VisualDatabaseDisplayNameFilterWidget::actLoadFromClipboard);
 
     connect(filterModel, &FilterTreeModel::layoutChanged, this,
-            [this]() { QTimer::singleShot(100, this, &VisualDatabaseDisplayNameFilterWidget::syncWithFilterModel); });
+            [this]() { syncDebouncer.call([this] { syncWithFilterModel(); }); });
 
     retranslateUi();
 }
@@ -62,10 +78,9 @@ void VisualDatabaseDisplayNameFilterWidget::retranslateUi()
 
 void VisualDatabaseDisplayNameFilterWidget::actLoadFromDeck()
 {
-    DeckListModel *deckListModel = deckEditor->deckStateManager->getModel();
-
-    if (!deckListModel)
+    if (!deckListModel) {
         return;
+    }
 
     QList<QString> cardNames = deckListModel->getCardNames();
     for (auto cardName : cardNames) {
@@ -78,8 +93,9 @@ void VisualDatabaseDisplayNameFilterWidget::actLoadFromDeck()
 void VisualDatabaseDisplayNameFilterWidget::actLoadFromClipboard()
 {
     DlgLoadDeckFromClipboard dlg(this);
-    if (!dlg.exec())
+    if (!dlg.exec()) {
         return;
+    }
 
     QStringList cardsInClipboard = dlg.getDeckList().getCardList();
     for (QString cardName : cardsInClipboard) {
@@ -91,8 +107,9 @@ void VisualDatabaseDisplayNameFilterWidget::actLoadFromClipboard()
 
 void VisualDatabaseDisplayNameFilterWidget::createNameFilter(const QString &name)
 {
-    if (activeFilters.contains(name))
+    if (activeFilters.contains(name)) {
         return;
+    }
 
     // Create a button for the filter
     auto *button = new QPushButton(name, flowWidget);
@@ -123,19 +140,18 @@ void VisualDatabaseDisplayNameFilterWidget::updateFilterModel()
     emit filterModel->layoutAboutToBeChanged();
     filterModel->clearFiltersOfType(CardFilter::Attr::AttrNameExact);
 
-    filterModel->blockSignals(true);
-    filterModel->filterTree()->blockSignals(true);
+    {
+        // Scope the blockers so both models are unblocked before the explicit
+        // change notifications below.
+        const QSignalBlocker modelBlocker(filterModel);
+        const QSignalBlocker treeBlocker(filterModel->filterTree());
 
-    for (const auto &name : activeFilters.keys()) {
-        QString nameString = name;
-        filterModel->addFilter(new CardFilter(nameString, CardFilter::Type::TypeOr, CardFilter::Attr::AttrNameExact));
+        for (const auto &name : activeFilters.keys()) {
+            QString nameString = name;
+            filterModel->addFilter(
+                new CardFilter(nameString, CardFilter::Type::TypeOr, CardFilter::Attr::AttrNameExact));
+        }
     }
-
-    filterModel->blockSignals(false);
-    filterModel->filterTree()->blockSignals(false);
-
-    filterModel->blockSignals(false);
-    filterModel->filterTree()->blockSignals(false);
 
     emit filterModel->filterTree()->changed();
     emit filterModel->layoutChanged();

@@ -2,11 +2,21 @@
 #define COCKATRICE_CARD_DATABASE_LOADER_H
 
 #include <QBasicMutex>
+#include <QByteArray>
 #include <QList>
 #include <QLoggingCategory>
-#include <libcockatrice/interfaces/interface_card_database_path_provider.h>
-#include <libcockatrice/interfaces/interface_card_preference_provider.h>
-#include <libcockatrice/interfaces/interface_card_set_priority_controller.h>
+#include <QObject>
+#include <QString>
+#include <QStringList>
+#include <qtmetamacros.h>
+
+class ICardDatabasePathProvider;
+class ICardSetPriorityController;
+
+// IWYU pragma: keep
+// CardDatabaseData is passed by value to the databaseDataReady() signal, so the
+// moc-generated code needs the complete type.
+#include "card_database_data.h"
 
 inline Q_LOGGING_CATEGORY(CardDatabaseLoadingLog, "card_database.loading");
 inline Q_LOGGING_CATEGORY(CardDatabaseLoadingSuccessOrFailureLog, "card_database.loading.success_or_failure");
@@ -48,12 +58,10 @@ public:
      * @param parent QObject parent.
      * @param db Pointer to the CardDatabase to populate (non-owning).
      * @param pathProvider Provider for card database file paths.
-     * @param preferenceProvider Optional card preference provider for pinned printings.
      */
     explicit CardDatabaseLoader(QObject *parent,
                                 CardDatabase *db,
                                 ICardDatabasePathProvider *pathProvider,
-                                ICardPreferenceProvider *preferenceProvider,
                                 ICardSetPriorityController *_priorityController);
 
     /** @brief Destructor cleans up allocated parsers. */
@@ -62,16 +70,24 @@ public:
 public slots:
     /**
      * @brief Loads all configured card databases.
+     *
+     * Runs synchronously on the calling thread.  The caller should ensure
+     * that any signal receivers are already connected before invoking this.
+     * @param ignoreCache Skip the binary cache lookup and re-parse the source
+     *        files from disk, refreshing the cache afterwards. Used for
+     *        explicit reloads so that edits the source hash cannot see are
+     *        still picked up.
      * @return Status of the main database load.
      */
-    LoadStatus loadCardDatabases();
+    LoadStatus loadCardDatabases(bool ignoreCache = false);
 
     /**
-     * @brief Loads a single card database file.
+     * @brief Loads a single card database file into the given snapshot.
      * @param path Path to the database file.
+     * @param data Snapshot to populate.
      * @return LoadStatus indicating success or failure.
      */
-    LoadStatus loadCardDatabase(const QString &path);
+    LoadStatus loadCardDatabase(const QString &path, CardDatabaseData &data);
 
     /**
      * @brief Saves custom tokens to the user-defined custom database path.
@@ -90,6 +106,12 @@ signals:
     void loadingFailed();
 
     /**
+     * @brief Emitted with the fully-built snapshot once background loading
+     *        completes. The receiver swaps it into the live database.
+     */
+    void databaseDataReady(CardDatabaseData data);
+
+    /**
      * @brief Emitted when new sets are discovered during loading.
      * @param numSets Number of new sets.
      * @param setNames Names of the discovered sets.
@@ -101,11 +123,19 @@ signals:
 
 private:
     /**
-     * @brief Loads a database from a single file using the available parsers.
+     * @brief Parses a single file into the given snapshot using the available parsers.
      * @param fileName Path to the database file.
+     * @param data Snapshot to populate.
      * @return LoadStatus indicating success or failure.
      */
-    LoadStatus loadFromFile(const QString &fileName);
+    LoadStatus loadFromFile(const QString &fileName, CardDatabaseData &data);
+
+    /**
+     * @brief Performs the actual load work synchronously on the calling thread.
+     * @param ignoreCache Skip the binary cache lookup and re-parse from disk.
+     * @return Status of the main database load.
+     */
+    LoadStatus doLoadCardDatabases(bool ignoreCache);
 
     /**
      * @brief Collects custom card database paths recursively.
@@ -113,13 +143,42 @@ private:
      */
     [[nodiscard]] QStringList collectCustomDatabasePaths() const;
 
-private:
-    CardDatabase *database;                        /**< Non-owning pointer to the target CardDatabase. */
-    ICardDatabasePathProvider *pathProvider;       /**< Pointer to the path provider. */
-    QList<ICardDatabaseParser *> availableParsers; /**< List of available parsers for different formats. */
+    /**
+     * @brief Computes a hash identifying the current set of input database files.
+     * @return Hash over the paths, sizes and modification times of all inputs.
+     */
+    [[nodiscard]] QByteArray computeSourceHash(const QStringList &customPaths) const;
 
-    QBasicMutex *loadFromFileMutex = new QBasicMutex();   /**< Mutex for single-file loading. */
-    QBasicMutex *reloadDatabaseMutex = new QBasicMutex(); /**< Mutex for reloading entire database. */
+    /**
+     * @brief Path of the binary cache file derived from the main card database path.
+     * @return Cache file path.
+     */
+    [[nodiscard]] QString cachePath() const;
+
+    /**
+     * @brief Attempts to populate the snapshot from the binary cache.
+     * @param data Snapshot to populate.
+     * @param sourceHash Pre-computed hash identifying the current input files.
+     * @return True if a valid, up-to-date cache was read.
+     */
+    bool loadFromCache(CardDatabaseData &data, const QByteArray &sourceHash);
+
+    /**
+     * @brief Writes the snapshot to the binary cache for the current inputs.
+     * @param data Snapshot to serialize.
+     * @param sourceHash Pre-computed hash identifying the current input files.
+     * @return True if the cache was written successfully.
+     */
+    bool saveToCache(const CardDatabaseData &data, const QByteArray &sourceHash);
+
+private:
+    CardDatabase *database;                         /**< Non-owning pointer to the target CardDatabase. */
+    ICardDatabasePathProvider *pathProvider;        /**< Pointer to the path provider. */
+    ICardSetPriorityController *priorityController; /**< Controller for reconstructing set state. */
+    QList<ICardDatabaseParser *> availableParsers;  /**< List of available parsers for different formats. */
+
+    QBasicMutex loadFromFileMutex;   /**< Mutex for single-file loading. */
+    QBasicMutex reloadDatabaseMutex; /**< Mutex for reloading entire database. */
 };
 
 #endif // COCKATRICE_CARD_DATABASE_LOADER_H

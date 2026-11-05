@@ -1,10 +1,12 @@
+#include <libcockatrice/game/player/player_manager.h>
+#include <libcockatrice/game/player/player_info.h>
 #include "ruled_replacement_picker.h"
 
-#include "../abstract_game.h"
-#include "../game_scene.h"
-#include "../player/player.h"
-#include "../zones/view_zone.h"
-#include "../zones/view_zone_widget.h"
+#include <libcockatrice/game/abstract_game.h>
+#include "../../game_graphics/game_scene.h"
+#include <libcockatrice/game/player/player_logic.h>
+#include "../../game_graphics/zones/view_zone.h"
+#include "../../game_graphics/zones/view_zone_widget.h"
 #include "ruled_client_state.h"
 
 #include <libcockatrice/protocol/pb/serverinfo_card.pb.h>

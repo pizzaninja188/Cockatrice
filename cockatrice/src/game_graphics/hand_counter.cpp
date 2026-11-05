@@ -1,0 +1,64 @@
+#include "hand_counter.h"
+
+#include "../interface/pixel_map_generator.h"
+
+#include <QGraphicsSceneMouseEvent>
+#include <QPainter>
+#include <QPixmap>
+#include <QPixmapCache>
+#include <QRectF>
+#include <QSize>
+#include <QSizeF>
+#include <QString>
+#include <QStringLiteral>
+#include <QTransform>
+#include <libcockatrice/game/board/card_list.h>
+#include <libcockatrice/game/zones/card_zone_logic.h>
+#include <qnamespace.h>
+
+class QGraphicsItem;
+
+HandCounter::HandCounter(QGraphicsItem *parent) : AbstractGraphicsItem(parent), number(0)
+{
+    setCacheMode(DeviceCoordinateCache);
+}
+
+HandCounter::~HandCounter()
+{
+}
+
+void HandCounter::updateNumber()
+{
+    number = static_cast<CardZoneLogic *>(sender())->getCards().size();
+    update();
+}
+
+QRectF HandCounter::boundingRect() const
+{
+    return QRectF(0, 0, 72, 72);
+}
+
+void HandCounter::paint(QPainter *painter, const QStyleOptionGraphicsItem * /*option*/, QWidget * /*widget*/)
+{
+    painter->save();
+    QSize translatedSize = painter->combinedTransform().mapRect(boundingRect()).size().toSize();
+    QPixmap cachedPixmap;
+    if (!QPixmapCache::find("handCounter" + QString::number(translatedSize.width()), &cachedPixmap)) {
+        cachedPixmap =
+            themePixmap(QStringLiteral("hand")).scaled(translatedSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        QPixmapCache::insert("handCounter" + QString::number(translatedSize.width()), cachedPixmap);
+    }
+    resetPainterTransform(painter);
+    painter->drawPixmap(cachedPixmap.rect(), cachedPixmap, cachedPixmap.rect());
+    painter->restore();
+
+    paintNumberEllipse(number, 24, Qt::white, -1, -1, painter);
+}
+
+void HandCounter::mousePressEvent(QGraphicsSceneMouseEvent *event)
+{
+    if (event->button() == Qt::RightButton) {
+        emit showContextMenu(event->screenPos());
+        event->accept();
+    }
+}

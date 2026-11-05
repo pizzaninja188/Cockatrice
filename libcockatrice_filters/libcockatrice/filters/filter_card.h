@@ -1,14 +1,16 @@
 /**
  * @file filter_card.h
  * @ingroup CardDatabaseModelFilters
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef CARDFILTER_H
 #define CARDFILTER_H
 
+#include <QJsonObject>
 #include <QObject>
 #include <QString>
+#include <qtmetamacros.h>
 
 class CardFilter : public QObject
 {
@@ -52,7 +54,7 @@ private:
     enum Attr a;
 
 public:
-    CardFilter(QString &term, Type type, Attr attr) : trm(term), t(type), a(attr)
+    CardFilter(const QString &term, Type type, Attr attr) : trm(term), t(type), a(attr)
     {
     }
 

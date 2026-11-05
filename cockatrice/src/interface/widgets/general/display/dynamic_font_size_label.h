@@ -1,14 +1,20 @@
 /**
  * @file dynamic_font_size_label.h
  * @ingroup Widgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef DYNAMICFONTSIZELABEL_H
 #define DYNAMICFONTSIZELABEL_H
 
 #include <QColor>
 #include <QLabel>
+#include <QString>
+#include <qnamespace.h>
+#include <qtmetamacros.h>
+#include <stddef.h>
+
+class QWidget;
 
 class DynamicFontSizeLabel : public QLabel
 {

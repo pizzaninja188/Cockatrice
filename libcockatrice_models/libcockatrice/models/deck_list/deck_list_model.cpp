@@ -1,6 +1,27 @@
 #include "deck_list_model.h"
 
+#include "deck_list_model_custom_zones.h"
+#include "libcockatrice/card/database/card_database_querier.h"
+#include "libcockatrice/card/format/format_legality_rules.h"
+#include "libcockatrice/card/printing/exact_card.h"
+#include "libcockatrice/card/printing/printing_info.h"
+#include "libcockatrice/card/set/card_set.h"
+#include "libcockatrice/deck_list/deck_list.h"
+#include "libcockatrice/deck_list/deck_list_node_tree.h"
+#include "libcockatrice/deck_list/tree/abstract_deck_list_node.h"
+#include "libcockatrice/deck_list/tree/deck_list_card_node.h"
+
+#include <QModelIndexList>
+#include <QSet>
+#include <QVariant>
+#include <algorithm>
+#include <compare>
+#include <iterator>
 #include <libcockatrice/card/database/card_database_manager.h>
+#include <libcockatrice/utility/card_ref.h>
+#include <utility>
+
+class QObject;
 
 DeckListModel::DeckListModel(QObject *parent)
     : QAbstractItemModel(parent), lastKnownColumn(1), lastKnownOrder(Qt::AscendingOrder)
@@ -26,6 +47,16 @@ DeckListModel::DeckListModel(QObject *parent, const QSharedPointer<DeckList> &de
 DeckListModel::~DeckListModel()
 {
     delete root;
+}
+
+void DeckListModel::setDisplayLanguage(const QString &lang)
+{
+    if (displayLang == lang) {
+        return;
+    }
+    displayLang = lang;
+    emit layoutAboutToBeChanged();
+    emit layoutChanged();
 }
 
 /**
@@ -66,7 +97,8 @@ void DeckListModel::rebuildTree()
         for (int j = 0; j < currentZone->size(); j++) {
             auto *currentCard = dynamic_cast<DecklistCardNode *>(currentZone->at(j));
 
-            // TODO: better sanity checking
+            // Non-card children are custom zones; they are mirrored in a single
+            // pass below so each is mirrored exactly once.
             if (currentCard == nullptr) {
                 continue;
             }
@@ -82,7 +114,18 @@ void DeckListModel::rebuildTree()
 
             new DecklistModelCardNode(currentCard, groupNode);
         }
+
+        // Custom zones nested under the board zone are mirrored as-is, with their
+        // cards as direct children (no further grouping).
+        DeckListModelCustomZones::mirrorCustomZones(currentZone, node);
     }
+
+    // The shadow tree was built in deck file order. Apply the active sort while
+    // the reset is still open so every consumer (tree view and visual editor)
+    // sees the canonical order from the start. sortShadowTree emits no signals,
+    // which is only valid before endResetModel closes the reset.
+    root->setSortMethod(lastKnownColumn == 0 ? DeckSortMethod::ByNumber : DeckSortMethod::ByName);
+    sortShadowTree(root, lastKnownOrder);
 
     endResetModel();
 
@@ -91,6 +134,13 @@ void DeckListModel::rebuildTree()
 
 int DeckListModel::rowCount(const QModelIndex &parent) const
 {
+    // Only column 0 carries children. Column 1 and later indexes are siblings
+    // used by views for the remaining cells of a row, and a model that hangs
+    // children off them breaks QAbstractItemModelTester and proxy models.
+    if (parent.isValid() && parent.column() != 0) {
+        return 0;
+    }
+
     // debugIndexInfo("rowCount", parent);
     auto *node = getNode<InnerDecklistNode *>(parent);
     if (node) {
@@ -154,6 +204,9 @@ QVariant DeckListModel::data(const QModelIndex &index, int role) const
             case DeckRoles::IsLegalRole:
                 return true;
 
+            case DeckRoles::IsCustomZoneRole:
+                return DeckListModelCustomZones::isCustomZone(group);
+
             default:
                 return {};
         }
@@ -166,8 +219,15 @@ QVariant DeckListModel::data(const QModelIndex &index, int role) const
             switch (index.column()) {
                 case DeckListModelColumns::CARD_AMOUNT:
                     return card->getNumber();
-                case DeckListModelColumns::CARD_NAME:
+                case DeckListModelColumns::CARD_NAME: {
+                    if (role == Qt::DisplayRole) {
+                        CardInfoPtr info = CardDatabaseManager::query()->getCardInfo(card->getName());
+                        if (info) {
+                            return info->getLocalizedName(displayLang);
+                        }
+                    }
                     return card->getName();
+                }
                 case DeckListModelColumns::CARD_SET:
                     return card->getCardSetShortName();
                 case DeckListModelColumns::CARD_COLLECTOR_NUMBER:
@@ -188,6 +248,10 @@ QVariant DeckListModel::data(const QModelIndex &index, int role) const
 
         case DeckRoles::IsLegalRole: {
             return card->getFormatLegality();
+        }
+
+        case DeckRoles::IsCustomZoneRole: {
+            return false;
         }
 
         default: {
@@ -225,7 +289,7 @@ QVariant DeckListModel::headerData(const int section, const Qt::Orientation orie
 QModelIndex DeckListModel::index(int row, int column, const QModelIndex &parent) const
 {
     // debugIndexInfo("index", parent);
-    if (!hasIndex(row, column, parent)) {
+    if ((parent.isValid() && parent.column() != 0) || !hasIndex(row, column, parent)) {
         return {};
     }
 
@@ -257,8 +321,9 @@ Qt::ItemFlags DeckListModel::flags(const QModelIndex &index) const
 void DeckListModel::emitBackgroundUpdates(const QModelIndex &parent)
 {
     int rows = rowCount(parent);
-    if (rows == 0)
+    if (rows == 0) {
         return;
+    }
 
     QModelIndex topLeft = index(0, 0, parent);
     QModelIndex bottomRight = index(rows - 1, columnCount() - 1, parent);
@@ -326,6 +391,13 @@ bool DeckListModel::removeRows(int row, int count, const QModelIndex &parent)
         return false;
     }
 
+    // Custom zone rows are managed through the deck tree, never removed as model rows.
+    for (int i = 0; i < count; i++) {
+        if (DeckListModelCustomZones::isCustomZone(node->at(row + i))) {
+            return false;
+        }
+    }
+
     beginRemoveRows(parent, row, row + count - 1);
     for (int i = 0; i < count; i++) {
         AbstractDecklistNode *toDelete = node->takeAt(row);
@@ -336,7 +408,8 @@ bool DeckListModel::removeRows(int row, int count, const QModelIndex &parent)
     }
     endRemoveRows();
 
-    if (node->empty() && (node != root)) {
+    // Empty criteria groups get pruned, but custom zones stay until explicitly deleted.
+    if (node->empty() && (node != root) && !DeckListModelCustomZones::isCustomZone(node)) {
         removeRows(parent.row(), 1, parent.parent());
     } else {
         emitRecursiveUpdates(parent);
@@ -350,7 +423,8 @@ bool DeckListModel::removeRows(int row, int count, const QModelIndex &parent)
 
 InnerDecklistNode *DeckListModel::createNodeIfNeeded(const QString &name, InnerDecklistNode *parent)
 {
-    auto *newNode = dynamic_cast<InnerDecklistNode *>(parent->findChild(name));
+    // Group lookups must not resolve a mirrored custom zone that shares the name.
+    auto *newNode = DeckListModelCustomZones::findGroupChild(parent, name);
     if (!newNode) {
         beginInsertRows(nodeToIndex(parent), parent->size(), parent->size());
         newNode = new InnerDecklistNode(name, parent);
@@ -364,24 +438,44 @@ DecklistModelCardNode *DeckListModel::findCardNode(const QString &cardName,
                                                    const QString &providerId,
                                                    const QString &cardNumber) const
 {
-    InnerDecklistNode *zoneNode = dynamic_cast<InnerDecklistNode *>(root->findChild(zoneName));
-    if (!zoneNode) {
-        return nullptr;
-    }
-
     CardInfoPtr info = CardDatabaseManager::query()->getCardInfo(cardName);
     if (!info) {
         return nullptr;
     }
 
-    QString groupCriteria = extractGroupCriteriaValue(info, activeGroupCriteria);
-    InnerDecklistNode *groupNode = dynamic_cast<InnerDecklistNode *>(zoneNode->findChild(groupCriteria));
-    if (!groupNode) {
-        return nullptr;
+    // 1. Board zone lookup: search the criteria groups, then the custom zones
+    //    nested under the board.
+    if (auto *zoneNode = dynamic_cast<InnerDecklistNode *>(root->findChild(zoneName))) {
+        QString groupCriteria = extractGroupCriteriaValue(info, activeGroupCriteria);
+        if (auto *groupNode = DeckListModelCustomZones::findGroupChild(zoneNode, groupCriteria)) {
+            if (auto *card = dynamic_cast<DecklistModelCardNode *>(
+                    groupNode->findCardChildByNameProviderIdAndNumber(cardName, providerId, cardNumber))) {
+                return card;
+            }
+        }
+
+        for (auto *child : *zoneNode) {
+            if (!DeckListModelCustomZones::isCustomZone(child)) {
+                continue;
+            }
+            auto *customZone = dynamic_cast<InnerDecklistNode *>(child);
+            if (!customZone) {
+                continue;
+            }
+            if (auto *card = dynamic_cast<DecklistModelCardNode *>(
+                    customZone->findCardChildByNameProviderIdAndNumber(cardName, providerId, cardNumber))) {
+                return card;
+            }
+        }
     }
 
-    return dynamic_cast<DecklistModelCardNode *>(
-        groupNode->findCardChildByNameProviderIdAndNumber(cardName, providerId, cardNumber));
+    // 2. Custom zone lookup by name (custom zone names are deck-unique).
+    if (auto *customZone = DeckListModelCustomZones::findSubZoneByName(root, zoneName)) {
+        return dynamic_cast<DecklistModelCardNode *>(
+            customZone->findCardChildByNameProviderIdAndNumber(cardName, providerId, cardNumber));
+    }
+
+    return nullptr;
 }
 
 QModelIndex DeckListModel::findCard(const QString &cardName,
@@ -422,29 +516,95 @@ QModelIndex DeckListModel::addCard(const ExactCard &card, const QString &zoneNam
         return {};
     }
 
-    InnerDecklistNode *zoneNode = createNodeIfNeeded(zoneName, root);
-
     CardInfoPtr cardInfo = card.getCardPtr();
     PrintingInfo printingInfo = card.getPrinting();
 
-    QString groupCriteria = extractGroupCriteriaValue(cardInfo, activeGroupCriteria);
-    InnerDecklistNode *groupNode = createNodeIfNeeded(groupCriteria, zoneNode);
+    InnerDecklistNode *cardParent = nullptr;
 
-    const QModelIndex parentIndex = nodeToIndex(groupNode);
-    auto *cardNode = dynamic_cast<DecklistModelCardNode *>(groupNode->findCardChildByNameProviderIdAndNumber(
+    auto *boardNode = dynamic_cast<InnerDecklistNode *>(root->findChild(zoneName));
+    auto *customZoneNode = boardNode ? nullptr : DeckListModelCustomZones::findSubZoneByName(root, zoneName);
+
+    // Mirroring flattens nested deck sub-zones into shadow rows, so a shadow row
+    // index is only usable as a deck-tree position while both sides have the same
+    // direct-children shape. When they diverge, the card is appended to the deck
+    // zone instead of being written out of range.
+    InnerDecklistNode *deckCardParent = nullptr;
+    bool customZoneNeedsAppend = false;
+
+    if (boardNode) {
+        // Board zone: cards are grouped by the active criteria.
+        QString groupCriteria = extractGroupCriteriaValue(cardInfo, activeGroupCriteria);
+        cardParent = createNodeIfNeeded(groupCriteria, boardNode);
+    } else if (customZoneNode) {
+        // Custom zone: cards live flat inside the zone.
+        cardParent = customZoneNode;
+        auto *listRoot = deckList->getTree()->getRoot();
+        for (int i = 0; i < listRoot->size(); ++i) {
+            auto *boardZone = dynamic_cast<InnerDecklistNode *>(listRoot->at(i));
+            if (!boardZone) {
+                continue;
+            }
+            deckCardParent = dynamic_cast<InnerDecklistNode *>(boardZone->findChild(zoneName));
+            if (deckCardParent) {
+                break;
+            }
+        }
+        // A deck custom zone holding nested sub-zones mirrors with flattened rows,
+        // so a shadow row index does not map onto its direct children.
+        if (deckCardParent) {
+            for (int i = 0; i < deckCardParent->size(); ++i) {
+                if (dynamic_cast<InnerDecklistNode *>(deckCardParent->at(i))) {
+                    customZoneNeedsAppend = true;
+                    break;
+                }
+            }
+        }
+    } else {
+        // Not present in the shadow tree. The deck tree may still hold a custom
+        // zone that has not been mirrored (callers can add a zone and then a
+        // card without a rebuild). Check before falling back to creating a
+        // top-level zone the deck does not actually have.
+        auto *listRoot = deckList->getTree()->getRoot();
+        bool hasDeckZone = false;
+        for (int i = 0; i < listRoot->size(); ++i) {
+            if (auto *boardZone = dynamic_cast<InnerDecklistNode *>(listRoot->at(i))) {
+                // Only real zones count: a card sitting directly under the board
+                // shares the name comparison but is not a zone, and treating it as
+                // one would recurse forever without mirroring anything.
+                if (dynamic_cast<InnerDecklistNode *>(boardZone->findChild(zoneName))) {
+                    hasDeckZone = true;
+                    break;
+                }
+            }
+        }
+
+        if (hasDeckZone) {
+            rebuildTree();
+            return addCard(card, zoneName);
+        }
+
+        // Unknown zone: create a top-level zone (legacy behavior).
+        QString groupCriteria = extractGroupCriteriaValue(cardInfo, activeGroupCriteria);
+        auto *newZone = createNodeIfNeeded(zoneName, root);
+        cardParent = createNodeIfNeeded(groupCriteria, newZone);
+    }
+
+    const QModelIndex parentIndex = nodeToIndex(cardParent);
+    auto *cardNode = dynamic_cast<DecklistModelCardNode *>(cardParent->findCardChildByNameProviderIdAndNumber(
         card.getName(), printingInfo.getUuid(), printingInfo.getProperty("num")));
     const auto cardSetName = printingInfo.getSet().isNull() ? "" : printingInfo.getSet()->getCorrectedShortName();
 
     bool cardNodeAdded = false;
     if (!cardNode) {
         // Determine the correct index
-        int insertRow = findSortedInsertRow(groupNode, cardInfo);
+        int insertRow = findSortedInsertRow(cardParent, cardInfo);
+        int deckInsertRow = customZoneNeedsAppend ? -1 : insertRow;
 
-        auto *decklistCard = deckList->addCard(cardInfo->getName(), zoneName, insertRow, cardSetName,
+        auto *decklistCard = deckList->addCard(cardInfo->getName(), zoneName, deckInsertRow, cardSetName,
                                                printingInfo.getProperty("num"), printingInfo.getProperty("uuid"));
 
         beginInsertRows(parentIndex, insertRow, insertRow);
-        cardNode = new DecklistModelCardNode(decklistCard, groupNode, insertRow);
+        cardNode = new DecklistModelCardNode(decklistCard, cardParent, insertRow);
         endInsertRows();
 
         cardNodeAdded = true;
@@ -539,8 +699,9 @@ int DeckListModel::findSortedInsertRow(const InnerDecklistNode *parent, const Ca
 
     for (int i = 0; i < parent->size(); ++i) {
         auto *existingCard = dynamic_cast<DecklistModelCardNode *>(parent->at(i));
-        if (!existingCard)
+        if (!existingCard) {
             continue;
+        }
 
         bool lessThan = false;
         switch (lastKnownColumn) {
@@ -557,8 +718,9 @@ int DeckListModel::findSortedInsertRow(const InnerDecklistNode *parent, const Ca
                 break;
         }
 
-        if (lessThan)
+        if (lessThan) {
             return i;
+        }
     }
 
     return parent->size(); // insert at end if no earlier match
@@ -573,21 +735,43 @@ QModelIndex DeckListModel::nodeToIndex(AbstractDecklistNode *node) const
     return createIndex(node->getParent()->indexOf(node), 0, node);
 }
 
+/**
+ * @brief Sorts a freshly built shadow subtree without emitting model signals.
+ *
+ * Used by rebuildTree while the model reset is still open (emitting layout
+ * changes during a reset is invalid). Reorders every node just like
+ * sortHelper does, but ignores the movement mapping because there are no
+ * persistent indices established yet.
+ */
+void DeckListModel::sortShadowTree(InnerDecklistNode *node, Qt::SortOrder order)
+{
+    // The mapping is not needed: fresh shadow nodes have no persistent indices yet.
+    (void)DeckListModelCustomZones::sortWithCustomZonesLast(
+        root, node, order, activeGroupCriteria == DeckListModelGroupCriteria::MANA_COST && lastKnownColumn != 0);
+
+    for (int i = node->size() - 1; i >= 0; --i) {
+        if (auto *subNode = dynamic_cast<InnerDecklistNode *>(node->at(i))) {
+            sortShadowTree(subNode, order);
+        }
+    }
+}
+
 void DeckListModel::sortHelper(InnerDecklistNode *node, Qt::SortOrder order)
 {
-    // Sort children of node and save the information needed to
-    // update the list of persistent indexes.
-    QVector<QPair<int, int>> sortResult = node->sort(order);
+    // Sort children (custom zones always sorted after groups within a board) and
+    // use the movement mapping to update the list of persistent indices.
+    const auto mapping = DeckListModelCustomZones::sortWithCustomZonesLast(
+        root, node, order, activeGroupCriteria == DeckListModelGroupCriteria::MANA_COST && lastKnownColumn != 0);
 
     QModelIndexList from, to;
     int columns = columnCount();
-    for (int i = sortResult.size() - 1; i >= 0; --i) {
-        const int fromRow = sortResult[i].first;
-        const int toRow = sortResult[i].second;
-        AbstractDecklistNode *temp = node->at(toRow);
+    for (const auto &move : mapping) {
+        const int preSortRow = move.first;
+        const int finalRow = move.second;
+        AbstractDecklistNode *temp = node->at(finalRow);
         for (int j = 0; j < columns; ++j) {
-            from << createIndex(fromRow, j, temp);
-            to << createIndex(toRow, j, temp);
+            from << createIndex(preSortRow, j, temp);
+            to << createIndex(finalRow, j, temp);
         }
     }
     changePersistentIndexList(from, to);
@@ -699,6 +883,15 @@ QList<QString> DeckListModel::getZones() const
                    [](auto zoneNode) { return zoneNode->getName(); });
 
     return zones;
+}
+
+QStringList DeckListModel::getCustomZoneNames(const QString &boardZoneName) const
+{
+    QStringList zoneNames;
+    for (const auto *customZone : deckList->getTree()->getCustomZones(boardZoneName)) {
+        zoneNames.append(customZone->getName());
+    }
+    return zoneNames;
 }
 
 static int maxAllowedForLegality(const FormatRules &format, const QString &legality)

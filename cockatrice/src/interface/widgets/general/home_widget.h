@@ -2,18 +2,27 @@
  * @file home_widget.h
  * @ingroup Core
  * @ingroup Widgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef HOME_WIDGET_H
 #define HOME_WIDGET_H
-#include "../../../interface/widgets/tabs/tab_supervisor.h"
-#include "../cards/card_info_picture_art_crop_widget.h"
-#include "home_styled_button.h"
+#include "libcockatrice/deck_list/deck_list.h"
 
-#include <QGridLayout>
+#include <QColor>
+#include <QPair>
+#include <QPixmap>
 #include <QWidget>
 #include <libcockatrice/network/client/abstract/abstract_client.h>
+#include <qtmetamacros.h>
+
+class QLabel;
+class CardInfoPictureArtCropWidget;
+class ExactCard;
+class HomeStyledButton;
+class QGroupBox;
+class QTimer;
+class TabSupervisor;
 
 class HomeWidget : public QWidget
 {
@@ -23,7 +32,8 @@ class HomeWidget : public QWidget
 public:
     HomeWidget(QWidget *parent, TabSupervisor *tabSupervisor);
     void updateRandomCard();
-    QPair<QColor, QColor> extractDominantColors(const QPixmap &pixmap);
+    void retranslateUi();
+    static QPair<QColor, QColor> extractDominantColors(const QPixmap &pixmap);
 
 public slots:
     void paintEvent(QPaintEvent *event) override;
@@ -35,18 +45,27 @@ public slots:
     void updateConnectButton(const ClientStatus status);
 
 private:
-    QGridLayout *layout;
     QTimer *cardChangeTimer;
     TabSupervisor *tabSupervisor;
     QPixmap background;
     CardInfoPictureArtCropWidget *backgroundSourceCard = nullptr;
     DeckList backgroundSourceDeck;
-    QPixmap overlay;
+    QLabel *logoLabel = nullptr;
     QPair<QColor, QColor> gradientColors;
-    HomeStyledButton *connectButton;
+    HomeStyledButton *connectButton = nullptr;
+    HomeStyledButton *visualDeckEditorButton = nullptr;
+    HomeStyledButton *visualDeckStorageButton = nullptr;
+    HomeStyledButton *visualDatabaseDisplayButton = nullptr;
+    HomeStyledButton *edhrecButton = nullptr;
+    HomeStyledButton *archidektButton = nullptr;
+    HomeStyledButton *replayButton = nullptr;
+    HomeStyledButton *exitButton = nullptr;
+    ClientStatus connectionStatus = StatusDisconnected;
 
     void setRandomCard(ExactCard &newCard);
     void loadBackgroundSourceDeck();
+    QPair<QColor, QColor> determineButtonColor() const;
+    void updateLogoOverlay();
 };
 
 #endif // HOME_WIDGET_H

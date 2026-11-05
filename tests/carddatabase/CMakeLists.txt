@@ -9,58 +9,70 @@ add_definitions("-DCARDDB_DATADIR=\"${CMAKE_CURRENT_SOURCE_DIR}/data/\"")
 # ------------------------
 # Card Database Test
 # ------------------------
-add_executable(
+cockatrice_add_test(
+  NAME
   carddatabase_test
-  ${MOCKS_SOURCES}
+  SOURCES
   ${VERSION_STRING_CPP}
   carddatabase_test.cpp
+  mocks.cpp
   ruled_token_display_test.cpp
   ruled_oracle_import_test.cpp
   ${CMAKE_SOURCE_DIR}/oracle/src/oracleimporter.cpp
   ${CMAKE_SOURCE_DIR}/oracle/src/parsehelpers.cpp
-  ${CMAKE_SOURCE_DIR}/oracle/src/qt-json/json.cpp
-  mocks.cpp
+  ${CMAKE_SOURCE_DIR}/oracle/src/raw_json_scanner.cpp
   ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_token_display.cpp
+  LIBS
+  libcockatrice_card
+  libcockatrice_protocol
+  INCLUDE_DIRS
+  ${CMAKE_SOURCE_DIR}/cockatrice/src
 )
-
-target_include_directories(carddatabase_test PRIVATE ${CMAKE_SOURCE_DIR}/cockatrice/src)
-
-target_link_libraries(
-  carddatabase_test
-  PRIVATE libcockatrice_card
-  PRIVATE libcockatrice_protocol
-  PRIVATE Threads::Threads
-  PRIVATE ${GTEST_BOTH_LIBRARIES}
-  PRIVATE ${TEST_QT_MODULES}
-)
-
-add_test(NAME carddatabase_test COMMAND carddatabase_test)
 
 # ------------------------
 # Filter String Test
 # (guard must match the condition for libcockatrice_filters in the root CMakeLists.txt)
 # ------------------------
 if(WITH_ORACLE OR WITH_CLIENT)
-  add_executable(filter_string_test ${MOCKS_SOURCES} ${VERSION_STRING_CPP} filter_string_test.cpp mocks.cpp)
-
-  target_link_libraries(
+  cockatrice_add_test(
+    NAME
     filter_string_test
-    PRIVATE libcockatrice_filters
-    PRIVATE Threads::Threads
-    PRIVATE ${GTEST_BOTH_LIBRARIES}
-    PRIVATE ${TEST_QT_MODULES}
+    SOURCES
+    ${VERSION_STRING_CPP}
+    filter_string_test.cpp
+    mocks.cpp
+    LIBS
+    libcockatrice_filters
   )
 
-  add_test(NAME filter_string_test COMMAND filter_string_test)
-
-  if(NOT GTEST_FOUND)
-    add_dependencies(filter_string_test gtest)
-  endif()
+  # ------------------------
+  # Visual Display Model Test
+  # ------------------------
+  cockatrice_add_test(
+    NAME
+    visual_display_model_test
+    SOURCES
+    ${VERSION_STRING_CPP}
+    visual_display_model_test.cpp
+    mocks.cpp
+    LIBS
+    libcockatrice_card
+    libcockatrice_models
+  )
 endif()
 
 # ------------------------
-# Dependencies on gtest
+# Load Benchmark (manual, not run in CI)
 # ------------------------
-if(NOT GTEST_FOUND)
-  add_dependencies(carddatabase_test gtest)
-endif()
+cockatrice_add_manual_test(
+  NAME
+  load_benchmark
+  SOURCES
+  ${VERSION_STRING_CPP}
+  load_benchmark.cpp
+  mocks.cpp
+  LIBS
+  libcockatrice_card
+  libcockatrice_models
+  MANUAL
+)

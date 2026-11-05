@@ -1,11 +1,13 @@
+#include <libcockatrice/game/zones/view_zone_logic.h>
+#include "ruled_client_ui.h"
 #include "ruled_preparation_display.h"
 #include "ruled_actions.h"
-#include "../abstract_game.h"
-#include "../board/card_item.h"
-#include "../player/player.h"
-#include "../player/player_manager.h"
-#include "../zones/logic/card_zone_logic.h"
-#include "../zones/view_zone.h"
+#include <libcockatrice/game/abstract_game.h>
+#include "../../game_graphics/board/card_item.h"
+#include <libcockatrice/game/player/player_logic.h>
+#include <libcockatrice/game/player/player_manager.h>
+#include <libcockatrice/game/zones/card_zone_logic.h>
+#include "../../game_graphics/zones/view_zone.h"
 #include <QSet>
 #include <libcockatrice/utility/zone_names.h>
 
@@ -21,7 +23,7 @@ void RuledPreparationDisplay::remove(quint32 oid)
         return;
     }
     if (auto *zone = card->getZone()) {
-        const int position = zone->getCards().indexOf(card);
+        const int position = RuledActions::cardItems(zone->getCards()).indexOf(card);
         if (position >= 0) {
             // Preserve an open view across a full replacement, including an empty snapshot.
             zone->takeCard(position, card->getId(), false);
@@ -45,23 +47,23 @@ void RuledPreparationDisplay::reconcile(const QVector<RuledClientHost::Preparati
         return;
     }
     for (const auto &copy : copies) {
-        Player *player = game->getPlayerManager()->getPlayers().value(copy.playerId, nullptr);
+        PlayerLogic *player = game->getPlayerManager()->getPlayers().value(copy.playerId, nullptr);
         CardZoneLogic *zone = player ? player->getZone(QLatin1String(ZoneNames::EXILE)) : nullptr;
         if (!zone) {
             continue;
         }
         CardItem *card = displayed.value(copy.objectId);
         if (card && (card->getZone() != zone || card->getId() != copy.serverCardId ||
-                     !zone->getCards().contains(card))) {
+                     !RuledActions::cardItems(zone->getCards()).contains(card))) {
             remove(copy.objectId);
             card = nullptr;
         }
         if (!card) {
             // A restored physical snapshot may already have installed this exact binding.
-            card = zone->getCards().findCard(copy.serverCardId);
+            card = RuledActions::cardItems(zone->getCards()).findCard(copy.serverCardId);
             if (!card) {
                 card = new CardItem(player, nullptr, CardRef{copy.displayName}, copy.serverCardId);
-                zone->addCard(card, true, qBound(0, copy.zoneIndex, static_cast<int>(zone->getCards().size())));
+                zone->addCard(card->getState(), true, qBound(0, copy.zoneIndex, static_cast<int>(RuledActions::cardItems(zone->getCards()).size())));
             }
             displayed.insert(copy.objectId, card);
         }
@@ -69,7 +71,7 @@ void RuledPreparationDisplay::reconcile(const QVector<RuledClientHost::Preparati
         card->setAnnotation(QStringLiteral("Prepare spell copy"));
         card->setDestroyOnZoneChange(true);
         for (auto *view : zone->getViews()) {
-            if (CardItem *mirror = view->getLogic()->getCards().findCard(copy.serverCardId)) {
+            if (CardItem *mirror = RuledActions::cardItems(view->getCards()).findCard(copy.serverCardId)) {
                 mirror->setCardRef(card->getCardRef());
                 copyViewState(card, mirror);
             }

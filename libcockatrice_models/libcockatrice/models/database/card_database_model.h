@@ -7,10 +7,17 @@
 #ifndef CARDDATABASEMODEL_H
 #define CARDDATABASEMODEL_H
 
+#include "libcockatrice/card/card_info.h"
+
 #include <QAbstractListModel>
 #include <QList>
+#include <QModelIndex>
 #include <QSet>
-#include <libcockatrice/card/database/card_database.h>
+#include <qnamespace.h>
+#include <qtmetamacros.h>
+
+class CardDatabase;
+class QObject;
 
 class CardDatabaseModel : public QAbstractListModel
 {
@@ -51,12 +58,13 @@ private:
     CardDatabase *db;
     bool showOnlyCardsFromEnabledSets;
 
-    inline bool checkCardHasAtLeastOneEnabledSet(CardInfoPtr card);
+    inline bool checkCardHasAtLeastOneEnabledSet(const CardInfoPtr &card) const;
 private slots:
-    void cardAdded(CardInfoPtr card);
+    void cardAdded(const CardInfoPtr &card);
     void cardRemoved(CardInfoPtr card);
-    void cardInfoChanged(CardInfoPtr card);
+    void cardInfoChanged(const CardInfoPtr &card);
     void cardDatabaseEnabledSetsChanged();
+    void resetCardList();
 };
 
 #endif

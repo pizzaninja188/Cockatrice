@@ -1,17 +1,77 @@
 #include "deck_editor_deck_dock_widget.h"
 
 #include "../../../client/settings/cache_settings.h"
+#include "../../../client/settings/shortcuts_settings.h"
+#include "../../key_signals.h"
+#include "../../theme_icon.h"
+#include "../playmat/playmat_settings_dialog.h"
+#include "../quick_settings/settings_button_widget.h"
+#include "../tabs/abstract_tab_deck_editor.h"
+#include "../tabs/api/commander_spellbook/commander_bracket_widget.h"
+#include "../utility/custom_line_edit.h"
+#include "../visual_deck_storage/deck_preview/deck_preview_deck_tags_display_widget.h"
+#include "deck_list_history_manager_widget.h"
+#include "deck_list_model.h"
 #include "deck_list_style_proxy.h"
 #include "deck_state_manager.h"
+#include "deck_zone_dialog.h"
+#include "libcockatrice/card/card_info.h"
+#include "libcockatrice/card/database/card_database.h"
+#include "libcockatrice/card/database/card_database_loader.h"
+#include "libcockatrice/card/database/card_database_querier.h"
+#include "libcockatrice/card/printing/printing_info.h"
+#include "libcockatrice/deck_list/deck_list.h"
+#include "libcockatrice/deck_list/tree/abstract_deck_list_node.h"
+#include "libcockatrice/deck_list/tree/inner_deck_list_node.h"
+#include "libcockatrice/utility/card_ref.h"
+#include "libcockatrice/utility/playmat_params.h"
 
+#include <QAbstractItemModel>
+#include <QAbstractItemView>
+#include <QAction>
+#include <QCheckBox>
 #include <QComboBox>
+#include <QDebug>
+#include <QDialog>
 #include <QDockWidget>
+#include <QFlags>
+#include <QGridLayout>
 #include <QHeaderView>
+#include <QItemSelectionModel>
 #include <QLabel>
+#include <QList>
+#include <QMap>
+#include <QMenu>
+#include <QMessageBox>
+#include <QModelIndex>
+#include <QPair>
+#include <QPoint>
+#include <QPushButton>
+#include <QSet>
+#include <QSharedPointer>
+#include <QSignalBlocker>
+#include <QSize>
+#include <QSizePolicy>
 #include <QSplitter>
+#include <QStringList>
+#include <QStringLiteral>
 #include <QTextEdit>
+#include <QTimer>
+#include <QToolButton>
+#include <QVBoxLayout>
+#include <QVariant>
+#include <QWidget>
+#include <QtGlobal>
+#include <algorithm>
+#include <compare>
+#include <functional>
 #include <libcockatrice/card/database/card_database_manager.h>
-#include <libcockatrice/utility/trice_limits.h>
+#include <libcockatrice/deck_list/deck_list_node_tree.h>
+#include <libcockatrice/settings/deck_editor_settings.h>
+#include <libcockatrice/utility/macros.h>
+#include <libcockatrice/utility/string_limits.h>
+#include <qnamespace.h>
+#include <utility>
 
 static int findRestoreIndex(const CardRef &wanted, const QComboBox *combo)
 {
@@ -108,18 +168,18 @@ void DeckEditorDeckDockWidget::createDeckDock()
 
     showBannerCardCheckBox = new QCheckBox();
     showBannerCardCheckBox->setObjectName("showBannerCardCheckBox");
-    showBannerCardCheckBox->setChecked(SettingsCache::instance().getDeckEditorBannerCardComboBoxVisible());
-    connect(showBannerCardCheckBox, &QCheckBox::QT_STATE_CHANGED, &SettingsCache::instance(),
-            &SettingsCache::setDeckEditorBannerCardComboBoxVisible);
-    connect(&SettingsCache::instance(), &SettingsCache::deckEditorBannerCardComboBoxVisibleChanged, this,
+    showBannerCardCheckBox->setChecked(SettingsCache::instance().deckEditor().getBannerCardComboBoxVisible());
+    connect(showBannerCardCheckBox, &QCheckBox::QT_STATE_CHANGED, &SettingsCache::instance().deckEditor(),
+            &DeckEditorSettings::setBannerCardComboBoxVisible);
+    connect(&SettingsCache::instance().deckEditor(), &DeckEditorSettings::bannerCardComboBoxVisibleChanged, this,
             &DeckEditorDeckDockWidget::updateShowBannerCardComboBox);
 
     showTagsWidgetCheckBox = new QCheckBox();
     showTagsWidgetCheckBox->setObjectName("showTagsWidgetCheckBox");
-    showTagsWidgetCheckBox->setChecked(SettingsCache::instance().getDeckEditorTagsWidgetVisible());
-    connect(showTagsWidgetCheckBox, &QCheckBox::QT_STATE_CHANGED, &SettingsCache::instance(),
-            &SettingsCache::setDeckEditorTagsWidgetVisible);
-    connect(&SettingsCache::instance(), &SettingsCache::deckEditorTagsWidgetVisibleChanged, this,
+    showTagsWidgetCheckBox->setChecked(SettingsCache::instance().deckEditor().getTagsWidgetVisible());
+    connect(showTagsWidgetCheckBox, &QCheckBox::QT_STATE_CHANGED, &SettingsCache::instance().deckEditor(),
+            &DeckEditorSettings::setTagsWidgetVisible);
+    connect(&SettingsCache::instance().deckEditor(), &DeckEditorSettings::tagsWidgetVisibleChanged, this,
             &DeckEditorDeckDockWidget::updateShowTagsWidget);
 
     quickSettingsWidget->addSettingsWidget(showBannerCardCheckBox);
@@ -128,8 +188,17 @@ void DeckEditorDeckDockWidget::createDeckDock()
     formatLabel = new QLabel(this);
 
     formatComboBox = new QComboBox(this);
+    formatComboBox->setObjectName("deckFormatComboBox");
     formatComboBox->addItem(tr("Loading Database..."));
     formatComboBox->setEnabled(false); // Disable until loaded
+
+    commanderBracketWidget = new CommanderBracketWidget(this);
+    connect(formatComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        formatComboBox->setPlaceholderText(QString());
+        formatComboBox->setToolTip(QString());
+        deckStateManager->setFormat(index >= 0 ? formatComboBox->itemData(index).toString() : QString());
+        commanderBracketWidget->setDeck(deckStateManager->getDeckListShared());
+    });
 
     commentsLabel = new QLabel();
     commentsLabel->setObjectName("commentsLabel");
@@ -151,7 +220,7 @@ void DeckEditorDeckDockWidget::createDeckDock()
     bannerCardLabel = new QLabel();
     bannerCardLabel->setObjectName("bannerCardLabel");
     bannerCardLabel->setText(tr("Banner Card"));
-    bannerCardLabel->setHidden(!SettingsCache::instance().getDeckEditorBannerCardComboBoxVisible());
+    bannerCardLabel->setHidden(!SettingsCache::instance().deckEditor().getBannerCardComboBoxVisible());
     bannerCardComboBox = new QComboBox(this);
     connect(getModel(), &DeckListModel::cardNodesChanged, this, [this]() {
         // Delay the update to avoid race conditions
@@ -162,10 +231,10 @@ void DeckEditorDeckDockWidget::createDeckDock()
 
     connect(bannerCardComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &DeckEditorDeckDockWidget::writeBannerCard);
-    bannerCardComboBox->setHidden(!SettingsCache::instance().getDeckEditorBannerCardComboBoxVisible());
+    bannerCardComboBox->setHidden(!SettingsCache::instance().deckEditor().getBannerCardComboBoxVisible());
 
     deckTagsDisplayWidget = new DeckPreviewDeckTagsDisplayWidget(this, {});
-    deckTagsDisplayWidget->setHidden(!SettingsCache::instance().getDeckEditorTagsWidgetVisible());
+    deckTagsDisplayWidget->setHidden(!SettingsCache::instance().deckEditor().getTagsWidgetVisible());
     connect(deckTagsDisplayWidget, &DeckPreviewDeckTagsDisplayWidget::tagsChanged, deckStateManager,
             &DeckStateManager::setTags);
 
@@ -179,25 +248,25 @@ void DeckEditorDeckDockWidget::createDeckDock()
             &DeckEditorDeckDockWidget::applyActiveGroupCriteria);
 
     aIncrement = new QAction(QString(), this);
-    aIncrement->setIcon(QPixmap("theme:icons/increment"));
+    aIncrement->setIcon(loadThemedIcon(QStringLiteral("icons/increment")));
     connect(aIncrement, &QAction::triggered, this, &DeckEditorDeckDockWidget::actIncrementSelection);
     auto *tbIncrement = new QToolButton(this);
     tbIncrement->setDefaultAction(aIncrement);
 
     aDecrement = new QAction(QString(), this);
-    aDecrement->setIcon(QPixmap("theme:icons/decrement"));
+    aDecrement->setIcon(loadThemedIcon(QStringLiteral("icons/decrement")));
     connect(aDecrement, &QAction::triggered, this, &DeckEditorDeckDockWidget::actDecrementSelection);
     auto *tbDecrement = new QToolButton(this);
     tbDecrement->setDefaultAction(aDecrement);
 
     aRemoveCard = new QAction(QString(), this);
-    aRemoveCard->setIcon(QPixmap("theme:icons/remove_row"));
+    aRemoveCard->setIcon(loadThemedIcon(QStringLiteral("icons/remove_row")));
     connect(aRemoveCard, &QAction::triggered, this, &DeckEditorDeckDockWidget::actRemoveCard);
     auto *tbRemoveCard = new QToolButton(this);
     tbRemoveCard->setDefaultAction(aRemoveCard);
 
     aSwapCard = new QAction(QString(), this);
-    aSwapCard->setIcon(QPixmap("theme:icons/swap"));
+    aSwapCard->setIcon(loadThemedIcon(QStringLiteral("icons/swap")));
     connect(aSwapCard, &QAction::triggered, this, &DeckEditorDeckDockWidget::actSwapSelection);
     auto *tbSwapCard = new QToolButton(this);
     tbSwapCard->setDefaultAction(aSwapCard);
@@ -216,13 +285,23 @@ void DeckEditorDeckDockWidget::createDeckDock()
     upperLayout->addWidget(formatLabel, 2, 0);
     upperLayout->addWidget(formatComboBox, 2, 1);
 
-    upperLayout->addWidget(bannerCardLabel, 3, 0);
-    upperLayout->addWidget(bannerCardComboBox, 3, 1);
+    upperLayout->addWidget(commanderBracketWidget, 3, 0, 1, 2);
 
-    upperLayout->addWidget(deckTagsDisplayWidget, 4, 1);
+    upperLayout->addWidget(bannerCardLabel, 4, 0);
+    upperLayout->addWidget(bannerCardComboBox, 4, 1);
 
-    upperLayout->addWidget(activeGroupCriteriaLabel, 5, 0);
-    upperLayout->addWidget(activeGroupCriteriaComboBox, 5, 1);
+    playmatLabel = new QLabel();
+    playmatLabel->setObjectName("playmatLabel");
+    playmatLabel->setText(tr("Playmat"));
+    playmatSettingsButton = new QPushButton(tr("Edit Playmat..."));
+    connect(playmatSettingsButton, &QPushButton::clicked, this, &DeckEditorDeckDockWidget::openPlaymatSettings);
+    upperLayout->addWidget(playmatLabel, 5, 0);
+    upperLayout->addWidget(playmatSettingsButton, 5, 1);
+
+    upperLayout->addWidget(deckTagsDisplayWidget, 6, 1);
+
+    upperLayout->addWidget(activeGroupCriteriaLabel, 7, 0);
+    upperLayout->addWidget(activeGroupCriteriaComboBox, 7, 1);
 
     hashLabel1 = new QLabel();
     hashLabel1->setObjectName("hashLabel1");
@@ -284,6 +363,9 @@ void DeckEditorDeckDockWidget::initializeFormats()
 {
     QStringList allFormats = CardDatabaseManager::query()->getAllFormatsWithCount().keys();
 
+    // Rebuilding the list is a view update, not a user edit. In particular,
+    // clear() emits currentIndexChanged(-1), which must not clear the deck.
+    const QSignalBlocker blocker(formatComboBox);
     formatComboBox->clear(); // Remove "Loading Database..."
     formatComboBox->setEnabled(true);
 
@@ -293,30 +375,34 @@ void DeckEditorDeckDockWidget::initializeFormats()
         formatComboBox->addItem(formatName, formatName); // store the raw key in itemData
     }
 
-    QString format = deckStateManager->getMetadata().gameFormat;
-    if (!format.isEmpty()) {
-        formatComboBox->setCurrentIndex(formatComboBox->findData(format));
-    } else {
-        // Ensure no selection is visible initially
-        formatComboBox->setCurrentIndex(-1);
-    }
+    syncFormatSelection();
 
-    connect(formatComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
-        if (index >= 0) {
-            QString formatKey = formatComboBox->itemData(index).toString();
-            deckStateManager->setFormat(formatKey);
-        } else {
-            deckStateManager->setFormat(""); // clear format if deselected
-        }
-    });
+    commanderBracketWidget->setDeck(deckStateManager->getDeckListShared());
+}
+
+void DeckEditorDeckDockWidget::syncFormatSelection()
+{
+    if (!formatComboBox->isEnabled()) {
+        return;
+    }
+    const QSignalBlocker blocker(formatComboBox);
+    const QString format = deckStateManager->getMetadata().gameFormat;
+    const int index = format.isEmpty() ? -1 : formatComboBox->findData(format);
+    const QString unavailable = index < 0 && !format.isEmpty() ? tr("Unavailable: %1").arg(format) : QString();
+    formatComboBox->setPlaceholderText(unavailable);
+    formatComboBox->setToolTip(unavailable);
+    formatComboBox->setCurrentIndex(index);
 }
 
 ExactCard DeckEditorDeckDockWidget::getCurrentCard()
 {
     QModelIndex current = deckView->selectionModel()->currentIndex();
-    if (!current.isValid())
+    if (!current.isValid()) {
         return {};
-    const QString cardName = current.siblingAtColumn(DeckListModelColumns::CARD_NAME).data().toString();
+    }
+    // The display role holds the localized card name; the edit role always carries the
+    // canonical English name needed to look the card up in the database.
+    const QString cardName = current.siblingAtColumn(DeckListModelColumns::CARD_NAME).data(Qt::EditRole).toString();
     const QString cardProviderID = current.siblingAtColumn(DeckListModelColumns::CARD_PROVIDER_ID).data().toString();
     const QModelIndex gparent = current.parent().parent();
 
@@ -426,6 +512,35 @@ void DeckEditorDeckDockWidget::writeBannerCard(int index)
     deckStateManager->setBannerCard(bannerCard);
 }
 
+void DeckEditorDeckDockWidget::openPlaymatSettings()
+{
+    PlaymatInfo current = deckStateManager->getMetadata().playmat;
+
+    PlaymatSettingsDialog dialog(current.card, current.params, this);
+    if (dialog.exec() == QDialog::Accepted) {
+        CardRef newCard = dialog.card();
+        PlaymatParams newParams = dialog.params();
+
+        if (newCard.isEmpty()) {
+            deckStateManager->setPlaymat(PlaymatInfo{});
+        } else {
+            deckStateManager->setPlaymat({newCard, newParams});
+        }
+
+        updatePlaymatLabel();
+    }
+}
+
+void DeckEditorDeckDockWidget::updatePlaymatLabel()
+{
+    CardRef playmat = deckStateManager->getMetadata().playmat.card;
+    if (playmat.isEmpty()) {
+        playmatSettingsButton->setText(tr("Edit Playmat..."));
+    } else {
+        playmatSettingsButton->setText(tr("Edit Playmat (%1)").arg(playmat.name));
+    }
+}
+
 void DeckEditorDeckDockWidget::applyActiveGroupCriteria()
 {
     getModel()->setActiveGroupCriteria(
@@ -460,8 +575,11 @@ void DeckEditorDeckDockWidget::syncBannerCardComboBoxSelectionWithDeck()
 
 void DeckEditorDeckDockWidget::setSelectedIndex(const QModelIndex &newCardIndex, bool preserveWidgetFocus)
 {
+    const QModelIndex proxyIndex = proxy->mapFromSource(newCardIndex);
+
     deckView->clearSelection();
-    deckView->setCurrentIndex(newCardIndex);
+    deckView->setCurrentIndex(proxyIndex);
+    deckView->scrollTo(proxyIndex);
     recursiveExpand(newCardIndex);
 
     if (!preserveWidgetFocus) {
@@ -483,11 +601,12 @@ void DeckEditorDeckDockWidget::syncDisplayWidgetsToModel()
     syncBannerCardComboBoxSelectionWithDeck();
     updateBannerCardComboBox();
     bannerCardComboBox->blockSignals(false);
+    updatePlaymatLabel();
     updateHash();
 
-    formatComboBox->blockSignals(true);
-    formatComboBox->setCurrentIndex(formatComboBox->findData(deckStateManager->getMetadata().gameFormat));
-    formatComboBox->blockSignals(false);
+    syncFormatSelection();
+
+    commanderBracketWidget->setDeck(deckStateManager->getDeckListShared());
 
     deckTagsDisplayWidget->blockSignals(true);
     deckTagsDisplayWidget->setTags(deckStateManager->getMetadata().tags);
@@ -530,7 +649,7 @@ void DeckEditorDeckDockWidget::changeSelectedCard(int changeBy)
     // currentIndex will return an index for the underlying deckModel instead of the proxy.
     // That index will return an invalid index when indexBelow/indexAbove crosses a header node,
     // causing the selection to fail to move down.
-    /// \todo Figure out why it's happening so we can do a proper fix instead of a hacky workaround
+    //! \todo Figure out why it's happening so we can do a proper fix instead of a hacky workaround.
     if (deckViewCurrentIndex.model() == proxy->sourceModel()) {
         deckViewCurrentIndex = proxy->mapFromSource(deckViewCurrentIndex);
     }
@@ -634,8 +753,8 @@ void DeckEditorDeckDockWidget::actSwapSelection()
 {
     auto selectedRows = getSelectedCardNodeSourceIndices();
 
-    // hack to maintain the old reselection behavior when currently selected row of a single-selection gets deleted
-    // TODO: remove the hack and also handle reselection when all rows of a multi-selection gets deleted
+    //! \todo Remove the hack and also handle reselection when all rows of a multi-selection gets deleted.
+    // Hack: maintains old reselection behavior when single-selection row is deleted.
     if (selectedRows.length() == 1) {
         deckView->setSelectionMode(QAbstractItemView::SingleSelection);
     }
@@ -649,22 +768,12 @@ void DeckEditorDeckDockWidget::actSwapSelection()
     update();
 }
 
-void DeckEditorDeckDockWidget::actDecrementCard(const ExactCard &card, QString zoneName)
-{
-    if (!card)
-        return;
-    if (card.getInfo().getIsToken())
-        zoneName = DECK_ZONE_TOKENS;
-
-    deckStateManager->decrementCard(card, zoneName);
-}
-
 void DeckEditorDeckDockWidget::actDecrementSelection()
 {
     auto selectedRows = getSelectedCardNodeSourceIndices();
 
-    // hack to maintain the old reselection behavior when currently selected row of a single-selection gets deleted
-    // TODO: remove the hack and also handle reselection when all rows of a multi-selection gets deleted
+    //! \todo Remove the hack and also handle reselection when all rows of a multi-selection gets deleted.
+    // Hack: maintains old reselection behavior when single-selection row is deleted.
     if (selectedRows.length() == 1) {
         deckView->setSelectionMode(QAbstractItemView::SingleSelection);
     }
@@ -680,8 +789,8 @@ void DeckEditorDeckDockWidget::actRemoveCard()
 {
     auto selectedRows = getSelectedCardNodeSourceIndices();
 
-    // hack to maintain the old reselection behavior when currently selected row of a single-selection gets deleted
-    // TODO: remove the hack and also handle reselection when all rows of a multi-selection gets deleted
+    //! \todo Remove the hack and also handle reselection when all rows of a multi-selection gets deleted.
+    // Hack: maintains old reselection behavior when single-selection row is deleted.
     if (selectedRows.length() == 1) {
         deckView->setSelectionMode(QAbstractItemView::SingleSelection);
     }
@@ -713,12 +822,211 @@ void DeckEditorDeckDockWidget::offsetCountAtIndex(const QModelIndex &idx, bool i
 
 void DeckEditorDeckDockWidget::decklistCustomMenu(QPoint point)
 {
+    const QModelIndex sourceIndex = proxy->mapToSource(deckView->indexAt(point));
+
     QMenu menu;
+
+    const bool isCustomZoneRow = sourceIndex.isValid() && sourceIndex.data(DeckRoles::IsCustomZoneRole).toBool();
+    const bool isBoardZoneRow = sourceIndex.isValid() && !isCustomZoneRow && !sourceIndex.parent().isValid();
+    const bool isCardRow =
+        sourceIndex.isValid() && !isCustomZoneRow && !isBoardZoneRow && !getModel()->hasChildren(sourceIndex);
+
+    // Walk the row up to its top-level node to find the hosting board. Cards in
+    // the tokens board cannot be moved (moveCardToZone bails for it), so the
+    // move menu is skipped for them.
+    QString currentBoardName;
+    QModelIndex board = sourceIndex.parent();
+    while (board.isValid() && board.parent().isValid()) {
+        board = board.parent();
+    }
+    if (board.isValid()) {
+        currentBoardName = board.siblingAtColumn(DeckListModelColumns::CARD_NAME).data(Qt::EditRole).toString();
+    }
+
+    if (isCardRow) {
+        if (currentBoardName != DECK_ZONE_TOKENS) {
+            addMoveToZoneMenu(&menu, sourceIndex, currentBoardName);
+            menu.addSeparator();
+        }
+    } else if (isCustomZoneRow) {
+        const QString zoneName =
+            sourceIndex.siblingAtColumn(DeckListModelColumns::CARD_NAME).data(Qt::EditRole).toString();
+
+        QAction *renameAction = menu.addAction(tr("&Rename zone..."));
+        connect(renameAction, &QAction::triggered, this, [this, zoneName] {
+            // The unchanged name must not validate as a duplicate.
+            const QString newName =
+                DeckZoneDialog::promptForRename(this, zoneName, [this, zoneName](const QString &candidate) {
+                    return candidate == zoneName ? QString() : deckStateManager->validateNewZoneName(candidate);
+                });
+            if (!newName.isEmpty() && newName != zoneName) {
+                deckStateManager->renameCustomZone(zoneName, newName);
+            }
+        });
+
+        QMenu *boardMenu = menu.addMenu(tr("Change &board"));
+        addChangeBoardMenu(boardMenu, zoneName);
+
+        QAction *deleteAction = menu.addAction(tr("&Delete zone"));
+        const bool zoneHasCards = getModel()->hasChildren(sourceIndex);
+        deleteAction->setEnabled(!zoneHasCards);
+        if (zoneHasCards) {
+            deleteAction->setToolTip(tr("Move or remove all cards first."));
+            menu.setToolTipsVisible(true);
+        }
+        connect(deleteAction, &QAction::triggered, this, [this, zoneName] {
+            const auto result =
+                QMessageBox::warning(this, tr("Delete zone"), tr("Delete the zone \"%1\"?").arg(zoneName),
+                                     QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+            if (result == QMessageBox::Yes) {
+                deckStateManager->removeCustomZone(zoneName);
+            }
+        });
+        menu.addSeparator();
+    } else if (isBoardZoneRow) {
+        const QString boardName =
+            sourceIndex.siblingAtColumn(DeckListModelColumns::CARD_NAME).data(Qt::EditRole).toString();
+        // Tokens cannot host custom zones, so only offer the action on real boards.
+        const bool canHostCustomZones =
+            boardName == DECK_ZONE_MAIN || boardName == DECK_ZONE_SIDE || boardName == DECK_ZONE_MAYBEBOARD;
+        if (canHostCustomZones) {
+            addNewZoneAction(&menu, boardName);
+            menu.addSeparator();
+        }
+    } else if (!sourceIndex.isValid()) {
+        addNewZoneAction(&menu);
+        menu.addSeparator();
+    }
 
     QAction *selectPrinting = menu.addAction(tr("Select Printing"));
     connect(selectPrinting, &QAction::triggered, deckEditor, &AbstractTabDeckEditor::showPrintingSelector);
 
     menu.exec(deckView->mapToGlobal(point));
+}
+
+void DeckEditorDeckDockWidget::addMoveToZoneMenu(QMenu *menu,
+                                                 const QModelIndex &sourceCardIndex,
+                                                 const QString &currentBoardName)
+{
+    // The card's current *zone*, derived with the same ancestor walk as
+    // DeckStateManager::moveCardToZone (nearest custom-zone ancestor, else the
+    // top-level board/zone): a card inside "Removal" under the maindeck lives in
+    // "Removal", not "main". Comparing against that instead of the board keeps
+    // the enabled state and the same-zone no-op consistent with the move logic.
+    QString currentZoneName;
+    for (QModelIndex ancestor = sourceCardIndex.parent(); ancestor.isValid(); ancestor = ancestor.parent()) {
+        if (ancestor.data(DeckRoles::IsCustomZoneRole).toBool() || !ancestor.parent().isValid()) {
+            currentZoneName = ancestor.siblingAtColumn(DeckListModelColumns::CARD_NAME).data(Qt::EditRole).toString();
+            break;
+        }
+    }
+
+    const auto addMoveAction = [this, sourceCardIndex](QMenu *targetMenu, const QString &targetZoneName,
+                                                       const QString &label, bool enabled) {
+        QAction *action = targetMenu->addAction(label);
+        action->setEnabled(enabled);
+        if (enabled) {
+            connect(action, &QAction::triggered, this, [this, sourceCardIndex, targetZoneName] {
+                deckStateManager->moveCardToZone(sourceCardIndex, targetZoneName);
+            });
+        }
+    };
+
+    const auto tree = deckStateManager->getDeckListShared()->getTree();
+
+    QMenu *moveMenu = menu->addMenu(tr("Move to &zone"));
+
+    for (const QString &boardName : InnerDecklistNode::boardZoneNames()) {
+        const QString boardLabel = InnerDecklistNode::visibleNameFromName(boardName);
+        const auto customZones = tree->getCustomZones(boardName);
+
+        // Boards with zones nest their children so no two menu entries share a
+        // visible name: "Maindeck ▸ { Maindeck (whole board), Removal, … }".
+        // The board the card already lives on is marked instead of offered.
+        if (!customZones.isEmpty()) {
+            QMenu *boardSubmenu = moveMenu->addMenu(boardLabel);
+            addMoveAction(boardSubmenu, boardName, boardLabel, boardName != currentZoneName);
+            for (const auto *customZone : customZones) {
+                addMoveAction(boardSubmenu, customZone->getName(), customZone->getName(),
+                              customZone->getName() != currentZoneName);
+            }
+        } else {
+            addMoveAction(moveMenu, boardName, boardLabel, boardName != currentZoneName);
+        }
+    }
+
+    moveMenu->addSeparator();
+
+    QAction *newZoneAction = moveMenu->addAction(tr("Create new zone and move &here..."));
+    connect(newZoneAction, &QAction::triggered, this, [this, sourceCardIndex, currentBoardName, currentZoneName] {
+        // Resolve the card's identity before creating the zone:
+        // createNewCustomZone rebuilds the model tree, so sourceCardIndex's
+        // internal pointer is freed by the time it would be used.
+        const QString cardName =
+            sourceCardIndex.siblingAtColumn(DeckListModelColumns::CARD_NAME).data(Qt::EditRole).toString();
+        const QString providerId =
+            sourceCardIndex.siblingAtColumn(DeckListModelColumns::CARD_PROVIDER_ID).data(Qt::DisplayRole).toString();
+        const QString collectorNumber = sourceCardIndex.siblingAtColumn(DeckListModelColumns::CARD_COLLECTOR_NUMBER)
+                                            .data(Qt::DisplayRole)
+                                            .toString();
+
+        const QString zoneName = createNewCustomZone(currentBoardName);
+        if (!zoneName.isEmpty()) {
+            // Re-find the card: the old index is no longer safe since rows were
+            // rebuilt. Mirror DeckStateManager::decrementCard's re-find pattern.
+            const QModelIndex refreshed = getModel()->findCard(cardName, currentZoneName, providerId, collectorNumber);
+            if (refreshed.isValid()) {
+                deckStateManager->moveCardToZone(refreshed, zoneName);
+            }
+        }
+    });
+}
+
+void DeckEditorDeckDockWidget::addChangeBoardMenu(QMenu *menu, const QString &zoneName)
+{
+    const auto tree = deckStateManager->getDeckListShared()->getTree();
+    for (const QString &boardName : InnerDecklistNode::boardZoneNames()) {
+        QAction *action = menu->addAction(InnerDecklistNode::visibleNameFromName(boardName));
+
+        // The board currently holding the zone is marked instead of offered.
+        // Duplicate names cannot come up through the editor, so this doubles as
+        // the uniqueness guard for imported decks.
+        bool holdsTheZone = false;
+        for (const auto *customZone : tree->getCustomZones(boardName)) {
+            if (customZone->getName() == zoneName) {
+                holdsTheZone = true;
+                break;
+            }
+        }
+        if (holdsTheZone) {
+            action->setCheckable(true);
+            action->setChecked(true);
+            continue;
+        }
+
+        connect(action, &QAction::triggered, this,
+                [this, zoneName, boardName] { deckStateManager->moveCustomZone(zoneName, boardName); });
+    }
+}
+
+void DeckEditorDeckDockWidget::addNewZoneAction(QMenu *menu, const QString &initialBoardName)
+{
+    QAction *newZoneAction = menu->addAction(tr("Create &new zone..."));
+    connect(newZoneAction, &QAction::triggered, this,
+            [this, initialBoardName] { createNewCustomZone(initialBoardName); });
+}
+
+QString DeckEditorDeckDockWidget::createNewCustomZone(const QString &initialBoardName)
+{
+    QString boardName;
+    const QString zoneName =
+        DeckZoneDialog::promptForNewZone(this, initialBoardName, &boardName, [this](const QString &candidate) {
+            return deckStateManager->validateNewZoneName(candidate);
+        });
+    if (!zoneName.isEmpty()) {
+        deckStateManager->createCustomZone(boardName, zoneName);
+    }
+    return zoneName;
 }
 
 void DeckEditorDeckDockWidget::refreshShortcuts()
@@ -740,6 +1048,8 @@ void DeckEditorDeckDockWidget::retranslateUi()
     commentsLabel->setText(tr("&Comments:"));
     activeGroupCriteriaLabel->setText(tr("Group by:"));
     formatLabel->setText(tr("Format:"));
+    syncFormatSelection();
+    commanderBracketWidget->retranslateUi();
 
     hashLabel1->setText(tr("Hash:"));
 

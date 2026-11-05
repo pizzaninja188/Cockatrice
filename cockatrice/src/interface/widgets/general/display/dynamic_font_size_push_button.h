@@ -1,15 +1,18 @@
 /**
  * @file dynamic_font_size_push_button.h
  * @ingroup PrintingWidgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef DYNAMICFONTSIZEPUSHBUTTON_H
 #define DYNAMICFONTSIZEPUSHBUTTON_H
 
-#include <QObject>
+#include <QColor>
 #include <QPushButton>
-#include <QWidget>
+#include <QString>
+#include <stddef.h>
+
+class QWidget;
 
 class DynamicFontSizePushButton : public QPushButton
 {

@@ -1,11 +1,13 @@
 #include "debug_pb_message.h"
 
-#include <QList>
 #include <QString>
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/message.h>
+#include <google/protobuf/stubs/common.h>
 #include <google/protobuf/text_format.h>
-#include <libcockatrice/utility/trice_limits.h>
+#include <libcockatrice/utility/string_limits.h>
+#include <string>
+#include <vector>
 
 // FastFieldValuePrinter is added in protobuf 3.4, going out of our way to add the old FieldValuePrinter is not worth it
 #if GOOGLE_PROTOBUF_VERSION > 3004000
@@ -58,8 +60,9 @@ void SafePrinter::applySafePrinter(const ::google::protobuf::Message &message,
             case ::google::protobuf::FieldDescriptor::CPPTYPE_STRING:
                 if (field->name().find("password") != std::string::npos) { // name contains password
                     auto *safePrinter = new SafePrinter();
-                    if (!printer.RegisterFieldValuePrinter(field, safePrinter))
+                    if (!printer.RegisterFieldValuePrinter(field, safePrinter)) {
                         delete safePrinter; // in case safePrinter has not been taken ownership of
+                    }
                 }
                 break;
             case google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE:

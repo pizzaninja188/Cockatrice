@@ -7,6 +7,7 @@ project(Cockatrice VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${
 set(cockatrice_SOURCES
     ${VERSION_STRING_CPP}
     # sort by alphabetical order, so that there is no debate about where to add new sources to the list
+    src/client/network/connection_controller/remote_connection_controller.cpp
     src/client/network/update/client/update_downloader.cpp
     src/client/network/interfaces/deck_stats_interface.cpp
     src/client/network/interfaces/tapped_out_interface.cpp
@@ -14,18 +15,22 @@ set(cockatrice_SOURCES
     src/client/network/update/client/client_update_checker.cpp
     src/client/network/update/client/release_channel.cpp
     src/client/network/update/card_spoiler/spoiler_background_updater.cpp
+    src/client/network/update/card_spoiler/spoiler_file.cpp
+    src/client/crash/crash_reporter.cpp
+    src/client/latency_graph_widget.cpp
+    src/client/latency_status_widget.cpp
+    src/client/lag_monitor.cpp
     src/client/sound_engine.cpp
     src/client/settings/cache_settings.cpp
     src/client/settings/card_counter_settings.cpp
     src/client/settings/shortcut_treeview.cpp
     src/client/settings/shortcuts_settings.cpp
     src/interface/deck_loader/card_node_function.cpp
-    src/interface/deck_loader/deck_file_format.cpp
     src/interface/deck_loader/deck_loader.cpp
-    src/interface/deck_loader/loaded_deck.cpp
     src/interface/widgets/dialogs/dlg_connect.cpp
     src/interface/widgets/dialogs/dlg_convert_deck_to_cod_format.cpp
     src/interface/widgets/dialogs/dlg_create_game.cpp
+    src/interface/widgets/dialogs/dlg_crash_report.cpp
     src/interface/widgets/dialogs/dlg_default_tags_editor.cpp
     src/interface/widgets/dialogs/dlg_edit_avatar.cpp
     src/interface/widgets/dialogs/dlg_edit_password.cpp
@@ -35,79 +40,95 @@ set(cockatrice_SOURCES
     src/interface/widgets/dialogs/dlg_forgot_password_challenge.cpp
     src/interface/widgets/dialogs/dlg_forgot_password_request.cpp
     src/interface/widgets/dialogs/dlg_forgot_password_reset.cpp
+    src/interface/widgets/dialogs/dlg_invite_to_game.cpp
     src/interface/widgets/dialogs/dlg_load_deck.cpp
     src/interface/widgets/dialogs/dlg_load_deck_from_clipboard.cpp
     src/interface/widgets/dialogs/dlg_load_deck_from_website.cpp
     src/interface/widgets/dialogs/dlg_load_remote_deck.cpp
     src/interface/widgets/dialogs/dlg_local_game_options.cpp
+    src/interface/widgets/dialogs/dlg_login_prompt.cpp
     src/interface/widgets/dialogs/dlg_manage_sets.cpp
+    src/interface/widgets/dialogs/dlg_my_reports.cpp
     src/interface/widgets/dialogs/dlg_register.cpp
+    src/interface/widgets/dialogs/dlg_report_user.cpp
     src/interface/widgets/dialogs/dlg_select_set_for_cards.cpp
+    src/interface/widgets/dialogs/dlg_share_deck.cpp
+    src/interface/widgets/dialogs/dlg_shared_decks_preview.cpp
     src/interface/widgets/dialogs/dlg_settings.cpp
     src/interface/widgets/dialogs/dlg_startup_card_check.cpp
     src/interface/widgets/dialogs/dlg_tip_of_the_day.cpp
+    src/interface/widgets/dialogs/dlg_turn_order.cpp
     src/interface/widgets/dialogs/dlg_update.cpp
     src/interface/widgets/dialogs/dlg_view_log.cpp
     src/interface/widgets/dialogs/override_printing_warning.cpp
+    src/interface/widgets/dialogs/path_safety_warning.cpp
+    src/interface/widgets/dialogs/settings_view.cpp
     src/interface/widgets/dialogs/tip_of_the_day.cpp
+    src/interface/widgets/deck_share/deck_share_utils.cpp
+    src/interface/widgets/deck_share/shared_deck_preview_widget.cpp
+    src/interface/widgets/deck_share/share_bar_widget.cpp
     src/filters/deck_filter_string.cpp
     src/filters/filter_builder.cpp
     src/filters/filter_tree_model.cpp
     src/filters/syntax_help.cpp
-    src/game/abstract_game.cpp
-    src/game/board/abstract_card_drag_item.cpp
-    src/game/board/abstract_card_item.cpp
-    src/game/board/abstract_counter.cpp
-    src/game/board/arrow_item.cpp
-    src/game/board/arrow_target.cpp
-    src/game/board/card_drag_item.cpp
-    src/game/board/card_item.cpp
-    src/game/board/card_list.cpp
-    src/game/board/counter_general.cpp
-    src/game/board/translate_counter_name.cpp
-    src/game/deckview/deck_view.cpp
-    src/game/deckview/deck_view_container.cpp
-    src/game/deckview/tabbed_deck_view_container.cpp
-    src/game/dialogs/dlg_create_token.cpp
-    src/game/dialogs/dlg_move_top_cards_until.cpp
-    src/game/dialogs/dlg_roll_dice.cpp
-    src/game/game.cpp
-    src/game/game_event_handler.cpp
-    src/game/game_meta_info.cpp
+    src/game_graphics/board/abstract_card_drag_item.cpp
+    src/game_graphics/board/abstract_card_item.cpp
+    src/game_graphics/board/abstract_counter.cpp
+    src/game_graphics/board/arrow_item.cpp
+    src/game_graphics/board/arrow_registry.cpp
+    src/game_graphics/board/arrow_target.cpp
+    src/game_graphics/board/card_drag_item.cpp
+    src/game_graphics/board/card_item.cpp
+    src/game_graphics/board/counter_general.cpp
+    src/game_graphics/board/translate_counter_name.cpp
+    src/game_graphics/deckview/deck_view.cpp
+    src/game_graphics/deckview/deck_view_container.cpp
+    src/game_graphics/deckview/tabbed_deck_view_container.cpp
+    src/game_graphics/dialogs/dlg_annotation.cpp
+    src/game_graphics/dialogs/dlg_create_token.cpp
+    src/game_graphics/dialogs/dlg_move_top_cards_until.cpp
+    src/game_graphics/dialogs/dlg_roll_dice.cpp
+    src/game_graphics/game_scene.cpp
+    src/game_graphics/game_view.cpp
+    src/game_graphics/hand_counter.cpp
+    src/game_graphics/log/message_log_widget.cpp
+    src/game_graphics/phases_toolbar.cpp
+    src/game_graphics/player/menu/card_menu.cpp
+    src/game_graphics/player/menu/custom_zone_menu.cpp
+    src/game_graphics/player/menu/grave_menu.cpp
+    src/game_graphics/player/menu/hand_menu.cpp
+    src/game_graphics/player/menu/library_menu.cpp
+    src/game_graphics/player/menu/move_menu.cpp
+    src/game_graphics/player/menu/player_menu.cpp
+    src/game_graphics/player/menu/pt_menu.cpp
+    src/game_graphics/player/menu/rfg_menu.cpp
+    src/game_graphics/player/menu/say_menu.cpp
+    src/game_graphics/player/menu/sideboard_menu.cpp
+    src/game_graphics/player/menu/tally_menu.cpp
+    src/game_graphics/player/menu/utility_menu.cpp
+    src/game_graphics/tally/stats_tally.cpp
+    src/game_graphics/tally/subtype_tally.cpp
+    src/game_graphics/tally/tally.cpp
+    src/game_graphics/player/player_area.cpp
+    src/game_graphics/player/player_dialogs.cpp
+    src/game_graphics/player/player_graphics_item.cpp
+    src/game_graphics/player/player_list_widget.cpp
+    src/game_graphics/player/player_target.cpp
+    src/game_graphics/zones/card_zone.cpp
+    src/game_graphics/zones/hand_zone.cpp
+    src/game_graphics/zones/pile_zone.cpp
+    src/game_graphics/zones/select_zone.cpp
+    src/game_graphics/zones/stack_zone.cpp
+    src/game_graphics/zones/table_zone.cpp
+    src/game_graphics/zones/view_zone.cpp
+    src/game_graphics/zones/view_zone_widget.cpp
     src/game/prompt/game_prompt_widget.cpp
     src/game/ruled/ruled_large_choice_picker.cpp
-    src/game/game_scene.cpp
-    src/game/game_state.cpp
-    src/game/game_view.cpp
-    src/game/hand_counter.cpp
-    src/game/log/message_log_widget.cpp
-    src/game/phase.cpp
-    src/game/phases_toolbar.cpp
-    src/game/player/menu/card_menu.cpp
-    src/game/player/menu/custom_zone_menu.cpp
-    src/game/player/menu/grave_menu.cpp
-    src/game/player/menu/hand_menu.cpp
-    src/game/player/menu/library_menu.cpp
-    src/game/player/menu/move_menu.cpp
-    src/game/player/menu/player_menu.cpp
-    src/game/player/menu/pt_menu.cpp
-    src/game/player/menu/rfg_menu.cpp
-    src/game/player/menu/say_menu.cpp
-    src/game/player/menu/sideboard_menu.cpp
-    src/game/player/menu/utility_menu.cpp
-    src/game/player/player.cpp
-    src/game/player/player_actions.cpp
-    src/game/player/player_area.cpp
-    src/game/player/player_event_handler.cpp
-    src/game/player/player_graphics_item.cpp
-    src/game/player/player_info.cpp
-    src/game/player/player_list_widget.cpp
-    src/game/player/player_manager.cpp
-    src/game/player/player_target.cpp
-    src/game/replay.cpp
+    src/game/ruled/ruled_client_ui.cpp
+    src/game/ruled/ruled_game_controller.cpp
+    src/game/ruled/ruled_player_actions.cpp
     src/game/ruled/ruled_actions.cpp
     src/game/ruled/ruled_card_popup.cpp
-    src/game/ruled/ruled_public_zone_order.cpp
     src/game/ruled/ruled_preparation_display.cpp
     src/game/ruled/ruled_autopilot.cpp
     src/game/ruled/ruled_reveal_state.cpp
@@ -139,21 +160,13 @@ set(cockatrice_SOURCES
     src/game/ruled/ruled_restricted_mana_display.cpp
     src/game/ruled/ruled_target_ui.cpp
     src/game/ruled/ruled_token_display.cpp
-    src/game/zones/card_zone.cpp
-    src/game/zones/hand_zone.cpp
-    src/game/zones/logic/card_zone_logic.cpp
-    src/game/zones/logic/hand_zone_logic.cpp
-    src/game/zones/logic/pile_zone_logic.cpp
-    src/game/zones/logic/stack_zone_logic.cpp
-    src/game/zones/logic/table_zone_logic.cpp
-    src/game/zones/logic/view_zone_logic.cpp
-    src/game/zones/pile_zone.cpp
-    src/game/zones/select_zone.cpp
-    src/game/zones/stack_zone.cpp
-    src/game/zones/table_zone.cpp
-    src/game/zones/view_zone.cpp
-    src/game/zones/view_zone_widget.cpp
     src/game_graphics/board/abstract_graphics_item.cpp
+    src/interface/at_risk_data_warning.cpp
+    src/interface/at_risk_data_warning.h
+    src/interface/card_database_update/card_database_update_status_bar.cpp
+    src/interface/card_database_update/card_database_update_status_bar.h
+    src/interface/card_database_update/card_update_progress.cpp
+    src/interface/card_database_update/card_update_progress.h
     src/interface/card_picture_loader/card_picture_loader.cpp
     src/interface/card_picture_loader/card_picture_loader_local.cpp
     src/interface/card_picture_loader/card_picture_loader_request_status_display_widget.cpp
@@ -161,14 +174,35 @@ set(cockatrice_SOURCES
     src/interface/card_picture_loader/card_picture_loader_worker.cpp
     src/interface/card_picture_loader/card_picture_loader_worker_work.cpp
     src/interface/card_picture_loader/card_picture_to_load.cpp
+    src/interface/intents/intent.cpp
+    src/interface/intents/intent.h
+    src/interface/intents/intent_open_local_deck.cpp
+    src/interface/intents/intent_open_local_deck.h
+    src/interface/intents/intent_wait_for_database_load.cpp
+    src/interface/intents/intent_wait_for_database_load.h
     src/interface/layouts/flow_layout.cpp
     src/interface/layouts/overlap_layout.cpp
+    src/interface/widgets/utility/card_completer_delegate.cpp
+    src/interface/widgets/utility/card_completer_styler.cpp
+    src/interface/widgets/utility/completer_utils.cpp
     src/interface/widgets/utility/line_edit_completer.cpp
+    src/interface/widgets/utility/reversed_completer_model.cpp
     src/interface/pixel_map_generator.cpp
+    src/interface/theme_config.cpp
+    src/interface/theme_icon.cpp
     src/interface/theme_manager.cpp
+    src/interface/palette_editor/color_button.cpp
+    src/interface/palette_editor/palette_generator.cpp
+    src/interface/palette_editor/quick_setup_panel.cpp
+    src/interface/palette_editor/palette_grid_widget.cpp
+    src/interface/palette_editor/font_grid_widget.cpp
+    src/interface/palette_editor/palette_editor_dialog.cpp
     src/interface/widgets/cards/additional_info/color_identity_widget.cpp
+    src/interface/widgets/cards/additional_info/deck_color_identity.cpp
     src/interface/widgets/cards/additional_info/mana_cost_widget.cpp
     src/interface/widgets/cards/additional_info/mana_symbol_widget.cpp
+    src/interface/widgets/cards/art_crop_attribution.cpp
+    src/interface/widgets/cards/card_art_utils.cpp
     src/interface/widgets/cards/card_group_display_widgets/card_group_display_widget.cpp
     src/interface/widgets/cards/card_group_display_widgets/flat_card_group_display_widget.cpp
     src/interface/widgets/cards/card_group_display_widgets/overlapped_card_group_display_widget.cpp
@@ -179,6 +213,7 @@ set(cockatrice_SOURCES
     src/interface/widgets/cards/card_info_picture_widget.cpp
     src/interface/widgets/cards/card_info_picture_with_text_overlay_widget.cpp
     src/interface/widgets/cards/card_info_text_widget.cpp
+    src/interface/widgets/cards/card_picture_delegate.cpp
     src/interface/widgets/cards/card_size_widget.cpp
     src/interface/widgets/cards/deck_card_zone_display_widget.cpp
     src/interface/widgets/cards/deck_preview_card_picture_widget.cpp
@@ -207,6 +242,7 @@ set(cockatrice_SOURCES
     src/interface/widgets/deck_analytics/analyzer_modules/mana_distribution/mana_distribution_single_display_widget.cpp
     src/interface/widgets/deck_analytics/analyzer_modules/mana_curve/mana_curve_total_widget.cpp
     src/interface/widgets/deck_analytics/analyzer_modules/mana_curve/mana_curve_category_widget.cpp
+    src/interface/widgets/deck_editor/card_database_view.cpp
     src/interface/widgets/deck_editor/deck_list_history_manager_widget.cpp
     src/interface/widgets/deck_editor/deck_editor_card_database_dock_widget.cpp
     src/interface/widgets/deck_editor/deck_editor_card_info_dock_widget.cpp
@@ -216,6 +252,7 @@ set(cockatrice_SOURCES
     src/interface/widgets/deck_editor/deck_editor_printing_selector_dock_widget.cpp
     src/interface/widgets/deck_editor/deck_list_style_proxy.cpp
     src/interface/widgets/deck_editor/deck_state_manager.cpp
+    src/interface/widgets/deck_editor/deck_zone_dialog.cpp
     src/interface/widgets/deck_editor/printing_disabled_info_widget.cpp
     src/interface/widgets/general/background_sources.cpp
     src/interface/widgets/general/display/background_plate_widget.cpp
@@ -232,6 +269,7 @@ set(cockatrice_SOURCES
     src/interface/widgets/general/display/charts/bars/segmented_bar_widget.cpp
     src/interface/widgets/general/display/charts/pies/color_pie.cpp
     src/interface/widgets/general/home_styled_button.cpp
+    src/interface/widgets/general/home_tab_button_color.h
     src/interface/widgets/general/home_widget.cpp
     src/interface/widgets/general/layout_containers/flow_widget.cpp
     src/interface/widgets/general/layout_containers/overlap_control_widget.cpp
@@ -247,27 +285,57 @@ set(cockatrice_SOURCES
     src/interface/widgets/printing_selector/printing_selector_card_selection_widget.cpp
     src/interface/widgets/printing_selector/printing_selector_card_sorting_widget.cpp
     src/interface/widgets/printing_selector/set_name_and_collectors_number_display_widget.cpp
+    src/interface/widgets/playmat/playmat_collection_dialog.cpp
+    src/interface/widgets/playmat/playmat_collection_dialog.h
+    src/interface/widgets/playmat/playmat_preview_widget.cpp
+    src/interface/widgets/playmat/playmat_settings_dialog.cpp
     src/interface/widgets/quick_settings/settings_button_widget.cpp
     src/interface/widgets/quick_settings/settings_popup_widget.cpp
+    src/interface/widgets/replay/replay_event_index.cpp
+    src/interface/widgets/replay/replay_event_sidebar.cpp
     src/interface/widgets/replay/replay_manager.cpp
+    src/interface/widgets/replay/replay_quick_settings_widget.cpp
     src/interface/widgets/replay/replay_timeline_widget.cpp
+    src/interface/widgets/replay/replay_widget.cpp
     src/interface/widgets/server/chat_view/chat_view.cpp
+    src/interface/widgets/server/game_filter_configs.cpp
+    src/interface/widgets/server/game_link.cpp
     src/interface/widgets/server/game_selector.cpp
     src/interface/widgets/server/game_selector_quick_filter_toolbar.cpp
     src/interface/widgets/server/games_model.cpp
     src/interface/widgets/server/handle_public_servers.cpp
     src/interface/widgets/server/remote/remote_decklist_tree_widget.cpp
     src/interface/widgets/server/remote/remote_replay_list_tree_widget.cpp
+    src/interface/widgets/server/user/user_avatar_provider.cpp
+    src/interface/widgets/server/user/user_card_art_provider.cpp
+    src/interface/widgets/server/user/user_card_settings_dialog.cpp
     src/interface/widgets/server/user/user_context_menu.cpp
     src/interface/widgets/server/user/user_info_box.cpp
     src/interface/widgets/server/user/user_info_connection.cpp
+    src/interface/widgets/server/user/user_list_dialog.cpp
     src/interface/widgets/server/user/user_list_manager.cpp
+    src/interface/widgets/server/user/user_list_painter.cpp
+    src/interface/widgets/server/user/user_list_panel_widget.cpp
     src/interface/widgets/server/user/user_list_widget.cpp
+    src/interface/widgets/settings_page/abstract_settings_page.cpp
+    src/interface/widgets/settings_page/appearance_settings_page.cpp
+    src/interface/widgets/settings_page/deck_editor_settings_page.cpp
+    src/interface/widgets/settings_page/general_settings_page.cpp
+    src/interface/widgets/settings_page/messages_settings_page.cpp
+    src/interface/widgets/settings_page/settings_search_delegate.cpp
+    src/interface/widgets/settings_page/settings_search_model.cpp
+    src/interface/widgets/settings_page/shortcut_settings_page.cpp
+    src/interface/widgets/settings_page/sound_settings_page.cpp
+    src/interface/widgets/settings_page/storage_settings_page.cpp
+    src/interface/widgets/settings_page/user_interface_settings_page.cpp
     src/interface/widgets/utility/custom_line_edit.cpp
     src/interface/widgets/utility/get_text_with_max.cpp
+    src/interface/widgets/utility/report_utils.cpp
+    src/interface/widgets/utility/report_utils.h
     src/interface/widgets/utility/sequence_edit.cpp
     src/interface/widgets/utility/visibility_change_listener.cpp
     src/interface/widgets/utility/visibility_change_listener.h
+    src/interface/widgets/visual_database_display/card_database_visual_view.cpp
     src/interface/widgets/visual_database_display/visual_database_display_color_filter_widget.cpp
     src/interface/widgets/visual_database_display/visual_database_display_filter_save_load_widget.cpp
     src/interface/widgets/visual_database_display/visual_database_display_filter_toolbar_widget.cpp
@@ -289,14 +357,20 @@ set(cockatrice_SOURCES
     src/interface/widgets/visual_deck_storage/deck_preview/deck_preview_tag_display_widget.cpp
     src/interface/widgets/visual_deck_storage/deck_preview/deck_preview_tag_item_widget.cpp
     src/interface/widgets/visual_deck_storage/deck_preview/deck_preview_widget.cpp
+    src/interface/widgets/visual_deck_storage/deck_preview/public_deck_preview_widget.cpp
+    src/interface/widgets/visual_deck_storage/remote_public_decks_model.cpp
     src/interface/widgets/visual_deck_storage/visual_deck_storage_folder_display_widget.cpp
+    src/interface/widgets/visual_deck_storage/visual_deck_storage_model.cpp
     src/interface/widgets/visual_deck_storage/visual_deck_storage_quick_settings_widget.cpp
     src/interface/widgets/visual_deck_storage/visual_deck_storage_search_widget.cpp
+    src/interface/widgets/visual_deck_storage/visual_deck_storage_sort_filter_proxy_model.cpp
     src/interface/widgets/visual_deck_storage/visual_deck_storage_sort_widget.cpp
     src/interface/widgets/visual_deck_storage/visual_deck_storage_tag_filter_widget.cpp
     src/interface/widgets/visual_deck_storage/visual_deck_storage_widget.cpp
     src/interface/window_main.cpp
+    src/installer_close_server.cpp
     src/main.cpp
+    src/single_instance_manager.cpp
     src/interface/widgets/tabs/abstract_tab_deck_editor.cpp
     src/interface/widgets/tabs/api/archidekt/tab_archidekt.cpp
     src/interface/widgets/tabs/api/archidekt/api_response/archidekt_deck_listing_api_response.cpp
@@ -312,6 +386,13 @@ set(cockatrice_SOURCES
     src/interface/widgets/tabs/api/archidekt/display/archidekt_api_response_deck_entry_display_widget.cpp
     src/interface/widgets/tabs/api/archidekt/display/archidekt_api_response_deck_listings_display_widget.cpp
     src/interface/widgets/tabs/api/archidekt/display/archidekt_deck_preview_image_display_widget.cpp
+    src/interface/widgets/tabs/api/commander_spellbook/api_response/card_in_deck_request.cpp
+    src/interface/widgets/tabs/api/commander_spellbook/api_response/commander_spellbook_deck_request.cpp
+    src/interface/widgets/tabs/api/commander_spellbook/api_response/commander_spellbook_card_result.cpp
+    src/interface/widgets/tabs/api/commander_spellbook/api_response/commander_spellbook_variant_result.cpp
+    src/interface/widgets/tabs/api/commander_spellbook/api_response/commander_spellbook_estimate_bracket_result.cpp
+    src/interface/widgets/tabs/api/commander_spellbook/commander_spellbook_bracket_explainer.cpp
+    src/interface/widgets/tabs/api/commander_spellbook/commander_spellbook_api_accessor.cpp
     src/interface/widgets/tabs/api/edhrec/api_response/archidekt_links/edhrec_api_response_archidekt_links.cpp
     src/interface/widgets/tabs/api/edhrec/api_response/average_deck/edhrec_average_deck_api_response.cpp
     src/interface/widgets/tabs/api/edhrec/api_response/average_deck/edhrec_deck_api_response.cpp
@@ -341,12 +422,17 @@ set(cockatrice_SOURCES
     src/interface/widgets/tabs/tab.cpp
     src/interface/widgets/tabs/tab_account.cpp
     src/interface/widgets/tabs/tab_admin.cpp
+    src/interface/widgets/tabs/tab_card_art_rules.cpp
     src/interface/widgets/tabs/tab_deck_editor.cpp
     src/interface/widgets/tabs/tab_deck_storage.cpp
+    src/interface/widgets/tabs/tab_developer.cpp
     src/interface/widgets/tabs/tab_game.cpp
     src/interface/widgets/tabs/tab_home.cpp
     src/interface/widgets/tabs/tab_logs.cpp
     src/interface/widgets/tabs/tab_message.cpp
+    src/interface/widgets/tabs/tab_moderation.cpp
+    src/interface/widgets/tabs/tab_public_decks.cpp
+    src/interface/widgets/tabs/tab_report.cpp
     src/interface/widgets/tabs/tab_replays.cpp
     src/interface/widgets/tabs/tab_room.cpp
     src/interface/widgets/tabs/tab_server.cpp
@@ -357,10 +443,60 @@ set(cockatrice_SOURCES
     src/interface/widgets/tabs/visual_deck_storage/tab_deck_storage_visual.cpp
     src/interface/key_signals.cpp
     src/interface/logger.cpp
+    src/interface/widgets/tabs/api/commander_spellbook/commander_bracket_service.cpp
+    src/interface/widgets/tabs/api/commander_spellbook/commander_bracket_widget.cpp
+    src/interface/widgets/tabs/api/commander_spellbook/handle_commander_brackets.cpp
+    src/interface/widgets/onboarding/banner_shader_config.h
+    src/interface/widgets/onboarding/brand_colors.h
+    src/interface/widgets/onboarding/first_run_wizard.cpp
+    src/interface/widgets/onboarding/first_run_wizard.h
+    src/interface/widgets/onboarding/first_run_wizard_page.cpp
+    src/interface/widgets/onboarding/first_run_wizard_page.h
+    src/interface/widgets/onboarding/pages/account_setup_page.cpp
+    src/interface/widgets/onboarding/pages/account_setup_page.h
+    src/interface/widgets/onboarding/pages/card_database_setup_page.cpp
+    src/interface/widgets/onboarding/pages/card_database_setup_page.h
+    src/interface/widgets/onboarding/pages/finish_page.cpp
+    src/interface/widgets/onboarding/pages/finish_page.h
+    src/interface/widgets/onboarding/pages/preferences_setup_page.cpp
+    src/interface/widgets/onboarding/pages/preferences_setup_page.h
+    src/interface/widgets/onboarding/pages/theme_setup_page.cpp
+    src/interface/widgets/onboarding/pages/theme_setup_page.h
+    src/interface/widgets/onboarding/pages/welcome_page.cpp
+    src/interface/widgets/onboarding/pages/welcome_page.h
+    src/interface/widgets/onboarding/shader_banner_widget.cpp
+    src/interface/widgets/onboarding/shader_banner_widget.h
+    src/interface/widgets/onboarding/step_indicator_widget.cpp
+    src/interface/widgets/onboarding/step_indicator_widget.h
     src/interface/widgets/tabs/api/edhrec/display/commander/edhrec_commander_api_response_bracket_navigation_widget.cpp
     src/interface/widgets/tabs/api/edhrec/display/commander/edhrec_commander_api_response_bracket_navigation_widget.h
     src/interface/widgets/tabs/api/edhrec/display/commander/edhrec_commander_api_response_budget_navigation_widget.cpp
     src/interface/widgets/tabs/api/edhrec/display/commander/edhrec_commander_api_response_budget_navigation_widget.h
+    src/interface/widgets/utility/compact_push_button.cpp
+    src/interface/widgets/utility/compact_push_button.h
+    src/installer_close_server.h
+    src/single_instance_manager.h
+    src/client/url_scheme_event_filter.h
+    src/interface/intents/intent_connect_to_server.cpp
+    src/interface/intents/intent_connect_to_server.h
+    src/interface/intents/intent_disconnect_from_server.cpp
+    src/interface/intents/intent_disconnect_from_server.h
+    src/interface/intents/intent_join_server_game.cpp
+    src/interface/intents/intent_join_server_game.h
+    src/interface/intents/intent_join_server_room.cpp
+    src/interface/intents/intent_join_server_room.h
+    src/interface/intents/intent_login.cpp
+    src/interface/intents/intent_login.h
+    src/interface/intents/intent_open_server_room_by_name.cpp
+    src/interface/intents/intent_open_server_room_by_name.h
+    src/interface/intents/intent_open_shared_deck.cpp
+    src/interface/intents/intent_open_shared_deck.h
+    src/interface/intents/url_parser.cpp
+    src/interface/intents/url_parser.h
+    src/interface/widgets/server/user/user_games_model.cpp
+    src/interface/widgets/server/user/user_games_model.h
+    src/interface/widgets/server/user/user_info_popup.cpp
+    src/interface/widgets/server/user/user_info_popup.h
 )
 
 add_subdirectory(sounds)
@@ -402,11 +538,15 @@ if(APPLE)
   set(cockatrice_SOURCES ${cockatrice_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/resources/appicon.icns)
 endif(APPLE)
 
-if(Qt6_FOUND)
-  qt6_add_resources(cockatrice_RESOURCES_RCC ${cockatrice_RESOURCES})
-elseif(Qt5_FOUND)
-  qt5_add_resources(cockatrice_RESOURCES_RCC ${cockatrice_RESOURCES})
+# The fonts and card artwork produce a large C++ byte array with qt_add_resources.
+# Embed the data in the compiled resource object instead, keeping compiler memory
+# independent of that payload. Qt's two-pass resource build is unsupported on iOS.
+if(IOS)
+  qt_add_resources(cockatrice_RESOURCES_RCC ${cockatrice_RESOURCES})
+else()
+  qt_add_big_resources(cockatrice_RESOURCES_RCC ${cockatrice_RESOURCES})
 endif()
+set_source_files_properties(${cockatrice_RESOURCES} PROPERTIES SKIP_AUTORCC ON)
 
 # Declare path variables
 set(ICONDIR
@@ -418,70 +558,73 @@ set(DESKTOPDIR
     CACHE STRING "desktop file destination"
 )
 
+set(MIMEDIR
+    share/mime/packages
+    CACHE STRING "mime file destination"
+)
+
 set(COCKATRICE_MAC_QM_INSTALL_DIR "cockatrice.app/Contents/Resources/translations")
 set(COCKATRICE_UNIX_QM_INSTALL_DIR "share/cockatrice/translations")
 set(COCKATRICE_WIN32_QM_INSTALL_DIR "translations")
 
-if(Qt6_FOUND)
-  qt6_add_executable(
-    cockatrice
-    WIN32
-    MACOSX_BUNDLE
-    ${cockatrice_SOURCES}
-    ${cockatrice_RESOURCES_RCC}
-    ${cockatrice_MOC_SRCS}
-    MANUAL_FINALIZATION
-  )
-elseif(Qt5_FOUND)
-  # Qt5 Translations need to be linked at executable creation time
-  if(Qt5LinguistTools_FOUND)
-    if(UPDATE_TRANSLATIONS)
-      qt5_create_translation(cockatrice_QM ${translate_SRCS} ${cockatrice_TS})
-    else()
-      qt5_add_translation(cockatrice_QM ${cockatrice_TS})
-    endif()
-  endif()
-  add_executable(
-    cockatrice WIN32 MACOSX_BUNDLE ${cockatrice_MOC_SRCS} ${cockatrice_QM} ${cockatrice_RESOURCES_RCC}
-                                   ${cockatrice_SOURCES}
-  )
-  if(UNIX)
-    if(APPLE)
-      install(FILES ${cockatrice_QM} DESTINATION ${COCKATRICE_MAC_QM_INSTALL_DIR})
-    else()
-      install(FILES ${cockatrice_QM} DESTINATION ${COCKATRICE_UNIX_QM_INSTALL_DIR})
-    endif()
-  elseif(WIN32)
-    install(FILES ${cockatrice_QM} DESTINATION ${COCKATRICE_WIN32_QM_INSTALL_DIR})
-  endif()
-endif()
+qt_add_executable(
+  cockatrice
+  WIN32
+  MACOSX_BUNDLE
+  ${cockatrice_SOURCES}
+  ${cockatrice_RESOURCES}
+  ${cockatrice_RESOURCES_RCC}
+  ${cockatrice_MOC_SRCS}
+  MANUAL_FINALIZATION
+)
 
-if(Qt5_FOUND)
-  target_link_libraries(
-    cockatrice
-    libcockatrice_card
-    libcockatrice_deck_list
-    libcockatrice_filters
-    libcockatrice_utility
-    libcockatrice_network
-    libcockatrice_models
-    libcockatrice_rng
-    libcockatrice_settings
-    ${COCKATRICE_QT_MODULES}
-  )
-else()
-  target_link_libraries(
-    cockatrice
-    PUBLIC libcockatrice_card
-           libcockatrice_deck_list
-           libcockatrice_filters
-           libcockatrice_utility
-           libcockatrice_network
-           libcockatrice_models
-           libcockatrice_rng
-           libcockatrice_settings
-           ${COCKATRICE_QT_MODULES}
-  )
+target_precompile_headers(cockatrice PRIVATE "${CMAKE_SOURCE_DIR}/cmake/pch/qtwidgets_pch.h")
+
+qt_add_shaders(
+  cockatrice
+  "onboarding_shaders"
+  PREFIX
+  "/onboarding/shaders"
+  BASE
+  "src/interface/widgets/onboarding/shaders"
+  FILES
+  src/interface/widgets/onboarding/shaders/brand_banner.frag
+  src/interface/widgets/onboarding/shaders/brand_plate.frag
+)
+
+qt_add_resources(
+  cockatrice
+  "onboarding_qml"
+  PREFIX
+  "/onboarding/qml"
+  BASE
+  "src/interface/widgets/onboarding/qml"
+  FILES
+  src/interface/widgets/onboarding/qml/BrandBanner.qml
+)
+
+target_link_libraries(
+  cockatrice
+  PUBLIC libcockatrice_card
+         libcockatrice_deck_list
+         libcockatrice_filters
+         libcockatrice_game
+         libcockatrice_utility
+         libcockatrice_network
+         libcockatrice_models
+         libcockatrice_rng
+         libcockatrice_settings
+         ${COCKATRICE_QT_MODULES}
+)
+
+cockatrice_target_enable_crash_reporting(cockatrice)
+
+if(WITH_GUI_TEST)
+  # These two translate between XML test files and the QtTesting event pipeline;
+  # they need the QtTesting headers, so they only exist with the harness.
+  target_sources(cockatrice PRIVATE src/game_graphics/pq_cockatrice_event_player.cpp src/interface/recording.cpp)
+  target_link_libraries(cockatrice PRIVATE QtTesting)
+  target_compile_definitions(cockatrice PRIVATE WITH_GUI_TEST)
 endif()
 
 include("${CMAKE_SOURCE_DIR}/cmake/DeployQtRuntime.cmake")
@@ -505,6 +648,23 @@ if(UNIX)
     install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/resources/cockatrice.png DESTINATION ${ICONDIR}/hicolor/48x48/apps)
     install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/resources/cockatrice.svg DESTINATION ${ICONDIR}/hicolor/scalable/apps)
     install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cockatrice.desktop DESTINATION ${DESKTOPDIR})
+    install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cockatrice-cod.xml DESTINATION ${MIMEDIR})
+
+    # Refresh the freedesktop databases so the file associations and scheme
+    # handler register without requiring the user to run them manually. The
+    # tools may be missing on minimal systems; that is fine, packaging systems
+    # usually refresh these databases through their own triggers.
+    find_program(UPDATE_MIME_DATABASE update-mime-database)
+    if(UPDATE_MIME_DATABASE)
+      install(CODE "execute_process(COMMAND \"${UPDATE_MIME_DATABASE}\" \"${CMAKE_INSTALL_PREFIX}/share/mime\")")
+    endif()
+
+    find_program(UPDATE_DESKTOP_DATABASE update-desktop-database)
+    if(UPDATE_DESKTOP_DATABASE)
+      install(
+        CODE "execute_process(COMMAND \"${UPDATE_DESKTOP_DATABASE}\" \"${CMAKE_INSTALL_PREFIX}/share/applications\")"
+      )
+    endif()
   endif()
 elseif(WIN32)
   install(TARGETS cockatrice RUNTIME DESTINATION ./)
@@ -515,7 +675,7 @@ if(APPLE)
   set(plugin_dest_dir cockatrice.app/Contents/Plugins)
   set(qtconf_dest_dir cockatrice.app/Contents/Resources)
 
-  # Qt plugins: audio (Qt5), iconengines, imageformats, multimedia (Qt6), platforms, printsupport (Qt5), styles, tls (Qt6)
+  # Qt plugins: audio, iconengines, imageformats, multimedia, platforms, printsupport, styles, tls
   install(
     DIRECTORY "${QT_PLUGINS_DIR}/"
     DESTINATION ${plugin_dest_dir}
@@ -568,20 +728,56 @@ if(WIN32)
   set(qtconf_dest_dir .)
 
   install(
-    DIRECTORY "${CMAKE_BINARY_DIR}/${PROJECT_NAME}/${CMAKE_BUILD_TYPE}/"
+    DIRECTORY "$<TARGET_FILE_DIR:cockatrice>/"
     DESTINATION ./
     FILES_MATCHING
     PATTERN "*.dll"
+    PATTERN "*.pdb" EXCLUDE
+    PATTERN "*.dir*" EXCLUDE
+    PATTERN "*_autogen*" EXCLUDE
+    PATTERN "*.tlog*" EXCLUDE
+    PATTERN "CMakeFiles*" EXCLUDE
+    PATTERN "x64*" EXCLUDE
+    PATTERN ".qt*" EXCLUDE
+    PATTERN ".qsb*" EXCLUDE
+    PATTERN ".lupdate*" EXCLUDE
   )
+
+  # fixup_bundle further down copies only the DLLs it can find in Cockatrice.exe's
+  # import table, and the glob above only sees DLLs that were already copied next
+  # to the executable. Qt6::Concurrent is linked but never imported - QtConcurrent::run
+  # and QFutureWatcher are header-only in Qt 6 - so neither step ships
+  # Qt6Concurrent.dll, even though required-runtime.txt lists it and the
+  # Windows package check then fails on a package that is fine to run.
+  # Qt6::ShaderTools is skipped for the same reason.
+  #
+  # Install the runtime of every linked module explicitly. An unused DLL costs a
+  # few hundred kilobytes; a missing one is what stops the client starting after
+  # an update, and it stays invisible until then.
+  foreach(_qt_module IN LISTS COCKATRICE_QT_MODULES)
+    get_target_property(_qt_module_type ${_qt_module} TYPE)
+    if(_qt_module_type STREQUAL "SHARED_LIBRARY")
+      install(FILES "$<TARGET_FILE:${_qt_module}>" DESTINATION ./)
+    endif()
+  endforeach()
 
   install(
     DIRECTORY "${CMAKE_BINARY_DIR}/cockatrice/"
     DESTINATION ./
     FILES_MATCHING
     PATTERN "*.ini"
+    PATTERN "CMakeFiles*" EXCLUDE
+    PATTERN "*.dir*" EXCLUDE
+    PATTERN "*_autogen*" EXCLUDE
+    PATTERN "*.tlog*" EXCLUDE
+    PATTERN "*.pdb" EXCLUDE
+    PATTERN "x64*" EXCLUDE
+    PATTERN ".qt*" EXCLUDE
+    PATTERN ".qsb*" EXCLUDE
+    PATTERN ".lupdate*" EXCLUDE
   )
 
-  # Qt plugins: audio (Qt5), iconengines, imageformats, multimedia (Qt6) platforms, printsupport (Qt5), styles, tls (Qt6)
+  # Qt plugins: audio, iconengines, imageformats, multimedia, platforms, printsupport, styles, tls
   install(
     DIRECTORY "${QT_PLUGINS_DIR}/"
     DESTINATION ${plugin_dest_dir}
@@ -611,11 +807,15 @@ if(WIN32)
     PATTERN "tls/qschannelbackend.dll"
   )
 
+  # The Windows install has no Resources directory: the .qm files go to
+  # ${COCKATRICE_WIN32_QM_INSTALL_DIR} and main.cpp looks for them at
+  # applicationDirPath() + "/translations". The macOS bundle above keeps
+  # Resources/translations, which is correct for it.
   install(
     CODE "
         file(WRITE \"\${CMAKE_INSTALL_PREFIX}/${qtconf_dest_dir}/qt.conf\" \"[Paths]
 Plugins = Plugins
-Translations = Resources/translations
+Translations = translations
 Data = Resources\")
     "
     COMPONENT Runtime
@@ -631,16 +831,12 @@ Data = Resources\")
         "
     COMPONENT Runtime
   )
-
-  if(OPENSSL_FOUND)
-    install(FILES ${OPENSSL_INCLUDE_DIRS} DESTINATION ./)
-  endif()
 endif()
 
-if(Qt6_FOUND AND Qt6LinguistTools_FOUND)
+if(Qt6LinguistTools_FOUND)
   #Qt6 Translations happen after the executable is built up
   if(UPDATE_TRANSLATIONS)
-    qt6_add_translations(
+    qt_add_translations(
       cockatrice
       TS_FILES
       ${cockatrice_TS}
@@ -650,7 +846,7 @@ if(Qt6_FOUND AND Qt6LinguistTools_FOUND)
       cockatrice_QM
     )
   else()
-    qt6_add_translations(cockatrice TS_FILES ${cockatrice_TS} QM_FILES_OUTPUT_VARIABLE cockatrice_QM)
+    qt_add_translations(cockatrice TS_FILES ${cockatrice_TS} QM_FILES_OUTPUT_VARIABLE cockatrice_QM)
   endif()
 
   if(UNIX)
@@ -662,8 +858,18 @@ if(Qt6_FOUND AND Qt6LinguistTools_FOUND)
   elseif(WIN32)
     install(FILES ${cockatrice_QM} DESTINATION ${COCKATRICE_WIN32_QM_INSTALL_DIR})
   endif()
+
+  # Qt attaches the .qm files to the default build target only, so building the executable on its own
+  # (CLion, --target cockatrice) leaves it without any translations: nothing is translated and the
+  # language selector stays empty.
+  # Depend on Qt's own lrelease target instead of attaching the .qm custom commands to a second
+  # target: two independent targets owning the same outputs race on MSBuild/Makefiles and are an
+  # error on Xcode. Older Qt versions already add this dependency themselves.
+  foreach(_lrelease_target Cockatrice_lrelease cockatrice_lrelease)
+    if(TARGET ${_lrelease_target})
+      add_dependencies(cockatrice ${_lrelease_target})
+    endif()
+  endforeach()
 endif()
 
-if(Qt6_FOUND)
-  qt6_finalize_target(cockatrice)
-endif()
+qt_finalize_target(cockatrice)

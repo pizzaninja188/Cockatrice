@@ -1,13 +1,19 @@
 /**
  * @file recents_settings.h
  * @ingroup DeckSettings
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef RECENTS_SETTINGS_H
 #define RECENTS_SETTINGS_H
 
 #include "settings_manager.h"
+
+#include <QString>
+#include <QStringList>
+#include <qtmetamacros.h>
+
+class QObject;
 
 class RecentsSettings : public SettingsManager
 {

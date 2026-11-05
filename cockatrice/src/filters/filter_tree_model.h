@@ -1,18 +1,22 @@
 /**
  * @file filter_tree_model.h
  * @ingroup CardDatabaseModelFilters
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef FILTERTREEMODEL_H
 #define FILTERTREEMODEL_H
 
 #include <QAbstractItemModel>
+#include <QList>
+#include <QModelIndex>
 #include <libcockatrice/filters/filter_card.h>
+#include <qnamespace.h>
+#include <qtmetamacros.h>
 
 class FilterTree;
-class CardFilter;
 class FilterTreeNode;
+class QObject;
 
 class FilterTreeModel : public QAbstractItemModel
 {
@@ -24,7 +28,14 @@ public slots:
     void addFilter(const CardFilter *f);
     void removeFilter(const CardFilter *f);
     void clearFiltersOfType(CardFilter::Attr filterType);
+    /**
+     * @brief Copies every active filter of one attribute into new CardFilter objects.
+     *
+     * The caller owns the returned filters. Prefer getFilterTermsOfType() when only
+     * the terms are needed.
+     */
     [[nodiscard]] QList<const CardFilter *> getFiltersOfType(CardFilter::Attr filterType) const;
+    /// @brief Copies every active filter into new CardFilter objects. The caller owns them.
     [[nodiscard]] QList<const CardFilter *> allFilters() const;
 
 private slots:
@@ -44,6 +55,13 @@ public:
     {
         return fTree;
     }
+
+    /**
+     * @brief The texts of every active filter of one attribute, without allocating filters.
+     *
+     * Prefer this over getFiltersOfType() when only the filter terms are needed.
+     */
+    [[nodiscard]] QStringList getFilterTermsOfType(CardFilter::Attr filterType) const;
     [[nodiscard]] int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     [[nodiscard]] int columnCount(const QModelIndex & /*parent*/ = QModelIndex()) const override;
     [[nodiscard]] QVariant data(const QModelIndex &index, int role) const override;

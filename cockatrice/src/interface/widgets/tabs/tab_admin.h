@@ -1,8 +1,8 @@
 /**
  * @file tab_admin.h
  * @ingroup ServerTabs
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef TAB_ADMIN_H
 #define TAB_ADMIN_H
@@ -10,15 +10,17 @@
 #include "tab.h"
 
 #include <QDialog>
-#include <libcockatrice/protocol/pb/commands.pb.h>
-#include <libcockatrice/protocol/pb/response.pb.h>
+#include <QString>
+#include <qtmetamacros.h>
 
 class AbstractClient;
-
 class QGroupBox;
 class QPushButton;
 class QSpinBox;
 class QLineEdit;
+class QWidget;
+class Response;
+class TabSupervisor;
 
 class ShutdownDialog : public QDialog
 {

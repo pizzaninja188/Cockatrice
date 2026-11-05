@@ -1,25 +1,48 @@
 #include "card_info_picture_widget.h"
 
 #include "../../../client/settings/cache_settings.h"
-#include "../../../game/board/card_item.h"
 #include "../../../interface/card_picture_loader/card_picture_loader.h"
 #include "../../../interface/widgets/tabs/tab_supervisor.h"
 #include "../../window_main.h"
+#include "../tabs/abstract_tab_deck_editor.h"
+#include "card_art_utils.h"
+#include "card_info_picture_enlarged_widget.h"
+#include "libcockatrice/card/card_info.h"
+#include "libcockatrice/card/database/card_database_querier.h"
+#include "libcockatrice/card/printing/exact_card.h"
+#include "libcockatrice/card/printing/printing_info.h"
+#include "libcockatrice/deck_list/tree/inner_deck_list_node.h"
 
+#include <QAbstractAnimation>
+#include <QAction>
+#include <QApplication>
+#include <QByteArray>
+#include <QCursor>
+#include <QDebug>
+#include <QEasingCurve>
+#include <QGuiApplication>
+#include <QList>
 #include <QMenu>
 #include <QMouseEvent>
+#include <QObject>
+#include <QPainterPath>
+#include <QPropertyAnimation>
+#include <QRect>
 #include <QScreen>
+#include <QSharedPointer>
+#include <QSize>
+#include <QString>
 #include <QStylePainter>
+#include <QTimer>
 #include <QWidget>
+#include <QtGlobal>
+#include <algorithm>
 #include <libcockatrice/card/database/card_database_manager.h>
 #include <libcockatrice/card/relation/card_relation.h>
-#include <utility>
+#include <libcockatrice/settings/cards_display_settings.h>
+#include <qlogging.h>
+#include <qnamespace.h>
 
-static constexpr qreal MTG_CARD_ASPECT_RATIO = 1.396;
-// static constexpr qreal YUGIOH_CARD_ASPECT_RATIO = 1.457;
-static constexpr qreal ASPECT_RATIO = MTG_CARD_ASPECT_RATIO;
-
-static constexpr int BASE_WIDTH = 200;
 static constexpr int BASE_HEIGHT = 200;
 
 static constexpr int ENLARGED_PIXMAP_OFFSET = 10;
@@ -66,11 +89,14 @@ CardInfoPictureWidget::CardInfoPictureWidget(QWidget *parent, const bool _hoverT
     animation->setStartValue(originalPos);
     animation->setEndValue(originalPos - QPoint(0, ANIMATION_OFFSET));
 
-    connect(&SettingsCache::instance(), &SettingsCache::roundCardCornersChanged, this, [this](bool _roundCardCorners) {
-        Q_UNUSED(_roundCardCorners);
+    connect(&SettingsCache::instance().cardsDisplay(), &CardsDisplaySettings::roundCardCornersChanged, this,
+            [this](bool _roundCardCorners) {
+                Q_UNUSED(_roundCardCorners);
 
-        update();
-    });
+                update();
+            });
+    connect(&SettingsCache::instance().cardsDisplay(), &CardsDisplaySettings::cardLangChanged, this,
+            &CardInfoPictureWidget::updatePixmap);
 }
 
 /**
@@ -131,12 +157,11 @@ void CardInfoPictureWidget::resizeEvent(QResizeEvent *event)
  */
 void CardInfoPictureWidget::setScaleFactor(const int scale)
 {
-    const int newWidth = BASE_WIDTH * scale / 100;
-    const int newHeight = static_cast<int>(newWidth * ASPECT_RATIO);
+    const QSize newSize = sizeForScaleFactor(scale);
 
     scaleFactor = scale;
 
-    setFixedSize(newWidth, newHeight);
+    setFixedSize(newSize);
     updatePixmap();
 
     emit cardScaleFactorChanged(scale);
@@ -190,13 +215,8 @@ void CardInfoPictureWidget::paintEvent(QPaintEvent *event)
     }
 
     QPixmap transformedPixmap = resizedPixmap; // Default pixmap
-    if (SettingsCache::instance().getAutoRotateSidewaysLayoutCards()) {
-        if (exactCard.getInfo().getUiAttributes().landscapeOrientation) {
-            // Rotate pixmap 90 degrees to the left
-            QTransform transform;
-            transform.rotate(90);
-            transformedPixmap = resizedPixmap.transformed(transform, Qt::SmoothTransformation);
-        }
+    if (SettingsCache::instance().cardsDisplay().getAutoRotateSidewaysLayoutCards()) {
+        transformedPixmap = CardArtUtils::rotateSidewaysLayoutArt(resizedPixmap, exactCard);
     }
 
     // Handle DPI scaling
@@ -220,7 +240,9 @@ void CardInfoPictureWidget::paintEvent(QPaintEvent *event)
 
     // Compute rounded corner radius
     // Ensure consistent rounding
-    qreal radius = SettingsCache::instance().getRoundCardCorners() ? 0.05 * static_cast<qreal>(targetRect.width()) : 0.;
+    qreal radius = SettingsCache::instance().cardsDisplay().getRoundCardCorners()
+                       ? 0.05 * static_cast<qreal>(targetRect.width())
+                       : 0.;
 
     // Draw the pixmap with rounded corners
     QStylePainter painter(this);
@@ -238,19 +260,20 @@ void CardInfoPictureWidget::paintEvent(QPaintEvent *event)
  */
 QSize CardInfoPictureWidget::sizeHint() const
 {
-    return {static_cast<int>(BASE_WIDTH * scaleFactor / 100.0),
-            static_cast<int>(BASE_WIDTH * scaleFactor / 100.0 * ASPECT_RATIO)};
+    return sizeForScaleFactor(scaleFactor);
+}
+
+QSize CardInfoPictureWidget::sizeForScaleFactor(int scaleFactor)
+{
+    const int width = BASE_WIDTH * scaleFactor / 100;
+    return {width, static_cast<int>(width * ASPECT_RATIO)};
 }
 
 /**
  * @brief Starts the hover timer to show the enlarged pixmap on hover.
  * @param event The enter event.
  */
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 void CardInfoPictureWidget::enterEvent(QEnterEvent *event)
-#else
-void CardInfoPictureWidget::enterEvent(QEvent *event)
-#endif
 {
     QWidget::enterEvent(event); // Call the base class implementation
 
@@ -345,7 +368,7 @@ void CardInfoPictureWidget::mousePressEvent(QMouseEvent *event)
         createRightClickMenu()->popup(QCursor::pos());
     }
 
-    emit cardClicked(event);
+    emit cardClicked(event, exactCard);
 }
 
 void CardInfoPictureWidget::hideEvent(QHideEvent *event)
@@ -431,13 +454,13 @@ QMenu *CardInfoPictureWidget::createAddToOpenDeckMenu()
         QAction *addCard = addCardMenu->addAction(tr("Mainboard"));
         connect(addCard, &QAction::triggered, this, [this, deckEditorTab] {
             deckEditorTab->updateCard(exactCard);
-            deckEditorTab->actAddCard(exactCard);
+            deckEditorTab->addCard(exactCard, DECK_ZONE_MAIN);
         });
 
         QAction *addCardSideboard = addCardMenu->addAction(tr("Sideboard"));
         connect(addCardSideboard, &QAction::triggered, this, [this, deckEditorTab] {
             deckEditorTab->updateCard(exactCard);
-            deckEditorTab->actAddCardToSideboard(exactCard);
+            deckEditorTab->addCard(exactCard, DECK_ZONE_SIDE);
         });
     }
 
@@ -467,7 +490,14 @@ void CardInfoPictureWidget::showEnlargedPixmap()
     enlargedPixmapWidget->setCardPixmap(exactCard, enlargedSize);
 
     const QPoint cursorPos = QCursor::pos();
-    const QRect screenGeometry = QGuiApplication::screenAt(cursorPos)->geometry();
+    QScreen *screen = QGuiApplication::screenAt(cursorPos);
+    if (!screen) {
+        screen = QGuiApplication::primaryScreen();
+    }
+    if (!screen) {
+        return;
+    }
+    const QRect screenGeometry = screen->geometry();
     const QSize widgetSize = enlargedPixmapWidget->size();
 
     int newX = cursorPos.x() + ENLARGED_PIXMAP_OFFSET;

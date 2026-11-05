@@ -2700,9 +2700,8 @@ CardNameMap readPresentationCards(QByteArray xml)
 {
     QBuffer input(&xml);
     input.open(QIODevice::ReadOnly);
-    NoopCardPreferenceProvider preferences;
     NoopCardSetPriorityController priorities;
-    CockatriceXml4Parser parser(&preferences, &priorities);
+    CockatriceXml4Parser parser(&priorities);
     CardNameMap cards;
     QObject::connect(&parser, &ICardDatabaseParser::addCard,
                      [&cards](CardInfoPtr card) { cards.insert(card->getName(), card); });

@@ -1,10 +1,11 @@
 #ifndef COCKATRICE_ARCHIDEKT_DECK_PREVIEW_IMAGE_DISPLAY_WIDGET_H
 #define COCKATRICE_ARCHIDEKT_DECK_PREVIEW_IMAGE_DISPLAY_WIDGET_H
 
-#include "../../../../general/display/shadow_background_label.h"
-
-#include <QLabel>
 #include <QWidget>
+#include <qtmetamacros.h>
+
+class QLabel;
+class ShadowBackgroundLabel;
 
 /**
  * @class ArchidektDeckPreviewImageDisplayWidget
@@ -58,6 +59,9 @@ protected:
      * @param event Resize event.
      */
     void resizeEvent(QResizeEvent *event) override;
+
+private slots:
+    void applyCardTextFont();
 
 private:
     float aspectRatio = 1.0f; ///< Aspect ratio to maintain for the preview image

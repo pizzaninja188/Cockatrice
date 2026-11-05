@@ -1,12 +1,17 @@
 /**
  * @file debug_settings.h
  * @ingroup CoreSettings
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef DEBUG_SETTINGS_H
 #define DEBUG_SETTINGS_H
 #include "settings_manager.h"
+
+#include <QString>
+#include <qtmetamacros.h>
+
+class QObject;
 
 class DebugSettings : public SettingsManager
 {

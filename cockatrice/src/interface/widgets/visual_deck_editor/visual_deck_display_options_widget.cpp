@@ -1,14 +1,32 @@
 #include "visual_deck_display_options_widget.h"
 
+#include "../../theme_icon.h"
+#include "../deck_editor/deck_editor_deck_dock_widget.h"
+#include "../quick_settings/settings_button_widget.h"
 #include "../tabs/visual_deck_editor/tab_deck_editor_visual.h"
+#include "../utility/compact_push_button.h"
+#include "deck_list_model.h"
 
+#include <QAbstractItemModel>
+#include <QAbstractItemView>
+#include <QComboBox>
+#include <QEvent>
+#include <QFlags>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QListWidget>
+#include <QListWidgetItem>
+#include <QPushButton>
+#include <QSize>
+#include <QSizePolicy>
+#include <QStringLiteral>
+#include <QtGlobal>
 #include <libcockatrice/utility/qt_utils.h>
+#include <qnamespace.h>
 
 VisualDeckDisplayOptionsWidget::VisualDeckDisplayOptionsWidget(QWidget *parent) : QWidget(parent)
 {
-    groupAndSortLayout = new QHBoxLayout(this);
-    groupAndSortLayout->setContentsMargins(0, 0, 0, 0);
-    groupAndSortLayout->setSpacing(3);
+    groupAndSortLayout = QtUtils::makeLayout<QHBoxLayout>(this, 3);
     groupAndSortLayout->setAlignment(Qt::AlignLeft);
     this->setLayout(groupAndSortLayout);
 
@@ -47,7 +65,7 @@ VisualDeckDisplayOptionsWidget::VisualDeckDisplayOptionsWidget(QWidget *parent) 
     sortByLabel = new QLabel(this);
 
     sortCriteriaButton = new SettingsButtonWidget(this);
-    sortCriteriaButton->setButtonIcon(QPixmap("theme:icons/sort_arrow_down"));
+    sortCriteriaButton->setButtonIcon(loadThemedIcon(QStringLiteral("icons/sort_arrow_down")));
 
     sortLabel = new QLabel(sortCriteriaButton);
     sortLabel->setWordWrap(true);
@@ -72,7 +90,7 @@ VisualDeckDisplayOptionsWidget::VisualDeckDisplayOptionsWidget(QWidget *parent) 
     sortCriteriaButton->addSettingsWidget(sortLabel);
     sortCriteriaButton->addSettingsWidget(sortByListWidget);
 
-    displayTypeButton = new QPushButton(this);
+    displayTypeButton = new CompactPushButton(this);
     connect(displayTypeButton, &QPushButton::clicked, this, &VisualDeckDisplayOptionsWidget::updateDisplayType);
 
     groupAndSortLayout->addWidget(groupByLabel);
@@ -91,9 +109,31 @@ void VisualDeckDisplayOptionsWidget::retranslateUi()
     sortByLabel->setText(tr("Sort by:"));
     sortLabel->setText(tr("Click and drag to change the sort order within the groups"));
     sortCriteriaButton->setToolTip(tr("Configure how cards are sorted within their groups"));
-    displayTypeButton->setText(tr("Toggle Layout: Overlap"));
+    updateDisplayTypeButton();
     displayTypeButton->setToolTip(
         tr("Change how cards are displayed within zones (i.e. overlapped or fully visible.)"));
+}
+
+void VisualDeckDisplayOptionsWidget::updateDisplayTypeButton()
+{
+    switch (currentDisplayType) {
+        case DisplayType::Flat:
+            displayTypeButton->setButtonText(tr("Toggle Layout: Flat"));
+            displayTypeButton->setButtonIcon(loadThemedIcon(QStringLiteral("icons/scroll")));
+            break;
+        case DisplayType::Overlap:
+            displayTypeButton->setButtonText(tr("Toggle Layout: Overlap"));
+            displayTypeButton->setButtonIcon(loadThemedIcon(QStringLiteral("icons/scales")));
+            break;
+    }
+}
+
+void VisualDeckDisplayOptionsWidget::changeEvent(QEvent *event)
+{
+    if (event->type() == QEvent::LanguageChange) {
+        retranslateUi();
+    }
+    QWidget::changeEvent(event);
 }
 
 void VisualDeckDisplayOptionsWidget::onSortCriteriaChange()
@@ -112,14 +152,26 @@ void VisualDeckDisplayOptionsWidget::updateDisplayType()
     // Toggle the display type
     currentDisplayType = (currentDisplayType == DisplayType::Overlap) ? DisplayType::Flat : DisplayType::Overlap;
 
-    // Update UI and emit signal
-    switch (currentDisplayType) {
-        case DisplayType::Flat:
-            displayTypeButton->setText(tr("Toggle Layout: Flat"));
-            break;
-        case DisplayType::Overlap:
-            displayTypeButton->setText(tr("Toggle Layout: Overlap"));
-            break;
-    }
+    // Update only the toggle button, not every string in the widget
+    updateDisplayTypeButton();
     emit displayTypeChanged(currentDisplayType);
+}
+
+void VisualDeckDisplayOptionsWidget::updateCompactMode(bool mode)
+{
+    displayTypeButton->setCompact(mode);
+}
+
+int VisualDeckDisplayOptionsWidget::expandedWidth() const
+{
+    return groupByLabel->sizeHint().width() + groupByComboBox->sizeHint().width() + sortByLabel->sizeHint().width() +
+           sortCriteriaButton->sizeHint().width() + displayTypeButton->expandedWidth() +
+           (groupAndSortLayout->spacing() * 4);
+}
+
+int VisualDeckDisplayOptionsWidget::compactWidth() const
+{
+    return groupByLabel->sizeHint().width() + groupByComboBox->sizeHint().width() + sortByLabel->sizeHint().width() +
+           sortCriteriaButton->sizeHint().width() + displayTypeButton->compactWidth() +
+           (groupAndSortLayout->spacing() * 4);
 }

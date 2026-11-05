@@ -3,11 +3,10 @@
 
 #include "archidekt_api_response_card.h"
 
-#include <QDebug>
-#include <QJsonArray>
 #include <QJsonObject>
+#include <QList>
 #include <QString>
-#include <QVector>
+#include <QStringList>
 
 struct Category
 {
@@ -33,7 +32,7 @@ public:
     ArchidektApiResponseCard getCard() const
     {
         return card;
-    };
+    }
 
     QList<Category> getCategories() const
     {

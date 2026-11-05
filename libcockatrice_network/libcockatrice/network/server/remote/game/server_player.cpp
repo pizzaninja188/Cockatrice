@@ -1,26 +1,40 @@
 #include "server_player.h"
 
 #include "../server.h"
-#include "../server_abstractuserinterface.h"
 #include "../server_database_interface.h"
 #include "../server_room.h"
 #include "ruled_utils.h"
+#include "game/server_abstract_participant.h"
+#include "game/server_abstract_player.h"
+#include "libcockatrice/deck_list/tree/inner_deck_list_node.h"
+#include "libcockatrice/protocol/pb/color.pb.h"
+#include "libcockatrice/protocol/pb/move_card_to_zone.pb.h"
+#include "libcockatrice/protocol/pb/serverinfo_card.pb.h"
+#include "libcockatrice/protocol/pb/serverinfo_counter.pb.h"
+#include "libcockatrice/protocol/pb/serverinfo_playerproperties.pb.h"
+#include "libcockatrice/protocol/pb/serverinfo_zone.pb.h"
+#include "libcockatrice/utility/card_ref.h"
+#include "libcockatrice/utility/playmat_params.h"
 #include "server_card.h"
 #include "server_cardzone.h"
 #include "server_counter.h"
 #include "server_game.h"
 #include "server_move_card_struct.h"
+#include "server_response_containers.h"
 
 #include <QDebug>
 #include <QRegularExpression>
 #include <QtGlobal>
 #include <algorithm>
 
+#include <QMapIterator>
+#include <QSet>
+#include <QSharedPointer>
+#include <QString>
+#include <QtGlobal>
+#include <google/protobuf/stubs/port.h>
 #include <libcockatrice/deck_list/deck_list.h>
-#include <libcockatrice/deck_list/tree/deck_list_card_node.h>
-#include <libcockatrice/protocol/pb/command_attach_card.pb.h>
 #include <libcockatrice/protocol/pb/command_change_zone_properties.pb.h>
-#include <libcockatrice/protocol/pb/command_concede.pb.h>
 #include <libcockatrice/protocol/pb/command_create_counter.pb.h>
 #include <libcockatrice/protocol/pb/command_deck_select.pb.h>
 #include <libcockatrice/protocol/pb/command_del_counter.pb.h>
@@ -30,6 +44,7 @@
 #include <libcockatrice/protocol/pb/command_mulligan.pb.h>
 #include <libcockatrice/protocol/pb/command_set_active_phase.pb.h>
 #include <libcockatrice/protocol/pb/command_set_counter.pb.h>
+#include <libcockatrice/protocol/pb/command_set_playmat.pb.h>
 #include <libcockatrice/protocol/pb/command_set_sideboard_lock.pb.h>
 #include <libcockatrice/protocol/pb/command_set_sideboard_plan.pb.h>
 #include <libcockatrice/protocol/pb/command_shuffle.pb.h>
@@ -39,18 +54,21 @@
 #include <libcockatrice/protocol/pb/event_create_counter.pb.h>
 #include <libcockatrice/protocol/pb/event_del_counter.pb.h>
 #include <libcockatrice/protocol/pb/event_draw_cards.pb.h>
+#include <libcockatrice/protocol/pb/event_game_log_notice.pb.h>
 #include <libcockatrice/protocol/pb/event_player_properties_changed.pb.h>
 #include <libcockatrice/protocol/pb/event_set_counter.pb.h>
 #include <libcockatrice/protocol/pb/event_shuffle.pb.h>
 #include <libcockatrice/protocol/pb/response.pb.h>
 #include <libcockatrice/protocol/pb/response_deck_download.pb.h>
-#include <libcockatrice/protocol/pb/response_dump_zone.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_player.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_user.pb.h>
-#include <libcockatrice/rng/rng_abstract.h>
 #include <libcockatrice/utility/color.h>
-#include <libcockatrice/utility/trice_limits.h>
+#include <libcockatrice/utility/string_limits.h>
 #include <libcockatrice/utility/zone_names.h>
+#include <qalgorithms.h>
+#include <string>
+
+class Server_AbstractUserInterface;
 
 Server_Player::Server_Player(Server_Game *_game,
                              int _playerId,
@@ -259,6 +277,19 @@ Server_Player::cmdDeckSelect(const Command_DeckSelect &cmd, ResponseContainer &r
         return Response::RespInternalError;
     }
 
+    // Card art rules apply to playmats as well: never broadcast a DENY-listed
+    // printing as a playmat. Stripping keeps the deck selectable while hiding
+    // the banned art from all clients.
+    const auto deckPlaymat = newDeck->getPlaymat();
+    if (!deckPlaymat.card.name.isEmpty()) {
+        auto *db = game->getRoom()->getServer()->getDatabaseInterface();
+        // Check the truncated values actually broadcast below; the rule columns are varchar(255).
+        if (db && !db->isCardArtAllowed(deckPlaymat.card.name.left(MAX_NAME_LENGTH),
+                                        deckPlaymat.card.providerId.left(MAX_NAME_LENGTH))) {
+            newDeck->setPlaymat({});
+        }
+    }
+
     delete deck;
     deck = newDeck;
     sideboardLocked = true;
@@ -266,6 +297,14 @@ Server_Player::cmdDeckSelect(const Command_DeckSelect &cmd, ResponseContainer &r
     Event_PlayerPropertiesChanged event;
     event.mutable_player_properties()->set_sideboard_locked(true);
     event.mutable_player_properties()->set_deck_hash(deck->getDeckHash().toStdString());
+    const auto &playmat = deck->getPlaymat();
+    auto *playmatParams = event.mutable_player_properties()->mutable_playmat_params();
+    playmatParams->set_card_name(playmat.card.name.left(MAX_NAME_LENGTH).toStdString());
+    playmatParams->set_card_provider_id(playmat.card.providerId.left(MAX_NAME_LENGTH).toStdString());
+    playmatParams->set_margin_pct_l(playmat.params.marginPctL);
+    playmatParams->set_margin_pct_r(playmat.params.marginPctR);
+    playmatParams->set_vertical_offset(playmat.params.verticalOffset);
+    playmatParams->set_zoom(playmat.params.zoom);
     ges.enqueueGameEvent(event, playerId);
 
     Context_DeckSelect context;
@@ -426,6 +465,9 @@ Server_Player::cmdUndoDraw(const Command_UndoDraw & /*cmd*/, ResponseContainer &
     }
 
     if (lastDrawList.isEmpty()) {
+        Event_GameLogNotice event;
+        event.set_notice_type(Event_GameLogNotice::UNDO_DRAW_FAILED);
+        ges.enqueueGameEvent(event, playerId);
         return Response::RespContextError;
     }
 
@@ -449,7 +491,8 @@ Server_Player::cmdIncCounter(const Command_IncCounter &cmd, ResponseContainer & 
         return Response::RespContextError;
     }
 
-    Server_Counter *c = counters.value(cmd.counter_id(), 0);
+    const int counterId = cmd.counter_id();
+    Server_Counter *c = counters.value(counterId, nullptr);
     if (!c) {
         return Response::RespNameNotFound;
     }
@@ -462,12 +505,13 @@ Server_Player::cmdIncCounter(const Command_IncCounter &cmd, ResponseContainer & 
         return Response::RespInvalidCommand;
     }
 
-    c->setCount(c->getCount() + cmd.delta());
-
-    Event_SetCounter event;
-    event.set_counter_id(c->getId());
-    event.set_value(c->getCount());
-    ges.enqueueGameEvent(event, playerId);
+    bool didChange = c->incrementCount(cmd.delta());
+    if (didChange) {
+        Event_SetCounter event;
+        event.set_counter_id(c->getId());
+        event.set_value(c->getCount());
+        ges.enqueueGameEvent(event, playerId);
+    }
 
     return Response::RespOk;
 }
@@ -508,7 +552,8 @@ Server_Player::cmdSetCounter(const Command_SetCounter &cmd, ResponseContainer & 
         return Response::RespContextError;
     }
 
-    Server_Counter *c = counters.value(cmd.counter_id(), 0);
+    const int counterId = cmd.counter_id();
+    Server_Counter *c = counters.value(counterId, nullptr);
     if (!c) {
         return Response::RespNameNotFound;
     }
@@ -525,12 +570,13 @@ Server_Player::cmdSetCounter(const Command_SetCounter &cmd, ResponseContainer & 
         }
     }
 
-    c->setCount(cmd.value());
-
-    Event_SetCounter event;
-    event.set_counter_id(c->getId());
-    event.set_value(c->getCount());
-    ges.enqueueGameEvent(event, playerId);
+    bool didChange = c->setCount(cmd.value());
+    if (didChange) {
+        Event_SetCounter event;
+        event.set_counter_id(c->getId());
+        event.set_value(c->getCount());
+        ges.enqueueGameEvent(event, playerId);
+    }
 
     return Response::RespOk;
 }
@@ -545,15 +591,16 @@ Server_Player::cmdDelCounter(const Command_DelCounter &cmd, ResponseContainer & 
         return Response::RespContextError;
     }
 
-    Server_Counter *counter = counters.value(cmd.counter_id(), 0);
+    const int counterId = cmd.counter_id();
+    Server_Counter *counter = counters.value(counterId, nullptr);
     if (!counter) {
         return Response::RespNameNotFound;
     }
-    counters.remove(cmd.counter_id());
+    counters.remove(counterId);
     delete counter;
 
     Event_DelCounter event;
-    event.set_counter_id(cmd.counter_id());
+    event.set_counter_id(counterId);
     ges.enqueueGameEvent(event, playerId);
 
     return Response::RespOk;
@@ -566,7 +613,7 @@ Server_Player::cmdNextTurn(const Command_NextTurn & /*cmd*/, ResponseContainer &
         return Response::RespGameNotStarted;
     }
 
-    if (conceded && !judge) {
+    if (conceded && !isJudge()) {
         return Response::RespContextError;
     }
 
@@ -582,7 +629,7 @@ Response::ResponseCode Server_Player::cmdSetActivePhase(const Command_SetActiveP
         return Response::RespGameNotStarted;
     }
 
-    if (!judge) {
+    if (!isJudge()) {
         if (conceded) {
             return Response::RespContextError;
         }
@@ -616,10 +663,58 @@ Response::ResponseCode
 Server_Player::cmdReverseTurn(const Command_ReverseTurn &cmd, ResponseContainer &rc, GameEventStorage &ges)
 {
 
-    if (!judge && conceded) {
+    if (!isJudge() && conceded) {
         return Response::RespContextError;
     }
     return Server_AbstractParticipant::cmdReverseTurn(cmd, rc, ges);
+}
+
+Response::ResponseCode
+Server_Player::cmdSetPlaymat(const Command_SetPlaymat &cmd, ResponseContainer &rc, GameEventStorage &ges)
+{
+    Q_UNUSED(rc);
+
+    if (!deck) {
+        return Response::RespContextError;
+    }
+
+    const auto &pp = cmd.playmat_params();
+    const auto rawName = QString::fromStdString(pp.card_name());
+    const auto rawProviderId = QString::fromStdString(pp.card_provider_id());
+    if (rawName.length() > MAX_NAME_LENGTH || rawProviderId.length() > MAX_NAME_LENGTH) {
+        return Response::RespInvalidData;
+    }
+    // Card art rules apply to playmats as well: reject DENY-listed art, like
+    // cmdSetCardArtParams does. Empty clears the playmat and is always allowed.
+    if (!rawName.isEmpty()) {
+        auto *db = game->getRoom()->getServer()->getDatabaseInterface();
+        if (db && !db->isCardArtAllowed(rawName, rawProviderId)) {
+            return Response::RespFunctionNotAllowed;
+        }
+    }
+    PlaymatInfo playmat;
+    playmat.card.name = rawName;
+    playmat.card.providerId = rawProviderId;
+    playmat.params.marginPctL = qBound(0.0, pp.margin_pct_l(), 0.95);
+    playmat.params.marginPctR = qBound(0.0, pp.margin_pct_r(), 0.95);
+    playmat.params.verticalOffset = qBound(0.0, pp.vertical_offset(), 1.0);
+    playmat.params.zoom = qBound(0.1, pp.zoom(), 4.0);
+    deck->setPlaymat(playmat);
+
+    Event_PlayerPropertiesChanged event;
+    auto *props = event.mutable_player_properties();
+    props->set_sideboard_locked(sideboardLocked);
+    props->set_deck_hash(deck->getDeckHash().toStdString());
+    auto *playmatParams = props->mutable_playmat_params();
+    playmatParams->set_card_name(playmat.card.name.toStdString());
+    playmatParams->set_card_provider_id(playmat.card.providerId.toStdString());
+    playmatParams->set_margin_pct_l(playmat.params.marginPctL);
+    playmatParams->set_margin_pct_r(playmat.params.marginPctR);
+    playmatParams->set_vertical_offset(playmat.params.verticalOffset);
+    playmatParams->set_zoom(playmat.params.zoom);
+    ges.enqueueGameEvent(event, playerId);
+
+    return Response::RespOk;
 }
 
 void Server_Player::getInfo(ServerInfo_Player *info,

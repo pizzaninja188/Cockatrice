@@ -1,0 +1,109 @@
+/**
+ * @file card_zone.h
+ * @ingroup GameGraphicsZones
+ * @brief Base graphics item for zones that contain cards.
+ */
+
+#ifndef CARDZONE_H
+#define CARDZONE_H
+
+#include "../board/abstract_graphics_item.h"
+#include "../board/graphics_item_type.h"
+
+#include <QLoggingCategory>
+#include <QPointF>
+#include <qtmetamacros.h>
+
+class CardDragItem;
+class CardItem;
+class CardState;
+class CardZoneLogic;
+class QAction;
+class QGraphicsItem;
+class QMenu;
+class QPoint;
+class ServerInfo_Card;
+template <typename T> class QList;
+
+class CardItem;
+
+inline Q_LOGGING_CATEGORY(CardZoneLog, "card_zone");
+
+/**
+ * A zone in the game that can contain cards.
+ * This class contains methods to get and modify the cards that are contained inside this zone.
+ *
+ * The cards are stored as a list of `CardItem*`.
+ */
+class CardZone : public AbstractGraphicsItem
+{
+    Q_OBJECT
+protected:
+    QMenu *menu;
+    QAction *doubleClickAction;
+
+    void mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event) override;
+    void mousePressEvent(QGraphicsSceneMouseEvent *event) override;
+    virtual void reorganizeCards() = 0;
+    virtual QPointF closestGridPoint(const QPointF &point);
+
+    QMenu *getMenu() const
+    {
+        return menu;
+    }
+public slots:
+    bool showContextMenu(const QPoint &screenPos);
+    /**
+     * @brief Called when a card is added to this zone. Default: reparents card to this item.
+     *
+     * Virtual so subclasses (e.g. SelectZone) can override parenting behavior — the Qt signal
+     * connection in CardZone's constructor dispatches through the vtable.
+     */
+    virtual void onCardAdded(CardState *addedCard);
+    /** @brief Builds the card item for @p cardInfo and hands it to this zone's logic. */
+    void onCreateCardRequested(const ServerInfo_Card &cardInfo, bool reorganize);
+
+public:
+    enum
+    {
+        Type = typeZone
+    };
+    int type() const override
+    {
+        return Type;
+    }
+    virtual void
+    handleDropEvent(const QList<CardDragItem *> &dragItem, CardZoneLogic *startZone, const QPoint &dropPoint) = 0;
+    CardZone(CardZoneLogic *logic, QGraphicsItem *parent = nullptr);
+    void retranslateUi();
+
+    CardZoneLogic *getLogic() const
+    {
+        return logic;
+    }
+
+    /**
+     * @brief The CardItems backing getLogic()->getCards(), in zone order.
+     *
+     * Game logic talks about cards as states; this is the graphics side's view of the same list.
+     * It is rebuilt on demand after any content change, so views never reach into the logic's
+     * container themselves and never observe a stale one.
+     */
+    [[nodiscard]] const QList<CardItem *> &cardItems() const;
+
+    void setMenu(QMenu *_menu, QAction *_doubleClickAction = 0)
+    {
+        menu = _menu;
+        doubleClickAction = _doubleClickAction;
+    }
+
+private:
+    /** @brief Marks the cached card items stale. Connected to every content-changing signal. */
+    void invalidateItems();
+
+    CardZoneLogic *logic;
+    mutable QList<CardItem *> items;
+    mutable bool itemsDirty = true;
+};
+
+#endif

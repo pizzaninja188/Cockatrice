@@ -4,6 +4,13 @@
 #include <QDebug>
 #include <QFile>
 #include <QStandardPaths>
+#include <QStringList>
+#include <QVariant>
+#include <qlogging.h>
+#include <qnamespace.h>
+#include <qsystemdetection.h>
+
+class QObject;
 
 SettingsCache::SettingsCache(const QString &fileName, QSettings::Format format, QObject *parent)
     : QSettings(fileName, format, parent)
@@ -30,14 +37,16 @@ QString SettingsCache::guessConfigurationPath()
 
     // application directory path
     guessFileName = QCoreApplication::applicationDirPath() + "/" + fileName;
-    if (QFile::exists(guessFileName))
+    if (QFile::exists(guessFileName)) {
         return guessFileName;
+    }
 
 #ifdef Q_OS_UNIX
     // /etc
     guessFileName = "/etc/servatrice/" + fileName;
-    if (QFile::exists(guessFileName))
+    if (QFile::exists(guessFileName)) {
         return guessFileName;
+    }
 #endif
 
     guessFileName = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + "/" + fileName;

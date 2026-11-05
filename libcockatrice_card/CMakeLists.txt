@@ -1,10 +1,8 @@
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTOUIC ON)
-set(CMAKE_AUTORCC ON)
-
 set(HEADERS
     libcockatrice/card/card_info.h
     libcockatrice/card/card_info_comparator.h
+    libcockatrice/card/card_localization.h
+    libcockatrice/card/lazy_properties_hash.h
     libcockatrice/card/database/card_database.h
     libcockatrice/card/database/card_database_loader.h
     libcockatrice/card/database/card_database_manager.h
@@ -20,18 +18,15 @@ set(HEADERS
     libcockatrice/card/ruled_oracle_text.h
 )
 
-if(Qt6_FOUND)
-  qt6_wrap_cpp(MOC_SOURCES ${HEADERS})
-elseif(Qt5_FOUND)
-  qt5_wrap_cpp(MOC_SOURCES ${HEADERS})
-endif()
-
 add_library(
   libcockatrice_card STATIC
-  ${MOC_SOURCES}
+  ${HEADERS}
   libcockatrice/card/card_info.cpp
   libcockatrice/card/card_info_comparator.cpp
+  libcockatrice/card/card_localization.cpp
+  libcockatrice/card/lazy_properties_hash.cpp
   libcockatrice/card/database/card_database.cpp
+  libcockatrice/card/database/card_database_cache.cpp
   libcockatrice/card/database/card_database_loader.cpp
   libcockatrice/card/database/card_database_manager.cpp
   libcockatrice/card/database/card_database_querier.cpp
@@ -61,3 +56,5 @@ target_link_libraries(
   PUBLIC libcockatrice_utility
   PUBLIC ${QT_CORE_MODULE}
 )
+
+target_precompile_headers(libcockatrice_card PRIVATE "${CMAKE_SOURCE_DIR}/cmake/pch/qtcore_pch.h")

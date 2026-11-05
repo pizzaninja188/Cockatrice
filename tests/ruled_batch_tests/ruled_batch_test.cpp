@@ -1,3 +1,4 @@
+#include "game/game_config.h"
 // Unit tests for RuledPlayerBinding, RuledBatchSynchronizer, and RuledBroadcastRouter.
 //
 // These tests feed synthetic ruled::v1::IpcResponse batches to the server and assert that
@@ -283,8 +284,10 @@ protected:
         userA.set_name("alice");
         userB.set_name("bob");
         room = new Server_Room(0, 0, "", "", "", "", false, "", {}, &server);
-        game = new Server_Game(userA, 1, "", "", 2, QList<int>(), false, false, false, false, false, false, 20, false,
-                               true /* ruledGame */, room);
+        game = new Server_Game(GameConfig{.creatorInfo = userA, .gameId = 1, .maxPlayers = 2,
+                                           .spectatorsAllowed = false, .spectatorsCanTalk = false,
+                                           .spectatorsSeeEverything = false, .shareDecklistsOnLoad = false,
+                                           .ruledGame = true}, room);
 
         p1 = new Server_Player(game, 1, userA, false, nullptr);
         p2 = new Server_Player(game, 2, userB, false, nullptr);
@@ -8784,8 +8787,10 @@ TEST_F(RuledBatchTest, CrossPlayerMovePredicateAllowsOnlyEngineDrivenRuledMoves)
 
     // Nothing is exempt outside a ruled game either — freeform's trust model is upstream's
     // business, and widening this predicate must never loosen it.
-    auto *freeformGame = new Server_Game(userA, 1, "", "", 2, QList<int>(), false, false, false, false, false, false,
-                                         20, false, false /* ruledGame */, room);
+    auto *freeformGame = new Server_Game(GameConfig{.creatorInfo = userA, .gameId = 1, .maxPlayers = 2,
+                                                  .spectatorsAllowed = false, .spectatorsCanTalk = false,
+                                                  .spectatorsSeeEverything = false, .shareDecklistsOnLoad = false,
+                                                  .ruledGame = false}, room);
     auto *f1 = new Server_Player(freeformGame, 1, userA, false, nullptr);
     auto *f2 = new Server_Player(freeformGame, 2, userB, false, nullptr);
     setupPlayerZonesAndCounters(f1);

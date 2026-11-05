@@ -1,0 +1,120 @@
+/**
+ * @file abstract_counter.h
+ * @ingroup GameGraphicsPlayers
+ */
+//! \todo Document this file.
+
+#ifndef COUNTER_H
+#define COUNTER_H
+
+#include "../../interface/widgets/menus/tearoff_menu.h"
+#include "../player/menu/abstract_player_component.h"
+
+#include <QColor>
+#include <QGraphicsItem>
+#include <QInputDialog>
+#include <QObject>
+#include <QString>
+#include <qtmetamacros.h>
+
+class PlayerLogic;
+class QAction;
+class QMenu;
+class CounterState;
+class QWidget;
+
+class AbstractCounter : public QObject, public QGraphicsItem, public AbstractPlayerComponent
+{
+    Q_OBJECT
+    Q_INTERFACES(QGraphicsItem)
+
+protected:
+    PlayerLogic *player;
+    int id;
+    QString name;
+    int value;
+    QColor color;
+    int radius;
+    bool hovered = false;
+    bool useNameForShortcut;
+
+    /**
+     * @brief Hook for subclasses that need per-value-change feedback (e.g. life-total flash).
+     *
+     * Called whenever the counter's value changes, before the item repaints.
+     * @param skipDamageAnimation True when damage-related feedback should be suppressed (replay rewinds).
+     */
+    virtual void onValueChanged(int oldValue, int newValue, bool skipDamageAnimation);
+
+    void mousePressEvent(QGraphicsSceneMouseEvent *event) override;
+    void hoverEnterEvent(QGraphicsSceneHoverEvent *event) override;
+    void hoverLeaveEvent(QGraphicsSceneHoverEvent *event) override;
+
+private:
+    QAction *aSet = nullptr, *aDec = nullptr, *aInc = nullptr;
+    TearOffMenu *menu = nullptr;
+    bool dialogSemaphore = false;
+    bool deleteAfterDialog = false;
+    bool shownInCounterArea;
+    bool shortcutActive = false;
+
+private slots:
+    void refreshShortcuts();
+    void incrementCounter();
+    void setCounter();
+
+public:
+    AbstractCounter(CounterState *state,
+                    PlayerLogic *player,
+                    bool shownInCounterArea,
+                    bool useNameForShortcut = false,
+                    QGraphicsItem *parent = nullptr);
+    ~AbstractCounter() override;
+
+    void retranslateUi() override;
+    void setShortcutsActive() override;
+    void setShortcutsInactive() override;
+    void delCounter();
+
+    QMenu *getMenu() const
+    {
+        return menu;
+    }
+    int getId() const
+    {
+        return id;
+    }
+    QString getName() const
+    {
+        return name;
+    }
+    QColor getColor() const
+    {
+        return color;
+    }
+    int getRadius() const
+    {
+        return radius;
+    }
+    int getValue() const
+    {
+        return value;
+    }
+    bool getShownInCounterArea() const
+    {
+        return shownInCounterArea;
+    }
+};
+
+class AbstractCounterDialog : public QInputDialog
+{
+    Q_OBJECT
+public:
+    AbstractCounterDialog(const QString &name, const QString &value, QWidget *parent = nullptr);
+
+protected:
+    bool eventFilter(QObject *obj, QEvent *event) override;
+    void changeValue(int diff);
+};
+
+#endif

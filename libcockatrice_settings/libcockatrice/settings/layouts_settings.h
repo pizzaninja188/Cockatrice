@@ -1,15 +1,19 @@
 /**
  * @file layouts_settings.h
  * @ingroup CoreSettings
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef LAYOUTSSETTINGS_H
 #define LAYOUTSSETTINGS_H
 
 #include "settings_manager.h"
 
-#include <QSize>
+#include <QByteArray>
+#include <QString>
+#include <qtmetamacros.h>
+
+class QObject;
 
 class LayoutsSettings : public SettingsManager
 {

@@ -8,16 +8,17 @@
    <a href="#related-repositories">Related</a> <b>|</b>
    <a href="#community-resources-">Community</a> <b>|</b>
    <a href="#contribute">Contribute</a> <b>|</b>
-   <a href="#build---">Build</a> <b>|</b>
+   <a href="#build--">Build</a> <b>|</b>
    <a href="#run">Run</a>
 </p>
 
 ---
 
 <br><pre><p align='center'>
-<b>To get started with Cockatrice &#8674; [view our webpage](https://cockatrice.github.io/)</b><br>
-<b>To get support, or suggest changes to the app &#8674; [file an issue](https://github.com/Cockatrice/Cockatrice/issues) ([How?](https://github.com/Cockatrice/Cockatrice/wiki/How-to-Create-a-GitHub-Ticket-Regarding-Cockatrice))</b>
-<b>To help with development &#8674; learn [how to contribute](#contribute-)</b>
+<b>To get started with Cockatrice &#8674; [view our webpage](https://cockatrice.github.io/)</b>
+<b>To get support, or suggest changes to the app &#8674; [file an issue](https://github.com/Cockatrice/Cockatrice/issues) ([How?](https://github.com/Cockatrice/Cockatrice/wiki/How-to-Create-a-GitHub-Ticket-Regarding-Cockatrice))</b><br>
+<b>To learn about the app and its code &#8674; [read our code documentation](https://cockatrice.github.io/docs/)</b>
+<b>To help with development &#8674; learn [how to contribute](#contribute)</b>
 </pre><p><br>
 
 
@@ -25,7 +26,6 @@
 
 Cockatrice is an open-source, multiplatform application for playing tabletop card games over a network. The program's server design prevents users from manipulating the game for unfair advantage. The client also provides a single-player mode, which allows users to brew while offline.<br><br>
 This project uses <kbd>C++</kbd> and the <kbd>Qt</kbd> libraries.<br>
-First work on a webclient with <kbd>Typescript</kbd> was started as well.<br>
 
 
 # Download [![Cockatrice Eternal Download Count](https://img.shields.io/github/downloads/cockatrice/cockatrice/total.svg)](https://tooomm.github.io/github-release-stats/?username=Cockatrice&repository=Cockatrice&search=0)
@@ -48,6 +48,7 @@ Latest <kbd>beta</kbd> version:
 - [Magic-Spoiler](https://github.com/Cockatrice/Magic-Spoiler): Code to generate MtG spoiler data from [MTGJSON](https://github.com/mtgjson/mtgjson) for use in Cockatrice
 - [cockatrice.github.io](https://github.com/Cockatrice/cockatrice.github.io): Code of the official Cockatrice webpage
 - [io.github.Cockatrice.cockatrice](https://github.com/flathub/io.github.Cockatrice.cockatrice): Configuration of our Linux `flatpak` package hosted at [Flathub](https://flathub.org/en/apps/io.github.Cockatrice.cockatrice)
+- [Webatrice](https://github.com/Cockatrice/Webatrice): Web client for Cockatrice servers (TypeScript / React)
 
 
 # Community Resources [![Discord](https://img.shields.io/discord/314987288398659595?label=Discord&logo=discord&logoColor=white)](https://discord.gg/3Z9yzmA)
@@ -83,7 +84,7 @@ Join our [Discord community](https://discord.gg/3Z9yzmA) to connect with other p
 
 ### Code
 
-To contribute code to the project, please review our [guidelines](https://github.com/Cockatrice/Cockatrice/blob/master/.github/CONTRIBUTING.md) first.<br>
+To commit code to the project, please review our [Contribution Guidelines](https://github.com/Cockatrice/Cockatrice/blob/master/.github/CONTRIBUTING.md) first.<br>
 We maintain two tags for contributors to easier find issues to potentially work on:
 - [![Good first issue](https://img.shields.io/github/issues/cockatrice/cockatrice/Good%20First%20Issue)](https://github.com/Cockatrice/Cockatrice/issues?utf8=%E2%9C%93&q=is%3Aopen%20is%3Aissue%20label%3A%22Good%20first%20issue%22%20)<br>
 Issues tagged in this way provide a simple way to get started. They don't require much experience to be worked on.
@@ -95,24 +96,26 @@ We'll happily advice on how best to implement a feature, or we can show you wher
 
 You can also have a look at our `Todo List` in our [Code Documentation](https://cockatrice.github.io/docs) or search the repo for [`\todo` comments](https://github.com/search?q=repo%3ACockatrice%2FCockatrice%20%5Ctodo&type=code).
 
-### Documentation [![CI Docs](https://github.com/Cockatrice/Cockatrice/actions/workflows/documentation-build.yml/badge.svg?event=push)](https://github.com/Cockatrice/Cockatrice/actions/workflows/documentation-build.yml?query=event%3Apush)
+### Documentation [![CI Docs](https://github.com/Cockatrice/Cockatrice/actions/workflows/documentation-build.yml/badge.svg?event=push)](https://github.com/Cockatrice/Cockatrice/actions/workflows/documentation-build.yml?query=event%3Arelease+event%3Aworkflow_dispatch)
 
 There are various places where useful information for different needs are maintained:
 - [Official Code Documentation](https://cockatrice.github.io/docs/) 
 - [Official Wiki](https://github.com/Cockatrice/Cockatrice/wiki) `Community supported`
 - [Official Webpage](https://cockatrice.github.io/)
 - [Official README](https://github.com/Cockatrice/Cockatrice/blob/master/README.md) `This file`
+- [Official CONTRIBUTING](https://github.com/Cockatrice/Cockatrice/blob/master/.github/CONTRIBUTING.md)
 
-Cockatrice tries to use the [Google Developer Documentation Style Guide](https://developers.google.com/style/) to ensure consistent documentation. We encourage you to improve the documentation by suggesting edits based on this guide.
+Cockatrice tries to use the [Google Developer Documentation Style Guide](https://developers.google.com/style/) to ensure consistent documentation.
+We encourage everybody to improve the documentation by suggesting edits based on this guide.
 
 ### Translation [![Transifex Project](https://img.shields.io/badge/translate-on%20transifex-brightgreen)](https://explore.transifex.com/cockatrice/cockatrice/)
 
-Cockatrice uses Transifex to manage translations. You can help us bring <kbd>Cockatrice</kbd>, <kbd>Oracle</kbd> and <kbd>Webatrice</kbd> to your language and just adjust single wordings right from within your browser by visiting our [Transifex project page](https://explore.transifex.com/cockatrice/cockatrice/).<br>
+Cockatrice uses Transifex to manage translations. You can help us bring <kbd>Cockatrice</kbd> and <kbd>Oracle</kbd> to your language and just adjust single wordings right from within your browser by visiting our [Transifex project page](https://explore.transifex.com/cockatrice/cockatrice/). The [Webatrice](https://github.com/seavor/Webatrice) web client manages its own translations in its repo.<br>
 
 Check out our [Translator FAQ](https://github.com/Cockatrice/Cockatrice/wiki/Translation-FAQ) for more information about getting involved, and join a group of hundreds of others!<br>
 
 
-# Build [![CI Desktop](https://github.com/Cockatrice/Cockatrice/actions/workflows/desktop-build.yml/badge.svg?branch=master&event=push)](https://github.com/Cockatrice/Cockatrice/actions/workflows/desktop-build.yml?query=branch%3Amaster+event%3Apush) [![CI Docker](https://github.com/Cockatrice/Cockatrice/actions/workflows/docker-release.yml/badge.svg?branch=master&event=push)](https://github.com/Cockatrice/Cockatrice/actions/workflows/docker-release.yml?query=branch%3Amaster+event%3Apush) [![CI Web](https://github.com/Cockatrice/Cockatrice/actions/workflows/web-build.yml/badge.svg?branch=master&event=push)](https://github.com/Cockatrice/Cockatrice/actions/workflows/web-build.yml?query=branch%3Amaster+event%3Apush)
+# Build [![CI Desktop](https://github.com/Cockatrice/Cockatrice/actions/workflows/desktop-build.yml/badge.svg?branch=master&event=push)](https://github.com/Cockatrice/Cockatrice/actions/workflows/desktop-build.yml?query=branch%3Amaster+event%3Apush) [![CI Docker](https://github.com/Cockatrice/Cockatrice/actions/workflows/docker-release.yml/badge.svg?branch=master&event=push)](https://github.com/Cockatrice/Cockatrice/actions/workflows/docker-release.yml?query=branch%3Amaster+event%3Apush)
 
 Dependencies: *(for minimum versions search our [CMake file](https://github.com/Cockatrice/Cockatrice/blob/master/CMakeLists.txt))*
 - [Qt](https://www.qt.io/developers/)
@@ -149,16 +152,21 @@ You can then
 <br>
 
 The following flags (with their non-default values) can be passed to `cmake`:
-| Flag | Description |
-| --- | --- |
-| `-DWITH_SERVER=1` | Build <kbd>Servatrice</kbd> server |
-| `-DWITH_CLIENT=0` | Don't build <kbd>Cockatrice</kbd> client |
-| `-DWITH_ORACLE=0` | Don't build <kbd>Oracle</kbd> card database tool |
-| `-DCMAKE_BUILD_TYPE=Debug` | Compile in debug mode<br> Enables extra logging output, debug symbols, and much more verbose compiler warnings |
-| `-DWARNING_AS_ERROR=0` | Don't treat compilation warnings as errors in debug mode |
-| `-DUPDATE_TRANSLATIONS=1` |  Configure `make` to update the translation .ts files for new strings in the source code<br> **Note:** `make clean` will remove the .ts files |
-| `-DTEST=1` | Enable regression tests<br> **Note:** `make test` to run tests, *googletest* will be downloaded if not available |
-| `-DFORCE_USE_QT5=1` | Skip looking for Qt6 before trying to find Qt5 |
+| Flag                       | Description                                                                                                                                   |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-DWITH_SERVER=1`          | Build <kbd>Servatrice</kbd> server                                                                                                            |
+| `-DWITH_CLIENT=0`          | Don't build <kbd>Cockatrice</kbd> client                                                                                                      |
+| `-DWITH_ORACLE=0`          | Don't build <kbd>Oracle</kbd> card database tool                                                                                              |
+| `-DCMAKE_BUILD_TYPE=Debug` | Compile in debug mode<br> Enables extra logging output, debug symbols, and much more verbose compiler warnings                                |
+| `-DWARNING_AS_ERROR=0`     | Don't treat compilation warnings as errors in debug mode                                                                                      |
+| `-DUPDATE_TRANSLATIONS=1`  |  Configure `make` to update the translation .ts files for new strings in the source code<br> **Note:** `make clean` will remove the .ts files |
+| `-DTEST=1`                 | Enable regression tests<br> **Note:** `make test` to run tests, *googletest* will be downloaded if not available                              |
+
+> [!TIP]
+> Build code documentation ([Doxygen](https://www.doxygen.nl)) according to our [configuration](https://github.com/Cockatrice/Cockatrice/blob/master/Doxyfile) into `/docs`:
+> ```bash
+> doxygen Doxyfile
+> ```
 
 
 # Run

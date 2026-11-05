@@ -1,24 +1,49 @@
 #include "dlg_load_deck_from_website.h"
 
+#include "../../deck_loader/card_node_function.h"
+#include "parsers/deck_link_to_api_transformer.h"
+#include "parsers/interface_json_deck_parser.h"
+
 #include <QApplication>
+#include <QByteArray>
 #include <QClipboard>
+#include <QDebug>
 #include <QDialogButtonBox>
 #include <QEventLoop>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonParseError>
+#include <QLabel>
+#include <QLineEdit>
 #include <QMessageBox>
+#include <QMessageLogger>
+#include <QMetaObject>
+#include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QString>
+#include <QStringList>
+#include <QTextStream>
+#include <QUrl>
+#include <QVBoxLayout>
+#include <functional>
 #include <libcockatrice/card/import/card_name_normalizer.h>
+#include <libcockatrice/network/network_manager.h>
+#include <qnamespace.h>
 #include <version_string.h>
 
+class QWidget;
+
+static const QStringList SUPPORTED_PROVIDERS = {"Archidekt", "Deckstats", "ManaBox", "Moxfield", "TappedOut"};
 DlgLoadDeckFromWebsite::DlgLoadDeckFromWebsite(QWidget *parent) : QDialog(parent)
 {
-    nam = new QNetworkAccessManager(this);
+    nam = NetworkManagerFactory::create(this);
 
     layout = new QVBoxLayout(this);
     setLayout(layout);
 
     instructionLabel = new QLabel(this);
+    instructionLabel->setWordWrap(true);
     layout->addWidget(instructionLabel);
 
     urlEdit = new QLineEdit(this);
@@ -42,8 +67,8 @@ DlgLoadDeckFromWebsite::DlgLoadDeckFromWebsite(QWidget *parent) : QDialog(parent
 
 void DlgLoadDeckFromWebsite::retranslateUi()
 {
-    instructionLabel->setText(tr("Paste a link to a decklist site here to import it.\n(Archidekt, Deckstats, Moxfield, "
-                                 "and TappedOut are supported.)"));
+    instructionLabel->setText(tr("Paste a link to a decklist site here to import it.") + "\n" +
+                              tr("Supported services: %1").arg(SUPPORTED_PROVIDERS.join(", ")));
 }
 
 bool DlgLoadDeckFromWebsite::testValidUrl()
@@ -62,8 +87,8 @@ void DlgLoadDeckFromWebsite::accept()
         if (!jsonParser && info.provider != DeckProvider::Deckstats && info.provider != DeckProvider::TappedOut) {
             qCWarning(DlgLoadDeckFromWebsiteLog) << "No parser found for provider";
             QMessageBox::warning(this, tr("Load Deck from Website"),
-                                 tr("No parser available for this deck provider.\n (Archidekt, Deckstats, Moxfield, "
-                                    "and TappedOut are supported.)"));
+                                 tr("No parser available for this deck provider.") + "\n" +
+                                     tr("Supported services: %1").arg(SUPPORTED_PROVIDERS.join(", ")));
             QDialog::reject();
             return;
         }
@@ -130,6 +155,7 @@ void DlgLoadDeckFromWebsite::accept()
                                 "https://archidekt.com/decks/9999999\n"
                                 "https://deckstats.net/decks/99999/9999999-your-deck-name/en\n"
                                 "https://moxfield.com/decks/XYZxx-XYZ99Yyy-xyzXzzz\n"
+                                "https://manabox.app/decks/XYZxxa-YZ99Yyyx_yzXzzz\n"
                                 "https://tappedout.net/mtg-decks/your-deck-name/"));
         QDialog::reject();
     }
@@ -142,6 +168,8 @@ QSharedPointer<IJsonDeckParser> DlgLoadDeckFromWebsite::createParserForProvider(
             return QSharedPointer<IJsonDeckParser>(new ArchidektJsonParser());
         case DeckProvider::Moxfield:
             return QSharedPointer<IJsonDeckParser>(new MoxfieldJsonParser());
+        case DeckProvider::Manabox:
+            return QSharedPointer<IJsonDeckParser>(new ManaboxJsonParser());
         default:
             return QSharedPointer<IJsonDeckParser>(nullptr);
     }

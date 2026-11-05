@@ -1,17 +1,31 @@
 #include "archidekt_api_response_deck_entry_display_widget.h"
 
 #include "../../../../../card_picture_loader/card_picture_loader.h"
-#include "../../../../cards/card_info_picture_with_text_overlay_widget.h"
 #include "../../../../general/display/background_plate_widget.h"
 #include "../../../../general/display/charts/bars/color_bar.h"
+#include "../../../../general/display/shadow_background_label.h"
+#include "../api_response/deck_listings/archidekt_api_response_deck_listing_container.h"
+#include "../api_response/deck_listings/archidekt_api_response_deck_owner.h"
 #include "archidekt_deck_preview_image_display_widget.h"
 
-#include <QHBoxLayout>
+#include <QByteArray>
+#include <QDateTime>
+#include <QFontMetrics>
 #include <QLabel>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QNetworkRequest>
 #include <QPixmap>
+#include <QRect>
+#include <QSharedPointer>
+#include <QSize>
+#include <QSizePolicy>
+#include <QVBoxLayout>
+#include <QVariant>
 #include <QWidget>
+#include <QtGlobal>
+#include <libcockatrice/utility/qt_utils.h>
+#include <qnamespace.h>
 #include <version_string.h>
 
 #define ARCHIDEKT_DEFAULT_IMAGE "https://storage.googleapis.com/topdekt-user/images/archidekt_deck_card_shadow.jpg"
@@ -20,21 +34,27 @@ static QString timeAgo(const QString &timestamp)
 {
     QDateTime dt = QDateTime::fromString(timestamp, Qt::ISODate);
 
-    if (!dt.isValid())
+    if (!dt.isValid()) {
         return timestamp; // fallback if parsing fails
+    }
 
     qint64 secs = dt.secsTo(QDateTime::currentDateTimeUtc());
 
-    if (secs < 60)
+    if (secs < 60) {
         return QString("%1 seconds ago").arg(secs);
-    if (secs < 3600)
+    }
+    if (secs < 3600) {
         return QString("%1 minutes ago").arg(secs / 60);
-    if (secs < 86400)
+    }
+    if (secs < 86400) {
         return QString("%1 hours ago").arg(secs / 3600);
-    if (secs < 30 * 86400)
+    }
+    if (secs < 30 * 86400) {
         return QString("%1 days ago").arg(secs / 86400);
-    if (secs < 365 * 86400)
+    }
+    if (secs < 365 * 86400) {
         return QString("%1 months ago").arg(secs / (30 * 86400));
+    }
 
     return QString("%1 years ago").arg(secs / (365 * 86400));
 }
@@ -131,11 +151,7 @@ void ArchidektApiResponseDeckEntryDisplayWidget::mousePressEvent(QMouseEvent *ev
     actRequestNavigationToDeck();
 }
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 void ArchidektApiResponseDeckEntryDisplayWidget::enterEvent(QEnterEvent *event)
-#else
-void ArchidektApiResponseDeckEntryDisplayWidget::enterEvent(QEvent *event)
-#endif
 {
     QWidget::enterEvent(event);
     backgroundPlateWidget->setFocused(true);
@@ -226,9 +242,7 @@ void ArchidektApiResponseDeckEntryDisplayWidget::updateScaledPreview()
 void ArchidektApiResponseDeckEntryDisplayWidget::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
-    layout->invalidate();
-    layout->activate();
-    layout->update();
+    QtUtils::relayout(layout);
 }
 
 void ArchidektApiResponseDeckEntryDisplayWidget::actRequestNavigationToDeck()

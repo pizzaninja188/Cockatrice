@@ -1,11 +1,17 @@
+#include "../../game_graphics/board/abstract_counter.h"
+#include "../../game_graphics/player/player_graphics_item.h"
+#include <libcockatrice/game/player/player_info.h>
+#include <libcockatrice/game/player/player_manager.h>
+#include <libcockatrice/game/board/counter_state.h>
+#include "ruled_client_ui.h"
 #include "ruled_restricted_mana_display.h"
 
 #include "../../interface/pixel_map_generator.h"
-#include "../abstract_game.h"
-#include "../board/abstract_counter.h"
-#include "../game_event_handler.h"
-#include "../player/player.h"
-#include "../player/player_actions.h"
+#include <libcockatrice/game/abstract_game.h>
+#include "../../game_graphics/board/abstract_counter.h"
+#include <libcockatrice/game/game_event_handler.h>
+#include <libcockatrice/game/player/player_logic.h>
+#include "ruled_player_actions.h"
 #include "ruled_client_state.h"
 #include "ruled_restricted_mana_model.h"
 
@@ -23,7 +29,7 @@ constexpr qreal DEFAULT_ROW_STEP = 45.0;
 class RestrictedManaPip final : public QGraphicsObject
 {
 public:
-    RestrictedManaPip(Player *player,
+    RestrictedManaPip(PlayerLogic *player,
                       quint32 groupId,
                       QChar symbol,
                       int count,
@@ -44,7 +50,7 @@ public:
 
     void paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidget *) override
     {
-        const auto *actions = player->getPlayerActions();
+        const auto *actions = RuledActions::actions(player);
         const bool eligible =
             !actions->ruledRestrictedManaPaymentPending() || actions->ruledRestrictedManaGroupEligible(groupId);
         painter->save();
@@ -94,7 +100,7 @@ protected:
     void mousePressEvent(QGraphicsSceneMouseEvent *event) override
     {
         if (event->button() == Qt::LeftButton && player->getPlayerInfo()->getLocal() &&
-            player->getPlayerActions()->tryPayRuledRestrictedMana(groupId, symbol)) {
+            RuledActions::actions(player)->tryPayRuledRestrictedMana(groupId, symbol)) {
             event->accept();
             return;
         }
@@ -102,7 +108,7 @@ protected:
     }
 
 private:
-    Player *player;
+    PlayerLogic *player;
     quint32 groupId;
     QChar symbol;
     int count;
@@ -116,12 +122,14 @@ struct CounterRow
     qreal size = DEFAULT_COUNTER_SIZE;
 };
 
-CounterRow rowForSymbol(Player *player, QChar symbol)
+CounterRow rowForSymbol(PlayerLogic *player, QChar symbol)
 {
     const QChar wanted = symbol == QLatin1Char('C') ? QLatin1Char('X') : symbol;
+    const auto *graphics = RuledActions::graphics(player);
     for (const auto *counter : player->getCounters()) {
-        if (counter && counter->getShownInCounterArea() && counter->getName().trimmed().toUpper() == wanted) {
-            return {counter->pos().y(), counter->boundingRect().width()};
+        const auto *view = graphics && counter ? graphics->getCounterGraphicsItem(counter->getId()) : nullptr;
+        if (view && view->getShownInCounterArea() && counter->getName().trimmed().toUpper() == wanted) {
+            return {view->pos().y(), view->boundingRect().width()};
         }
     }
     const int index = QStringLiteral("WUBRGC").indexOf(symbol);
@@ -129,7 +137,7 @@ CounterRow rowForSymbol(Player *player, QChar symbol)
 }
 } // namespace
 
-RuledRestrictedManaDisplay::RuledRestrictedManaDisplay(Player *_player, QGraphicsItem *parent)
+RuledRestrictedManaDisplay::RuledRestrictedManaDisplay(PlayerLogic *_player, QGraphicsItem *parent)
     : QGraphicsObject(parent), player(_player)
 {
     auto *state = player->getGame()->getGameEventHandler()->ruled();
@@ -140,11 +148,11 @@ RuledRestrictedManaDisplay::RuledRestrictedManaDisplay(Player *_player, QGraphic
     });
     connect(state, &RuledClientState::legalActionsChanged, this, &RuledRestrictedManaDisplay::refresh);
     connect(state, &RuledClientState::sessionReset, this, &RuledRestrictedManaDisplay::refresh);
-    connect(player->getPlayerActions(), &PlayerActions::ruledRestrictedManaStagingChanged, this,
+    connect(RuledActions::actions(player), &RuledPlayerActions::ruledRestrictedManaStagingChanged, this,
             &RuledRestrictedManaDisplay::refresh, Qt::QueuedConnection);
-    connect(player->getPlayerActions(), &PlayerActions::ruledSpellManaPromptChanged, this,
+    connect(RuledActions::actions(player), &RuledPlayerActions::ruledSpellManaPromptChanged, this,
             &RuledRestrictedManaDisplay::refresh, Qt::QueuedConnection);
-    connect(player->getPlayerActions(), &PlayerActions::ruledAbilityManaPromptChanged, this,
+    connect(RuledActions::actions(player), &RuledPlayerActions::ruledAbilityManaPromptChanged, this,
             &RuledRestrictedManaDisplay::refresh, Qt::QueuedConnection);
     refresh();
 }
@@ -182,7 +190,7 @@ void RuledRestrictedManaDisplay::refresh()
     for (const auto &group : groups) {
         for (const QChar symbol : QStringLiteral("WUBRGC")) {
             stagedSelections[group.groupId][symbol] =
-                player->getPlayerActions()->ruledRestrictedManaOptimisticSpendCount(group.groupId, symbol);
+                RuledActions::actions(player)->ruledRestrictedManaOptimisticSpendCount(group.groupId, symbol);
         }
     }
 

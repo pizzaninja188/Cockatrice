@@ -1,8 +1,5 @@
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTOUIC ON)
-set(CMAKE_AUTORCC ON)
-
 set(HEADERS
+    game/dump_zone_range.h
     game/server_abstract_participant.h
     game/server_abstract_player.h
     game/server_arrow.h
@@ -19,7 +16,13 @@ set(HEADERS
     game/ruled_server_diagnostics.h
     game/ruled_player_binding.h
     game/ruled_utils.h
+    game/game_config.h
+    game/role_info.h
+    game/server_deck_validation_strategy.h
     game/server_game.h
+    game/server_game_lifecycle_strategy.h
+    game/server_match_result_strategy.h
+    game/server_match_game_factory.h
     game/server_player.h
     game/server_spectator.h
     server.h
@@ -32,15 +35,10 @@ set(HEADERS
     serverinfo_user_container.h
 )
 
-if(Qt6_FOUND)
-  qt6_wrap_cpp(MOC_SOURCES ${HEADERS})
-elseif(Qt5_FOUND)
-  qt5_wrap_cpp(MOC_SOURCES ${HEADERS})
-endif()
-
 add_library(
   libcockatrice_network_server_remote STATIC
-  ${MOC_SOURCES}
+  ${HEADERS}
+  game/dump_zone_range.cpp
   game/server_abstract_participant.cpp
   game/server_abstract_player.cpp
   game/server_arrow.cpp
@@ -79,5 +77,7 @@ target_include_directories(libcockatrice_network_server_remote PUBLIC .)
 # Make cockatrice_server depend on cockatrice_protocol
 target_link_libraries(
   libcockatrice_network_server_remote PUBLIC libcockatrice_protocol libcockatrice_utility libcockatrice_rng
-                                             libcockatrice_deck_list libcockatrice_card ${COCKATRICE_QT_MODULES}
+                                             libcockatrice_deck_list libcockatrice_card ${COCKATRICE_QT_VERSION_NAME}::Network ${COCKATRICE_QT_MODULES}
 )
+
+target_precompile_headers(libcockatrice_network_server_remote PRIVATE "${CMAKE_SOURCE_DIR}/cmake/pch/qtcore_pch.h")

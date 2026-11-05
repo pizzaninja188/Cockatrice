@@ -1,13 +1,22 @@
 #include "remote_decklist_tree_widget.h"
 
+#include "libcockatrice/protocol/pb/response.pb.h"
+
+#include <QAbstractItemView>
 #include <QFileIconProvider>
 #include <QHeaderView>
+#include <QItemSelectionModel>
+#include <QSharedPointer>
 #include <QSortFilterProxyModel>
+#include <QVariant>
 #include <libcockatrice/network/client/abstract/abstract_client.h>
 #include <libcockatrice/protocol/pb/command_deck_list.pb.h>
 #include <libcockatrice/protocol/pb/response_deck_list.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_deckstorage.pb.h>
 #include <libcockatrice/protocol/pending_command.h>
+
+class QObject;
+class QWidget;
 
 RemoteDeckList_TreeModel::DirectoryNode::DirectoryNode(const QString &_name,
                                                        RemoteDeckList_TreeModel::DirectoryNode *_parent)
@@ -22,8 +31,9 @@ RemoteDeckList_TreeModel::DirectoryNode::~DirectoryNode()
 
 void RemoteDeckList_TreeModel::DirectoryNode::clearTree()
 {
-    for (int i = 0; i < size(); ++i)
+    for (int i = 0; i < size(); ++i) {
         delete at(i);
+    }
     clear();
 }
 
@@ -31,31 +41,37 @@ QString RemoteDeckList_TreeModel::DirectoryNode::getPath() const
 {
     if (parent) {
         QString parentPath = parent->getPath();
-        if (parentPath.isEmpty())
+        if (parentPath.isEmpty()) {
             return name;
-        else
+        } else {
             return parentPath + "/" + name;
-    } else
+        }
+    } else {
         return name;
+    }
 }
 
 RemoteDeckList_TreeModel::DirectoryNode *RemoteDeckList_TreeModel::DirectoryNode::getNodeByPath(QStringList path)
 {
     QString pathItem;
     if (parent) {
-        if (path.isEmpty())
+        if (path.isEmpty()) {
             return this;
+        }
         pathItem = path.takeFirst();
-        if (pathItem.isEmpty() && name.isEmpty())
+        if (pathItem.isEmpty() && name.isEmpty()) {
             return this;
+        }
     }
 
     for (int i = 0; i < size(); ++i) {
         DirectoryNode *node = dynamic_cast<DirectoryNode *>(at(i));
-        if (!node)
+        if (!node) {
             continue;
-        if (node->getName() == pathItem)
+        }
+        if (node->getName() == pathItem) {
             return node->getNodeByPath(path);
+        }
     }
     return 0;
 }
@@ -66,12 +82,14 @@ RemoteDeckList_TreeModel::FileNode *RemoteDeckList_TreeModel::DirectoryNode::get
         DirectoryNode *node = dynamic_cast<DirectoryNode *>(at(i));
         if (node) {
             FileNode *result = node->getNodeById(id);
-            if (result)
+            if (result) {
                 return result;
+            }
         } else {
             FileNode *file = dynamic_cast<FileNode *>(at(i));
-            if (file->getId() == id)
+            if (file->getId() == id) {
                 return file;
+            }
         }
     }
     return 0;
@@ -95,23 +113,26 @@ RemoteDeckList_TreeModel::~RemoteDeckList_TreeModel()
 int RemoteDeckList_TreeModel::rowCount(const QModelIndex &parent) const
 {
     DirectoryNode *node = getNode<DirectoryNode *>(parent);
-    if (node)
+    if (node) {
         return node->size();
-    else
+    } else {
         return 0;
+    }
 }
 
 int RemoteDeckList_TreeModel::columnCount(const QModelIndex & /*parent*/) const
 {
-    return 3;
+    return 4;
 }
 
 QVariant RemoteDeckList_TreeModel::data(const QModelIndex &index, int role) const
 {
-    if (!index.isValid())
+    if (!index.isValid()) {
         return QVariant();
-    if (index.column() >= 3)
+    }
+    if (index.column() >= 4) {
         return QVariant();
+    }
 
     Node *temp = static_cast<Node *>(index.internalPointer());
     FileNode *file = dynamic_cast<FileNode *>(temp);
@@ -122,12 +143,29 @@ QVariant RemoteDeckList_TreeModel::data(const QModelIndex &index, int role) cons
                 switch (index.column()) {
                     case 0:
                         return node->getName();
+                    case 3:
+                        // Report the node's own bit, not the inherited effective
+                        // state, so it stays in step with what publishing toggles.
+                        if (node->isPublic()) {
+                            return tr("Public");
+                        }
+                        return isEffectivelyPublic(node) ? tr("Public (inherited)") : tr("Private");
                     default:
                         return QVariant();
                 }
             }
             case Qt::DecorationRole:
                 return index.column() == 0 ? dirIcon : QVariant();
+            case Qt::ToolTipRole:
+                if (index.column() == 3) {
+                    if (node->isPublic()) {
+                        return tr("This folder is visible to other users");
+                    }
+                    return isEffectivelyPublic(node)
+                               ? tr("This folder is private, but a parent folder is public (inherited).")
+                               : tr("This folder is only visible to you");
+                }
+                return QVariant();
             default:
                 return QVariant();
         }
@@ -141,6 +179,13 @@ QVariant RemoteDeckList_TreeModel::data(const QModelIndex &index, int role) cons
                         return file->getId();
                     case 2:
                         return file->getUploadTime();
+                    case 3:
+                        // Report the node's own bit, not the inherited effective
+                        // state, so it stays in step with what publishing toggles.
+                        if (file->isPublic()) {
+                            return tr("Public");
+                        }
+                        return isEffectivelyPublic(file) ? tr("Public (inherited)") : tr("Private");
                     default:
                         return QVariant();
                 }
@@ -149,6 +194,16 @@ QVariant RemoteDeckList_TreeModel::data(const QModelIndex &index, int role) cons
                 return index.column() == 0 ? fileIcon : QVariant();
             case Qt::TextAlignmentRole:
                 return index.column() == 1 ? Qt::AlignRight : Qt::AlignLeft;
+            case Qt::ToolTipRole:
+                if (index.column() == 3) {
+                    if (file->isPublic()) {
+                        return tr("This deck is visible to other users");
+                    }
+                    return isEffectivelyPublic(file)
+                               ? tr("This deck is private, but a parent folder is public (inherited).")
+                               : tr("This deck is only visible to you");
+                }
+                return QVariant();
             default:
                 return QVariant();
         }
@@ -157,8 +212,9 @@ QVariant RemoteDeckList_TreeModel::data(const QModelIndex &index, int role) cons
 
 QVariant RemoteDeckList_TreeModel::headerData(int section, Qt::Orientation orientation, int role) const
 {
-    if (orientation != Qt::Horizontal)
+    if (orientation != Qt::Horizontal) {
         return QVariant();
+    }
     switch (role) {
         case Qt::TextAlignmentRole:
             return section == 1 ? Qt::AlignRight : Qt::AlignLeft;
@@ -170,6 +226,8 @@ QVariant RemoteDeckList_TreeModel::headerData(int section, Qt::Orientation orien
                     return tr("ID");
                 case 2:
                     return tr("Upload time");
+                case 3:
+                    return tr("Visibility");
                 default:
                     return QVariant();
             }
@@ -181,20 +239,23 @@ QVariant RemoteDeckList_TreeModel::headerData(int section, Qt::Orientation orien
 
 QModelIndex RemoteDeckList_TreeModel::index(int row, int column, const QModelIndex &parent) const
 {
-    if (!hasIndex(row, column, parent))
+    if (!hasIndex(row, column, parent)) {
         return QModelIndex();
+    }
 
     DirectoryNode *parentNode = getNode<DirectoryNode *>(parent);
-    if (row >= parentNode->size())
+    if (row >= parentNode->size()) {
         return QModelIndex();
+    }
 
     return createIndex(row, column, parentNode->at(row));
 }
 
 QModelIndex RemoteDeckList_TreeModel::parent(const QModelIndex &ind) const
 {
-    if (!ind.isValid())
+    if (!ind.isValid()) {
         return QModelIndex();
+    }
 
     return nodeToIndex(static_cast<Node *>(ind.internalPointer())->getParent());
 }
@@ -210,8 +271,9 @@ Qt::ItemFlags RemoteDeckList_TreeModel::flags(const QModelIndex &index) const
 
 QModelIndex RemoteDeckList_TreeModel::nodeToIndex(Node *node) const
 {
-    if (node == nullptr || node == root)
+    if (node == nullptr || node == root) {
         return QModelIndex();
+    }
     return createIndex(node->getParent()->indexOf(node), 0, node);
 }
 
@@ -222,21 +284,23 @@ void RemoteDeckList_TreeModel::addFileToTree(const ServerInfo_DeckStorage_TreeIt
     time.setSecsSinceEpoch(fileInfo.creation_time());
 
     beginInsertRows(nodeToIndex(parent), parent->size(), parent->size());
-    parent->append(new FileNode(QString::fromStdString(file.name()), file.id(), time, parent));
+    parent->append(new FileNode(QString::fromStdString(file.name()), file.id(), time, parent, fileInfo.is_public()));
     endInsertRows();
 }
 
 void RemoteDeckList_TreeModel::addFolderToTree(const ServerInfo_DeckStorage_TreeItem &folder, DirectoryNode *parent)
 {
     DirectoryNode *newItem = addNamedFolderToTree(QString::fromStdString(folder.name()), parent);
+    newItem->setIsPublic(folder.folder().is_public());
     const ServerInfo_DeckStorage_Folder &folderInfo = folder.folder();
     const int folderItemsSize = folderInfo.items_size();
     for (int i = 0; i < folderItemsSize; ++i) {
         const ServerInfo_DeckStorage_TreeItem &subItem = folderInfo.items(i);
-        if (subItem.has_folder())
+        if (subItem.has_folder()) {
             addFolderToTree(subItem, newItem);
-        else
+        } else {
             addFileToTree(subItem, newItem);
+        }
     }
 }
 
@@ -265,6 +329,21 @@ void RemoteDeckList_TreeModel::refreshTree()
     connect(pend, &PendingCommand::finished, this, &RemoteDeckList_TreeModel::deckListFinished);
 
     client->sendCommand(pend);
+}
+
+bool RemoteDeckList_TreeModel::isEffectivelyPublic(const Node *node) const
+{
+    if (node == nullptr || node == root) {
+        return false;
+    }
+    const Node *current = node;
+    while (current != nullptr) {
+        if (current->isPublic()) {
+            return true;
+        }
+        current = current->getParent();
+    }
+    return false;
 }
 
 void RemoteDeckList_TreeModel::clearTree()

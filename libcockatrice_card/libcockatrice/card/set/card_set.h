@@ -5,12 +5,14 @@
 #include <QList>
 #include <QSharedPointer>
 #include <QString>
-#include <libcockatrice/interfaces/interface_card_set_priority_controller.h>
 
 class CardInfo;
+class ICardSetPriorityController;
+
 using CardInfoPtr = QSharedPointer<CardInfo>;
 
 class CardSet;
+
 using CardSetPtr = QSharedPointer<CardSet>;
 
 /**
@@ -107,31 +109,31 @@ public:
      */
     [[nodiscard]] QString getCorrectedShortName() const;
 
-    /// @return Short identifier of the set.
+    /** @return Short identifier of the set. */
     [[nodiscard]] QString getShortName() const
     {
         return shortName;
     }
 
-    /// @return Descriptive name of the set.
+    /** @return Descriptive name of the set. */
     [[nodiscard]] QString getLongName() const
     {
         return longName;
     }
 
-    /// @return Type/category string of the set.
+    /** @return Type/category string of the set. */
     [[nodiscard]] QString getSetType() const
     {
         return setType;
     }
 
-    /// @return Release date of the set.
+    /** @return Release date of the set. */
     [[nodiscard]] QDate getReleaseDate() const
     {
         return releaseDate;
     }
 
-    /// @return Priority level of the set.
+    /** @return Priority level of the set. */
     [[nodiscard]] Priority getPriority() const
     {
         return priority;
@@ -181,7 +183,16 @@ public:
      */
     void loadSetOptions();
 
-    /// @return The sort key assigned to this set.
+    void setSortKeyInMemory(unsigned int _sortKey)
+    {
+        sortKey = _sortKey;
+    }
+    void setEnabledInMemory(bool _enabled)
+    {
+        enabled = _enabled;
+    }
+
+    /** @return The sort key assigned to this set. */
     [[nodiscard]] int getSortKey() const
     {
         return sortKey;
@@ -193,7 +204,7 @@ public:
      */
     void setSortKey(unsigned int _sortKey);
 
-    /// @return True if the set is enabled.
+    /** @return True if the set is enabled. */
     [[nodiscard]] bool getEnabled() const
     {
         return enabled;
@@ -205,7 +216,7 @@ public:
      */
     void setEnabled(bool _enabled);
 
-    /// @return True if the set is considered known.
+    /** @return True if the set is considered known. */
     [[nodiscard]] bool getIsKnown() const
     {
         return isknown;
@@ -216,6 +227,10 @@ public:
      * @param _isknown True if known, false if unknown.
      */
     void setIsKnown(bool _isknown);
+    void setIsKnownInMemory(bool _isknown)
+    {
+        isknown = _isknown;
+    }
 
     /**
      * @brief Determines whether the set has incomplete metadata and should be ignored.
@@ -224,7 +239,7 @@ public:
      */
     [[nodiscard]] bool getIsKnownIgnored() const
     {
-        return longName.length() + setType.length() + releaseDate.toString().length() == 0;
+        return longName.isEmpty() && setType.isEmpty() && !releaseDate.isValid();
     }
 };
 

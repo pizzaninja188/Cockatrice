@@ -8,48 +8,32 @@
 #ifndef TAB_GENERIC_DECK_EDITOR_H
 #define TAB_GENERIC_DECK_EDITOR_H
 
-#include "../interface/widgets/deck_editor/deck_editor_card_database_dock_widget.h"
-#include "../interface/widgets/deck_editor/deck_editor_card_info_dock_widget.h"
-#include "../interface/widgets/deck_editor/deck_editor_database_display_widget.h"
-#include "../interface/widgets/deck_editor/deck_editor_deck_dock_widget.h"
-#include "../interface/widgets/deck_editor/deck_editor_filter_dock_widget.h"
-#include "../interface/widgets/deck_editor/deck_editor_printing_selector_dock_widget.h"
-#include "../interface/widgets/menus/deck_editor_menu.h"
-#include "../interface/widgets/visual_deck_storage/deck_preview/deck_preview_deck_tags_display_widget.h"
+#include "../../deck_loader/deck_loader.h"
+#include "libcockatrice/card/card_info.h"
 #include "tab.h"
 
-#include <libcockatrice/deck_list/deck_list_history_manager.h>
+#include <QMap>
+#include <QSize>
+#include <QString>
+#include <qtmetamacros.h>
 
 class DeckStateManager;
 class CardDatabaseModel;
-class CardDatabaseDisplayModel;
-
-class CardInfoFrameWidget;
-class DeckLoader;
 class DeckEditorMenu;
 class DeckEditorCardInfoDockWidget;
 class DeckEditorCardDatabaseDockWidget;
 class DeckEditorDeckDockWidget;
 class DeckEditorFilterDockWidget;
 class DeckEditorPrintingSelectorDockWidget;
-class DeckPreviewDeckTagsDisplayWidget;
 class Response;
 class FilterTree;
-class FilterTreeModel;
-class FilterBuilder;
-
-class QTreeView;
-class QTextEdit;
-class QLabel;
-class QComboBox;
-class QGroupBox;
 class QMessageBox;
-class QHBoxLayout;
-class QVBoxLayout;
-class QPushButton;
 class QDockWidget;
 class QMenu;
 class QAction;
+class ExactCard;
+class TabSupervisor;
+struct LoadedDeck;
 
 /**
  * @class AbstractTabDeckEditor
@@ -77,8 +61,8 @@ class QAction;
  *
  * **Key Methods:**
  *
- * - actAddCard(const ExactCard &card) — Adds a card to the deck.
- * - actDecrementCard(const ExactCard &card) — Removes a single instance of a card from the deck.
+ * - addCard(const ExactCard &card, const QString &zoneName) — Adds a card to the deck.
+ * - decrementCard(const ExactCard &card, const QString &zoneName) — Removes a single instance of a card from the deck.
  * - actRemoveCard() — Removes the currently selected card from the deck.
  * - actSaveDeckAs() — Performs a "Save As" action for the deck.
  * - updateCard(const ExactCard &card) — Updates the currently displayed card info in the dock.
@@ -126,6 +110,7 @@ public:
 
     // UI Elements
     DeckStateManager *deckStateManager;
+    CardDatabaseModel *databaseModel;                                 ///< Card database
     DeckEditorMenu *deckMenu;                                         ///< Menu for deck operations
     DeckEditorCardDatabaseDockWidget *cardDatabaseDockWidget;         ///< Database dock
     DeckEditorCardInfoDockWidget *cardInfoDockWidget;                 ///< Card info dock
@@ -140,22 +125,35 @@ public slots:
     /** @brief Called when the deck is modified. */
     virtual void onDeckModified();
 
-    /** @brief Updates the card info panel.
-     *  @param card The card to display.
+    /**
+     * @brief Updates the card info dock and printing selector.
+     * @param card The card to display.
      */
     void updateCard(const ExactCard &card);
 
-    /** @brief Adds a card to the main deck or sideboard based on Ctrl key. */
-    void actAddCard(const ExactCard &card);
+    /**
+     * @brief Updates just the card info dock
+     * @param card The card to display
+     */
+    void updateCardInfo(const ExactCard &card);
 
-    /** @brief Adds a card to the sideboard explicitly. */
-    void actAddCardToSideboard(const ExactCard &card);
+    /**
+     * @brief Adds a card to the given zone
+     * @param card Card to add.
+     * @param zoneName Zone to add the card to.
+     */
+    void addCard(const ExactCard &card, const QString &zoneName);
 
-    /** @brief Decrements a card from the main deck. */
-    void actDecrementCard(const ExactCard &card);
-
-    /** @brief Decrements a card from the sideboard. */
-    void actDecrementCardFromSideboard(const ExactCard &card);
+    /**
+     * @brief Decrements a card from the given zone
+     *
+     * Use an ExactCard with empty PrintingInfo if you want to remove a card by name regardless of printing.
+     * Otherwise, it won't remove anything unless there's an exact printing match.
+     *
+     * @param card Card to decrement.
+     * @param zoneName Zone to decrement from.
+     */
+    void decrementCard(const ExactCard &card, const QString &zoneName);
 
     /** @brief Opens a recently opened deck file. */
     void actOpenRecent(const QString &fileName);
@@ -166,8 +164,15 @@ public slots:
     /** @brief Requests closing the tab. */
     bool closeRequest() override;
 
-    /** @brief Shows the printing selector dock. Pure virtual. */
-    virtual void showPrintingSelector() = 0;
+    /** @brief Shows the printing selector dock and updates it with the current card. */
+    void showPrintingSelector();
+
+    /**
+     * @brief Opens an EDHRec tab for the given card
+     * @param info The card
+     * @param isCommander The type of search
+     */
+    void openEdhrecTab(const CardInfoPtr &info, bool isCommander);
 
 signals:
     /** @brief Emitted when a deck should be opened in a new editor tab. */
@@ -191,6 +196,9 @@ protected slots:
 
     /** @brief Saves the current deck under a new name. */
     virtual bool actSaveDeckAs();
+
+    /** @brief Opens the deck share dialog for the current deck. */
+    void actShareDeck();
 
     /** @brief Loads a deck from the clipboard. */
     virtual void actLoadDeckFromClipboard();
@@ -242,12 +250,12 @@ protected slots:
     /** @brief Handles dock close events. */
     void closeEvent(QCloseEvent *event) override;
 
-private:
     /** @brief Sets the deck for this tab.
      *  @param _deck The deck object.
      */
     virtual void setDeck(const LoadedDeck &_deck);
 
+private:
     /** @brief Helper for editing decks from the clipboard. */
     void editDeckInClipboard(bool annotated);
 
@@ -292,9 +300,6 @@ protected:
      *  @return Pointer to a QMessageBox.
      */
     QMessageBox *createSaveConfirmationWindow();
-
-    /** @brief Helper function to add a card to a specific deck zone. */
-    void addCardHelper(const ExactCard &card, const QString &zoneName);
 
     /** @brief Opens a deck from a file. */
     virtual void openDeckFromFile(const QString &fileName, DeckOpenLocation deckOpenLocation);

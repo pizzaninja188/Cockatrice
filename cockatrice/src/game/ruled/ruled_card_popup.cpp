@@ -1,9 +1,9 @@
 #include "ruled_card_popup.h"
 
-#include "../board/abstract_card_item.h"
-#include "../board/card_item.h"
-#include "../player/player.h"
-#include "../player/player_info.h"
+#include "../../game_graphics/board/abstract_card_item.h"
+#include "../../game_graphics/board/card_item.h"
+#include <libcockatrice/game/player/player_logic.h>
+#include <libcockatrice/game/player/player_info.h>
 #include "ruled_actions.h"
 #include "ruled_client_state.h"
 
@@ -27,7 +27,7 @@ void connectRuledCardPopup(AbstractGame *game,
                                                          zone->getName() == ZoneNames::EXILE &&
                                                          RuledActions::isRuledGame(game);
                          const RuledClientState *state = ruledFaceDownExile ? RuledActions::stateFor(game) : nullptr;
-                         Player *zonePlayer = zone ? zone->getPlayer() : nullptr;
+                         PlayerLogic *zonePlayer = zone ? zone->getPlayer() : nullptr;
                          const PlayerInfo *info = zonePlayer ? zonePlayer->getPlayerInfo() : nullptr;
                          const QString privateName = state && info
                                                          ? state->privateFaceDownNameForCard(info->getId(), physical->getId())

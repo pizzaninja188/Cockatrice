@@ -19,16 +19,36 @@
  ***************************************************************************/
 #include "server.h"
 
+#include "game/server_abstract_participant.h"
 #include "game/server_game.h"
-#include "game/server_player.h"
+#include "libcockatrice/protocol/pb/commands.pb.h"
+#include "libcockatrice/protocol/pb/game_commands.pb.h"
+#include "libcockatrice/protocol/pb/game_event_container.pb.h"
+#include "libcockatrice/protocol/pb/response.pb.h"
+#include "libcockatrice/protocol/pb/room_commands.pb.h"
+#include "libcockatrice/protocol/pb/room_event.pb.h"
+#include "libcockatrice/protocol/pb/serverinfo_ban.pb.h"
+#include "libcockatrice/protocol/pb/serverinfo_game.pb.h"
+#include "libcockatrice/protocol/pb/serverinfo_room.pb.h"
+#include "libcockatrice/protocol/pb/serverinfo_user.pb.h"
+#include "server_abstractuserinterface.h"
 #include "server_database_interface.h"
 #include "server_protocolhandler.h"
 #include "server_remoteuserinterface.h"
+#include "server_response_containers.h"
 #include "server_room.h"
+#include "serverinfo_user_container.h"
 
-#include <QCoreApplication>
+#include <QDateTime>
 #include <QDebug>
+#include <QMapIterator>
+#include <QMetaType>
+#include <QPair>
+#include <QReadLocker>
+#include <QSharedPointer>
 #include <QThread>
+#include <QWriteLocker>
+#include <google/protobuf/stubs/port.h>
 #include <libcockatrice/protocol/debug_pb_message.h>
 #include <libcockatrice/protocol/pb/event_connection_closed.pb.h>
 #include <libcockatrice/protocol/pb/event_list_rooms.pb.h>
@@ -36,6 +56,10 @@
 #include <libcockatrice/protocol/pb/event_user_left.pb.h>
 #include <libcockatrice/protocol/pb/isl_message.pb.h>
 #include <libcockatrice/protocol/pb/session_event.pb.h>
+#include <qlogging.h>
+#include <qnamespace.h>
+#include <string>
+#include <utility>
 
 Server::Server(QObject *parent) : QObject(parent), nextLocalGameId(0), tcpUserCount(0), webSocketUserCount(0)
 {
@@ -56,8 +80,9 @@ void Server::prepareDestroy()
 {
     roomsLock.lockForWrite();
     QMapIterator<int, Server_Room *> roomIterator(rooms);
-    while (roomIterator.hasNext())
+    while (roomIterator.hasNext()) {
         delete roomIterator.next().value();
+    }
     rooms.clear();
     roomsLock.unlock();
 }
@@ -86,22 +111,35 @@ AuthenticationResult Server::loginUser(Server_ProtocolHandler *session,
     bool hasClientId = false;
     if (clientid.isEmpty()) {
         // client id is empty, either out dated client or client has been modified
-        if (getClientIDRequiredEnabled())
+        if (getClientIDRequiredEnabled()) {
             return ClientIdRequired;
+        }
     } else {
         hasClientId = true;
     }
 
-    if (name.size() > 35)
+    if (name.size() > 35) {
         name = name.left(35);
+    }
 
     Server_DatabaseInterface *databaseInterface = getDatabaseInterface();
 
     AuthenticationResult authState = databaseInterface->checkUserPassword(session, name, password, clientid, reasonStr,
                                                                           secondsLeft, passwordNeedsHash);
     if (authState == NotLoggedIn || authState == UserIsBanned || authState == UsernameInvalid ||
-        authState == UserIsInactive)
+        authState == UserIsInactive) {
         return authState;
+    }
+
+    if (authState == PasswordChangeRequired) {
+        // The credentials were right, but the account must choose a new password before it may
+        // use the server. Give the session an identity so it can complete that change, without
+        // registering a user session or announcing the user as logged in.
+        ServerInfo_User pendingData = databaseInterface->getUserData(name, true);
+        pendingData.set_address(session->getAddress().toStdString());
+        session->setUserInfo(pendingData);
+        return authState;
+    }
 
     ServerInfo_User data = databaseInterface->getUserData(name, true);
     data.set_address(session->getAddress().toStdString());
@@ -140,8 +178,9 @@ AuthenticationResult Server::loginUser(Server_ProtocolHandler *session,
         QString tempName = name;
         int i = 0;
         while (users.contains(tempName) || databaseInterface->activeUserExists(tempName) ||
-               databaseInterface->userSessionExists(tempName))
+               databaseInterface->userSessionExists(tempName)) {
             tempName = name + "_" + QString::number(++i);
+        }
         name = tempName;
         data.set_name(name.toStdString());
     }
@@ -163,9 +202,11 @@ AuthenticationResult Server::loginUser(Server_ProtocolHandler *session,
     Event_UserJoined event;
     event.mutable_user_info()->CopyFrom(session->copyUserInfo(false));
     SessionEvent *se = Server_ProtocolHandler::prepareSessionEvent(event);
-    for (auto &client : clients)
-        if (client->getAcceptsUserListChanges())
+    for (auto &client : clients) {
+        if (client->getAcceptsUserListChanges()) {
             client->sendProtocolItem(*se);
+        }
+    }
     delete se;
 
     event.mutable_user_info()->CopyFrom(session->copyUserInfo(true, true, true));
@@ -181,6 +222,25 @@ AuthenticationResult Server::loginUser(Server_ProtocolHandler *session,
     delete se;
 
     return authState;
+}
+
+void Server::broadcastUserInfoUpdate(Server_ProtocolHandler *source)
+{
+    Event_UserJoined event;
+    event.mutable_user_info()->CopyFrom(source->copyUserInfo(false));
+
+    SessionEvent *se = Server_ProtocolHandler::prepareSessionEvent(event);
+
+    clientsLock.lockForRead();
+    for (auto &client : clients) {
+        if (client->getAcceptsUserListChanges()) {
+            client->sendProtocolItem(*se);
+        }
+    }
+    clientsLock.unlock();
+
+    sendIsl_SessionEvent(*se);
+    delete se;
 }
 
 void Server::addPersistentPlayer(const QString &userName, int roomId, int gameId, int playerId)
@@ -206,19 +266,22 @@ Server_AbstractUserInterface *Server::findUser(const QString &userName) const
     // Call this only with clientsLock set.
 
     Server_AbstractUserInterface *userHandler = users.value(userName);
-    if (userHandler)
+    if (userHandler) {
         return userHandler;
-    else
+    } else {
         return externalUsers.value(userName);
+    }
 }
 
 void Server::addClient(Server_ProtocolHandler *client)
 {
-    if (client->getConnectionType() == "tcp")
+    if (client->getConnectionType() == "tcp") {
         tcpUserCount++;
+    }
 
-    if (client->getConnectionType() == "websocket")
+    if (client->getConnectionType() == "websocket") {
         webSocketUserCount++;
+    }
 
     QWriteLocker locker(&clientsLock);
     clients << client;
@@ -232,34 +295,38 @@ void Server::removeClient(Server_ProtocolHandler *client)
         return;
     }
 
-    if (client->getConnectionType() == "tcp")
+    if (client->getConnectionType() == "tcp") {
         tcpUserCount--;
+    }
 
-    if (client->getConnectionType() == "websocket")
+    if (client->getConnectionType() == "websocket") {
         webSocketUserCount--;
+    }
 
     QWriteLocker locker(&clientsLock);
     clients.removeAt(clientIndex);
     ServerInfo_User *data = client->getUserInfo();
-    if (data) {
+    // A session that never completed login (for example one that still owes a password change)
+    // has no session id: it was never announced as joined, so it must not be announced as leaving.
+    if (data && data->has_session_id()) {
         Event_UserLeft event;
         event.set_name(data->name());
         SessionEvent *se = Server_ProtocolHandler::prepareSessionEvent(event);
-        for (auto &_client : clients)
-            if (_client->getAcceptsUserListChanges())
+        for (auto &_client : clients) {
+            if (_client->getAcceptsUserListChanges()) {
                 _client->sendProtocolItem(*se);
+            }
+        }
         sendIsl_SessionEvent(*se);
         delete se;
 
         users.remove(QString::fromStdString(data->name()));
         qDebug() << "Server::removeClient: name=" << QString::fromStdString(data->name());
 
-        if (data->has_session_id()) {
-            const qint64 sessionId = data->session_id();
-            usersBySessionId.remove(sessionId);
-            emit endSession(sessionId);
-            qDebug() << "closed session id:" << sessionId;
-        }
+        const qint64 sessionId = data->session_id();
+        usersBySessionId.remove(sessionId);
+        emit endSession(sessionId);
+        qDebug() << "closed session id:" << sessionId;
     }
     qDebug() << "Server::removeClient: removed" << (void *)client << ";" << clients.size() << "clients; "
              << users.size() << "users left";
@@ -272,10 +339,13 @@ QList<QString> Server::getOnlineModeratorList() const
     for (auto &client : clients) {
         ServerInfo_User *data = client->getUserInfo();
 
-        // TODO: this line should be updated in the event there is any type of new user level created
-        if (data &&
-            (data->user_level() & ServerInfo_User::IsModerator || data->user_level() & ServerInfo_User::IsAdmin))
+        //! \todo This line should be updated in the event there is any type of new user level created.
+        // A session that still owes a forced password change has user info but no session id:
+        // it never joined, so it must not be reported as an online moderator either.
+        if (data && data->has_session_id() &&
+            (data->user_level() & ServerInfo_User::IsModerator || data->user_level() & ServerInfo_User::IsAdmin)) {
             results << QString::fromStdString(data->name()).simplified();
+        }
     }
     return results;
 }
@@ -293,9 +363,11 @@ void Server::externalUserJoined(const ServerInfo_User &userInfo)
     event.mutable_user_info()->CopyFrom(userInfo);
 
     SessionEvent *se = Server_ProtocolHandler::prepareSessionEvent(event);
-    for (auto &client : clients)
-        if (client->getAcceptsUserListChanges())
+    for (auto &client : clients) {
+        if (client->getAcceptsUserListChanges()) {
             client->sendProtocolItem(*se);
+        }
+    }
     delete se;
     clientsLock.unlock();
 
@@ -319,18 +391,21 @@ void Server::externalUserLeft(const QString &userName)
     while (userGamesIterator.hasNext()) {
         userGamesIterator.next();
         Server_Room *room = rooms.value(userGamesIterator.value().first);
-        if (!room)
+        if (!room) {
             continue;
+        }
 
         QReadLocker roomGamesLocker(&room->gamesLock);
         Server_Game *game = room->getGames().value(userGamesIterator.key());
-        if (!game)
+        if (!game) {
             continue;
+        }
 
         QMutexLocker gameLocker(&game->gameMutex);
         auto *participant = game->getParticipants().value(userGamesIterator.value().second);
-        if (!participant)
+        if (!participant) {
             continue;
+        }
 
         participant->disconnectClient();
     }
@@ -343,9 +418,11 @@ void Server::externalUserLeft(const QString &userName)
 
     SessionEvent *se = Server_ProtocolHandler::prepareSessionEvent(event);
     clientsLock.lockForRead();
-    for (auto &client : clients)
-        if (client->getAcceptsUserListChanges())
+    for (auto &client : clients) {
+        if (client->getAcceptsUserListChanges()) {
             client->sendProtocolItem(*se);
+        }
+    }
     clientsLock.unlock();
     delete se;
 }
@@ -376,7 +453,7 @@ void Server::externalRoomUserLeft(int roomId, const QString &userName)
     room->removeExternalUser(userName);
 }
 
-void Server::externalRoomSay(int roomId, const QString &userName, const QString &message)
+void Server::externalRoomSay(int roomId, const QString &userName, const QString &message, const QString &channelId)
 {
     // This function is always called from the main thread via signal/slot.
     QReadLocker locker(&roomsLock);
@@ -386,10 +463,22 @@ void Server::externalRoomSay(int roomId, const QString &userName, const QString 
         qDebug() << "externalRoomSay: room id=" << roomId << "not found";
         return;
     }
-    room->say(userName, message, false);
+    if (!channelId.isEmpty() && !Server_Room::isMainChannel(channelId) && room->findChannel(channelId) == nullptr) {
+        // The receiver does not know this channel; say() would drop it, so do
+        // not log what was never delivered.
+        qDebug() << "externalRoomSay: unknown channel" << channelId << "for room id=" << roomId << "dropping";
+        return;
+    }
+    room->say(userName, message, channelId, false);
 
-    getDatabaseInterface()->logMessage(0, userName, "ISL", message, Server_DatabaseInterface::MessageTargetIslRoom,
-                                       room->getId(), room->getName());
+    if (channelId.isEmpty()) {
+        getDatabaseInterface()->logMessage(0, userName, "ISL", message, Server_DatabaseInterface::MessageTargetIslRoom,
+                                           room->getId(), room->getName());
+    } else {
+        getDatabaseInterface()->logMessage(0, userName, "ISL", message,
+                                           Server_DatabaseInterface::MessageTargetRoomChannel, room->getId(),
+                                           room->getName(), channelId);
+    }
 }
 
 void Server::externalRoomRemoveMessages(int roomId, const QString &userName, int amount)
@@ -492,8 +581,9 @@ void Server::externalGameCommandContainerReceived(const CommandContainer &cont,
 
             Response::ResponseCode resp = participant->processGameCommand(sc, responseContainer, ges);
 
-            if (resp != Response::RespOk)
+            if (resp != Response::RespOk) {
                 finalResponseCode = resp;
+            }
         }
         ges.sendToGame(game);
 
@@ -547,13 +637,16 @@ void Server::broadcastRoomUpdate(const ServerInfo_Room &roomInfo, bool sendToIsl
     SessionEvent *se = Server_ProtocolHandler::prepareSessionEvent(event);
 
     clientsLock.lockForRead();
-    for (auto &client : clients)
-        if (client->getAcceptsRoomListChanges())
+    for (auto &client : clients) {
+        if (client->getAcceptsRoomListChanges()) {
             client->sendProtocolItem(*se);
+        }
+    }
     clientsLock.unlock();
 
-    if (sendToIsl)
+    if (sendToIsl) {
         sendIsl_SessionEvent(*se);
+    }
 
     delete se;
 }
@@ -591,8 +684,9 @@ void Server::sendIsl_Response(const Response &item, int serverId, qint64 session
 {
     IslMessage msg;
     msg.set_message_type(IslMessage::RESPONSE);
-    if (sessionId != -1)
+    if (sessionId != -1) {
         msg.set_session_id(static_cast<google::protobuf::uint64>(sessionId));
+    }
     msg.mutable_response()->CopyFrom(item);
 
     emit sigSendIslMessage(msg, serverId);
@@ -602,8 +696,9 @@ void Server::sendIsl_SessionEvent(const SessionEvent &item, int serverId, qint64
 {
     IslMessage msg;
     msg.set_message_type(IslMessage::SESSION_EVENT);
-    if (sessionId != -1)
+    if (sessionId != -1) {
         msg.set_session_id(static_cast<google::protobuf::uint64>(sessionId));
+    }
     msg.mutable_session_event()->CopyFrom(item);
 
     emit sigSendIslMessage(msg, serverId);
@@ -613,8 +708,9 @@ void Server::sendIsl_GameEventContainer(const GameEventContainer &item, int serv
 {
     IslMessage msg;
     msg.set_message_type(IslMessage::GAME_EVENT_CONTAINER);
-    if (sessionId != -1)
+    if (sessionId != -1) {
         msg.set_session_id(static_cast<google::protobuf::uint64>(sessionId));
+    }
     msg.mutable_game_event_container()->CopyFrom(item);
 
     emit sigSendIslMessage(msg, serverId);
@@ -624,8 +720,9 @@ void Server::sendIsl_RoomEvent(const RoomEvent &item, int serverId, qint64 sessi
 {
     IslMessage msg;
     msg.set_message_type(IslMessage::ROOM_EVENT);
-    if (sessionId != -1)
+    if (sessionId != -1) {
         msg.set_session_id(static_cast<google::protobuf::uint64>(sessionId));
+    }
     msg.mutable_room_event()->CopyFrom(item);
 
     emit sigSendIslMessage(msg, serverId);

@@ -1,19 +1,19 @@
 /**
  * @file dlg_forgot_password_challenge.h
  * @ingroup AccountDialogs
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef DLG_FORGOTPASSWORDCHALLENGE_H
 #define DLG_FORGOTPASSWORDCHALLENGE_H
 
-#include <QComboBox>
 #include <QDialog>
 #include <QLineEdit>
+#include <QString>
+#include <qtmetamacros.h>
 
 class QLabel;
-class QPushButton;
-class QCheckBox;
+class QWidget;
 
 class DlgForgotPasswordChallenge : public QDialog
 {

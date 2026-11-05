@@ -1,17 +1,20 @@
 /**
  * @file printing_selector_card_search_widget.h
  * @ingroup PrintingWidgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef PRINTING_SELECTOR_CARD_SEARCH_WIDGET_H
 #define PRINTING_SELECTOR_CARD_SEARCH_WIDGET_H
 
-#include "printing_selector.h"
-
-#include <QLineEdit>
-#include <QTimer>
+#include <QString>
 #include <QWidget>
+#include <qtmetamacros.h>
+
+class PrintingSelector;
+class QHBoxLayout;
+class QLineEdit;
+class QTimer;
 
 class PrintingSelectorCardSearchWidget : public QWidget
 {

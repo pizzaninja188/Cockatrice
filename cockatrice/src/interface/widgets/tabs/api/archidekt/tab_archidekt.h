@@ -1,26 +1,37 @@
 #ifndef COCKATRICE_TAB_ARCHIDEKT_H
 #define COCKATRICE_TAB_ARCHIDEKT_H
 
-#include "../../interface/widgets/cards/card_size_widget.h"
-#include "../../interface/widgets/quick_settings/settings_button_widget.h"
 #include "../../tab.h"
-#include "display/archidekt_api_response_deck_listings_display_widget.h"
+#include "libcockatrice/card/card_info.h"
 
-#include <QCheckBox>
-#include <QComboBox>
-#include <QHBoxLayout>
-#include <QLabel>
-#include <QLineEdit>
-#include <QNetworkAccessManager>
-#include <QPushButton>
-#include <QScrollArea>
+#include <QChar>
+#include <QJsonObject>
+#include <QJsonValue>
+#include <QList>
+#include <QPointer>
 #include <QSet>
-#include <QSpinBox>
 #include <QString>
-#include <QTimer>
-#include <QVBoxLayout>
-#include <QWidget>
-#include <libcockatrice/card/database/card_database.h>
+#include <QUrl>
+#include <QVector>
+#include <qtmetamacros.h>
+
+class ArchidektApiResponseDeckListingsDisplayWidget;
+class CardSizeWidget;
+class QCheckBox;
+class QComboBox;
+class QHBoxLayout;
+class QLabel;
+class QLineEdit;
+class QNetworkAccessManager;
+class QNetworkReply;
+class QPushButton;
+class QScrollArea;
+class QSpinBox;
+class QTimer;
+class QVBoxLayout;
+class QWidget;
+class SettingsButtonWidget;
+class TabSupervisor;
 
 /** Base API link for Archidekt deck search */
 inline QString archidektApiLink = "https://archidekt.com/api/decks/v3/?name=";
@@ -46,6 +57,7 @@ public:
      * connects signals and slots, and triggers an initial fetch of top decks.
      */
     explicit TabArchidekt(TabSupervisor *_tabSupervisor);
+    ~TabArchidekt() override;
 
     /**
      * @brief Update all UI text to reflect the current language or translation
@@ -181,6 +193,17 @@ protected:
     bool eventFilter(QObject *obj, QEvent *event) override;
 
 private:
+    enum class RequestKind
+    {
+        Search,
+        NextPage,
+        Deck
+    };
+
+    void startRequest(QUrl url, RequestKind kind, int page = 1);
+    void cancelRequest();
+    void showRequestError(const QString &error);
+
     /**
      * @brief Initialize the main UI layout and toolbars
      *
@@ -227,7 +250,14 @@ private:
     int currentPage;                       ///< Current page number for infinite scroll
     bool isLoadingMore;                    ///< Flag to prevent multiple simultaneous page loads
     bool isListMode;
-    ArchidektApiResponseDeckListingsDisplayWidget *listingsWidget = nullptr;
+    QPointer<QNetworkReply> activeReply;
+    RequestKind requestKind = RequestKind::Search;
+    QUrl requestUrl;
+    QUrl nextPageUrl;
+    int requestedPage = 1;
+    QPointer<ArchidektApiResponseDeckListingsDisplayWidget> listingsWidget;
+    QLabel *requestStatusLabel;
+    QPushButton *retryButton;
 
     // ---------------------------------------------------------------------
     // Layout Containers
@@ -278,9 +308,11 @@ private:
 
     SettingsButtonWidget *formatButton; ///< Collapsible button for format filters
     QVector<QCheckBox *> formatChecks;  ///< Individual checkboxes for each format
+    QLabel *bracketLabel;               ///< Label for EDH bracket selection
     QComboBox *edhBracketCombo;         ///< Dropdown for EDH bracket selection
 
     SettingsButtonWidget *deckSizeButton; ///< Collapsible button for deck size filter
+    QLabel *cardsLabel;                   ///< Label for deck size selection
     QSpinBox *minDeckSizeSpin;            ///< Spinner to select minimum deck size
     QComboBox *minDeckSizeLogicCombo;     ///< Combo box for size comparison logic
 

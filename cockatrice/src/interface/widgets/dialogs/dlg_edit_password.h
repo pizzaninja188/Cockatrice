@@ -1,18 +1,19 @@
 /**
  * @file dlg_edit_password.h
  * @ingroup AccountDialogs
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef DLG_EDITPASSWORD_H
 #define DLG_EDITPASSWORD_H
 
 #include <QDialog>
 #include <QLineEdit>
+#include <QString>
+#include <qtmetamacros.h>
 
 class QLabel;
-class QPushButton;
-class QCheckBox;
+class QWidget;
 
 class DlgEditPassword : public QDialog
 {

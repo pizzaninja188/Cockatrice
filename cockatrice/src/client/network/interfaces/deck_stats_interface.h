@@ -1,16 +1,17 @@
 /**
  * @file deck_stats_interface.h
  * @ingroup ApiInterfaces
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef DECKSTATS_INTERFACE_H
 #define DECKSTATS_INTERFACE_H
 
-#include <libcockatrice/card/database/card_database.h>
-#include <libcockatrice/deck_list/deck_list.h>
+#include <QObject>
+#include <qtmetamacros.h>
 
 class QByteArray;
+class QString;
 class QNetworkAccessManager;
 class QNetworkReply;
 class DeckList;
@@ -20,8 +21,8 @@ class DeckStatsInterface : public QObject
     Q_OBJECT
 private:
     QNetworkAccessManager *manager;
-
-    CardDatabase &cardDatabase;
+    bool replyHandled = false;
+    void showError(const QString &message);
 
     /**
      * Deckstats doesn't recognize token cards, and instead tries to find the
@@ -35,7 +36,7 @@ private slots:
     void getAnalyzeRequestData(const DeckList &deck, QByteArray &data);
 
 public:
-    explicit DeckStatsInterface(CardDatabase &_cardDatabase, QObject *parent = nullptr);
+    explicit DeckStatsInterface(QObject *parent = nullptr);
     void analyzeDeck(const DeckList &deck);
 };
 

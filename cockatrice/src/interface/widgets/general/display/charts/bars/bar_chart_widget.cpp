@@ -1,13 +1,30 @@
 #include "bar_chart_widget.h"
 
+#include "../../interface/theme_manager.h"
+
+#include <QBrush>
+#include <QFlags>
+#include <QFont>
+#include <QLinearGradient>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPen>
+#include <QPoint>
+#include <QPointF>
+#include <QRect>
+#include <QSize>
 #include <QToolTip>
+#include <QtGlobal>
+#include <qnamespace.h>
 
 BarChartWidget::BarChartWidget(QWidget *parent) : QWidget(parent)
 {
     setMouseTracking(true);
+
+    // Labels read the InterfaceDefault role at paint time, so a font change
+    // only needs a repaint.
+    connect(themeManager, &ThemeManager::fontsChanged, this, [this] { update(); });
 }
 
 void BarChartWidget::setBars(const QVector<BarData> &newBars)
@@ -52,8 +69,9 @@ void BarChartWidget::paintEvent(QPaintEvent *)
     int barAreaWidth = right - left;
 
     int barCount = bars.size();
-    if (barCount == 0)
+    if (barCount == 0) {
         return;
+    }
 
     int spacing = 6;
     int barWidth = (barAreaWidth - (barCount - 1) * spacing) / barCount;
@@ -91,8 +109,9 @@ void BarChartWidget::paintEvent(QPaintEvent *)
         for (int j = 0; j < bar.segments.size(); j++) {
             const auto &seg = bar.segments[j];
             int segHeight = (seg.value * barAreaHeight / highest);
-            if (segHeight < 2 && seg.value > 0)
+            if (segHeight < 2 && seg.value > 0) {
                 segHeight = 2;
+            }
 
             int topY = yCurrent - segHeight;
 
@@ -133,7 +152,8 @@ void BarChartWidget::paintEvent(QPaintEvent *)
 
         // draw label below bar
         QRect labelRect(left + i * (barWidth + spacing), bottom, barWidth, LABEL_H);
-        QFont f = p.font();
+        // Family comes from the InterfaceDefault theme role; bold stays caller-side.
+        QFont f = themeManager->appFont(AppFont::InterfaceDefault);
         f.setBold(true);
         p.setFont(f);
         p.setPen(Qt::black);
@@ -189,8 +209,9 @@ void BarChartWidget::mouseMoveEvent(QMouseEvent *e)
     for (int i = 0; i < segments.size(); i++) {
         const auto &seg = segments[i];
         int segHeight = (seg.value * barAreaHeight / highest);
-        if (segHeight < 2 && seg.value > 0)
+        if (segHeight < 2 && seg.value > 0) {
             segHeight = 2;
+        }
 
         int topY = yCurrent - segHeight;
         int bottomY = yCurrent;
@@ -204,11 +225,7 @@ void BarChartWidget::mouseMoveEvent(QMouseEvent *e)
     if (hoveredSegment >= 0) {
         const auto &s = segments[hoveredSegment];
         QString text = QString("%1: %2 cards\n\n%3").arg(s.category).arg(s.value).arg(s.cards.join("\n"));
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
         QToolTip::showText(e->globalPosition().toPoint(), text, this);
-#else
-        QToolTip::showText(e->globalPos(), text, this);
-#endif
     } else {
         QToolTip::hideText();
     }

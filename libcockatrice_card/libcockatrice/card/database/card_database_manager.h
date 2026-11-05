@@ -2,7 +2,12 @@
 #define CARD_DATABASE_ACCESSOR_H
 
 #pragma once
-#include "card_database.h"
+
+class CardDatabase;
+class CardDatabaseQuerier;
+class ICardDatabasePathProvider;
+class ICardPreferenceProvider;
+class ICardSetPriorityController;
 
 /**
  * @class CardDatabaseManager
@@ -67,13 +72,13 @@ private:
     /** @brief Private destructor. */
     ~CardDatabaseManager() = default;
 
-    /// Static card preference provider pointer (default: Noop)
+    /** @brief Static card preference provider pointer (default: Noop). */
     static ICardPreferenceProvider *cardPreferenceProvider;
 
-    /// Static path provider pointer (default: Noop)
+    /** @brief Static path provider pointer (default: Noop). */
     static ICardDatabasePathProvider *pathProvider;
 
-    /// Static set priority controller pointer (default: Noop)
+    /** @brief Static set priority controller pointer (default: Noop). */
     static ICardSetPriorityController *setPriorityController;
 };
 

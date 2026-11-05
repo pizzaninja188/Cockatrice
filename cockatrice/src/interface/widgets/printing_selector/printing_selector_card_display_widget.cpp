@@ -1,11 +1,22 @@
 #include "printing_selector_card_display_widget.h"
 
+#include "libcockatrice/card/card_info.h"
+#include "libcockatrice/card/printing/printing_info.h"
+#include "libcockatrice/card/set/card_set.h"
+#include "printing_selector.h"
 #include "printing_selector_card_overlay_widget.h"
 #include "set_name_and_collectors_number_display_widget.h"
 
-#include <QGraphicsEffect>
+#include <QMap>
+#include <QSharedPointer>
+#include <QSizePolicy>
+#include <QString>
 #include <QVBoxLayout>
-#include <utility>
+#include <qnamespace.h>
+
+class AbstractTabDeckEditor;
+class DeckStateManager;
+class QSlider;
 
 /**
  * @brief Constructs a PrintingSelectorCardDisplayWidget to display card information.
@@ -67,10 +78,10 @@ void PrintingSelectorCardDisplayWidget::clampSetNameToPicture()
     update();
 }
 
-void PrintingSelectorCardDisplayWidget::updateCardAmounts(const QMap<QString, QPair<int, int>> &uuidToAmounts)
+void PrintingSelectorCardDisplayWidget::updateCardAmounts(const QMap<QString, ZoneCounts> &uuidToAmounts)
 {
-    auto [main, side] = uuidToAmounts.value(rootCard.getPrinting().getUuid());
-    overlayWidget->updateCardAmounts(main, side);
+    auto counts = uuidToAmounts.value(rootCard.getPrinting().getUuid());
+    overlayWidget->updateCardAmounts(counts.mainboard, counts.sideboard, counts.tokensboard);
 }
 
 void PrintingSelectorCardDisplayWidget::resizeEvent(QResizeEvent *event)

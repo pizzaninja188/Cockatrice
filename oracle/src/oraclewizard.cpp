@@ -1,26 +1,38 @@
 #include "oraclewizard.h"
 
 #include "client/settings/cache_settings.h"
+#include "database_writer.h"
 #include "main.h"
 #include "oracleimporter.h"
 #include "pages.h"
 #include "pagetemplates.h"
 
-#include <QCheckBox>
-#include <QFileDialog>
-#include <QGridLayout>
-#include <QLineEdit>
-#include <QNetworkReply>
-#include <QPushButton>
-#include <QScrollBar>
-#include <QtConcurrent>
-#include <QtGui>
+#include <QAbstractButton>
+#include <QApplication>
+#include <QDebug>
+#include <QDialog>
+#include <QEvent>
+#include <QFile>
+#include <QIODevice>
+#include <QList>
+#include <QLocalServer>
+#include <QLocalSocket>
+#include <QNetworkAccessManager>
+#include <QSettings>
+#include <QVariant>
+#include <QWindow>
+#include <QWizardPage>
+#include <QtGlobal>
+#include <libcockatrice/network/network_manager.h>
+#include <libcockatrice/settings/cards_display_settings.h>
+#include <libcockatrice/settings/personal_settings.h>
+#include <libcockatrice/utility/local_server_name.h>
+#include <qlogging.h>
+
+class QWidget;
 
 OracleWizard::OracleWizard(QWidget *parent) : QWizard(parent)
 {
-    // define a dummy context that will be used where needed
-    QString dummy = QT_TRANSLATE_NOOP("i18n", "English");
-
 #ifdef Q_OS_WIN
     setWizardStyle(QWizard::ModernStyle);
 #endif
@@ -33,11 +45,14 @@ OracleWizard::OracleWizard(QWidget *parent) : QWizard(parent)
         migrateOracleSettings();
     }
 
-    connect(&SettingsCache::instance(), &SettingsCache::langChanged, this, &OracleWizard::updateLanguage);
+    connect(&SettingsCache::instance().personal(), &PersonalSettings::langChanged, this, &OracleWizard::updateLanguage);
 
     importer = new OracleImporter(this);
+    // Import card text in the language the client displays, if supported:
+    // foreignData for any other language is never imported.
+    importer->setCardLang(SettingsCache::instance().cardsDisplay().getCardLang());
 
-    nam = new QNetworkAccessManager(this);
+    nam = NetworkManagerFactory::create(this);
 
     QList<OracleWizardPage *> pages;
 
@@ -59,6 +74,7 @@ OracleWizard::OracleWizard(QWidget *parent) : QWizard(parent)
     }
 
     retranslateUi();
+    startRaiseServer();
 }
 
 /**
@@ -109,6 +125,87 @@ void OracleWizard::accept()
     QDialog::accept();
 }
 
+void OracleWizard::reject()
+{
+    cancelled = true;
+
+    // The wizard is being closed while a page may still run a worker on the
+    // importer. Ask it to stop before the wizard (and the importer child) is
+    // destroyed, so the worker thread never touches freed memory.
+    if (auto *active = dynamic_cast<OracleWizardPage *>(currentPage())) {
+        active->cancelWork();
+    }
+
+    const auto replies = nam->findChildren<QNetworkReply *>();
+    for (QNetworkReply *reply : replies) {
+        reply->abort();
+    }
+
+    QWizard::reject();
+    // A hidden wizard does not close the application's last visible window.
+    // Stop background refreshes explicitly so the hosting client receives a verdict,
+    // using the same rule as main(): a reject after the database was written is still
+    // a successful update, only a reject that wrote nothing counts as a failure.
+    if (backgroundMode) {
+        QCoreApplication::exit(hasSavedDatabase() ? 0 : 1);
+    }
+}
+
+void OracleWizard::runInBackground()
+{
+    backgroundMode = true;
+    hide();
+    currentPage()->initializePage();
+}
+
+void OracleWizard::startRaiseServer()
+{
+    // Scope the socket name to the current user, mirroring the hosting client.
+    raiseServer = new QLocalServer(this);
+    connect(raiseServer, &QLocalServer::newConnection, this, &OracleWizard::handleRaiseRequest);
+    const QString serverName = scopedLocalServerName(QStringLiteral("CockatriceOracleRaise"));
+    if (raiseServer->listen(serverName)) {
+        return;
+    }
+    // A stale socket left behind by a crashed run holds the name: take it back.
+    QLocalServer::removeServer(serverName);
+    if (!raiseServer->listen(serverName)) {
+        qWarning() << "Oracle: could not listen for raise requests on" << serverName;
+        delete raiseServer;
+        raiseServer = nullptr;
+    }
+}
+
+void OracleWizard::handleRaiseRequest()
+{
+    while (raiseServer && raiseServer->hasPendingConnections()) {
+        QLocalSocket *socket = raiseServer->nextPendingConnection();
+        connect(socket, &QLocalSocket::readyRead, this, [this, socket]() {
+            socket->readAll();
+            socket->deleteLater();
+            raiseWizard();
+        });
+        connect(socket, &QLocalSocket::disconnected, socket, &QLocalSocket::deleteLater);
+    }
+    raiseWizard();
+}
+
+void OracleWizard::raiseWizard()
+{
+    // An ongoing background run is hidden; the user asked to see it, so promote it to a window.
+    if (backgroundMode && !isVisible()) {
+        show();
+    }
+    if (isMinimized()) {
+        showNormal();
+    }
+    raise();
+    activateWindow();
+    if (windowHandle()) {
+        windowHandle()->requestActivate();
+    }
+}
+
 void OracleWizard::enableButtons()
 {
     button(QWizard::NextButton)->setDisabled(false);
@@ -123,17 +220,10 @@ void OracleWizard::disableButtons()
 
 bool OracleWizard::saveTokensToFile(const QString &fileName)
 {
-    QFile file(fileName);
-    if (!file.open(QIODevice::WriteOnly)) {
-        qDebug() << "File open (w) failed for" << fileName;
+    QString error;
+    if (!OracleDatabase::saveXml(fileName, tokensData, &error)) {
+        qWarning() << error;
         return false;
     }
-
-    if (file.write(tokensData) == -1) {
-        qDebug() << "File write (w) failed for" << fileName;
-        return false;
-    }
-
-    file.close();
     return true;
 }

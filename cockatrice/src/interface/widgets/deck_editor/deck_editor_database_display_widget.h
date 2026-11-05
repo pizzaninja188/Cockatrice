@@ -8,63 +8,69 @@
 #ifndef DECK_EDITOR_DATABASE_DISPLAY_WIDGET_H
 #define DECK_EDITOR_DATABASE_DISPLAY_WIDGET_H
 
-#include "../../../interface/widgets/tabs/abstract_tab_deck_editor.h"
-#include "../../key_signals.h"
-#include "../utility/custom_line_edit.h"
+#include "libcockatrice/card/card_info.h"
 
-#include <QHBoxLayout>
+#include <QString>
 #include <QWidget>
-#include <libcockatrice/models/database/card_database_display_model.h>
-#include <libcockatrice/models/database/card_database_model.h>
+#include <qtmetamacros.h>
 
-class AbstractTabDeckEditor;
+class CardDatabaseView;
+class CardDatabaseDisplayModel;
+class CardDatabaseModel;
+class ExactCard;
+class FilterTree;
+class QAction;
+class QHBoxLayout;
+class QVBoxLayout;
+class SearchLineEdit;
+
 class DeckEditorDatabaseDisplayWidget : public QWidget
 {
 
     Q_OBJECT
 public:
-    explicit DeckEditorDatabaseDisplayWidget(QWidget *parent, AbstractTabDeckEditor *deckEditor);
-    AbstractTabDeckEditor *deckEditor;
-    SearchLineEdit *searchEdit;
-    CardDatabaseModel *databaseModel;
-    CardDatabaseDisplayModel *databaseDisplayModel;
+    explicit DeckEditorDatabaseDisplayWidget(QWidget *parent, CardDatabaseModel *databaseModel);
 
-    QTreeView *getDatabaseView()
+    CardDatabaseView *getDatabaseView() const
     {
         return databaseView;
     }
 
 public slots:
-    ExactCard currentCard() const;
     void setFilterTree(FilterTree *filterTree);
     void clearAllDatabaseFilters();
-    void updateSearch(const QString &search);
-    void updateCard(const QModelIndex &current, const QModelIndex &);
+
     void actAddCardToMainDeck();
     void actAddCardToSideboard();
-    void actDecrementCardFromMainDeck();
-    void actDecrementCardFromSideboard();
-    void databaseCustomMenu(QPoint point);
-    void copyDatabaseCellContents();
+
+    void addCard(const QString &cardName, const QString &zoneName);
+    void decrementCard(const QString &cardName, const QString &zoneName);
+    void updateCard(const QString &cardName);
 
 signals:
-    void addCardToMainDeck(const ExactCard &card);
-    void addCardToSideboard(const ExactCard &card);
-    void decrementCardFromMainDeck(const ExactCard &card);
-    void decrementCardFromSideboard(const ExactCard &card);
+    void cardAdded(const ExactCard &card, const QString &zoneName);
+    void cardDecremented(const ExactCard &card, const QString &zoneName);
     void cardChanged(const ExactCard &_card);
 
+    void edhrecRequested(const CardInfoPtr &cardInfo, bool isCommander);
+    void printingSelectorRequested();
+    void cardInfoRequested(const ExactCard &card);
+
 private:
-    KeySignals searchKeySignals;
-    QTreeView *databaseView;
+    CardDatabaseDisplayModel *databaseDisplayModel;
+    CardDatabaseView *databaseView;
     QHBoxLayout *searchLayout;
+    SearchLineEdit *searchEdit;
     QAction *aAddCard, *aAddCardToSideboard;
     QVBoxLayout *centralFrame;
     QWidget *centralWidget;
 
+    void highlightAllSearchEdit();
+
 private slots:
     void retranslateUi();
-    void saveDbHeaderState();
+
+    void onRelatedCardClicked(const QString &relatedCard);
 };
 
 #endif // DECK_EDITOR_DATABASE_DISPLAY_WIDGET_H

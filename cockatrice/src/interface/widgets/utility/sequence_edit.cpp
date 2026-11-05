@@ -1,10 +1,21 @@
 #include "sequence_edit.h"
 
 #include "../../../client/settings/cache_settings.h"
+#include "../../../client/settings/shortcuts_settings.h"
+#include "../../theme_icon.h"
 
+#include <QChar>
+#include <QEvent>
+#include <QFlags>
 #include <QHBoxLayout>
 #include <QKeyEvent>
+#include <QLineEdit>
+#include <QList>
+#include <QPoint>
+#include <QPushButton>
+#include <QStringLiteral>
 #include <QToolTip>
+#include <libcockatrice/utility/qt_utils.h>
 
 SequenceEdit::SequenceEdit(const QString &_shortcutName, QWidget *parent) : QWidget(parent)
 {
@@ -13,12 +24,10 @@ SequenceEdit::SequenceEdit(const QString &_shortcutName, QWidget *parent) : QWid
     defaultButton = new QPushButton("", this);
 
     lineEdit->setMinimumWidth(70);
-    clearButton->setIcon(QPixmap("theme:icons/clearsearch"));
-    defaultButton->setIcon(QPixmap("theme:icons/update"));
+    clearButton->setIcon(loadThemedIcon(QStringLiteral("icons/clearsearch")));
+    defaultButton->setIcon(loadThemedIcon(QStringLiteral("icons/reload")));
 
-    auto *layout = new QHBoxLayout(this);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(1);
+    auto *layout = QtUtils::makeLayout<QHBoxLayout>(this, 1);
     layout->addWidget(lineEdit);
     layout->addWidget(clearButton);
     layout->addWidget(defaultButton);

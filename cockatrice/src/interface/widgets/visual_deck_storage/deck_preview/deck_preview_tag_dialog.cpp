@@ -8,9 +8,17 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
+#include <QListWidgetItem>
 #include <QMessageBox>
+#include <QObject>
 #include <QPushButton>
+#include <QSharedPointer>
 #include <QTimer>
+#include <QVBoxLayout>
+#include <QWidget>
+#include <libcockatrice/settings/visual_deck_storage_settings.h>
+#include <qnamespace.h>
 
 DeckPreviewTagDialog::DeckPreviewTagDialog(const QStringList &knownTags,
                                            const QStringList &_activeTags,
@@ -19,7 +27,7 @@ DeckPreviewTagDialog::DeckPreviewTagDialog(const QStringList &knownTags,
 {
     resize(400, 500);
 
-    QStringList defaultTags = SettingsCache::instance().getVisualDeckStorageDefaultTagsList();
+    QStringList defaultTags = SettingsCache::instance().visualDeckStorage().getVisualDeckStorageDefaultTagsList();
 
     // Merge knownTags with defaultTags, ensuring no duplicates
     QStringList combinedTags = defaultTags + knownTags + activeTags;
@@ -90,7 +98,8 @@ DeckPreviewTagDialog::DeckPreviewTagDialog(const QStringList &knownTags,
     connect(okButton, &QPushButton::clicked, this, &DeckPreviewTagDialog::accept);
     connect(cancelButton, &QPushButton::clicked, this, &DeckPreviewTagDialog::reject);
 
-    connect(&SettingsCache::instance(), &SettingsCache::visualDeckStorageDefaultTagsListChanged, this,
+    connect(&SettingsCache::instance().visualDeckStorage(),
+            &VisualDeckStorageSettings::visualDeckStorageDefaultTagsListChanged, this,
             &DeckPreviewTagDialog::refreshTagList);
 
     retranslateUi();
@@ -114,7 +123,7 @@ void DeckPreviewTagDialog::refreshTagList()
     tagListView->clear();
 
     // Get the updated list of tags from SettingsCache
-    QStringList defaultTags = SettingsCache::instance().getVisualDeckStorageDefaultTagsList();
+    QStringList defaultTags = SettingsCache::instance().visualDeckStorage().getVisualDeckStorageDefaultTagsList();
     QStringList combinedTags = defaultTags + knownTags_ + activeTags;
     combinedTags.removeDuplicates();
 

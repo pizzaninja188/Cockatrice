@@ -1,13 +1,18 @@
 /**
  * @file message_settings.h
  * @ingroup NetworkSettings
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef MESSAGESETTINGS_H
 #define MESSAGESETTINGS_H
 
 #include "settings_manager.h"
+
+#include <QString>
+#include <qtmetamacros.h>
+
+class QObject;
 
 class MessageSettings : public SettingsManager
 {

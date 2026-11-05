@@ -2,15 +2,35 @@
 
 #include "ruled_game_driver.h"
 #include "ruled_utils.h"
+#include "dump_zone_range.h"
+#include "game/server_abstract_participant.h"
+#include "game/server_arrowtarget.h"
+#include "libcockatrice/protocol/pb/card_attributes.pb.h"
+#include "libcockatrice/protocol/pb/color.pb.h"
+#include "libcockatrice/protocol/pb/serverinfo_arrow.pb.h"
+#include "libcockatrice/protocol/pb/serverinfo_card.pb.h"
+#include "libcockatrice/protocol/pb/serverinfo_cardcounter.pb.h"
+#include "libcockatrice/protocol/pb/serverinfo_playerproperties.pb.h"
+#include "libcockatrice/protocol/pb/serverinfo_zone.pb.h"
+#include "libcockatrice/utility/card_ref.h"
+#include "libcockatrice/utility/playmat_params.h"
 #include "server_arrow.h"
 #include "server_card.h"
 #include "server_cardzone.h"
 #include "server_game.h"
 #include "server_move_card_struct.h"
+#include "server_response_containers.h"
 
-#include <QDebug>
-#include <QRegularExpression>
+#include <QList>
+#include <QListIterator>
+#include <QMapIterator>
+#include <QObject>
+#include <QSet>
+#include <QSharedPointer>
+#include <QVariant>
 #include <algorithm>
+#include <google/protobuf/stubs/port.h>
+#include <iterator>
 #include <libcockatrice/deck_list/deck_list.h>
 #include <libcockatrice/protocol/pb/command_attach_card.pb.h>
 #include <libcockatrice/protocol/pb/command_change_zone_properties.pb.h>
@@ -49,22 +69,35 @@
 #include <libcockatrice/protocol/pb/serverinfo_player.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_user.pb.h>
 #include <libcockatrice/rng/rng_abstract.h>
-#include <libcockatrice/utility/trice_limits.h>
+#include <libcockatrice/utility/dice_limits.h>
+#include <libcockatrice/utility/string_limits.h>
 #include <libcockatrice/utility/zone_names.h>
 #include <ranges>
+#include <set>
+#include <string>
+
+class Server_AbstractUserInterface;
 
 Server_AbstractPlayer::Server_AbstractPlayer(Server_Game *_game,
                                              int _playerId,
                                              const ServerInfo_User &_userInfo,
                                              bool _judge,
                                              Server_AbstractUserInterface *_userInterface)
-    : Server_AbstractParticipant(_game, _playerId, _userInfo, _judge, _userInterface), conceded(false), deck(nullptr),
-      sideboardLocked(true), readyStart(false), nextCardId(0)
+    : Server_AbstractParticipant(_game, _playerId, _userInfo, {.isJudge = _judge}, _userInterface), conceded(false),
+      deck(nullptr), sideboardLocked(true), readyStart(false), nextCardId(0)
 {
-    spectator = false;
 }
 
 Server_AbstractPlayer::~Server_AbstractPlayer() = default;
+
+int Server_AbstractPlayer::getCardCount() const
+{
+    int result = 0;
+    for (auto *zone : zones) {
+        result += zone->getCards().size();
+    }
+    return result;
+}
 
 void Server_AbstractPlayer::prepareDestroy()
 {
@@ -80,17 +113,6 @@ void Server_AbstractPlayer::prepareDestroy()
 int Server_AbstractPlayer::newCardId()
 {
     return nextCardId++;
-}
-
-int Server_AbstractPlayer::newArrowId() const
-{
-    int id = 0;
-    for (Server_Arrow *a : arrows) {
-        if (a->getId() > id) {
-            id = a->getId();
-        }
-    }
-    return id + 1;
 }
 
 void Server_AbstractPlayer::setupZones()
@@ -287,7 +309,7 @@ Response::ResponseCode Server_AbstractPlayer::moveCard(GameEventStorage &ges,
     // Disallow controller change to other zones than the table. The engine-decided ruled moves
     // that legitimately cross players are enumerated in ruledAllowsCrossPlayerMove (ruled_utils).
     if (((targetzone->getType() != ServerInfo_Zone::PublicZone) || !targetzone->hasCoords()) &&
-        (startzone->getPlayer() != targetzone->getPlayer()) && !judge &&
+        (startzone->getPlayer() != targetzone->getPlayer()) && !isJudge() &&
         !ruledAllowsCrossPlayerMove(game, startzone, targetzone)) {
         return Response::RespContextError;
     }
@@ -407,10 +429,14 @@ void Server_AbstractPlayer::processMoveCard(GameEventStorage &ges,
         for (auto *player : game->getPlayers().values()) {
             QList<int> arrowsToDelete;
             for (Server_Arrow *arrow : player->getArrows()) {
-                if ((arrow->getStartCard() == card) || (arrow->getTargetItem() == card))
+                if ((arrow->getStartCard() == card) || (arrow->getTargetItem() == card)) {
                     arrowsToDelete.append(arrow->getId());
+                }
             }
             for (int j : arrowsToDelete) {
+                Event_DeleteArrow event;
+                event.set_arrow_id(j);
+                ges.enqueueGameEvent(event, player->getPlayerId());
                 player->deleteArrow(j);
             }
         }
@@ -827,7 +853,7 @@ Server_AbstractPlayer::cmdMoveCard(const Command_MoveCard &cmd, ResponseContaine
         return Response::RespNameNotFound;
     }
 
-    if ((startPlayer != this) && (!startZone->getPlayersWithWritePermission().contains(playerId)) && !judge) {
+    if ((startPlayer != this) && (!startZone->getPlayersWithWritePermission().contains(playerId)) && !isJudge()) {
         return Response::RespContextError;
     }
 
@@ -840,7 +866,7 @@ Server_AbstractPlayer::cmdMoveCard(const Command_MoveCard &cmd, ResponseContaine
         return Response::RespNameNotFound;
     }
 
-    if ((startPlayer != this) && (targetPlayer != this) && !judge) {
+    if ((startPlayer != this) && (targetPlayer != this) && !isJudge()) {
         return Response::RespContextError;
     }
 
@@ -1136,8 +1162,9 @@ Server_AbstractPlayer::cmdCreateToken(const Command_CreateToken &cmd, ResponseCo
                 _event.set_zone_name(card->getZone()->getName().toStdString());
                 _event.set_card_id(card->getId());
 
-                card->setCounter(i.key(), i.value(), &_event);
-                ges.enqueueGameEvent(_event, playerId);
+                if (card->setCounter(i.key(), i.value(), &_event)) {
+                    ges.enqueueGameEvent(_event, playerId);
+                }
             }
 
             // Copy parent card
@@ -1175,12 +1202,18 @@ Server_AbstractPlayer::cmdCreateToken(const Command_CreateToken &cmd, ResponseCo
                         targetItem = card;
                     }
                     if (sendGameEvent) {
-                        Event_CreateArrow _event;
-                        ServerInfo_Arrow *arrowInfo = _event.mutable_arrow_info();
-                        changedArrowIds.append(arrow->getId());
-                        int id = player->newArrowId();
-                        arrow->setId(id);
-                        arrowInfo->set_id(id);
+                        const int oldId = arrow->getId();
+                        changedArrowIds.append(oldId);
+
+                        Event_DeleteArrow deleteEvent;
+                        deleteEvent.set_arrow_id(oldId);
+                        ges.enqueueGameEvent(deleteEvent, player->getPlayerId());
+
+                        Event_CreateArrow createEvent;
+                        ServerInfo_Arrow *arrowInfo = createEvent.mutable_arrow_info();
+                        const int newId = game->generateArrowId();
+                        arrow->setId(newId);
+                        arrowInfo->set_id(newId);
                         arrowInfo->set_start_player_id(player->getPlayerId());
                         arrowInfo->set_start_zone(startCard->getZone()->getName().toStdString());
                         arrowInfo->set_start_card_id(startCard->getId());
@@ -1194,7 +1227,7 @@ Server_AbstractPlayer::cmdCreateToken(const Command_CreateToken &cmd, ResponseCo
                             arrowInfo->set_target_card_id(arrowTargetCard->getId());
                         }
                         arrowInfo->mutable_arrow_color()->CopyFrom(arrow->getColor());
-                        ges.enqueueGameEvent(_event, player->getPlayerId());
+                        ges.enqueueGameEvent(createEvent, player->getPlayerId());
                     }
                 }
                 for (int id : changedArrowIds) {
@@ -1301,7 +1334,8 @@ Server_AbstractPlayer::cmdCreateArrow(const Command_CreateArrow &cmd, ResponseCo
 
     int currentPhase = game->getActivePhase();
     int deletionPhase = cmd.has_delete_in_phase() ? cmd.delete_in_phase() : currentPhase;
-    auto arrow = new Server_Arrow(newArrowId(), startCard, targetItem, cmd.arrow_color(), currentPhase, deletionPhase);
+    auto arrow = new Server_Arrow(game->generateArrowId(), startCard, targetItem, cmd.arrow_color(), currentPhase,
+                                  deletionPhase);
     addArrow(arrow);
 
     Event_CreateArrow event;
@@ -1385,8 +1419,9 @@ Response::ResponseCode Server_AbstractPlayer::cmdSetCardCounter(const Command_Se
     Event_SetCardCounter event;
     event.set_zone_name(zone->getName().toStdString());
     event.set_card_id(card->getId());
-    card->setCounter(cmd.counter_id(), cmd.counter_value(), &event);
-    ges.enqueueGameEvent(event, playerId);
+    if (card->setCounter(cmd.counter_id(), cmd.counter_value(), &event)) {
+        ges.enqueueGameEvent(event, playerId);
+    }
 
     return Response::RespOk;
 }
@@ -1415,14 +1450,13 @@ Response::ResponseCode Server_AbstractPlayer::cmdIncCardCounter(const Command_In
         return Response::RespNameNotFound;
     }
 
-    int newValue = card->getCounter(cmd.counter_id()) + cmd.counter_delta();
-    card->setCounter(cmd.counter_id(), newValue);
-
     Event_SetCardCounter event;
     event.set_zone_name(zone->getName().toStdString());
     event.set_card_id(card->getId());
-    event.set_counter_id(cmd.counter_id());
-    event.set_counter_value(newValue);
+    if (!card->incrementCounter(cmd.counter_id(), cmd.counter_delta(), &event)) {
+        return Response::RespOk;
+    }
+
     ges.enqueueGameEvent(event, playerId);
 
     return Response::RespOk;
@@ -1449,23 +1483,23 @@ Server_AbstractPlayer::cmdDumpZone(const Command_DumpZone &cmd, ResponseContaine
 
     int numberCards = cmd.number_cards();
     const QList<Server_Card *> &cards = zone->getCards();
+    const auto cardRange = dumpZoneCardRange(cards.size(), numberCards, cmd.is_reversed());
 
     auto *re = new Response_DumpZone;
     ServerInfo_Zone *zoneInfo = re->mutable_zone_info();
     zoneInfo->set_name(zone->getName().toStdString());
     zoneInfo->set_type(zone->getType());
     zoneInfo->set_with_coords(zone->hasCoords());
-    zoneInfo->set_card_count(numberCards < cards.size() ? cards.size() : numberCards);
+    zoneInfo->set_card_count(cards.size());
 
-    for (int i = 0; (i < cards.size()) && (i < numberCards || numberCards == -1); ++i) {
-        const auto &findId = cmd.is_reversed() ? cards.size() - numberCards + i : i;
-        Server_Card *card = cards[findId];
+    for (qsizetype findId = cardRange.first; findId < cardRange.second; ++findId) {
+        Server_Card *card = cards.at(findId);
         QString displayedName = card->getFaceDown() ? QString() : card->getName();
         ServerInfo_Card *cardInfo = zoneInfo->add_card_list();
         cardInfo->set_provider_id(card->getProviderId().toStdString());
         cardInfo->set_name(displayedName.toStdString());
         if (zone->getType() == ServerInfo_Zone::HiddenZone) {
-            cardInfo->set_id(findId);
+            cardInfo->set_id(static_cast<int>(findId));
         } else {
             cardInfo->set_id(card->getId());
             cardInfo->set_x(card->getX());
@@ -1520,8 +1554,9 @@ Server_AbstractPlayer::cmdRevealCards(const Command_RevealCards &cmd, ResponseCo
 
     if (cmd.has_player_id()) {
         Server_AbstractPlayer *otherPlayer = game->getPlayer(cmd.player_id());
-        if (!otherPlayer)
+        if (!otherPlayer) {
             return Response::RespNameNotFound;
+        }
     }
     Server_CardZone *zone = zones.value(nameFromStdString(cmd.zone_name()));
     if (!zone) {
@@ -1674,10 +1709,11 @@ void Server_AbstractPlayer::getInfo(ServerInfo_Player *info,
                                     bool withUserInfo)
 {
     getProperties(*info->mutable_properties(), withUserInfo);
-    if (recipient == this) {
-        if (deck) {
-            info->set_deck_list(deck->writeToString_Native().toStdString());
-        }
+
+    // Deck lists are only shared with other players when the game is in Open Decklists mode,
+    // so a player joining an open lobby can see every deck that was loaded before they joined.
+    if (deck && (recipient == this || game->getShareDecklistsOnLoad())) {
+        info->set_deck_list(deck->writeToString_Native().toStdString());
     }
 
     for (Server_Arrow *arrow : arrows) {
@@ -1696,5 +1732,13 @@ void Server_AbstractPlayer::getPlayerProperties(ServerInfo_PlayerProperties &res
     result.set_ready_start(readyStart);
     if (deck) {
         result.set_deck_hash(deck->getDeckHash().toStdString());
+        const auto &playmat = deck->getPlaymat();
+        auto *playmatParams = result.mutable_playmat_params();
+        playmatParams->set_card_name(playmat.card.name.toStdString());
+        playmatParams->set_card_provider_id(playmat.card.providerId.toStdString());
+        playmatParams->set_margin_pct_l(playmat.params.marginPctL);
+        playmatParams->set_margin_pct_r(playmat.params.marginPctR);
+        playmatParams->set_vertical_offset(playmat.params.verticalOffset);
+        playmatParams->set_zoom(playmat.params.zoom);
     }
 }

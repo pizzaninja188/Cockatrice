@@ -1,9 +1,32 @@
 #include "card_amount_widget.h"
 
+#include "../../theme_manager.h"
 #include "../deck_editor/deck_state_manager.h"
+#include "../general/display/dynamic_font_size_push_button.h"
+#include "deck_list_model.h"
+#include "libcockatrice/card/printing/printing_info.h"
+#include "libcockatrice/card/set/card_set.h"
+#include "libcockatrice/deck_list/tree/inner_deck_list_node.h"
 
+#include <QBrush>
+#include <QColor>
+#include <QFont>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QModelIndex>
 #include <QPainter>
-#include <QTimer>
+#include <QPushButton>
+#include <QSharedPointer>
+#include <QSize>
+#include <QSizePolicy>
+#include <QSlider>
+#include <QVariant>
+#include <algorithm>
+#include <functional>
+#include <libcockatrice/utility/qt_utils.h>
+#include <qnamespace.h>
+
+class QModelIndex;
 
 /**
  * @brief Constructs a widget for displaying and controlling the card count in a specific zone.
@@ -11,7 +34,7 @@
  * @param parent The parent widget.
  * @param cardSizeSlider Pointer to the QSlider for adjusting font size.
  * @param rootCard The root card to manage within the widget.
- * @param zoneName The zone name (e.g., DECK_ZONE_MAIN or DECK_ZONE_SIDE).
+ * @param zoneName The zone name (e.g., DECK_ZONE_MAIN , DECK_ZONE_SIDE, or DECK_ZONE_TOKENS).
  */
 CardAmountWidget::CardAmountWidget(QWidget *parent,
                                    DeckStateManager *deckStateManager,
@@ -21,9 +44,7 @@ CardAmountWidget::CardAmountWidget(QWidget *parent,
     : QWidget(parent), deckStateManager(deckStateManager), cardSizeSlider(cardSizeSlider), rootCard(rootCard),
       zoneName(zoneName), hovered(false)
 {
-    layout = new QHBoxLayout(this);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(10);
+    layout = QtUtils::makeLayout<QHBoxLayout>(this, 10);
     this->setLayout(layout);
     this->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     layout->setAlignment(Qt::AlignHCenter);
@@ -36,13 +57,16 @@ CardAmountWidget::CardAmountWidget(QWidget *parent,
     incrementButton->setFixedSize(parentWidget()->size().width() / 3, parentWidget()->size().height() / 9);
     decrementButton->setFixedSize(parentWidget()->size().width() / 3, parentWidget()->size().height() / 9);
 
-    // Set up connections based on the zone (Mainboard or Sideboard)
+    // Set up connections based on the zone (Mainboard, Sideboard, or Tokensboard)
     if (zoneName == DECK_ZONE_MAIN) {
         connect(incrementButton, &QPushButton::clicked, this, &CardAmountWidget::addPrintingMainboard);
         connect(decrementButton, &QPushButton::clicked, this, &CardAmountWidget::removePrintingMainboard);
     } else if (zoneName == DECK_ZONE_SIDE) {
         connect(incrementButton, &QPushButton::clicked, this, &CardAmountWidget::addPrintingSideboard);
         connect(decrementButton, &QPushButton::clicked, this, &CardAmountWidget::removePrintingSideboard);
+    } else if (zoneName == DECK_ZONE_TOKENS) {
+        connect(incrementButton, &QPushButton::clicked, this, &CardAmountWidget::addPrintingTokensboard);
+        connect(decrementButton, &QPushButton::clicked, this, &CardAmountWidget::removePrintingTokensboard);
     }
 
     cardCountInZone = new QLabel(QString::number(amount), this);
@@ -54,6 +78,7 @@ CardAmountWidget::CardAmountWidget(QWidget *parent,
 
     // Connect slider for dynamic font size adjustment
     connect(cardSizeSlider, &QSlider::valueChanged, this, &CardAmountWidget::adjustFontSize);
+    connect(themeManager, &ThemeManager::fontsChanged, this, &CardAmountWidget::applyCardTextFont);
 }
 
 int CardAmountWidget::getAmount()
@@ -115,8 +140,9 @@ void CardAmountWidget::adjustFontSize(int scalePercentage)
     int newFontSize = minFontSize + (scalePercentage - basePercentage) * (maxFontSize - minFontSize) / 225;
     newFontSize = std::clamp(newFontSize, minFontSize, maxFontSize);
 
-    // Update the font for card count label
-    QFont cardCountFont = cardCountInZone->font();
+    // Update the font for card count label. The family comes from the
+    // CardText theme role; the slider-driven point size stays as before.
+    QFont cardCountFont = themeManager->appFont(AppFont::CardText);
     cardCountFont.setPointSize(newFontSize);
     cardCountInZone->setFont(cardCountFont);
 
@@ -127,6 +153,11 @@ void CardAmountWidget::adjustFontSize(int scalePercentage)
     repaint();
 }
 
+void CardAmountWidget::applyCardTextFont()
+{
+    adjustFontSize(cardSizeSlider->value());
+}
+
 /**
  * @brief Updates the card count display in the widget.
  */
@@ -135,6 +166,19 @@ void CardAmountWidget::updateCardCount()
     cardCountInZone->setText("<font color='white'>" + QString::number(amount) + "</font>");
     layout->invalidate();
     layout->activate();
+}
+
+static QString zoneLogName(const QString &zone)
+{
+    if (zone == DECK_ZONE_MAIN) {
+        return "mainboard";
+    } else if (zone == DECK_ZONE_SIDE) {
+        return "sideboard";
+    } else if (zone == DECK_ZONE_TOKENS) {
+        return "tokens";
+    } else {
+        return "unknown";
+    }
 }
 
 static QModelIndex addAndReplacePrintings(DeckListModel *model,
@@ -161,9 +205,9 @@ static QModelIndex addAndReplacePrintings(DeckListModel *model,
 }
 
 /**
- * @brief Adds a printing of the card to the specified zone (Mainboard or Sideboard).
+ * @brief Adds a printing of the card to the specified zone (Mainboard, Sideboard, or Tokensboard).
  *
- * @param zone The zone to add the card to (DECK_ZONE_MAIN or DECK_ZONE_SIDE).
+ * @param zone The zone to add the card to (DECK_ZONE_MAIN, DECK_ZONE_SIDE, or DECK_ZONE_TOKENS).
  */
 void CardAmountWidget::addPrinting(const QString &zone)
 {
@@ -183,12 +227,13 @@ void CardAmountWidget::addPrinting(const QString &zone)
         }
     }
 
+    QString zoneName = zoneLogName(zone);
     QString reason = QString("Added %1 copies of '%2 (%3) %4' to %5 [ProviderID: %6]%7")
                          .arg(1 + extraCopies)
                          .arg(rootCard.getName())
                          .arg(rootCard.getPrinting().getSet()->getShortName())
                          .arg(rootCard.getPrinting().getProperty("num"))
-                         .arg(zone == DECK_ZONE_MAIN ? "mainboard" : "sideboard")
+                         .arg(zoneName)
                          .arg(rootCard.getPrinting().getUuid())
                          .arg(replacingProviderless ? " (replaced providerless printings)" : "");
 
@@ -219,6 +264,14 @@ void CardAmountWidget::addPrintingSideboard()
 }
 
 /**
+ * @brief Adds a printing to the tokens zone.
+ */
+void CardAmountWidget::addPrintingTokensboard()
+{
+    addPrinting(DECK_ZONE_TOKENS);
+}
+
+/**
  * @brief Removes a printing from the mainboard zone.
  */
 void CardAmountWidget::removePrintingMainboard()
@@ -235,17 +288,26 @@ void CardAmountWidget::removePrintingSideboard()
 }
 
 /**
+ * @brief Removes a printing from the tokens zone.
+ */
+void CardAmountWidget::removePrintingTokensboard()
+{
+    decrementCardHelper(DECK_ZONE_TOKENS);
+}
+
+/**
  * @brief Helper function to decrement the card count for a given zone.
  *
- * @param zone The zone from which to remove the card (DECK_ZONE_MAIN or DECK_ZONE_SIDE).
+ * @param zone The zone from which to remove the card (DECK_ZONE_MAIN, DECK_ZONE_SIDE, or DECK_ZONE_TOKENS).
  */
 void CardAmountWidget::decrementCardHelper(const QString &zone)
 {
+    QString zoneName = zoneLogName(zone);
     QString reason = QString("Removed 1 copy of '%1 (%2) %3' from %4 [ProviderID: %5]")
                          .arg(rootCard.getName())
                          .arg(rootCard.getPrinting().getSet()->getShortName())
                          .arg(rootCard.getPrinting().getProperty("num"))
-                         .arg(zone == DECK_ZONE_MAIN ? "mainboard" : "sideboard")
+                         .arg(zoneName)
                          .arg(rootCard.getPrinting().getUuid());
 
     deckStateManager->modifyDeck(reason, [this, &zone](auto model) {

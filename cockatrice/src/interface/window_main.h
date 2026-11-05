@@ -20,44 +20,68 @@
 /**
  * @file window_main.h
  * @ingroup Core
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 #ifndef WINDOW_H
 #define WINDOW_H
 
-#include "widgets/dialogs/dlg_local_game_options.h"
+#include "../client/lag_monitor.h"
+#include "../client/network/update/client/release_channel.h"
+#include "card_database_update/card_update_progress.h"
+#include "connection_controller/remote_connection_controller.h"
 
+#include <QByteArray>
+#include <QDir>
+#include <QElapsedTimer>
 #include <QList>
+#include <QLoggingCategory>
 #include <QMainWindow>
-#include <QMessageBox>
-#include <QSystemTrayIcon>
-#include <QtNetwork>
+#include <QMenu>
+#include <QProcess>
+#include <QString>
+#include <QStringList>
+#include <QUrl>
+#include <QtGlobal>
 #include <libcockatrice/network/client/abstract/abstract_client.h>
-#include <libcockatrice/protocol/pb/response.pb.h>
+#include <qtmetamacros.h>
+
+class QAction;
+class QToolButton;
+class QWidget;
+class pqTestUtility;
+struct LocalGameOptions;
 
 inline Q_LOGGING_CATEGORY(WindowMainLog, "window_main");
 inline Q_LOGGING_CATEGORY(WindowMainStartupLog, "window_main.startup");
 inline Q_LOGGING_CATEGORY(WindowMainStartupVersionLog, "window_main.startup.version");
 inline Q_LOGGING_CATEGORY(WindowMainStartupShortcutsLog, "window_main.startup.shortcuts");
 inline Q_LOGGING_CATEGORY(WindowMainStartupAutoconnectLog, "window_main.startup.autoconnect");
+inline Q_LOGGING_CATEGORY(CardDatabaseUpdateLog, "card_database.update");
 
-class Release;
-class DlgConnect;
 class DlgViewLog;
 class GameReplay;
-class HandlePublicServers;
-class LocalClient;
 class LocalServer;
-class QThread;
+class LatencyStatusWidget;
+class CardDatabaseUpdateStatusBar;
 class RemoteClient;
-class ServerInfo_User;
 class TabSupervisor;
 class WndSets;
 class DlgTipOfTheDay;
+struct ContextConnectToServer;
+class IntentUrlParser;
 
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
+signals:
+    /** @brief Emitted after the card-database update subprocess exits. */
+    void cardDatabaseUpdateFinished(bool success);
+
+    /** @brief Emitted while the card-database update subprocess runs.
+     *         @p progress.done/@p progress.total are byte counts for the first two stages
+     *         and set indices for "import". */
+    void cardDatabaseUpdateProgress(const CardUpdateProgress &progress);
+
 public slots:
     void actCheckCardUpdates();
     void actCheckCardUpdatesBackground();
@@ -65,51 +89,42 @@ public slots:
     void actCheckClientUpdates();
     void actConnect();
     void actExit();
+    void handleCockatriceLink(const QString &url);
 private slots:
     void updateTabMenu(const QList<QMenu *> &newMenuList);
     void statusChanged(ClientStatus _status);
-    void processConnectionClosedEvent(const Event_ConnectionClosed &event);
-    void processServerShutdownEvent(const Event_ServerShutdown &event);
-    void serverTimeout();
-    void loginError(Response::ResponseCode r, QString reasonStr, quint32 endTime, QList<QString> missingFeatures);
-    void registerError(Response::ResponseCode r, QString reasonStr, quint32 endTime);
-    void activateError();
-    void socketError(const QString &errorStr);
-    void protocolVersionMismatch(int localVersion, int remoteVersion);
-    void userInfoReceived(const ServerInfo_User &userInfo);
-    void registerAccepted();
-    void registerAcceptedNeedsActivate();
-    void activateAccepted();
     void localGameEnded();
     void pixmapCacheSizeChanged(int newSizeInMBs);
-    void notifyUserAboutUpdate();
     void actDisconnect();
     void actSinglePlayer();
     void actWatchReplay();
     void actFullScreen(bool checked);
-    void actRegister();
     void actSettings();
-    void actForgotPasswordRequest();
     void actAbout();
     void actTips();
     void actUpdate();
     void actViewLog();
     void actOpenSettingsFolder();
-    void forgotPasswordSuccess();
-    void forgotPasswordError();
-    void promptForgotPasswordReset();
+#ifdef WITH_GUI_TEST
+    void actRecord();
+    void actPlayRecording();
+#endif
+
     void actShow();
-    void promptForgotPasswordChallenge();
     void showWindowIfHidden();
+    void onUrlChainFinished(bool connected);
 
     void cardUpdateError(QProcess::ProcessError err);
     void cardUpdateFinished(int exitCode, QProcess::ExitStatus exitStatus);
+    void cardUpdateProgressOutput();
+    void cardUpdateStandardError();
     void refreshShortcuts();
     void cardDatabaseLoadingFailed();
     void cardDatabaseNewSetsFound(int numUnknownSets, QStringList unknownSetsNames);
     void cardDatabaseAllNewSetsEnabled();
 
     void checkClientUpdatesFinished(bool needToUpdate, bool isCompatible, Release *release);
+    void actCheckCommanderBracketDefinitionUpdates();
 
     void actOpenCustomFolder();
     void actOpenCustomsetsFolder();
@@ -122,47 +137,101 @@ private slots:
     void startupConfigCheck();
     void alertForcedOracleRun(const QString &version, bool isUpdate);
 
+    void applyStartupDestination();
+    void onStartupDestinationConnected(int destination, const ContextConnectToServer &serverContext);
+    void startupDestinationFailed(const QString &reason);
+    [[nodiscard]] bool startupDestinationConnectsToServer() const;
+
+    void attemptStartupAutoConnect();
+
 private:
     static const QString appName;
     static const QStringList fileNameFilters;
-    void setClientStatusTitle();
     void retranslateUi();
     void createActions();
     void createMenus();
 
     void createTrayIcon();
     int getNextCustomSetPrefix(QDir dataDir);
+
+    void runFirstRunWizard(bool firstRun = false);
+
     inline QString getCardUpdaterBinaryName()
     {
         return "oracle";
     }
     void createCardUpdateProcess(bool background = false);
-    void exitCardDatabaseUpdate();
+    void exitCardDatabaseUpdate(bool doReload);
+    /**
+     * @brief Reloads the card database on a worker thread and runs checkUnknownSets() once the finished
+     *        snapshot has been swapped in.
+     *
+     * The loader never runs checkUnknownSets() itself (see main.cpp); post-update loads that can introduce
+     * new sets must own the check, and it has to run after the queued snapshot swap, not on the worker.
+     */
+    void reloadCardDatabaseAndCheckSets();
+    /**
+     * @brief Tries to bring the open card database updater window to the front.
+     * @return true when the updater acknowledged the request
+     */
+    bool requestCardUpdateRaise();
+    /** @brief Tells the user an update is running without blocking, honoring a hidden status bar. */
+    void announceCardUpdateRunning();
+    /** @brief Posts a tray notification when the status bar cannot show progress. */
+    void notifyCardUpdateFinishedFromTray(bool success);
 
     void startLocalGame(const LocalGameOptions &options);
 
     QList<QMenu *> tabMenus;
     QMenu *cockatriceMenu, *dbMenu, *tabsMenu, *helpMenu, *trayIconMenu;
     QAction *aAbout, *aSettings, *aShow, *aExit;
+    QToolButton *settingsButton = nullptr;
     QAction *aConnect, *aDisconnect, *aRegister, *aForgotPassword, *aSinglePlayer, *aWatchReplay, *aFullScreen;
     QAction *aManageSets, *aEditTokens, *aOpenCustomFolder, *aOpenCustomsetsFolder, *aAddCustomSet,
         *aReloadCardDatabase;
-    QAction *aTips, *aUpdate, *aCheckCardUpdates, *aCheckCardUpdatesBackground, *aStatusBar, *aViewLog,
-        *aOpenSettingsFolder;
+    QAction *aTips, *aUpdate, *aCheckCardUpdates, *aCheckCardUpdatesBackground, *aFirstRunWizard, *aStatusBar,
+        *aViewLog, *aOpenSettingsFolder;
+#ifdef WITH_GUI_TEST
+    QAction *aRecord, *aPlayRecording;
+#endif
 
     TabSupervisor *tabSupervisor;
+    IntentUrlParser *urlParser;
     WndSets *wndSets;
-    RemoteClient *client;
-    QThread *clientThread;
+    ConnectionController *connectionController;
     LocalServer *localServer;
+    LagMonitor lagMonitor;                        ///< watches the main thread for event loop stalls
+    LatencyStatusWidget *latencyStatus = nullptr; ///< status bar widget with live round-trip stats and history graph
     bool bHasActivated, askedForDbUpdater;
-    QMessageBox serverShutdownMessageBox;
+    /**
+     * How far a shutdown that was asked for has got. A close request that arrives while one is
+     * already asking the user something must not be accepted - see closeEvent().
+     */
+    enum class ShutdownState
+    {
+        Idle,       ///< no shutdown has been asked for
+        Confirming, ///< asking about a card database update, open games or an unsaved deck
+        Accepted,   ///< the close was accepted and the window is hiding
+    };
+    ShutdownState shutdownState = ShutdownState::Idle;
+    bool skipStartupAutoConnect = false;
+    bool startupAutoConnectAttempted = false;
+    bool firstRunWizardActive = false;
+    bool noConnect = false; ///< --no-connect: skip every startup connection
     QProcess *cardUpdateProcess;
+    QByteArray cardUpdateOutputBuffer;
+    QByteArray cardUpdateErrorOutput;  ///< diagnostic output collected from the updater's stderr
+    QByteArray cardUpdateErrorPartial; ///< incomplete trailing stderr line, kept for line-based logging
+    CardUpdateStage cardUpdateLoggedStage = CardUpdateStage::Unknown; ///< stage of the last logged progress update
+    QElapsedTimer cardUpdateProgressLogTimer;                   ///< throttles progress logging to the running stage
+    CardDatabaseUpdateStatusBar *cardUpdateStatusBar = nullptr; ///< status bar widget tracking the card database update
     DlgViewLog *logviewDialog;
-    DlgConnect *dlgConnect;
     GameReplay *replay;
     DlgTipOfTheDay *tip;
     QUrl connectTo;
+#ifdef WITH_GUI_TEST
+    pqTestUtility *testUtility;
+#endif
 
 public:
     explicit MainWindow(QWidget *parent = nullptr);
@@ -170,17 +239,66 @@ public:
     {
         connectTo = QUrl(QString("cockatrice://%1").arg(url));
     }
+    /**
+     * @brief Suppresses every startup connection: --connect, auto-connect and the
+     *        configured startup destination. Used by the GUI test harness so a
+     *        playback run never dials out.
+     */
+    void setNoConnect(bool value)
+    {
+        noConnect = value;
+    }
+
+    // When set, the window's own startup connection (--connect or auto-connect
+    // on first activation) is skipped. Used for activation launches: the intent
+    // chain triggered by a cockatrice:// URL owns the connection, and letting
+    // auto-connect race against it caused two connectToServer calls to tear
+    // each other down. onUrlChainFinished() clears this and retries the startup
+    // connection when the link's chain ended without connecting.
+    void setSkipStartupAutoConnect(bool skip)
+    {
+        skipStartupAutoConnect = skip;
+    }
     ~MainWindow() override;
+
+    RemoteClient *getRemoteClient() const
+    {
+        return connectionController->client();
+    }
 
     TabSupervisor *getTabSupervisor() const
     {
         return tabSupervisor;
     }
 
+    /**
+     * @brief Closes the window so an update installer can replace the running binaries.
+     *        Returns true only if the shutdown actually ran (settings flushed, tabs shut down);
+     *        false if the close was vetoed by the user or is already in progress.
+     */
+    bool closeForUpdate();
+
+    /**
+     * @brief Closes this instance because the installer asked it to over its local socket.
+     *
+     * The request reaches an instance hidden in the notification area or sitting on its own
+     * confirmation, which is exactly where a WM_CLOSE from the installer does not. The close
+     * is still the ordinary one: a clean client exits, one with unsaved work raises the same
+     * confirmation the close button does, and a confirmation already up is brought to the
+     * front instead of being left behind the installer.
+     */
+    void requestInstallerClose();
+
+#ifdef WITH_GUI_TEST
+    pqTestUtility *getTestUtility() const
+    {
+        return testUtility;
+    }
+#endif
+
 protected:
     void closeEvent(QCloseEvent *event) override;
     void changeEvent(QEvent *event) override;
-    QString extractInvalidUsernameMessage(QString &in);
 };
 
 #endif

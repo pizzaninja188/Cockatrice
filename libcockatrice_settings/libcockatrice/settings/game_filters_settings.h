@@ -2,13 +2,20 @@
  * @file game_filters_settings.h
  * @ingroup Lobby
  * @ingroup GameSettings
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef GAMEFILTERSSETTINGS_H
 #define GAMEFILTERSSETTINGS_H
 
 #include "settings_manager.h"
+
+#include <QString>
+#include <QStringList>
+#include <QTime>
+#include <qtmetamacros.h>
+
+class QObject;
 
 class GameFiltersSettings : public SettingsManager
 {
@@ -24,7 +31,7 @@ public:
     bool isHideNotBuddyCreatedGames() const;
     bool isHideOpenDecklistGames() const;
     QString getGameNameFilter() const;
-    QStringList getCreatorNameFilters() const;
+    QStringList getHostNameFilters() const;
     int getMinPlayers() const;
     int getMaxPlayers() const;
     QTime getMaxGameAge() const;
@@ -42,7 +49,7 @@ public:
     void setHidePasswordProtectedGames(bool hide);
     void setHideNotBuddyCreatedGames(bool hide);
     void setGameNameFilter(QString gameName);
-    void setCreatorNameFilters(QStringList creatorName);
+    void setHostNameFilters(QStringList hostName);
     void setMinPlayers(int min);
     void setMaxPlayers(int max);
     void setMaxGameAge(const QTime &maxGameAge);

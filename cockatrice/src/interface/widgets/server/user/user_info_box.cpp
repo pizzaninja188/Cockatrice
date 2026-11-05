@@ -1,31 +1,47 @@
 #include "user_info_box.h"
 
 #include "../../interface/pixel_map_generator.h"
+#include "../../interface/theme_manager.h"
 #include "../../interface/widgets/dialogs/dlg_edit_avatar.h"
 #include "../../interface/widgets/dialogs/dlg_edit_password.h"
 #include "../../interface/widgets/dialogs/dlg_edit_user.h"
 #include "../../interface/widgets/utility/get_text_with_max.h"
+#include "libcockatrice/protocol/pb/response.pb.h"
+#include "libcockatrice/utility/days_years_between.h"
+#include "user_card_settings_dialog.h"
+#include "user_level.h"
+#include "user_list_painter.h"
 
+#include <QByteArray>
+#include <QDate>
 #include <QDateTime>
+#include <QDialog>
+#include <QFlag>
+#include <QFont>
 #include <QGridLayout>
 #include <QHBoxLayout>
-#include <QInputDialog>
 #include <QLabel>
+#include <QLineEdit>
+#include <QLocale>
 #include <QMessageBox>
+#include <QSharedPointer>
+#include <QSize>
+#include <QSizePolicy>
+#include <QtGlobal>
 #include <libcockatrice/network/client/abstract/abstract_client.h>
 #include <libcockatrice/protocol/pb/response_get_user_info.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_user.pb.h>
 #include <libcockatrice/protocol/pb/session_commands.pb.h>
 #include <libcockatrice/protocol/pending_command.h>
-#include <libcockatrice/utility/passwordhasher.h>
+#include <libcockatrice/utility/qt_utils.h>
+#include <string>
+#include <sys/types.h>
 
 UserInfoBox::UserInfoBox(AbstractClient *_client, bool _editable, QWidget *parent, Qt::WindowFlags flags)
     : QWidget(parent, flags), client(_client), editable(_editable)
 {
-    QFont nameFont = nameLabel.font();
-    nameFont.setBold(true);
-    nameFont.setPointSizeF(nameFont.pointSizeF() * 1.5);
-    nameLabel.setFont(nameFont);
+    applyInterfaceDefaultFont();
+    connect(themeManager, &ThemeManager::fontsChanged, this, &UserInfoBox::applyInterfaceDefaultFont);
 
     auto *userIconAndNameLayout = new QHBoxLayout;
     userIconAndNameLayout->addWidget(&userLevelIcon, 0, Qt::AlignCenter);
@@ -36,8 +52,7 @@ UserInfoBox::UserInfoBox(AbstractClient *_client, bool _editable, QWidget *paren
     avatarPic.setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     avatarPic.setAlignment(Qt::AlignCenter);
 
-    auto *avatarLayout = new QHBoxLayout;
-    avatarLayout->setContentsMargins(0, 0, 0, 0);
+    auto *avatarLayout = QtUtils::makeLayout<QHBoxLayout>();
     avatarLayout->addStretch(1);
     avatarLayout->addWidget(&avatarPic, 3);
     avatarLayout->addStretch(1);
@@ -61,16 +76,28 @@ UserInfoBox::UserInfoBox(AbstractClient *_client, bool _editable, QWidget *paren
         buttonsLayout->addWidget(&editButton);
         buttonsLayout->addWidget(&passwordButton);
         buttonsLayout->addWidget(&avatarButton);
+        buttonsLayout->addWidget(&bannerCardButton);
         mainLayout->addLayout(buttonsLayout, 7, 0, 1, 3);
 
         connect(&editButton, &QPushButton::clicked, this, &UserInfoBox::actEdit);
         connect(&passwordButton, &QPushButton::clicked, this, &UserInfoBox::actPassword);
         connect(&avatarButton, &QPushButton::clicked, this, &UserInfoBox::actAvatar);
+        connect(&bannerCardButton, &QPushButton::clicked, this, &UserInfoBox::actBannerCard);
     }
 
     setWindowTitle(tr("User Information"));
     setLayout(mainLayout);
     retranslateUi();
+}
+
+void UserInfoBox::applyInterfaceDefaultFont()
+{
+    // Family comes from the InterfaceDefault theme role; the *1.5 size
+    // multiplier and bold weight stay caller-side as before.
+    QFont nameFont = themeManager->appFont(AppFont::InterfaceDefault);
+    nameFont.setBold(true);
+    nameFont.setPointSizeF(nameFont.pointSizeF() * 1.5);
+    nameLabel.setFont(nameFont);
 }
 
 void UserInfoBox::retranslateUi()
@@ -83,26 +110,21 @@ void UserInfoBox::retranslateUi()
     editButton.setText(tr("Edit"));
     passwordButton.setText(tr("Change password"));
     avatarButton.setText(tr("Change avatar"));
-}
-
-/**
- * Creates the default profile pic that is used when the user doesn't have a custom pic
- */
-static QPixmap createDefaultAvatar(int height, const ServerInfo_User &user)
-{
-    return UserLevelPixmapGenerator::generatePixmap(height, UserLevelFlags(user.user_level()), user.pawn_colors(),
-                                                    false, QString::fromStdString(user.privlevel()));
+    bannerCardButton.setText(tr("Edit Banner Card"));
 }
 
 void UserInfoBox::updateInfo(const ServerInfo_User &user)
 {
-    currentUserInfo = &user;
+    currentUserInfo = user;
+    hasUserInfo = true;
 
     const UserLevelFlags userLevel(user.user_level());
+    pawnColors = user.pawn_colors();
+    privLevel = QString::fromStdString(user.privlevel());
 
     const std::string &bmp = user.avatar_bmp();
     if (!avatarPixmap.loadFromData((const uchar *)bmp.data(), static_cast<uint>(bmp.size()))) {
-        avatarPixmap = createDefaultAvatar(64, user);
+        avatarPixmap = UserLevelPixmapGenerator::generatePixmap(64, userLevel, pawnColors, false, privLevel);
         hasAvatar = false;
     } else {
         hasAvatar = true;
@@ -120,20 +142,23 @@ void UserInfoBox::updateInfo(const ServerInfo_User &user)
         countryLabel3.setText("");
     }
 
-    userLevelIcon.setPixmap(UserLevelPixmapGenerator::generatePixmap(15, userLevel, user.pawn_colors(), false,
-                                                                     QString::fromStdString(user.privlevel())));
+    userLevelIcon.setPixmap(UserLevelPixmapGenerator::generatePixmap(15, userLevel, pawnColors, false, privLevel));
     QString userLevelText;
-    if (userLevel.testFlag(ServerInfo_User::IsAdmin))
+    if (userLevel.testFlag(ServerInfo_User::IsAdmin)) {
         userLevelText = tr("Administrator");
-    else if (userLevel.testFlag(ServerInfo_User::IsModerator))
+    } else if (userLevel.testFlag(ServerInfo_User::IsDeveloper)) {
+        userLevelText = tr("Developer");
+    } else if (userLevel.testFlag(ServerInfo_User::IsModerator)) {
         userLevelText = tr("Moderator");
-    else if (userLevel.testFlag(ServerInfo_User::IsRegistered))
+    } else if (userLevel.testFlag(ServerInfo_User::IsRegistered)) {
         userLevelText = tr("Registered user");
-    else
+    } else {
         userLevelText = tr("Unregistered user");
+    }
 
-    if (userLevel.testFlag(ServerInfo_User::IsJudge))
+    if (userLevel.testFlag(ServerInfo_User::IsJudge)) {
         userLevelText += " | " + tr("Judge");
+    }
 
     if (user.has_privlevel() && user.privlevel() != "NONE") {
         userLevelText += " | " + QString("%1").arg(user.privlevel().c_str());
@@ -152,15 +177,17 @@ void UserInfoBox::updateInfo(const ServerInfo_User &user)
 QString UserInfoBox::getAgeString(int ageSeconds)
 {
     QString accountAgeString = tr("Unknown");
-    if (ageSeconds <= 0)
+    if (ageSeconds <= 0) {
         return accountAgeString;
+    }
 
     // secsSinceEpoch is in utc
     auto secsSinceEpoch = QDateTime::currentSecsSinceEpoch() - ageSeconds;
     // the date is in local time, fromSecsSinceEpoch expects a timestamp from utc and converts it to local time
     auto date = QDateTime::fromSecsSinceEpoch(secsSinceEpoch).date();
-    if (!date.isValid())
+    if (!date.isValid()) {
         return accountAgeString;
+    }
 
     // now can be local time as the date is also local time
     auto now = QDate::currentDate();
@@ -218,8 +245,9 @@ void UserInfoBox::actEditInternal(const Response &r)
     QString realName = QString::fromStdString(user.real_name());
 
     DlgEditUser dlg(this, email, country, realName);
-    if (!dlg.exec())
+    if (!dlg.exec()) {
         return;
+    }
 
     Command_AccountEdit cmd;
     cmd.set_real_name(dlg.getRealName().toStdString());
@@ -231,8 +259,9 @@ void UserInfoBox::actEditInternal(const Response &r)
                 getTextWithMax(this, tr("Enter Password"),
                                tr("Password verification is required in order to change your email address"),
                                QLineEdit::Password, "", &ok);
-            if (!ok)
+            if (!ok) {
                 return;
+            }
             cmd.set_password_check(password.toStdString());
             cmd.set_email(dlg.getEmail().toStdString());
         } // servers that support password hash do not require all fields to be filled anymore
@@ -250,8 +279,9 @@ void UserInfoBox::actEditInternal(const Response &r)
 void UserInfoBox::actPassword()
 {
     DlgEditPassword dlg(this);
-    if (!dlg.exec())
+    if (!dlg.exec()) {
         return;
+    }
 
     auto oldPassword = dlg.getOldPassword();
     auto newPassword = dlg.getNewPassword();
@@ -277,15 +307,7 @@ void UserInfoBox::actPassword()
 
 void UserInfoBox::changePassword(const QString &oldPassword, const QString &newPassword)
 {
-    Command_AccountPassword cmd;
-    cmd.set_old_password(oldPassword.toStdString());
-    if (client->getServerSupportsPasswordHash()) {
-        auto passwordSalt = PasswordHasher::generateRandomSalt();
-        QString hashedPassword = PasswordHasher::computeHash(newPassword, passwordSalt);
-        cmd.set_hashed_new_password(hashedPassword.toStdString());
-    } else {
-        cmd.set_new_password(newPassword.toStdString());
-    }
+    const Command_AccountPassword cmd = client->makeAccountPasswordCommand(oldPassword, newPassword);
 
     PendingCommand *pend = client->prepareSessionCommand(cmd);
     connect(pend, &PendingCommand::finished, this, &UserInfoBox::processPasswordResponse);
@@ -296,8 +318,9 @@ void UserInfoBox::changePassword(const QString &oldPassword, const QString &newP
 void UserInfoBox::actAvatar()
 {
     DlgEditAvatar dlg(this);
-    if (!dlg.exec())
+    if (!dlg.exec()) {
         return;
+    }
 
     Command_AccountImage cmd;
     cmd.set_image(dlg.getImage().data(), dlg.getImage().size());
@@ -305,6 +328,50 @@ void UserInfoBox::actAvatar()
     PendingCommand *pend = client->prepareSessionCommand(cmd);
     connect(pend, &PendingCommand::finished, this, &UserInfoBox::processAvatarResponse);
 
+    client->sendCommand(pend);
+}
+
+void UserInfoBox::actBannerCard()
+{
+    CardArtParams initial;
+    if (hasUserInfo && currentUserInfo.has_card_art_params()) {
+        const auto &cap = currentUserInfo.card_art_params();
+        initial.cardName = QString::fromStdString(cap.card_name());
+        initial.cardProviderId = QString::fromStdString(cap.card_provider_id());
+        initial.marginPctL = cap.margin_pct_l();
+        initial.marginPctR = cap.margin_pct_r();
+        initial.verticalOffset = cap.vertical_offset();
+        initial.zoom = cap.zoom();
+    }
+
+    UserCardArtSettingsDialog dlg(initial, this);
+    if (dlg.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    const CardArtParams p = dlg.params();
+
+    Command_SetCardArtParams cmd;
+    cmd.set_card_name(p.cardName.toStdString());
+    if (!p.cardName.isEmpty()) {
+        cmd.set_card_provider_id(p.cardProviderId.toStdString());
+        cmd.set_margin_pct_l(p.marginPctL);
+        cmd.set_margin_pct_r(p.marginPctR);
+        cmd.set_vertical_offset(p.verticalOffset);
+        cmd.set_zoom(p.zoom);
+    }
+
+    PendingCommand *pend = client->prepareSessionCommand(cmd);
+    connect(pend, &PendingCommand::finished, this, [p, this](const Response &r) {
+        if (r.response_code() != Response::RespOk) {
+            QMessageBox::critical(this, tr("Error"),
+                                  tr("The selected card is blacklisted on this server or another error occurred."));
+        } else {
+            updateInfo(nameLabel.text()); // re-fetch so currentUserInfo reflects the change
+            QMessageBox::information(this, tr("Information"),
+                                     p.cardName.isEmpty() ? tr("Banner card removed.") : tr("Banner card updated."));
+        }
+    });
     client->sendCommand(pend);
 }
 
@@ -365,7 +432,7 @@ void UserInfoBox::processAvatarResponse(const Response &r)
             break;
         case Response::RespInternalError:
         default:
-            QMessageBox::critical(this, tr("Error"), tr("An error occured while trying to updater your avatar."));
+            QMessageBox::critical(this, tr("Error"), tr("An error occured while trying to update your avatar."));
             break;
     }
 }
@@ -377,7 +444,7 @@ void UserInfoBox::resizeEvent(QResizeEvent *event)
         resizedPixmap = avatarPixmap.scaled(avatarPic.size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
     } else {
         int height = qMin(avatarPic.size().width(), avatarPic.size().height());
-        resizedPixmap = createDefaultAvatar(height, *currentUserInfo);
+        resizedPixmap = UserLevelPixmapGenerator::generatePixmap(height, userLevel, pawnColors, false, privLevel);
     }
     avatarPic.setPixmap(resizedPixmap);
 

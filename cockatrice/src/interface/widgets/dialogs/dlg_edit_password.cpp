@@ -4,10 +4,16 @@
 
 #include <QDialogButtonBox>
 #include <QGridLayout>
-#include <QHBoxLayout>
 #include <QLabel>
 #include <QMessageBox>
-#include <libcockatrice/utility/trice_limits.h>
+#include <QSharedPointer>
+#include <QSize>
+#include <QVBoxLayout>
+#include <libcockatrice/settings/servers_settings.h>
+#include <libcockatrice/utility/string_limits.h>
+
+class QVBoxLayout;
+class QWidget;
 
 DlgEditPassword::DlgEditPassword(QWidget *parent) : QDialog(parent)
 {
@@ -17,7 +23,10 @@ DlgEditPassword::DlgEditPassword(QWidget *parent) : QDialog(parent)
 
     auto &servers = SettingsCache::instance().servers();
     if (servers.getSavePassword()) {
-        oldPasswordEdit->setText(servers.getPassword());
+        const QString stored = servers.getPassword();
+        if (!stored.startsWith("$")) {
+            oldPasswordEdit->setText(stored);
+        }
     }
 
     oldPasswordLabel->setBuddy(oldPasswordEdit);
@@ -59,7 +68,7 @@ DlgEditPassword::DlgEditPassword(QWidget *parent) : QDialog(parent)
 
 void DlgEditPassword::actOk()
 {
-    //! \todo this stuff should be using qvalidators
+    //! \todo This stuff should be using QValidators.
     if (newPasswordEdit->text().length() < 8) {
         QMessageBox::critical(this, tr("Error"), tr("Your password is too short."));
         return;

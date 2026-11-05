@@ -1,31 +1,49 @@
 #include "draw_probability_widget.h"
 
+#include "../../../general/display/banner_widget.h"
+#include "../../../general/layout_containers/flow_widget.h"
+#include "../../abstract_analytics_panel_widget.h"
+#include "../../deck_list_statistics_analyzer.h"
+#include "deck_list_model.h"
 #include "draw_probability_config_dialog.h"
+#include "libcockatrice/card/database/card_database_querier.h"
+#include "libcockatrice/deck_list/tree/deck_list_card_node.h"
 
+#include <QAbstractItemView>
+#include <QChar>
 #include <QComboBox>
 #include <QDialog>
-#include <QDialogButtonBox>
-#include <QFormLayout>
-#include <QHBoxLayout>
 #include <QHeaderView>
+#include <QJsonObject>
 #include <QLabel>
+#include <QList>
 #include <QMap>
+#include <QObject>
+#include <QSharedPointer>
+#include <QSizePolicy>
 #include <QSpinBox>
+#include <QString>
+#include <QStringList>
+#include <QTableWidget>
 #include <QTableWidgetItem>
-#include <QWidget>
+#include <QVBoxLayout>
+#include <QVariant>
+#include <QtGlobal>
 #include <QtMath>
 #include <libcockatrice/card/card_info.h>
 #include <libcockatrice/card/database/card_database_manager.h>
+#include <qnamespace.h>
+
+class QWidget;
 
 DrawProbabilityWidget::DrawProbabilityWidget(QWidget *parent, DeckListStatisticsAnalyzer *analyzer)
     : AbstractAnalyticsPanelWidget(parent, analyzer)
 {
-    controls = new QWidget(this);
-    controlLayout = new QHBoxLayout(controls);
-    controlLayout->setContentsMargins(11, 0, 11, 0);
+    controls = new FlowWidget(this, Qt::Horizontal, Qt::ScrollBarAlwaysOff, Qt::ScrollBarAlwaysOff);
+    controls->setSpacing(4, 4);
 
     labelPrefix = new QLabel(this);
-    controlLayout->addWidget(labelPrefix);
+    controls->addWidget(labelPrefix);
 
     criteriaCombo = new QComboBox(this);
     // Give these things item-data so we can translate the actual user-facing strings
@@ -33,33 +51,32 @@ DrawProbabilityWidget::DrawProbabilityWidget(QWidget *parent, DeckListStatistics
     criteriaCombo->addItem(QString(), "type");
     criteriaCombo->addItem(QString(), "subtype");
     criteriaCombo->addItem(QString(), "cmc");
-    controlLayout->addWidget(criteriaCombo);
+    controls->addWidget(criteriaCombo);
 
     exactnessCombo = new QComboBox(this);
     exactnessCombo->addItem(QString(), true);  // At least
     exactnessCombo->addItem(QString(), false); // Exactly
-    controlLayout->addWidget(exactnessCombo);
+    controls->addWidget(exactnessCombo);
 
     quantitySpin = new QSpinBox(this);
     quantitySpin->setRange(1, 60);
-    controlLayout->addWidget(quantitySpin);
+    controls->addWidget(quantitySpin);
 
     labelMiddle = new QLabel(this);
-    controlLayout->addWidget(labelMiddle);
+    controls->addWidget(labelMiddle);
 
     drawnSpin = new QSpinBox(this);
     drawnSpin->setRange(1, 60);
     drawnSpin->setValue(7);
-    controlLayout->addWidget(drawnSpin);
+    controls->addWidget(drawnSpin);
 
     labelSuffix = new QLabel(this);
-    controlLayout->addWidget(labelSuffix);
+    controls->addWidget(labelSuffix);
 
     labelPrefix->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     labelMiddle->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     labelSuffix->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
 
-    controlLayout->addStretch(1);
     layout->addWidget(controls);
 
     // Table

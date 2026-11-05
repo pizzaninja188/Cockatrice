@@ -16,6 +16,7 @@
 #ifndef COCKATRICE_RULED_ACTIONS_H
 #define COCKATRICE_RULED_ACTIONS_H
 
+#include "ruled_client_ui.h"
 #include <QList>
 #include <QString>
 #include <QtGlobal>
@@ -24,7 +25,7 @@
 class AbstractGame;
 class ArrowTarget;
 class CardItem;
-class Player;
+class PlayerLogic;
 class RuledClientState;
 /// Defined in ruled_client_state.h; forward-declared (fixed underlying type) to keep this header
 /// free of that include.
@@ -48,7 +49,7 @@ bool tryHandlePublicZonePlay(CardItem *card, bool contextMenu = false);
 // Mode predicate — the one place that reads the ruled_game flag.
 // ---------------------------------------------------------------------------------------
 [[nodiscard]] bool isRuledGame(const AbstractGame *game);
-[[nodiscard]] bool isRuledGameForPlayer(const Player *player);
+[[nodiscard]] bool isRuledGameForPlayer(const PlayerLogic *player);
 [[nodiscard]] bool isRuledGameForCard(const CardItem *card);
 /// True when a ruled battlefield CardItem has the public engine status phased out.
 [[nodiscard]] bool isPhasedOutCard(const CardItem *card);
@@ -60,8 +61,8 @@ bool tryHandlePublicZonePlay(CardItem *card, bool contextMenu = false);
 /// and combat-preview messages do not enter this state.
 [[nodiscard]] bool gameplayInputLocked(const AbstractGame *game);
 /// CR 508.1b destination selection after an attacker with multiple published defenders is staged.
-[[nodiscard]] bool isCombatDefenderPlayerCandidate(const Player *player);
-bool tryHandleCombatDefenderPlayerClick(Player *player);
+[[nodiscard]] bool isCombatDefenderPlayerCandidate(const PlayerLogic *player);
+bool tryHandleCombatDefenderPlayerClick(PlayerLogic *player);
 
 /// Tell the view model which graveyard OIDs the pending cast of `handSlot`/`faceIndex` may target,
 /// so `TabGame` can open the right players' graveyard views. Pass `handSlot < 0` to retract the
@@ -70,7 +71,7 @@ bool tryHandleCombatDefenderPlayerClick(Player *player);
 /// Casting Raise Dead used to require the player to open their own graveyard by hand — the view
 /// auto-opened only for a pending *trigger*. Reanimate makes that worse, because the card may sit
 /// in an opponent's graveyard.
-void updateGraveyardTargetHint(const Player *player, int handSlot, int faceIndex);
+void updateGraveyardTargetHint(const PlayerLogic *player, int handSlot, int faceIndex);
 
 /// Send a ready-built ruled command that does not originate in the view model — today only the
 /// dev console, whose input is text rather than a click or an engine event.

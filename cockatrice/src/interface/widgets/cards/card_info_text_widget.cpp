@@ -1,16 +1,29 @@
 #include "card_info_text_widget.h"
 
-#include "../../../game/board/card_item.h"
+#include "../../../client/settings/cache_settings.h"
+#include "../../card_localization.h"
+#include "libcockatrice/card/card_info.h"
+#include "libcockatrice/card/printing/printing_info.h"
+#include "libcockatrice/card/set/card_set.h"
+#include "libcockatrice/settings/cards_display_settings.h"
 
 #include <QGridLayout>
 #include <QLabel>
+#include <QList>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QSharedPointer>
+#include <QSize>
+#include <QStringList>
 #include <QTextEdit>
+#include <QWidget>
 #include <libcockatrice/card/game_specific_terms.h>
 #include <libcockatrice/card/relation/card_relation.h>
+#include <libcockatrice/utility/qt_utils.h>
+#include <qnamespace.h>
+#include <qobjectdefs.h>
 
-CardInfoTextWidget::CardInfoTextWidget(QWidget *parent) : QFrame(parent), info(nullptr)
+CardInfoTextWidget::CardInfoTextWidget(QWidget *parent) : QFrame(parent)
 {
     propsLabel = new QLabel;
     propsLabel->setOpenExternalLinks(false);
@@ -21,9 +34,7 @@ CardInfoTextWidget::CardInfoTextWidget(QWidget *parent) : QFrame(parent), info(n
     textLabel->setReadOnly(true);
     textLabel->setMinimumSize(35, 35);
 
-    propsScroll = new QScrollArea(this);
-    propsScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    propsScroll->setWidgetResizable(true);
+    propsScroll = QtUtils::makeScrollArea(this);
     propsScroll->setAlignment(Qt::AlignLeft | Qt::AlignTop);
     propsScroll->setContentsMargins(0, 0, 0, 0);
     propsScroll->setFrameStyle(QFrame::NoFrame);
@@ -39,6 +50,12 @@ CardInfoTextWidget::CardInfoTextWidget(QWidget *parent) : QFrame(parent), info(n
     grid->setRowStretch(1, 1);
 
     retranslateUi();
+
+    connect(&SettingsCache::instance().cardsDisplay(), &CardsDisplaySettings::cardLangChanged, this, [this] {
+        if (currentCard) {
+            setCard(currentCard);
+        }
+    });
 }
 
 void CardInfoTextWidget::setTexts(const QString &propsText, const QString &textText)
@@ -60,7 +77,7 @@ void CardInfoTextWidget::setCard(const ExactCard &exactCard)
 
     QString text = "<table width=\"100%\" border=0 cellspacing=0 cellpadding=0>";
     text += QString("<tr><td>%1</td><td width=\"5\"></td><td>%2</td></tr>")
-                .arg(tr("Name:"), card->getName().toHtmlEscaped());
+                .arg(tr("Name:"), CardLocalization::displayName(card).toHtmlEscaped());
 
     if (!exactCard.getPrinting().isEmpty()) {
         QString setShort = exactCard.getPrinting().getSet()->getShortName().toHtmlEscaped();
@@ -73,8 +90,9 @@ void CardInfoTextWidget::setCard(const ExactCard &exactCard)
 
     QStringList cardProps = card->getProperties();
     for (const QString &key : cardProps) {
-        if (key.contains("-"))
+        if (key.contains("-")) {
             continue;
+        }
         QString keyText = Mtg::getNicePropertyName(key).toHtmlEscaped() + ":";
         text +=
             QString("<tr><td>%1</td><td></td><td>%2</td></tr>").arg(keyText, card->getProperty(key).toHtmlEscaped());
@@ -93,7 +111,8 @@ void CardInfoTextWidget::setCard(const ExactCard &exactCard)
     }
 
     text += "</table>";
-    setTexts(text, card->getText());
+    setTexts(text, CardLocalization::displayText(card));
+    currentCard = exactCard;
 }
 
 void CardInfoTextWidget::setInvalidCardName(const QString &cardName)

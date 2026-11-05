@@ -2,10 +2,35 @@
 #define COCKATRICE_INTERFACE_CARD_SET_PRIORITY_CONTROLLER_H
 
 #include <QString>
+#include <QStringList>
 
 class ICardSetPriorityController
 {
 public:
+    struct SetSaveData
+    {
+        QString shortName;
+        unsigned int sortKey;
+        bool enabled;
+        bool isKnown = false;
+    };
+
+    /**
+     * @brief Bundled per-set priority options, returned in a single call.
+     *
+     * Reading these individually (getSortKey/isEnabled/isKnown) is cheap for the
+     * noop controller but extremely expensive when backed by QSettings, which
+     * re-opens and re-parses the whole .ini on every access. Callers that need
+     * more than one option for the same set (notably CardSet construction during
+     * database load) should use getSetOptions() to avoid that cost.
+     */
+    struct SetOptions
+    {
+        unsigned int sortKey = 0;
+        bool enabled = false;
+        bool isKnown = false;
+    };
+
     virtual ~ICardSetPriorityController() = default;
 
     virtual void setSortKey(QString shortName, unsigned int sortKey) = 0;
@@ -15,6 +40,33 @@ public:
     virtual unsigned int getSortKey(QString shortName) const = 0;
     virtual bool isEnabled(QString shortName) const = 0;
     virtual bool isKnown(QString shortName) const = 0;
+
+    /**
+     * @brief Returns the bundled priority options for a set in a single call.
+     * @param shortName The set's short name.
+     * @return The sort key, enabled and known flags for the set.
+     */
+    virtual SetOptions getSetOptions(QString shortName) const = 0;
+
+    /**
+     * @brief Returns the short names of every set currently marked as enabled.
+     *
+     * Callers fold this into the card database cache source hash so that
+     * toggling set enablement invalidates the cache.
+     *
+     * @return The enabled set short names, sorted alphabetically.
+     */
+    virtual QStringList getEnabledSetNames() const = 0;
+
+    /**
+     * @brief Persists per-set options for every entry in a single settings flush.
+     *
+     * Each individual setSortKey/setEnabled/setIsKnown call re-opens and re-syncs
+     * the whole .ini when backed by QSettings, so persisting hundreds of sets
+     * one option at a time freezes the GUI thread for seconds. Callers that touch
+     * more than a handful of sets must bundle the records and call this once.
+     */
+    virtual void saveSets(const QVector<SetSaveData> &data) = 0;
 };
 
 #endif // COCKATRICE_INTERFACE_CARD_SET_PRIORITY_CONTROLLER_H

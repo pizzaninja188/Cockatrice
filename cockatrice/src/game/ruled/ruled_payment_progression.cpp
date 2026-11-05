@@ -1,12 +1,13 @@
+#include <libcockatrice/game/game_state.h>
 #include "../../interface/widgets/tabs/tab_game.h"
-#include "../abstract_game.h"
-#include "../board/abstract_counter.h"
-#include "../board/card_item.h"
-#include "../game_event_handler.h"
-#include "../player/player.h"
-#include "../player/player_actions.h"
-#include "../player/player_info.h"
-#include "../zones/logic/card_zone_logic.h"
+#include <libcockatrice/game/abstract_game.h>
+#include "../../game_graphics/board/abstract_counter.h"
+#include "../../game_graphics/board/card_item.h"
+#include <libcockatrice/game/game_event_handler.h>
+#include <libcockatrice/game/player/player_logic.h>
+#include "ruled_player_actions.h"
+#include <libcockatrice/game/player/player_info.h>
+#include <libcockatrice/game/zones/card_zone_logic.h>
 #include "ruled_actions.h"
 #include "ruled_activation.h"
 #include "ruled_payment_ui.h"
@@ -204,13 +205,13 @@ bool RuledPaymentUi::tryHandlePriorityCostClick(CardItem *card)
     // the shared cost prompt. The engine owns the candidate set and revalidates its generation.
     if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CostObjects)) {
         if (!card || !card->getZone() || card->getZone()->getName() != ZoneNames::TABLE) {
-            handler->emitLocalLog(PlayerActions::tr("Choose a permanent from the battlefield for this cost."));
+            handler->emitLocalLog(RuledPlayerActions::tr("Choose a permanent from the battlefield for this cost."));
             return true;
         }
         const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
         const quint32 oid = handler->engineOidForCardId(ownerPlayerId, card->getId());
         if (oid == 0 || !handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CostObjects, oid)) {
-            handler->emitLocalLog(PlayerActions::tr("That permanent cannot pay this resolution cost."));
+            handler->emitLocalLog(RuledPlayerActions::tr("That permanent cannot pay this resolution cost."));
             return true;
         }
         handler->toggleResolutionCostObject(oid);
@@ -238,7 +239,7 @@ bool RuledPaymentUi::tryHandlePriorityCostClick(CardItem *card)
         quint64 expectedGeneration = 0;
         int genericReduction = 0;
         if (card->getZone()->getName() == ZoneNames::HAND) {
-            Player *const handPlayer = card->getZone()->getPlayer();
+            PlayerLogic *const handPlayer = card->getZone()->getPlayer();
             const int handPlayerId = handPlayer ? handPlayer->getPlayerInfo()->getId() : -1;
             const int handSlot = handler->engineHandSlotForServerCard(handPlayerId, card->getId());
             if (handPlayer == actions->player && handSlot >= 0 &&
@@ -262,7 +263,7 @@ bool RuledPaymentUi::tryHandlePriorityCostClick(CardItem *card)
         }
         if (objectKind == RuledPendingCastCostSelection::ObjectKind::None) {
             actions->pendingRuledSpellCast.castCostObjectError =
-                PlayerActions::tr("That card cannot be used for %1.").arg(option->label);
+                RuledPlayerActions::tr("That card cannot be used for %1.").arg(option->label);
             emit actions->ruledSpellCastPendingChanged(true);
             return true;
         }
@@ -389,7 +390,7 @@ bool RuledPaymentUi::tryHandleCounterGroupCostClick(CardItem *card)
                            selectedValid ? selected : std::numeric_limits<quint64>::max()});
     }
     if (components.isEmpty()) {
-        handler->emitLocalLog(PlayerActions::tr("That permanent is not offered for any counter cost component."));
+        handler->emitLocalLog(RuledPlayerActions::tr("That permanent is not offered for any counter cost component."));
         return true;
     }
 
@@ -398,14 +399,14 @@ bool RuledPaymentUi::tryHandleCounterGroupCostClick(CardItem *card)
     card = nullptr;
     handler = nullptr;
     std::optional<int> selectedCostIndex;
-    QPointer<PlayerActions> actionsGuard(actions);
+    QPointer<RuledPlayerActions> actionsGuard(actions);
     if (components.size() == 1) {
         selectedCostIndex = components.constFirst().costIndex;
     } else {
         QMenu menu;
-        menu.setTitle(PlayerActions::tr("Choose counter cost component"));
+        menu.setTitle(RuledPlayerActions::tr("Choose counter cost component"));
         for (const auto &component : components) {
-            auto *entry = menu.addAction(PlayerActions::tr("Component %1: %2 / %3 counters")
+            auto *entry = menu.addAction(RuledPlayerActions::tr("Component %1: %2 / %3 counters")
                                              .arg(component.menuNumber)
                                              .arg(static_cast<qulonglong>(component.selected))
                                              .arg(static_cast<qulonglong>(component.required)));
@@ -483,12 +484,12 @@ bool RuledPaymentUi::tryHandleAdditionalCostClick(CardItem *card)
         if (choice.zone == RuledCostChoiceZone::Hand) {
             if (card->getZone()->getName() != ZoneNames::HAND ||
                 ownerPlayerId != actions->player->getPlayerInfo()->getId()) {
-                handler->emitLocalLog(PlayerActions::tr("Choose a card from your hand to discard."));
+                handler->emitLocalLog(RuledPlayerActions::tr("Choose a card from your hand to discard."));
                 return true;
             }
             const int handSlot = handler->engineHandSlotForServerCard(ownerPlayerId, card->getId());
             if (handSlot < 0) {
-                handler->emitLocalLog(PlayerActions::tr("That hand card is not selectable yet."));
+                handler->emitLocalLog(RuledPlayerActions::tr("That hand card is not selectable yet."));
                 return true;
             }
             candidateId = static_cast<quint32>(handSlot);
@@ -496,7 +497,7 @@ bool RuledPaymentUi::tryHandleAdditionalCostClick(CardItem *card)
         } else if (choice.zone == RuledCostChoiceZone::Graveyard) {
             if (card->getZone()->getName() != ZoneNames::GRAVE ||
                 ownerPlayerId != actions->player->getPlayerInfo()->getId()) {
-                handler->emitLocalLog(PlayerActions::tr("Choose a card from your graveyard."));
+                handler->emitLocalLog(RuledPlayerActions::tr("Choose a card from your graveyard."));
                 return true;
             }
             candidateId = handler->graveyardEngineOidForOwnedCard(ownerPlayerId, card->getId());
@@ -510,12 +511,12 @@ bool RuledPaymentUi::tryHandleAdditionalCostClick(CardItem *card)
             stableId = candidateId;
         }
         if (!choice.candidateIds.contains(candidateId)) {
-            handler->emitLocalLog(PlayerActions::tr("That object cannot pay this spell cost."));
+            handler->emitLocalLog(RuledPlayerActions::tr("That object cannot pay this spell cost."));
             return true;
         }
         for (const auto &already : actions->pendingRuledSpellCast.costSelections) {
             if (ruledCostSelectionConflicts(choice, actions->pendingRuledSpellCast.costChoices, already, stableId)) {
-                handler->emitLocalLog(PlayerActions::tr("One object cannot pay two cost components."));
+                handler->emitLocalLog(RuledPlayerActions::tr("One object cannot pay two cost components."));
                 return true;
             }
         }
@@ -584,12 +585,12 @@ bool RuledPaymentUi::tryHandleAdditionalCostClick(CardItem *card)
                 if (choice.zone == RuledCostChoiceZone::Hand) {
                     if (card->getZone()->getName() != ZoneNames::HAND ||
                         ownerPlayerId != actions->player->getPlayerInfo()->getId()) {
-                        handler->emitLocalLog(PlayerActions::tr("Choose a card from your hand to discard."));
+                        handler->emitLocalLog(RuledPlayerActions::tr("Choose a card from your hand to discard."));
                         return;
                     }
                     const int handSlot = handler->engineHandSlotForServerCard(ownerPlayerId, card->getId());
                     if (handSlot < 0) {
-                        handler->emitLocalLog(PlayerActions::tr("That hand card is not selectable yet."));
+                        handler->emitLocalLog(RuledPlayerActions::tr("That hand card is not selectable yet."));
                         return;
                     }
                     selectedId = static_cast<quint32>(handSlot);
@@ -597,7 +598,7 @@ bool RuledPaymentUi::tryHandleAdditionalCostClick(CardItem *card)
                 } else if (choice.zone == RuledCostChoiceZone::Graveyard) {
                     if (card->getZone()->getName() != ZoneNames::GRAVE ||
                         ownerPlayerId != actions->player->getPlayerInfo()->getId()) {
-                        handler->emitLocalLog(PlayerActions::tr("Choose a card from your graveyard."));
+                        handler->emitLocalLog(RuledPlayerActions::tr("Choose a card from your graveyard."));
                         return;
                     }
                     selectedId = handler->graveyardEngineOidForOwnedCard(ownerPlayerId, card->getId());
@@ -611,16 +612,16 @@ bool RuledPaymentUi::tryHandleAdditionalCostClick(CardItem *card)
                     stableId = selectedId;
                 }
                 if (selectedId == 0 && choice.zone == RuledCostChoiceZone::Battlefield) {
-                    handler->emitLocalLog(PlayerActions::tr("That permanent is not selectable yet."));
+                    handler->emitLocalLog(RuledPlayerActions::tr("That permanent is not selectable yet."));
                     return;
                 }
                 if (!choice.candidateIds.contains(selectedId)) {
-                    handler->emitLocalLog(PlayerActions::tr("That object cannot pay this ability cost."));
+                    handler->emitLocalLog(RuledPlayerActions::tr("That object cannot pay this ability cost."));
                     return;
                 }
                 for (const auto &already : pending.costSelections) {
                     if (ruledCostSelectionConflicts(choice, pending.costChoices, already, stableId)) {
-                        handler->emitLocalLog(PlayerActions::tr("One object cannot pay two cost components."));
+                        handler->emitLocalLog(RuledPlayerActions::tr("One object cannot pay two cost components."));
                         return;
                     }
                 }
@@ -737,9 +738,9 @@ bool RuledPaymentUi::promptFlexiblePipChoices(const QString &fullCost,
                                               QVector<int> &choices)
 {
     QDialog dialog;
-    dialog.setWindowTitle(PlayerActions::tr("Pay hybrid/Phyrexian mana for %1").arg(cardName));
+    dialog.setWindowTitle(RuledPlayerActions::tr("Pay hybrid/Phyrexian mana for %1").arg(cardName));
     auto *layout = new QVBoxLayout(&dialog);
-    layout->addWidget(new QLabel(PlayerActions::tr("Cost: %1").arg(fullCost), &dialog));
+    layout->addWidget(new QLabel(RuledPlayerActions::tr("Cost: %1").arg(fullCost), &dialog));
 
     QVector<QComboBox *> combos;
     combos.reserve(flex.size());
@@ -750,19 +751,19 @@ bool RuledPaymentUi::promptFlexiblePipChoices(const QString &fullCost,
         if (pip.phyrexian) {
             pipLabel = pip.colorB.isNull() ? QStringLiteral("{%1/P}").arg(pip.colorA)
                                           : QStringLiteral("{%1/%2/P}").arg(pip.colorA).arg(pip.colorB);
-            primary = PlayerActions::tr("Pay {%1}").arg(pip.colorA);
-            alternative = pip.colorB.isNull() ? PlayerActions::tr("Pay 2 life")
-                                              : PlayerActions::tr("Pay {%1}").arg(pip.colorB);
+            primary = RuledPlayerActions::tr("Pay {%1}").arg(pip.colorA);
+            alternative = pip.colorB.isNull() ? RuledPlayerActions::tr("Pay 2 life")
+                                              : RuledPlayerActions::tr("Pay {%1}").arg(pip.colorB);
         } else if (pip.generic > 0) {
             // CR 107.4e: mono-hybrid — the color OR N generic.
             pipLabel = QStringLiteral("{%1/%2}").arg(pip.generic).arg(pip.colorA);
-            primary = PlayerActions::tr("Pay {%1}").arg(pip.colorA);
-            alternative = PlayerActions::tr("Pay {%1} generic").arg(pip.generic);
+            primary = RuledPlayerActions::tr("Pay {%1}").arg(pip.colorA);
+            alternative = RuledPlayerActions::tr("Pay {%1} generic").arg(pip.generic);
         } else {
             // CR 107.4d: hybrid — either color.
             pipLabel = QStringLiteral("{%1/%2}").arg(pip.colorA).arg(pip.colorB);
-            primary = PlayerActions::tr("Pay {%1}").arg(pip.colorA);
-            alternative = PlayerActions::tr("Pay {%1}").arg(pip.colorB);
+            primary = RuledPlayerActions::tr("Pay {%1}").arg(pip.colorA);
+            alternative = RuledPlayerActions::tr("Pay {%1}").arg(pip.colorB);
         }
         auto *row = new QHBoxLayout;
         row->addWidget(new QLabel(pipLabel, &dialog));
@@ -770,7 +771,7 @@ bool RuledPaymentUi::promptFlexiblePipChoices(const QString &fullCost,
         combo->addItem(primary);     // index 0 -> primary color
         combo->addItem(alternative); // index 1 -> alternative
         if (pip.phyrexian && !pip.colorB.isNull())
-            combo->addItem(PlayerActions::tr("Pay 2 life"));
+            combo->addItem(RuledPlayerActions::tr("Pay 2 life"));
         row->addWidget(combo, 1);
         layout->addLayout(row);
         combos.append(combo);
@@ -824,8 +825,8 @@ bool RuledPaymentUi::promptForRuledSpellXIfNeeded()
     }
     bool ok = false;
     const int chosenX = QInputDialog::getInt(
-        nullptr, PlayerActions::tr("Choose X"),
-        PlayerActions::tr("Value of X for %1:").arg(actions->pendingRuledSpellCast.cardName), 0, 0, 99, 1, &ok);
+        nullptr, RuledPlayerActions::tr("Choose X"),
+        RuledPlayerActions::tr("Value of X for %1:").arg(actions->pendingRuledSpellCast.cardName), 0, 0, 99, 1, &ok);
     if (!ok) {
         clearPendingRuledSpellCast();
         return false; // user cancelled the cast at the X prompt
@@ -837,7 +838,7 @@ bool RuledPaymentUi::promptForRuledSpellXIfNeeded()
                     })) {
         if (!actions->ruledPendingCast->expandRepeatedCastX(chosenX)) {
             actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-                PlayerActions::tr("The combined cost exceeds the supported numeric range."));
+                RuledPlayerActions::tr("The combined cost exceeds the supported numeric range."));
             clearPendingRuledSpellCast();
             return false;
         }
@@ -858,7 +859,7 @@ bool RuledPaymentUi::resolvePendingSpellFlexiblePips()
     const auto captured = actions->pendingRuledSpellCast;
     if (captured.flexPips.isEmpty())
         return true;
-    QPointer<PlayerActions> actionsGuard(actions);
+    QPointer<RuledPlayerActions> actionsGuard(actions);
     const QString fullCost = RuledPendingCast::formatRemainingCost(captured.remainingCost, captured.flexPips);
     QVector<int> choices;
     const bool accepted = promptFlexiblePipChoices(fullCost, captured.cardName, captured.flexPips, choices);
@@ -878,7 +879,7 @@ bool RuledPaymentUi::resolvePendingAbilityFlexiblePips()
     const auto captured = actions->pendingActivatedAbility;
     if (captured.flexPips.isEmpty())
         return true;
-    QPointer<PlayerActions> actionsGuard(actions);
+    QPointer<RuledPlayerActions> actionsGuard(actions);
     const QString fullCost = RuledPendingCast::formatRemainingCost(captured.remainingCost, captured.flexPips);
     QVector<int> choices;
     const bool accepted = promptFlexiblePipChoices(fullCost, captured.cardName, captured.flexPips, choices);
@@ -936,14 +937,14 @@ void RuledPaymentUi::cancelPendingRuledSpellCast()
                 }
             });
         actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            PlayerActions::tr("Canceling casting %1.").arg(cardName));
+            RuledPlayerActions::tr("Canceling casting %1.").arg(cardName));
         return;
     }
 
     clearPendingRuledSpellCast();
     emit actions->landTapUndoAvailableChanged(actions->landTapUndoCurrentlyAvailable());
     actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-        PlayerActions::tr("Canceled casting %1.").arg(cardName));
+        RuledPlayerActions::tr("Canceled casting %1.").arg(cardName));
 }
 
 bool RuledPaymentUi::completePendingRuledSpellCast()
@@ -1177,8 +1178,8 @@ void RuledPaymentUi::selectPendingRuledCastCostOption(int optionIndex)
                     return;
                 }
                 if (!actions->ruledPendingCast->stageRepeatedCastCost(optionIndex, *count)) {
-                    QMessageBox::warning(nullptr, PlayerActions::tr("Multikicker"),
-                                         PlayerActions::tr("The combined cost exceeds the supported numeric range."));
+                    QMessageBox::warning(nullptr, RuledPlayerActions::tr("Multikicker"),
+                                         RuledPlayerActions::tr("The combined cost exceeds the supported numeric range."));
                     return;
                 }
             } else {
@@ -1236,7 +1237,7 @@ void RuledPaymentUi::confirmPendingRuledCastCostGroup()
             selection->selectedObjectIds.size() > option->objectMax ||
             (option->aggregateMinimum > 0 && total < option->aggregateMinimum)) {
             actions->pendingRuledSpellCast.castCostObjectError =
-                PlayerActions::tr("The selected permanents do not satisfy %1.").arg(option->label);
+                RuledPlayerActions::tr("The selected permanents do not satisfy %1.").arg(option->label);
             emit actions->ruledSpellCastPendingChanged(true);
             return;
         }
@@ -1382,7 +1383,7 @@ void RuledPaymentUi::continuePendingActivatedAbilityAfterChoice()
         const auto phyrexianPips = unresolvedPhyrexianPips(pending);
         if (!fixedFlexPaymentsMatch(pending, phyrexianPips)) {
             const PendingActivatedAbility captured = pending;
-            QPointer<PlayerActions> actionsGuard(actions);
+            QPointer<RuledPlayerActions> actionsGuard(actions);
             const QString fullCost = RuledPendingCast::formatRemainingCost(pending.remainingCost, pending.flexPips);
             const QString cardName = pending.cardName;
             QVector<int> selectedBranches;
@@ -1504,7 +1505,7 @@ void RuledPaymentUi::finishPendingAbilityManaPaymentStep()
     }
     emit actions->ruledAbilityManaPromptChanged();
     actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-        PlayerActions::tr("Pay mana for %1: %2 remaining (click mana counters).")
+        RuledPlayerActions::tr("Pay mana for %1: %2 remaining (click mana counters).")
             .arg(actions->pendingActivatedAbility.cardName,
                  RuledPendingCast::formatRemainingCost(actions->pendingActivatedAbility.remainingCost,
                                                        actions->pendingActivatedAbility.flexPips)));
@@ -1533,7 +1534,7 @@ void RuledPaymentUi::finishPendingSpellManaPaymentStep()
     }
     emit actions->ruledSpellManaPromptChanged();
     actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-        PlayerActions::tr("Pay mana for %1: %2 remaining (click mana counters).")
+        RuledPlayerActions::tr("Pay mana for %1: %2 remaining (click mana counters).")
             .arg(actions->pendingRuledSpellCast.cardName,
                  RuledPendingCast::formatRemainingCost(actions->pendingRuledSpellCast.remainingCost,
                                                        actions->pendingRuledSpellCast.flexPips)));
@@ -1732,11 +1733,11 @@ void RuledPaymentUi::cancelPendingActivatedAbility()
     emit actions->landTapUndoAvailableChanged(actions->landTapUndoCurrentlyAvailable());
     if (restartAfterTargetInvalidation) {
         actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            PlayerActions::tr("Canceled activating %1 because its target changed during payment. Choose the ability again.")
+            RuledPlayerActions::tr("Canceled activating %1 because its target changed during payment. Choose the ability again.")
                 .arg(cardName.isEmpty() ? abilityText : cardName));
     } else {
         actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            PlayerActions::tr("Canceled activating %1.").arg(cardName.isEmpty() ? abilityText : cardName));
+            RuledPlayerActions::tr("Canceled activating %1.").arg(cardName.isEmpty() ? abilityText : cardName));
     }
 }
 
@@ -1807,7 +1808,7 @@ bool RuledPaymentUi::tryPayRuledSpellWithCounter(const QString &counterName)
     // still waiting for a target would complete the cast with no targets and burn pool counters.
     if (actions->pendingRuledSpellCast.waitingForTarget || actions->pendingRuledSpellCast.waitingForCost) {
         actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            PlayerActions::tr("Finish choosing targets and additional costs for %1 before paying mana.")
+            RuledPlayerActions::tr("Finish choosing targets and additional costs for %1 before paying mana.")
                 .arg(actions->pendingRuledSpellCast.cardName));
         return false;
     }
@@ -2297,7 +2298,7 @@ bool RuledPaymentUi::beginRuledSpellCast(CardItem *card,
     }
     if (actionSet && actionSet->modalOptionsByCastKey.contains(castKey)) {
         const auto &modeOptions = actionSet->modalOptionsByCastKey.value(castKey);
-        const auto selected = RuledPendingCast::chooseModes(actions->player->getGame()->getTab(), castName, modeOptions,
+        const auto selected = RuledPendingCast::chooseModes(RuledActions::tab(actions->player->getGame()), castName, modeOptions,
                                                             actionSet->modalMinModesByCastKey.value(castKey),
                                                             actionSet->modalMaxModesByCastKey.value(castKey));
         if (!selected.has_value()) {
@@ -2390,7 +2391,7 @@ bool RuledPaymentUi::beginRuledSpellCast(CardItem *card,
         const auto parsed = RuledPendingCast::parseRepresentableManaCost(castCost);
         if (!parsed) {
             clearPendingRuledSpellCast();
-            geh->emitLocalLog(PlayerActions::tr("The combined cost exceeds the supported numeric range."));
+            geh->emitLocalLog(RuledPlayerActions::tr("The combined cost exceeds the supported numeric range."));
             return true;
         }
         actions->pendingRuledSpellCast.remainingCost = *parsed;
@@ -2597,7 +2598,7 @@ void RuledPaymentUi::finalizePendingSpellManaCost()
         if (!actions->ruledPendingCast->finalizeRepeatedCastManaCost(
                 increases, static_cast<qint64>(actions->pendingRuledSpellCast.genericCostReduction) +
                                actions->pendingRuledSpellCast.castCostGenericReduction + targetedReductions)) {
-            state->emitLocalLog(PlayerActions::tr("The combined cost exceeds the supported numeric range."));
+            state->emitLocalLog(RuledPlayerActions::tr("The combined cost exceeds the supported numeric range."));
             cancelPendingRuledSpellCast();
         }
         return;
@@ -2729,10 +2730,10 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
             QMenu colorMenu;
             colorMenu.setTitle(card->getName());
             for (const QString &opt : colorOptions) {
-                const QString action = firstAbility->manaProduced.isEmpty() ? PlayerActions::tr("Choose {%1}").arg(opt)
-                                                                            : PlayerActions::tr("Add {%1}").arg(opt);
+                const QString action = firstAbility->manaProduced.isEmpty() ? RuledPlayerActions::tr("Choose {%1}").arg(opt)
+                                                                            : RuledPlayerActions::tr("Add {%1}").arg(opt);
                 const QString label =
-                    costPrefix.isEmpty() ? action : PlayerActions::tr("%1: %2").arg(costPrefix, action);
+                    costPrefix.isEmpty() ? action : RuledPlayerActions::tr("%1: %2").arg(costPrefix, action);
                 colorMenu.addAction(label);
             }
             QAction *chosen = colorMenu.exec(QCursor::pos());
@@ -2817,7 +2818,7 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     // A grouped-cost activation starts from the exact offer that opened this menu. Capture the
     // engine receipt and display value before entering the nested event loop; the CardItem may be
     // removed or replaced while QMenu::exec() is active.
-    QPointer<PlayerActions> actionsGuard(actions);
+    QPointer<RuledPlayerActions> actionsGuard(actions);
     QPointer<CardItem> sourceCardGuard(card);
     const quint32 originalSourceOid = oid;
     const auto originalSourceZone = handler->abilitySourceZone(originalSourceOid);
@@ -2865,12 +2866,12 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         actions->pendingActivatedAbility.abilityIndex = -1;
         actions->pendingActivatedAbility.abilityText = permanentAction.label;
         if (permanentAction.kind == ruled::v1::PERMANENT_ACTION_KIND_TURN_FACE_UP) {
-            Player *const zonePlayer = card->getZone() ? card->getZone()->getPlayer() : nullptr;
+            PlayerLogic *const zonePlayer = card->getZone() ? card->getZone()->getPlayer() : nullptr;
             const int zonePlayerId = zonePlayer ? zonePlayer->getPlayerInfo()->getId() : -1;
             actions->pendingActivatedAbility.cardName =
                 handler->privateFaceDownNameForCard(zonePlayerId, card->getId());
             if (actions->pendingActivatedAbility.cardName.isEmpty()) {
-                actions->pendingActivatedAbility.cardName = PlayerActions::tr("face-down permanent");
+                actions->pendingActivatedAbility.cardName = RuledPlayerActions::tr("face-down permanent");
             }
         } else {
             actions->pendingActivatedAbility.cardName = card->getName();
@@ -2958,7 +2959,7 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
             return true;
         }
         const auto modeSelection = RuledPendingCast::chooseModes(
-            actions->player->getGame()->getTab(), originalDisplayValue, offeredModes.modes, 1, 1,
+            RuledActions::tab(actions->player->getGame()), originalDisplayValue, offeredModes.modes, 1, 1,
             RuledPendingCast::ModeChoicePurpose::ActivatedAbility);
         if (!modeSelection) {
             return true;
@@ -3083,8 +3084,8 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
             }
             bool accepted = false;
             const QString selected = QInputDialog::getItem(
-                actions->player->getGame()->getTab(), PlayerActions::tr("Choose X"),
-                PlayerActions::tr("Choose X and a matching artifact for %1:").arg(actions->pendingActivatedAbility.cardName),
+                RuledActions::tab(actions->player->getGame()), RuledPlayerActions::tr("Choose X"),
+                RuledPlayerActions::tr("Choose X and a matching artifact for %1:").arg(actions->pendingActivatedAbility.cardName),
                 choices, 0, false, &accepted);
             bool parsed = false;
             const quint32 value = selected.toUInt(&parsed);
@@ -3093,8 +3094,8 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
             }
         } else {
             chosenX = promptBoundedManaCount(
-                actions->player->getGame()->getTab(), PlayerActions::tr("Choose X"),
-                PlayerActions::tr("Value of X for %1:").arg(actions->pendingActivatedAbility.cardName),
+                RuledActions::tab(actions->player->getGame()), RuledPlayerActions::tr("Choose X"),
+                RuledPlayerActions::tr("Value of X for %1:").arg(actions->pendingActivatedAbility.cardName),
                 ruledActivatedXChoiceMaximum(actions->pendingActivatedAbility, xPips));
         }
         if (!ruledApplyActivatedXChoice(actions->pendingActivatedAbility, xPips, chosenX)) {
@@ -3109,15 +3110,15 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         const auto selection = ruledPromptXCounterManaSplit(
             choice.maxX, [&](RuledXCounterManaPromptStep step, quint32 maximum) -> std::optional<quint32> {
                 if (step == RuledXCounterManaPromptStep::ChooseX) {
-                    return promptBoundedManaCount(actions->player->getGame()->getTab(), PlayerActions::tr("Choose X"),
-                                                  PlayerActions::tr("Number of %1 counters to remove from %2 (0–%3):")
+                    return promptBoundedManaCount(RuledActions::tab(actions->player->getGame()), RuledPlayerActions::tr("Choose X"),
+                                                  RuledPlayerActions::tr("Number of %1 counters to remove from %2 (0–%3):")
                                                       .arg(counterName, actions->pendingActivatedAbility.cardName)
                                                       .arg(maximum),
                                                   maximum);
                 }
                 return promptBoundedManaCount(
-                    actions->player->getGame()->getTab(), PlayerActions::tr("Choose Mana Split"),
-                    PlayerActions::tr("How many of the %1 mana should be {%2}? The rest will be {%3}.")
+                    RuledActions::tab(actions->player->getGame()), RuledPlayerActions::tr("Choose Mana Split"),
+                    RuledPlayerActions::tr("How many of the %1 mana should be {%2}? The rest will be {%3}.")
                         .arg(maximum)
                         .arg(choice.firstColor, choice.secondColor),
                     maximum);
@@ -3142,8 +3143,8 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
             actions->pendingActivatedAbility, choice, [&](quint32 minX, quint32 maxX) -> std::optional<quint32> {
                 bool accepted = false;
                 const int value = QInputDialog::getInt(
-                    actions->player->getGame()->getTab(), PlayerActions::tr("Choose Loyalty X"),
-                    PlayerActions::tr("Value of X for %1 (%2–%3):")
+                    RuledActions::tab(actions->player->getGame()), RuledPlayerActions::tr("Choose Loyalty X"),
+                    RuledPlayerActions::tr("Value of X for %1 (%2–%3):")
                         .arg(actions->pendingActivatedAbility.cardName)
                         .arg(minX)
                         .arg(maxX),
@@ -3221,7 +3222,7 @@ bool RuledPaymentUi::tryRequireSpellTargetCost(ruled::v1::TargetRefKind kind, qu
             if (!promptForNextRuledCastCostGroup())
                 return true;
             handler->emitLocalLog(
-                PlayerActions::tr("That target requires %1; choose its payment objects, then select the target again.")
+                RuledPlayerActions::tr("That target requires %1; choose its payment objects, then select the target again.")
                     .arg(requiredLabel));
             return true;
         }
@@ -3307,7 +3308,7 @@ bool RuledPaymentUi::tryUndoManaAbility()
     return false;
 }
 
-bool RuledPaymentUi::startPublicZoneCast(PlayerActions *actions, CardItem *card, bool contextMenu)
+bool RuledPaymentUi::startPublicZoneCast(RuledPlayerActions *actions, CardItem *card, bool contextMenu)
 {
     if (!contextMenu) {
         return actions->ruledPayment->tryStartRuledSpellCast(card);
@@ -3325,7 +3326,7 @@ bool RuledPaymentUi::startPublicZoneCast(PlayerActions *actions, CardItem *card,
         return false;
     }
     AsForetoldSourceHover sourceHover(actions->player->getGame());
-    const auto choice = RuledPendingCast::chooseFace(actions->player->getGame()->getTab(), card->getName(), options,
+    const auto choice = RuledPendingCast::chooseFace(RuledActions::tab(actions->player->getGame()), card->getName(), options,
                                                     [&](auto source) { sourceHover.show(source); });
     if (choice) {
         if (!hasExactCastOffer(state, oid, source, promptId, *choice))
@@ -3372,7 +3373,7 @@ bool RuledPaymentUi::tryStartRuledSpellCast(CardItem *card)
         if (options.size() > 1) {
             AsForetoldSourceHover sourceHover(actions->player->getGame());
             const auto chosen =
-                RuledPendingCast::chooseFace(actions->player->getGame()->getTab(), card->getName(), options,
+                RuledPendingCast::chooseFace(RuledActions::tab(actions->player->getGame()), card->getName(), options,
                                              [&](auto source) { sourceHover.show(source); });
             if (!chosen.has_value()) {
                 return true;
@@ -3474,7 +3475,7 @@ bool RuledPaymentUi::tryRuledSpellCastFaceMenu(CardItem *card)
                                    face.zoneChangeGeneration, face.asForetoldSource);
     }
     AsForetoldSourceHover sourceHover(actions->player->getGame());
-    const auto chosen = RuledPendingCast::chooseFace(actions->player->getGame()->getTab(), card->getName(), faces,
+    const auto chosen = RuledPendingCast::chooseFace(RuledActions::tab(actions->player->getGame()), card->getName(), faces,
                                                     [&](auto source) { sourceHover.show(source); });
     if (!chosen.has_value()) {
         return true; // menu was shown, player cancelled

@@ -5,26 +5,40 @@
 # This file sets all the variables shared between the projects
 # like the installation path, compilation flags etc..
 
-# cmake 3.16 is required if using qt6
-cmake_minimum_required(VERSION 3.10)
+# 3.16 required for Qt6 and target_precompile_headers()
+cmake_minimum_required(VERSION 3.16)
 
-# Early detect ccache
+# Use compiler cache (ccache)
 option(USE_CCACHE "Cache the build results with ccache" ON)
 # Treat warnings as errors (Debug builds only)
 option(WARNING_AS_ERROR "Treat warnings as errors in debug builds" ON)
 # Check for translation updates
 option(UPDATE_TRANSLATIONS "Update translations on compile" OFF)
-# Compile servatrice
-option(WITH_SERVER "build servatrice" OFF)
-# Compile cockatrice
-option(WITH_CLIENT "build cockatrice" ON)
-# Compile oracle
-option(WITH_ORACLE "build oracle" ON)
+# Compile Cockatrice
+option(WITH_CLIENT "Build Cockatrice client" ON)
+# Compile Oracle
+option(WITH_ORACLE "Build Cockatrice card database tool (Oracle)" ON)
+# Compile Servatrice
+option(WITH_SERVER "Build Cockatrice server (Servatrice)" OFF)
+# Compile GUI tests (QtTesting widget-level playback)
+option(WITH_GUI_TEST "Build the QtTesting-based GUI test harness" OFF)
 # Compile tests
-option(TEST "build tests" OFF)
+option(TEST "Build tests" OFF)
+# Build with AddressSanitizer and UndefinedBehaviorSanitizer
+option(ENABLE_SANITIZERS "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+# Build instrumented for GCC line coverage, reported with gcovr
+option(ENABLE_COVERAGE "Build instrumented for GCC line coverage" OFF)
 # Use vcpkg regardless of OS
 option(USE_VCPKG "Use vcpkg regardless of OS" OFF)
 option(WITH_RULES_ENGINE "Build tricerules Rust sidecar (cargo)" OFF)
+
+# The GUI test harness lives in a submodule; a checkout without it must still configure.
+if(WITH_GUI_TEST AND NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/qttesting/CMakeLists.txt")
+  message(WARNING "WITH_GUI_TEST is ON but external/qttesting is missing, so GUI tests are disabled.\n"
+                  "Run 'git submodule update --init external/qttesting' to enable them."
+  )
+  set(WITH_GUI_TEST OFF)
+endif()
 
 # Default to "Release" build type
 # User-provided value for CMAKE_BUILD_TYPE must be checked before the PROJECT() call
@@ -40,13 +54,28 @@ else()
   )
 endif()
 
-if(USE_CCACHE)
+# ccache does not support MSVC and must not auto-engage on Windows
+# (it is installed unintentionally on the Windows CI runner).
+# NOTE: this keys off the target OS, so a mingw/Ninja configuration on Windows
+# also opts out of ccache even though the GNUCXX branch below supports it.
+if(USE_CCACHE AND NOT WIN32)
   find_program(CCACHE_PROGRAM ccache)
   if(CCACHE_PROGRAM)
     # Support Unix Makefiles and Ninja
     set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
+    # PCH-aware caching, matching .ci/compile.sh: without this ccache refuses
+    # to cache any TU that consumes a precompiled header, so every PCH-backed
+    # target recompiles from scratch on each build.
+    # The include_file_mtime/include_file_ctime entries that CI also sets are
+    # deliberately not set here: --set-config writes the user's global
+    # ccache.conf, and those two would turn off the modified-during-compile
+    # check for every project on the machine, not just this one.
+    execute_process(COMMAND ${CCACHE_PROGRAM} --set-config sloppiness=pch_defines,time_macros)
     message(STATUS "Found CCache ${CCACHE_PROGRAM}")
   endif()
+elseif(USE_CCACHE AND WIN32)
+  # An explicit opt-in must not disappear silently on Windows.
+  message(STATUS "ccache disabled: not supported for the MSVC toolchain on Windows")
 endif()
 
 if(WIN32 OR USE_VCPKG)
@@ -57,6 +86,8 @@ if(WIN32 OR USE_VCPKG)
   )
   # Qt path set by user or env var
   if(QTDIR
+     OR QTDIR32
+     OR QTDIR64
      OR DEFINED ENV{QTDIR}
      OR DEFINED ENV{QTDIR32}
      OR DEFINED ENV{QTDIR64}
@@ -65,21 +96,22 @@ if(WIN32 OR USE_VCPKG)
   else()
     set(QTDIR
         ""
-        CACHE PATH "Path to Qt (e.g. C:/Qt/5.7/msvc2015_64)"
+        CACHE PATH "Path to Qt (e.g. C:/Qt/6.4.2/msvc2019_64)"
     )
     message(
-      WARNING "QTDIR variable is missing.  Please set this variable to specify path to Qt (e.g. C:/Qt/5.7/msvc2015_64)"
+      WARNING
+        "QTDIR variable is missing.  Please set this variable to specify path to Qt (e.g. C:/Qt/6.4.2/msvc2019_64)"
     )
   endif()
 endif()
 
 # A project name is needed for CPack
 # Version can be overriden by git tags, see cmake/getversion.cmake
-project("Cockatrice" VERSION 3.0.0)
+project("Cockatrice" VERSION 3.2.0)
 
 # Set release name if not provided via env/cmake var
 if(NOT DEFINED GIT_TAG_RELEASENAME)
-  set(GIT_TAG_RELEASENAME "Graduation Day")
+  set(GIT_TAG_RELEASENAME "Reality Check")
 endif()
 
 # Use c++20 for all targets
@@ -175,6 +207,7 @@ elseif(CMAKE_COMPILER_IS_GNUCXX)
       -Wno-error=delete-non-virtual-dtor
       -Wno-error=sign-compare
       -Wno-error=missing-declarations
+      -Wno-error=sfinae-incomplete # GCC 16+: Qt MOC + protobuf forward decls trigger this
   )
 
   foreach(FLAG ${ADDITIONAL_DEBUG_FLAGS})
@@ -183,6 +216,9 @@ elseif(CMAKE_COMPILER_IS_GNUCXX)
       set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${FLAG}")
     endif()
   endforeach()
+
+  # Reduce compiler I/O by using pipes between stages instead of temp files
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pipe")
 else()
   # other: osx/llvm, bsd/llvm
   set(CMAKE_CXX_FLAGS_RELEASE "-O2")
@@ -191,7 +227,17 @@ else()
   else()
     set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall -Wextra")
   endif()
+
+  # Reduce compiler I/O by using pipes between stages instead of temp files
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pipe")
 endif()
+
+# Always included, because they define cockatrice_disable_sanitizers_for() and
+# cockatrice_disable_coverage_for() for the vendored trees. They only touch the global flags
+# when ENABLE_SANITIZERS or ENABLE_COVERAGE is on.
+include(Sanitizers)
+include(Coverage)
+include(CrashReporting)
 
 # GNU systems need to define the Mersenne exponent for the RNG to compile w/o warning
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -207,13 +253,13 @@ else()
   set(_lib_suffix 32)
 endif()
 
-if(DEFINED QTDIR${_lib_suffix})
+if(NOT "${QTDIR${_lib_suffix}}" STREQUAL "")
   list(APPEND CMAKE_PREFIX_PATH "${QTDIR${_lib_suffix}}")
-elseif(DEFINED QTDIR)
+elseif(NOT "${QTDIR}" STREQUAL "")
   list(APPEND CMAKE_PREFIX_PATH "${QTDIR}")
-elseif(DEFINED ENV{QTDIR${_lib_suffix}})
+elseif(NOT "$ENV{QTDIR${_lib_suffix}}" STREQUAL "")
   list(APPEND CMAKE_PREFIX_PATH "$ENV{QTDIR${_lib_suffix}}")
-elseif(DEFINED ENV{QTDIR})
+elseif(NOT "$ENV{QTDIR}" STREQUAL "")
   list(APPEND CMAKE_PREFIX_PATH "$ENV{QTDIR}")
 endif()
 
@@ -221,7 +267,22 @@ message(STATUS "Update Translations: ${UPDATE_TRANSLATIONS}")
 
 include(FindQtRuntime)
 
+# Reject APIs that were deprecated before the oldest Qt release we support
+# (6.4). Qt 6.5 renamed the switch, so use whichever spelling the found
+# version understands while still compiling everywhere.
+if(Qt6_VERSION VERSION_GREATER_EQUAL 6.5)
+  add_compile_definitions(QT_DISABLE_DEPRECATED_UP_TO=0x060400)
+else()
+  add_compile_definitions(QT_DISABLE_DEPRECATED_BEFORE=0x060400)
+endif()
+
+# Set once here for every target: these variables are inherited by the
+# subdirectories, so the per-directory copies were redundant. Only the
+# variables are set; qt_standard_project_setup would also change the runtime
+# output directories and the install RPATH.
 set(CMAKE_AUTOMOC TRUE)
+set(CMAKE_AUTOUIC TRUE)
+set(CMAKE_AUTORCC TRUE)
 
 # Find other needed libraries
 find_package(Protobuf CONFIG)
@@ -238,11 +299,6 @@ if(WIN32)
   find_package(OpenSSL REQUIRED)
   if(OPENSSL_FOUND)
     include_directories(${OPENSSL_INCLUDE_DIRS})
-  else()
-    message(
-      WARNING
-        "Could not find OpenSSL runtime libraries. They are not required for compiling, but needs to be available at runtime."
-    )
   endif()
 endif()
 
@@ -280,11 +336,7 @@ if(UNIX)
     if(CPACK_GENERATOR STREQUAL "RPM")
       set(CPACK_RPM_PACKAGE_LICENSE "GPLv2")
       set(CPACK_RPM_MAIN_COMPONENT "cockatrice")
-      if(Qt6_FOUND)
-        set(CPACK_RPM_PACKAGE_REQUIRES "protobuf, qt6-qttools, qt6-qtsvg, qt6-qtmultimedia, qt6-qtimageformats")
-      elseif(Qt5_FOUND)
-        set(CPACK_RPM_PACKAGE_REQUIRES "protobuf, qt5-qttools, qt5-qtsvg, qt5-qtmultimedia")
-      endif()
+      set(CPACK_RPM_PACKAGE_REQUIRES "protobuf, qt6-qtimageformats, qt6-qtmultimedia, qt6-qtsvg, qt6-qttools")
       set(CPACK_RPM_PACKAGE_GROUP "Amusements/Games")
       set(CPACK_RPM_PACKAGE_URL "http://github.com/Cockatrice/Cockatrice")
       # stop directories from making package conflicts
@@ -302,17 +354,13 @@ if(UNIX)
       set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
       set(CPACK_DEBIAN_PACKAGE_SECTION "games")
       set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "http://github.com/Cockatrice/Cockatrice")
-      if(Qt6_FOUND)
-        set(CPACK_DEBIAN_PACKAGE_DEPENDS "libqt6multimedia6, libqt6svg6, qt6-qpa-plugins, qt6-image-formats-plugins")
-        set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "libqt6sql6-mysql") # for connecting servatrice to a mysql db
-      elseif(Qt5_FOUND)
-        set(CPACK_DEBIAN_PACKAGE_DEPENDS "libqt5multimedia5-plugins, libqt5svg5")
-      endif()
+      set(CPACK_DEBIAN_PACKAGE_DEPENDS "libqt6multimedia6, libqt6svg6, qt6-image-formats-plugins, qt6-qpa-plugins")
+      set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "libqt6sql6-mysql") # for connecting servatrice to a mysql db
     endif()
   endif()
 elseif(WIN32)
   set(CPACK_GENERATOR NSIS ${CPACK_GENERATOR})
-  if("${CMAKE_GENERATOR_PLATFORM}" MATCHES "(x64)")
+  if(CMAKE_SIZEOF_VOID_P EQUAL 8)
     set(TRICE_IS_64_BIT 1)
   else()
     set(TRICE_IS_64_BIT 0)
@@ -320,6 +368,64 @@ elseif(WIN32)
 
   # Configure file with custom definitions for NSIS.
   configure_file("${COCKATRICE_CMAKE_PATH}/NSIS.definitions.nsh.in" "${PROJECT_BINARY_DIR}/NSIS.definitions.nsh")
+
+  # Installer-log sender for the AbortInstall Sentry hook (values parsed out of COCKATRICE_SENTRY_DSN in
+  # cmake/CrashReporting.cmake). Generated only when a DSN was parsed: cmake/NSIS.template.in embeds it under
+  # the same CPACK_SENTRY_ENABLED check, so a build without reporting never references or carries the helper.
+  if(CPACK_SENTRY_ENABLED)
+    configure_file(
+      "${COCKATRICE_CMAKE_PATH}/SendInstallerLog.ps1.in" "${PROJECT_BINARY_DIR}/SendInstallerLog.ps1" @ONLY
+    )
+  endif()
+
+  # Every runtime DLL a Windows install has to contain, as paths relative to the
+  # install root. .ci/compile.sh reads this and fails the build when the packaged
+  # installer is missing one of them, or carries a runtime it does not know about.
+  #
+  # All three applications are packaged into the same directory on Windows, so
+  # this is the union of their Qt module lists, not just the client's: Servatrice
+  # contributes Qt6Sql.dll and Oracle contributes nothing the client lacks, and a
+  # client-only manifest leaves Qt6Sql.dll unasserted even though servatrice.exe
+  # is installed next to cockatrice.exe and cannot start without it.
+  #
+  # A statically linked Qt module ships no runtime DLL, so requiring one would
+  # fail the package check on a static build for no reason. cockatrice/CMakeLists.txt
+  # installs the runtime of every module listed here, and skips static ones the
+  # same way, so the two can never disagree.
+  #
+  # Only the Qt modules, and that is deliberate. protobuf, Abseil, liblzma, zlib
+  # and OpenSSL also ride in on the "*.dll" glob, and a client whose runtime is
+  # absent, stale or of the wrong architecture fails to start with "abseil_dll.dll
+  # is either not designed to run on Windows or it contains an error", so they
+  # are exactly the files worth asserting.
+  #
+  # Their names cannot be derived from the vcpkg bin directory, which is what a
+  # first attempt did and what a Windows build immediately refuted: bin holds
+  # everything vcpkg installed, not everything the applications import. It also
+  # contains gmock.dll, libprotobuf-lite.dll, libprotoc.dll, legacy.dll and three
+  # pthreadVC*.dll FindThreads probes, none of which any shipped executable
+  # links, so requiring them failed a build over a package that was correct.
+  #
+  # Deriving them from the executables' own import tables is the real answer,
+  # and fixup_bundle already walks it to decide what to copy. Until that result
+  # is available to CMake, requiring the vcpkg half would mean guessing names
+  # again, which is what produced this bug report in the first place. So assert
+  # what is derived from the build's own link lists and leave the rest to the
+  # purge in cmake/NSIS.template.in, which removes every DLL regardless of name.
+  set(_required_runtime "")
+  foreach(_qt_module IN LISTS COCKATRICE_QT_MODULES SERVATRICE_QT_MODULES ORACLE_QT_MODULES)
+    get_target_property(_qt_module_type ${_qt_module} TYPE)
+    if(_qt_module_type STREQUAL "SHARED_LIBRARY")
+      string(REGEX REPLACE "^Qt6::" "" _qt_component "${_qt_module}")
+      list(APPEND _required_runtime "Qt6${_qt_component}.dll")
+    endif()
+  endforeach()
+  list(APPEND _required_runtime "Plugins/platforms/qwindows.dll")
+
+  list(REMOVE_DUPLICATES _required_runtime)
+  list(SORT _required_runtime)
+  string(REPLACE ";" "\n" _required_runtime "${_required_runtime}")
+  file(WRITE "${PROJECT_BINARY_DIR}/required-runtime.txt" "${_required_runtime}\n")
 
   # include vcredist into the package; NSIS will take care of running it
   if(VCREDISTRUNTIME_FOUND)
@@ -346,6 +452,9 @@ if(WITH_ORACLE OR WITH_CLIENT)
   add_subdirectory(${CMAKE_SOURCE_DIR}/libcockatrice_models ${CMAKE_BINARY_DIR}/libcockatrice_models)
   add_subdirectory(${CMAKE_SOURCE_DIR}/libcockatrice_filters ${CMAKE_BINARY_DIR}/libcockatrice_filters)
 endif()
+if(WITH_CLIENT)
+  add_subdirectory(${CMAKE_SOURCE_DIR}/libcockatrice_game ${CMAKE_BINARY_DIR}/libcockatrice_game)
+endif()
 
 if(WITH_SERVER)
   add_subdirectory(servatrice)
@@ -355,6 +464,13 @@ endif()
 if(WITH_CLIENT)
   add_subdirectory(cockatrice)
   set(CPACK_INSTALL_CMAKE_PROJECTS "Cockatrice;Cockatrice;ALL;/" ${CPACK_INSTALL_CMAKE_PROJECTS})
+endif()
+
+if(WIN32 AND WITH_CLIENT)
+  # Runs from the installer's $PLUGINSDIR when a purge fails, and is never installed
+  # (see LogProcessesUsingInstallDir in cmake/NSIS.template.in), so it has no install
+  # rules and is not part of the client's staged tree.
+  add_subdirectory(${CMAKE_SOURCE_DIR}/tools/installer-holder-probe ${CMAKE_BINARY_DIR}/tools/installer-holder-probe)
 endif()
 
 if(WITH_ORACLE)
@@ -383,6 +499,34 @@ if(WITH_RULES_ENGINE)
   endif()
 endif()
 
+if(WITH_GUI_TEST)
+  set(QtTesting_QT_VERSION "6")
+  # QtTesting registers its own unit tests when BUILD_TESTING is on. They target the
+  # Qt version the harness was written for and fail on Qt 6.11 (toolbutton
+  # long-press recording), and they are not Cockatrice's tests, so suppress them
+  # for the duration of the subdirectory instead of painting ctest red.
+  if(DEFINED BUILD_TESTING)
+    set(_cockatrice_saved_build_testing ${BUILD_TESTING})
+  endif()
+  set(BUILD_TESTING
+      OFF
+      CACHE BOOL "Build the testing tree." FORCE
+  )
+  add_subdirectory(external/qttesting)
+  if(DEFINED _cockatrice_saved_build_testing)
+    set(BUILD_TESTING
+        ${_cockatrice_saved_build_testing}
+        CACHE BOOL "Build the testing tree." FORCE
+    )
+  else()
+    unset(BUILD_TESTING CACHE)
+  endif()
+  # cl.exe has no warnings-as-errors here, and it rejects -Wno-error with D8021.
+  if(NOT MSVC)
+    target_compile_options(qttesting PRIVATE -Wno-error)
+  endif()
+endif()
+
 if(TEST)
   include(CTest)
   add_subdirectory(tests)
@@ -390,5 +534,5 @@ endif()
 
 if(Qt6_FOUND AND Qt6_VERSION_MINOR GREATER_EQUAL 3)
   # Qt6.3+ requires project finalization to support translations
-  qt6_finalize_project()
+  qt_finalize_project()
 endif()

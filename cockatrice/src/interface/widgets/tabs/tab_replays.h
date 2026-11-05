@@ -2,27 +2,34 @@
  * @file tab_replays.h
  * @ingroup Replays
  * @ingroup Tabs
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef TAB_REPLAYS_H
 #define TAB_REPLAYS_H
 
 #include "tab.h"
 
+#include <QString>
+#include <QVariant>
 #include <libcockatrice/network/client/abstract/abstract_client.h>
+// IWYU pragma: keep
+// GameReplay is a protobuf message passed through the openReplay signal,
+// so the moc-generated code needs the complete type.
+#include <libcockatrice/protocol/pb/game_replay.pb.h>
+#include <qtmetamacros.h>
 
 class ServerInfo_User;
 class Response;
-class AbstractClient;
 class QTreeView;
 class QFileSystemModel;
-class QToolBar;
 class QGroupBox;
 class RemoteReplayList_TreeWidget;
-class GameReplay;
 class Event_ReplayAdded;
 class CommandContainer;
+class QAction;
+class QModelIndex;
+class TabSupervisor;
 
 class TabReplays : public Tab
 {

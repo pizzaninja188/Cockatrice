@@ -1,18 +1,69 @@
 #include "card_database_display_model.h"
 
+#include "../natural_sort_collator.h"
 #include "card_database_model.h"
+#include "libcockatrice/card/card_localization.h"
+#include "libcockatrice/filters/filter_string.h"
+#include "libcockatrice/filters/filter_tree.h"
+
+#include <QAbstractItemModel>
+#include <QChar>
+#include <QList>
+#include <QMap>
+#include <QSharedPointer>
+#include <QStringList>
+#include <QVariant>
+#include <QtGlobal>
+#include <qnamespace.h>
+#include <string>
+#include <utility>
+
+class QObject;
 
 CardDatabaseDisplayModel::CardDatabaseDisplayModel(QObject *parent)
-    : QSortFilterProxyModel(parent), isToken(ShowAll), filterString(nullptr)
+    : QSortFilterProxyModel(parent), isToken(ShowAll), filterString(nullptr), cardModel(nullptr),
+      collator(NaturalSort::makeNaturalSortCollator())
 {
     filterTree = nullptr;
     setFilterCaseSensitivity(Qt::CaseInsensitive);
     setSortCaseSensitivity(Qt::CaseInsensitive);
 
     dirtyTimer.setSingleShot(true);
-    connect(&dirtyTimer, &QTimer::timeout, this, &CardDatabaseDisplayModel::invalidate);
+    connect(&dirtyTimer, &QTimer::timeout, this, [this]() {
+        invalidate();
+        emit modelDirty();
+    });
+}
 
-    loadedRowCount = 0;
+void CardDatabaseDisplayModel::setSourceModel(QAbstractItemModel *model)
+{
+    cardModel = qobject_cast<CardDatabaseModel *>(model);
+    QSortFilterProxyModel::setSourceModel(model);
+
+    connect(model, &QAbstractItemModel::rowsInserted, this, [this]() { dirty(); });
+
+    connect(model, &QAbstractItemModel::rowsRemoved, this, [this]() { dirty(); });
+
+    connect(model, &QAbstractItemModel::modelReset, this, [this]() { dirty(); });
+}
+
+QVariant CardDatabaseDisplayModel::data(const QModelIndex &index, int role) const
+{
+    if (role == CardInfoRole) {
+        return QVariant::fromValue(cardInfoAt(index));
+    }
+
+    return QSortFilterProxyModel::data(index, role);
+}
+
+CardInfoPtr CardDatabaseDisplayModel::cardInfoAt(const QModelIndex &index) const
+{
+    if (!index.isValid() || cardModel == nullptr) {
+        return {};
+    }
+
+    const QModelIndex sourceIndex = mapToSource(index);
+    return sourceIndex.isValid() ? cardModel->getCard(sourceIndex.row()) : CardInfoPtr();
 }
 
 QMap<wchar_t, wchar_t> CardDatabaseDisplayModel::characterTranslation = {{L'“', L'\"'},
@@ -20,76 +71,57 @@ QMap<wchar_t, wchar_t> CardDatabaseDisplayModel::characterTranslation = {{L'“'
                                                                          {L'‘', L'\''},
                                                                          {L'’', L'\''}};
 
-bool CardDatabaseDisplayModel::canFetchMore(const QModelIndex &index) const
-{
-    return loadedRowCount < sourceModel()->rowCount(index);
-}
-
-void CardDatabaseDisplayModel::fetchMore(const QModelIndex &index)
-{
-    int remainder = sourceModel()->rowCount(index) - loadedRowCount;
-    int itemsToFetch = qMin(100, remainder);
-
-    if (itemsToFetch == 0) {
-        return;
-    }
-
-    const auto startIndex = qMin(rowCount(QModelIndex()), loadedRowCount);
-    beginInsertRows(QModelIndex(), startIndex, startIndex + itemsToFetch - 1);
-
-    loadedRowCount += itemsToFetch;
-    endInsertRows();
-}
-
-int CardDatabaseDisplayModel::rowCount(const QModelIndex &parent) const
-{
-    return QSortFilterProxyModel::rowCount(parent);
-}
-
 bool CardDatabaseDisplayModel::lessThan(const QModelIndex &left, const QModelIndex &right) const
 {
-
-    QString leftString = sourceModel()->data(left, CardDatabaseModel::SortRole).toString();
-    QString rightString = sourceModel()->data(right, CardDatabaseModel::SortRole).toString();
+    const QString leftString = sourceModel()->data(left, CardDatabaseModel::SortRole).toString();
+    const QString rightString = sourceModel()->data(right, CardDatabaseModel::SortRole).toString();
 
     if (!cardName.isEmpty() && left.column() == CardDatabaseModel::NameColumn) {
-        bool isLeftType = leftString.startsWith(cardName, Qt::CaseInsensitive);
-        bool isRightType = rightString.startsWith(cardName, Qt::CaseInsensitive);
+        const bool isLeftType = leftString.startsWith(cardName, Qt::CaseInsensitive);
+        const bool isRightType = rightString.startsWith(cardName, Qt::CaseInsensitive);
 
         // test for an exact match: isLeftType && leftString.size() == cardName.size()
         // or an exclusive start match: isLeftType && !isRightType
-        if (isLeftType && (!isRightType || leftString.size() == cardName.size()))
+        if (isLeftType && (!isRightType || leftString.size() == cardName.size())) {
             return true;
+        }
 
         // same checks for the right string
-        if (isRightType && (!isLeftType || rightString.size() == cardName.size()))
+        if (isRightType && (!isLeftType || rightString.size() == cardName.size())) {
             return false;
+        }
     } else if (right.column() == CardDatabaseModel::PTColumn && left.column() == CardDatabaseModel::PTColumn) {
-        QStringList leftList = leftString.split("/");
-        QStringList rightList = rightString.split("/");
+        // The comparator runs O(n log n) times while the view is sorted, so
+        // splitting every power/toughness string into a QStringList allocates
+        // a lot for data that has exactly one separator. Work on views and
+        // only split the two halves out when both strings are well formed.
+        const QStringView leftPT = leftString;
+        const QStringView rightPT = rightString;
+        const qsizetype leftSlash = leftPT.indexOf(u'/');
+        const qsizetype rightSlash = rightPT.indexOf(u'/');
+        const bool leftIsWellFormed = leftSlash >= 0 && leftPT.indexOf(u'/', leftSlash + 1) < 0;
+        const bool rightIsWellFormed = rightSlash >= 0 && rightPT.indexOf(u'/', rightSlash + 1) < 0;
 
-        if (leftList.size() == 2 && rightList.size() == 2) {
-
-            // cool, have both P/T in list now
-            int lessThanNum = lessThanNumerically(leftList.at(0), rightList.at(0));
-            if (lessThanNum != 0) {
-                return lessThanNum < 0;
-            } else {
-                // power equal, check toughness
-                return lessThanNumerically(leftList.at(1), rightList.at(1)) < 0;
+        if (leftIsWellFormed && rightIsWellFormed) {
+            const int powerComparison = lessThanNumerically(leftPT.left(leftSlash), rightPT.left(rightSlash));
+            if (powerComparison != 0) {
+                return powerComparison < 0;
             }
+            // power equal, check toughness
+            return lessThanNumerically(leftPT.mid(leftSlash + 1), rightPT.mid(rightSlash + 1)) < 0;
         }
     }
-    return QString::localeAwareCompare(leftString, rightString) < 0;
+    return collator.compare(leftString, rightString) < 0;
 }
 
-int CardDatabaseDisplayModel::lessThanNumerically(const QString &left, const QString &right)
+int CardDatabaseDisplayModel::lessThanNumerically(QStringView left, QStringView right) const
 {
     if (left == right) {
         return 0;
     }
 
-    bool okLeft, okRight;
+    bool okLeft = false;
+    bool okRight = false;
     float leftNum = left.toFloat(&okLeft);
     float rightNum = right.toFloat(&okRight);
 
@@ -103,11 +135,11 @@ int CardDatabaseDisplayModel::lessThanNumerically(const QString &left, const QSt
         }
     }
     // try and parsing again, for weird ones like "1+*"
-    QString leftAfterNum = "";
-    QString rightAfterNum = "";
+    QStringView leftAfterNum;
+    QStringView rightAfterNum;
     if (!okLeft) {
         int leftNumIndex = 0;
-        for (; leftNumIndex < left.length(); leftNumIndex++) {
+        for (; leftNumIndex < left.size(); leftNumIndex++) {
             if (!left.at(leftNumIndex).isDigit()) {
                 break;
             }
@@ -119,7 +151,7 @@ int CardDatabaseDisplayModel::lessThanNumerically(const QString &left, const QSt
     }
     if (!okRight) {
         int rightNumIndex = 0;
-        for (; rightNumIndex < right.length(); rightNumIndex++) {
+        for (; rightNumIndex < right.size(); rightNumIndex++) {
             if (!right.at(rightNumIndex).isDigit()) {
                 break;
             }
@@ -141,7 +173,7 @@ int CardDatabaseDisplayModel::lessThanNumerically(const QString &left, const QSt
         } else {
             // both parsed, same number, but at least one has something else
             // so compare the part after the number - prefer nothing
-            return QString::localeAwareCompare(leftAfterNum, rightAfterNum);
+            return collator.compare(leftAfterNum, rightAfterNum);
         }
     } else if (okLeft) {
         return -1;
@@ -149,17 +181,18 @@ int CardDatabaseDisplayModel::lessThanNumerically(const QString &left, const QSt
         return 1;
     }
     // couldn't parse it, just return String comparison
-    return QString::localeAwareCompare(left, right);
+    return collator.compare(left, right);
 }
 bool CardDatabaseDisplayModel::filterAcceptsRow(int sourceRow, const QModelIndex & /*sourceParent*/) const
 {
     CardInfoPtr info = static_cast<CardDatabaseModel *>(sourceModel())->getCard(sourceRow);
 
-    if (((isToken == ShowTrue) && !info->getIsToken()) || ((isToken == ShowFalse) && info->getIsToken()))
+    if (((isToken == ShowTrue) && !info->getIsToken()) || ((isToken == ShowFalse) && info->getIsToken())) {
         return false;
+    }
 
     if (filterString != nullptr) {
-        if (filterTree != nullptr && !filterTree->acceptsCard(info)) {
+        if (filterTree != nullptr && !filterTree->acceptsCard(info, searchLanguage)) {
             return false;
         }
         return filterString->check(info);
@@ -170,14 +203,23 @@ bool CardDatabaseDisplayModel::filterAcceptsRow(int sourceRow, const QModelIndex
 
 bool CardDatabaseDisplayModel::rowMatchesCardName(CardInfoPtr info) const
 {
-    if (!cardName.isEmpty() && !info->getName().contains(cardName, Qt::CaseInsensitive))
-        return false;
+    if (!cardName.isEmpty()) {
+        const bool matchesEnglish = info->getName().contains(cardName, Qt::CaseInsensitive);
+        const bool matchesLocalized =
+            !searchLanguage.isEnglishOnly() &&
+            info->getLocalizedName(searchLanguage.language).contains(cardName, Qt::CaseInsensitive);
+        if (!matchesEnglish && !matchesLocalized) {
+            return false;
+        }
+    }
 
-    if (!cardNameSet.isEmpty() && !cardNameSet.contains(info->getName()))
+    if (!cardNameSet.isEmpty() && !cardNameSet.contains(info->getName())) {
         return false;
+    }
 
-    if (filterTree != nullptr)
-        return filterTree->acceptsCard(info);
+    if (filterTree != nullptr) {
+        return filterTree->acceptsCard(info, searchLanguage);
+    }
 
     return true;
 }
@@ -191,8 +233,9 @@ void CardDatabaseDisplayModel::clearFilterAll()
     cardText.clear();
     cardTypes.clear();
     cardColors.clear();
-    if (filterTree != nullptr)
+    if (filterTree != nullptr) {
         filterTree->clear();
+    }
 #if (QT_VERSION >= QT_VERSION_CHECK(6, 10, 0))
     endFilterChange(QSortFilterProxyModel::Direction::Rows);
 #else
@@ -202,12 +245,35 @@ void CardDatabaseDisplayModel::clearFilterAll()
 
 void CardDatabaseDisplayModel::setFilterTree(FilterTree *_filterTree)
 {
-    if (this->filterTree != nullptr)
+    if (this->filterTree != nullptr) {
         disconnect(this->filterTree, nullptr, this, nullptr);
+    }
 
     this->filterTree = _filterTree;
     connect(this->filterTree, &FilterTree::changed, this, &CardDatabaseDisplayModel::filterTreeChanged);
     invalidate();
+}
+
+void CardDatabaseDisplayModel::setStringFilter(const QString &_src)
+{
+    searchText = _src;
+    delete filterString;
+    filterString = new FilterString(_src, searchLanguage);
+    dirty();
+}
+
+void CardDatabaseDisplayModel::setSearchLanguage(const CardSearchLanguage &searchLang)
+{
+    if (searchLanguage == searchLang) {
+        return;
+    }
+
+    searchLanguage = searchLang;
+
+    if (filterString != nullptr) {
+        setStringFilter(searchText);
+    }
+    dirty();
 }
 
 void CardDatabaseDisplayModel::filterTreeChanged()

@@ -1,6 +1,8 @@
 #include "rng_abstract.h"
 
 #include <QDebug>
+#include <QList>
+#include <qlogging.h>
 
 QVector<int> RNG_Abstract::makeNumbersVector(int n, int min, int max)
 {
@@ -8,10 +10,11 @@ QVector<int> RNG_Abstract::makeNumbersVector(int n, int min, int max)
     QVector<int> result(bins);
     for (int i = 0; i < n; ++i) {
         int number = rand(min, max);
-        if ((number < min) || (number > max))
+        if ((number < min) || (number > max)) {
             qDebug() << "rand(" << min << "," << max << ") returned " << number;
-        else
+        } else {
             result[number - min]++;
+        }
     }
     return result;
 }
@@ -19,12 +22,14 @@ QVector<int> RNG_Abstract::makeNumbersVector(int n, int min, int max)
 double RNG_Abstract::testRandom(const QVector<int> &numbers) const
 {
     int n = 0;
-    for (int i = 0; i < numbers.size(); ++i)
+    for (int i = 0; i < numbers.size(); ++i) {
         n += numbers[i];
+    }
     double expected = (double)n / (double)numbers.size();
     double chisq = 0;
-    for (int i = 0; i < numbers.size(); ++i)
+    for (int i = 0; i < numbers.size(); ++i) {
         chisq += ((double)numbers[i] - expected) * ((double)numbers[i] - expected) / expected;
+    }
 
     return chisq;
 }

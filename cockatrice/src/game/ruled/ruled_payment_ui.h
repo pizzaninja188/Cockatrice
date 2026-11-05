@@ -9,7 +9,7 @@
 #include <QVector>
 #include <optional>
 
-class PlayerActions;
+class RuledPlayerActions;
 class CardItem;
 class QPainter;
 class Command_RuledPayload;
@@ -20,9 +20,9 @@ class RuledPaymentUi
 {
 public:
     [[nodiscard]] QJsonObject diagnosticSnapshot() const;
-    explicit RuledPaymentUi(PlayerActions *actions);
-    static std::optional<ruled::v1::RuledCommand> buildCommand(PlayerActions *actions);
-    static std::optional<ruled::v1::RuledCommand> buildActivationCommand(PlayerActions *actions);
+    explicit RuledPaymentUi(RuledPlayerActions *actions);
+    static std::optional<ruled::v1::RuledCommand> buildCommand(RuledPlayerActions *actions);
+    static std::optional<ruled::v1::RuledCommand> buildActivationCommand(RuledPlayerActions *actions);
     bool startOrRefresh();
     bool payMana(const QString &name, quint32 groupId = 0);
     bool autoPayMana(const QString &name, int amount, quint32 groupId = 0);
@@ -78,7 +78,7 @@ public:
     [[nodiscard]] bool canRetryCounterGroupPayment() const;
     bool retryCounterGroupPayment(quint64 transactionId, quint64 revision);
     void resumePendingRuledPaymentAfterEngineCommand();
-    static bool startPublicZoneCast(PlayerActions *actions, CardItem *card, bool contextMenu);
+    static bool startPublicZoneCast(RuledPlayerActions *actions, CardItem *card, bool contextMenu);
     bool tryStartRuledSpellCast(CardItem *card);
     bool tryRuledSpellCastFaceMenu(CardItem *card);
     bool beginRuledSpellCast(CardItem *card,
@@ -147,7 +147,7 @@ private:
     bool beginAbilityActivation();
     void restoreOptimisticManaCounters(const QVector<int> &counterIds);
     bool stageMana(RuledPayment &model, const QString &name, quint32 groupId);
-    PlayerActions *actions;
+    RuledPlayerActions *actions;
     bool queued = false;
     bool choosingLifePayment = false;
     QVector<SuspendedPayment> suspendedPayments;

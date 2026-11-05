@@ -1,0 +1,55 @@
+#include "custom_zone_menu.h"
+
+#include <libcockatrice/game/player/player_logic.h>
+#include "../../../game/ruled/ruled_actions.h"
+#include "../../../game/ruled/ruled_zone_view_policy.h"
+#include "../../game_scene.h"
+#include "../player_graphics_item.h"
+
+#include <QAction>
+#include <QList>
+#include <QVariant>
+#include <libcockatrice/game/player/player_info.h>
+#include <libcockatrice/game/player/player_logic.h>
+
+CustomZoneMenu::CustomZoneMenu(PlayerGraphicsItem *_player) : player(_player)
+{
+    menuAction()->setVisible(false);
+
+    connect(player->getLogic(), &PlayerLogic::clearCustomZonesMenu, this, &CustomZoneMenu::clearCustomZonesMenu);
+    connect(player->getLogic(), &PlayerLogic::addViewCustomZoneActionToCustomZoneMenu, this,
+            &CustomZoneMenu::addViewCustomZoneActionToCustomZoneMenu);
+
+    retranslateUi();
+}
+
+void CustomZoneMenu::retranslateUi()
+{
+    setTitle(tr("C&ustom Zones"));
+
+    if (player->getLogic()->getPlayerInfo()->getLocalOrJudge()) {
+
+        for (auto aViewZone : actions()) {
+            aViewZone->setText(tr("View custom zone '%1'").arg(aViewZone->data().toString()));
+        }
+    }
+}
+
+void CustomZoneMenu::clearCustomZonesMenu()
+{
+    clear();
+    menuAction()->setVisible(false);
+}
+
+void CustomZoneMenu::addViewCustomZoneActionToCustomZoneMenu(QString zoneName)
+{
+    if (!ruledCustomZoneViewAllowed(player->getLogic()->getPlayerInfo()->getLocalOrJudge(),
+                                   RuledActions::isRuledGame(player->getLogic()->getGame()), zoneName)) {
+        return;
+    }
+    menuAction()->setVisible(true);
+    QAction *aViewZone = addAction(tr("View custom zone '%1'").arg(zoneName));
+    aViewZone->setData(zoneName);
+    connect(aViewZone, &QAction::triggered, this,
+            [zoneName, this]() { player->getGameScene()->toggleZoneView(player->getLogic(), zoneName, -1); });
+}

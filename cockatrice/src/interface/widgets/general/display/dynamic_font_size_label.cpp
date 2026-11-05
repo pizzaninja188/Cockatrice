@@ -1,7 +1,18 @@
 #include "dynamic_font_size_label.h"
-#define FONT_PRECISION (0.5)
 
-#include <QElapsedTimer>
+#include "../../interface/theme_manager.h"
+
+#include <QFont>
+#include <QFontMetricsF>
+#include <QObject>
+#include <QRect>
+#include <QRectF>
+#include <QSharedPointer>
+#include <QSize>
+#include <QWidget>
+#include <QtGlobal>
+
+#define FONT_PRECISION (0.5)
 
 DynamicFontSizeLabel::DynamicFontSizeLabel(QWidget *parent, Qt::WindowFlags f) : QLabel(parent, f)
 {
@@ -19,9 +30,13 @@ void DynamicFontSizeLabel::paintEvent(QPaintEvent *event)
     // QElapsedTimer timer;
     // timer.start();
 
-    QFont newFont = font();
+    // Family follows the InterfaceDefault theme role; the fitted point size
+    // stays computed from the widget geometry as before.
+    QFont newFont = themeManager->appFont(AppFont::InterfaceDefault);
     float fontSize = getWidgetMaximumFontSize(this, this->text());
     newFont.setPointSizeF(fontSize);
+    // Preserve the caller's bold emphasis, which the role font does not carry.
+    newFont.setBold(font().bold());
     setFont(newFont);
     // qDebug() << "Font size set to" << fontSize;
 
@@ -31,7 +46,10 @@ void DynamicFontSizeLabel::paintEvent(QPaintEvent *event)
 
 float DynamicFontSizeLabel::getWidgetMaximumFontSize(QWidget *widget, const QString &text)
 {
-    QFont font = widget->font();
+    // Measure with the InterfaceDefault family so the fit matches the painted font.
+    QFont font = themeManager->appFont(AppFont::InterfaceDefault);
+    font.setBold(widget->font().bold());
+    font.setPointSizeF(widget->font().pointSizeF());
     const QRect widgetRect = widget->contentsRect();
     const float widgetWidth = widgetRect.width();
     const float widgetHeight = widgetRect.height();

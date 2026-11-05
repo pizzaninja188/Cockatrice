@@ -2,6 +2,7 @@
 #define COCKATRICE_SIDEBOARD_PLAN_H
 
 #include <QList>
+#include <QString>
 #include <libcockatrice/protocol/pb/move_card_to_zone.pb.h>
 
 class QXmlStreamWriter;
@@ -51,19 +52,19 @@ public:
      */
     void write(QXmlStreamWriter *xml) const;
 
-    /// @return The plan name.
+    /** @return The plan name. */
     [[nodiscard]] QString getName() const
     {
         return name;
     }
 
-    /// @return Const reference to the move list.
+    /** @return Const reference to the move list. */
     [[nodiscard]] const QList<MoveCard_ToZone> &getMoveList() const
     {
         return moveList;
     }
 
-    /// @brief Replace the move list with a new one.
+    /** @brief Replace the move list with a new one. */
     void setMoveList(const QList<MoveCard_ToZone> &_moveList);
 };
 

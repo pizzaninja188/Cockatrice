@@ -2,8 +2,8 @@
  * @file card_info_picture_with_text_overlay_widget.h
  * @ingroup CardWidgets
  * @ingroup DeckStorageWidgets
- * @brief TODO: Document this.
  */
+//! \todo Document this file.
 
 #ifndef CARD_PICTURE_WITH_TEXT_OVERLAY_H
 #define CARD_PICTURE_WITH_TEXT_OVERLAY_H
@@ -11,8 +11,14 @@
 #include "card_info_picture_widget.h"
 
 #include <QColor>
-#include <QSize>
+#include <QString>
 #include <QTextOption>
+#include <qnamespace.h>
+#include <qtmetamacros.h>
+
+class QPainter;
+class QRect;
+class QWidget;
 
 class CardInfoPictureWithTextOverlayWidget : public CardInfoPictureWidget
 {
@@ -35,13 +41,14 @@ public:
     void setHighlighted(bool _highlighted);
 
     [[nodiscard]] QSize sizeHint() const override;
-signals:
-    void imageClicked(QMouseEvent *event, CardInfoPictureWithTextOverlayWidget *instance);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     [[nodiscard]] QSize minimumSizeHint() const override;
+
+private slots:
+    void applyCardTextFont();
 
 private:
     void drawOutlinedText(QPainter &painter,

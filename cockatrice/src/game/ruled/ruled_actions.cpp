@@ -1,22 +1,23 @@
+#include "ruled_client_ui.h"
 #include "ruled_actions.h"
 #include "ruled_pending_cast.h"
 #include "ruled_payment_ui.h"
 
 #include "../../interface/widgets/tabs/tab_game.h"
-#include "../abstract_game.h"
-#include "../board/arrow_target.h"
-#include "../board/card_item.h"
-#include "../board/card_list.h"
-#include "../game_event_handler.h"
-#include "../game_meta_info.h"
-#include "../player/player.h"
-#include "../player/player_actions.h"
-#include "../player/player_graphics_item.h"
-#include "../player/player_info.h"
-#include "../player/player_manager.h"
-#include "../player/player_target.h"
-#include "../zones/logic/card_zone_logic.h"
-#include "../zones/logic/view_zone_logic.h"
+#include <libcockatrice/game/abstract_game.h>
+#include "../../game_graphics/board/arrow_target.h"
+#include "../../game_graphics/board/card_item.h"
+#include <libcockatrice/game/board/card_list.h>
+#include <libcockatrice/game/game_event_handler.h>
+#include <libcockatrice/game/game_meta_info.h>
+#include <libcockatrice/game/player/player_logic.h>
+#include "ruled_player_actions.h"
+#include "../../game_graphics/player/player_graphics_item.h"
+#include <libcockatrice/game/player/player_info.h>
+#include <libcockatrice/game/player/player_manager.h>
+#include "../../game_graphics/player/player_target.h"
+#include <libcockatrice/game/zones/card_zone_logic.h>
+#include <libcockatrice/game/zones/view_zone_logic.h>
 #include "ruled_client_host.h"
 #include "ruled_client_state.h"
 
@@ -27,7 +28,7 @@ namespace
 {
 
 /// Local player's PlayerActions, or nullptr when there is no seated local player.
-PlayerActions *localPlayerActions(const AbstractGame *game)
+RuledPlayerActions *localPlayerActions(const AbstractGame *game)
 {
     if (!game) {
         return nullptr;
@@ -40,8 +41,8 @@ PlayerActions *localPlayerActions(const AbstractGame *game)
     if (localId < 0) {
         return nullptr;
     }
-    Player *local = pm->getPlayers().value(localId, nullptr);
-    return local ? local->getPlayerActions() : nullptr;
+    PlayerLogic *local = pm->getPlayers().value(localId, nullptr);
+    return local ? RuledActions::actions(local) : nullptr;
 }
 
 /// Stack CardItem with this Server_Card.id in any player's stack zone (no zone-view preference).
@@ -50,12 +51,12 @@ CardItem *rawStackCardByServerId(AbstractGame *game, int serverCardId)
     if (!game || serverCardId < 0) {
         return nullptr;
     }
-    for (Player *p : game->getPlayerManager()->getPlayers()) {
+    for (PlayerLogic *p : game->getPlayerManager()->getPlayers()) {
         if (!p) {
             continue;
         }
         if (CardItem *c =
-                game->getCard(p->getPlayerInfo()->getId(), QString::fromLatin1(ZoneNames::STACK), serverCardId)) {
+                RuledActions::card(game, p->getPlayerInfo()->getId(), QString::fromLatin1(ZoneNames::STACK), serverCardId)) {
             return c;
         }
     }
@@ -89,18 +90,11 @@ bool tryHandleReplacementEffectClick(CardItem *card, bool select)
 // Mode predicate
 // ---------------------------------------------------------------------------------------
 
-bool isRuledGame(const AbstractGame *game)
-{
-    if (!game) {
-        return false;
-    }
-    GameMetaInfo *meta = const_cast<AbstractGame *>(game)->getGameMetaInfo();
-    return meta && meta->proto().ruled_game();
-}
 
-bool isRuledGameForPlayer(const Player *player)
+
+bool isRuledGameForPlayer(const PlayerLogic *player)
 {
-    return player && isRuledGame(const_cast<Player *>(player)->getGame());
+    return player && isRuledGame(const_cast<PlayerLogic *>(player)->getGame());
 }
 
 bool isRuledGameForCard(const CardItem *card)
@@ -126,7 +120,7 @@ bool gameplayInputLocked(const AbstractGame *game)
     return state && state->isEngineCommandPending();
 }
 
-void updateGraveyardTargetHint(const Player *player, int handSlot, int faceIndex)
+void updateGraveyardTargetHint(const PlayerLogic *player, int handSlot, int faceIndex)
 {
     if (!player) {
         return;
@@ -155,13 +149,13 @@ void sendRuledCommand(const AbstractGame *game, const ruled::v1::RuledCommand &c
     // Through the host interface, where the method is public. GameEventHandler keeps its
     // RuledClientHost overrides private so the view model is the only thing that normally sends;
     // this is the one documented exception, rather than widening that class's interface.
-    PlayerActions *const actions = localPlayerActions(game);
+    RuledPlayerActions *const actions = localPlayerActions(game);
     RuledClientState *const state = stateFor(game);
     const auto *pendingSpell = actions ? &actions->pendingSpellCastForRuledSubmission() : nullptr;
     const auto outgoing = RuledPendingCast::submissionCommand(command, pendingSpell, state);
     if (!outgoing)
         return;
-    static_cast<RuledClientHost *>(handler)->sendRuledCommand(*outgoing);
+    RuledActions::host(game)->sendRuledCommand(*outgoing);
 }
 
 void sendRuledCommandExpectingAck(const AbstractGame *game,
@@ -177,7 +171,7 @@ void sendRuledCommandExpectingAck(const AbstractGame *game,
         onFinished(false);
         return;
     }
-    PlayerActions *const actions = localPlayerActions(game);
+    RuledPlayerActions *const actions = localPlayerActions(game);
     RuledClientState *const state = stateFor(game);
     const auto *pendingSpell = actions ? &actions->pendingSpellCastForRuledSubmission() : nullptr;
     const auto outgoing = RuledPendingCast::submissionCommand(command, pendingSpell, state);
@@ -185,7 +179,7 @@ void sendRuledCommandExpectingAck(const AbstractGame *game,
         onFinished(false);
         return;
     }
-    static_cast<RuledClientHost *>(handler)->sendRuledCommandExpectingAck(*outgoing, std::move(onFinished));
+    RuledActions::host(game)->sendRuledCommandExpectingAck(*outgoing, std::move(onFinished));
 }
 
 RuledClientState *stateForCard(const CardItem *card)
@@ -249,12 +243,12 @@ CardItem *findBattlefieldCardItemByEngineOid(AbstractGame *game, quint32 engineO
     const int sid = state->cardIdForEngineOid(engineOid);
     const int owner = state->playerIdForEngineOid(engineOid);
     if (sid >= 0 && owner >= 0) {
-        if (CardItem *c = game->getCard(owner, QString::fromLatin1(ZoneNames::TABLE), sid)) {
+        if (CardItem *c = RuledActions::card(game, owner, QString::fromLatin1(ZoneNames::TABLE), sid)) {
             return c;
         }
     }
     PlayerManager *pm = game->getPlayerManager();
-    for (Player *p : pm->getPlayers()) {
+    for (PlayerLogic *p : pm->getPlayers()) {
         if (!p) {
             continue;
         }
@@ -262,14 +256,14 @@ CardItem *findBattlefieldCardItemByEngineOid(AbstractGame *game, quint32 engineO
         if (!zt) {
             continue;
         }
-        for (CardItem *c : zt->getCards()) {
+        for (CardItem *c : RuledActions::cardItems(zt->getCards())) {
             if (!c) {
                 continue;
             }
             const int cid = c->getId();
             // BattlefieldObjectMap keys (player_id, server_card_id) use the server zone controller;
             // CardItem ownership can disagree, so try every seat id that appears in the oid map.
-            for (Player *op : pm->getPlayers()) {
+            for (PlayerLogic *op : pm->getPlayers()) {
                 if (!op || !op->getPlayerInfo()) {
                     continue;
                 }
@@ -287,7 +281,7 @@ CardItem *findStackCardItemByServerCardId(AbstractGame *game, int serverCardId)
     if (!game || serverCardId < 0) {
         return nullptr;
     }
-    if (TabGame *tab = game->getTab()) {
+    if (TabGame *tab = RuledActions::tab(game)) {
         if (CardItem *c = tab->findVisibleStackSpellCardItem(serverCardId)) {
             return c;
         }
@@ -308,7 +302,7 @@ CardItem *findStackCardItemByEngineOid(AbstractGame *game, quint32 stackOid)
         }
     }
     PlayerManager *pm = game->getPlayerManager();
-    for (Player *p : pm->getPlayers()) {
+    for (PlayerLogic *p : pm->getPlayers()) {
         if (!p) {
             continue;
         }
@@ -316,12 +310,12 @@ CardItem *findStackCardItemByEngineOid(AbstractGame *game, quint32 stackOid)
         if (!sz) {
             continue;
         }
-        for (CardItem *c : sz->getCards()) {
+        for (CardItem *c : RuledActions::cardItems(sz->getCards())) {
             if (!c) {
                 continue;
             }
             const int cid = c->getId();
-            for (Player *op : pm->getPlayers()) {
+            for (PlayerLogic *op : pm->getPlayers()) {
                 if (!op || !op->getPlayerInfo()) {
                     continue;
                 }
@@ -351,7 +345,7 @@ CardItem *findGraveyardCardItemByEngineOid(AbstractGame *game, quint32 engineOid
     }
     // Prefer the copy in an open zone view: a graveyard pile paints only its front card, so that
     // is the only place the *targeted* card has a position of its own to point at.
-    if (TabGame *tab = game->getTab()) {
+    if (TabGame *tab = RuledActions::tab(game)) {
         if (CardItem *visible = tab->findVisibleGraveyardCardItem(playerId, serverCardId)) {
             return visible;
         }
@@ -359,7 +353,7 @@ CardItem *findGraveyardCardItemByEngineOid(AbstractGame *game, quint32 engineOid
     // Pile closed: fall back to the card in the pile zone. `PileZone::reorganizeCards` never lays
     // its cards out, so they all sit at the pile's own position — an arrow to any of them points
     // at the graveyard, which is exactly what should happen when the card itself is not visible.
-    return game->getCard(playerId, QString::fromLatin1(ZoneNames::GRAVE), serverCardId);
+    return RuledActions::card(game, playerId, QString::fromLatin1(ZoneNames::GRAVE), serverCardId);
 }
 
 namespace
@@ -383,7 +377,7 @@ ArrowTarget *stackTargetItem(AbstractGame *game, RuledClientState *state, quint3
         stk->getZone()->getName().compare(QStringLiteral("stack"), Qt::CaseInsensitive) != 0) {
         return nullptr;
     }
-    if (TabGame *tab = game->getTab()) {
+    if (TabGame *tab = RuledActions::tab(game)) {
         if (CardItem *vis = tab->findVisibleStackSpellCardItem(sidProbe)) {
             return vis;
         }
@@ -400,8 +394,8 @@ ArrowTarget *playerTargetItem(AbstractGame *game, quint32 targetOid)
     if (!pm->getPlayers().contains(seatId)) {
         return nullptr;
     }
-    Player *asPlayer = pm->getPlayer(seatId);
-    return asPlayer ? asPlayer->getGraphicsItem()->getPlayerTarget() : nullptr;
+    PlayerLogic *asPlayer = pm->getPlayer(seatId);
+    return asPlayer ? RuledActions::graphics(asPlayer)->getPlayerTarget() : nullptr;
 }
 } // namespace
 
@@ -469,7 +463,7 @@ int resolveHandActionIndex(const RuledClientState *state, RuledHandActionKind ki
     // Never fall back to visual hand order: a dev-conjured card can become visible during the
     // full-state resync before the matching ruled payload arrives, and a positional guess can
     // turn that click into an action on a different physical card.
-    Player *handPlayer = card->getZone()->getPlayer();
+    PlayerLogic *handPlayer = card->getZone()->getPlayer();
     if (!handPlayer || !handPlayer->getPlayerInfo()) {
         return -1;
     }
@@ -507,7 +501,7 @@ bool isResolutionPickZoneCard(const RuledClientState *state, const CardItem *car
     if (state->pendingChoice->publicReveal)
         return false;
     const auto *viewZone = qobject_cast<const ZoneViewZoneLogic *>(zone);
-    const Player *zonePlayer = zone->getPlayer();
+    const PlayerLogic *zonePlayer = zone->getPlayer();
     const bool zoneIsLocal = zonePlayer && zonePlayer->getPlayerInfo()->getLocal();
     const RuledPickScaffoldZone scaffoldZone = zone->getName() == ZoneNames::HAND
                                                    ? RuledPickScaffoldZone::Hand
@@ -535,7 +529,7 @@ bool isCombatEligibleCreature(const CardItem *card)
     // map) rather than the Oracle display DB. The Oracle path has no entry for engine-minted
     // tokens, so deciding from getCardType() would wrongly make tokens combat-ineligible.
     if (RuledClientState *state = stateForCard(card)) {
-        Player *owner = card->getOwner();
+        PlayerLogic *owner = card->getOwner();
         const int ownerPlayerId = owner ? owner->getPlayerInfo()->getId() : -1;
         const quint32 oid = state->engineOidForCardId(ownerPlayerId, card->getId());
         if (oid != 0) {
@@ -557,7 +551,7 @@ quint32 combatObjectOid(const CardItem *card, RuledClientState **outState)
         card->getZone()->getName() != ZoneNames::TABLE) {
         return 0;
     }
-    Player *owner = card->getOwner();
+    PlayerLogic *owner = card->getOwner();
     const int ownerPlayerId = owner ? owner->getPlayerInfo()->getId() : -1;
     const quint32 oid = state->engineOidForCardId(ownerPlayerId, card->getId());
     if (oid == 0) {
@@ -605,7 +599,7 @@ bool tryHandleCombatClick(CardItem *card)
     }
     using Phase = RuledClientState::RuledCombatPhase;
     const Phase phase = state->getCombatPhase();
-    Player *owner = card->getOwner();
+    PlayerLogic *owner = card->getOwner();
     const bool creature = isCombatEligibleCreature(card);
     const bool ownCreature = creature && owner && owner->getPlayerInfo()->getLocal();
 
@@ -678,7 +672,7 @@ bool tryHandlePublicZonePlay(CardItem *card, bool contextMenu)
     if (card->getZone()->getName() != ZoneNames::EXILE && card->getZone()->getName() != ZoneNames::GRAVE) {
         return false;
     }
-    PlayerActions *actions = localPlayerActions(card->getOwner()->getGame());
+    RuledPlayerActions *actions = localPlayerActions(card->getOwner()->getGame());
     if (!actions || !isSingleClickPlayLegal(card)) {
         return false;
     }
@@ -703,7 +697,7 @@ bool isSingleClickPlayLegal(const CardItem *card)
     if (!state) {
         return false;
     }
-    const int zoneIndex = card->getZone()->getCards().indexOf(const_cast<CardItem *>(card));
+    const int zoneIndex = card->getZone()->getCards().indexOf(card->getState());
     if (zoneIndex < 0) {
         return false;
     }
@@ -727,7 +721,7 @@ bool isSingleClickPlayLegal(const CardItem *card)
 
 bool isSelectedSpellTarget(const AbstractGame *game, quint32 oid)
 {
-    PlayerActions *actions = localPlayerActions(game);
+    RuledPlayerActions *actions = localPlayerActions(game);
     if (actions && (actions->isTargetSelectedForPendingSpell(oid) || actions->isTargetSelectedForPendingAbility(oid))) {
         return true;
     }
@@ -735,7 +729,7 @@ bool isSelectedSpellTarget(const AbstractGame *game, quint32 oid)
     return state && state->isPendingTriggerTargetSelected(oid);
 }
 
-bool isCombatDefenderPlayerCandidate(const Player *player)
+bool isCombatDefenderPlayerCandidate(const PlayerLogic *player)
 {
     if (!player || !player->getGame()) {
         return false;
@@ -744,7 +738,7 @@ bool isCombatDefenderPlayerCandidate(const Player *player)
     return state && state->isLegalAttackPlayerDefender(player->getPlayerInfo()->getId());
 }
 
-bool tryHandleCombatDefenderPlayerClick(Player *player)
+bool tryHandleCombatDefenderPlayerClick(PlayerLogic *player)
 {
     if (!isCombatDefenderPlayerCandidate(player)) {
         return false;
@@ -755,13 +749,13 @@ bool tryHandleCombatDefenderPlayerClick(Player *player)
 
 bool isSelectedCastCostPermanent(const AbstractGame *game, quint32 oid)
 {
-    PlayerActions *actions = localPlayerActions(game);
+    RuledPlayerActions *actions = localPlayerActions(game);
     return actions && actions->isCastCostPermanentSelected(oid);
 }
 
 bool isSelectedGraveyardCostObject(const AbstractGame *game, quint32 oid)
 {
-    PlayerActions *actions = localPlayerActions(game);
+    RuledPlayerActions *actions = localPlayerActions(game);
     RuledClientState *state = stateFor(game);
     return (actions && actions->isRuledGraveyardCostObjectSelected(oid)) ||
            (state && state->isResolutionCostObjectSelected(oid));
@@ -775,32 +769,32 @@ bool isSelectedPermanentChoiceObject(const AbstractGame *game, quint32 oid)
 
 bool isPlayerSelectedAsSpellTarget(const AbstractGame *game, int playerId)
 {
-    PlayerActions *actions = localPlayerActions(game);
+    RuledPlayerActions *actions = localPlayerActions(game);
     return actions && (actions->isPlayerSelectedAsPendingSpellTarget(playerId) ||
                        actions->isPlayerSelectedAsPendingAbilityTarget(playerId));
 }
 
 bool isSpellDamageAllocationMode(const AbstractGame *game)
 {
-    PlayerActions *actions = localPlayerActions(game);
+    RuledPlayerActions *actions = localPlayerActions(game);
     return actions && actions->isInSpellDamageAllocationMode();
 }
 
 bool isSpellDamageAllocationDisplayActive(const AbstractGame *game)
 {
-    PlayerActions *actions = localPlayerActions(game);
+    RuledPlayerActions *actions = localPlayerActions(game);
     return actions && actions->isSpellDamageAllocationDisplayActive();
 }
 
 int spellDamageAllocationForOid(const AbstractGame *game, quint32 oid)
 {
-    PlayerActions *actions = localPlayerActions(game);
+    RuledPlayerActions *actions = localPlayerActions(game);
     return actions ? actions->spellDamageAllocationForOid(oid) : 0;
 }
 
 int spellDamageAllocationForPlayerId(const AbstractGame *game, int playerId)
 {
-    PlayerActions *actions = localPlayerActions(game);
+    RuledPlayerActions *actions = localPlayerActions(game);
     return actions ? actions->spellDamageAllocationForPlayerId(playerId) : 0;
 }
 

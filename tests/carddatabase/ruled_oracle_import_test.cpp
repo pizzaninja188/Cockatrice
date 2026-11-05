@@ -1,6 +1,9 @@
 #include "../../oracle/src/oracleimporter.h"
 
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTemporaryDir>
 #include <gtest/gtest.h>
 #include <libcockatrice/card/database/parser/cockatrice_xml_4.h>
@@ -10,9 +13,7 @@
 
 TEST(RuledOracleImportTest, SavesExactFacesInDatabaseWithoutCompanionFile)
 {
-    NoopCardPreferenceProvider preferences;
     NoopCardSetPriorityController priorities;
-    auto set = CardSet::newInstance(&priorities, "TST", "Test", "expansion", QDate(2026, 1, 1));
     OracleImporter importer;
     const QList<QVariant> cards{
         QVariantMap{{"name", "Forest"},
@@ -59,14 +60,18 @@ TEST(RuledOracleImportTest, SavesExactFacesInDatabaseWithoutCompanionFile)
                     {"types", QStringList{"Land"}},
                     {"number", "5"}},
     };
-    importer.importCardsFromSet(set, cards);
+    const QJsonObject set{{"code", "TST"}, {"name", "Test"}, {"type", "expansion"},
+                          {"releaseDate", "2026-01-01"}, {"cards", QJsonArray::fromVariantList(cards)}};
+    const auto source = QJsonDocument(QJsonObject{{"data", QJsonObject{{"TST", set}}}}).toJson();
+    ASSERT_TRUE(importer.readSetsFromByteArray(source));
+    ASSERT_EQ(importer.startImport(), 1);
     QTemporaryDir directory;
     const QString path = directory.filePath("cards.xml");
     ASSERT_TRUE(importer.saveToFile(path, "https://example.test/source", "snapshot"));
     EXPECT_FALSE(QFile::exists(directory.filePath("cards.ruled-oracle.json")));
     QFile input(path);
     ASSERT_TRUE(input.open(QIODevice::ReadOnly));
-    CockatriceXml4Parser parser(&preferences, &priorities);
+    CockatriceXml4Parser parser(&priorities);
     CardNameMap loaded;
     QObject::connect(&parser, &ICardDatabaseParser::addCard,
                      [&loaded](CardInfoPtr card) { loaded.insert(card->getName(), card); });

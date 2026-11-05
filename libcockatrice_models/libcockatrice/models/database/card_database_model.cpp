@@ -1,7 +1,15 @@
 #include "card_database_model.h"
 
-#include <QMap>
+#include "libcockatrice/card/printing/printing_info.h"
+#include "libcockatrice/card/set/card_set.h"
+
+#include <QChar>
+#include <QSharedPointer>
+#include <QString>
+#include <QVariant>
 #include <libcockatrice/card/database/card_database.h>
+
+class QObject;
 
 #define CARDDBMODEL_COLUMNS 6
 
@@ -12,27 +20,33 @@ CardDatabaseModel::CardDatabaseModel(CardDatabase *_db, bool _showOnlyCardsFromE
     connect(db, &CardDatabase::cardRemoved, this, &CardDatabaseModel::cardRemoved);
     connect(db, &CardDatabase::cardDatabaseEnabledSetsChanged, this,
             &CardDatabaseModel::cardDatabaseEnabledSetsChanged);
+    connect(db, &CardDatabase::cardDatabaseReset, this, &CardDatabaseModel::resetCardList);
 
     cardDatabaseEnabledSetsChanged();
 }
 
 CardDatabaseModel::~CardDatabaseModel() = default;
 
-int CardDatabaseModel::rowCount(const QModelIndex & /*parent*/) const
+int CardDatabaseModel::rowCount(const QModelIndex &parent) const
 {
-    return cardList.size();
+    // A list model's card rows are leaves; returning the full card count for a
+    // valid parent makes every row claim all cards as children.
+    return parent.isValid() ? 0 : cardList.size();
 }
 
-int CardDatabaseModel::columnCount(const QModelIndex & /*parent*/) const
+int CardDatabaseModel::columnCount(const QModelIndex &parent) const
 {
-    return CARDDBMODEL_COLUMNS;
+    // Card rows are leaves, so a valid parent holds no columns. Reporting the
+    // row width for a card index would claim child cells that do not exist.
+    return parent.isValid() ? 0 : CARDDBMODEL_COLUMNS;
 }
 
 QVariant CardDatabaseModel::data(const QModelIndex &index, int role) const
 {
     if (!index.isValid() || index.row() >= cardList.size() || index.column() >= CARDDBMODEL_COLUMNS ||
-        (role != Qt::DisplayRole && role != SortRole))
+        (role != Qt::DisplayRole && role != SortRole)) {
         return QVariant();
+    }
 
     CardInfoPtr card = cardList.at(index.row());
     switch (index.column()) {
@@ -56,10 +70,12 @@ QVariant CardDatabaseModel::data(const QModelIndex &index, int role) const
 
 QVariant CardDatabaseModel::headerData(int section, Qt::Orientation orientation, int role) const
 {
-    if (role != Qt::DisplayRole)
+    if (role != Qt::DisplayRole) {
         return QVariant();
-    if (orientation != Qt::Horizontal)
+    }
+    if (orientation != Qt::Horizontal) {
         return QVariant();
+    }
     switch (section) {
         case NameColumn:
             return QString(tr("Name"));
@@ -78,24 +94,27 @@ QVariant CardDatabaseModel::headerData(int section, Qt::Orientation orientation,
     }
 }
 
-void CardDatabaseModel::cardInfoChanged(CardInfoPtr card)
+void CardDatabaseModel::cardInfoChanged(const CardInfoPtr &card)
 {
     const int row = cardList.indexOf(card);
-    if (row == -1)
+    if (row == -1) {
         return;
+    }
 
     emit dataChanged(index(row, 0), index(row, CARDDBMODEL_COLUMNS - 1));
 }
 
-bool CardDatabaseModel::checkCardHasAtLeastOneEnabledSet(CardInfoPtr card)
+bool CardDatabaseModel::checkCardHasAtLeastOneEnabledSet(const CardInfoPtr &card) const
 {
-    if (!showOnlyCardsFromEnabledSets)
+    if (!showOnlyCardsFromEnabledSets) {
         return true;
+    }
 
     for (const auto &printings : card->getSets()) {
         for (const auto &printing : printings) {
-            if (printing.getSet()->getEnabled())
+            if (printing.getSet()->getEnabled()) {
                 return true;
+            }
         }
     }
 
@@ -104,22 +123,53 @@ bool CardDatabaseModel::checkCardHasAtLeastOneEnabledSet(CardInfoPtr card)
 
 void CardDatabaseModel::cardDatabaseEnabledSetsChanged()
 {
-    // remove all the cards no more present in at least one enabled set
+    // Build the new card list in a single pass.
+    QList<CardInfoPtr> newCardList;
+    newCardList.reserve(cardList.size());
     for (const CardInfoPtr &card : cardList) {
-        if (!checkCardHasAtLeastOneEnabledSet(card)) {
-            cardRemoved(card);
+        if (checkCardHasAtLeastOneEnabledSet(card)) {
+            newCardList.append(card);
+        }
+    }
+    for (const CardInfoPtr &card : db->getCardList()) {
+        if (!cardListSet.contains(card) && checkCardHasAtLeastOneEnabledSet(card)) {
+            newCardList.append(card);
         }
     }
 
-    // re-check all the card currently not shown, maybe their part of a newly-enabled set
-    for (const CardInfoPtr &card : db->getCardList()) {
-        if (!cardListSet.contains(card)) {
-            cardAdded(card);
+    if (newCardList == cardList) {
+        return;
+    }
+
+    // Rebuild the whole list inside a single model reset instead of emitting
+    // per-card insert/remove notifications. With tens of thousands of cards the
+    // per-card path is the dominant cost of constructing a CardDatabaseModel.
+    QSet<CardInfoPtr> oldCardListSet = cardListSet;
+    QSet<CardInfoPtr> newCardListSet(newCardList.begin(), newCardList.end());
+
+    beginResetModel();
+
+    // Disconnect cards that are no longer shown.
+    for (const CardInfoPtr &card : cardList) {
+        if (!newCardListSet.contains(card)) {
+            disconnect(card.data(), nullptr, this, nullptr);
         }
     }
+
+    cardList = newCardList;
+    cardListSet = newCardListSet;
+
+    // Connect cards that are now shown for the first time.
+    for (const CardInfoPtr &card : cardList) {
+        if (!oldCardListSet.contains(card)) {
+            connect(card.data(), &CardInfo::cardInfoChanged, this, &CardDatabaseModel::cardInfoChanged);
+        }
+    }
+
+    endResetModel();
 }
 
-void CardDatabaseModel::cardAdded(CardInfoPtr card)
+void CardDatabaseModel::cardAdded(const CardInfoPtr &card)
 {
     if (checkCardHasAtLeastOneEnabledSet(card)) {
         // add the card if it's present in at least one enabled set
@@ -144,4 +194,19 @@ void CardDatabaseModel::cardRemoved(CardInfoPtr card)
     card.clear();
     cardList.removeAt(row);
     endRemoveRows();
+}
+
+void CardDatabaseModel::resetCardList()
+{
+    beginResetModel();
+    cardList.clear();
+    cardListSet.clear();
+    for (const CardInfoPtr &card : db->getCardList()) {
+        if (checkCardHasAtLeastOneEnabledSet(card)) {
+            cardList.append(card);
+            cardListSet.insert(card);
+            connect(card.data(), &CardInfo::cardInfoChanged, this, &CardDatabaseModel::cardInfoChanged);
+        }
+    }
+    endResetModel();
 }

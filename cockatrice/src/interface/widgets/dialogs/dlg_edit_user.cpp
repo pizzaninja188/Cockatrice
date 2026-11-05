@@ -4,9 +4,17 @@
 
 #include <QDialogButtonBox>
 #include <QGridLayout>
-#include <QHBoxLayout>
 #include <QLabel>
-#include <libcockatrice/utility/trice_limits.h>
+#include <QList>
+#include <QPixmap>
+#include <QSharedPointer>
+#include <QSize>
+#include <QStringList>
+#include <QVBoxLayout>
+#include <libcockatrice/utility/string_limits.h>
+
+class QVBoxLayout;
+class QWidget;
 
 DlgEditUser::DlgEditUser(QWidget *parent, QString email, QString country, QString realName) : QDialog(parent)
 {
@@ -26,8 +34,9 @@ DlgEditUser::DlgEditUser(QWidget *parent, QString email, QString country, QStrin
     int i = 1;
     for (const QString &c : countries) {
         countryEdit->addItem(QPixmap("theme:countries/" + c.toLower()), c);
-        if (c == country)
+        if (c == country) {
             countryEdit->setCurrentIndex(i);
+        }
 
         ++i;
     }
