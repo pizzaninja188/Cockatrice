@@ -68,6 +68,14 @@ path is preserved. Upstream menu implementations and translation ownership remai
 Batch `zone_context_menus` probes exercise actual popup slots and check inspection-only actions
 and the absence of legacy zone shortcuts after focus changes.
 
+`ruled_game_menu` hides manual turn-order and phase controls, their shortcuts, and the empty
+Selected cards submenu. Persistent action guards survive role, translation and shortcut refreshes.
+The existing Next turn action becomes Pass priority through `ruled_game_mode_ui`: its availability
+and activation follow the prompt button, preserving engine priority and blocking-choice handling.
+Display rotation, arrows, chat, game information and session actions remain available.
+Batch `live_game_menu` probes construct an offline live tab and exercise lifecycle refreshes;
+historical replay tabs retain their existing smaller menu.
+
 ### `ruled_client_state.{h,cpp}` — `RuledClientState`
 
 A `QObject` parented to `RuledGameController`; the client's whole picture of the ruled game.

@@ -3,6 +3,7 @@
 
 class QAction;
 class QCheckBox;
+class QPushButton;
 
 // Product entry-point policy. Retain upstream implementations for periodic merges.
 namespace RuledGameModeUi
@@ -10,6 +11,7 @@ namespace RuledGameModeUi
 bool allowsLocalFreeformGames();
 void configureCreationControls(QCheckBox *ruled, QCheckBox *shuffle);
 void disableLocalGameAction(QAction *action);
+void bindPriorityMenuAction(QAction *action, QPushButton *button);
 } // namespace RuledGameModeUi
 
 #endif

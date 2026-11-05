@@ -91,6 +91,7 @@ class TabGame : public Tab
 
     friend class RuledAutopilot; // fork: dev-loop autopilot needs this seat's deck view
     friend class RuledDiagnosticViewer;
+    friend struct RuledGameMenu;
 
 private:
     AbstractGame *game;

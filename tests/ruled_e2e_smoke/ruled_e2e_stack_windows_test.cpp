@@ -168,6 +168,21 @@ TEST_F(RuledE2ESmokeTest, DiagnosticReplayShowsProtectedStackWindow)
         EXPECT_TRUE(probedZones.contains(zone)) << zone.toStdString();
     }
     ASSERT_TRUE(playback.contains("zone_windows"));
+    ASSERT_TRUE(exported.contains("live_game_menu"));
+    const auto gameMenu = exported.value("live_game_menu").toObject();
+    for (const QString name : {"reverse_turn", "turn_order", "phases", "next_phase", "next_phase_action",
+                               "selected_cards"}) {
+        const auto menuAction = gameMenu.value(name).toObject();
+        EXPECT_FALSE(menuAction.value("visible").toBool()) << name.toStdString();
+        EXPECT_FALSE(menuAction.value("enabled").toBool()) << name.toStdString();
+        EXPECT_EQ(menuAction.value("shortcuts").toInt(), 0) << name.toStdString();
+    }
+    for (const QString name : {"rotate_view", "game_info", "concede", "leave"}) {
+        EXPECT_TRUE(gameMenu.value(name).toObject().value("visible").toBool()) << name.toStdString();
+    }
+    EXPECT_EQ(gameMenu.value("active_manual_phase_actions").toInt(), 0);
+    EXPECT_TRUE(gameMenu.value("priority_label").toBool());
+    EXPECT_FALSE(gameMenu.value("priority_enabled_before_offer").toBool());
     bool stackVisible = false;
     for (const auto &entry : playback.value("zone_windows").toArray()) {
         const auto window = entry.toObject();

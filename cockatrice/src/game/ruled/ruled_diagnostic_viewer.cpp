@@ -1,5 +1,6 @@
 #include <libcockatrice/protocol/pb/game_replay.pb.h>
 #include <libcockatrice/protocol/pb/game_event_container.pb.h>
+#include <libcockatrice/protocol/pb/event_game_joined.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_game.pb.h>
 #include <libcockatrice/game/game_meta_info.h>
 #include <libcockatrice/game/game_state.h>
@@ -347,6 +348,44 @@ void RuledDiagnosticViewer::openFromCommandLine(MainWindow *window, const QComma
             viewer->tab->setCardMenu(nullptr);
             viewer->comparison.insert("card_context_menus", cardMenus);
             viewer->comparison.insert("zone_context_menus", zoneMenus);
+            // Replay tabs intentionally have a smaller menu. Probe the actual live-tab menu
+            // separately, using the captured game identity and an offline supervisor client.
+            auto *supervisor = viewer->tab->getTabSupervisor();
+            QList<AbstractClient *> clients{supervisor->getClient()};
+            Event_GameJoined joined;
+            joined.set_player_id(viewer->tab->getGame()->getPlayerManager()->getLocalPlayerId());
+            joined.mutable_game_info()->CopyFrom(viewer->tab->getGame()->getGameMetaInfo()->proto());
+            auto liveTab = std::make_unique<TabGame>(supervisor, clients, joined, QMap<int, QString>{});
+            liveTab->retranslateUi();
+            liveTab->refreshShortcuts();
+            // Host/role updates can try to restore turn-order editing.
+            liveTab->aTurnOrder->setVisible(true);
+            liveTab->aTurnOrder->setEnabled(true);
+            QJsonObject gameMenu;
+            const auto recordAction = [&gameMenu](const char *name, QAction *action) {
+                gameMenu.insert(name, QJsonObject{{"visible", action->isVisible()},
+                                                  {"enabled", action->isEnabled()},
+                                                  {"shortcuts", action->shortcuts().size()}});
+            };
+            recordAction("reverse_turn", liveTab->aReverseTurn);
+            recordAction("turn_order", liveTab->aTurnOrder);
+            recordAction("phases", liveTab->phasesMenu->menuAction());
+            recordAction("next_phase", liveTab->aNextPhase);
+            recordAction("next_phase_action", liveTab->aNextPhaseAction);
+            recordAction("selected_cards", liveTab->aCardMenu);
+            recordAction("rotate_view", liveTab->aRotateViewCW);
+            recordAction("game_info", liveTab->aGameInfo);
+            recordAction("concede", liveTab->aConcede);
+            recordAction("leave", liveTab->aLeaveGame);
+            int activePhaseActions = 0;
+            for (auto *action : liveTab->phaseActions)
+                if (action->isEnabled() || !action->shortcuts().isEmpty()) ++activePhaseActions;
+            gameMenu.insert("active_manual_phase_actions", activePhaseActions);
+            gameMenu.insert("priority_label", liveTab->aNextTurn->text() ==
+                                                    QCoreApplication::translate("TabGame", "Pass priority"));
+            gameMenu.insert("priority_enabled_before_offer", liveTab->aNextTurn->isEnabled());
+            viewer->comparison.insert("live_game_menu", gameMenu);
+            liveTab.reset();
             QString error;
             const bool ok = RuledDiagnosticJournal::writeJson(output, viewer->comparison, &error);
             if (!ok)

@@ -2,6 +2,7 @@
 
 #include <QAction>
 #include <QCheckBox>
+#include <QPushButton>
 #include <QSignalSpy>
 #include <QWidget>
 #include <gtest/gtest.h>
@@ -44,4 +45,37 @@ TEST(RuledGameModeUiTest, ConnectionStateCannotRestoreLocalGameAction)
     EXPECT_FALSE(localGame.isEnabled());
     EXPECT_FALSE(localGame.isVisible());
     EXPECT_EQ(triggered.count(), 0);
+}
+
+TEST(RuledGameModeUiTest, PriorityMenuFollowsPromptAvailabilityAndCannotBypassIt)
+{
+    QWidget parent;
+    auto *button = new QPushButton(&parent);
+    button->hide();
+    QAction action;
+    QSignalSpy clicked(button, &QPushButton::clicked);
+    RuledGameModeUi::bindPriorityMenuAction(&action, button);
+    EXPECT_FALSE(action.isEnabled());
+    action.setEnabled(true); // Simulate an upstream lifecycle update.
+    action.setText(QStringLiteral("Next turn"));
+    EXPECT_FALSE(action.isEnabled());
+    EXPECT_EQ(action.text(), QStringLiteral("Pass priority"));
+    action.trigger();
+    EXPECT_EQ(clicked.count(), 0);
+
+    button->show();
+    EXPECT_TRUE(action.isEnabled());
+    action.trigger();
+    EXPECT_EQ(clicked.count(), 1);
+    button->setEnabled(false); // A blocking choice has taken over the prompt.
+    EXPECT_FALSE(action.isEnabled());
+    action.trigger();
+    EXPECT_EQ(clicked.count(), 1);
+    button->setEnabled(true);
+    EXPECT_TRUE(action.isEnabled());
+    button->hide();
+    EXPECT_FALSE(action.isEnabled());
+    button->show();
+    delete button;
+    EXPECT_FALSE(action.isEnabled());
 }

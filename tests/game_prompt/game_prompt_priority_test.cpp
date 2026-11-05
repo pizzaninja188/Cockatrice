@@ -1,5 +1,7 @@
 #include "game_prompt_widget.h"
+#include "game/ruled/ruled_game_mode_ui.h"
 
+#include <QAction>
 #include <QPushButton>
 #include <gtest/gtest.h>
 #include <libcockatrice/game/game.h>
@@ -25,7 +27,7 @@ protected:
 class GamePromptPriorityTest : public testing::Test
 {
 protected:
-    void clickPassAndExpectEngineCommand(bool stackHasItems)
+    void clickPassAndExpectEngineCommand(bool stackHasItems, bool fromMenu = false)
     {
         PriorityRecordingClient client;
         QList<AbstractClient *> clients{&client};
@@ -47,7 +49,14 @@ protected:
         if (stackHasItems) {
             EXPECT_EQ(button->text(), QStringLiteral("No Response"));
         }
-        button->click();
+        QAction menuAction;
+        if (fromMenu) {
+            RuledGameModeUi::bindPriorityMenuAction(&menuAction, button);
+            ASSERT_TRUE(menuAction.isEnabled());
+            menuAction.trigger();
+        } else {
+            button->click();
+        }
 
         ASSERT_EQ(client.sent.size(), 1);
         const auto &container = client.sent.first();
@@ -70,6 +79,12 @@ TEST_F(GamePromptPriorityTest, NoResponseClickSendsEnginePassPriority)
 TEST_F(GamePromptPriorityTest, EmptyStackAdvanceStillPassesEnginePriority)
 {
     clickPassAndExpectEngineCommand(false);
+}
+
+TEST_F(GamePromptPriorityTest, GameMenuUsesEnginePassPriorityWithAndWithoutStack)
+{
+    clickPassAndExpectEngineCommand(true, true);
+    clickPassAndExpectEngineCommand(false, true);
 }
 
 TEST_F(GamePromptPriorityTest, FreeformNextTurnRetainsLegacyCommand)

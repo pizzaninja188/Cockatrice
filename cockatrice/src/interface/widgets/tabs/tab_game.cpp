@@ -1,5 +1,6 @@
 #include "../../../game_graphics/player/player_target.h"
 #include "../../../game/ruled/ruled_game_controller.h"
+#include "../../../game/ruled/ruled_game_menu.h"
 #include "tab_game.h"
 #include "../../../game/ruled/ruled_diagnostic_viewer.h"
 
@@ -2584,6 +2585,7 @@ void TabGame::createMenuItems()
     // Sync the new action with the same state the dock button already shows.
     updateInviteButtonState();
 
+    RuledGameMenu::configure(*this);
     addTabMenu(gameMenu);
 }
 

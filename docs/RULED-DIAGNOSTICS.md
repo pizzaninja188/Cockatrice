@@ -169,6 +169,10 @@ card information. Ruled cards must not construct the generic upstream menu.
 non-inspection action counts and remaining legacy shortcuts. Battlefield, hand and library
 popups must be absent; graveyard/exile popups retain one inspection action. The hand-counter
 icon forwards to the hand zone's popup slot. No action labels or shortcut strings are exported.
+`live_game_menu` constructs a temporary offline live tab from the report's game metadata, then
+refreshes translations, shortcuts and turn-order availability. It records action visibility,
+enabled state and shortcut counts, plus whether the priority label and initial availability match
+the ruled policy. It sends no commands and does not change the replay tab's smaller menu.
 
 ## Resume locally with real clients
 
