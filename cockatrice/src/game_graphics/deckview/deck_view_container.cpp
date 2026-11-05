@@ -125,7 +125,7 @@ DeckViewContainer::DeckViewContainer(int _playerId, TabGame *parent)
     validationPanel = new RuledDeckLobbyPanel(this);
     deckViewLayout->addWidget(validationPanel);
     validationPanel->setVisible(RuledActions::isRuledGame(parentGame->getGame()));
-    deckViewLayout->addWidget(deckView);
+    deckViewLayout->addWidget(deckView, 1);
     setLayout(deckViewLayout);
 
     retranslateUi();
@@ -156,7 +156,7 @@ void DeckViewContainer::tryCreateVisualDeckStorageWidget()
             &DeckViewContainer::loadDeckFromFile);
     connect(visualDeckStorageWidget, &VisualDeckStorageWidget::openDeckEditor, parentGame, &TabGame::openDeckEditor);
 
-    deckViewLayout->addWidget(visualDeckStorageWidget);
+    deckViewLayout->addWidget(visualDeckStorageWidget, 1);
 }
 
 void DeckViewContainer::retranslateUi()
@@ -543,7 +543,7 @@ void DeckViewContainer::setSideboardLocked(bool locked)
 void DeckViewContainer::setDeck(const DeckList &deck)
 {
     currentDeck = deck;
-    validationPanel->setDeck(deck);
+    validationPanel->resetReport();
     deckView->setDeck(deck);
     switchToDeckLoadedView();
 }

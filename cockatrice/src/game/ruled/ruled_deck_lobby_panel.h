@@ -1,18 +1,11 @@
 #pragma once
-#include <QWidget>
+#include <QLabel>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
-class DeckList;
-class QLabel;
-class QHBoxLayout;
-class RuledDeckLobbyPanel : public QWidget
+
+class RuledDeckLobbyPanel : public QLabel
 {
 public:
     explicit RuledDeckLobbyPanel(QWidget *parent = nullptr);
-    void setDeck(const DeckList &deck);
+    void resetReport();
     void showReport(const ruled::v1::DeckValidationReport &report, bool rejected = false);
-
-private:
-    QLabel *status;
-    QWidget *commanders;
-    QHBoxLayout *cards;
 };

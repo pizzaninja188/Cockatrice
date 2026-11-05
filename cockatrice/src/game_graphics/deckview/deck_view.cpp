@@ -64,7 +64,7 @@ void DeckViewCardDragItem::updatePosition(const QPointF &cursorScenePos)
     if (!cursorZone) {
         return;
     }
-    currentZone = cursorZone;
+    currentZone = cursorZone->getName() == DECK_ZONE_COMMANDER ? nullptr : cursorZone;
 
     QPointF newPos = cursorScenePos;
     if (newPos != pos()) {
@@ -125,6 +125,9 @@ DeckViewCard::~DeckViewCard()
 void DeckViewCard::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)
 {
     AbstractCardItem::paint(painter, option, widget);
+    if (originZone == DECK_ZONE_COMMANDER) {
+        return;
+    }
 
     painter->save();
     QPen pen;
@@ -141,6 +144,9 @@ void DeckViewCard::paint(QPainter *painter, const QStyleOptionGraphicsItem *opti
 
 void DeckViewCard::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 {
+    if (originZone == DECK_ZONE_COMMANDER) {
+        return;
+    }
     if ((event->screenPos() - event->buttonDownScreenPos(Qt::LeftButton)).manhattanLength() <
         2 * QApplication::startDragDistance()) {
         return;
@@ -160,7 +166,7 @@ void DeckViewCard::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
     int j = 0;
     for (int i = 0; i < sel.size(); i++) {
         auto *c = static_cast<DeckViewCard *>(sel.at(i));
-        if (c == this) {
+        if (c == this || c->getOriginZone() == DECK_ZONE_COMMANDER) {
             continue;
         }
         ++j;
@@ -194,6 +200,9 @@ void DeckView::mouseDoubleClickEvent(QMouseEvent *event)
         for (int i = 0; i < sel.size(); i++) {
             auto *c = static_cast<DeckViewCard *>(sel.at(i));
             auto *zone = static_cast<DeckViewCardContainer *>(c->parentItem());
+            if (zone->getName() == DECK_ZONE_COMMANDER) {
+                continue;
+            }
             MoveCard_ToZone m;
             m.set_card_name(c->getName().toStdString());
             m.set_start_zone(zone->getName().toStdString());
@@ -209,9 +218,11 @@ void DeckView::mouseDoubleClickEvent(QMouseEvent *event)
             result.append(m);
         }
 
-        deckViewScene->applySideboardPlan(result);
-        deckViewScene->rearrangeItems();
-        emit deckViewScene->sideboardPlanChanged();
+        if (!result.isEmpty()) {
+            deckViewScene->applySideboardPlan(result);
+            deckViewScene->rearrangeItems();
+            emit deckViewScene->sideboardPlanChanged();
+        }
     }
 }
 
@@ -423,9 +434,6 @@ void DeckViewScene::rebuildTree()
     }
 
     for (auto *currentZone : deck->getZoneNodes()) {
-        if (currentZone->getName() == DECK_ZONE_COMMANDER) {
-            continue;
-        }
         DeckViewCardContainer *container = cardContainers.value(currentZone->getName(), 0);
         if (!container) {
             container = new DeckViewCardContainer(currentZone->getName());
@@ -450,6 +458,9 @@ void DeckViewScene::applySideboardPlan(const QList<MoveCard_ToZone> &plan)
 {
     for (int i = 0; i < plan.size(); ++i) {
         const MoveCard_ToZone &m = plan[i];
+        if (m.start_zone() == DECK_ZONE_COMMANDER || m.target_zone() == DECK_ZONE_COMMANDER) {
+            continue;
+        }
         DeckViewCardContainer *start = cardContainers.value(QString::fromStdString(m.start_zone()));
         DeckViewCardContainer *target = cardContainers.value(QString::fromStdString(m.target_zone()));
         if (!start || !target) {
