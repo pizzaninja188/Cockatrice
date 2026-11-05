@@ -138,6 +138,22 @@ TEST_F(ThemeIconRenderTest, ThemedIconFollowsPaletteModeAndDpr)
     const QPixmap selected = icon.pixmap(QSize(24, 24), 1.0, QIcon::Selected, QIcon::Off);
     EXPECT_GT(countOpaquePixels(selected, QColor(QStringLiteral("#00ff00"))), 0);
 }
+
+TEST_F(ThemeIconRenderTest, DisabledIconWithAuthoredColorsRenders)
+{
+    QTemporaryDir themeDir;
+    ASSERT_TRUE(themeDir.isValid());
+    QFile file(QDir(themeDir.path()).absoluteFilePath(QStringLiteral("plain.svg")));
+    ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+    ASSERT_GT(file.write(svgWith("#ff0000")), 0);
+    file.close();
+    QDir::addSearchPath(QStringLiteral("theme"), themeDir.path());
+
+    const QIcon icon = loadThemedIcon(QStringLiteral("plain"));
+    const QSize size(24, 24);
+    ASSERT_EQ(icon.pixmap(size).size(), size);
+    EXPECT_EQ(icon.pixmap(size, QIcon::Disabled).size(), size);
+}
 } // namespace
 
 TEST_F(ThemeIconRenderTest, SentinelUsesPaletteColor)

@@ -21,6 +21,7 @@
 #include <QString>
 #include <QStringLiteral>
 #include <QStyle>
+#include <QStyleOption>
 #include <QSvgRenderer>
 #include <QtGlobal>
 #include <utility>
@@ -225,7 +226,9 @@ private:
             pixmap = pixmap.scaled(pixelSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
         }
         if (mode == QIcon::Disabled && !pixmap.isNull()) {
-            pixmap = QApplication::style()->generatedIconPixmap(QIcon::Disabled, pixmap, nullptr);
+            QStyleOption option;
+            option.palette = QApplication::palette();
+            pixmap = QApplication::style()->generatedIconPixmap(QIcon::Disabled, pixmap, &option);
         }
         return pixmap;
     }
