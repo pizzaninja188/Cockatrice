@@ -250,8 +250,7 @@ DlgCreateGame::DlgCreateGame(const ServerInfo_Game &gameInfo, const QMap<int, QS
     ruledGameCheckBox->setEnabled(false);
     shufflePlayersCheckBox->setEnabled(false);
 
-    formatEdit->setCurrentIndex(gameInfo.format() == ruled::v1::GAME_FORMAT_COMMANDER ? 1 : 0);
-    formatEdit->setEnabled(false);
+    RuledGameModeUi::configureFormatInfo(formatEdit, maxPlayersEdit, gameInfo);
     descriptionEdit->setText(QString::fromStdString(gameInfo.description()));
     maxPlayersEdit->setValue(gameInfo.max_players());
     onlyBuddiesCheckBox->setChecked(gameInfo.only_buddies());

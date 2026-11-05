@@ -42,7 +42,8 @@ On its first run the launcher warms that cache before automatically selecting de
 Run `tricerules-server --refresh-formats` for an immediate administrator refresh; running
 sidecars pick up the promoted manifest on subsequent validation queries. Setting
 `TRICERULES_FORMAT_UPDATES=0` disables automatic network updates and keeps cached validation.
-New bans, unbans and rotations take effect after the next successful refresh, without rebuilding.
+New bans, unbans and rotations take effect after Scryfall publishes an updated bulk snapshot
+and the next successful refresh, without rebuilding.
 
 Accepted games record the chosen format and catalogue provenance. Catalogue updates do not
 change active engine state. Diagnostic replay reconstructs accepted settings from its recorded

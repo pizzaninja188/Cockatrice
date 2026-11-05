@@ -10,6 +10,7 @@
 #include <QPushButton>
 #include <QSpinBox>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
+#include <libcockatrice/protocol/pb/serverinfo_game.pb.h>
 
 namespace
 {
@@ -72,6 +73,20 @@ private:
 
 namespace RuledGameModeUi
 {
+void configureFormatInfo(QComboBox *format, QSpinBox *players, const ServerInfo_Game &info)
+{
+    auto index = format->findData(info.format());
+    if (index < 0) {
+        format->addItem(QCoreApplication::translate("DlgCreateGame", "Unspecified"), info.format());
+        index = format->count() - 1;
+    }
+    format->setCurrentIndex(index);
+    format->setEnabled(false);
+    // Recorded metadata predates this product's format-specific creation limits.
+    players->setRange(1, 100);
+    players->setValue(info.max_players());
+}
+
 void configureFormatControls(QComboBox *format, QSpinBox *players, QSpinBox *life)
 {
     format->setObjectName("gameFormat");

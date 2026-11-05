@@ -8,6 +8,27 @@
 #include <QSpinBox>
 #include <QWidget>
 #include <gtest/gtest.h>
+#include <libcockatrice/protocol/pb/serverinfo_game.pb.h>
+
+TEST(RuledGameModeUiTest, RecordedGamesWithoutFormatRetainTheirActualPlayerCount)
+{
+    QComboBox format;
+    QSpinBox players;
+    QSpinBox life;
+    RuledGameModeUi::configureFormatControls(&format, &players, &life);
+    ServerInfo_Game recorded;
+    recorded.set_max_players(4);
+    RuledGameModeUi::configureFormatInfo(&format, &players, recorded);
+    EXPECT_EQ(format.currentData().toInt(), ruled::v1::GAME_FORMAT_UNSPECIFIED);
+    EXPECT_EQ(format.currentText(), QStringLiteral("Unspecified"));
+    EXPECT_FALSE(format.isEnabled());
+    EXPECT_EQ(players.value(), 4);
+    recorded.set_format(ruled::v1::GAME_FORMAT_COMMANDER);
+    recorded.set_max_players(3);
+    RuledGameModeUi::configureFormatInfo(&format, &players, recorded);
+    EXPECT_EQ(format.currentData().toInt(), ruled::v1::GAME_FORMAT_COMMANDER);
+    EXPECT_EQ(players.value(), 3);
+}
 
 TEST(RuledGameModeUiTest, FormatControlsDeriveLifeAndSeatLimits)
 {
