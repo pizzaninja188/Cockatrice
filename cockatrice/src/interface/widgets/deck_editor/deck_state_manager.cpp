@@ -205,6 +205,62 @@ void DeckStateManager::setFormat(const QString &format)
     doMetadataModified();
 }
 
+void DeckStateManager::setCommanders(const QList<CardRef> &commanders)
+{
+    if (deckList->getCommanders() == commanders) {
+        return;
+    }
+    requestHistorySave(tr("Change commanders"));
+    deckList->setCommanders(commanders);
+    doMetadataModified();
+}
+
+bool DeckStateManager::moveToCommander(const QModelIndex &index)
+{
+    if (!index.isValid() || !index.data(DeckRoles::IsCardRole).toBool()) {
+        return false;
+    }
+    const CardRef card{index.siblingAtColumn(DeckListModelColumns::CARD_NAME).data(Qt::EditRole).toString(),
+                       index.siblingAtColumn(DeckListModelColumns::CARD_PROVIDER_ID).data().toString()};
+    if (card.name.isEmpty()) {
+        return false;
+    }
+    return modifyDeck(tr("Move %1 to commanders").arg(card.name), [&](DeckListModel *model) {
+        if (!model->offsetCountAtIndex(index, -1)) {
+            return false;
+        }
+        auto commanders = deckList->getCommanders();
+        commanders.append(card);
+        deckList->setCommanders(commanders);
+        emit metadataModified();
+        return true;
+    });
+}
+
+bool DeckStateManager::returnCommanderToMainboard(int index)
+{
+    auto commanders = deckList->getCommanders();
+    if (index < 0 || index >= commanders.size()) {
+        return false;
+    }
+    const auto card = commanders.takeAt(index);
+    return modifyDeck(tr("Return %1 to mainboard").arg(card.name), [&](DeckListModel *model) {
+        const auto existing = model->findCard(card.name, DECK_ZONE_MAIN, card.providerId);
+        if (existing.isValid()) {
+            model->offsetCountAtIndex(existing, 1);
+        } else {
+            deckList->addCard(card.name, DECK_ZONE_MAIN, -1, {}, {}, card.providerId);
+        }
+        deckList->setCommanders(commanders);
+        deckList->refreshDeckHash();
+        model->rebuildTree();
+        emit model->cardNodesChanged();
+        emit model->deckHashChanged();
+        emit metadataModified();
+        return true;
+    });
+}
+
 QModelIndex DeckStateManager::addCard(const ExactCard &card, const QString &zoneName)
 {
     if (!card) {

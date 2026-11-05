@@ -185,6 +185,9 @@ public:
     void setPlaymat(const PlaymatInfo &playmat);
     void setTags(const QStringList &tags);
     void setFormat(const QString &format);
+    void setCommanders(const QList<CardRef> &commanders);
+    bool moveToCommander(const QModelIndex &index);
+    bool returnCommanderToMainboard(int index);
     ///@}
 
     /**

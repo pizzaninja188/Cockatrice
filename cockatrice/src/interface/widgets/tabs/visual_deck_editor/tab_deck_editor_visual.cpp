@@ -2,6 +2,7 @@
 
 #include "../../../../client/settings/cache_settings.h"
 #include "../../../../client/settings/shortcuts_settings.h"
+#include "../../../../game/ruled/ruled_commander_editor.h"
 #include "../../deck_editor/deck_editor_card_database_dock_widget.h"
 #include "../../deck_editor/deck_editor_card_info_dock_widget.h"
 #include "../../deck_editor/deck_editor_deck_dock_widget.h"
@@ -82,6 +83,7 @@ void TabDeckEditorVisual::createCentralFrame()
 
     centralFrame = new QVBoxLayout;
     centralWidget->setLayout(centralFrame);
+    centralFrame->addWidget(new RuledCommanderEditor(deckStateManager, centralWidget));
 
     tabContainer = new TabDeckEditorVisualTabWidget(centralWidget, this, deckStateManager->getModel(), databaseModel);
 

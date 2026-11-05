@@ -64,6 +64,58 @@ TEST(DeckStateManager, AddCards)
     containsExactly(manager, {}, DECK_ZONE_MAIN, "Lightning Bolt", 2);
 }
 
+TEST(DeckStateManager, CommanderMovePreservesCopiesPrintingAndUndo)
+{
+    DeckStateManager manager;
+    manager.addCard(ExactCard(CardInfo::newInstance("Grizzly Bears")), DECK_ZONE_MAIN);
+    manager.addCard(ExactCard(CardInfo::newInstance("Grizzly Bears")), DECK_ZONE_MAIN);
+    const auto index = manager.getModel()->findCard("Grizzly Bears", DECK_ZONE_MAIN);
+    ASSERT_TRUE(manager.moveToCommander(index));
+    ASSERT_EQ(manager.getDeckList().getCommanders().size(), 1);
+    EXPECT_EQ(manager.getDeckList().getCommanders()[0].name, "Grizzly Bears");
+    containsExactly(manager, {DECK_ZONE_MAIN}, DECK_ZONE_MAIN, "Grizzly Bears", 1);
+    manager.undo();
+    EXPECT_TRUE(manager.getDeckList().getCommanders().isEmpty());
+    containsExactly(manager, {DECK_ZONE_MAIN}, DECK_ZONE_MAIN, "Grizzly Bears", 2);
+    manager.redo();
+    ASSERT_EQ(manager.getDeckList().getCommanders().size(), 1);
+    EXPECT_TRUE(manager.returnCommanderToMainboard(0));
+    EXPECT_TRUE(manager.getDeckList().getCommanders().isEmpty());
+    containsExactly(manager, {DECK_ZONE_MAIN}, DECK_ZONE_MAIN, "Grizzly Bears", 2);
+}
+
+TEST(DeckStateManager, CommanderDeclarationsAreIndependentOfBannerAndRoundTrip)
+{
+    DeckStateManager manager;
+    const QList<CardRef> commanders{{"Grizzly Bears", "printing-one"}, {"Lightning Bolt", "printing-two"}};
+    manager.setCommanders(commanders);
+    EXPECT_TRUE(manager.getDeckList().getCardList().isEmpty());
+    EXPECT_TRUE(manager.getDeckList().getBannerCard().isEmpty());
+    EXPECT_EQ(DeckList(manager.getDeckList().writeToString_Native()).getCommanders(), commanders);
+    manager.undo();
+    EXPECT_TRUE(manager.getDeckList().getCommanders().isEmpty());
+    manager.redo();
+    EXPECT_EQ(manager.getDeckList().getCommanders(), commanders);
+    EXPECT_FALSE(manager.returnCommanderToMainboard(-1));
+    EXPECT_FALSE(manager.returnCommanderToMainboard(2));
+    EXPECT_EQ(manager.getDeckList().getCommanders(), commanders);
+}
+
+TEST(DeckStateManager, MovingLastPrintedCopyToCommanderPreservesItsPrinting)
+{
+    DeckStateManager manager;
+    manager.getDeckListShared()->addCard("Grizzly Bears", DECK_ZONE_SIDE, -1, {}, {}, "exact-printing");
+    manager.getModel()->rebuildTree();
+    const auto index = manager.getModel()->findCard("Grizzly Bears", DECK_ZONE_SIDE, "exact-printing");
+    ASSERT_TRUE(index.isValid());
+    ASSERT_TRUE(manager.moveToCommander(index));
+    EXPECT_TRUE(manager.getDeckList().getCardList().isEmpty());
+    ASSERT_EQ(manager.getDeckList().getCommanders().size(), 1);
+    EXPECT_EQ(manager.getDeckList().getCommanders()[0].providerId, "exact-printing");
+    ASSERT_TRUE(manager.returnCommanderToMainboard(0));
+    EXPECT_TRUE(manager.getModel()->findCard("Grizzly Bears", DECK_ZONE_MAIN, "exact-printing").isValid());
+}
+
 TEST(DeckStateManager, AddCardZones)
 {
     DeckStateManager manager;

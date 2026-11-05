@@ -2,6 +2,7 @@
 
 #include "../../../client/settings/cache_settings.h"
 #include "../../../client/settings/shortcuts_settings.h"
+#include "../../../game/ruled/ruled_commander_editor.h"
 #include "../../key_signals.h"
 #include "../../theme_icon.h"
 #include "../playmat/playmat_settings_dialog.h"
@@ -286,6 +287,17 @@ void DeckEditorDeckDockWidget::createDeckDock()
     upperLayout->addWidget(formatComboBox, 2, 1);
 
     upperLayout->addWidget(commanderBracketWidget, 3, 0, 1, 2);
+    auto *commanderLayout = new QVBoxLayout;
+    commanderLayout->addWidget(new RuledCommanderEditor(deckStateManager, this));
+    auto *moveCommander = new QPushButton(tr("Move selected card to Commander"), this);
+    connect(moveCommander, &QPushButton::clicked, this, [this] {
+        const auto indices = getSelectedCardNodeSourceIndices();
+        if (indices.size() == 1) {
+            deckStateManager->moveToCommander(indices.front());
+        }
+    });
+    commanderLayout->addWidget(moveCommander);
+    upperLayout->addLayout(commanderLayout, 8, 0, 1, 3);
 
     upperLayout->addWidget(bannerCardLabel, 4, 0);
     upperLayout->addWidget(bannerCardComboBox, 4, 1);
