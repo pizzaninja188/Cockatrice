@@ -38,6 +38,8 @@ QString InnerDecklistNode::visibleNameFromName(const QString &_name)
         return QObject::tr("Maindeck");
     } else if (_name == DECK_ZONE_SIDE) {
         return QObject::tr("Sideboard");
+    } else if (_name == DECK_ZONE_COMMANDER) {
+        return QObject::tr("Commander");
     } else if (_name == DECK_ZONE_TOKENS) {
         return QObject::tr("Tokens");
     } else if (_name == DECK_ZONE_MAYBEBOARD) {
@@ -58,7 +60,7 @@ void InnerDecklistNode::setSortMethod(DeckSortMethod method)
 const QList<QString> &InnerDecklistNode::boardZoneNames()
 {
     static const QList<QString> names = {QString(DECK_ZONE_MAIN), QString(DECK_ZONE_SIDE),
-                                         QString(DECK_ZONE_MAYBEBOARD)};
+                                         QString(DECK_ZONE_COMMANDER), QString(DECK_ZONE_MAYBEBOARD)};
     return names;
 }
 

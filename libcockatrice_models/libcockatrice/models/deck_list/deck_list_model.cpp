@@ -516,9 +516,28 @@ QModelIndex DeckListModel::addCard(const ExactCard &card, const QString &zoneNam
         return {};
     }
 
-    CardInfoPtr cardInfo = card.getCardPtr();
-    PrintingInfo printingInfo = card.getPrinting();
+    const auto &printing = card.getPrinting();
+    const auto set = printing.getSet();
+    return addCard(card.getCardPtr(), zoneName, set ? set->getCorrectedShortName() : QString(),
+                   printing.getProperty("num"), printing.getUuid(), false);
+}
 
+QModelIndex DeckListModel::addCard(const CardInfoPtr &cardInfo,
+                                  const QString &zoneName,
+                                  const QString &cardSetName,
+                                  const QString &collectorNumber,
+                                  const QString &providerId)
+{
+    return addCard(cardInfo, zoneName, cardSetName, collectorNumber, providerId, true);
+}
+
+QModelIndex DeckListModel::addCard(const CardInfoPtr &cardInfo,
+                                  const QString &zoneName,
+                                  const QString &cardSetName,
+                                  const QString &collectorNumber,
+                                  const QString &providerId,
+                                  bool matchStoredPrinting)
+{
     InnerDecklistNode *cardParent = nullptr;
 
     auto *boardNode = dynamic_cast<InnerDecklistNode *>(root->findChild(zoneName));
@@ -580,7 +599,7 @@ QModelIndex DeckListModel::addCard(const ExactCard &card, const QString &zoneNam
 
         if (hasDeckZone) {
             rebuildTree();
-            return addCard(card, zoneName);
+            return addCard(cardInfo, zoneName, cardSetName, collectorNumber, providerId, matchStoredPrinting);
         }
 
         // Unknown zone: create a top-level zone (legacy behavior).
@@ -590,9 +609,19 @@ QModelIndex DeckListModel::addCard(const ExactCard &card, const QString &zoneNam
     }
 
     const QModelIndex parentIndex = nodeToIndex(cardParent);
-    auto *cardNode = dynamic_cast<DecklistModelCardNode *>(cardParent->findCardChildByNameProviderIdAndNumber(
-        card.getName(), printingInfo.getUuid(), printingInfo.getProperty("num")));
-    const auto cardSetName = printingInfo.getSet().isNull() ? "" : printingInfo.getSet()->getCorrectedShortName();
+    DecklistModelCardNode *cardNode = nullptr;
+    if (matchStoredPrinting) {
+        const auto existing = std::find_if(cardParent->cbegin(), cardParent->cend(), [&](const auto *node) {
+            return node->getName() == cardInfo->getName() && node->getCardProviderId() == providerId &&
+                   node->getCardCollectorNumber() == collectorNumber && node->getCardSetShortName() == cardSetName;
+        });
+        if (existing != cardParent->cend()) {
+            cardNode = dynamic_cast<DecklistModelCardNode *>(*existing);
+        }
+    } else {
+        cardNode = dynamic_cast<DecklistModelCardNode *>(
+            cardParent->findCardChildByNameProviderIdAndNumber(cardInfo->getName(), providerId, collectorNumber));
+    }
 
     bool cardNodeAdded = false;
     if (!cardNode) {
@@ -601,7 +630,7 @@ QModelIndex DeckListModel::addCard(const ExactCard &card, const QString &zoneNam
         int deckInsertRow = customZoneNeedsAppend ? -1 : insertRow;
 
         auto *decklistCard = deckList->addCard(cardInfo->getName(), zoneName, deckInsertRow, cardSetName,
-                                               printingInfo.getProperty("num"), printingInfo.getProperty("uuid"));
+                                               collectorNumber, providerId);
 
         beginInsertRows(parentIndex, insertRow, insertRow);
         cardNode = new DecklistModelCardNode(decklistCard, cardParent, insertRow);
@@ -611,8 +640,8 @@ QModelIndex DeckListModel::addCard(const ExactCard &card, const QString &zoneNam
     } else {
         cardNode->setNumber(cardNode->getNumber() + 1);
         cardNode->setCardSetShortName(cardSetName);
-        cardNode->setCardCollectorNumber(printingInfo.getProperty("num"));
-        cardNode->setCardProviderId(printingInfo.getProperty("uuid"));
+        cardNode->setCardCollectorNumber(collectorNumber);
+        cardNode->setCardProviderId(providerId);
         // Emit dataChanged for the amount column since we modified it
         QModelIndex cardIndex = nodeToIndex(cardNode);
         QModelIndex amountIndex = cardIndex.sibling(cardIndex.row(), DeckListModelColumns::CARD_AMOUNT);

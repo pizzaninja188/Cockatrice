@@ -29,6 +29,9 @@ DeckZoneDialog::DeckZoneDialog(QWidget *parent,
     boardLabel = new QLabel(this);
     boardCombo = new QComboBox(this);
     for (const QString &boardName : InnerDecklistNode::boardZoneNames()) {
+        if (boardName == DECK_ZONE_COMMANDER) {
+            continue;
+        }
         // Use the icon overload explicitly so `boardName` lands in the user data role
         // (visible text is applied below in retranslateUi). The two-argument form
         // addItem({}, boardName) would be ambiguous and resolve to the icon overload

@@ -21,7 +21,6 @@ bool parse(QTextStream &in,
            DeckList::Metadata &metadata,
            DecklistNodeTree &tree)
 {
-    tree.clear();
     enum class Section
     {
         Legacy,
@@ -31,9 +30,10 @@ bool parse(QTextStream &in,
     };
     Section section = Section::Legacy;
     bool declarationsSeen = false;
+    int commanderCopies = 0;
     const auto beginDeclarations = [&] {
         if (!declarationsSeen) {
-            metadata.commanders.clear();
+            tree.clearCommanders();
             declarationsSeen = true;
         }
     };
@@ -236,16 +236,12 @@ bool parse(QTextStream &in,
         cardName = cardNameNormalizer(cardName);
 
         if (commander) {
-            if (amount < 1 || amount > 10000 - metadata.commanders.size() || cardName.isEmpty()) {
+            if (amount < 1 || amount > 10000 - commanderCopies || cardName.isEmpty()) {
                 return false;
             }
-            for (int copy = 0; copy < amount; ++copy) {
-                metadata.commanders.append({cardName, {}});
-            }
-            continue;
+            commanderCopies += amount;
         }
-        // Determine the zone (mainboard/sideboard)
-        QString zoneName = sideboard ? DECK_ZONE_SIDE : DECK_ZONE_MAIN;
+        const QString zoneName = commander ? DECK_ZONE_COMMANDER : sideboard ? DECK_ZONE_SIDE : DECK_ZONE_MAIN;
 
         // make new entry in decklist
         tree.addCard(cardName, amount, zoneName, -1, setCode, collectorNumber);

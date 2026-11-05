@@ -58,7 +58,7 @@ TEST(DeckListCommanders, PlainTextReplacesExplicitDeclarationsAndPreservesOtherM
     EXPECT_FALSE(deck.loadFromStream_Plain(invalid, false, [](const QString &name) { return name; }));
 }
 
-TEST(DeckListCommanders, NativeMetadataKeepsDeclarationsSeparateFromTheMainboard)
+TEST(DeckListCommanders, NativeDeckKeepsDeclarationsSeparateFromTheMainboard)
 {
     DeckList source;
     const QList<CardRef> commanders = {
@@ -71,8 +71,19 @@ TEST(DeckListCommanders, NativeMetadataKeepsDeclarationsSeparateFromTheMainboard
     const DeckList restored(source.writeToString_Native());
     EXPECT_EQ(restored.getCommanders(), commanders);
     EXPECT_EQ(restored.getBannerCard(), commanders.front());
-    EXPECT_TRUE(restored.getCardList().isEmpty());
+    EXPECT_TRUE(restored.getCardList({DECK_ZONE_MAIN}).isEmpty());
     EXPECT_FALSE(restored.isBlankDeck());
+}
+
+TEST(DeckListCommanders, LegacyCustomZoneNamedCommanderRemainsSeparate)
+{
+    const DeckList deck(QStringLiteral(
+        "<cockatrice_deck><commanders><commander>Kami of the Crescent Moon</commander></commanders>"
+        "<zone name=\"main\"><zone name=\"commander\"><card number=\"1\" name=\"Island\"/></zone></zone>"
+        "</cockatrice_deck>"));
+    const DeckList restored(deck.writeToString_Native());
+    EXPECT_EQ(restored.getCardList({DECK_ZONE_MAIN}), QStringList{"Island"});
+    EXPECT_EQ(restored.getCardList({DECK_ZONE_COMMANDER}), QStringList{"Kami of the Crescent Moon"});
 }
 
 int main(int argc, char **argv)

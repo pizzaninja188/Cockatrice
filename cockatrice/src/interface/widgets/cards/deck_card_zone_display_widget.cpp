@@ -281,7 +281,7 @@ void DeckCardZoneDisplayWidget::updateZoneCardCount()
         return;
     }
 
-    QString text = zoneName;
+    QString text = InnerDecklistNode::visibleNameFromName(zoneName);
     if (SettingsCache::instance().cardsDisplay().getVisualDeckEditorShowCardCounts()) {
         int total = 0;
         const auto cardNodes = deckListModel->getCardNodesForZone(zoneName);

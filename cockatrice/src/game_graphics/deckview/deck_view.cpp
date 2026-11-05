@@ -423,6 +423,9 @@ void DeckViewScene::rebuildTree()
     }
 
     for (auto *currentZone : deck->getZoneNodes()) {
+        if (currentZone->getName() == DECK_ZONE_COMMANDER) {
+            continue;
+        }
         DeckViewCardContainer *container = cardContainers.value(currentZone->getName(), 0);
         if (!container) {
             container = new DeckViewCardContainer(currentZone->getName());

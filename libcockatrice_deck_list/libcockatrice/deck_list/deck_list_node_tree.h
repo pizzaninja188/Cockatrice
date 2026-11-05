@@ -43,7 +43,8 @@ public:
     /**
      * @brief Deletes all nodes except the root.
      */
-    void clear();
+    void clear(bool preserveCommanders = false);
+    void clearCommanders();
 
     /**
      * Gets all card nodes in the tree
@@ -73,6 +74,7 @@ public:
      * @brief Reads a "zone" section of the xml to this tree
      */
     void readZoneElement(QXmlStreamReader *xml);
+    void readCommandersElement(QXmlStreamReader *xml);
 
     DecklistCardNode *addCard(const QString &cardName,
                               int amount,

@@ -92,7 +92,7 @@ static PlaymatInfo readPlaymatCard(QXmlStreamReader *xml)
 
 bool DeckList::Metadata::isEmpty() const
 {
-    return commanders.isEmpty() && name.isEmpty() && comments.isEmpty() && bannerCard.isEmpty() && tags.isEmpty() && playmat.card.isEmpty();
+    return name.isEmpty() && comments.isEmpty() && bannerCard.isEmpty() && tags.isEmpty() && playmat.card.isEmpty();
 }
 
 bool DeckList::Metadata::readElement(QXmlStreamReader *xml, const QString &childName)
@@ -109,17 +109,6 @@ bool DeckList::Metadata::readElement(QXmlStreamReader *xml, const QString &child
         bannerCard = readBannerCard(xml);
     } else if (childName == "playmatCard") {
         playmat = readPlaymatCard(xml);
-    } else if (childName == "commanders") {
-            commanders.clear();
-            while (xml->readNextStartElement()) {
-                if (xml->name().toString() == "commander") {
-                    const QString providerId = xml->attributes().value("providerId").toString();
-                    const QString cardName = xml->readElementText();
-                    commanders.append({cardName, providerId});
-                } else {
-                    xml->skipCurrentElement();
-                }
-            }
     } else if (childName == "tags") {
         tags.clear(); // Clear existing tags
         while (xml->readNextStartElement()) {
@@ -152,14 +141,6 @@ void DeckList::Metadata::write(QXmlStreamWriter *xml) const
         xml->writeCharacters(playmat.card.name);
         xml->writeEndElement();
     }
-    xml->writeStartElement("commanders");
-    for (const CardRef &commander : commanders) {
-        xml->writeStartElement("commander");
-        xml->writeAttribute("providerId", commander.providerId);
-        xml->writeCharacters(commander.name);
-        xml->writeEndElement();
-    }
-    xml->writeEndElement();
     xml->writeTextElement("comments", comments);
 
     // Write tags
@@ -186,6 +167,25 @@ DeckList::DeckList(const Metadata &metadata,
 {
 }
 
+void DeckList::setCommanders(const QList<CardRef> &commanders)
+{
+    tree.clearCommanders();
+    for (const auto &card : commanders) {
+        tree.addCard(card.name, 1, DECK_ZONE_COMMANDER, -1, {}, {}, card.providerId);
+    }
+}
+
+QList<CardRef> DeckList::getCommanders() const
+{
+    QList<CardRef> result;
+    for (const auto *card : tree.getCardNodes({DECK_ZONE_COMMANDER})) {
+        for (int copy = 0; copy < card->getNumber(); ++copy) {
+            result.append(card->toCardRef());
+        }
+    }
+    return result;
+}
+
 QList<MoveCard_ToZone> DeckList::getCurrentSideboardPlan() const
 {
     if (!sideboardPlans.contains(CURRENT_SIDEBOARD_PLAN_KEY)) {
@@ -209,6 +209,8 @@ bool DeckList::readElement(QXmlStreamReader *xml)
         }
         if (childName == "zone") {
             tree.readZoneElement(xml);
+        } else if (childName == "commanders") {
+            tree.readCommandersElement(xml);
         } else if (childName == "sideboard_plan") {
             SideboardPlan newSideboardPlan;
             if (newSideboardPlan.readElement(xml)) {
@@ -328,9 +330,7 @@ bool DeckList::loadFromStream_Plain(QTextStream &in,
                                     bool preserveMetadata,
                                     const std::function<QString(const QString &)> &cardNameNormalizer)
 {
-    if (!preserveMetadata) {
-        metadata = {};
-    }
+    cleanList(preserveMetadata);
     bool ok = DeckListPlainText::parse(in, cardNameNormalizer, metadata, tree);
     refreshDeckHash();
     return ok;
@@ -344,17 +344,21 @@ bool DeckList::loadFromFile_Plain(QIODevice *device, const std::function<QString
 
 bool DeckList::saveToStream_Plain(QTextStream &stream, bool prefixSideboardCards, bool slashTappedOutSplitCards) const
 {
-    if (!metadata.commanders.isEmpty()) {
+    const auto commanders = getCardNodes({DECK_ZONE_COMMANDER});
+    if (!commanders.isEmpty()) {
         stream << "Commander\n";
-        for (const auto &commander : metadata.commanders) {
-            const auto name = slashTappedOutSplitCards ? QString(commander.name).replace("//", "/") : commander.name;
-            stream << "1 " << name << '\n';
+        for (const auto *card : commanders) {
+            auto name = card->getName();
+            if (slashTappedOutSplitCards) {
+                name.replace("//", "/");
+            }
+            stream << card->getNumber() << ' ' << name << '\n';
         }
         stream << "\nDeck\n";
     }
     auto writeToStream = [&stream, prefixSideboardCards, slashTappedOutSplitCards](const auto node, const auto card) {
         // The maybeboard is scratch space and never exported.
-        if (node->getName() == DECK_ZONE_MAYBEBOARD) {
+        if (node->getName() == DECK_ZONE_MAYBEBOARD || node->getName() == DECK_ZONE_COMMANDER) {
             return;
         }
         if (prefixSideboardCards && node->getName() == DECK_ZONE_SIDE) {
@@ -402,7 +406,7 @@ QString DeckList::writeToString_Plain(bool prefixSideboardCards, bool slashTappe
  */
 void DeckList::cleanList(bool preserveMetadata)
 {
-    tree.clear();
+    tree.clear(preserveMetadata);
     if (!preserveMetadata) {
         metadata = {};
     }

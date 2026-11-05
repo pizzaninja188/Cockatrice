@@ -49,8 +49,8 @@ cancellation, stack movement and reconnect use the existing casting transaction.
 See [format admission and acceptance](../../../../docs/FORMATS.md) for format data updates,
 validation and the pending end-user checks.
 
-`ruled_commander_editor` edits the deck's canonical commander declarations in both editors.
-DeckStateManager owns history and one-copy moves between those declarations and the mainboard.
+Both deck editors use the shared deck model and its Commander board. Native deck files
+continue to encode those cards as commander declarations for Servatrice.
 
 Upstream now keeps game state under `libcockatrice_game/libcockatrice/game/` and graphics
 under `cockatrice/src/game_graphics/`. `RuledGameController` implements the model-facing

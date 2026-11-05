@@ -2,7 +2,6 @@
 
 #include "../../../../client/settings/cache_settings.h"
 #include "../../../../client/settings/shortcuts_settings.h"
-#include "../../../../game/ruled/ruled_commander_editor.h"
 #include "../../deck_editor/deck_editor_card_database_dock_widget.h"
 #include "../../deck_editor/deck_editor_card_info_dock_widget.h"
 #include "../../deck_editor/deck_editor_deck_dock_widget.h"
@@ -84,7 +83,6 @@ void TabDeckEditorVisual::createCentralFrame()
 
     centralFrame = new QVBoxLayout;
     centralWidget->setLayout(centralFrame);
-    centralFrame->addWidget(new RuledCommanderEditor(deckStateManager, centralWidget));
     auto *validateDeck = new QPushButton(tr("Validate deck…"), centralWidget);
     connect(validateDeck, &QPushButton::clicked, this, &AbstractTabDeckEditor::actValidateDeck);
     centralFrame->addWidget(validateDeck);
@@ -188,13 +186,16 @@ void TabDeckEditorVisual::changeModelIndexAndCardInfo(const ExactCard &activeCar
     changeModelIndexToCard(activeCard);
 }
 
-/** @brief Selects the given card in the deck view, checking main and side zones. */
+/** @brief Selects the given card in the deck view. */
 void TabDeckEditorVisual::changeModelIndexToCard(const ExactCard &activeCard)
 {
     QString cardName = activeCard.getName();
-    QModelIndex index = deckStateManager->getModel()->findCard(cardName, DECK_ZONE_MAIN);
-    if (!index.isValid()) {
-        index = deckStateManager->getModel()->findCard(cardName, DECK_ZONE_SIDE);
+    QModelIndex index;
+    for (const auto &board : InnerDecklistNode::boardZoneNames()) {
+        index = deckStateManager->getModel()->findCard(cardName, board);
+        if (index.isValid()) {
+            break;
+        }
     }
     if (!deckDockWidget->getSelectionModel()->hasSelection()) {
         deckDockWidget->getSelectionModel()->setCurrentIndex(index, QItemSelectionModel::NoUpdate);

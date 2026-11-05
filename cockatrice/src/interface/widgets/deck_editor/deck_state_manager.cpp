@@ -205,62 +205,6 @@ void DeckStateManager::setFormat(const QString &format)
     doMetadataModified();
 }
 
-void DeckStateManager::setCommanders(const QList<CardRef> &commanders)
-{
-    if (deckList->getCommanders() == commanders) {
-        return;
-    }
-    requestHistorySave(tr("Change commanders"));
-    deckList->setCommanders(commanders);
-    doMetadataModified();
-}
-
-bool DeckStateManager::moveToCommander(const QModelIndex &index)
-{
-    if (!index.isValid() || !index.data(DeckRoles::IsCardRole).toBool()) {
-        return false;
-    }
-    const CardRef card{index.siblingAtColumn(DeckListModelColumns::CARD_NAME).data(Qt::EditRole).toString(),
-                       index.siblingAtColumn(DeckListModelColumns::CARD_PROVIDER_ID).data().toString()};
-    if (card.name.isEmpty()) {
-        return false;
-    }
-    return modifyDeck(tr("Move %1 to commanders").arg(card.name), [&](DeckListModel *model) {
-        if (!model->offsetCountAtIndex(index, -1)) {
-            return false;
-        }
-        auto commanders = deckList->getCommanders();
-        commanders.append(card);
-        deckList->setCommanders(commanders);
-        emit metadataModified();
-        return true;
-    });
-}
-
-bool DeckStateManager::returnCommanderToMainboard(int index)
-{
-    auto commanders = deckList->getCommanders();
-    if (index < 0 || index >= commanders.size()) {
-        return false;
-    }
-    const auto card = commanders.takeAt(index);
-    return modifyDeck(tr("Return %1 to mainboard").arg(card.name), [&](DeckListModel *model) {
-        const auto existing = model->findCard(card.name, DECK_ZONE_MAIN, card.providerId);
-        if (existing.isValid()) {
-            model->offsetCountAtIndex(existing, 1);
-        } else {
-            deckList->addCard(card.name, DECK_ZONE_MAIN, -1, {}, {}, card.providerId);
-        }
-        deckList->setCommanders(commanders);
-        deckList->refreshDeckHash();
-        model->rebuildTree();
-        emit model->cardNodesChanged();
-        emit model->deckHashChanged();
-        emit metadataModified();
-        return true;
-    });
-}
-
 QModelIndex DeckStateManager::addCard(const ExactCard &card, const QString &zoneName)
 {
     if (!card) {
@@ -272,8 +216,9 @@ QModelIndex DeckStateManager::addCard(const ExactCard &card, const QString &zone
     CardSetPtr set = card.getPrinting().getSet();
     QString setName = set ? set->getCorrectedShortName() : "";
 
-    QString reason =
-        tr("Added (%1): %2 (%3) %4").arg(targetZone, card.getName(), setName, card.getPrinting().getProperty("num"));
+    QString reason = tr("Added (%1): %2 (%3) %4")
+                         .arg(InnerDecklistNode::visibleNameFromName(targetZone), card.getName(), setName,
+                              card.getPrinting().getProperty("num"));
 
     QModelIndex idx = modifyDeck(reason, [&card, &targetZone](auto model) { return model->addCard(card, targetZone); });
 
@@ -364,8 +309,8 @@ bool DeckStateManager::swapCardAtIndex(const QModelIndex &idx)
     }
 
     QString zoneName = gparent.siblingAtColumn(DeckListModelColumns::CARD_NAME).data(Qt::EditRole).toString();
-    // tokens have no swap target
-    if (zoneName == DECK_ZONE_TOKENS) {
+    // Keep Commander separate from the mainboard/sideboard swap shortcut.
+    if (zoneName == DECK_ZONE_TOKENS || zoneName == DECK_ZONE_COMMANDER) {
         return false;
     }
     QString otherZoneName = zoneName == DECK_ZONE_MAIN ? DECK_ZONE_SIDE : DECK_ZONE_MAIN;
@@ -443,25 +388,25 @@ bool DeckStateManager::moveCardToZone(const QModelIndex &idx, const QString &tar
         return false;
     }
 
+    const auto set = idx.siblingAtColumn(DeckListModelColumns::CARD_SET).data(Qt::EditRole).toString();
+    const auto number = idx.siblingAtColumn(DeckListModelColumns::CARD_COLLECTOR_NUMBER).data(Qt::EditRole).toString();
+    if (!info) {
+        info = CardInfo::newInstance(cardName);
+    }
+
     QString reason = tr("Moved %1 × \"%2\" (%3) to %4")
                          .arg(copies)
                          .arg(cardName)
                          .arg(providerId)
                          .arg(InnerDecklistNode::visibleNameFromName(targetZoneName));
 
-    return modifyDeck(reason, [&idx, &cardName, &providerId, &targetZoneName, copies](auto model) {
+    return modifyDeck(reason, [&](auto model) {
         if (!model->removeRow(idx.row(), idx.parent())) {
             return false;
         }
 
-        if (ExactCard card = CardDatabaseManager::query()->getCard({cardName, providerId})) {
-            for (int i = 0; i < copies; ++i) {
-                model->addCard(card, targetZoneName);
-            }
-        } else {
-            for (int i = 0; i < copies; ++i) {
-                model->addPreferredPrintingCard(cardName, targetZoneName, true);
-            }
+        for (int i = 0; i < copies; ++i) {
+            model->addCard(info, targetZoneName, set, number, providerId);
         }
 
         return true;

@@ -29,6 +29,8 @@ class QXmlStreamReader;
 
 /** @brief Constant for the "main" deck zone name. */
 #define DECK_ZONE_MAIN "main"
+// Internal board key. XML cannot contain the separator, so older custom zones named "commander" stay distinct.
+#define DECK_ZONE_COMMANDER "\x1f" "commander"
 /** @brief Constant for the "sideboard" zone name. */
 #define DECK_ZONE_SIDE "side"
 /** @brief Constant for the "tokens" zone name. */

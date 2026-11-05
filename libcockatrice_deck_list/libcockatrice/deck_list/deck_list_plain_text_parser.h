@@ -15,7 +15,7 @@ namespace DeckListPlainText
 /**
  * @brief Parses a plain-text deck list into a tree and its metadata.
  *
- * Clears the tree first, then fills both from the text.
+ * Adds cards to a prepared tree. The first Commander section replaces any retained declarations.
  *
  * @param in The text to load
  * @param cardNameNormalizer Function that takes the parsed card name string

@@ -20,8 +20,9 @@ Both deck editors expose **Validate deck…**, also available in the Deck menu. 
 matching server, choose the validation format, and press Validate. The dialog uses the same
 server validator as game admission. Editing the deck or changing format invalidates its result;
 a response for an older deck cannot be presented as current. Invalid drafts can still be saved.
-Plain-text export includes Commander and Deck sections. Import also accepts `CM:` declarations,
-keeps those cards outside the mainboard, and preserves separate native commander metadata.
+Both editors use a Commander board. Use **Add to Zone → Commander** from the card database or
+**Move to zone → Commander** from the deck list. Native decks use the existing commander
+declarations. Plain text accepts a Commander section and `CM:` lines.
 
 ## Catalogue source and updates
 
@@ -88,9 +89,9 @@ establish interactive GUI acceptance. The user elected to test after implementat
 2. In Create Game, verify the Game setup options section is absent. Switch between formats.
    Standard fixes two seats and Commander permits two to four seats with a default of four.
    Reopen with remembered settings.
-3. In each editor, add/move one copy into Commander, undo/redo, save and reopen. The banner
-   remains independent. Export/re-import plain text and check the Commander section. Validate
-   a valid sample, an illegal copy count and an unsupported card.
+3. In each editor, use **Add to Zone → Commander** or **Move to zone → Commander**. Undo/redo,
+   save and reopen. The banner remains independent. Export/re-import plain text and check the
+   Commander board. Validate a valid sample, an illegal copy count and an unsupported card.
    Edit while a response is pending and verify that the old result is marked out of date.
 4. Select a legal deck, join from the second client, then reselect it. The second client sees
    that a deck is loaded and only the owner can view the list. Select an illegal deck. Only its

@@ -72,7 +72,6 @@ public:
         QString comments;            ///< Free-form comments or notes.
         QString gameFormat;          ///< The name of the game format this deck contains legal cards for
         CardRef bannerCard;          ///< Optional representative card for the deck.
-        QList<CardRef> commanders;   ///< Declared Commander cards, distinct from mainboard and banner.
         QStringList tags;            ///< User-defined tags for deck classification.
         QString lastLoadedTimestamp; ///< Timestamp string of last load.
         PlaymatInfo playmat;         ///< Optional playmat background for table+stack zones.
@@ -154,10 +153,7 @@ public:
     {
         metadata.bannerCard = _bannerCard;
     }
-    void setCommanders(const QList<CardRef> &_commanders = {})
-    {
-        metadata.commanders = _commanders;
-    }
+    void setCommanders(const QList<CardRef> &commanders = {});
     void setPlaymat(const PlaymatInfo &_playmat = {})
     {
         metadata.playmat = _playmat;
@@ -217,10 +213,7 @@ public:
     {
         return metadata.bannerCard;
     }
-    QList<CardRef> getCommanders() const
-    {
-        return metadata.commanders;
-    }
+    QList<CardRef> getCommanders() const;
     PlaymatInfo getPlaymat() const
     {
         return metadata.playmat;

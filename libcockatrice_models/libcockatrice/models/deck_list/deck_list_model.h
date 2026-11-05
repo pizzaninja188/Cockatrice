@@ -358,6 +358,11 @@ public:
      * @return QModelIndex pointing to the newly inserted card node.
      */
     QModelIndex addCard(const ExactCard &card, const QString &zoneName);
+    QModelIndex addCard(const CardInfoPtr &cardInfo,
+                        const QString &zoneName,
+                        const QString &cardSetName,
+                        const QString &collectorNumber,
+                        const QString &providerId);
 
     /**
      * @brief Changes the `amount` field in the card node at the index by the amount.
@@ -429,6 +434,12 @@ private:
     QString displayLang = "en";   /**< Language code for localized card names in the display role. */
 
     InnerDecklistNode *createNodeIfNeeded(const QString &name, InnerDecklistNode *parent);
+    QModelIndex addCard(const CardInfoPtr &cardInfo,
+                        const QString &zoneName,
+                        const QString &cardSetName,
+                        const QString &collectorNumber,
+                        const QString &providerId,
+                        bool matchStoredPrinting);
     QModelIndex nodeToIndex(AbstractDecklistNode *node) const;
     [[nodiscard]] DecklistModelCardNode *findCardNode(const QString &cardName,
                                                       const QString &zoneName,

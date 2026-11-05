@@ -482,7 +482,9 @@ void DeckLoader::saveToStream_DeckZoneCards(QTextStream &out,
     for (int i = cards.size() - 1; i >= 0; --i) {
         DecklistCardNode *card = cards[i];
 
-        if (boardZoneName == DECK_ZONE_SIDE && addComments) {
+        if (boardZoneName == DECK_ZONE_COMMANDER) {
+            out << "CM: ";
+        } else if (boardZoneName == DECK_ZONE_SIDE && addComments) {
             out << "SB: ";
         }
 

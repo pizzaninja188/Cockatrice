@@ -13,6 +13,7 @@
 #include <QStringView>
 #include <QXmlStreamAttributes>
 #include <QXmlStreamReader>
+#include <QXmlStreamWriter>
 #include <QtGlobal>
 
 static constexpr int MAX_DECK_SIZE = 1e5;
@@ -122,9 +123,26 @@ bool DecklistNodeTree::isEmpty() const
     return root->isEmpty();
 }
 
-void DecklistNodeTree::clear()
+void DecklistNodeTree::clear(bool preserveCommanders)
 {
+    auto *commanders = preserveCommanders ? findBoardZone(DECK_ZONE_COMMANDER) : nullptr;
+    if (commanders) {
+        root->removeOne(commanders);
+    }
     root->clearTree();
+    totalCards = 0;
+    if (commanders) {
+        root->append(commanders);
+        totalCards = commanders->recursiveCount(true);
+    }
+}
+
+void DecklistNodeTree::clearCommanders()
+{
+    if (auto *zone = findBoardZone(DECK_ZONE_COMMANDER)) {
+        totalCards = qMax(0, totalCards - zone->recursiveCount(true));
+        deleteNode(zone, root);
+    }
 }
 
 QList<const DecklistCardNode *> DecklistNodeTree::getCardNodes(const QSet<QString> &restrictToZones) const
@@ -170,7 +188,57 @@ QString DecklistNodeTree::computeDeckHash() const
 void DecklistNodeTree::write(QXmlStreamWriter *xml) const
 {
     for (int i = 0; i < root->size(); i++) {
-        root->at(i)->writeElement(xml);
+        if (root->at(i)->getName() != DECK_ZONE_COMMANDER) {
+            root->at(i)->writeElement(xml);
+        }
+    }
+
+    // Older clients and servers read one declaration per copy.
+    const auto commanders = getCardNodes({DECK_ZONE_COMMANDER});
+    if (!commanders.isEmpty()) {
+        xml->writeStartElement("commanders");
+        for (const auto *card : commanders) {
+            for (int copy = 0; copy < card->getNumber(); ++copy) {
+                xml->writeStartElement("commander");
+                xml->writeAttribute("providerId", card->getCardProviderId());
+                if (!card->getCardSetShortName().isEmpty()) {
+                    xml->writeAttribute("setShortName", card->getCardSetShortName());
+                }
+                if (!card->getCardCollectorNumber().isEmpty()) {
+                    xml->writeAttribute("collectorNumber", card->getCardCollectorNumber());
+                }
+                xml->writeCharacters(card->getName());
+                xml->writeEndElement();
+            }
+        }
+        xml->writeEndElement();
+    }
+}
+
+void DecklistNodeTree::readCommandersElement(QXmlStreamReader *xml)
+{
+    clearCommanders();
+    DecklistCardNode *previous = nullptr;
+    while (xml->readNextStartElement()) {
+        if (xml->name() != QStringLiteral("commander")) {
+            xml->skipCurrentElement();
+            continue;
+        }
+        const auto provider = xml->attributes().value("providerId").toString();
+        const auto set = xml->attributes().value("setShortName").toString();
+        const auto number = xml->attributes().value("collectorNumber").toString();
+        const auto name = xml->readElementText();
+        if (totalCards >= MAX_DECK_SIZE) {
+            xml->raiseError(QStringLiteral("Too many cards in deck"));
+            return;
+        }
+        if (previous && previous->getName() == name && previous->getCardSetShortName() == set &&
+            previous->getCardCollectorNumber() == number && previous->getCardProviderId() == provider) {
+            previous->setNumber(previous->getNumber() + 1);
+            ++totalCards;
+        } else {
+            previous = addCard(name, 1, DECK_ZONE_COMMANDER, -1, set, number, provider);
+        }
     }
 }
 
@@ -389,7 +457,7 @@ bool DecklistNodeTree::hasZoneName(const QString &zoneName) const
 {
     // The standard zones are reserved names even before they are created lazily.
     if (zoneName == DECK_ZONE_MAIN || zoneName == DECK_ZONE_SIDE || zoneName == DECK_ZONE_MAYBEBOARD ||
-        zoneName == DECK_ZONE_TOKENS) {
+        zoneName == DECK_ZONE_TOKENS || zoneName == DECK_ZONE_COMMANDER) {
         return true;
     }
 

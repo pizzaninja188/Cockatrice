@@ -19,7 +19,8 @@ namespace RuledDeckValidation
 bool normalize(const DeckList &deck, int playerId, ruled::v1::PlayerDeck &out, QString &error)
 {
     QStringList main, side;
-    int total = deck.getCommanders().size();
+    const auto commanders = deck.getCommanders();
+    int total = commanders.size();
     for (const auto &zone : {QStringLiteral(DECK_ZONE_MAIN), QStringLiteral(DECK_ZONE_SIDE)}) {
         auto &names = zone == DECK_ZONE_MAIN ? main : side;
         for (const auto *node : deck.getCardNodes({zone})) {
@@ -35,7 +36,8 @@ bool normalize(const DeckList &deck, int playerId, ruled::v1::PlayerDeck &out, Q
     }
     for (const auto *zone : deck.getZoneNodes()) {
         if (zone->getName() != DECK_ZONE_MAIN && zone->getName() != DECK_ZONE_SIDE &&
-            zone->getName() != DECK_ZONE_TOKENS && zone->getName() != DECK_ZONE_MAYBEBOARD) {
+            zone->getName() != DECK_ZONE_TOKENS && zone->getName() != DECK_ZONE_MAYBEBOARD &&
+            zone->getName() != DECK_ZONE_COMMANDER) {
             error = QStringLiteral("Unsupported deck section: %1").arg(zone->getName());
             return false;
         }
@@ -70,10 +72,10 @@ bool normalize(const DeckList &deck, int playerId, ruled::v1::PlayerDeck &out, Q
         out.add_sideboard_card_name(name.trimmed().toStdString());
     }
     auto *setup = out.mutable_commander_setup();
-    if (deck.getCommanders().isEmpty()) {
+    if (commanders.isEmpty()) {
         setup->set_no_commander(true);
     } else {
-        for (const auto &commander : deck.getCommanders()) {
+        for (const auto &commander : commanders) {
             setup->mutable_declared()->add_card_name(commander.name.trimmed().toStdString());
         }
     }
