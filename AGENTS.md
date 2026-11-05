@@ -6,7 +6,7 @@ current request; carry forward authorization and acceptance deferrals. Planning 
 ## Required workflow
 
 - Preserve unrelated edits. Keep one coherent outcome; avoid unrelated cleanup or optional polish.
-- Use Windows/PowerShell. For testable behavior, prove an intended focused red before implementation,
+- Use PowerShell on Windows or PowerShell 7 on Linux. For testable behavior, prove an intended focused red before implementation,
   then focused green after each coherent increment. Once stable, run the full affected-side gate,
   except for the explicitly eligible routine RON gate in the verification guide.
   Check exit codes. Documentation and mechanical changes need their actual contract checks, not
@@ -62,6 +62,8 @@ Verification commands, metadata preparation and evidence reuse are owned by
 [AGENT-VERIFICATION.md](docs/AGENT-VERIFICATION.md). Use its quiet runner for noisy commands and
 retain full failure logs. Updating external source datasets requires separate authorization.
 If a running executable blocks linking, stop only its exact process and rebuild.
+For headless Linux setup and local source/evidence transfer, see
+[HEADLESS-LINUX.md](docs/HEADLESS-LINUX.md). Keep Windows build coverage for Windows delivery.
 
 ## Manual Windows interaction
 

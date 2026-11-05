@@ -2,7 +2,9 @@
 
 This is the command source of truth for agent-driven changes. The root `AGENTS.md` defines when each tier is required; nested guidance adds subsystem-specific gates.
 
-The active agent workflow assumes Windows and PowerShell. Existing Linux/macOS scripts remain in the repository for possible future use, but they are not required agent gates.
+The agent workflow supports Windows PowerShell and PowerShell 7 on Linux. Use the
+same verification entry point on either host. For dependencies and local source
+transfer, see [headless Linux setup](HEADLESS-LINUX.md).
 
 ## Verification ladder
 
@@ -22,7 +24,7 @@ permits already-authorized delivery under the root instructions while retaining 
 
 Documentation, formatting, generated output, and mechanical moves do not require manufactured executable tests. Validate their actual contracts: links and targets, stale-reference searches, generators where applicable, and `git diff --check`.
 
-## Quiet Windows runner
+## Quiet command runner
 
 `scripts/run-quiet-command.ps1` runs one external command, stores complete output under `build/verification-logs`, prints one success line, prints the full log on failure, and exits with the wrapped command's exact status. Use it for noisy commands; do not hide failure output.
 
@@ -78,9 +80,13 @@ establish semantic scope. From the repository root:
 ```
 
 The script locates the checkout from its own path, so invoking it by an absolute path from another
-directory is also supported. Rust runs in `tricerules`; Ninja runs in a child Windows PowerShell;
-CTest uses `build/windows-ninja-all`, rejects an empty suite, and requires ruled E2E prerequisites
-with `RULED_E2E_REQUIRE=1`. The caller's E2E environment is restored after CTest.
+directory is also supported. Rust runs in `tricerules`. Build helpers use the current
+PowerShell host. Windows uses the MSVC `windows-ninja-all` preset. Linux configures
+and builds `linux-ninja-all` with system Qt packages. CTest uses the matching build
+directory, rejects an empty suite, and requires ruled E2E prerequisites with
+`RULED_E2E_REQUIRE=1`. Linux uses `QT_QPA_PLATFORM=offscreen`, including build-time
+test discovery. The caller's E2E and Qt platform environment is restored after CTest.
+`-OracleBulk` and `-CardsXml` pass explicit local input paths to CardData Check.
 
 Rust checks the production card-data dependency boundary, then selects full tests, all-target
 Clippy with warnings denied, and a separate format check for every package declared in the
@@ -97,15 +103,17 @@ fingerprint table, and checks Cargo's library artifact freshness. It restores ea
 bytes in `finally`, rebuilds restored inputs, and retains timings and Cargo logs. This is an
 explicit mutation test, not part of ordinary final verification.
 
-Every real run starts with `check-verification-environment.ps1`. It requires at least 20 GiB
-free on the repository, temporary-directory, and Cargo-target volumes, and probes Windows
-path canonicalization in the checkout and temporary directory. Replay uses this capability
+Every real run starts with `check-verification-environment.ps1`. By default it requires 20 GiB
+free on the repository, temporary-directory, and Cargo-target volumes, and probes native
+path canonicalization in the checkout and temporary directory (Windows handles or Linux
+`realpath`). Replay uses this capability
 to reject capture paths that escape their root. Some host sandboxes permit file IO but deny
 canonicalization; retry through the supported approval route rather than weakening replay
 validation. A failed preflight retains a normal failure log and summary and stops all later gates.
 It never deletes artifacts or changes permissions. `CARGO_TARGET_DIR` overrides are included;
 relative overrides resolve from `tricerules`. The capacity check is a minimum headroom check,
-not a guarantee that an arbitrary build will fit. Standalone preflight accepts `-MinimumFreeGiB`.
+not a guarantee that an arbitrary build will fit. Pass `-MinimumFreeGiB` to the full gate
+or standalone preflight to select a reserve based on the host's measured build usage.
 
 The workspace development profile (also inherited by tests) uses limited debug information
 and enables incremental compilation. Shared card-test suites reduce duplicated binaries and
@@ -308,6 +316,7 @@ powershell.exe -NoProfile -File tests/scripts/verify_workflow_test.ps1
 powershell.exe -NoProfile -File tests/scripts/routine_ron_verification_test.ps1
 powershell.exe -NoProfile -File tests/scripts/routine_ron_workflow_test.ps1
 powershell.exe -NoProfile -File tests/scripts/verification_environment_test.ps1
+powershell.exe -NoProfile -File tests/scripts/linux_workflow_test.ps1
 powershell.exe -NoProfile -File tests/scripts/rust_format_workflow_test.ps1
 powershell.exe -NoProfile -File tests/scripts/launch_ruled_game_test.ps1
 ```
