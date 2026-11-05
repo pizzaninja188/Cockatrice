@@ -367,6 +367,10 @@ void RuledPaymentUi::reconcileEnginePendingSpellCast()
                     rebuilt.source = RuledCastSource::Library;
                     rebuilt.handIndex = static_cast<int>(announcement.source().library_object_id());
                     break;
+                case ruled::v1::CastSource::kCommandZoneObjectId:
+                    rebuilt.source = RuledCastSource::Command;
+                    rebuilt.handIndex = static_cast<int>(announcement.source().command_zone_object_id());
+                    break;
                 default:
                     break;
             }
@@ -1535,6 +1539,9 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildCommand(RuledPlayerA
             break;
         case RuledCastSource::Library:
             source->set_library_object_id(static_cast<quint32>(pendingRuledSpellCast.handIndex));
+            break;
+        case RuledCastSource::Command:
+            source->set_command_zone_object_id(static_cast<quint32>(pendingRuledSpellCast.handIndex));
             break;
     }
     cast->set_x_value(static_cast<quint32>(pendingRuledSpellCast.xValue));

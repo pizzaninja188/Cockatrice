@@ -329,6 +329,7 @@ message CastSource {
     uint32 exile_object_id = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
     // Library casts bind only the exact current top object and use the generation below.
     uint32 library_object_id = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+    uint32 command_zone_object_id = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   }
   // Required for ordinary public-zone casts; hand casts use their current private slot.
   optional uint64 expected_zone_change_generation = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
@@ -929,6 +930,7 @@ enum CastSourceZone {
   CAST_SOURCE_ZONE_GRAVEYARD = 0;
   CAST_SOURCE_ZONE_EXILE = 1;
   CAST_SOURCE_ZONE_LIBRARY = 2;
+  CAST_SOURCE_ZONE_COMMAND = 3;
 }
 
 // A spell the player may cast from a public zone. Flashback and Adventure share this shape while
@@ -1534,12 +1536,18 @@ message RuledEvent {
     // A concealed card is becoming a publicly trackable face-down object. The relay changes
     // its presentation identity at this ordered boundary; canonical engine identity is unchanged.
     PresentationIdentityBreak presentation_identity_break = 41 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+    CommandZoneObjectMap command_zone_object_map = 42 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   }
 }
 
 message PresentationIdentityBreak {
   uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
   uint64 zone_change_generation = 2 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+}
+
+// Full replacement of public physical command-zone bindings, including when empty.
+message CommandZoneObjectMap {
+  repeated GraveyardObjectMap.Entry entries = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message AttackPaymentRequired {

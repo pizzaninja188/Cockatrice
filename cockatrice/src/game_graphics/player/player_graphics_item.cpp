@@ -1,6 +1,10 @@
 #include "player_graphics_item.h"
 
 #include "../../client/settings/cache_settings.h"
+#include "../../game/ruled/ruled_actions.h"
+#include "../../game/ruled/ruled_auxiliary_area.h"
+#include "../../game/ruled/ruled_public_card_zone.h"
+#include "../../game/ruled/ruled_restricted_mana_display.h"
 #include "../../interface/card_picture_loader/card_picture_loader.h"
 #include "../../interface/widgets/cards/art_crop_attribution.h"
 #include "../../interface/widgets/cards/card_art_utils.h"
@@ -9,8 +13,6 @@
 #include "../board/counter_general.h"
 #include "../card_dimensions.h"
 #include "../hand_counter.h"
-#include "../../game/ruled/ruled_actions.h"
-#include "../../game/ruled/ruled_restricted_mana_display.h"
 #include "../zones/hand_zone.h"
 #include "../zones/pile_zone.h"
 #include "../zones/stack_zone.h"
@@ -172,6 +174,20 @@ void PlayerGraphicsItem::initializeZones()
     zoneGraphicsItems.insert(player->getTableZone()->getName(), tableZoneGraphicsItem);
     zoneGraphicsItems.insert(player->getStackZone()->getName(), stackZoneGraphicsItem);
     zoneGraphicsItems.insert(player->getHandZone()->getName(), handZoneGraphicsItem);
+    if (RuledActions::isRuledGame(player->getGame())) {
+        if (auto *logic = player->getZone(QStringLiteral("command"))) {
+            auxiliaryArea = new RuledAuxiliaryArea(this);
+            auto *command = new RuledPublicCardZone(logic);
+            auxiliaryArea->addSection(command);
+            zoneGraphicsItems.insert(logic->getName(), command);
+            connect(command, &RuledPublicCardZone::extentChanged, auxiliaryArea, &RuledAuxiliaryArea::relayout);
+            connect(auxiliaryArea, &RuledAuxiliaryArea::extentChanged, this, [this] {
+                processSceneSizeChange(availablePlayerWidth > 0 ? availablePlayerWidth
+                                                                : static_cast<int>(getMinimumWidth()));
+                rearrangeZones();
+            });
+        }
+    }
 }
 
 void PlayerGraphicsItem::onCustomZoneAdded(QString customZoneName)
@@ -181,8 +197,7 @@ void PlayerGraphicsItem::onCustomZoneAdded(QString customZoneName)
     // or hand into a custom zone stay drawn at their old spot. Give them a hidden
     // pile zone so added cards are reparented to (0, 0) and hidden.
     CardZoneLogic *logic = player->getZone(customZoneName);
-    if (auto *existing = zoneGraphicsItems.value(customZoneName, nullptr);
-        existing && existing->getLogic() == logic) {
+    if (auto *existing = zoneGraphicsItems.value(customZoneName, nullptr); existing && existing->getLogic() == logic) {
         return;
     }
     if (auto *pileLogic = qobject_cast<PileZoneLogic *>(logic)) {
@@ -207,7 +222,7 @@ QRectF PlayerGraphicsItem::boundingRect() const
 qreal PlayerGraphicsItem::getMinimumWidth() const
 {
     qreal result = tableZoneGraphicsItem->getMinimumWidth() + CardDimensions::HEIGHT_F + 15 + counterAreaWidth +
-                   restrictedManaExtraWidth();
+                   restrictedManaExtraWidth() + auxiliaryWidth();
     if (!SettingsCache::instance().userInterface().getHorizontalHand()) {
         result += handZoneGraphicsItem->boundingRect().width();
     }
@@ -273,8 +288,10 @@ QPixmap PlayerGraphicsItem::scaledPlaymatFor(const QRectF &srcRect, const QSizeF
 
 void PlayerGraphicsItem::processSceneSizeChange(int newPlayerWidth)
 {
+    availablePlayerWidth = newPlayerWidth;
     // Extend table (and hand, if horizontal) to accommodate the new player width.
-    qreal tableWidth = newPlayerWidth - CardDimensions::HEIGHT_F - 15 - counterAreaWidth - restrictedManaExtraWidth();
+    qreal tableWidth = newPlayerWidth - CardDimensions::HEIGHT_F - 15 - counterAreaWidth - restrictedManaExtraWidth() -
+                       auxiliaryWidth();
     if (!SettingsCache::instance().userInterface().getHorizontalHand()) {
         tableWidth -= handZoneGraphicsItem->boundingRect().width();
     }
@@ -394,7 +411,7 @@ void PlayerGraphicsItem::rearrangeZones()
 void PlayerGraphicsItem::updateBoundingRect()
 {
     prepareGeometryChange();
-    qreal width = CardDimensions::HEIGHT_F + 15 + counterAreaWidth + restrictedManaExtraWidth();
+    qreal width = CardDimensions::HEIGHT_F + 15 + counterAreaWidth + restrictedManaExtraWidth() + auxiliaryWidth();
     if (SettingsCache::instance().userInterface().getHorizontalHand()) {
         qreal handHeight =
             player->getPlayerInfo()->getLocalOrJudge() ? handZoneGraphicsItem->boundingRect().height() : 0;
@@ -405,6 +422,11 @@ void PlayerGraphicsItem::updateBoundingRect()
             0, 0, width + handZoneGraphicsItem->boundingRect().width() + tableZoneGraphicsItem->boundingRect().width(),
             tableZoneGraphicsItem->boundingRect().height());
     }
+    if (auxiliaryArea) {
+        auto rect = tableZoneGraphicsItem->boundingRect().translated(tableZoneGraphicsItem->pos());
+        rect.setRight(rect.right() + auxiliaryWidth());
+        auxiliaryArea->anchorTo(rect, player->getPlayerInfo()->getLocal());
+    }
     playerArea->setSize(CardDimensions::HEIGHT_F + counterAreaWidth + restrictedManaExtraWidth() + 15, bRect.height());
 
     emit sizeChanged();
@@ -413,6 +435,11 @@ void PlayerGraphicsItem::updateBoundingRect()
 qreal PlayerGraphicsItem::restrictedManaExtraWidth() const
 {
     return restrictedManaDisplay ? restrictedManaDisplay->displayWidth() : 0;
+}
+
+qreal PlayerGraphicsItem::auxiliaryWidth() const
+{
+    return auxiliaryArea ? auxiliaryArea->reservedWidth() : 0;
 }
 
 void PlayerGraphicsItem::rearrangeSidebar()

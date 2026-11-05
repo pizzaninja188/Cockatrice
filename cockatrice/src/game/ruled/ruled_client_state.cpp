@@ -2324,6 +2324,9 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     ownedGraveyardCardToEngineOid.clear();
     graveyardOidToPlayerId.clear();
     ownedExileCardToEngineOid.clear();
+    ownedCommandCardToEngineOid.clear();
+    commandOidToPlayerId.clear();
+    commandOidToServerCardId.clear();
     exileOidToPlayerId.clear();
     exileOidToServerCardId.clear();
     pendingCastGraveyardOids.clear();

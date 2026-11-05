@@ -2125,6 +2125,7 @@ impl GameEngine {
                 }
                 let delta = super::life_numeric::loss_delta(result.dealt)?;
                 super::history::commit_life_change_checked(&mut self.state, index, delta)?;
+                self.record_commander_damage(event, result.dealt);
                 events.push(rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
                         player_id: player,

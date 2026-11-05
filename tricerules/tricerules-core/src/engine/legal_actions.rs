@@ -2251,7 +2251,12 @@ fn zone_prototype_variant(
     let mut prototype = action.clone();
     prototype.prototyped = true;
     if prototype.cast_method == rv1::CastMethod::Normal as i32 {
-        prototype.cost = prototype_face.mana_cost.to_string();
+        prototype.cost = if prototype.source_zone == rv1::CastSourceZone::Command as i32 {
+            eng.commander_cost(pid, oid, prototype_face.mana_cost.clone())
+                .to_string()
+        } else {
+            prototype_face.mana_cost.to_string()
+        };
     }
     prototype.eligible_restricted_mana_group_ids =
         eng.eligible_restricted_mana_for_spell(player_index, &prototype_face);
@@ -2292,6 +2297,7 @@ pub(super) fn cast_face_count_for_source(
             .len(),
         rv1::cast_source::Location::GraveyardObjectId(object_id)
         | rv1::cast_source::Location::ExileObjectId(object_id)
+        | rv1::cast_source::Location::CommandZoneObjectId(object_id)
         | rv1::cast_source::Location::LibraryObjectId(object_id) => {
             legal_zone_cast_actions(eng, pid)
                 .iter()
@@ -2895,6 +2901,42 @@ pub(super) fn legal_zone_cast_actions(
         }
     }
 
+    if !special {
+        for &object_id in &eng.state.players[player_index].command_zone {
+            let Some(object) = eng
+                .state
+                .objects
+                .get(&object_id)
+                .filter(|o| o.owner == pid && o.zone == Zone::Command)
+            else {
+                continue;
+            };
+            if !eng.state.players[player_index]
+                .declared_commander_object_ids
+                .contains(&object_id)
+            {
+                continue;
+            }
+            let Some(definition) = eng.registry.get(&object.card_id) else {
+                continue;
+            };
+            for (face_index, face) in definition.faces_iter().enumerate() {
+                if face.is_land || !definition.face_available_from_hand(face_index) {
+                    continue;
+                }
+                actions.extend(legal_zone_face_cast_actions(
+                    eng,
+                    pid,
+                    player_index,
+                    object_id,
+                    face_index,
+                    face,
+                    Some(Zone::Command),
+                ));
+            }
+        }
+    }
+
     // The active continuous permission applies to the current top object and each chosen face is
     // checked against it. A second library action is not offered while another command transaction
     // is awaiting a choice or payment. This is a normal cast, so timing and cost choices follow the
@@ -2974,7 +3016,7 @@ fn legal_zone_face_cast_actions(
         .get(&object_id)
         .copied()
         .unwrap_or(0);
-    let legendary = legendary_zone.is_some();
+    let legendary = matches!(legendary_zone, Some(Zone::Graveyard | Zone::Exile));
     let face_cast_permitted = eng.spell_cast_permitted_by_emblems(pid, face);
     let prototype_cast_permitted = !legendary
         && face.prototyped_face().is_some_and(|prototype_face| {
@@ -3016,6 +3058,7 @@ fn legal_zone_face_cast_actions(
         source_zone: match legendary_zone {
             Some(Zone::Graveyard) => rv1::CastSourceZone::Graveyard,
             Some(Zone::Exile) => rv1::CastSourceZone::Exile,
+            Some(Zone::Command) => rv1::CastSourceZone::Command,
             None => rv1::CastSourceZone::Library,
             _ => unreachable!("legendary hand casts use hand actions"),
         } as i32,
@@ -3029,6 +3072,9 @@ fn legal_zone_face_cast_actions(
         modes: vec![],
         cost: if legendary {
             ManaCost::default().to_string()
+        } else if legendary_zone == Some(Zone::Command) {
+            eng.commander_cost(pid, object_id, face.mana_cost.clone())
+                .to_string()
         } else {
             face.mana_cost.to_string()
         },

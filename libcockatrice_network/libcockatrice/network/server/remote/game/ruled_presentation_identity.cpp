@@ -73,11 +73,10 @@ bool supportedSchema()
             appendEnum(contract, file->enum_type(i));
         const QByteArray digest = QCryptographicHash::hash(
             QByteArray(contract.data(), static_cast<qsizetype>(contract.size())), QCryptographicHash::Sha256).toHex();
-        // As Foretold appends private offers and an exact source receipt to cast commands and
-        // announcements. Recursive CostObjectRef pair translation covers these nested identities;
-        // labels, costs and the unpayable-base flag introduce no identity domain. Audited descriptor
-        // changes preserve all existing fields; remapping and recipient isolation have regressions.
-        const QByteArray expected("e6858ee30123d767e86d5786220aeed45d313b2d5616d803e36851e532110465");
+        // Command-zone casts add a generation-bound CastSource and a public physical binding map.
+        // The source is translated by the paired-generation table; map entries reuse the audited
+        // public GraveyardObjectMap.Entry shape. The cast-source enum adds no identity domain.
+        const QByteArray expected("3f1c68f0e5fe941e05938a1710137f90e5ed4391c068d8dd2236beb78d95fa68");
         if (digest != expected)
             qCritical() << "ruled presentation schema needs an identity audit:" << digest;
         return digest == expected;
@@ -560,6 +559,7 @@ bool RuledPresentationIdentity::walk(Message *message, Walk &context)
         {"CastSource.graveyard_object_id", "expected_zone_change_generation"},
         {"CastSource.exile_object_id", "expected_zone_change_generation"},
         {"CastSource.library_object_id", "expected_zone_change_generation"},
+        {"CastSource.command_zone_object_id", "expected_zone_change_generation"},
         {"LandSource.graveyard_object_id", "expected_zone_change_generation"},
         {"LandSource.exile_object_id", "expected_zone_change_generation"},
         {"LandSource.library_object_id", "expected_zone_change_generation"},
@@ -592,8 +592,7 @@ bool RuledPresentationIdentity::walk(Message *message, Walk &context)
         {"StackAbilitySource.object_id", "zone_change_generation"},
         {"PublicHandCard.object_id", "zone_change_generation"},
         {"PrivateLibraryTopView.object_id", "zone_change_generation"},
-        {"FaceDownObjectMap.Entry.engine_object_id", "zone_change_generation"}
-    };
+        {"FaceDownObjectMap.Entry.engine_object_id", "zone_change_generation"}};
 
     // These five maps pack a public object handle into the key; their low bits remain the
     // engine's ability or face index. Rebuild the map so protobuf's map index stays coherent.

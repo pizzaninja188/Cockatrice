@@ -567,6 +567,7 @@ enum class RuledCastSource : int
     Graveyard,
     Exile,
     Library,
+    Command,
 };
 
 /// Participant-private identity of the current library top while an engine permission allows
@@ -1031,6 +1032,9 @@ public:
     QHash<quint32, int> graveyardOidToPlayerId;
     QHash<quint32, int> graveyardOidToServerCardId;
     QHash<quint64, quint32> ownedExileCardToEngineOid;
+    QHash<quint64, quint32> ownedCommandCardToEngineOid;
+    QHash<quint32, int> commandOidToPlayerId;
+    QHash<quint32, int> commandOidToServerCardId;
     QHash<quint32, int> exileOidToPlayerId;
     QHash<quint32, int> exileOidToServerCardId;
     // Graveyard OIDs the in-progress cast may target. Client-local UI state (not engine state):
@@ -1269,7 +1273,9 @@ public:
     }
     [[nodiscard]] quint32 engineOidForCardId(int ownerPlayerId, int cardId) const
     {
-        return ownerCardIdToEngineOid.value(makeOwnedCardKey(ownerPlayerId, cardId), 0);
+        return ownerCardIdToEngineOid.value(
+            makeOwnedCardKey(ownerPlayerId, cardId),
+            ownedCommandCardToEngineOid.value(makeOwnedCardKey(ownerPlayerId, cardId), 0));
     }
     /// A physical card may already be parked in Cockatrice's canonical stack zone while the
     /// engine-owned casting transaction is still awaiting payment. It becomes presentable only
@@ -1315,11 +1321,11 @@ public:
     }
     [[nodiscard]] int cardIdForEngineOid(quint32 engineOid) const
     {
-        return engineOidToCardId.value(engineOid, -1);
+        return engineOidToCardId.value(engineOid, commandOidToServerCardId.value(engineOid, -1));
     }
     [[nodiscard]] int playerIdForEngineOid(quint32 engineOid) const
     {
-        return engineOidOwner.value(engineOid, -1);
+        return engineOidOwner.value(engineOid, commandOidToPlayerId.value(engineOid, -1));
     }
     [[nodiscard]] bool isEngineOidSummoningSick(quint32 engineOid) const
     {

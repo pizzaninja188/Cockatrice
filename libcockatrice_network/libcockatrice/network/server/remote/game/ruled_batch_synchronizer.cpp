@@ -605,6 +605,15 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
                     break;
                 }
             }
+        } else if (source.location_case() == ruled::v1::CastSource::kCommandZoneObjectId) {
+            const quint32 oid = source.command_zone_object_id();
+            sourceLabel = QStringLiteral("command:%1").arg(oid);
+            auto *owner = dynamic_cast<Server_Player *>(cmdPlayer);
+            card = owner ? playerBinding(playerId).findCardByEngineOid(owner, oid) : nullptr;
+            sourceZone = owner ? owner->getZones().value(ZoneNames::COMMAND) : nullptr;
+            if (card && card->getZone() != sourceZone) {
+                card = nullptr;
+            }
         } else if (source.location_case() == ruled::v1::CastSource::kLibraryObjectId) {
             const quint32 oid = static_cast<quint32>(source.library_object_id());
             sourceLabel = QStringLiteral("library:%1").arg(oid);

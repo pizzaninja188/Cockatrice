@@ -1,3 +1,4 @@
+#include <libcockatrice/protocol/ruled_protocol_version.h>
 /** @file client_login_status_test.cpp
  *  @brief The login response state machine must keep the session a forced password change needs.
  *  @ingroup Tests
@@ -114,7 +115,7 @@ TEST_F(ClientLoginStatusTest, RejectsTheAmbiguousUpstreamProtocolBeforeLogin)
     QObject::connect(client, &RemoteClient::protocolVersionMismatch, client,
                      [&](int expected, int received) {
                          ++mismatches;
-                         EXPECT_EQ(expected, 10014);
+                         EXPECT_EQ(expected, kRuledProtocolVersion);
                          EXPECT_EQ(received, 14);
                      });
     Event_ServerIdentification identification;
@@ -131,7 +132,7 @@ TEST_F(ClientLoginStatusTest, MatchingForkProtocolContinuesToLogin)
     QObject::connect(client, &RemoteClient::protocolVersionMismatch, client,
                      [&](int, int) { ++mismatches; });
     Event_ServerIdentification identification;
-    identification.set_protocol_version(10014);
+    identification.set_protocol_version(kRuledProtocolVersion);
     ASSERT_TRUE(QMetaObject::invokeMethod(client, "processServerIdentificationEvent", Qt::DirectConnection,
                                          Q_ARG(Event_ServerIdentification, identification)));
     EXPECT_EQ(mismatches, 0);

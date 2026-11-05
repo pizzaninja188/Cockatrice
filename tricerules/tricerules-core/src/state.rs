@@ -989,6 +989,10 @@ pub struct PlayerState {
     /// Initial declaration, retained even when all commanders leave the command zone.
     /// Distinguishes a colorless commander from no commander for War Room's life cost.
     pub has_declared_commander: bool,
+    /// CR 903.8: committed command-zone casts by this player, per physical commander.
+    pub commander_cast_counts: BTreeMap<ObjectId, u32>,
+    /// CR 903.10a: combat damage received, per physical commander regardless of controller.
+    pub commander_damage: BTreeMap<ObjectId, u32>,
     pub mana_pool: ManaPool,
     /// Unrestricted mana included in `mana_pool` that survives ordinary combat-step boundaries.
     /// This engine-private subset is never published separately; it exists only to implement
@@ -1018,6 +1022,8 @@ impl PlayerState {
             declared_commander_object_ids: Vec::new(),
             color_identity: Vec::new(),
             has_declared_commander: false,
+            commander_cast_counts: BTreeMap::new(),
+            commander_damage: BTreeMap::new(),
             mana_pool: ManaPool::default(),
             retained_combat_mana: ManaPool::default(),
             restricted_mana: Vec::new(),

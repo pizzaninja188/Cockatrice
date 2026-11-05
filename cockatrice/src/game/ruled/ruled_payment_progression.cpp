@@ -3314,8 +3314,9 @@ bool RuledPaymentUi::startPublicZoneCast(RuledPlayerActions *actions, CardItem *
         return actions->ruledPayment->tryStartRuledSpellCast(card);
     }
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
-    const auto source =
-        card->getZone()->getName() == ZoneNames::EXILE ? RuledCastSource::Exile : RuledCastSource::Graveyard;
+    const auto source = card->getZone()->getName() == ZoneNames::COMMAND ? RuledCastSource::Command
+                        : card->getZone()->getName() == ZoneNames::EXILE ? RuledCastSource::Exile
+                                                                         : RuledCastSource::Graveyard;
     const quint32 oid = RuledActions::resolvePublicZoneObjectId(state, card);
     const bool hasSpecialOffer = state->specialCastObjectForSource(static_cast<int>(oid), source) != 0;
     const quint64 promptId = hasSpecialOffer ? captureSpecialCastPromptId(state, oid) : 0;
@@ -3348,15 +3349,17 @@ bool RuledPaymentUi::tryStartRuledSpellCast(CardItem *card)
         return true;
     }
     const bool fromHand = card->getZone()->getName() == ZoneNames::HAND;
-    const bool fromPublicZone =
-        card->getZone()->getName() == ZoneNames::GRAVE || card->getZone()->getName() == ZoneNames::EXILE;
+    const bool fromPublicZone = card->getZone()->getName() == ZoneNames::GRAVE ||
+                                card->getZone()->getName() == ZoneNames::EXILE ||
+                                card->getZone()->getName() == ZoneNames::COMMAND;
     if (!fromHand && !fromPublicZone) {
         return false;
     }
     RuledClientState *const geh = actions->player->getGame()->getGameEventHandler()->ruled();
     if (fromPublicZone) {
-        const RuledCastSource source =
-            card->getZone()->getName() == ZoneNames::GRAVE ? RuledCastSource::Graveyard : RuledCastSource::Exile;
+        const RuledCastSource source = card->getZone()->getName() == ZoneNames::COMMAND ? RuledCastSource::Command
+                                       : card->getZone()->getName() == ZoneNames::GRAVE ? RuledCastSource::Graveyard
+                                                                                        : RuledCastSource::Exile;
         const quint32 objectId = RuledActions::resolvePublicZoneObjectId(geh, card);
         if (objectId == 0 || !geh->isZoneActionLegal(objectId, source)) {
             return false;
@@ -3421,8 +3424,9 @@ bool RuledPaymentUi::tryRuledSpellCastFaceMenu(CardItem *card)
         return false; // preserve the ordinary right-click inspection menu
     }
     const bool fromHand = card->getZone()->getName() == ZoneNames::HAND;
-    const bool fromPublicZone =
-        card->getZone()->getName() == ZoneNames::GRAVE || card->getZone()->getName() == ZoneNames::EXILE;
+    const bool fromPublicZone = card->getZone()->getName() == ZoneNames::GRAVE ||
+                                card->getZone()->getName() == ZoneNames::EXILE ||
+                                card->getZone()->getName() == ZoneNames::COMMAND;
     if (!fromHand && !fromPublicZone) {
         return false;
     }
@@ -3433,8 +3437,9 @@ bool RuledPaymentUi::tryRuledSpellCastFaceMenu(CardItem *card)
     const int sourceIndex = fromHand
                                 ? RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_CAST_SPELL, card)
                                 : static_cast<int>(RuledActions::resolvePublicZoneObjectId(geh, card));
-    const RuledCastSource publicSource =
-        card->getZone()->getName() == ZoneNames::GRAVE ? RuledCastSource::Graveyard : RuledCastSource::Exile;
+    const RuledCastSource publicSource = card->getZone()->getName() == ZoneNames::COMMAND ? RuledCastSource::Command
+                                         : card->getZone()->getName() == ZoneNames::GRAVE ? RuledCastSource::Graveyard
+                                                                                          : RuledCastSource::Exile;
     if (sourceIndex < 0 ||
         (fromPublicZone &&
          (sourceIndex == 0 || !geh->isZoneActionLegal(static_cast<quint32>(sourceIndex), publicSource)))) {

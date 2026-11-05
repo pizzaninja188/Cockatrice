@@ -11014,6 +11014,78 @@ TEST_F(RuledBatchTest, GemstoneOpeningPrivateReferencesRoundTripThroughPresentat
     EXPECT_EQ(command.begin_with_gemstone_caverns().exile().zone_change_generation(),11u);
 }
 
+TEST_F(RuledBatchTest, CommandZoneCastSourceAndPublicBindingRoundTripThroughProjection)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *binding = batch.add_events()->mutable_command_zone_object_map()->add_entries();
+    binding->set_player_id(p1->getPlayerId());
+    binding->set_engine_object_id(901);
+    binding->set_server_card_id(17);
+    auto *offer = (*batch.mutable_legal_by_player())[p1->getPlayerId()].add_zone_cast_actions();
+    offer->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_COMMAND);
+    offer->set_object_id(901);
+    offer->set_zone_change_generation(4);
+    offer->set_card_name("Commander");
+    offer->set_cost("{3}{G}");
+    offer->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    ASSERT_TRUE(prepareIdentityBatch(batch));
+    const auto projected = redactFor(batch, p1);
+    ASSERT_EQ(projected.legal_by_player().at(p1->getPlayerId()).zone_cast_actions_size(), 1);
+    const auto &action = projected.legal_by_player().at(p1->getPlayerId()).zone_cast_actions(0);
+    const auto &mapped = projected.events(0).command_zone_object_map().entries(0);
+    EXPECT_EQ(mapped.engine_object_id(), action.object_id());
+    EXPECT_EQ(mapped.server_card_id(), 17);
+    EXPECT_TRUE(redactFor(batch, p2).legal_by_player().empty());
+    ruled::v1::RuledCommand command;
+    auto *cast = command.mutable_cast_spell();
+    cast->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    cast->mutable_source()->set_command_zone_object_id(action.object_id());
+    cast->mutable_source()->set_expected_zone_change_generation(action.zone_change_generation());
+    ASSERT_TRUE(canonicalizeClientCommand(p1->getPlayerId(), command));
+    EXPECT_EQ(command.cast_spell().source().command_zone_object_id(), 901u);
+    EXPECT_EQ(command.cast_spell().source().expected_zone_change_generation(), 4u);
+}
+
+TEST_F(RuledBatchTest, CommanderPaymentCancellationRestoresTheExactPhysicalCardAndOrder)
+{
+    auto *zone = new Server_CardZone(p1, ZoneNames::COMMAND, false, ServerInfo_Zone::PublicZone);
+    p1->addZone(zone);
+    auto *first = new Server_Card({"Grizzly Bears", "print-one"}, p1->newCardId(), 0, 0);
+    auto *second = new Server_Card({"Grizzly Bears", "print-two"}, p1->newCardId(), 0, 0);
+    zone->insertCard(first, -1, 0);
+    zone->insertCard(second, -1, 0);
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto view = buildPerPlayerView(p1, {}, {});
+    view.add_command_zone_object_ids(901);
+    view.add_command_zone_object_ids(902);
+    *seed.mutable_batch()->add_events()->mutable_zone_view()->add_per_player() = view;
+    ASSERT_TRUE(callBatchApply(seed).zoneViewApplied);
+    const auto originalOrder = zone->getCards();
+    ruled::v1::RuledCommand begin;
+    auto *announcement = begin.mutable_begin_spell_cast()->mutable_announcement();
+    announcement->mutable_source()->set_command_zone_object_id(902);
+    announcement->mutable_source()->set_expected_zone_change_generation(0);
+    announcement->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    ruled::v1::IpcResponse begun;
+    begun.set_ok(true);
+    auto *pending = (*begun.mutable_batch()->mutable_legal_by_player())[p1->getPlayerId()].mutable_pending_spell_cast();
+    pending->set_transaction_id(77);
+    pending->set_reserved_object_id(902);
+    pending->mutable_announcement()->CopyFrom(*announcement);
+    applyAcceptedCommandVisuals(p1->getPlayerId(), begin, begun);
+    EXPECT_FALSE(zone->getCards().contains(second));
+    EXPECT_TRUE(p1->getZones().value(ZoneNames::STACK)->getCards().contains(second));
+    ruled::v1::RuledCommand cancel;
+    cancel.mutable_cancel_spell_cast()->set_transaction_id(77);
+    ruled::v1::IpcResponse cancelled;
+    cancelled.set_ok(true);
+    applyAcceptedCommandVisuals(p1->getPlayerId(), cancel, cancelled);
+    EXPECT_EQ(zone->getCards(), originalOrder);
+    EXPECT_TRUE(p1->getZones().value(ZoneNames::STACK)->getCards().isEmpty());
+    EXPECT_EQ(second->getCardRef().providerId, QString("print-two"));
+}
+
 TEST_F(RuledBatchTest, OpeningReconnectRestoresRemainingQuotaAndClearsOnCompletion)
 {
     ruled::v1::IpcResponse response;

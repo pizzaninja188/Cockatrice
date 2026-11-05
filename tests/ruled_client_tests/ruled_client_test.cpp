@@ -15800,6 +15800,34 @@ TEST_F(RuledClientTest, PublicZoneCastActionsRequireTheClickedSourceZone)
     EXPECT_TRUE(state->zoneActionCost(77, 0, RuledCastSource::Exile, ruled::v1::CAST_METHOD_HARMONIZE).isEmpty());
 }
 
+TEST_F(RuledClientTest, CommanderBindingsAndOffersUseExactOwnerCardAndGeneration)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *entry = batch.add_events()->mutable_command_zone_object_map()->add_entries();
+    entry->set_player_id(kLocalPlayer);
+    entry->set_engine_object_id(900);
+    entry->set_server_card_id(12);
+    auto *offer = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_cast_actions();
+    offer->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_COMMAND);
+    offer->set_object_id(900);
+    offer->set_zone_change_generation(7);
+    offer->set_card_name("Commander");
+    offer->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    offer->set_cost("{3}{G}");
+    apply(batch);
+    EXPECT_EQ(state->engineOidForCardId(kLocalPlayer, 12), 900u);
+    EXPECT_EQ(state->engineOidForCardId(kOpponent, 12), 0u);
+    EXPECT_TRUE(state->isZoneCastActionLegal(900, 0, RuledCastSource::Command, ruled::v1::CAST_METHOD_NORMAL, 0, 7));
+    EXPECT_FALSE(state->isZoneCastActionLegal(900, 0, RuledCastSource::Command, ruled::v1::CAST_METHOD_NORMAL, 0, 6));
+    EXPECT_FALSE(state->isZoneActionLegal(900, RuledCastSource::Exile));
+    EXPECT_EQ(state->zoneActionCost(900, 0, RuledCastSource::Command, ruled::v1::CAST_METHOD_NORMAL),
+              QString("{3}{G}"));
+    ruled::v1::RuledEventBatch empty;
+    empty.add_events()->mutable_command_zone_object_map();
+    apply(empty);
+    EXPECT_EQ(state->engineOidForCardId(kLocalPlayer, 12), 0u);
+}
+
 TEST_F(RuledClientTest, AppliesExileLandActionsAndStablePermissionGroupSnapshots)
 {
     constexpr quint32 objectId = 700;

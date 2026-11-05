@@ -109,6 +109,9 @@ QJsonObject RuledClientState::diagnosticSnapshot() const
     FIELD(zoneAbilityIndicesByOid);
     FIELD(ownedGraveyardCardToEngineOid);
     FIELD(ownedExileCardToEngineOid);
+    FIELD(ownedCommandCardToEngineOid);
+    FIELD(commandOidToPlayerId);
+    FIELD(commandOidToServerCardId);
     FIELD(validTargetsByHandSlot);
     FIELD(validTargetsByZoneObject);
     FIELD(validTargetsByAbility);

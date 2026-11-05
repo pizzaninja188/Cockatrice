@@ -35,6 +35,7 @@ class BlockersPreview;
 class CombatDamageAssigned;
 class CreaturesRemovedFromCombat;
 class ExileObjectMap;
+class CommandZoneObjectMap;
 class FaceDownObjectMap;
 class GraveyardObjectMap;
 class HandSlotMap;
@@ -130,6 +131,7 @@ private:
     void applyHandSlotMap(const ruled::v1::HandSlotMap &map);
     void applyGraveyardObjectMap(const ruled::v1::GraveyardObjectMap &map);
     void applyExileObjectMap(const ruled::v1::ExileObjectMap &map);
+    void applyCommandZoneObjectMap(const ruled::v1::CommandZoneObjectMap &map);
     void applyZoneView(const ruled::v1::ZoneViewSync &view, BatchContext &ctx);
     void applyAttackersDeclared(const ruled::v1::AttackersDeclared &ad, BatchContext &ctx);
     void applyAttackersAdded(const ruled::v1::AttackersAdded &added, BatchContext &ctx);

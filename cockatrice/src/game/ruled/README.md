@@ -38,6 +38,17 @@ this a legal target, is this a creature — is answered from what the engine sen
 
 ### Upstream model and graphics adapters
 
+`ruled_auxiliary_area` owns a reusable per-player floating layout for independently typed sections.
+`ruled_public_card_zone` displays actual command-zone CardItems in that layout, anchored at the
+local battlefield's bottom right and each opponent's top right. Its reserved column keeps the
+battlefield's permanent layout clear. Empty sections collapse. Emblem/effect presentation may
+reuse the container without changing their engine locations or granting card interactions.
+Command-zone clicks use engine-offered casts and explicit public physical bindings; payment,
+cancellation, stack movement and reconnect use the existing casting transaction.
+
+`ruled_commander_editor` edits the deck's canonical commander declarations in both editors.
+DeckStateManager owns history and one-copy moves between those declarations and the mainboard.
+
 Upstream now keeps game state under `libcockatrice_game/libcockatrice/game/` and graphics
 under `cockatrice/src/game_graphics/`. `RuledGameController` implements the model-facing
 `RuledGameHooks` and the headless state-facing `RuledClientHost`; the tab owns its lifetime.

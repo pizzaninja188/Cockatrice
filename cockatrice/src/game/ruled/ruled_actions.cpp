@@ -482,6 +482,9 @@ quint32 resolvePublicZoneObjectId(const RuledClientState *state, const CardItem 
     if (card->getZone()->getName() == ZoneNames::EXILE) {
         return state->exileEngineOidForOwnedCard(playerId, card->getId());
     }
+    if (card->getZone()->getName() == ZoneNames::COMMAND) {
+        return state->ownedCommandCardToEngineOid.value(RuledClientState::makeOwnedCardKey(playerId, card->getId()), 0);
+    }
     return 0;
 }
 
@@ -669,7 +672,8 @@ bool tryHandlePublicZonePlay(CardItem *card, bool contextMenu)
     if (!card || !card->getOwner() || !card->getZone() || !isRuledGameForCard(card)) {
         return false;
     }
-    if (card->getZone()->getName() != ZoneNames::EXILE && card->getZone()->getName() != ZoneNames::GRAVE) {
+    if (card->getZone()->getName() != ZoneNames::EXILE && card->getZone()->getName() != ZoneNames::GRAVE &&
+        card->getZone()->getName() != ZoneNames::COMMAND) {
         return false;
     }
     RuledPlayerActions *actions = localPlayerActions(card->getOwner()->getGame());
@@ -689,7 +693,8 @@ bool isSingleClickPlayLegal(const CardItem *card)
     }
     const bool inHand = card->getZone()->getName() == ZoneNames::HAND;
     const bool inPublicCastZone = card->getZone()->getName() == ZoneNames::GRAVE ||
-                                  card->getZone()->getName() == ZoneNames::EXILE;
+                                  card->getZone()->getName() == ZoneNames::EXILE ||
+                                  card->getZone()->getName() == ZoneNames::COMMAND;
     if (!inHand && !inPublicCastZone) {
         return false;
     }
@@ -703,9 +708,9 @@ bool isSingleClickPlayLegal(const CardItem *card)
     }
     if (inPublicCastZone) {
         const quint32 objectId = resolvePublicZoneObjectId(state, card);
-        const RuledCastSource source = card->getZone()->getName() == ZoneNames::GRAVE
-                                           ? RuledCastSource::Graveyard
-                                           : RuledCastSource::Exile;
+        const RuledCastSource source = card->getZone()->getName() == ZoneNames::COMMAND ? RuledCastSource::Command
+                                       : card->getZone()->getName() == ZoneNames::GRAVE ? RuledCastSource::Graveyard
+                                                                                        : RuledCastSource::Exile;
         return objectId != 0 &&
                (state->isZoneActionLegal(objectId, source) || state->isZoneLandActionLegal(objectId, source));
     }

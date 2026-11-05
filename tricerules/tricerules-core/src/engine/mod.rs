@@ -84,6 +84,9 @@ use tricerules_proto::ruled::v1::{
 
 /// CR 514.1: default maximum hand size (Reliquary Tower–style overrides not modeled yet).
 const MAX_HAND_SIZE: usize = 7;
+mod commander;
+#[cfg(test)]
+mod commander_tests;
 /// A malformed or future policy must never make one command spin forever. Reaching the cap leaves
 /// the engine at its current valid priority window and publishes that settled state.
 const MAX_AUTOMATIC_PRIORITY_PASSES: usize = 128;

@@ -28,6 +28,7 @@ class PlayerDialogs;
 class PlayerMenu;
 class PlayerTarget;
 class RuledRestrictedManaDisplay;
+class RuledAuxiliaryArea;
 class StackZone;
 class TableZone;
 class AbstractCounter;
@@ -167,6 +168,8 @@ private:
     HandZone *handZoneGraphicsItem;
     HandCounter *handCounter;
     RuledRestrictedManaDisplay *restrictedManaDisplay = nullptr;
+    RuledAuxiliaryArea *auxiliaryArea = nullptr;
+    int availablePlayerWidth = 0;
     QRectF bRect;
     bool mirrored;
     bool handVisible = false;
@@ -180,6 +183,7 @@ private:
     QMetaObject::Connection playmatPixmapConnection;
 
     [[nodiscard]] qreal restrictedManaExtraWidth() const;
+    [[nodiscard]] qreal auxiliaryWidth() const;
     void rearrangeSidebar();
 
 private slots:

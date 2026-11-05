@@ -2894,6 +2894,7 @@ impl GameEngine {
                                     index,
                                     delta,
                                 )?;
+                                self.record_commander_damage(&damage_event, result.dealt);
                                 let total = life_lost.entry(player).or_default();
                                 *total = total
                                     .checked_add(delta)
@@ -3159,6 +3160,7 @@ impl GameEngine {
                                             index,
                                             delta,
                                         )?;
+                                        self.record_commander_damage(&damage_event, result.dealt);
                                         let total = life_lost.entry(player).or_default();
                                         *total = total.checked_add(delta).ok_or(
                                             EngineError::LifeNumericRange("combat life loss sum"),

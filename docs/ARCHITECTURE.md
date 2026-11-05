@@ -69,12 +69,16 @@ still depend on the embedded corpus.
 
 ### Fork wire compatibility
 
-The upstream integration uses the shared `kRuledProtocolVersion` (10014) on both client and
+The upstream integration uses the shared `kRuledProtocolVersion` (10015) on both client and
 server. Deploy matching updated fork clients and Servatrice together; protocol 14 peers are
 rejected before login. `Command_CreateGame.ruled_game` keeps field 15 and upstream
 `shuffle_players` uses field 16. The create-game UI and relay disable player shuffling for ruled
 games so the engine and physical seat bindings retain the same player identities.
-The inner `ruled_v1.proto` sidecar contract is unchanged by this upstream merge.
+Command-zone casts carry an exact object and zone-change generation through the ordinary
+casting/payment transaction. `CommandZoneObjectMap` publishes the public physical bindings,
+including empty replacements; its entries reuse the established public-zone entry type.
+Tax counts advance only on committed casts. Commander combat damage is tracked independently
+for each physical commander and recipient (CR 903.8, 903.10a; September 25, 2026 rules).
 
 ### Where things live
 

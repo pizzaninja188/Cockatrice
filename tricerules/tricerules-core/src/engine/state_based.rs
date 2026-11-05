@@ -223,8 +223,15 @@ impl GameEngine {
             }
         }
         let mut performed = false;
-        // CR 704.5c: a player with ten or more poison counters loses. All players at the
-        // threshold lose in the same SBA pass before their departures are reconciled.
+        // CR 903.10a / 704.6c: each physical commander's combat damage is tracked independently.
+        for player in &mut self.state.players {
+            if !player.has_lost && player.commander_damage.values().any(|damage| *damage >= 21) {
+                player.has_lost = true;
+                changed = true;
+                performed = true;
+            }
+        }
+        // CR 704.5c: players at ten poison lose in the same SBA pass before departures.
         for player in &mut self.state.players {
             if !player.has_lost
                 && player

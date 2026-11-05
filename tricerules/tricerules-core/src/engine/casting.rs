@@ -581,6 +581,7 @@ impl GameEngine {
                 Zone::Graveyard => candidate.graveyard.contains(&oid),
                 Zone::Exile => candidate.exile.contains(&oid),
                 Zone::Library => candidate.library.contains(&oid),
+                Zone::Command => candidate.command_zone.contains(&oid),
                 _ => false,
             })
             .map(|candidate| candidate.id)
@@ -606,6 +607,10 @@ impl GameEngine {
                 .position(|id| *id == oid),
             Zone::Library => self.state.players[holder_idx]
                 .library
+                .iter()
+                .position(|id| *id == oid),
+            Zone::Command => self.state.players[holder_idx]
+                .command_zone
                 .iter()
                 .position(|id| *id == oid),
             _ => None,
@@ -928,12 +933,23 @@ impl GameEngine {
             participant.graveyard.retain(|candidate| *candidate != oid);
             participant.exile.retain(|candidate| *candidate != oid);
             participant.library.retain(|candidate| *candidate != oid);
+            participant
+                .command_zone
+                .retain(|candidate| *candidate != oid);
         }
         let holder_idx = self
             .state
             .player_idx(state.original_holder)
             .ok_or(EngineError::UnknownPlayer(state.original_holder))?;
         match state.original_zone {
+            Zone::Command => {
+                let position = state
+                    .original_position
+                    .min(self.state.players[holder_idx].command_zone.len());
+                self.state.players[holder_idx]
+                    .command_zone
+                    .insert(position, oid);
+            }
             Zone::Hand => {
                 let position = state
                     .original_position
@@ -1129,6 +1145,24 @@ impl GameEngine {
         }
         let from_hand = matches!(source, rv1::cast_source::Location::HandIndex(_));
         let (oid, exile_permission_scope) = match source {
+            rv1::cast_source::Location::CommandZoneObjectId(source_oid) => {
+                if special
+                    || cast_method != SpellCastMethod::Normal
+                    || command.casting_permission_id.is_some()
+                    || !self.state.players[idx].command_zone.contains(source_oid)
+                    || !self.state.players[idx]
+                        .declared_commander_object_ids
+                        .contains(source_oid)
+                    || self
+                        .state
+                        .objects
+                        .get(source_oid)
+                        .is_none_or(|object| object.zone != Zone::Command || object.owner != player)
+                {
+                    return Err(EngineError::Illegal("card is not your castable commander"));
+                }
+                (*source_oid, None)
+            }
             rv1::cast_source::Location::HandIndex(hand_index) => {
                 if command.casting_permission_id.is_some() {
                     return Err(EngineError::Illegal(
@@ -1372,7 +1406,9 @@ impl GameEngine {
                 || def
                     .face_display_name(face_index)
                     .is_some_and(|display_name| display_name != face.name.as_str());
-        if from_hand && !def.face_available_from_hand(face_index) {
+        if (from_hand || matches!(source, rv1::cast_source::Location::CommandZoneObjectId(_)))
+            && !def.face_available_from_hand(face_index)
+        {
             return Err(EngineError::Illegal("face cannot be cast from hand"));
         }
         if matches!(
@@ -1542,7 +1578,12 @@ impl GameEngine {
         let mut chosen_modes: Vec<ChosenMode> = Vec::new();
         let mut chosen_mode_indices: Vec<u32> = Vec::new();
         let mut chosen_mode_labels: Vec<String> = Vec::new();
-        let mut extra_generic = 0;
+        let mut extra_generic =
+            if matches!(source, rv1::cast_source::Location::CommandZoneObjectId(_)) {
+                self.commander_tax(player, oid)
+            } else {
+                0
+            };
         if let Some(modal) = &modal_spell {
             if !targets.is_empty() {
                 return Err(EngineError::Illegal(
@@ -1904,6 +1945,13 @@ impl GameEngine {
         let prepare_source = self.state.prepare_spell_sources.get(&oid).cloned();
         let payment_plan = self.prepare_cost_transaction_commit(payment_plan)?;
         let payment = self.commit_prevalidated_cost_transaction(payment_plan, None)?;
+        if origin == Zone::Command {
+            let count = self.state.players[idx]
+                .commander_cast_counts
+                .entry(oid)
+                .or_default();
+            *count = count.saturating_add(1);
+        }
         let returned_attacker_assignment = payment.returned_attacker_assignment;
         let life_paid = payment.life_paid;
         let mana_spent = payment.mana_spent;

@@ -879,7 +879,7 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
         onlyCourtesyEvents &= event.has_attackers_preview() || event.has_blockers_preview() || event.has_log() ||
                               event.has_battlefield_object_map() || event.has_face_down_object_map() ||
                               event.has_hand_slot_map() || event.has_graveyard_object_map() ||
-                              event.has_exile_object_map();
+                              event.has_exile_object_map() || event.has_command_zone_object_map();
     }
     const bool preserveCombatCapabilities = batch.legal_by_player().empty() && hasCombatPreview && onlyCourtesyEvents;
     ctx.resolutionPromptSnapshotValid = batch.has_resolution_prompt_state();
@@ -1036,6 +1036,9 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
         }
         if (e.has_exile_object_map()) {
             applyExileObjectMap(e.exile_object_map());
+        }
+        if (e.has_command_zone_object_map()) {
+            applyCommandZoneObjectMap(e.command_zone_object_map());
         }
         if (e.has_zone_view()) {
             applyZoneView(e.zone_view(), ctx);
@@ -2544,6 +2547,20 @@ void RuledEventDispatcher::applyExileObjectMap(const ruled::v1::ExileObjectMap &
     }
 }
 
+void RuledEventDispatcher::applyCommandZoneObjectMap(const ruled::v1::CommandZoneObjectMap &map)
+{
+    state->ownedCommandCardToEngineOid.clear();
+    state->commandOidToPlayerId.clear();
+    state->commandOidToServerCardId.clear();
+    for (const auto &entry : map.entries()) {
+        const auto oid = entry.engine_object_id();
+        state->ownedCommandCardToEngineOid.insert(
+            RuledClientState::makeOwnedCardKey(entry.player_id(), entry.server_card_id()), oid);
+        state->commandOidToPlayerId.insert(oid, entry.player_id());
+        state->commandOidToServerCardId.insert(oid, entry.server_card_id());
+    }
+}
+
 void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, BatchContext &ctx)
 {
     ctx.preparationSnapshotSeen = true;
@@ -2859,6 +2876,9 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
                 break;
             case ruled::v1::CAST_SOURCE_ZONE_LIBRARY:
                 source = RuledCastSource::Library;
+                break;
+            case ruled::v1::CAST_SOURCE_ZONE_COMMAND:
+                source = RuledCastSource::Command;
                 break;
             default:
                 continue; // Ignore an unknown source zone instead of treating it as a graveyard offer.

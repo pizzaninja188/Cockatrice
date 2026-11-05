@@ -597,6 +597,24 @@ void RuledBroadcastRouter::appendServerObjectMaps(ruled::v1::IpcResponse &toSend
             *toSend.mutable_batch()->add_events() = handEv;
         }
     }
+    {
+        ruled::v1::RuledEvent event;
+        auto *map = event.mutable_command_zone_object_map();
+        for (auto *player : game->getPlayers().values()) {
+            if (!player) {
+                continue;
+            }
+            const auto &bindings =
+                synchronizer->playerBinding(player->getPlayerId()).commandZoneEngineOidToServerCardId;
+            for (auto it = bindings.constBegin(); it != bindings.constEnd(); ++it) {
+                auto *entry = map->add_entries();
+                entry->set_player_id(player->getPlayerId());
+                entry->set_engine_object_id(it.key());
+                entry->set_server_card_id(it.value());
+            }
+        }
+        *toSend.mutable_batch()->add_events() = event;
+    }
     // Graveyard OID map: lets the client map engine OIDs in valid_graveyard_ids to
     // server card ids so graveyard cards can be clicked as spell targets.
     {
