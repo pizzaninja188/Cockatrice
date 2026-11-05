@@ -161,6 +161,14 @@ Qt kit's `plugins/platforms` directory. The normal deployed Windows client carri
 Client snapshots include `zone_windows`: each visible/retained zone window's zone name, visibility,
 card count, local-dismissal policy, and close-button hint. This provides current-client UI evidence
 for stack and mandatory-choice windows without adding card identities to the window metadata.
+Batch exports also include `card_context_menus`, probing the shared card-menu entry point after
+the seek cycles. Each entry records player, zone, physical card ID, and whether a legacy menu
+was constructed. Probes do not activate actions or export menu labels, which can contain private
+card information. Ruled cards must not construct the generic upstream menu.
+`zone_context_menus` probes the actual player and zone popup bindings, recording action counts,
+non-inspection action counts and remaining legacy shortcuts. Battlefield, hand and library
+popups must be absent; graveyard/exile popups retain one inspection action. The hand-counter
+icon forwards to the hand zone's popup slot. No action labels or shortcut strings are exported.
 
 ## Resume locally with real clients
 

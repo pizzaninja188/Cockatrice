@@ -92,6 +92,12 @@ TEST_F(RuledE2ESmokeTest, DiagnosticReplayShowsProtectedStackWindow)
     ASSERT_TRUE(send(trigger));
     ASSERT_TRUE(p1.pumpUntil([&] { return p1.publishedStackItems == 2; }, 10000, "synthetic trigger on stack"));
     ASSERT_TRUE(p2.pumpUntil([&] { return p2.publishedStackItems == 2; }, 10000, "observer trigger on stack"));
+    ruled::v1::RuledCommand opposingCreature;
+    auto *opposingDev = opposingCreature.mutable_dev_command();
+    opposingDev->set_target_player_id(p2.myId);
+    opposingDev->mutable_put_card_in_zone()->set_card_name("Grizzly Bears");
+    opposingDev->mutable_put_card_in_zone()->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+    ASSERT_TRUE(send(opposingCreature));
     collectServerLogs();
     servatrice.kill();
     ASSERT_TRUE(servatrice.waitForFinished(5000));
@@ -123,7 +129,44 @@ TEST_F(RuledE2ESmokeTest, DiagnosticReplayShowsProtectedStackWindow)
     ASSERT_EQ(viewer.exitCode(), 0) << viewer.readAllStandardError().constData();
     QFile result(output);
     ASSERT_TRUE(result.open(QIODevice::ReadOnly));
-    const auto playback = QJsonDocument::fromJson(result.readAll()).object().value("current_playback_client").toObject();
+    const auto exported = QJsonDocument::fromJson(result.readAll()).object();
+    const auto playback = exported.value("current_playback_client").toObject();
+    ASSERT_TRUE(exported.contains("card_context_menus"));
+    const auto menus = exported.value("card_context_menus").toArray();
+    ASSERT_FALSE(menus.isEmpty());
+    bool ownBattlefield = false, opposingBattlefield = false, stack = false;
+    for (const auto &entry : menus) {
+        const auto menu = entry.toObject();
+        EXPECT_FALSE(menu.value("legacy_menu").toBool()) << QJsonDocument(menu).toJson().constData();
+        const auto zone = menu.value("zone").toString();
+        ownBattlefield |= zone == "table" && menu.value("player_id").toInt() == p1.myId;
+        opposingBattlefield |= zone == "table" && menu.value("player_id").toInt() == p2.myId;
+        stack |= zone == "stack";
+    }
+    EXPECT_TRUE(ownBattlefield);
+    EXPECT_TRUE(opposingBattlefield);
+    EXPECT_TRUE(stack);
+    ASSERT_TRUE(exported.contains("zone_context_menus"));
+    const auto zoneMenus = exported.value("zone_context_menus").toArray();
+    ASSERT_FALSE(zoneMenus.isEmpty());
+    QSet<QString> probedZones;
+    for (const auto &entry : zoneMenus) {
+        const auto menu = entry.toObject();
+        const auto zone = menu.value("zone").toString();
+        probedZones.insert(zone);
+        EXPECT_EQ(menu.value("unsafe_actions").toInt(), 0) << QJsonDocument(menu).toJson().constData();
+        if (zone == "player") {
+            EXPECT_EQ(menu.value("legacy_shortcuts").toInt(), 0);
+        } else if (zone == "table" || zone == "hand" || zone == "deck") {
+            EXPECT_FALSE(menu.value("shown").toBool()) << zone.toStdString();
+        } else if (zone == "grave" || zone == "rfg") {
+            EXPECT_TRUE(menu.value("shown").toBool()) << zone.toStdString();
+            EXPECT_EQ(menu.value("actions").toInt(), 1) << zone.toStdString();
+        }
+    }
+    for (const QString zone : {"player", "table", "hand", "deck", "grave", "rfg"}) {
+        EXPECT_TRUE(probedZones.contains(zone)) << zone.toStdString();
+    }
     ASSERT_TRUE(playback.contains("zone_windows"));
     bool stackVisible = false;
     for (const auto &entry : playback.value("zone_windows").toArray()) {

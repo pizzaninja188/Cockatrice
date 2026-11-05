@@ -11,12 +11,19 @@
 
 #include "../../interface/widgets/replay/replay_manager.h"
 #include "../../game_graphics/player/player_graphics_item.h"
+#include "../../game_graphics/board/card_item.h"
+#include "../../game_graphics/game_scene.h"
+#include "../../game_graphics/player/menu/card_menu.h"
+#include "../../game_graphics/player/menu/player_menu.h"
+#include "../../game_graphics/zones/card_zone.h"
 #include "ruled_client_ui.h"
 #include "../../interface/widgets/tabs/tab_game.h"
 #include "../../interface/widgets/tabs/tab_supervisor.h"
 #include "../../interface/window_main.h"
 #include <libcockatrice/game/abstract_game.h>
 #include <libcockatrice/game/player/player_logic.h>
+#include <libcockatrice/game/zones/card_zone_logic.h>
+#include <libcockatrice/utility/zone_names.h>
 #include "../prompt/game_prompt_widget.h"
 #include "ruled_client_diagnostics.h"
 #include "ruled_client_state.h"
@@ -270,6 +277,76 @@ void RuledDiagnosticViewer::openFromCommandLine(MainWindow *window, const QComma
                 if (!stableLayout())
                     return;
             }
+            // Exercise the shared card-menu seam after the rewind/forward cycles. Do not activate
+            // actions or record labels: menu text can contain recipient-private card information.
+            auto *scene = viewer->tab->getGameScene();
+            const QPointer<CardItem> previousCard = scene->getActiveCard();
+            QJsonArray cardMenus;
+            QJsonArray zoneMenus;
+            const auto menuCounts = [](QMenu *menu) {
+                int count = 0, unsafe = 0;
+                if (menu) {
+                    for (auto *action : menu->actions()) {
+                        if (!action->isVisible() || action->isSeparator()) continue;
+                        ++count;
+                        if (!action->property("ruledZoneInspection").toBool()) ++unsafe;
+                    }
+                }
+                return QPair<int, int>{count, unsafe};
+            };
+            for (auto *player : viewer->tab->getGame()->getPlayerManager()->getPlayers()) {
+                auto *graphics = RuledActions::graphics(player);
+                if (!graphics) {
+                    continue;
+                }
+                auto *playerMenu = graphics->getPlayerMenu();
+                if (player->getPlayerInfo()->getLocal()) {
+                    playerMenu->setShortcutsInactive();
+                    playerMenu->setShortcutsActive();
+                }
+                const auto rootCounts = menuCounts(playerMenu->getPlayerMenu());
+                int legacyShortcuts = 0;
+                for (auto *action : playerMenu->getPlayerMenu()->findChildren<QAction *>()) {
+                    if (!action->property("ruledZoneInspection").toBool() && !action->shortcuts().isEmpty())
+                        ++legacyShortcuts;
+                }
+                zoneMenus.append(QJsonObject{{"player_id", player->getPlayerInfo()->getId()},
+                                              {"zone", "player"}, {"actions", rootCounts.first},
+                                              {"unsafe_actions", rootCounts.second},
+                                              {"legacy_shortcuts", legacyShortcuts}});
+                for (const char *name : {ZoneNames::TABLE, ZoneNames::HAND, ZoneNames::DECK,
+                                         ZoneNames::GRAVE, ZoneNames::EXILE, ZoneNames::SIDEBOARD}) {
+                    auto *zone = graphics->getZoneGraphicsItem(QString::fromLatin1(name));
+                    if (!zone) continue;
+                    const bool shown = zone->showContextMenu(QPoint(0, 0));
+                    QMenu *popup = nullptr;
+                    for (auto *widget : QApplication::topLevelWidgets()) {
+                        auto *candidate = qobject_cast<QMenu *>(widget);
+                        if (candidate && candidate->isVisible()) popup = candidate;
+                    }
+                    const auto counts = menuCounts(popup);
+                    zoneMenus.append(QJsonObject{{"player_id", player->getPlayerInfo()->getId()},
+                                                  {"zone", QString::fromLatin1(name)},
+                                                  {"shown", shown}, {"actions", counts.first},
+                                                  {"unsafe_actions", counts.second}});
+                    if (popup) popup->hide();
+                }
+                for (auto *zone : player->getZones()) {
+                    for (auto *card : RuledActions::cardItems(zone->getCards())) {
+                        scene->setActiveCard(card);
+                        auto *menu = graphics->getPlayerMenu()->updateCardMenu(card->getState());
+                        cardMenus.append(QJsonObject{{"player_id", player->getPlayerInfo()->getId()},
+                                                     {"zone", zone->getName()},
+                                                     {"card_id", card->getId()},
+                                                     {"legacy_menu", menu != nullptr}});
+                        delete menu;
+                    }
+                }
+            }
+            scene->setActiveCard(previousCard);
+            viewer->tab->setCardMenu(nullptr);
+            viewer->comparison.insert("card_context_menus", cardMenus);
+            viewer->comparison.insert("zone_context_menus", zoneMenus);
             QString error;
             const bool ok = RuledDiagnosticJournal::writeJson(output, viewer->comparison, &error);
             if (!ok)

@@ -54,6 +54,20 @@ setting remain behind its product-policy guard. Servatrice rejects absent/false 
 before allocating a game; the dialog and autopilot always send true. Historical replay viewing
 and shared upstream presentation implementations remain available.
 
+The generic upstream `CardMenu` fallback is suppressed for ruled cards at
+`PlayerMenu::updateCardMenu`, covering both right-click and the top-level Card menu.
+Engine-authored right-click actions run before that fallback. Hover and middle-click inspection
+keep their existing recipient-permission checks. Batch playback exports `card_context_menus`
+probes after seeking; these record only whether a legacy menu exists, never its action labels.
+
+`ruled_zone_menus` restricts the shared player/zone menu objects to read-only graveyard, exile,
+sideboard and command-zone views. Battlefield, empty-hand/hand-counter and library popup
+bindings are cleared, including the library's legacy double-click draw. Player-focus refreshes
+activate only inspection shortcuts from these menus; the separate counter/mana shortcut signal
+path is preserved. Upstream menu implementations and translation ownership remain intact.
+Batch `zone_context_menus` probes exercise actual popup slots and check inspection-only actions
+and the absence of legacy zone shortcuts after focus changes.
+
 ### `ruled_client_state.{h,cpp}` — `RuledClientState`
 
 A `QObject` parented to `RuledGameController`; the client's whole picture of the ruled game.

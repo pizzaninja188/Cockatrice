@@ -15,6 +15,7 @@
 #include "hand_menu.h"
 #include "../../../game/ruled/ruled_actions.h"
 #include "../../../game/ruled/ruled_zone_view_policy.h"
+#include "../../../game/ruled/ruled_zone_menus.h"
 
 #include <libcockatrice/protocol/pb/command_reveal_cards.pb.h>
 
@@ -80,10 +81,12 @@ PlayerMenu::PlayerMenu(PlayerGraphicsItem *_player) : QObject(_player), player(_
     refreshShortcuts();
 
     retranslateUi();
+    RuledZoneMenus::configure(*this);
 }
 
 void PlayerMenu::setMenusForGraphicItems()
 {
+    if (RuledZoneMenus::bind(*this)) return;
     player->getTableZoneGraphicsItem()->setMenu(playerMenu);
     player->getGraveyardZoneGraphicsItem()->setMenu(graveMenu, graveMenu->aViewGraveyard);
     player->getRfgZoneGraphicsItem()->setMenu(rfgMenu, rfgMenu->aViewRfg);
@@ -97,6 +100,11 @@ void PlayerMenu::setMenusForGraphicItems()
 QMenu *PlayerMenu::updateCardMenu(CardState *card)
 {
     if (!card) {
+        emit cardMenuUpdated(nullptr);
+        return nullptr;
+    }
+    // Engine-authored action menus are handled before this legacy fallback.
+    if (RuledActions::isRuledGame(player->getLogic()->getGame())) {
         emit cardMenuUpdated(nullptr);
         return nullptr;
     }
@@ -155,6 +163,10 @@ void PlayerMenu::refreshShortcuts()
 void PlayerMenu::setShortcutsActive()
 {
     shortcutsActive = true;
+    if (RuledZoneMenus::activateShortcuts(*this)) {
+        emit shortcutsActivated();
+        return;
+    }
     for (auto *c : managedComponents) {
         c->setShortcutsActive();
     }

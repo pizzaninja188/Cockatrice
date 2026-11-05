@@ -33,6 +33,7 @@ struct CardRef;
 class PlayerMenu : public QObject
 {
     Q_OBJECT
+    friend struct RuledZoneMenus;
 
 signals:
     void cardMenuUpdated(CardMenu *cardMenu);
