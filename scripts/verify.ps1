@@ -19,6 +19,7 @@ param(
     [string] $Side,
     [switch] $CardData,
     [switch] $Preview,
+    [switch] $DisposableBuild,
     [switch] $RecordRoutineBaseline,
     [string] $RoutineRonBaseline,
     [string] $OracleBulk,
@@ -44,6 +45,10 @@ if ($Preview -and ($RoutineRonBaseline -or $RecordRoutineBaseline)) {
     Write-Error 'Baseline recording and routine RON selection require a real run; Preview executes no commands.' -ErrorAction Continue
     exit 2
 }
+if ($DisposableBuild -and ($RoutineRonBaseline -or $RecordRoutineBaseline)) {
+    Write-Error 'Disposable builds use a cold environment and require the full verification plan.' -ErrorAction Continue
+    exit 2
+}
 $repo = Split-Path -Parent $PSScriptRoot
 $windowsPowerShell = (Get-Process -Id $PID).Path
 $isWindowsHost = [IO.Path]::DirectorySeparatorChar -eq '\'
@@ -52,6 +57,41 @@ $buildScript = if ($isWindowsHost) { 'build-ninja.ps1' } else { 'build-linux.ps1
 $buildDirectory = if ($isWindowsHost) { 'build/windows-ninja-all' } else { 'build/linux-ninja-all' }
 $environmentArguments = @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'check-verification-environment.ps1'))
 if ($PSBoundParameters.ContainsKey('MinimumFreeGiB')) { $environmentArguments += @('-MinimumFreeGiB', [string] $MinimumFreeGiB) }
+
+function Assert-DisposableBuildPath {
+    param([string] $Path)
+    $prefix = [IO.Path]::GetFullPath($repo).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+    $comparison = if ($isWindowsHost) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    if (-not $Path.StartsWith($prefix, $comparison) -or $Path -cne [IO.Path]::GetFullPath($Path)) {
+        throw "Disposable build output is outside the checkout: $Path"
+    }
+    for ($directory = [IO.DirectoryInfo]::new($Path); $directory; $directory = $directory.Parent) {
+        $item = Get-Item -LiteralPath $directory.FullName -Force -ErrorAction SilentlyContinue
+        if ($item -and (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint))) {
+            throw "Disposable build refused a non-directory or linked path: $($item.FullName)"
+        }
+    }
+}
+
+function Remove-DisposableBuildOutput {
+    param([string] $Path)
+    Assert-DisposableBuildPath $Path
+    if (-not [IO.Directory]::Exists($Path)) { return }
+    if ($isWindowsHost) {
+        # Unlink junctions explicitly. Recursive deletion can try to unmount a junction
+        # and fail even when the caller can remove the link itself.
+        $pending = [Collections.Generic.Stack[string]]::new()
+        $pending.Push($Path)
+        while ($pending.Count) {
+            foreach ($item in Get-ChildItem -LiteralPath $pending.Pop() -Force -Directory) {
+                if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { [IO.Directory]::Delete($item.FullName) }
+                else { $pending.Push($item.FullName) }
+            }
+        }
+    }
+    Remove-Item -LiteralPath $Path -Recurse -Force
+    Write-Output "Removed disposable build output: $Path"
+}
 
 function Add-VerificationStep {
     param([string] $Label, [string] $Executable, [string[]] $Arguments,
@@ -73,7 +113,7 @@ function Get-FullVerificationSteps {
     param([string] $SelectedSide, [bool] $CheckCardData)
     $steps = [Collections.Generic.List[object]]::new()
     $preflight = $environmentArguments
-    if ($SelectedSide -eq 'Cpp') { $preflight += '-SkipRustCache' }
+    if ($SelectedSide -eq 'Cpp' -or $DisposableBuild) { $preflight += '-SkipRustCache' }
     Add-VerificationStep 'Verification environment' $windowsPowerShell $preflight
     if ($CheckCardData) {
         $cardArguments = @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'update-card-data.ps1'), '-Mode', 'Check')
@@ -108,6 +148,7 @@ $steps = [Collections.Generic.List[object]]::new()
 foreach ($fullStep in @(Get-FullVerificationSteps -SelectedSide $Side -CheckCardData ([bool] $CardData))) { $steps.Add($fullStep) }
 
 if ($Preview) {
+    if ($DisposableBuild) { Write-Output 'Disposable build environment: CARGO_INCREMENTAL=0; clean checkout-local Cargo and Ninja outputs after verification.' }
     foreach ($step in $steps) {
         Write-Output "[$($step.Label)] cwd: $($step.WorkingDirectory)"
         # JSON preserves the argument boundaries; this is display, not shell command text.
@@ -121,10 +162,10 @@ if ($Preview) {
 $leaseDirectory = Join-Path $repo 'build'
 $originalCacheBudget = $env:COCKATRICE_RUST_CACHE_BUDGET_GIB
 $cacheBudget = $originalCacheBudget
-if ($Side -ne 'Cpp' -and -not $cacheBudget) {
+if (-not $DisposableBuild -and $Side -ne 'Cpp' -and -not $cacheBudget) {
     $budgetFile = Join-Path $leaseDirectory 'rust-cache-budget-gib'
     if (Test-Path -LiteralPath $budgetFile -PathType Leaf) {
-        $cacheBudget = (Get-Content -LiteralPath $budgetFile -Raw).Trim()
+        $cacheBudget = ([string](Get-Content -LiteralPath $budgetFile -Raw)).Trim()
     }
 }
 New-Item -ItemType Directory -Path $leaseDirectory -Force | Out-Null
@@ -136,7 +177,7 @@ try {
         try { [IO.File]::Open($leasePath, 'CreateNew', 'Write', 'ReadWrite').Dispose() }
         catch [IO.IOException] { if (-not [IO.File]::Exists($leasePath)) { throw } }
     }
-    $lease = if ($Side -ne 'Cpp' -and $cacheBudget) {
+    $lease = if ($DisposableBuild -or ($Side -ne 'Cpp' -and $cacheBudget)) {
         [IO.File]::Open($leasePath, 'Open', 'ReadWrite', 'None')
     } else {
         [IO.File]::Open($leasePath, 'Open', 'Read', 'Read')
@@ -166,7 +207,30 @@ $summary = [ordered]@{
 }
 $code = 0
 $currentStep = $null
+$disposableOutputs = @()
+$savedCargoEnvironment = @{}
 try {
+    if ($DisposableBuild) {
+        $gitDirectory = & git -C $repo rev-parse --absolute-git-dir
+        if ($LASTEXITCODE -ne 0) { throw 'Disposable builds require a linked Git worktree.' }
+        $commonDirectory = & git -C $repo rev-parse --path-format=absolute --git-common-dir
+        if ($LASTEXITCODE -ne 0 -or -not $gitDirectory -or -not $commonDirectory -or $gitDirectory -eq $commonDirectory) {
+            throw 'Disposable builds require a linked Git worktree.'
+        }
+        $cargoOutput = [IO.Path]::GetFullPath((Join-Path $repo 'tricerules/target'))
+        $ninjaOutput = [IO.Path]::GetFullPath((Join-Path $repo $buildDirectory))
+        foreach ($path in @($cargoOutput, $ninjaOutput)) {
+            Assert-DisposableBuildPath $path
+            if (Test-Path -LiteralPath $path) { throw "Disposable builds require a worktree without existing build output: $path" }
+        }
+        $disposableOutputs = @($cargoOutput, $ninjaOutput)
+        $cargoEnvironment = @{ CARGO_INCREMENTAL = '0'; CARGO_TARGET_DIR = $cargoOutput; CARGO_BUILD_BUILD_DIR = $cargoOutput }
+        foreach ($name in $cargoEnvironment.Keys) {
+            $savedCargoEnvironment[$name] = [Environment]::GetEnvironmentVariable($name)
+            Set-Item -LiteralPath "Env:$name" -Value $cargoEnvironment[$name]
+        }
+        $summary.DisposableBuild = $true
+    }
     if ($RecordRoutineBaseline -or $RoutineRonBaseline) {
         . (Join-Path $PSScriptRoot 'routine-ron-checks.ps1')
         if ($RoutineRonBaseline) {
@@ -265,6 +329,21 @@ catch {
     Get-Content -LiteralPath $errorPath
 }
 finally {
+    foreach ($name in $savedCargoEnvironment.Keys) {
+        [Environment]::SetEnvironmentVariable($name, $savedCargoEnvironment[$name])
+    }
+    foreach ($path in $disposableOutputs) {
+        try {
+            Remove-DisposableBuildOutput $path
+        }
+        catch {
+            if ($code -eq 0) { $code = 1 }
+            $cleanupLog = Join-Path $runDirectory 'disposable-cleanup-error.log'
+            $_ | Out-String | Add-Content -LiteralPath $cleanupLog
+            $summary.DisposableCleanupError = $cleanupLog
+            Write-Output "Could not remove disposable build output ${path}. $_"
+        }
+    }
     $lease.Dispose()
     $summary.CompletedAt = [DateTime]::UtcNow.ToString('o')
     $summary.ExitCode = $code

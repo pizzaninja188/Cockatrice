@@ -146,6 +146,21 @@ in-checkout target and build directories. Use this option only while external Ca
 editor builds and test processes for the checkout are idle. The verification entry point
 holds an exclusive checkout lease when the budget is enabled.
 
+For one-off validation, run the full gate from a fresh linked Git worktree with
+`-DisposableBuild`. This uses checkout-local Cargo paths and disables incremental compilation
+for that invocation. It requires the Cargo target and host Ninja output directories to be
+absent on entry. It removes those generated trees after success or failure, while the
+checkout, local inputs and verification logs remain available for review.
+
+```powershell
+./scripts/verify.ps1 -Side Both -CardData -DisposableBuild
+```
+
+Keep other builds idle in that worktree until the gate exits. If the process is forcibly
+terminated before cleanup, a later disposable run rejects the leftover outputs. Inspect
+and remove the two generated trees or use a fresh worktree. Retain needed logs before
+removing the worktree itself.
+
 Every selection ends with `git diff --check`. Preview prints argument arrays and working
 directories without running commands or creating artifacts.
 With `-CardData`, the complete read-only card check follows preflight, before the full suites.

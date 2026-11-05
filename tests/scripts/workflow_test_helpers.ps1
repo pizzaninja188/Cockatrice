@@ -72,7 +72,8 @@ $arguments = @($args | Select-Object -Skip 1)
 $root = Split-Path -Parent $PSScriptRoot
 $joined = $arguments -join ' '
 $record = @{ Tool = $tool; Arguments = $arguments; Cwd = (Get-Location).Path; RequireE2E = $env:RULED_E2E_REQUIRE;
-    BuildJobs = $env:CARGO_BUILD_JOBS; TestThreads = $env:RUST_TEST_THREADS; Qpa = $env:QT_QPA_PLATFORM }
+    BuildJobs = $env:CARGO_BUILD_JOBS; TestThreads = $env:RUST_TEST_THREADS; Qpa = $env:QT_QPA_PLATFORM;
+    Incremental = $env:CARGO_INCREMENTAL; CargoTarget = $env:CARGO_TARGET_DIR; CargoBuildDir = $env:CARGO_BUILD_BUILD_DIR }
 ($record | ConvertTo-Json -Compress) | Add-Content -LiteralPath (Join-Path $root 'trace.jsonl')
 $failure = Join-Path $root 'fail-pattern'
 if ((Test-Path -LiteralPath $failure) -and "$tool $joined" -match ([IO.File]::ReadAllText($failure))) {
@@ -105,6 +106,25 @@ if ($tool -eq 'cargo') {
         }
         [IO.File]::WriteAllText($target, 'canonical checklist')
         if (Test-Path -LiteralPath (Join-Path $root 'bad-names')) { Write-Output 'unmatched card name'; exit 11 }
+    }
+}
+if (Test-Path -LiteralPath (Join-Path $root 'disposable-fixture')) {
+    if ($tool -eq 'git' -and $arguments -contains 'rev-parse') {
+        if ($arguments -contains '--absolute-git-dir') { Write-Output (Join-Path $root '.git/worktrees/fixture') }
+        elseif ($arguments -contains '--git-common-dir') { Write-Output (Join-Path $root '.git') }
+        exit 0
+    }
+    if ($tool -eq 'cargo' -and $arguments[0] -eq 'test') {
+        New-Item -ItemType Directory -Path (Join-Path $root 'tricerules/target/debug') -Force | Out-Null
+    }
+    if ($tool -eq 'build') {
+        $preset = if ([IO.Path]::DirectorySeparatorChar -eq '\') { 'windows-ninja-all' } else { 'linux-ninja-all' }
+        $output = Join-Path $root "build/$preset"
+        New-Item -ItemType Directory -Path $output -Force | Out-Null
+        $linkType = if ([IO.Path]::DirectorySeparatorChar -eq '\') { 'Junction' } else { 'SymbolicLink' }
+        if ($env:COCKATRICE_TEST_DISPOSABLE_LINK) {
+            New-Item -ItemType $linkType -Path (Join-Path $output 'source-link') -Target (Join-Path $root 'tricerules') | Out-Null
+        }
     }
 }
 [Console]::Error.WriteLine('fixture successful stderr')
