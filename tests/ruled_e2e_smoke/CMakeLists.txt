@@ -53,7 +53,7 @@ target_compile_definitions(
                                RULED_E2E_REPLAY_PATH="${TRICERULES_RELEASE_DIR}/tricerules-replay${CMAKE_EXECUTABLE_SUFFIX}"
                                RULED_E2E_CAPTURE_TOOL_PATH="$<TARGET_FILE:ruled-capture-tool>"
                                RULED_E2E_CLIENT_PATH="$<TARGET_FILE:cockatrice>"
-                               RULED_E2E_QT_PLATFORMS="$<TARGET_FILE_DIR:${COCKATRICE_QT_VERSION_NAME}::Core>/../plugins/platforms"
+                               RULED_E2E_QT_PLATFORMS="${QT_PLUGINS_DIR}/platforms"
                                RULED_E2E_REPO="${CMAKE_SOURCE_DIR}"
 )
 

@@ -14,7 +14,7 @@ const QString HOST = "api.scryfall.com";
 
 QDateTime timeAt(qint64 secsFromEpoch)
 {
-    return QDateTime::fromMSecsSinceEpoch(secsFromEpoch * 1000, QTimeZone::UTC);
+    return QDateTime::fromMSecsSinceEpoch(secsFromEpoch * 1000, QTimeZone::utc());
 }
 
 TEST(ServerRateLimiterTest, First429SetsThirtySecondBackoff)

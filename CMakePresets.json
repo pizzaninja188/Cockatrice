@@ -96,6 +96,20 @@
       }
     },
     {
+      "name": "linux-ninja-all",
+      "displayName": "Linux: full ruled build for headless verification",
+      "inherits": ["unix-ninja"],
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
+      "environment": { "QT_QPA_PLATFORM": "offscreen" },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "WITH_CLIENT": "ON",
+        "WITH_SERVER": "ON",
+        "TEST": "ON",
+        "WITH_RULES_ENGINE": "ON"
+      }
+    },
+    {
       "name": "unix-ninja-release",
       "displayName": "Ninja, Release (README-style defaults)",
       "description": "Typical 'mkdir build; cmake -DCMAKE_BUILD_TYPE=Release' flow; uses system packages (no USE_VCPKG) unless you set it.",
@@ -126,6 +140,10 @@
     }
   ],
   "buildPresets": [
+    {
+      "name": "linux-ninja-all",
+      "configurePreset": "linux-ninja-all"
+    },
     {
       "name": "windows-msvc-release",
       "displayName": "Build Release",
@@ -194,6 +212,13 @@
     }
   ],
   "testPresets": [
+    {
+      "name": "linux-ninja-all",
+      "configurePreset": "linux-ninja-all",
+      "environment": { "QT_QPA_PLATFORM": "offscreen", "RULED_E2E_REQUIRE": "1" },
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    },
     {
       "name": "windows-ninja-all",
       "displayName": "CTest (Ninja tree)",

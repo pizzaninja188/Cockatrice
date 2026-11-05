@@ -736,5 +736,6 @@ bool CockatriceXml4Parser::saveToFile(FormatRulesNameMap _formats,
     xml.writeEndElement(); // cockatrice_carddatabase
     xml.writeEndDocument();
 
-    return !xml.hasError() && file.commit();
+    // Check the buffered write before commit can replace the installed file.
+    return !xml.hasError() && file.flush() && file.commit();
 }

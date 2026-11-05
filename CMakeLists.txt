@@ -495,7 +495,7 @@ if(WITH_RULES_ENGINE)
       BYPRODUCTS ${TRICERULES_BIN}
     )
   else()
-    message(WARNING "WITH_RULES_ENGINE is ON but cargo was not found; skipping tricerules build")
+    message(FATAL_ERROR "WITH_RULES_ENGINE requires cargo on PATH; cannot build the requested sidecar")
   endif()
 endif()
 

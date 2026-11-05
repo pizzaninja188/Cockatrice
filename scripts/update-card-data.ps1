@@ -67,8 +67,13 @@ function Test-CanonicalCardData {
 try {
     if (-not $OracleBulk) { $OracleBulk = 'oracle-cards.jsonl.gz' }
     if (-not $CardsXml) {
-        if (-not $env:LOCALAPPDATA) { throw 'LOCALAPPDATA is unavailable; pass -CardsXml.' }
-        $CardsXml = Join-Path $env:LOCALAPPDATA 'Cockatrice\Cockatrice\cards.xml'
+        if ([IO.Path]::DirectorySeparatorChar -eq '\') {
+            if (-not $env:LOCALAPPDATA) { throw 'LOCALAPPDATA is unavailable; pass -CardsXml.' }
+            $CardsXml = Join-Path $env:LOCALAPPDATA 'Cockatrice/Cockatrice/cards.xml'
+        } else {
+            $dataHome = if ($env:XDG_DATA_HOME) { $env:XDG_DATA_HOME } else { Join-Path ([Environment]::GetFolderPath('UserProfile')) '.local/share' }
+            $CardsXml = Join-Path $dataHome 'Cockatrice/Cockatrice/cards.xml'
+        }
     }
     # Check all source presence before Refresh can write anything. card-author verifies the SHA and metadata.
     $OracleBulk = Resolve-CardSource $OracleBulk

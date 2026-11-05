@@ -1,6 +1,7 @@
 # Isolated checkout and native command fixtures for the workflow scripts.
 $ErrorActionPreference = 'Stop'
 $sourceRepo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$workflowWindows = [IO.Path]::DirectorySeparatorChar -eq '\'
 
 function Assert-Workflow {
     param([bool] $Condition, [string] $Message)
@@ -19,7 +20,8 @@ function New-WorkflowFixture {
     }
     New-Item -ItemType Directory -Path (Join-Path $root 'tests/scripts') -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $root 'scripts/check-verification-environment.ps1') -Value @'
-if (Test-Path -LiteralPath (Join-Path $PSScriptRoot '../bad-environment')) { Write-Output 'fixture environment failed'; exit 21 }
+param([int] $MinimumFreeGiB = 20)
+if (Test-Path -LiteralPath (Join-Path $PSScriptRoot '../bad-environment')) { Write-Output "fixture environment failed, minimum free GiB $MinimumFreeGiB"; exit 21 }
 Write-Output 'fixture environment passed'
 exit 0
 '@
@@ -52,10 +54,14 @@ exit 0
     Set-Content -LiteralPath (Join-Path $root 'Cockatrice\Cockatrice\cards.xml') -Value '<fixture/>'
     [IO.File]::WriteAllText((Join-Path $root 'tricerules\CARDS.md'), 'canonical checklist')
     [IO.File]::WriteAllText((Join-Path $root 'fingerprint'), 'canonical')
-    Set-Content -LiteralPath (Join-Path $root 'scripts\build-ninja.ps1') -Value @'
-& (Join-Path $PSScriptRoot '..\bin\build.cmd') @args
+    $buildStub = @'
+$suffix = if ([IO.Path]::DirectorySeparatorChar -eq '\') { '.cmd' } else { '' }
+& (Join-Path $PSScriptRoot "../bin/build$suffix") @args
 exit $LASTEXITCODE
 '@
+    foreach ($script in @('build-ninja.ps1', 'build-linux.ps1')) {
+        Set-Content -LiteralPath (Join-Path $root "scripts/$script") -Value $buildStub
+    }
     Set-Content -LiteralPath (Join-Path $root 'bin\tool.ps1') -Value @'
 $ErrorActionPreference = 'Stop'
 $tool = $args[0]
@@ -63,7 +69,7 @@ $arguments = @($args | Select-Object -Skip 1)
 $root = Split-Path -Parent $PSScriptRoot
 $joined = $arguments -join ' '
 $record = @{ Tool = $tool; Arguments = $arguments; Cwd = (Get-Location).Path; RequireE2E = $env:RULED_E2E_REQUIRE;
-    BuildJobs = $env:CARGO_BUILD_JOBS; TestThreads = $env:RUST_TEST_THREADS }
+    BuildJobs = $env:CARGO_BUILD_JOBS; TestThreads = $env:RUST_TEST_THREADS; Qpa = $env:QT_QPA_PLATFORM }
 ($record | ConvertTo-Json -Compress) | Add-Content -LiteralPath (Join-Path $root 'trace.jsonl')
 $failure = Join-Path $root 'fail-pattern'
 if ((Test-Path -LiteralPath $failure) -and "$tool $joined" -match ([IO.File]::ReadAllText($failure))) {
@@ -102,7 +108,17 @@ if ($tool -eq 'cargo') {
 Write-Output 'fixture successful stdout'
 exit 0
 '@
-    foreach ($tool in @('cargo', 'rustfmt', 'ctest', 'git', 'build')) {
+    foreach ($tool in @('cargo', 'rustfmt', 'ctest', 'git', 'build', 'cmake')) {
+        if (-not $workflowWindows) {
+            $shim = Join-Path $root "bin/$tool"
+            $shellQuoteEscape = "'" + '"' + "'" + '"' + "'"
+            $quotedHost = "'" + $fixturePowerShell.Replace("'", $shellQuoteEscape) + "'"
+            $body = '#!/bin/sh' + "`nexec $quotedHost -NoProfile -File " + '"$(dirname "$0")/tool.ps1" ' + $tool + ' "$@"' + "`n"
+            [IO.File]::WriteAllText($shim, $body, [Text.UTF8Encoding]::new($false))
+            & chmod +x -- $shim
+            if ($LASTEXITCODE -ne 0) { throw 'Could not make workflow shim executable.' }
+            continue
+        }
         Set-Content -LiteralPath (Join-Path $root "bin\$tool.cmd") -Encoding Ascii -Value @(
             '@echo off',
             "`"$fixturePowerShell`" -NoProfile -File `"%~dp0tool.ps1`" $tool %*",
@@ -117,13 +133,15 @@ function Invoke-WorkflowFixture {
     $savedPath = $env:PATH
     $savedMixedPath = $env:Path
     $savedLocalAppData = $env:LOCALAPPDATA
+    $savedXdgData = $env:XDG_DATA_HOME
     Push-Location $Cwd
     try {
         # Remove both spellings before setting one: this host can supply conflicting copies.
         Remove-Item Env:PATH -ErrorAction SilentlyContinue
         Remove-Item Env:Path -ErrorAction SilentlyContinue
-        $env:Path = "$(Join-Path $Root 'bin');$savedPath"
+        $env:PATH = "$(Join-Path $Root 'bin')$([IO.Path]::PathSeparator)$savedPath"
         $env:LOCALAPPDATA = $Root
+        $env:XDG_DATA_HOME = $Root
         $ErrorActionPreference = 'Continue'
         $output = (& $PowerShell -NoProfile -File (Join-Path $Root "scripts\$Script") @Arguments 2>&1) -join "`n"
         $code = $LASTEXITCODE
@@ -134,8 +152,9 @@ function Invoke-WorkflowFixture {
         Remove-Item Env:PATH -ErrorAction SilentlyContinue
         Remove-Item Env:Path -ErrorAction SilentlyContinue
         $env:PATH = $savedPath
-        $env:Path = $savedMixedPath
+        if ($workflowWindows) { $env:Path = $savedMixedPath }
         $env:LOCALAPPDATA = $savedLocalAppData
+        $env:XDG_DATA_HOME = $savedXdgData
         Pop-Location
     }
 }
@@ -149,7 +168,7 @@ function Read-WorkflowTrace {
 function Remove-WorkflowFixture {
     param([string] $Root)
     $resolved = [IO.Path]::GetFullPath($Root)
-    $tempParent = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\') + '\'
+    $tempParent = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
     if (-not $resolved.StartsWith($tempParent, [StringComparison]::OrdinalIgnoreCase)) {
         throw "Refusing to remove unexpected fixture: $resolved"
     }

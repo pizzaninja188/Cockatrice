@@ -7913,8 +7913,8 @@ TEST_F(RuledBatchTest, ServerAllZoneCleanupStillClearsTheBoardWithoutRehosting)
 
     // This is the legacy Servatrice cleanup predicate, not evidence about engine terminal status.
     game->stopGameIfFinished();
-    EXPECT_TRUE(p1Stack->getCards().isEmpty());
-    EXPECT_TRUE(p2Stack->getCards().isEmpty());
+    EXPECT_TRUE(p1->getZones().isEmpty());
+    EXPECT_TRUE(p2->getZones().isEmpty());
 }
 
 TEST_F(RuledBatchTest, StackObjectCounteredRetiresOnlyTheExactAbilityOrCopyBinding)

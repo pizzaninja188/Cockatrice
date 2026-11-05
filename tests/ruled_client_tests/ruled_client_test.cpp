@@ -9984,7 +9984,7 @@ TEST_F(RuledClientTest, StackBindingRehomeRefreshesPresentationWithoutPublishing
     // The pending reservation also follows its exact physical card but remains unpublished.
     addStackBinding(rehomed, kOpponent, pendingStackOid, 43);
 
-    const auto rehomeIsSettled = [this, firstStackOid, secondStackOid] {
+    const auto rehomeIsSettled = [this, firstStackOid, secondStackOid, pendingStackOid] {
         return state->engineOidOwner.value(firstStackOid, -1) == kOpponent &&
                state->engineOidToCardId.value(firstStackOid, -1) == 41 &&
                state->engineOidOwner.value(secondStackOid, -1) == kOpponent &&
@@ -15310,10 +15310,11 @@ TEST_F(RuledClientTest, AsForetoldFaceMenuHoverIdentifiesExactCopiesAndClearsOnC
 {
     // Exercise the actual nested menu without an interactive desktop.
     qputenv("QT_QPA_PLATFORM", "offscreen");
-    static int argc = 1;
-    static char name[] = "ruled_client_test";
-    static char *argv[] = {name, nullptr};
-    static QApplication application(argc, argv);
+    // Destroy the application before Qt's process-wide input device registry.
+    int argc = 1;
+    char name[] = "ruled_client_test";
+    char *argv[] = {name, nullptr};
+    QApplication application(argc, argv);
     QVector<RuledFaceOption> faces(2);
     for (int i = 0; i < faces.size(); ++i) {
         faces[i].faceName = QStringLiteral("Lightning Bolt");

@@ -188,7 +188,8 @@ QJsonObject RuledClientState::diagnosticSnapshot() const
                                             {"sourceCardName", QString::fromStdString(option.source_card_name())},
                                             {"effectSummary", QString::fromStdString(option.effect_summary())},
                                             {"sourceObjectId", value(option.source_object_id())},
-                                            {"sourceGeneration", value(option.source_zone_change_generation())}});
+                                            {"sourceGeneration",
+                                             value(static_cast<quint64>(option.source_zone_change_generation()))}});
         }
         choiceState.insert("replacementOptions", replacements);
 #undef FIELD

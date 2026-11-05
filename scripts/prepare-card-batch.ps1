@@ -15,6 +15,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
+$powerShellHost = (Get-Process -Id $PID).Path
 . (Join-Path $PSScriptRoot 'focused-test-plan.ps1')
 . (Join-Path $PSScriptRoot 'rust-format-checks.ps1')
 $logs = Join-Path $repo ('build/verification-logs/prepare-card-batch-' + [guid]::NewGuid())
@@ -60,12 +61,12 @@ try {
         [IO.File]::WriteAllText($mapListPath, (ConvertTo-Json -InputObject @($ReviewMapPath) -Compress))
         $evidenceArgs += @('-MapListFile', $mapListPath)
     }
-    & (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe') @evidenceArgs
+    & $powerShellHost @evidenceArgs
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     $arguments = @('-Mode', 'Refresh')
     if ($OracleBulk) { $arguments += @('-OracleBulk', $OracleBulk) }
     if ($CardsXml) { $arguments += @('-CardsXml', $CardsXml) }
-    & (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe') -NoProfile `
+    & $powerShellHost -NoProfile `
         -File (Join-Path $PSScriptRoot 'update-card-data.ps1') @arguments
     exit $LASTEXITCODE
 }

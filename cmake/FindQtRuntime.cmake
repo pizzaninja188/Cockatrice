@@ -86,7 +86,12 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # Establish Qt Plugins directory & Library directories
 get_target_property(QT_LIBRARY_DIR ${COCKATRICE_QT_VERSION_NAME}::Core LOCATION)
 get_filename_component(QT_LIBRARY_DIR ${QT_LIBRARY_DIR} DIRECTORY)
-get_filename_component(QT_PLUGINS_DIR "${Qt6Core_DIR}/../../../${QT6_INSTALL_PLUGINS}" ABSOLUTE)
+if(IS_ABSOLUTE "${QT6_INSTALL_PLUGINS}")
+  set(QT_PLUGINS_DIR "${QT6_INSTALL_PLUGINS}")
+else()
+  # Qt's CMake packages can live under lib/<architecture>/cmake, not just lib/cmake.
+  get_filename_component(QT_PLUGINS_DIR "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_PLUGINS}" ABSOLUTE)
+endif()
 get_filename_component(QT_LIBRARY_DIR "${QT_LIBRARY_DIR}/../../.." ABSOLUTE)
 if(UNIX AND APPLE)
   # Mac needs a bit more help finding all necessary components

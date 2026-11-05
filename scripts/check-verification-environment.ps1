@@ -16,8 +16,14 @@ try {
         $target = Join-Path (Join-Path $repo 'tricerules') $target
     }
     $target = [IO.Path]::GetFullPath($target)
+    $isWindowsHost = [IO.Path]::DirectorySeparatorChar -eq '\'
 
-    foreach ($root in @($repo, $temp, $target) | ForEach-Object { [IO.Path]::GetPathRoot($_) } | Select-Object -Unique) {
+    foreach ($path in @($repo, $temp, $target) | Select-Object -Unique) {
+        # On Unix these paths can live on distinct mounts below '/'. Probe the nearest
+        # existing ancestor rather than reducing every path to the filesystem root.
+        $root = $path
+        while (-not [IO.Directory]::Exists($root)) { $root = [IO.Path]::GetDirectoryName($root) }
+        if ($isWindowsHost) { $root = [IO.Path]::GetPathRoot($root) }
         $drive = [IO.DriveInfo]::new($root)
         $freeGiB = $drive.AvailableFreeSpace / 1GB
         if ($freeGiB -lt $MinimumFreeGiB) {
@@ -25,7 +31,7 @@ try {
         }
     }
 
-    if (-not ('Cockatrice.Verification.PathProbe' -as [type])) {
+    if ($isWindowsHost -and -not ('Cockatrice.Verification.PathProbe' -as [type])) {
         Add-Type -TypeDefinition @'
 using System;
 using System.ComponentModel;
@@ -56,9 +62,17 @@ namespace Cockatrice.Verification {
         $probe = Join-Path $parent ('cockatrice-preflight-' + [guid]::NewGuid())
         try {
             New-Item -ItemType Directory -Path $probe | Out-Null
-            try { [Cockatrice.Verification.PathProbe]::Canonicalize($probe) }
+            try {
+                if ($isWindowsHost) { [Cockatrice.Verification.PathProbe]::Canonicalize($probe) }
+                else {
+                    $canonical = & realpath -e -- $probe
+                    if ($LASTEXITCODE -ne 0 -or -not $canonical -or -not [IO.Directory]::Exists($canonical)) {
+                        throw 'Native realpath could not resolve the probe directory.'
+                    }
+                }
+            }
             catch {
-                throw "Windows path canonicalization failed in $parent. Replay requires this for capture path safety. Retry this verification through the supported approval route, or repair the host sandbox permissions. Do not bypass the replay checks. Details: $_"
+                throw "Native path canonicalization failed in $parent. Replay requires this for capture path safety. Retry this verification through the supported approval route, or repair the host sandbox permissions. Do not bypass the replay checks. Details: $_"
             }
         }
         finally {

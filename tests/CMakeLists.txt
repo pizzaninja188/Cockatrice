@@ -332,6 +332,7 @@ cockatrice_add_test(
   server_counter_test
   SOURCES
   server_counter_test.cpp
+  server_rng_stub.cpp
   LIBS
   libcockatrice_network
   LABELS
@@ -422,6 +423,7 @@ cockatrice_add_test(
   latency_tracker_test
   SOURCES
   latency_tracker_test.cpp
+  server_rng_stub.cpp
   LIBS
   libcockatrice_network
   LABELS
@@ -674,6 +676,7 @@ if(WITH_ORACLE OR WITH_CLIENT)
     ${CMAKE_SOURCE_DIR}/cockatrice/src/interface/card_picture_loader/card_picture_loader_local.cpp
     ${SETTINGS_SOURCES}
     loader_local_matching_test.cpp
+    server_rng_stub.cpp
     LIBS
     ${SETTINGS_LIBS}
     INCLUDE_DIRS

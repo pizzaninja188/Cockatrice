@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Run full affected-side Windows verification with retained logs and exact exit codes.
+    Run full affected-side Windows or Linux verification with retained logs and exact exit codes.
 .DESCRIPTION
     Choose Rust, Cpp, or Both after tracing the change's affected components. CardData adds
     read-only canonical card checks and requires Rust. RecordRoutineBaseline captures stable
@@ -20,7 +20,11 @@ param(
     [switch] $CardData,
     [switch] $Preview,
     [switch] $RecordRoutineBaseline,
-    [string] $RoutineRonBaseline
+    [string] $RoutineRonBaseline,
+    [string] $OracleBulk,
+    [string] $CardsXml,
+    [ValidateRange(1, 1000000)]
+    [int] $MinimumFreeGiB
 )
 
 $ErrorActionPreference = 'Stop'
@@ -42,6 +46,12 @@ if ($Preview -and ($RoutineRonBaseline -or $RecordRoutineBaseline)) {
 }
 $repo = Split-Path -Parent $PSScriptRoot
 $windowsPowerShell = (Get-Process -Id $PID).Path
+$isWindowsHost = [IO.Path]::DirectorySeparatorChar -eq '\'
+$buildPlatform = if ($isWindowsHost) { 'Windows' } else { 'Linux' }
+$buildScript = if ($isWindowsHost) { 'build-ninja.ps1' } else { 'build-linux.ps1' }
+$buildDirectory = if ($isWindowsHost) { 'build/windows-ninja-all' } else { 'build/linux-ninja-all' }
+$environmentArguments = @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'check-verification-environment.ps1'))
+if ($PSBoundParameters.ContainsKey('MinimumFreeGiB')) { $environmentArguments += @('-MinimumFreeGiB', [string] $MinimumFreeGiB) }
 
 function Add-VerificationStep {
     param([string] $Label, [string] $Executable, [string[]] $Arguments,
@@ -62,13 +72,12 @@ function Add-VerificationStep {
 function Get-FullVerificationSteps {
     param([string] $SelectedSide, [bool] $CheckCardData)
     $steps = [Collections.Generic.List[object]]::new()
-    Add-VerificationStep 'Verification environment' $windowsPowerShell @(
-        '-NoProfile', '-File', (Join-Path $PSScriptRoot 'check-verification-environment.ps1')
-    )
+    Add-VerificationStep 'Verification environment' $windowsPowerShell $environmentArguments
     if ($CheckCardData) {
-        Add-VerificationStep 'Card data' $windowsPowerShell @(
-            '-NoProfile', '-File', (Join-Path $PSScriptRoot 'update-card-data.ps1'), '-Mode', 'Check'
-        )
+        $cardArguments = @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'update-card-data.ps1'), '-Mode', 'Check')
+        if ($OracleBulk) { $cardArguments += @('-OracleBulk', $OracleBulk) }
+        if ($CardsXml) { $cardArguments += @('-CardsXml', $CardsXml) }
+        Add-VerificationStep 'Card data' $windowsPowerShell $cardArguments
     }
     if ($SelectedSide -in @('Rust', 'Both')) {
         $rust = Join-Path $repo 'tricerules'
@@ -83,11 +92,11 @@ function Get-FullVerificationSteps {
         }
     }
     if ($SelectedSide -in @('Cpp', 'Both')) {
-        Add-VerificationStep 'Windows Ninja build' $windowsPowerShell @(
-            '-NoProfile', '-File', (Join-Path $PSScriptRoot 'build-ninja.ps1')
+        Add-VerificationStep "$buildPlatform Ninja build" $windowsPowerShell @(
+            '-NoProfile', '-File', (Join-Path $PSScriptRoot $buildScript)
         )
         Add-VerificationStep 'C++ tests' 'ctest' @(
-            '--test-dir', 'build/windows-ninja-all', '--output-on-failure', '--no-tests=error'
+            '--test-dir', $buildDirectory, '--output-on-failure', '--no-tests=error'
         ) $repo $true
     }
     Add-VerificationStep 'Git diff check' 'git' @('diff', '--check')
@@ -102,6 +111,7 @@ if ($Preview) {
         # JSON preserves the argument boundaries; this is display, not shell command text.
         Write-Output (@($step.Executable) + $step.Arguments | ConvertTo-Json -Compress)
         if ($step.RequireE2E) { Write-Output 'Child environment: RULED_E2E_REQUIRE=1' }
+        if ($step.RequireE2E -and -not $isWindowsHost) { Write-Output 'Child environment: QT_QPA_PLATFORM=offscreen' }
     }
     exit 0
 }
@@ -161,8 +171,10 @@ try {
     foreach ($step in $steps) {
         $currentStep = $step
         $previousE2E = $env:RULED_E2E_REQUIRE
+        $previousQpa = $env:QT_QPA_PLATFORM
         try {
             if ($step.RequireE2E) { $env:RULED_E2E_REQUIRE = '1' }
+            if ($step.RequireE2E -and -not $isWindowsHost) { $env:QT_QPA_PLATFORM = 'offscreen' }
             $result = & (Join-Path $PSScriptRoot 'run-quiet-command.ps1') `
                 -Label $step.Label -Executable $step.Executable -ArgumentList $step.Arguments `
                 -WorkingDirectory $step.WorkingDirectory -LogDirectory $runDirectory -AsResultObject
@@ -171,6 +183,10 @@ try {
             if ($step.RequireE2E) {
                 if ($null -eq $previousE2E) { Remove-Item Env:RULED_E2E_REQUIRE -ErrorAction SilentlyContinue }
                 else { $env:RULED_E2E_REQUIRE = $previousE2E }
+                if (-not $isWindowsHost) {
+                    if ($null -eq $previousQpa) { Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue }
+                    else { $env:QT_QPA_PLATFORM = $previousQpa }
+                }
             }
         }
         if ($step.Exact -and $result.ExitCode -eq 0 -and -not (Select-String -LiteralPath $result.LogPath -Quiet -Pattern 'test result: ok\. 1 passed; 0 failed; 0 ignored;')) {

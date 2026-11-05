@@ -3,8 +3,9 @@ param([string] $PowerShell = (Get-Process -Id $PID).Path)
 $fixture = New-WorkflowFixture
 try {
     Set-Content -LiteralPath (Join-Path $fixture 'bad-environment') -Value 'invalid'
-    $environmentFailure = Invoke-WorkflowFixture $fixture 'verify.ps1' @('-Side', 'Both', '-CardData')
+    $environmentFailure = Invoke-WorkflowFixture $fixture 'verify.ps1' @('-Side', 'Both', '-CardData', '-MinimumFreeGiB', '11')
     Assert-Workflow ($environmentFailure.ExitCode -eq 21) "Environment failure code was lost: $($environmentFailure.Output)"
+    Assert-Workflow ($environmentFailure.Output -match 'minimum free GiB 11') 'Explicit free-space reserve did not reach preflight.'
     Assert-Workflow (@(Read-WorkflowTrace $fixture).Count -eq 0) 'Builds ran after environment preflight failed.'
     $environmentSummary = Get-ChildItem -LiteralPath (Join-Path $fixture 'build/verification-logs') -Filter summary.json -Recurse |
         ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json }
@@ -36,7 +37,8 @@ try {
     Assert-Workflow ($result.ExitCode -eq 0) "Preview failed: $($result.Output)"
     Assert-Workflow (@(Read-WorkflowTrace $fixture).Count -eq 0) 'Preview executed a command.'
     Assert-Workflow (-not (Test-Path -LiteralPath (Join-Path $fixture 'build'))) 'Preview created build artifacts.'
-    Assert-Workflow ($result.Output -match 'Rust tests' -and $result.Output -match 'Windows Ninja build' -and $result.Output -match 'Card data') 'Preview omitted gates.'
+    $platform = if ($workflowWindows) { 'Windows' } else { 'Linux' }
+    Assert-Workflow ($result.Output -match 'Rust tests' -and $result.Output -match "$platform Ninja build" -and $result.Output -match 'Card data') 'Preview omitted gates.'
 
     $result = Invoke-WorkflowFixture $fixture 'verify.ps1' @('-Side', 'Cpp', '-CardData')
     Assert-Workflow ($result.ExitCode -ne 0) 'Cpp-only card verification was accepted.'
@@ -56,6 +58,10 @@ try {
         Assert-Workflow ($call.Cwd -eq (Join-Path $fixture 'tricerules')) 'Rust command ran outside tricerules.'
     }
     Assert-Workflow ($trace[15].RequireE2E -eq '1') 'CTest did not require E2E prerequisites.'
+    if (-not $workflowWindows) {
+        Assert-Workflow ($trace[15].Qpa -eq 'offscreen') 'Linux CTest did not use offscreen Qt.'
+        Assert-Workflow ($trace[15].Arguments -contains 'build/linux-ninja-all') 'Linux CTest selected the Windows build tree.'
+    }
     Assert-Workflow ($trace[15].Arguments -contains '--no-tests=error') 'CTest could accept an empty suite.'
     $summaries = @(Get-ChildItem -LiteralPath (Join-Path $fixture 'build\verification-logs') -Filter summary.json -Recurse)
     Assert-Workflow ($summaries.Count -eq 1) 'Combined run did not save one summary.'
@@ -84,9 +90,11 @@ try {
     # Check restoration in the same PowerShell process, on success and failure.
     Set-Content -LiteralPath (Join-Path $fixture 'scripts\environment-probe.ps1') -Value @'
 $env:RULED_E2E_REQUIRE = 'caller-value'
+$env:QT_QPA_PLATFORM = 'caller-platform'
 & (Join-Path $PSScriptRoot 'verify.ps1') -Side Cpp
 $code = $LASTEXITCODE
 if ($env:RULED_E2E_REQUIRE -ne 'caller-value') { throw 'E2E environment was not restored' }
+if ($env:QT_QPA_PLATFORM -ne 'caller-platform') { throw 'Qt platform environment was not restored' }
 exit $code
 '@
     $result = Invoke-WorkflowFixture $fixture 'environment-probe.ps1'
