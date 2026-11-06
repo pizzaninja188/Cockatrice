@@ -28,7 +28,7 @@
             GraveyardAggregate(
               owners: Controller,
               aggregate: CardCount,
-              filter: Some((excluded_card_types: [Instant, Sorcery])),
+              filter: Some((any_of: Some([(card_type: Some(Land)), (card_type: Some(NonlandPermanent))]))),
               min: Some(6),
             ),
           ),
@@ -47,7 +47,10 @@
           ability_id: "characteristic_01",
           presentation: OracleLines([2]),
           definition: CountScaledPowerToughness(
-            count: GraveyardCards(owners: Controller, filter: Some((excluded_card_types: [Instant, Sorcery]))),
+            count: GraveyardCards(
+              owners: Controller,
+              filter: Some((any_of: Some([(card_type: Some(Land)), (card_type: Some(NonlandPermanent))]))),
+            ),
             power_per_match: 1,
             toughness_per_match: 0,
           ),

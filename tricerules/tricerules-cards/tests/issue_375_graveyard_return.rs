@@ -7,19 +7,13 @@
 //! (CR 404.2, 508.4, 702.181). The eleven identities whose printed clauses need absent engine
 //! behavior stay unretained and are asserted absent.
 
+use crate::common::permanent_card_filter;
 use tricerules_cards::primitives::{
     CardTypeFilter, CountExpression, DelayedTokenSacrificeTiming, EffectSubject,
     GraveyardAggregate, GraveyardDestination, GraveyardFilter, GraveyardOwner, PermanentTypeFilter,
     RelativePlayerSet, TargetKind, TargetObjectExclusion, ZoneCardFilter,
 };
 use tricerules_cards::{Amount, GameCondition, Keyword, SpellEffectKind, TriggerCondition};
-
-fn permanent_card_filter() -> ZoneCardFilter {
-    ZoneCardFilter {
-        excluded_card_types: vec![CardTypeFilter::Instant, CardTypeFilter::Sorcery],
-        ..ZoneCardFilter::default()
-    }
-}
 
 fn graveyard_gate(
     aggregate: GraveyardAggregate,
@@ -152,10 +146,7 @@ fn issue_375_coati_payload_is_exact() {
         panic!("Coati must have exactly one target group");
     };
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(
-        group.prompt,
-        "Choose target permanent card from your graveyard"
-    );
+    assert!(group.prompt.is_empty());
     assert_eq!(group.effect_indices, [0]);
 }
 

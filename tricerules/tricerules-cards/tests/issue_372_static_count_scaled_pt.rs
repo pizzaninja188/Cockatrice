@@ -9,6 +9,7 @@
 //! because its dies clause needs an unshipped attached-object last-known-power amount and a
 //! source-bound graveyard-to-hand return. Cid, Timeless Artificer stays blocked by #368.
 
+use crate::common::permanent_card_filter;
 use tricerules_cards::primitives::{
     BattlefieldCreatureCountFilter, CardTypeFilter, CountExpression, GraveyardAggregate,
     QuantityTerm, RelativePlayerSet, SpellEffectKind, StaticAbilityDef, TargetFilter, TargetKind,
@@ -21,13 +22,6 @@ use tricerules_cards::{
 fn graveyard_creature_card_filter() -> ZoneCardFilter {
     ZoneCardFilter {
         card_type: Some(CardTypeFilter::Creature),
-        ..ZoneCardFilter::default()
-    }
-}
-
-fn permanent_card_filter() -> ZoneCardFilter {
-    ZoneCardFilter {
-        excluded_card_types: vec![CardTypeFilter::Instant, CardTypeFilter::Sorcery],
         ..ZoneCardFilter::default()
     }
 }

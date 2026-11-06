@@ -8,9 +8,10 @@
 //! six blocked cohort identities stay unregistered until their narrower non-graveyard primitives
 //! land.
 
+use crate::common::permanent_card_filter;
 use tricerules_cards::primitives::{
-    CardTypeFilter, EffectSubject, EntersWithCountersAffected, InstructionKind, LifeAmount,
-    PlayerRecipient, StaticAbilityDef, ZoneCardFilter,
+    EffectSubject, EntersWithCountersAffected, InstructionKind, LifeAmount, PlayerRecipient,
+    StaticAbilityDef, ZoneCardFilter,
 };
 use tricerules_cards::{
     AbilityPresentation, Amount, CastTriggerPlayer, CounterKind, GameCondition, GraveyardAggregate,
@@ -34,13 +35,6 @@ fn graveyard_gate(
 fn elf_card_filter() -> ZoneCardFilter {
     ZoneCardFilter {
         required_subtypes: vec!["Elf".into()],
-        ..ZoneCardFilter::default()
-    }
-}
-
-fn permanent_card_filter() -> ZoneCardFilter {
-    ZoneCardFilter {
-        excluded_card_types: vec![CardTypeFilter::Instant, CardTypeFilter::Sorcery],
         ..ZoneCardFilter::default()
     }
 }

@@ -67,7 +67,7 @@ fn generated_prompts_describe_constraints_in_shipped_target_groups() {
         (
             "coati_scavenger",
             Triggered(0),
-            &["Choose target card from your graveyard excluding instants and sorceries"],
+            &["Choose target permanent card from your graveyard"],
         ),
         (
             "scrap_trawler",

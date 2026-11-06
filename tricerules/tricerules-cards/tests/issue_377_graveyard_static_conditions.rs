@@ -12,6 +12,7 @@
 use crate::common::draw_discard_program::{
     assert_ability_draw_discard_steps, AuthoredDrawDiscardExpectation, AuthoredDrawDiscardOrder,
 };
+use crate::common::permanent_card_filter;
 use tricerules_cards::primitives::{
     CardTypeFilter, CombatRestriction, PlayerRecipient, StaticAbilityDef,
 };
@@ -20,28 +21,6 @@ use tricerules_cards::{
     CastTriggerPlayer, GameCondition, GraveyardAggregate, Keyword, LibraryPartitionKind, ManaCost,
     RelativePlayerSet, SpellEffectKind, TriggerCondition, ZoneCardFilter,
 };
-
-fn permanent_card_filter() -> ZoneCardFilter {
-    ZoneCardFilter {
-        any_of: Some(
-            [
-                CardTypeFilter::Artifact,
-                CardTypeFilter::Battle,
-                CardTypeFilter::Creature,
-                CardTypeFilter::Enchantment,
-                CardTypeFilter::Land,
-                CardTypeFilter::Planeswalker,
-            ]
-            .into_iter()
-            .map(|card_type| ZoneCardFilter {
-                card_type: Some(card_type),
-                ..ZoneCardFilter::default()
-            })
-            .collect(),
-        ),
-        ..ZoneCardFilter::default()
-    }
-}
 
 fn graveyard_condition(
     aggregate: GraveyardAggregate,
@@ -478,7 +457,7 @@ fn issue_377_akawalli_authors_three_ordered_static_abilities() {
 }
 
 #[test]
-fn issue_377_descend_pumps_use_the_six_type_permanent_predicate() {
+fn issue_377_descend_pumps_use_the_permanent_card_filter() {
     for (id, power, toughness, keywords) in [
         ("basking_capybara", 3, 0, vec![]),
         ("echo_of_dusk", 1, 1, vec![Keyword::Lifelink]),

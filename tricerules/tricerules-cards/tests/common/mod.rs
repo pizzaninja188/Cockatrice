@@ -2,8 +2,24 @@
 pub mod draw_discard_program;
 
 use std::borrow::Cow;
-use tricerules_cards::primitives::{SpellEffectKind, TargetSchema, TargetingDef};
-use tricerules_cards::{CardFace, Keyword};
+use tricerules_cards::primitives::{CardTypeFilter, SpellEffectKind, TargetSchema, TargetingDef};
+use tricerules_cards::{CardFace, Keyword, ZoneCardFilter};
+
+#[allow(dead_code)] // Shared by the separate registry test binaries.
+pub fn permanent_card_filter() -> ZoneCardFilter {
+    ZoneCardFilter {
+        any_of: Some(
+            [CardTypeFilter::Land, CardTypeFilter::NonlandPermanent]
+                .into_iter()
+                .map(|card_type| ZoneCardFilter {
+                    card_type: Some(card_type),
+                    ..ZoneCardFilter::default()
+                })
+                .collect(),
+        ),
+        ..ZoneCardFilter::default()
+    }
+}
 
 #[allow(dead_code)] // Shared by the separate registry test binaries.
 pub fn compiled_legacy_target_prompt<'a>(

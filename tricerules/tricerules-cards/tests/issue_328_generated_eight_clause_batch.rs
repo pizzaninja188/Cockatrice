@@ -8,9 +8,9 @@
 //! can't-block spell; and CR 611.2a/514.2/701.22 the shared-target pump + first strike + scry one.
 
 use tricerules_cards::primitives::{
-    CardTypeFilter, CombatRestriction, CombatRestrictionScope, CombatRole, EffectSubject,
-    GraveyardDestination, GraveyardFilter, GraveyardOwner, PermanentTypeFilter, PlayerRecipient,
-    TargetFilter, TargetGroupDef, TargetKind, TargetingDef, ZoneCardFilter,
+    CombatRestriction, CombatRestrictionScope, CombatRole, EffectSubject, GraveyardDestination,
+    GraveyardFilter, GraveyardOwner, PermanentTypeFilter, PlayerRecipient, TargetFilter,
+    TargetGroupDef, TargetKind, TargetingDef,
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, Amount, CastTriggerPlayer, Color, Keyword, Layout,
@@ -241,10 +241,7 @@ fn issue_328_elvish_regrower_returns_a_permanent_card() {
         [SpellEffectKind::MoveGraveyardCards {
             filter: GraveyardFilter {
                 owner: GraveyardOwner::Controller,
-                card: Some(ZoneCardFilter {
-                    excluded_card_types: vec![CardTypeFilter::Instant, CardTypeFilter::Sorcery],
-                    ..ZoneCardFilter::default()
-                }),
+                card: Some(crate::common::permanent_card_filter()),
                 ..GraveyardFilter::default()
             },
             destination: GraveyardDestination::Hand,
@@ -252,7 +249,11 @@ fn issue_328_elvish_regrower_returns_a_permanent_card() {
             entry_modifiers: Vec::new(),
         }]
     );
-    assert!(ability.targeting.is_none());
+    let targeting = ability.targeting.as_ref().expect("authored target group");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(&ability.effect, Some(targeting), 0),
+        "Choose target permanent card from your graveyard"
+    );
 }
 
 #[test]

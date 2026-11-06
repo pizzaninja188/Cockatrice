@@ -94,6 +94,21 @@ fn issue_444_mass_modes_bind_one_player_and_keep_ordered_instructions() {
             "Choose target player"
         );
     }
-    let return_group = &trystan.modes[1].targeting.as_ref().unwrap().groups[0];
+    let return_mode = &trystan.modes[1];
+    let return_group = &return_mode.targeting.as_ref().unwrap().groups[0];
     assert_eq!((return_group.min, return_group.max), (1, 2));
+    assert!(return_group.prompt.is_empty());
+    assert!(matches!(
+        return_mode.effects.as_slice(),
+        [SpellEffectKind::MoveGraveyardCards { filter, .. }]
+            if filter.card.as_ref() == Some(&crate::common::permanent_card_filter())
+    ));
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(
+            &return_mode.effects,
+            return_mode.targeting.as_ref(),
+            0,
+        ),
+        "Choose one or two target permanent cards from your graveyard"
+    );
 }

@@ -15,20 +15,7 @@
         condition: GraveyardAggregate(
           owners: Controller,
           aggregate: CardCount,
-          filter: Some(
-            (
-              any_of: Some(
-                [
-                  (card_type: Some(Artifact)),
-                  (card_type: Some(Battle)),
-                  (card_type: Some(Creature)),
-                  (card_type: Some(Enchantment)),
-                  (card_type: Some(Land)),
-                  (card_type: Some(Planeswalker)),
-                ],
-              ),
-            ),
-          ),
+          filter: Some((any_of: Some([(card_type: Some(Land)), (card_type: Some(NonlandPermanent))]))),
           min: Some(4),
         ),
         delta_power: 3,

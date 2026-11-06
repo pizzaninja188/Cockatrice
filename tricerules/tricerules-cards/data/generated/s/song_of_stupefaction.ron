@@ -25,7 +25,10 @@
       presentation: OracleLines([3]),
       definition: AttachedModifier(
         count: Some(
-          GraveyardCards(owners: Controller, filter: Some((excluded_card_types: [Instant, Sorcery]))),
+          GraveyardCards(
+            owners: Controller,
+            filter: Some((any_of: Some([(card_type: Some(Land)), (card_type: Some(NonlandPermanent))]))),
+          ),
         ),
         power_per_match: -1,
       ),

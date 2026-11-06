@@ -21,7 +21,10 @@
             (
               basis: Amount(
                 Count(
-                  GraveyardCards(owners: Controller, filter: Some((excluded_card_types: [Instant, Sorcery]))),
+                  GraveyardCards(
+                    owners: Controller,
+                    filter: Some((any_of: Some([(card_type: Some(Land)), (card_type: Some(NonlandPermanent))]))),
+                  ),
                 ),
               ),
               power_per_unit: 1,

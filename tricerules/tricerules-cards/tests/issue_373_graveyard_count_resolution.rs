@@ -7,6 +7,7 @@
 //! CR 603.4 intervening-if re-checks, CR 602.5b activation conditions, and CR 701.17/701.25 mill
 //! and surveil ordering.
 
+use crate::common::permanent_card_filter;
 use tricerules_cards::primitives::{
     ActivationLimit, BattlefieldPermanentFilter, CardTypeFilter, CountExpression, EffectSubject,
     GameCondition, GraveyardAggregate, LibraryPartitionKind, PlayerRecipient, PtScale,
@@ -16,13 +17,6 @@ use tricerules_cards::{
     AbilityCost, AbilitySourceZone, ActivationTiming, Amount, CounterKind, Keyword, ManaCost,
     SpellEffectKind, TriggerCondition,
 };
-
-fn permanent_card_filter() -> ZoneCardFilter {
-    ZoneCardFilter {
-        excluded_card_types: vec![CardTypeFilter::Instant, CardTypeFilter::Sorcery],
-        ..ZoneCardFilter::default()
-    }
-}
 
 #[test]
 fn issue_373_registers_the_thirteen_retained_identities() {
