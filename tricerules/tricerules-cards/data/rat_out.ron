@@ -9,5 +9,5 @@
     PumpTarget(power: -1, toughness: -1, subject: Chosen((kind: Creature))),
     CreateTokens(token: "rat_b_1_1_cant_block", count: 1),
   ],
-  targeting: Some((groups: [(min: 0, max: 1, prompt: "Choose up to one target creature", effect_indices: [0])])),
+  targeting: Some((groups: [(min: 0, max: 1, effect_indices: [0])])),
 )

@@ -40,7 +40,6 @@
       targeting: Some((groups: [(
         min: 0,
         max: 1,
-        prompt: "Choose up to one target artifact",
         effect_indices: [0],
       )])),
     ),

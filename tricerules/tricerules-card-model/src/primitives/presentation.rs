@@ -169,9 +169,13 @@ pub(super) fn target_group_prompt<'a>(
         return Ok(format!("Choose {noun}{suffix}").into());
     }
     let quantity = match (group.min, group.max) {
-        (0, max) => format!("up to {max}"),
-        (min, max) if min == max => min.to_string(),
-        (min, max) => format!("{min}–{max}"),
+        (0, 1) => "up to one".into(),
+        (0, 2) => "up to two".into(),
+        (0, 3) => "up to three".into(),
+        (1, 2) => "one or two".into(),
+        (0, max) => Cow::Owned(format!("up to {max}")),
+        (min, max) if min == max => Cow::Owned(min.to_string()),
+        (min, max) => Cow::Owned(format!("{min}–{max}")),
     };
     let noun = noun.strip_prefix("any ").unwrap_or(&noun);
     let noun = match (group.max, first.role) {

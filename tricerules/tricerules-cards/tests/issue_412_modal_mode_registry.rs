@@ -233,7 +233,11 @@ fn issue_412_three_mode_spells_expose_every_bullet() {
         .groups;
     assert_eq!((exile_groups[0].min, exile_groups[0].max), (0, 1));
     assert_eq!(
-        exile_groups[0].prompt,
+        crate::common::compiled_legacy_target_prompt(
+            &heritage.modes[2].effects,
+            heritage.modes[2].targeting.as_ref(),
+            0
+        ),
         "Choose up to one target card from a graveyard"
     );
     assert_modal_schema("heritage_reclamation", &heritage);

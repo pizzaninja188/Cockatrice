@@ -3051,7 +3051,14 @@ mod tests {
         let schema = TargetSchema::compile(&effects, Some(&targeting)).unwrap();
         assert_eq!(
             schema.groups[0].prompt,
-            "Choose up to 2 target creatures you control"
+            "Choose up to two target creatures you control"
+        );
+
+        targeting.groups[0].min = 1;
+        let schema = TargetSchema::compile(&effects, Some(&targeting)).unwrap();
+        assert_eq!(
+            schema.groups[0].prompt,
+            "Choose one or two target creatures you control"
         );
 
         let mut restricted = effects.clone();
@@ -3098,7 +3105,7 @@ mod tests {
         let schema = TargetSchema::compile(&graveyard_effects, Some(&same_graveyard)).unwrap();
         assert_eq!(
             schema.groups[0].prompt,
-            "Choose up to 2 target cards from a single graveyard"
+            "Choose up to two target cards from a single graveyard"
         );
 
         let permanent_effects = vec![SpellEffectKind::DamageTarget {

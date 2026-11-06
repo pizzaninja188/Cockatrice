@@ -18,7 +18,7 @@
         mode_id: "mode_02",
         presentation: OracleLines([3]),
         effects: [DamageTargets(amount: 1, target: (kind: AnyTarget), division: PerTarget)],
-        targeting: Some((groups: [(min: 1, max: 2, prompt: "Choose one or two targets", effect_indices: [0])])),
+        targeting: Some((groups: [(min: 1, max: 2, effect_indices: [0])])),
       ),
       (
         mode_id: "mode_03",

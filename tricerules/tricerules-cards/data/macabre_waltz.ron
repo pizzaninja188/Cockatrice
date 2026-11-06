@@ -16,7 +16,6 @@
   targeting: Some((groups: [(
     min: 0,
     max: 2,
-    prompt: "Choose up to two target creature cards from your graveyard",
     effect_indices: [0],
   )])),
 )

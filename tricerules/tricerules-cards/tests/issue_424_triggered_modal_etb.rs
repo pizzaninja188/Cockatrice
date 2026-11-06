@@ -191,7 +191,14 @@ fn issue_424_up_to_two_counter_mode_is_bounded_and_targeted() {
         .expect("counter group")
         .groups[0];
     assert_eq!((group.min, group.max), (0, 2));
-    assert_eq!(group.prompt, "Choose up to two target creatures");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(
+            &bugle.modes[0].effects,
+            bugle.modes[0].targeting.as_ref(),
+            0
+        ),
+        "Choose up to two target creatures"
+    );
     assert_eq!(group.effect_indices, vec![0]);
     assert!(!group.same_graveyard);
     assert_modal_schema("daily_bugle_reporters", &bugle);
@@ -318,7 +325,11 @@ fn issue_424_exile_modes_use_the_printed_type_union_and_single_graveyard_group()
     assert_eq!((group.min, group.max), (0, 2));
     assert!(group.same_graveyard);
     assert_eq!(
-        group.prompt,
+        crate::common::compiled_legacy_target_prompt(
+            &qutrub.modes[1].effects,
+            qutrub.modes[1].targeting.as_ref(),
+            0
+        ),
         "Choose up to two target cards from a single graveyard"
     );
     assert_modal_schema("qutrub_forayer", &qutrub);
@@ -373,7 +384,6 @@ fn issue_424_gearbane_modes_bind_the_up_to_one_destroy_and_mandatory_sacrifice()
         .expect("up-to-one artifact group")
         .groups[0];
     assert_eq!((group.min, group.max), (0, 1));
-    assert_eq!(group.prompt, "Choose up to one target artifact");
     assert!(group.effect_indices.is_empty());
     let destroy_owner = tricerules_cards::ProgramOwnerId::ability_mode(
         ability_id.clone(),
@@ -382,6 +392,13 @@ fn issue_424_gearbane_modes_bind_the_up_to_one_destroy_and_mandatory_sacrifice()
     let destroy_program = registry
         .compiled_program_for_owner(&destroy_owner)
         .expect("mode 01 owns its resultless Destroy Program");
+    let destroy_schema =
+        TargetSchema::compile_program(destroy_program, destroy_mode.targeting.as_ref())
+            .expect("the destroy mode targets an artifact");
+    assert_eq!(
+        destroy_schema.groups[0].prompt,
+        "Choose up to one target artifact"
+    );
     let [destroy] = destroy_program.body.steps.as_slice() else {
         panic!("mode 01 performs one Destroy operation");
     };

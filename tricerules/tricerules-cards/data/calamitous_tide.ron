@@ -11,5 +11,5 @@
   ]), target_bindings: [
     (instruction_id: "return_creature", role: Subject, target_group_index: 0),
   ])),
-  targeting: Some((groups: [(min: 0, max: 2, prompt: "Choose up to two target creatures", effect_indices: [])])),
+  targeting: Some((groups: [(min: 0, max: 2, effect_indices: [])])),
 )

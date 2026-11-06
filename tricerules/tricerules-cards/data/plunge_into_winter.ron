@@ -12,5 +12,5 @@
     Scry(count: 1),
     Draw(count: 1),
   ],
-  targeting: Some((groups: [(min: 0, max: 1, prompt: "Choose up to one target creature", effect_indices: [0])])),
+  targeting: Some((groups: [(min: 0, max: 1, effect_indices: [0])])),
 )

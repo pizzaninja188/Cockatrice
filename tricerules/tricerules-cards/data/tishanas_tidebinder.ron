@@ -35,7 +35,6 @@
     targeting: Some((groups: [(
       min: 0,
       max: 1,
-      prompt: "Choose up to one target activated or triggered ability",
       effect_indices: [],
     )])),
   )],

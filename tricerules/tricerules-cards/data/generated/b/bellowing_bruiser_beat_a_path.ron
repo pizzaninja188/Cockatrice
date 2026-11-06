@@ -21,7 +21,7 @@
       spell_effect: [ApplyCombatRestriction(scope: Chosen((kind: Creature)), restriction: (cant_block: true))],
       targeting: Some(
         (
-          groups: [(min: 0, max: 2, prompt: "Choose up to two target creatures", effect_indices: [0])],
+          groups: [(min: 0, max: 2, effect_indices: [0])],
         ),
       ),
     ),

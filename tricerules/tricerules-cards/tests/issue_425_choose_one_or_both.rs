@@ -132,7 +132,14 @@ fn issue_425_tap_mode_is_bounded_to_one_or_two_creatures() {
         .expect("tap group")
         .groups[0];
     assert_eq!((group.min, group.max), (1, 2));
-    assert_eq!(group.prompt, "Choose one or two target creatures");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(
+            &acrobatics.modes[1].effects,
+            acrobatics.modes[1].targeting.as_ref(),
+            0
+        ),
+        "Choose one or two target creatures"
+    );
     assert_eq!(group.effect_indices, vec![0]);
     assert!(!group.same_graveyard);
 }

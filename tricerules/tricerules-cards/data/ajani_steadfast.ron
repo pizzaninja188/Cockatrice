@@ -16,7 +16,7 @@
             GrantKeywords(subject: Chosen((kind: Creature)), keywords: [FirstStrike, Vigilance, Lifelink]),
         ],
         targeting: Some((groups: [(
-            min: 0, max: 1, prompt: "Choose up to one target creature", effect_indices: [0, 1],
+            min: 0, max: 1, effect_indices: [0, 1],
         )])),
     ), (
         ability_id: "activated_02",

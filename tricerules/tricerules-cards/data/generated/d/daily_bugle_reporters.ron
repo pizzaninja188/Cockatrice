@@ -27,7 +27,6 @@
                     (
                       min: 0,
                       max: 2,
-                      prompt: "Choose up to two target creatures",
                       effect_indices: [0],
                     ),
                   ],

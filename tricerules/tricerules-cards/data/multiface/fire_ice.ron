@@ -18,7 +18,6 @@
             targeting: Some((groups: [(
                 min: 1,
                 max: 2,
-                prompt: "Choose one or two targets",
                 effect_indices: [0],
             )])),
         ),

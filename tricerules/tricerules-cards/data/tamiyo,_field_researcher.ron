@@ -14,7 +14,7 @@
             effect: [Draw(who: Controller, count: 1)],
         ))],
         targeting: Some((groups: [(
-            min: 0, max: 2, prompt: "Choose up to two target creatures", effect_indices: [0],
+            min: 0, max: 2, effect_indices: [0],
         )])),
     ), (
         ability_id: "activated_02", presentation: OracleLines([2]), costs: [Loyalty(-2)],

@@ -267,7 +267,7 @@ fn issue_316_griffnaut_tracker_exiles_up_to_two_from_one_graveyard() {
     let group = single_group(targeting);
     assert_eq!((group.min, group.max), (0, 2));
     assert_eq!(
-        group.prompt,
+        crate::common::compiled_legacy_target_prompt(&ability.effect, Some(targeting), 0),
         "Choose up to two target cards from a single graveyard"
     );
     assert_eq!(group.effect_indices, [0]);

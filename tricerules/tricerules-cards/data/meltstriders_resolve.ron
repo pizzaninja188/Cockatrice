@@ -17,7 +17,6 @@
     targeting: Some((groups: [(
       min: 0,
       max: 1,
-      prompt: "Choose up to one target creature an opponent controls",
       effect_indices: [0],
     )])),
   )],

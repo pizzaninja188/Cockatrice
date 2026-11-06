@@ -10,5 +10,5 @@
     LoseLife(amount: Fixed(2), who: EachOpponent),
     GainLife(amount: 2),
   ],
-  targeting: Some((groups: [(min: 0, max: 2, prompt: "Choose up to two target creature cards from your graveyard", effect_indices: [0])])),
+  targeting: Some((groups: [(min: 0, max: 2, effect_indices: [0])])),
 )

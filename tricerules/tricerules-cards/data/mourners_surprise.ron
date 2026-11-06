@@ -9,5 +9,5 @@
     MoveGraveyardCards(filter: ( card: Some((card_type: Some(Creature)))), destination: Hand),
     CreateTokens(token: "mercenary_r_1_1", count: 1),
   ],
-  targeting: Some((groups: [(min: 0, max: 1, prompt: "Choose up to one target creature card from your graveyard", effect_indices: [0])])),
+  targeting: Some((groups: [(min: 0, max: 1, effect_indices: [0])])),
 )

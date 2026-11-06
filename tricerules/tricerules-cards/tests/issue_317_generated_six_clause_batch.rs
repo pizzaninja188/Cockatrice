@@ -163,7 +163,7 @@ fn issue_317_fight_on_returns_up_to_two_creature_cards_from_own_graveyard() {
     let group = single_group(targeting);
     assert_eq!((group.min, group.max), (0, 2));
     assert_eq!(
-        group.prompt,
+        crate::common::compiled_legacy_target_prompt(&face.spell_effect, Some(targeting), 0),
         "Choose up to two target creature cards from your graveyard"
     );
     assert_eq!(group.effect_indices, [0]);

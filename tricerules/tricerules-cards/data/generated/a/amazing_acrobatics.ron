@@ -21,7 +21,7 @@
         effects: [Tap()],
         targeting: Some(
           (
-            groups: [(min: 1, max: 2, prompt: "Choose one or two target creatures", effect_indices: [0])],
+            groups: [(min: 1, max: 2, effect_indices: [0])],
           ),
         ),
       ),

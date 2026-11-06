@@ -15,7 +15,6 @@
     targeting: Some((groups: [(
       min: 0,
       max: 2,
-      prompt: "Choose up to two target cards from a single graveyard",
       effect_indices: [0],
       same_graveyard: true,
     )])),

@@ -235,7 +235,11 @@ fn issue_373_gloom_ripper_shares_one_affine_count_between_two_pumps() {
     assert_eq!((groups[0].min, groups[0].max), (1, 1));
     assert_eq!((groups[1].min, groups[1].max), (0, 1));
     assert_eq!(
-        groups[1].prompt,
+        crate::common::compiled_legacy_target_prompt(
+            &ability.effect,
+            ability.targeting.as_ref(),
+            1
+        ),
         "Choose up to one target creature an opponent controls"
     );
 }

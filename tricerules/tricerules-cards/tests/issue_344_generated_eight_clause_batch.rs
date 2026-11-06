@@ -412,7 +412,7 @@ fn issue_344_pitiless_fists_fights_up_to_one() {
     assert_eq!((group.min, group.max), (0, 1));
     assert_eq!(group.effect_indices, [0]);
     assert_eq!(
-        group.prompt,
+        crate::common::compiled_legacy_target_prompt(&trigger.effect, Some(targeting), 0),
         "Choose up to one target creature an opponent controls"
     );
 

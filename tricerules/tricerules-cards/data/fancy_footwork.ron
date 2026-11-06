@@ -9,5 +9,5 @@
     Untap(subject: Chosen((kind: Creature))),
     PumpTarget(power: 2, toughness: 2, subject: Chosen((kind: Creature))),
   ],
-  targeting: Some((groups: [(min: 1, max: 2, prompt: "Choose one or two target creatures", effect_indices: [0, 1])])),
+  targeting: Some((groups: [(min: 1, max: 2, effect_indices: [0, 1])])),
 )

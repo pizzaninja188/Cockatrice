@@ -21,7 +21,7 @@
             GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Vigilance]),
         ],
         targeting: Some((groups: [(
-            min: 0, max: 3, prompt: "Choose up to three target creatures", effect_indices: [0, 1],
+            min: 0, max: 3, effect_indices: [0, 1],
         )])),
     ), (
         ability_id: "activated_03", presentation: OracleLines([4]), costs: [Loyalty(-6)],

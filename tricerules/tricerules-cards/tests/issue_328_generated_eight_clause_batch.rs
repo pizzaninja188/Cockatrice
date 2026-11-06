@@ -293,7 +293,10 @@ fn issue_328_bellowing_bruiser_is_an_adventure_with_the_cant_block_face() {
         .expect("Beat a Path targets up to two creatures");
     let group = single_group(targeting);
     assert_eq!((group.min, group.max), (0, 2));
-    assert_eq!(group.prompt, "Choose up to two target creatures");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(&adventure.spell_effect, Some(targeting), 0),
+        "Choose up to two target creatures"
+    );
     assert_eq!(group.effect_indices, [0]);
 }
 

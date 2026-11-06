@@ -38,7 +38,9 @@ fn issue_301_registers_exactly_the_reviewed_two_card_cohort() {
                                 && group.distinct_from.is_empty()
                                 && !group.same_graveyard
                                 && group.cast_cost_expansion.is_none()
-                                && group.prompt == "Choose up to one target card from a graveyard"
+                                && crate::common::compiled_legacy_target_prompt(
+                                    &ability.effect, ability.targeting.as_ref(), 0
+                                ) == "Choose up to one target card from a graveyard"
                         )
                 })
             })

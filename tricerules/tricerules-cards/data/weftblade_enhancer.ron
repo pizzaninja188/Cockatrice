@@ -15,7 +15,6 @@
     effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature)))],
     targeting: Some((groups: [(
       min: 0, max: 2, effect_indices: [0],
-      prompt: "Choose up to two target creatures",
     )])),
   )],
 )
