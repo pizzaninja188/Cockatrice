@@ -2,6 +2,76 @@ use tricerules_cards::primitives::{SpellEffectKind, TargetSchema, TargetingDef, 
 use tricerules_cards::ModalDef;
 
 #[test]
+fn generated_prompts_describe_constraints_in_shipped_target_groups() {
+    let cases: &[(&str, Option<usize>, &[&str])] = &[
+        (
+            "annul",
+            None,
+            &["Choose target artifact spell or enchantment spell"],
+        ),
+        (
+            "repel_calamity",
+            None,
+            &["Choose target (creature with power 4 or greater) or (creature with toughness 4 or greater)"],
+        ),
+        (
+            "mabels_mettle",
+            None,
+            &[
+                "Choose target creature",
+                "Choose up to one other target creature",
+            ],
+        ),
+        (
+            "reaping_willow",
+            Some(0),
+            &["Choose target creature card with mana value 3 or less from your graveyard"],
+        ),
+        (
+            "the_mycosynth_gardens",
+            Some(2),
+            &["Choose target nontoken artifact you control with mana value X"],
+        ),
+        (
+            "arena",
+            Some(0),
+            &[
+                "Choose target creature you control",
+                "Choose target creature you control",
+            ],
+        ),
+        (
+            "cruel_alliance",
+            None,
+            &["Choose target creature (without the linked additional cost, choose target creature with mana value 3 or less)"],
+        ),
+    ];
+    let registry = tricerules_cards::registry::global();
+    for &(id, ability, expected) in cases {
+        let face = registry.get(id).unwrap().primary_face();
+        let (effects, targeting) = match ability {
+            Some(index) => {
+                let ability = &face.activated_abilities[index];
+                (&ability.effect, &ability.targeting)
+            }
+            None => (&face.spell_effect, &face.targeting),
+        };
+        let mut targeting = targeting.clone().unwrap();
+        for group in &mut targeting.groups {
+            group.prompt.clear();
+        }
+        let schema = TargetSchema::compile(effects, Some(&targeting))
+            .unwrap_or_else(|error| panic!("{id}: {error}"));
+        let prompts = schema
+            .groups
+            .iter()
+            .map(|group| group.prompt.as_ref())
+            .collect::<Vec<_>>();
+        assert_eq!(prompts, expected, "{id}");
+    }
+}
+
+#[test]
 fn token_copy_requires_one_permanent_source() {
     use tricerules_cards::primitives::{EffectContext, TargetFilter, TargetGroupDef, TargetKind};
     let effect = SpellEffectKind::CreateTokenCopies {

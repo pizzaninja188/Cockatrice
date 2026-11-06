@@ -1,6 +1,6 @@
 //! Target kinds and composable target filters.
 
-use super::presentation::target_group_prompt;
+use super::target_prompt::target_group_prompt;
 use super::{
     CastCostReceiptCondition, Color, CompiledBlock, CompiledInstructionKind, CompiledProgram,
     ConditionObjectRef, HandCardAction, HandCardChooser, HandChoiceVisibility, Keyword,
@@ -274,7 +274,17 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                     chooser: group.chooser,
                     min: group.min,
                     max: group.max,
-                    prompt: target_group_prompt(group, &bindings)?,
+                    prompt: target_group_prompt(
+                        group,
+                        &bindings,
+                        group_index,
+                        bindings.iter().any(|binding| {
+                            matches!(
+                                effects[binding.effect_index],
+                                SpellEffectKind::CopyTargetArtifactWithManaValueX { .. }
+                            )
+                        }),
+                    )?,
                     distinct_from: Cow::Borrowed(group.distinct_from.as_slice()),
                     same_graveyard: group.same_graveyard,
                     bindings,
@@ -752,7 +762,7 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                 chooser: group.chooser,
                 min: group.min,
                 max: group.max,
-                prompt: target_group_prompt(group, &bindings)?,
+                prompt: target_group_prompt(group, &bindings, group_index, false)?,
                 distinct_from: Cow::Borrowed(group.distinct_from.as_slice()),
                 same_graveyard: group.same_graveyard,
                 bindings,
@@ -3066,9 +3076,10 @@ mod tests {
             unreachable!()
         };
         target.power = Some(PowerComparison::AtLeast(4));
+        let schema = TargetSchema::compile(&restricted, Some(&targeting)).unwrap();
         assert_eq!(
-            TargetSchema::compile(&restricted, Some(&targeting)).unwrap_err(),
-            "target group requires an explicit prompt for its constraints"
+            schema.groups[0].prompt,
+            "Choose one or two target creatures you control with power 4 or greater"
         );
         targeting.groups[0].prompt = "Choose creatures for this instruction".into();
         let schema = TargetSchema::compile(&restricted, Some(&targeting)).unwrap();

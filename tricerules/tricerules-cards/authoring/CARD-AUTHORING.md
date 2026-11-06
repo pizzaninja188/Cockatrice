@@ -1021,8 +1021,9 @@ for the owner are announced and revalidated even when a branch is not selected. 
 local to their mode, not flattened across sibling modes.
 
 Omit `prompt` when the shared formatter can describe the target group from its validated roles,
-filters, and bounds. This works for both legacy and Program groups. Supply a `prompt` override if
-validation reports that the group's constraints require one.
+filters, and bounds. It can describe filter alternatives, target distinctness, and chooser-relative
+constraints in both legacy and Program groups. Supply a `prompt` override when the generated wording
+needs additional guidance or validation requires one.
 
 When several supported instructions share one target filter and group, `CardProgram.target_aliases`
 can name that owner-local pair, for example `(name: "creature", group_index: 0,

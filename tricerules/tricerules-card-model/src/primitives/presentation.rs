@@ -4,12 +4,10 @@
 //! None as a unit: a plausible but incomplete sentence is worse than an identified fallback.
 
 use super::{
-    AbilityCost, Amount, CardTypeFilter, EffectSubject, GraveyardFilter, GraveyardOwner,
-    LibraryPartitionKind, LifeAmount, ManaAmount, ManaRetention, PlayerRecipient, SpellEffectKind,
-    StackSpellFilter, TargetBinding, TargetChooser, TargetController, TargetFilter, TargetGroupDef,
-    TargetKind, TargetRole, ZoneCardFilter,
+    AbilityCost, Amount, CardTypeFilter, EffectSubject, LibraryPartitionKind, LifeAmount,
+    ManaAmount, ManaRetention, PlayerRecipient, SpellEffectKind, TargetController, TargetFilter,
+    TargetKind,
 };
-use std::borrow::Cow;
 
 fn mana_text(amount: &ManaAmount) -> String {
     [
@@ -44,24 +42,12 @@ fn mana_color_symbol(color: super::Color) -> &'static str {
 }
 
 fn simple_target(filter: &TargetFilter) -> Option<String> {
-    if !filter.permanent_types.is_empty() {
-        return None;
-    }
-    let (noun, suffix) = battlefield_target_parts(filter)?;
-    Some(format!("{noun}{suffix}"))
-}
-
-fn battlefield_target_parts(filter: &TargetFilter) -> Option<(Cow<'static, str>, &'static str)> {
-    let noun = match (filter.kind, filter.permanent_types.as_slice()) {
-        (TargetKind::AnyTarget, []) => "any target".into(),
-        (TargetKind::Creature, []) => "target creature".into(),
-        (TargetKind::AnyPlayer, []) => "target player".into(),
-        (TargetKind::OpponentPlayer, []) => "target opponent".into(),
-        (TargetKind::AnyPermanent, []) => "target permanent".into(),
-        (TargetKind::AnyPermanent, [card_type]) => {
-            format!("target {}", card_type.as_str().to_ascii_lowercase()).into()
-        }
-        _ => return None,
+    let noun = match filter.kind {
+        TargetKind::AnyTarget => "any target",
+        TargetKind::Creature => "target creature",
+        TargetKind::AnyPlayer => "target player",
+        TargetKind::OpponentPlayer => "target opponent",
+        TargetKind::AnyPermanent => "target permanent",
     };
     let controller = match (&filter.kind, filter.controller) {
         (_, TargetController::Any) => "",
@@ -75,10 +61,9 @@ fn battlefield_target_parts(filter: &TargetFilter) -> Option<(Cow<'static, str>,
     let simple = TargetFilter {
         kind: filter.kind,
         controller: filter.controller,
-        permanent_types: filter.permanent_types.clone(),
         ..TargetFilter::default()
     };
-    (*filter == simple).then_some((noun, controller))
+    (*filter == simple).then(|| format!("{noun}{controller}"))
 }
 
 pub(super) fn card_type_label(card_type: CardTypeFilter) -> &'static str {
@@ -97,93 +82,6 @@ pub(super) fn card_type_label(card_type: CardTypeFilter) -> &'static str {
         CardTypeFilter::NonlandPermanent => "nonland permanent",
         CardTypeFilter::Noncreature => "noncreature",
     }
-}
-
-fn typed_target(card_type: Option<CardTypeFilter>, noun: &str) -> String {
-    match card_type {
-        Some(card_type) => format!("target {} {noun}", card_type_label(card_type)),
-        None => format!("target {noun}"),
-    }
-}
-
-fn target_prompt_parts(
-    role: TargetRole<'_>,
-    same_graveyard: bool,
-) -> Option<(Cow<'static, str>, &'static str)> {
-    match role {
-        TargetRole::Filtered(filter) => battlefield_target_parts(filter),
-        TargetRole::CreaturePermanent => Some(("target creature".into(), "")),
-        TargetRole::StackAbility => Some(("target activated or triggered ability".into(), "")),
-        TargetRole::StackSpell(filter) => {
-            let simple = StackSpellFilter {
-                card_type: filter.card_type,
-                ..StackSpellFilter::default()
-            };
-            (*filter == simple).then(|| (typed_target(filter.card_type, "spell").into(), ""))
-        }
-        TargetRole::GraveyardCard(filter) => {
-            let card_type = filter.card.as_ref().and_then(|card| card.card_type);
-            let simple = GraveyardFilter {
-                owner: filter.owner,
-                card: filter.card.as_ref().map(|_| ZoneCardFilter {
-                    card_type,
-                    ..ZoneCardFilter::default()
-                }),
-                ..GraveyardFilter::default()
-            };
-            let suffix = match (filter.owner, same_graveyard) {
-                (GraveyardOwner::Controller, _) => " from your graveyard",
-                (GraveyardOwner::AnyPlayer, false) => " from a graveyard",
-                (GraveyardOwner::AnyPlayer, true) => " from a single graveyard",
-                (GraveyardOwner::Opponent, false) => " from an opponent's graveyard",
-                (GraveyardOwner::Opponent, true) => " from a single opponent's graveyard",
-            };
-            (*filter == simple).then(|| (typed_target(card_type, "card").into(), suffix))
-        }
-    }
-}
-
-pub(super) fn target_group_prompt<'a>(
-    group: &'a TargetGroupDef,
-    bindings: &[TargetBinding<'_>],
-) -> Result<Cow<'a, str>, String> {
-    if !group.prompt.trim().is_empty() {
-        return Ok(Cow::Borrowed(&group.prompt));
-    }
-    let explicit_prompt_required =
-        || "target group requires an explicit prompt for its constraints".into();
-    let [first, rest @ ..] = bindings else {
-        return Err(explicit_prompt_required());
-    };
-    if group.chooser != TargetChooser::Controller
-        || group.for_each_opponent
-        || !group.distinct_from.is_empty()
-        || group.cast_cost_expansion.is_some()
-        || rest.iter().any(|binding| binding.role != first.role)
-    {
-        return Err(explicit_prompt_required());
-    }
-    let (noun, suffix) = target_prompt_parts(first.role, group.same_graveyard)
-        .ok_or_else(explicit_prompt_required)?;
-    if (group.min, group.max) == (1, 1) {
-        return Ok(format!("Choose {noun}{suffix}").into());
-    }
-    let quantity = match (group.min, group.max) {
-        (0, 1) => "up to one".into(),
-        (0, 2) => "up to two".into(),
-        (0, 3) => "up to three".into(),
-        (1, 2) => "one or two".into(),
-        (0, max) => Cow::Owned(format!("up to {max}")),
-        (min, max) if min == max => Cow::Owned(min.to_string()),
-        (min, max) => Cow::Owned(format!("{min}–{max}")),
-    };
-    let noun = noun.strip_prefix("any ").unwrap_or(&noun);
-    let noun = match (group.max, first.role) {
-        (1, _) => Cow::Borrowed(noun),
-        (_, TargetRole::StackAbility) => Cow::Borrowed("target activated or triggered abilities"),
-        _ => Cow::Owned(format!("{noun}s")),
-    };
-    Ok(format!("Choose {quantity} {noun}{suffix}").into())
 }
 
 pub(super) fn simple_costs(costs: &[AbilityCost], source: &str) -> Option<String> {
