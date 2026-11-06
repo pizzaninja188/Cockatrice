@@ -1020,6 +1020,10 @@ different requirements, including targetful leaves in separate conditional branc
 for the owner are announced and revalidated even when a branch is not selected. Mode groups are
 local to their mode, not flattened across sibling modes.
 
+Omit `prompt` when the shared formatter can describe the target group from its validated roles,
+filters, and bounds. This works for both legacy and Program groups. Supply a `prompt` override if
+validation reports that the group's constraints require one.
+
 When several supported instructions share one target filter and group, `CardProgram.target_aliases`
 can name that owner-local pair, for example `(name: "creature", group_index: 0,
 filter: (kind: Creature, controller: You))`. Use `TargetAlias("creature")` in supported effect

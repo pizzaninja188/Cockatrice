@@ -1,5 +1,6 @@
 //! Target kinds and composable target filters.
 
+use super::presentation::target_group_prompt;
 use super::{
     CastCostReceiptCondition, Color, CompiledBlock, CompiledInstructionKind, CompiledProgram,
     ConditionObjectRef, HandCardAction, HandCardChooser, HandChoiceVisibility, Keyword,
@@ -68,6 +69,8 @@ pub struct TargetGroupDef {
     pub chooser: TargetChooser,
     pub min: u32,
     pub max: u32,
+    /// Optional presentation override for a target group with a generated default.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub prompt: String,
     pub effect_indices: Vec<u32>,
     /// Indices of other groups whose chosen objects must be distinct from this group.
@@ -215,9 +218,6 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                 if group.min > group.max || group.max == 0 {
                     return Err("target group requires min <= max and max > 0".into());
                 }
-                if group.prompt.trim().is_empty() {
-                    return Err("target group prompt must not be empty".into());
-                }
                 if let Some(expansion) = &group.cast_cost_expansion {
                     if group.effect_indices.len() != 1 {
                         return Err(
@@ -274,7 +274,7 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                     chooser: group.chooser,
                     min: group.min,
                     max: group.max,
-                    prompt: Cow::Borrowed(group.prompt.as_str()),
+                    prompt: target_group_prompt(group, &bindings)?,
                     distinct_from: Cow::Borrowed(group.distinct_from.as_slice()),
                     same_graveyard: group.same_graveyard,
                     bindings,
@@ -579,9 +579,6 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
             if group.min > group.max || group.max == 0 {
                 return Err("target group requires min <= max and max > 0".into());
             }
-            if group.prompt.trim().is_empty() {
-                return Err("target group prompt must not be empty".into());
-            }
             if group_program_bindings.iter().any(|binding| {
                 effects_by_address
                     .get(&binding.instruction_address)
@@ -755,7 +752,7 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                 chooser: group.chooser,
                 min: group.min,
                 max: group.max,
-                prompt: Cow::Borrowed(group.prompt.as_str()),
+                prompt: target_group_prompt(group, &bindings)?,
                 distinct_from: Cow::Borrowed(group.distinct_from.as_slice()),
                 same_graveyard: group.same_graveyard,
                 bindings,
@@ -3040,9 +3037,47 @@ mod tests {
     }
 
     #[test]
+    fn omitted_target_prompt_uses_validated_group_and_keeps_authored_overrides() {
+        let effects = [SpellEffectKind::DamageTarget {
+            amount: Amount::Fixed(1),
+            target: TargetFilter {
+                controller: TargetController::You,
+                ..TargetFilter::default_creature()
+            },
+        }];
+        let mut targeting: TargetingDef =
+            ron::from_str("(groups: [(min: 0, max: 2, effect_indices: [0])])")
+                .expect("targeting can omit its prompt");
+        let schema = TargetSchema::compile(&effects, Some(&targeting)).unwrap();
+        assert_eq!(
+            schema.groups[0].prompt,
+            "Choose up to 2 target creatures you control"
+        );
+
+        let mut restricted = effects.clone();
+        let SpellEffectKind::DamageTarget { target, .. } = &mut restricted[0] else {
+            unreachable!()
+        };
+        target.power = Some(PowerComparison::AtLeast(4));
+        assert_eq!(
+            TargetSchema::compile(&restricted, Some(&targeting)).unwrap_err(),
+            "target group requires an explicit prompt for its constraints"
+        );
+        targeting.groups[0].prompt = "Choose creatures for this instruction".into();
+        let schema = TargetSchema::compile(&restricted, Some(&targeting)).unwrap();
+        assert_eq!(
+            schema.groups[0].prompt,
+            "Choose creatures for this instruction"
+        );
+    }
+
+    #[test]
     fn issue_107_same_graveyard_is_only_valid_for_graveyard_target_groups() {
         let graveyard_effects = vec![SpellEffectKind::MoveGraveyardCards {
-            filter: GraveyardFilter::default(),
+            filter: GraveyardFilter {
+                owner: GraveyardOwner::AnyPlayer,
+                ..GraveyardFilter::default()
+            },
             destination: GraveyardDestination::Exile,
             linked_exile_id: None,
             entry_modifiers: Vec::new(),
@@ -3053,14 +3088,18 @@ mod tests {
                 chooser: Default::default(),
                 min: 0,
                 max: 2,
-                prompt: "Choose up to two cards from a single graveyard".into(),
+                prompt: String::new(),
                 effect_indices: vec![0],
                 distinct_from: Vec::new(),
                 same_graveyard: true,
                 cast_cost_expansion: None,
             }],
         };
-        assert!(TargetSchema::compile(&graveyard_effects, Some(&same_graveyard)).is_ok());
+        let schema = TargetSchema::compile(&graveyard_effects, Some(&same_graveyard)).unwrap();
+        assert_eq!(
+            schema.groups[0].prompt,
+            "Choose up to 2 target cards from a single graveyard"
+        );
 
         let permanent_effects = vec![SpellEffectKind::DamageTarget {
             amount: Amount::Fixed(1),

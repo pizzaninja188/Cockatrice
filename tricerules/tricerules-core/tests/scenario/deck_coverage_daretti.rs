@@ -234,6 +234,15 @@ fn daretti_minus_two_targets_first_then_sacrifices_a_controlled_artifact() {
         let target = inject_graveyard_card(&mut engine, 0, "mind_stone");
         let foreign = inject_graveyard_card(&mut engine, 1, "sol_ring");
         let nonartifact = inject_graveyard_card(&mut engine, 0, "grizzly_bears");
+        let offer = engine.initial_response_batch();
+        let key = (u64::from(daretti) << 32) | 1;
+        let group = &offer.legal_by_player[&0].valid_targets_by_ability[&key].groups[0];
+        assert_eq!(
+            group.prompt_text,
+            "Choose target artifact card from your graveyard"
+        );
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(group.valid_graveyard_ids, [target]);
         if redirected {
             engine
                 .state

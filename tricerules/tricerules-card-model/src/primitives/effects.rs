@@ -2893,21 +2893,7 @@ impl ManaSpendFilter {
     }
 
     fn fallback_card_description(&self) -> String {
-        let type_name = self.card_type.map(|card_type| match card_type {
-            CardTypeFilter::BasicLand => "basic land",
-            CardTypeFilter::Land => "land",
-            CardTypeFilter::Enchantment => "enchantment",
-            CardTypeFilter::Instant => "instant",
-            CardTypeFilter::Sorcery => "sorcery",
-            CardTypeFilter::InstantOrSorcery => "instant or sorcery",
-            CardTypeFilter::Creature => "creature",
-            CardTypeFilter::Artifact => "artifact",
-            CardTypeFilter::Planeswalker => "planeswalker",
-            CardTypeFilter::Battle => "battle",
-            CardTypeFilter::Nonland => "nonland",
-            CardTypeFilter::NonlandPermanent => "nonland permanent",
-            CardTypeFilter::Noncreature => "noncreature",
-        });
+        let type_name = self.card_type.map(super::presentation::card_type_label);
         let description = match (self.subtype.as_deref(), type_name) {
             (Some(subtype), Some(card_type)) => format!("{subtype} {card_type}"),
             (Some(subtype), None) => subtype.to_owned(),
