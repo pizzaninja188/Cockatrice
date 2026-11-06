@@ -1,10 +1,12 @@
 #include "ruled_oracle_text.h"
 
 #include <QCryptographicHash>
+#include <QDataStream>
 #include <QRegularExpression>
 #include <QStringList>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
+#include <utility>
 
 QString RuledOracleText::normalizedText(const QString &text)
 {
@@ -91,6 +93,30 @@ void RuledOracleText::writeXml(QXmlStreamWriter &xml) const
         xml.writeEndElement();
     }
     xml.writeEndElement();
+}
+
+RuledOracleText RuledOracleText::readCache(QDataStream &in)
+{
+    RuledOracleText result;
+    quint32 count = 0;
+    in >> count;
+    for (quint32 i = 0; i < count; ++i) {
+        RuledOracleTextFace face;
+        in >> face.cardName >> face.faceName >> face.oracleText;
+        if (in.status() != QDataStream::Ok) {
+            return {};
+        }
+        result.faces.append(std::move(face));
+    }
+    return result;
+}
+
+void RuledOracleText::writeCache(QDataStream &out) const
+{
+    out << static_cast<quint32>(faces.size());
+    for (const auto &face : faces) {
+        out << face.cardName << face.faceName << face.oracleText;
+    }
 }
 
 RuledOracleText::FaceResult

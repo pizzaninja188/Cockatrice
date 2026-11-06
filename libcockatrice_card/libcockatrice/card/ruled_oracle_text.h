@@ -4,6 +4,7 @@
 #include <QList>
 #include <QString>
 
+class QDataStream;
 class QXmlStreamReader;
 class QXmlStreamWriter;
 
@@ -37,6 +38,8 @@ public:
     void addFace(const QString &cardName, const QString &faceName, const QString &text);
     void readXml(QXmlStreamReader &xml);
     void writeXml(QXmlStreamWriter &xml) const;
+    static RuledOracleText readCache(QDataStream &in);
+    void writeCache(QDataStream &out) const;
     FaceResult inspectFace(const QString &cardName, const QString &faceName, const QString &sha256) const;
     QString compatibleFaceText(const QString &cardName, const QString &faceName, const QString &sha256) const;
 

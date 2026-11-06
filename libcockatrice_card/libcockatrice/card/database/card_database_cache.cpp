@@ -26,6 +26,7 @@
 #include <QSharedPointer>
 #include <QtGlobal>
 #include <qnamespace.h>
+#include <utility>
 
 class ICardSetPriorityController;
 enum class CardRelationType;
@@ -34,7 +35,8 @@ template <typename Key, typename T> class QHash;
 namespace
 {
 constexpr quint32 CACHE_MAGIC = 0x43445243; // "CDRC"
-constexpr quint32 CACHE_VERSION = 3;
+// Version 4 includes per-face ruled Oracle text.
+constexpr quint32 CACHE_VERSION = 4;
 
 // ---- Primitives -----------------------------------------------------------
 
@@ -194,6 +196,7 @@ void writeCard(QDataStream &out, const CardInfoPtr &card)
 {
     writeString(out, card->getName());
     writeString(out, card->getText());
+    card->ruled().writeCache(out);
     out << card->getIsToken();
     writeBlob(out, card->getPropertiesBlob());
 
@@ -248,6 +251,10 @@ CardInfoPtr readCard(QDataStream &in, const SetNameMap &sets)
 {
     QString name = readString(in);
     QString text = readString(in);
+    auto ruledOracle = RuledOracleText::readCache(in);
+    if (in.status() != QDataStream::Ok) {
+        return nullptr;
+    }
     bool isToken = false;
     in >> isToken;
     QByteArray propertiesBlob = readHashBlob(in);
@@ -326,7 +333,7 @@ CardInfoPtr readCard(QDataStream &in, const SetNameMap &sets)
 
     CardInfoPtr card = CardInfo::newInstance(name, text, isToken, propertiesBlob, related, reverse, cardSets, ui,
                                              simpleName, altNames, false, localizedNames, localizedTexts);
-
+    card->ruled() = std::move(ruledOracle);
     return card;
 }
 

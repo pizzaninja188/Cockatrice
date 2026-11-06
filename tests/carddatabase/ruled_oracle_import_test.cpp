@@ -6,6 +6,8 @@
 #include <QJsonObject>
 #include <QTemporaryDir>
 #include <gtest/gtest.h>
+#include <libcockatrice/card/database/card_database_cache.h>
+#include <libcockatrice/card/database/card_database_data.h>
 #include <libcockatrice/card/database/parser/cockatrice_xml_4.h>
 #include <libcockatrice/card/set/card_set.h>
 #include <libcockatrice/interfaces/noop_card_preference_provider.h>
@@ -72,19 +74,34 @@ TEST(RuledOracleImportTest, SavesExactFacesInDatabaseWithoutCompanionFile)
     QFile input(path);
     ASSERT_TRUE(input.open(QIODevice::ReadOnly));
     CockatriceXml4Parser parser(&priorities);
-    CardNameMap loaded;
+    CardDatabaseData loaded;
     QObject::connect(&parser, &ICardDatabaseParser::addCard,
-                     [&loaded](CardInfoPtr card) { loaded.insert(card->getName(), card); });
+                     [&loaded](CardInfoPtr card) { loaded.cards.insert(card->getName(), card); });
+    QObject::connect(&parser, &ICardDatabaseParser::addSet,
+                     [&loaded](CardSetPtr set) { loaded.sets.insert(set->getShortName(), set); });
     parser.parseFile(input);
-    for (const auto &record : cards) {
-        const auto data = record.toMap();
-        const QString cardName = data.value("name").toString();
-        const QString faceName = data.value("faceName", cardName).toString();
-        const QString text = data.value("text").toString();
-        const auto card = loaded.value(data.contains("side") ? faceName : cardName);
-        ASSERT_TRUE(card) << faceName.toStdString();
-        EXPECT_EQ(card->ruled().compatibleFaceText(cardName, faceName, RuledOracleText::textSha256(text)), text)
-            << faceName.toStdString();
+    const auto expectExactFaces = [&cards](const CardNameMap &snapshot) {
+        for (const auto &record : cards) {
+            const auto data = record.toMap();
+            const QString cardName = data.value("name").toString();
+            const QString faceName = data.value("faceName", cardName).toString();
+            const QString text = data.value("text").toString();
+            const auto card = snapshot.value(data.contains("side") ? faceName : cardName);
+            ASSERT_TRUE(card) << faceName.toStdString();
+            EXPECT_EQ(card->ruled().compatibleFaceText(cardName, faceName, RuledOracleText::textSha256(text)), text)
+                << faceName.toStdString();
+        }
+        EXPECT_EQ(snapshot.value("Fire // Ice")->getText(), QStringLiteral("Fire text\n\n---\n\nIce text"));
+    };
+    {
+        SCOPED_TRACE("XML import");
+        expectExactFaces(loaded.cards);
     }
-    EXPECT_EQ(loaded.value("Fire // Ice")->getText(), QStringLiteral("Fire text\n\n---\n\nIce text"));
+    const QString cachePath = path + ".cache";
+    const QByteArray sourceHash("test-source-hash");
+    ASSERT_TRUE(CardDatabaseCache::write(cachePath, loaded, sourceHash));
+    CardDatabaseData cached;
+    ASSERT_TRUE(CardDatabaseCache::read(cachePath, cached, sourceHash, &priorities));
+    SCOPED_TRACE("binary cache");
+    expectExactFaces(cached.cards);
 }
