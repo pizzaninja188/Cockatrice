@@ -3,20 +3,31 @@ use tricerules_cards::ModalDef;
 
 #[test]
 fn generated_prompts_describe_constraints_in_shipped_target_groups() {
-    let cases: &[(&str, Option<usize>, &[&str])] = &[
+    enum Owner {
+        Spell,
+        Activated(usize),
+        Triggered(usize),
+    }
+    use Owner::{Activated, Spell, Triggered};
+    let cases: &[(&str, Owner, &[&str])] = &[
         (
             "annul",
-            None,
-            &["Choose target artifact spell or enchantment spell"],
+            Spell,
+            &["Choose target artifact or enchantment spell"],
+        ),
+        (
+            "swan_song",
+            Spell,
+            &["Choose target enchantment, instant, or sorcery spell"],
         ),
         (
             "repel_calamity",
-            None,
+            Spell,
             &["Choose target (creature with power 4 or greater) or (creature with toughness 4 or greater)"],
         ),
         (
             "mabels_mettle",
-            None,
+            Spell,
             &[
                 "Choose target creature",
                 "Choose up to one other target creature",
@@ -24,17 +35,25 @@ fn generated_prompts_describe_constraints_in_shipped_target_groups() {
         ),
         (
             "reaping_willow",
-            Some(0),
+            Activated(0),
             &["Choose target creature card with mana value 3 or less from your graveyard"],
         ),
         (
+            "nesting_grounds",
+            Activated(1),
+            &[
+                "Choose target permanent you control",
+                "Choose another target permanent",
+            ],
+        ),
+        (
             "the_mycosynth_gardens",
-            Some(2),
+            Activated(2),
             &["Choose target nontoken artifact you control with mana value X"],
         ),
         (
             "arena",
-            Some(0),
+            Activated(0),
             &[
                 "Choose target creature you control",
                 "Choose target creature you control",
@@ -42,32 +61,53 @@ fn generated_prompts_describe_constraints_in_shipped_target_groups() {
         ),
         (
             "cruel_alliance",
-            None,
-            &["Choose target creature (without the linked additional cost, choose target creature with mana value 3 or less)"],
+            Spell,
+            &["Choose target creature. Without the additional cost, choose target creature with mana value 3 or less."],
+        ),
+        (
+            "coati_scavenger",
+            Triggered(0),
+            &["Choose target card from your graveyard excluding instants and sorceries"],
+        ),
+        (
+            "scrap_trawler",
+            Triggered(0),
+            &["Choose target artifact card from your graveyard with mana value lower than the permanent that left the battlefield"],
         ),
     ];
     let registry = tricerules_cards::registry::global();
-    for &(id, ability, expected) in cases {
+    for (id, owner, expected) in cases {
         let face = registry.get(id).unwrap().primary_face();
-        let (effects, targeting) = match ability {
-            Some(index) => {
-                let ability = &face.activated_abilities[index];
+        let (effects, targeting) = match owner {
+            Activated(index) => {
+                let ability = &face.activated_abilities[*index];
                 (&ability.effect, &ability.targeting)
             }
-            None => (&face.spell_effect, &face.targeting),
+            Triggered(index) => {
+                let ability = &face.triggered_abilities[*index];
+                (&ability.effect, &ability.targeting)
+            }
+            Spell => (&face.spell_effect, &face.targeting),
         };
         let mut targeting = targeting.clone().unwrap();
         for group in &mut targeting.groups {
             group.prompt.clear();
         }
-        let schema = TargetSchema::compile(effects, Some(&targeting))
-            .unwrap_or_else(|error| panic!("{id}: {error}"));
+        let schema = match owner {
+            Spell => registry.compiled_program(id, face.face_id.as_str()),
+            Activated(_) | Triggered(_) => None,
+        }
+        .map_or_else(
+            || TargetSchema::compile(effects, Some(&targeting)),
+            |program| TargetSchema::compile_program(program, Some(&targeting)),
+        )
+        .unwrap_or_else(|error| panic!("{id}: {error}"));
         let prompts = schema
             .groups
             .iter()
             .map(|group| group.prompt.as_ref())
             .collect::<Vec<_>>();
-        assert_eq!(prompts, expected, "{id}");
+        assert_eq!(prompts, *expected, "{id}");
     }
 }
 

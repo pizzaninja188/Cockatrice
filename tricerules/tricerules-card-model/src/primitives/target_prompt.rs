@@ -46,7 +46,7 @@ impl Phrase {
     }
 }
 
-fn alternatives(branches: Vec<Phrase>) -> Option<Phrase> {
+fn alternatives(branches: Vec<Phrase>, shared_ending: Option<&str>) -> Option<Phrase> {
     let first = branches.first()?;
     let qualifiers = first.qualifiers.clone();
     let excludes_source = first.excludes_source;
@@ -54,12 +54,20 @@ fn alternatives(branches: Vec<Phrase>) -> Option<Phrase> {
         .iter()
         .all(|branch| branch.qualifiers == qualifiers && branch.excludes_source == excludes_source)
     {
-        let names = branches
+        let mut names = branches
             .into_iter()
             .map(|branch| branch.noun)
             .collect::<Vec<_>>();
+        let ending = shared_ending
+            .filter(|ending| names.iter().all(|name| name.ends_with(*ending)))
+            .unwrap_or_default();
+        for name in &mut names {
+            name.truncate(name.len() - ending.len());
+        }
+        let mut noun = joined(&names, "or");
+        noun.push_str(ending);
         return Some(Phrase {
-            noun: joined(&names, "or"),
+            noun,
             qualifiers,
             excludes_source,
         });
@@ -165,6 +173,7 @@ fn battlefield(
                 .iter()
                 .map(|branch| battlefield(branch, plural, chooser, per_opponent))
                 .collect::<Option<Vec<_>>>()?,
+            None,
         );
     }
     let mut adjectives = Vec::new();
@@ -347,12 +356,14 @@ fn spell(filter: &StackSpellFilter, plural: bool) -> Option<Phrase> {
         min_mana_value,
         max_mana_value,
     } = filter;
+    let subject = noun("spell", plural);
     if let Some(branches) = any_of {
         return alternatives(
             branches
                 .iter()
                 .map(|branch| spell(branch, plural))
                 .collect::<Option<Vec<_>>>()?,
+            Some(&format!(" {subject}")),
         );
     }
     let adjectives = is_color
@@ -361,14 +372,14 @@ fn spell(filter: &StackSpellFilter, plural: bool) -> Option<Phrase> {
         .chain(card_type.map(card_type_label))
         .map(str::to_owned)
         .collect();
-    let mut phrase = Phrase::new(with_adjectives(adjectives, noun("spell", plural)));
+    let mut phrase = Phrase::new(with_adjectives(adjectives, subject));
     phrase
         .qualifiers
         .extend(bounds("mana value", *min_mana_value, *max_mana_value));
     Some(phrase)
 }
 
-fn zone_card(filter: &ZoneCardFilter, plural: bool) -> Option<Phrase> {
+fn zone_card(filter: &ZoneCardFilter, plural: bool, location: &str) -> Option<Phrase> {
     let ZoneCardFilter {
         any_of,
         exact_name: None,
@@ -405,31 +416,40 @@ fn zone_card(filter: &ZoneCardFilter, plural: bool) -> Option<Phrase> {
                 types.as_slice(),
                 [Land, NonlandPermanent] | [NonlandPermanent, Land]
             ) {
-                return Some(Phrase::new(format!("permanent {}", noun("card", plural))));
+                let mut phrase = Phrase::new(format!("permanent {}", noun("card", plural)));
+                phrase.add(location);
+                return Some(phrase);
             }
         }
         return alternatives(
             branches
                 .iter()
-                .map(|branch| zone_card(branch, plural))
+                .map(|branch| zone_card(branch, plural, location))
                 .collect::<Option<Vec<_>>>()?,
+            None,
         );
     }
     let mut adjectives = required_supertypes
         .iter()
         .map(|name| name.to_ascii_lowercase())
         .collect::<Vec<_>>();
-    for kind in excluded_card_types {
-        use super::CardTypeFilter::{
-            BasicLand, InstantOrSorcery, Noncreature, Nonland, NonlandPermanent,
-        };
-        if matches!(
-            kind,
-            BasicLand | InstantOrSorcery | Noncreature | Nonland | NonlandPermanent
-        ) {
-            return None;
+    use super::CardTypeFilter::{
+        BasicLand, Instant, InstantOrSorcery, Noncreature, Nonland, NonlandPermanent, Sorcery,
+    };
+    let excludes_instants_and_sorceries = matches!(
+        excluded_card_types.as_slice(),
+        [Instant, Sorcery] | [Sorcery, Instant]
+    );
+    if !excludes_instants_and_sorceries {
+        for kind in excluded_card_types {
+            if matches!(
+                kind,
+                BasicLand | InstantOrSorcery | Noncreature | Nonland | NonlandPermanent
+            ) {
+                return None;
+            }
+            adjectives.push(format!("non{}", card_type_label(*kind)));
         }
-        adjectives.push(format!("non{}", card_type_label(*kind)));
     }
     adjectives.extend(excluded_subtypes.iter().map(|name| format!("non-{name}")));
     adjectives.extend(required_subtypes.iter().cloned());
@@ -438,6 +458,10 @@ fn zone_card(filter: &ZoneCardFilter, plural: bool) -> Option<Phrase> {
     phrase
         .qualifiers
         .extend(bounds("mana value", *min_mana_value, *max_mana_value));
+    phrase.add(location);
+    if excludes_instants_and_sorceries {
+        phrase.add("excluding instants and sorceries");
+    }
     Some(phrase)
 }
 
@@ -448,14 +472,7 @@ fn graveyard(filter: &GraveyardFilter, plural: bool, same_graveyard: bool) -> Op
         card,
         mana_value_less_than_trigger_object,
     } = filter;
-    let mut phrase = match card {
-        Some(card) => zone_card(card, plural)?,
-        None => Phrase::new(noun("card", plural)),
-    };
-    if *mana_value_less_than_trigger_object {
-        phrase.add("with lower mana value than the triggering object");
-    }
-    phrase.add(match (owner, same_graveyard, plural) {
+    let location = match (owner, same_graveyard, plural) {
         (GraveyardOwner::Controller, _, _) => "from your graveyard",
         (GraveyardOwner::AnyPlayer, true, _) => "from a single graveyard",
         (GraveyardOwner::AnyPlayer, false, true) => "from graveyards",
@@ -463,7 +480,18 @@ fn graveyard(filter: &GraveyardFilter, plural: bool, same_graveyard: bool) -> Op
         (GraveyardOwner::Opponent, true, _) => "from a single opponent's graveyard",
         (GraveyardOwner::Opponent, false, true) => "from opponents' graveyards",
         (GraveyardOwner::Opponent, false, false) => "from an opponent's graveyard",
-    });
+    };
+    let mut phrase = match card {
+        Some(card) => zone_card(card, plural, location)?,
+        None => {
+            let mut phrase = Phrase::new(noun("card", plural));
+            phrase.add(location);
+            phrase
+        }
+    };
+    if *mana_value_less_than_trigger_object {
+        phrase.add("with mana value lower than the permanent that left the battlefield");
+    }
     phrase.excludes_source = excluded_objects.contains(&TargetObjectExclusion::Source);
     Some(phrase)
 }
@@ -472,6 +500,7 @@ fn constrained_prompt(
     group: &TargetGroupDef,
     bindings: &[TargetBinding<'_>],
     group_index: usize,
+    earlier_distinct: &[usize],
     quantity: &str,
     matches_activation_x: bool,
 ) -> Option<String> {
@@ -494,12 +523,15 @@ fn constrained_prompt(
     if matches_activation_x {
         phrase.add("with mana value X");
     }
-    let mut text = format!("Choose {}", selection(phrase, quantity, group, group_index));
+    let mut text = format!(
+        "Choose {}",
+        selection(phrase, quantity, plural, group_index, earlier_distinct)
+    );
     if let Some(expansion) = &group.cast_cost_expansion {
         let restricted = battlefield(&expansion.without_cost, plural, group.chooser, false)?;
-        let restricted = selection(restricted, quantity, group, group_index);
+        let restricted = selection(restricted, quantity, plural, group_index, earlier_distinct);
         text.push_str(&format!(
-            " (without the linked additional cost, choose {restricted})"
+            ". Without the additional cost, choose {restricted}."
         ));
     }
     Some(text)
@@ -508,25 +540,25 @@ fn constrained_prompt(
 fn selection(
     mut phrase: Phrase,
     quantity: &str,
-    group: &TargetGroupDef,
+    plural: bool,
     group_index: usize,
+    earlier_distinct: &[usize],
 ) -> String {
-    let distinct_from = &group.distinct_from;
     // Only the second group can say "other" without naming the group it differs from.
-    let other_first_target = group_index == 1 && distinct_from.as_slice() == [0];
+    let other_first_target = group_index == 1 && earlier_distinct == [0];
     let other = phrase.excludes_source || other_first_target;
-    if !distinct_from.is_empty() && (phrase.excludes_source || !other_first_target) {
-        let groups = distinct_from
+    if !earlier_distinct.is_empty() && (phrase.excludes_source || !other_first_target) {
+        let groups = earlier_distinct
             .iter()
-            .map(|index| (u64::from(*index) + 1).to_string())
+            .map(|index| (index + 1).to_string())
             .collect::<Vec<_>>();
         let group_label = if groups.len() == 1 { "group" } else { "groups" };
         phrase.add(format!(
-            "different from targets in {group_label} {}",
+            "different from targets chosen in {group_label} {}",
             joined(&groups, "and")
         ));
     }
-    let generic = phrase.noun == if group.max > 1 { "targets" } else { "target" };
+    let generic = phrase.noun == if plural { "targets" } else { "target" };
     let prefix = match (quantity, other) {
         ("", true) => "another ".into(),
         ("", false) if generic => "any ".into(),
@@ -539,11 +571,12 @@ fn selection(
 }
 
 pub(super) fn target_group_prompt<'a>(
-    group: &'a TargetGroupDef,
+    groups: &'a [TargetGroupDef],
     bindings: &[TargetBinding<'_>],
     group_index: usize,
     matches_activation_x: bool,
 ) -> Result<Cow<'a, str>, String> {
+    let group = &groups[group_index];
     if !group.prompt.trim().is_empty() {
         return Ok(Cow::Borrowed(&group.prompt));
     }
@@ -557,10 +590,21 @@ pub(super) fn target_group_prompt<'a>(
         (min, max) if min == max => Cow::Owned(min.to_string()),
         (min, max) => Cow::Owned(format!("{min}–{max}")),
     };
+    // Explain the relation at the later choice regardless of which group declared it.
+    let earlier_distinct = groups[..group_index]
+        .iter()
+        .enumerate()
+        .filter_map(|(index, earlier)| {
+            (group.distinct_from.contains(&(index as u32))
+                || earlier.distinct_from.contains(&(group_index as u32)))
+            .then_some(index)
+        })
+        .collect::<Vec<_>>();
     constrained_prompt(
         group,
         bindings,
         group_index,
+        &earlier_distinct,
         &quantity,
         matches_activation_x,
     )

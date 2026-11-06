@@ -275,7 +275,7 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                     min: group.min,
                     max: group.max,
                     prompt: target_group_prompt(
-                        group,
+                        &targeting.groups,
                         &bindings,
                         group_index,
                         bindings.iter().any(|binding| {
@@ -762,7 +762,7 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                 chooser: group.chooser,
                 min: group.min,
                 max: group.max,
-                prompt: target_group_prompt(group, &bindings, group_index, false)?,
+                prompt: target_group_prompt(&targeting.groups, &bindings, group_index, false)?,
                 distinct_from: Cow::Borrowed(group.distinct_from.as_slice()),
                 same_graveyard: group.same_graveyard,
                 bindings,
