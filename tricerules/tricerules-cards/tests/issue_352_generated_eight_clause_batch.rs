@@ -142,7 +142,10 @@ fn issue_352_elvenkings_harper_makes_a_creature_unblockable() {
     };
     assert_eq!((group.min, group.max), (1, 1));
     assert_eq!(group.effect_indices, [0]);
-    assert_eq!(group.prompt, "Choose target creature");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(&ability.effect, Some(targeting), 0),
+        "Choose target creature"
+    );
 }
 
 #[test]

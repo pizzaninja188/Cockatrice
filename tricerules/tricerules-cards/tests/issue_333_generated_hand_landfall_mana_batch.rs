@@ -113,7 +113,10 @@ fn issue_333_pilfer_targets_an_opponent_for_a_public_nonland_discard() {
         panic!("Pilfer must own exactly one target group");
     };
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(group.prompt, "Choose target opponent");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(&face.spell_effect, Some(targeting), 0),
+        "Choose target opponent"
+    );
     assert_eq!(group.effect_indices, [0]);
 }
 

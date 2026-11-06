@@ -77,7 +77,10 @@ fn issue_318_misleading_motes_offers_the_owners_placement_choice() {
         .expect("Misleading Motes targets a creature");
     let group = single_group(targeting);
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(group.prompt, "Choose target creature");
+    let schema =
+        tricerules_cards::primitives::TargetSchema::compile_program(program, Some(targeting))
+            .expect("Misleading Motes target schema");
+    assert_eq!(schema.groups[0].prompt, "Choose target creature");
     assert!(group.effect_indices.is_empty());
     assert!(!group.same_graveyard);
     assert!(group.distinct_from.is_empty());
@@ -124,7 +127,10 @@ fn issue_318_run_behind_reduces_only_for_attacking_targets() {
         .expect("Run Behind targets a creature");
     let group = single_group(targeting);
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(group.prompt, "Choose target creature");
+    let schema =
+        tricerules_cards::primitives::TargetSchema::compile_program(program, Some(targeting))
+            .expect("Run Behind target schema");
+    assert_eq!(schema.groups[0].prompt, "Choose target creature");
     assert!(group.effect_indices.is_empty());
 }
 
@@ -200,7 +206,10 @@ fn issue_318_stratosoarer_grants_flying_and_keeps_basic_landcycling() {
     let targeting = ability.targeting.as_ref().expect("flying ETB targets");
     let group = single_group(targeting);
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(group.prompt, "Choose target creature");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(&ability.effect, Some(targeting), 0),
+        "Choose target creature"
+    );
     assert_eq!(group.effect_indices, [0]);
 
     let [cycling] = face.activated_abilities.as_slice() else {

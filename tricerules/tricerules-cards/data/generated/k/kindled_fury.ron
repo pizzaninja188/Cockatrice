@@ -6,5 +6,5 @@
   mana_cost: "{R}",
   types: ["Instant"],
   spell_effect: [PumpTarget(power: 1, toughness: 0), GrantKeywords(keywords: [FirstStrike])],
-  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0, 1])])),
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0, 1])])),
 )

@@ -359,7 +359,10 @@ fn issue_344_gorehorn_raider_deals_two_only_after_attacking() {
     };
     assert_eq!((group.min, group.max), (1, 1));
     assert_eq!(group.effect_indices, [0]);
-    assert_eq!(group.prompt, "Choose any target");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(&ability.effect, Some(targeting), 0),
+        "Choose any target"
+    );
 }
 
 #[test]

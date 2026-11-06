@@ -174,7 +174,10 @@ fn issue_427_tundra_tank_registers_crew_etb_and_the_keyword() {
         panic!("the ETB must publish one target group");
     };
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(group.prompt, "Choose target creature you control");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(&etb.effect, Some(targeting), 0),
+        "Choose target creature you control"
+    );
     assert_eq!(group.effect_indices, [0]);
 }
 

@@ -178,11 +178,10 @@ fn issue_412_two_mode_spells_expose_exact_modes_and_targets() {
             second: EffectSubject::Chosen(Box::new(creature_filter(TargetController::Opponent))),
         }]
     );
-    let fight_groups = &plow.modes[0]
-        .targeting
-        .as_ref()
-        .expect("fight groups")
-        .groups;
+    let fight = &plow.modes[0];
+    let fight_schema = TargetSchema::compile(&fight.effects, fight.targeting.as_ref())
+        .expect("fight target schema");
+    let fight_groups = &fight_schema.groups;
     assert_eq!(fight_groups.len(), 2);
     assert_eq!(fight_groups[0].prompt, "Choose target creature you control");
     assert_eq!(

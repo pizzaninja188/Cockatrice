@@ -401,7 +401,10 @@ fn issue_415_wrench_static_grants_vigilance_and_the_tap_ability() {
         panic!("Wrench grants exactly one target group");
     };
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(group.prompt, "Choose target creature");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(&granted.effect, Some(targeting), 0),
+        "Choose target creature"
+    );
     assert_eq!(group.effect_indices, [0]);
 }
 

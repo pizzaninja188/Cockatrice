@@ -19,7 +19,7 @@
       mana_cost: "{1}{R}",
       types: ["Instant", "Adventure"],
       spell_effect: [GrantKeywords(keywords: [DoubleStrike])],
-      targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0])])),
+      targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
     ),
   ],
 )

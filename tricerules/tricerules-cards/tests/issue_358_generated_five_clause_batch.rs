@@ -285,7 +285,10 @@ fn issue_358_susurian_voidborn_drains_when_self_creature_or_artifact_dies() {
     };
     assert_eq!((group.min, group.max), (1, 1));
     assert_eq!(group.effect_indices, [0]);
-    assert_eq!(group.prompt, "Choose target opponent");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(&ability.effect, Some(targeting), 0),
+        "Choose target opponent"
+    );
 }
 
 #[test]

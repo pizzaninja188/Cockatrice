@@ -180,7 +180,10 @@ fn issue_414_burdened_stoneback_activation_payload_is_exact() {
         panic!("Burdened Stoneback must have exactly one target group");
     };
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(group.prompt, "Choose target creature");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(&ability.effect, Some(targeting), 0),
+        "Choose target creature"
+    );
     assert_eq!(group.effect_indices, [0]);
 }
 
@@ -286,7 +289,10 @@ fn issue_414_gnarlbark_elm_activation_payload_is_exact() {
         panic!("Gnarlbark Elm must have exactly one target group");
     };
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(group.prompt, "Choose target creature");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(&ability.effect, Some(targeting), 0),
+        "Choose target creature"
+    );
     assert_eq!(group.effect_indices, [0]);
 }
 

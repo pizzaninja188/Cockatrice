@@ -512,7 +512,15 @@ fn issue_424_tap_and_untap_pairs_keep_their_printed_scopes() {
         for mode in &modal.modes {
             let group = &mode.targeting.as_ref().expect("tap group").groups[0];
             assert_eq!((group.min, group.max), (1, 1), "{card_id}");
-            assert_eq!(group.prompt, prompt, "{card_id}");
+            assert_eq!(
+                crate::common::compiled_legacy_target_prompt(
+                    &mode.effects,
+                    mode.targeting.as_ref(),
+                    0
+                ),
+                prompt,
+                "{card_id}"
+            );
         }
         assert_modal_schema(card_id, &modal);
     }

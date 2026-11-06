@@ -296,7 +296,10 @@ fn issue_335_drix_fatemaker_keeps_its_warp_counter_and_counter_filtered_anthem()
         panic!("Drix Fatemaker must own exactly one target group");
     };
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(group.prompt, "Choose target creature");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(&trigger.effect, Some(targeting), 0),
+        "Choose target creature"
+    );
     assert_eq!(group.effect_indices, [0]);
 
     let [anthem] = face.static_abilities.as_slice() else {

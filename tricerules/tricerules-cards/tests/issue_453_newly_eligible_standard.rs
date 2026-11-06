@@ -764,7 +764,10 @@ fn issue_453_etb_triggers_keep_exact_shapes() {
     assert_eq!(targeting.groups.len(), 1);
     assert_eq!((targeting.groups[0].min, targeting.groups[0].max), (1, 1));
     assert_eq!(targeting.groups[0].effect_indices, [0]);
-    assert_eq!(targeting.groups[0].prompt, "Choose target opponent");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(&drain.effect, Some(targeting), 0),
+        "Choose target opponent"
+    );
 
     let goblins = face("stony-voiced_goblins");
     let [discard] = goblins.triggered_abilities.as_slice() else {

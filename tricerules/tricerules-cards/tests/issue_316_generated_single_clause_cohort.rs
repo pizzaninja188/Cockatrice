@@ -355,10 +355,10 @@ fn issue_316_first_strike_pumps_share_one_mandatory_target_group() {
             .unwrap_or_else(|| panic!("{name} targets"));
         let group = single_group(targeting);
         assert_eq!((group.min, group.max), (1, 1));
-        assert_eq!(group.prompt, "Choose target creature");
         assert_eq!(group.effect_indices, [0, 1]);
         assert!(!group.same_graveyard);
-        assert!(TargetSchema::compile(&face.spell_effect, Some(targeting)).is_ok());
+        let schema = TargetSchema::compile(&face.spell_effect, Some(targeting)).unwrap();
+        assert_eq!(schema.groups[0].prompt, "Choose target creature");
     }
 }
 

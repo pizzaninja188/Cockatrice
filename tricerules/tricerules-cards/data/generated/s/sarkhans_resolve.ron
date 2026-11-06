@@ -13,7 +13,7 @@
         mode_id: "mode_01",
         presentation: OracleLines([2]),
         effects: [PumpTarget(power: 3, toughness: 3)],
-        targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0])])),
+        targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
       ),
       (
         mode_id: "mode_02",

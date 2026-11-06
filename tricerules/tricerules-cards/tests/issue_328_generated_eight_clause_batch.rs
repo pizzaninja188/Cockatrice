@@ -209,7 +209,10 @@ fn issue_328_axgard_cavalry_taps_to_grant_haste() {
     let targeting = ability.targeting.as_ref().expect("Axgard Cavalry targets");
     let group = single_group(targeting);
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(group.prompt, "Choose target creature");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(&ability.effect, Some(targeting), 0),
+        "Choose target creature"
+    );
     assert_eq!(group.effect_indices, [0]);
 }
 
@@ -328,7 +331,10 @@ fn issue_328_kindled_heroism_pumps_grants_first_strike_and_scries() {
         .expect("Kindled Heroism targets a creature");
     let group = single_group(targeting);
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(group.prompt, "Choose target creature");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(&face.spell_effect, Some(targeting), 0),
+        "Choose target creature"
+    );
     assert_eq!(
         group.effect_indices,
         [0, 1],

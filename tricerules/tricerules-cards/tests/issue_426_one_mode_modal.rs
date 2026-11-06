@@ -183,12 +183,11 @@ fn issue_426_modes_expose_exact_effects_and_target_prompts() {
         }]
     );
     assert_eq!(
-        cerebral.modes[1]
-            .targeting
-            .as_ref()
-            .expect("reveal target group")
-            .groups[0]
-            .prompt,
+        crate::common::compiled_legacy_target_prompt(
+            &cerebral.modes[1].effects,
+            cerebral.modes[1].targeting.as_ref(),
+            0,
+        ),
         "Choose target opponent"
     );
     assert_modal_schema("cerebral_confiscation", &cerebral);
@@ -383,12 +382,11 @@ fn issue_426_modes_expose_exact_effects_and_target_prompts() {
         ]
     );
     assert_eq!(
-        over.modes[1]
-            .targeting
-            .as_ref()
-            .expect("explore group")
-            .groups[0]
-            .prompt,
+        crate::common::compiled_legacy_target_prompt(
+            &over.modes[1].effects,
+            over.modes[1].targeting.as_ref(),
+            0,
+        ),
         "Choose target creature you control"
     );
     assert_modal_schema("over_the_edge", &over);

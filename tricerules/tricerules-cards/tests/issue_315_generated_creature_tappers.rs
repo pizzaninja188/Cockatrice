@@ -140,7 +140,10 @@ fn issue_315_registry_contains_exactly_the_reviewed_creature_tapper_cohort() {
             panic!("{name} should have exactly one target group");
         };
         assert_eq!((group.min, group.max), (1, 1));
-        assert_eq!(group.prompt, prompt);
+        assert_eq!(
+            crate::common::compiled_legacy_target_prompt(&ability.effect, Some(targeting), 0),
+            prompt
+        );
         assert_eq!(group.effect_indices, [0]);
         assert!(group.distinct_from.is_empty());
         assert!(!group.same_graveyard);

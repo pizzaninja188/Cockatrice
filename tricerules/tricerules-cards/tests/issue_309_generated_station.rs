@@ -194,11 +194,16 @@ fn issue_309_cards_preserve_exact_faces_abilities_and_presentation_fingerprints(
                     },
                 }]
             );
-            let [group] = trigger.targeting.as_ref().unwrap().groups.as_slice() else {
+            let schema = tricerules_cards::primitives::TargetSchema::compile(
+                &trigger.effect,
+                trigger.targeting.as_ref(),
+            )
+            .expect("Debris target schema");
+            let [group] = schema.groups.as_slice() else {
                 panic!("Debris target group")
             };
             assert_eq!(
-                (group.min, group.max, group.prompt.as_str()),
+                (group.min, group.max, group.prompt.as_ref()),
                 (1, 1, "Choose any target")
             );
         }

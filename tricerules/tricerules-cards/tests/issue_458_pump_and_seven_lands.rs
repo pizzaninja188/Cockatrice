@@ -213,7 +213,12 @@ fn issue_458_pump_life_spells_apply_the_ordered_effects_to_one_mandatory_target(
             panic!("{} must author exactly one target group", case.id);
         };
         assert_eq!((group.min, group.max), (1, 1), "{}", case.id);
-        assert_eq!(group.prompt, "Choose target creature", "{}", case.id);
+        assert_eq!(
+            crate::common::compiled_legacy_target_prompt(&face.spell_effect, Some(targeting), 0),
+            "Choose target creature",
+            "{}",
+            case.id
+        );
         assert_eq!(
             group.effect_indices,
             vec![0],

@@ -335,7 +335,10 @@ fn issue_343_hoverstone_pilgrim_keeps_flying_ward_and_any_graveyard_bottom() {
     };
     assert_eq!((group.min, group.max), (1, 1));
     assert_eq!(group.effect_indices, [0]);
-    assert_eq!(group.prompt, "Choose target card from a graveyard");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(&activated.effect, Some(targeting), 0),
+        "Choose target card from a graveyard"
+    );
 
     let [ward] = face.triggered_abilities.as_slice() else {
         panic!("Hoverstone Pilgrim must keep exactly one triggered ability");

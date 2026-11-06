@@ -79,13 +79,11 @@ fn issue_327_honor_counters_one_target_and_draws() {
     let targeting = face.targeting.as_ref().expect("Honor targets a creature");
     let group = single_group(targeting);
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(group.prompt, "Choose target creature");
     assert_eq!(group.effect_indices, [0]);
-    assert!(tricerules_cards::primitives::TargetSchema::compile(
-        &face.spell_effect,
-        Some(targeting)
-    )
-    .is_ok());
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(&face.spell_effect, Some(targeting), 0),
+        "Choose target creature"
+    );
 }
 
 #[test]

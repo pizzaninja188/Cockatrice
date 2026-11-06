@@ -204,7 +204,10 @@ fn issue_336_magic_pot_exiles_any_graveyard_card_and_keeps_its_dies_treasure() {
         panic!("Magic Pot must own exactly one target group");
     };
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(group.prompt, "Choose target card from a graveyard");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(&ability.effect, Some(targeting), 0),
+        "Choose target card from a graveyard"
+    );
 
     let [trigger] = face.triggered_abilities.as_slice() else {
         panic!("Magic Pot must keep exactly one dies trigger");
@@ -329,7 +332,7 @@ fn issue_336_graveshifter_keeps_changeling_and_the_optional_return() {
     };
     assert_eq!((group.min, group.max), (1, 1));
     assert_eq!(
-        group.prompt,
+        crate::common::compiled_legacy_target_prompt(&ability.effect, Some(targeting), 0),
         "Choose target creature card from your graveyard"
     );
 }

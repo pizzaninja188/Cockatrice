@@ -191,7 +191,8 @@ fn issue_455_each_identity_prints_the_typed_opponent_pump_trigger() {
         };
         assert_eq!((group.min, group.max), (1, 1), "{}", case.id);
         assert_eq!(
-            group.prompt, "Choose target creature an opponent controls",
+            crate::common::compiled_legacy_target_prompt(&ability.effect, Some(targeting), 0),
+            "Choose target creature an opponent controls",
             "{}",
             case.id
         );

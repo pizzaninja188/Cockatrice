@@ -13,7 +13,7 @@
         mode_id: "mode_01",
         presentation: OracleLines([2]),
         effects: [ChooseHandCards(action: Discard, count: 2, target: (kind: OpponentPlayer))],
-        targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target opponent", effect_indices: [0])])),
+        targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
       ),
       (
         mode_id: "mode_02",
@@ -28,7 +28,7 @@
             visibility: PublicReveal,
           ),
         ],
-        targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target opponent", effect_indices: [0])])),
+        targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
       ),
     ],
   ),

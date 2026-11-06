@@ -362,7 +362,7 @@ fn issue_429_new_horizons_counters_and_grants_two_mana_of_one_color() {
     assert_eq!(targeting.groups[0].min, 1);
     assert_eq!(targeting.groups[0].max, 1);
     assert_eq!(
-        targeting.groups[0].prompt,
+        crate::common::compiled_legacy_target_prompt(&trigger.effect, Some(targeting), 0),
         "Choose target creature you control"
     );
     assert_eq!(targeting.groups[0].effect_indices, vec![0]);
@@ -496,7 +496,7 @@ fn issue_429_friendly_neighborhood_creates_citizens_and_pumps_per_creature() {
                         chooser: Default::default(),
                         min: 1,
                         max: 1,
-                        prompt: "Choose target creature".into(),
+                        prompt: String::new(),
                         effect_indices: vec![0],
                         distinct_from: Vec::new(),
                         same_graveyard: false,
@@ -516,6 +516,14 @@ fn issue_429_friendly_neighborhood_creates_citizens_and_pumps_per_creature() {
     );
     let granted = granted_ability(definition);
     assert_eq!(granted.timing, ActivationTiming::SorcerySpeed);
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(
+            &granted.effect,
+            granted.targeting.as_ref(),
+            0
+        ),
+        "Choose target creature"
+    );
 
     let token = tricerules_cards::registry::global()
         .get("human_citizen_gw_1_1")

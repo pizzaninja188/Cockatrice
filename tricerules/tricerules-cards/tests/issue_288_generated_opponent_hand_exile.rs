@@ -101,7 +101,11 @@ fn issue_288_emits_exact_private_affected_player_exile_trigger() {
         assert_eq!(targeting.groups.len(), 1, "{id}");
         let group = &targeting.groups[0];
         assert_eq!((group.min, group.max), (1, 1), "{id}");
-        assert_eq!(group.prompt, "Choose target opponent", "{id}");
+        assert_eq!(
+            crate::common::compiled_legacy_target_prompt(&ability.effect, Some(targeting), 0),
+            "Choose target opponent",
+            "{id}"
+        );
         assert_eq!(group.effect_indices, [0], "{id}");
         assert!(group.distinct_from.is_empty(), "{id}");
     }

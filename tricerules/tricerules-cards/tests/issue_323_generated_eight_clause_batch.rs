@@ -167,10 +167,10 @@ fn issue_323_twice_the_rage_grants_double_strike() {
         .expect("Twice the Rage targets a creature");
     let group = single_group(targeting);
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(group.prompt, "Choose target creature");
     assert_eq!(group.effect_indices, [0]);
     assert!(group.distinct_from.is_empty());
-    assert!(TargetSchema::compile(&adventure.spell_effect, Some(targeting)).is_ok());
+    let schema = TargetSchema::compile(&adventure.spell_effect, Some(targeting)).unwrap();
+    assert_eq!(schema.groups[0].prompt, "Choose target creature");
 }
 
 #[test]
@@ -205,9 +205,9 @@ fn issue_323_ancestors_aid_pumps_and_creates_a_treasure() {
         .expect("Ancestors' Aid targets a creature");
     let group = single_group(targeting);
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(group.prompt, "Choose target creature");
     assert_eq!(group.effect_indices, [0, 1]);
-    assert!(TargetSchema::compile(&face.spell_effect, Some(targeting)).is_ok());
+    let schema = TargetSchema::compile(&face.spell_effect, Some(targeting)).unwrap();
+    assert_eq!(schema.groups[0].prompt, "Choose target creature");
 }
 
 #[test]
@@ -291,9 +291,9 @@ fn issue_323_enter_the_enigma_makes_a_creature_unblockable_and_draws() {
         .expect("Enter the Enigma targets a creature");
     let group = single_group(targeting);
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(group.prompt, "Choose target creature");
     assert_eq!(group.effect_indices, [0]);
-    assert!(TargetSchema::compile(&face.spell_effect, Some(targeting)).is_ok());
+    let schema = TargetSchema::compile(&face.spell_effect, Some(targeting)).unwrap();
+    assert_eq!(schema.groups[0].prompt, "Choose target creature");
 }
 
 #[test]

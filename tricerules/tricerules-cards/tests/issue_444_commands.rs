@@ -89,7 +89,10 @@ fn issue_444_mass_modes_bind_one_player_and_keep_ordered_instructions() {
             .groups[0];
         assert_eq!((group.min, group.max), (1, 1));
         assert_eq!(group.effect_indices.len(), mode.effects.len());
-        assert_eq!(group.prompt, "Choose target player");
+        assert_eq!(
+            crate::common::compiled_legacy_target_prompt(&mode.effects, mode.targeting.as_ref(), 0),
+            "Choose target player"
+        );
     }
     let return_group = &trystan.modes[1].targeting.as_ref().unwrap().groups[0];
     assert_eq!((return_group.min, return_group.max), (1, 2));

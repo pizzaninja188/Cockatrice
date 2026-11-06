@@ -165,7 +165,11 @@ fn issue_460_fleeting_distraction_and_overkill_own_the_reviewed_negative_pumps()
             panic!("{id} must author exactly one target group");
         };
         assert_eq!((group.min, group.max), (1, 1), "{id}");
-        assert_eq!(group.prompt, "Choose target creature", "{id}");
+        assert_eq!(
+            crate::common::compiled_legacy_target_prompt(&face.spell_effect, Some(targeting), 0),
+            "Choose target creature",
+            "{id}"
+        );
         assert_eq!(group.effect_indices, vec![0], "{id}: only the pump targets");
         assert!(group.distinct_from.is_empty(), "{id}");
         assert!(!group.same_graveyard, "{id}");

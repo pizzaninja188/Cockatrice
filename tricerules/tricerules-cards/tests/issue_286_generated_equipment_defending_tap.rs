@@ -192,7 +192,10 @@ fn issue_286_generated_cards_preserve_identity_and_all_equipment_abilities() {
         panic!("Thunder Lasso ETB must have one target group");
     };
     assert_eq!((etb_group.min, etb_group.max), (1, 1));
-    assert_eq!(etb_group.prompt, "Choose target creature you control");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(&lasso_etb.effect, Some(etb_targeting), 0),
+        "Choose target creature you control"
+    );
     assert_eq!(etb_group.effect_indices, [0]);
     assert_attack_tap_trigger(lasso_trigger, "triggered_02", 3);
     let [lasso_equip] = lasso.activated_abilities.as_slice() else {

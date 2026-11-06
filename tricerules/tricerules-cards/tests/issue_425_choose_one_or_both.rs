@@ -186,7 +186,14 @@ fn issue_425_avengers_disassembled_sweeps_and_searches_for_the_lands_controller(
         .expect("land group")
         .groups[0];
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(group.prompt, "Choose target land");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(
+            &avengers.modes[1].effects,
+            avengers.modes[1].targeting.as_ref(),
+            0
+        ),
+        "Choose target land"
+    );
     assert_eq!(group.effect_indices, vec![0]);
 }
 
@@ -261,7 +268,14 @@ fn issue_425_epic_fight_doubles_both_characteristics_on_one_target() {
         .expect("double group")
         .groups[0];
     assert_eq!(group.effect_indices, vec![0, 1]);
-    assert_eq!(group.prompt, "Choose target creature");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(
+            &epic.modes[0].effects,
+            epic.modes[0].targeting.as_ref(),
+            0
+        ),
+        "Choose target creature"
+    );
 
     assert_eq!(
         epic.modes[1].effects,

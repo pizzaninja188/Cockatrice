@@ -121,7 +121,7 @@ fn issue_373_cloud_of_darkness_scales_the_pump_from_the_graveyard() {
     let targeting = ability.targeting.as_ref().expect("targeting");
     assert_eq!(targeting.groups[0].effect_indices, [0]);
     assert_eq!(
-        targeting.groups[0].prompt,
+        crate::common::compiled_legacy_target_prompt(&ability.effect, Some(targeting), 0),
         "Choose target creature an opponent controls"
     );
 }
