@@ -1,7 +1,24 @@
 //! Registry assertions accept reviewed constants, never generator-produced expectations.
 pub mod draw_discard_program;
 
+use std::borrow::Cow;
+use tricerules_cards::primitives::{SpellEffectKind, TargetSchema, TargetingDef};
 use tricerules_cards::{CardFace, Keyword};
+
+#[allow(dead_code)] // Shared by the separate registry test binaries.
+pub fn compiled_legacy_target_prompt<'a>(
+    effects: &[SpellEffectKind],
+    targeting: Option<&'a TargetingDef>,
+    group_index: usize,
+) -> Cow<'a, str> {
+    TargetSchema::compile(effects, targeting)
+        .expect("valid legacy targeting")
+        .groups
+        .into_iter()
+        .nth(group_index)
+        .expect("target group exists")
+        .prompt
+}
 
 #[allow(dead_code)]
 pub struct FaceExpectation<'a> {

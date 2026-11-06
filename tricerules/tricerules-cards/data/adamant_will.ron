@@ -11,5 +11,5 @@
     PumpTarget(power: 2, toughness: 2, subject: Chosen((kind: Creature))),
     GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Indestructible]),
   ],
-  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0, 1])])),
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0, 1])])),
 )

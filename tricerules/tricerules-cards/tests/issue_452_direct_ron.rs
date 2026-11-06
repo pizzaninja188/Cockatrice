@@ -114,7 +114,10 @@ fn issue_452_direct_ron_registers_both_reviewed_handwritten_cards() {
         .expect("Oracle's Restoration targeting");
     let group = single_group(targeting);
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(group.prompt, "Choose target creature you control");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(&face.spell_effect, Some(targeting), 0),
+        "Choose target creature you control"
+    );
     assert_eq!(group.effect_indices, [0]);
 }
 

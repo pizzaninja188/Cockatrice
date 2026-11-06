@@ -39,7 +39,14 @@ fn beast_within_targets_any_permanent_and_gives_a_beast_to_its_controller() {
         .groups[0];
     assert_eq!((group.min, group.max), (1, 1));
     assert_eq!(group.effect_indices, [0]);
-    assert_eq!(group.prompt, "Choose target permanent");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(
+            &face.spell_effect,
+            face.targeting.as_ref(),
+            0
+        ),
+        "Choose target permanent"
+    );
 
     assert!(registry.is_token("beast_g_3_3"));
     let token = registry.get("beast_g_3_3").expect("Beast token");

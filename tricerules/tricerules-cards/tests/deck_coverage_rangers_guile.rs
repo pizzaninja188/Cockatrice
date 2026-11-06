@@ -46,7 +46,6 @@ fn rangers_guile_registers_its_complete_targeted_pump_and_hexproof() {
         chooser: tricerules_cards::primitives::TargetChooser::Controller,
         min: 1,
         max: 1,
-        prompt,
         effect_indices,
         ..
     }] = face
@@ -58,6 +57,13 @@ fn rangers_guile_registers_its_complete_targeted_pump_and_hexproof() {
     else {
         panic!("Ranger's Guile has one required target group");
     };
-    assert_eq!(prompt, "Choose target creature you control");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(
+            &face.spell_effect,
+            face.targeting.as_ref(),
+            0
+        ),
+        "Choose target creature you control"
+    );
     assert_eq!(effect_indices, &[0, 1]);
 }

@@ -42,7 +42,14 @@ fn blue_complete_definition_and_presentation() {
     assert_eq!(groups.len(), 1);
     assert_eq!((groups[0].min, groups[0].max), (1, 1));
     assert_eq!(groups[0].effect_indices, [0]);
-    assert_eq!(groups[0].prompt, "Choose target player");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(
+            &face.spell_effect,
+            face.targeting.as_ref(),
+            0
+        ),
+        "Choose target player"
+    );
 }
 
 #[test]

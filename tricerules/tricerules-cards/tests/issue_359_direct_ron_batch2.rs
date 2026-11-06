@@ -123,10 +123,22 @@ fn issue_359_direct_ron_batch2_maps_definitions() {
         &counter_program.body.steps[0].kind,
         InstructionKind::Perform(effect) if effect.as_ref() == &counter_spell_default()
     ));
-    assert_eq!(
-        single_group(counter.targeting.as_ref().unwrap()).prompt,
-        "Choose target spell"
+    let counter_targeting = counter.targeting.as_ref().expect("counter mode targeting");
+    single_group(counter_targeting);
+    let counter_owner = ProgramOwnerId::face_mode(
+        three.id.clone(),
+        face.face_id.clone(),
+        counter.mode_id.clone(),
     );
+    let compiled_counter = registry
+        .compiled_program_for_owner(&counter_owner)
+        .expect("compiled counter mode");
+    let counter_targets = tricerules_cards::primitives::TargetSchema::compile_program(
+        compiled_counter,
+        Some(counter_targeting),
+    )
+    .expect("counter mode targets");
+    assert_eq!(counter_targets.groups[0].prompt, "Choose target spell");
     assert_eq!(copy.mode_id, tricerules_cards::ModeId::new("copy").unwrap());
     assert!(copy.effects.is_empty());
     let copy_program = copy.program.as_ref().expect("authored copy mode program");

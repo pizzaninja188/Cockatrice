@@ -42,7 +42,14 @@ fn pongify_has_exact_identity_target_and_ape_token_contract() {
         .groups[0];
     assert_eq!((group.min, group.max), (1, 1));
     assert_eq!(group.effect_indices, [0]);
-    assert_eq!(group.prompt, "Choose target creature");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(
+            &face.spell_effect,
+            face.targeting.as_ref(),
+            0
+        ),
+        "Choose target creature"
+    );
 
     assert!(registry.is_token("ape_g_3_3"));
     let ape = registry.get("ape_g_3_3").expect("Ape token").primary_face();

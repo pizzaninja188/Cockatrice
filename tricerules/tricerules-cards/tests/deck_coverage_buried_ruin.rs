@@ -42,7 +42,7 @@ fn buried_ruin_registers_colorless_mana_and_targeted_artifact_recovery() {
     };
     assert_eq!((group.min, group.max), (1, 1));
     assert_eq!(
-        group.prompt,
+        crate::common::compiled_legacy_target_prompt(&recovery.effect, Some(targeting), 0),
         "Choose target artifact card from your graveyard"
     );
     assert_eq!(group.effect_indices, [0]);

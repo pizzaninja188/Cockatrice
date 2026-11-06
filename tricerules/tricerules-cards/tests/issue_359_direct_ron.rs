@@ -123,7 +123,14 @@ fn issue_359_explosive_derailment_maps_every_printed_clause() {
     let damage_targeting = damage_mode.targeting.as_ref().expect("creature target");
     let group = single_group(damage_targeting);
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(group.prompt, "Choose target creature");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(
+            &damage_mode.effects,
+            Some(damage_targeting),
+            0
+        ),
+        "Choose target creature"
+    );
     assert_eq!(group.effect_indices, [0]);
 
     assert_eq!(
@@ -151,7 +158,14 @@ fn issue_359_explosive_derailment_maps_every_printed_clause() {
     let destroy_targeting = destroy_mode.targeting.as_ref().expect("artifact target");
     let group = single_group(destroy_targeting);
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(group.prompt, "Choose target artifact");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(
+            &destroy_mode.effects,
+            Some(destroy_targeting),
+            0
+        ),
+        "Choose target artifact"
+    );
     assert_eq!(group.effect_indices, [0]);
 
     // Mode-local target contracts stay distinct: each mode compiles against its own targeting.
@@ -227,8 +241,13 @@ fn issue_359_unfortunate_accident_maps_every_printed_clause() {
         }]
     );
     let destroy_targeting = destroy_mode.targeting.as_ref().expect("creature target");
+    single_group(destroy_targeting);
     assert_eq!(
-        single_group(destroy_targeting).prompt,
+        crate::common::compiled_legacy_target_prompt(
+            &destroy_mode.effects,
+            Some(destroy_targeting),
+            0,
+        ),
         "Choose target creature"
     );
 

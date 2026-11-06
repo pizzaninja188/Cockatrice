@@ -60,6 +60,13 @@ fn manifold_key_registers_its_artifact_untap_and_unblockable_activations() {
         panic!("Manifold Key's second ability has one target group");
     };
     assert_eq!((unblockable_group.min, unblockable_group.max), (1, 1));
-    assert_eq!(unblockable_group.prompt, "Choose target creature");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(
+            &unblockable.effect,
+            Some(unblockable_targeting),
+            0
+        ),
+        "Choose target creature"
+    );
     assert_eq!(unblockable_group.effect_indices, [0]);
 }

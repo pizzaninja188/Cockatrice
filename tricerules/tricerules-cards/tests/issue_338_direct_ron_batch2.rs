@@ -220,7 +220,10 @@ fn issue_338_direct_ron_batch2_maps_definitions() {
     let targeting = face.targeting.as_ref().expect("Betrayer's Bargain targets");
     let group = single_group(targeting);
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(group.prompt, "Choose target creature");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(&face.spell_effect, Some(targeting), 0),
+        "Choose target creature"
+    );
     assert_eq!(group.effect_indices, [0, 1]);
 
     // Dusk Rose Reliquary: sacrifice an artifact or creature, Ward {2}, and a linked exile.

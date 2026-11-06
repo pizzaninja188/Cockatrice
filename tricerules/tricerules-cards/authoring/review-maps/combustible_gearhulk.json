@@ -33,8 +33,7 @@
         "/faces/0/triggered_abilities/0/program/target_bindings/0/role",
         "/faces/0/triggered_abilities/0/program/target_bindings/0/target_group_index",
         "/faces/0/triggered_abilities/0/targeting/groups/0/min",
-        "/faces/0/triggered_abilities/0/targeting/groups/0/max",
-        "/faces/0/triggered_abilities/0/targeting/groups/0/prompt"
+        "/faces/0/triggered_abilities/0/targeting/groups/0/max"
       ]
     }
   ],

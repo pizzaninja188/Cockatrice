@@ -34,7 +34,14 @@ fn assert_targeting(face: &tricerules_cards::CardFace, prompt: &str, indices: &[
         panic!("one target group");
     };
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(group.prompt, prompt);
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(
+            &face.spell_effect,
+            face.targeting.as_ref(),
+            0
+        ),
+        prompt
+    );
     assert_eq!(group.effect_indices, indices);
 }
 

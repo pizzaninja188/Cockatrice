@@ -28,7 +28,10 @@ fn khalni_ambush_and_khalni_territory_register_both_faces() {
         panic!("Khalni Ambush has two target groups");
     };
     assert_eq!((you_control.min, you_control.max), (1, 1));
-    assert_eq!(you_control.prompt, "Choose target creature you control");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(&front.spell_effect, Some(targeting), 0),
+        "Choose target creature you control"
+    );
     assert_eq!((not_you_control.min, not_you_control.max), (1, 1));
     assert_eq!(
         not_you_control.prompt,

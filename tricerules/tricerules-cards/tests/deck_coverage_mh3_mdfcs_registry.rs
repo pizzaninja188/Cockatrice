@@ -201,8 +201,8 @@ fn sundering_front_keeps_target_controller_search_and_dynamic_restriction_ordere
     let groups = &face.targeting.as_ref().expect("target land").groups;
     assert_eq!(groups.len(), 1);
     assert_eq!((groups[0].min, groups[0].max), (1, 1));
-    assert_eq!(groups[0].prompt, "Choose target land");
     assert_eq!(groups[0].effect_indices, [0]);
-    TargetSchema::compile(&face.spell_effect, face.targeting.as_ref())
+    let schema = TargetSchema::compile(&face.spell_effect, face.targeting.as_ref())
         .expect("the destroy effect is the sole required target");
+    assert_eq!(schema.groups[0].prompt, "Choose target land");
 }

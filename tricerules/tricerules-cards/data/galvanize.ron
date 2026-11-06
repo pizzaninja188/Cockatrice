@@ -9,5 +9,5 @@
     amount: Conditional(condition: CardsDrawnThisTurn(players: Controller, min: Some(2)), when_true: 5, otherwise: 3),
     target: (kind: Creature),
   )],
-  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0])])),
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
 )

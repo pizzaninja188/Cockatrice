@@ -104,5 +104,8 @@ fn impossible_inferno_uses_the_exact_targeted_delirium_program() {
     };
     assert_eq!((group.min, group.max), (1, 1));
     assert!(group.effect_indices.is_empty());
-    assert_eq!(group.prompt, "Choose target creature");
+    let schema =
+        tricerules_cards::primitives::TargetSchema::compile_program(program, Some(targeting))
+            .expect("Inferno's Program targets");
+    assert_eq!(schema.groups[0].prompt, "Choose target creature");
 }

@@ -6,6 +6,6 @@
     (mode_id: "mode_01", presentation: OracleLines([2]), effects: [Draw(count: 3)]),
     (mode_id: "mode_02", presentation: OracleLines([3]),
       effects: [CounterTargetSpell(spell_filter: ()), Draw(count: 1)],
-      targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target spell", effect_indices: [0])]))),
+      targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])]))),
   ]),
 )

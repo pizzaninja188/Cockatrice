@@ -110,7 +110,10 @@ fn issue_430_sunset_saboteur_maps_menace_ward_and_attack_trigger() {
     let targeting = attack.targeting.as_ref().expect("attack trigger targets");
     let group = single_group(targeting);
     assert_eq!((group.min, group.max), (1, 1));
-    assert_eq!(group.prompt, "Choose target creature an opponent controls");
+    assert_eq!(
+        crate::common::compiled_legacy_target_prompt(&attack.effect, Some(targeting), 0),
+        "Choose target creature an opponent controls"
+    );
     assert_eq!(group.effect_indices, [0]);
 }
 
