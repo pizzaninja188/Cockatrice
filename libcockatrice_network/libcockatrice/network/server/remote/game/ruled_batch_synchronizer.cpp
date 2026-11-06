@@ -314,7 +314,7 @@ void RuledBatchSynchronizer::rehomeCanonicalStackForDeparture(int departingPlaye
         QVector<int> pendingCastIndexes;
         for (int i = 0; i < ruledPendingCastVisualQueue.size(); ++i) {
             const PendingRuledCastVisual &pending = ruledPendingCastVisualQueue.at(i);
-            if (pending.sourceZoneName == ZoneNames::HAND || pending.sourceZoneName == ZoneNames::DECK) {
+            if (pending.moveOnCommit) {
                 continue;
             }
             if (pending.serverCardId == card->getId()) {
@@ -464,7 +464,7 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
         if (pendingIt == ruledPendingCastVisualQueue.end()) {
             return;
         }
-        if (pendingIt->sourceZoneName == ZoneNames::HAND || pendingIt->sourceZoneName == ZoneNames::DECK) {
+        if (pendingIt->moveOnCommit) {
             ruledPendingCastVisualQueue.erase(pendingIt);
             return;
         }
@@ -510,8 +510,7 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
         const auto pendingIt = std::find_if(
             ruledPendingCastVisualQueue.begin(), ruledPendingCastVisualQueue.end(),
             [playerId, transactionId](const PendingRuledCastVisual &entry) {
-                return entry.casterPlayerId == playerId && entry.transactionId == transactionId &&
-                       (entry.sourceZoneName == ZoneNames::HAND || entry.sourceZoneName == ZoneNames::DECK);
+                return entry.casterPlayerId == playerId && entry.transactionId == transactionId && entry.moveOnCommit;
             });
         if (pendingIt != ruledPendingCastVisualQueue.end()) {
             Server_AbstractPlayer *sourcePlayer = game->getPlayer(pendingIt->sourcePlayerId);
@@ -538,6 +537,7 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
                         GameEventStorage events;
                         if (ruledApplyMove(cmdPlayer, events, sourceZone, stack, move, -1, 0, "commitCast")) {
                             pendingIt->serverCardId = card->getId();
+                            pendingIt->moveOnCommit = false;
                             events.sendToGame(game);
                         }
                         break;
@@ -569,7 +569,7 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
 
     const auto applyBegin = [&](const auto &acceptedCast) {
         // Route committed spells to the canonical (lowest player-id) stack zone so every client's
-        // stack window shows one stack. Hand sources remain in hand until commit.
+        // stack window shows one stack. Deferred sources stay in their physical zones until commit.
         Server_CardZone *stackZone = canonicalStackZone();
         Server_CardZone *sourceZone = nullptr;
         Server_Card *card = nullptr;
@@ -657,10 +657,10 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
         pending.sourceCardRef = card->getCardRef();
         const int faceIndex = static_cast<int>(acceptedCast.face_index());
         pending.faceIndex = faceIndex;
-        const bool deferredPrivateCast = !legacyAtomic &&
-                                         (sourceZone->getName() == ZoneNames::HAND ||
-                                          sourceZone->getName() == ZoneNames::DECK);
-        if (faceIndex > 0 && !deferredPrivateCast) {
+        pending.moveOnCommit = !legacyAtomic &&
+                               (pending.sourceZoneName == ZoneNames::HAND || pending.sourceZoneName == ZoneNames::DECK ||
+                                pending.sourceZoneName == ZoneNames::COMMAND);
+        if (faceIndex > 0 && !pending.moveOnCommit) {
             const QString cardId = cardIdForName(card->getName());
             const QString activeName = faceDisplayName(cardId, faceIndex);
             if (!activeName.isEmpty() && activeName != card->getName()) {
@@ -677,7 +677,7 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
             }
         }
 
-        if (deferredPrivateCast) {
+        if (pending.moveOnCommit) {
             ruledPendingCastVisualQueue.append(pending);
             return;
         }
@@ -972,16 +972,17 @@ void RuledBatchSynchronizer::applyStackPushBindings(const ruled::v1::RuledEventB
         const QString normalizedPushedName = normalizeRuledCardName(pushedName);
         QList<PendingRuledCastVisual>::iterator bindIt = ruledPendingCastVisualQueue.end();
         for (auto it = ruledPendingCastVisualQueue.begin(); it != ruledPendingCastVisualQueue.end(); ++it) {
+            if (it->moveOnCommit) {
+                continue;
+            }
+            // Fall back to the first physical cast if its printing name differs from the catalog.
+            if (bindIt == ruledPendingCastVisualQueue.end()) {
+                bindIt = it;
+            }
             if (normalizeRuledCardName(it->cardName) == normalizedPushedName) {
                 bindIt = it;
                 break;
             }
-        }
-        // CastSpell always enqueues one pending entry before applyBatch; if the engine
-        // stack description and Cockatrice printing names differ, name match fails and clients
-        // never get BattlefieldObjectMap rows for stack oids (spell targeting arrows break).
-        if (bindIt == ruledPendingCastVisualQueue.end() && !ruledPendingCastVisualQueue.isEmpty()) {
-            bindIt = ruledPendingCastVisualQueue.begin();
         }
         if (bindIt != ruledPendingCastVisualQueue.end()) {
             ruledStackTargetsByObjectId.insert(pushedOid, bindIt->targetOids);

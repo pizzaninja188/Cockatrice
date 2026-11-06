@@ -520,7 +520,8 @@ void RuledBroadcastRouter::appendServerObjectMaps(ruled::v1::IpcResponse &toSend
                         const auto pending = std::find_if(
                             synchronizer->ruledPendingCastVisualQueue.cbegin(),
                             synchronizer->ruledPendingCastVisualQueue.cend(), [&stackCard](const auto &entry) {
-                                return entry.serverCardId == stackCard->getId() && entry.reservedObjectId != 0;
+                                return !entry.moveOnCommit && entry.serverCardId == stackCard->getId() &&
+                                       entry.reservedObjectId != 0;
                             });
                         if (pending != synchronizer->ruledPendingCastVisualQueue.cend()) {
                             stackOid = pending->reservedObjectId;

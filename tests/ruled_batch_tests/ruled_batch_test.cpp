@@ -425,6 +425,7 @@ protected:
         pending.sourcePlayerId = sourcePlayerId;
         pending.sourceZoneName = sourceZoneName;
         pending.sourcePosition = sourcePosition;
+        pending.moveOnCommit = card->getZone()->getName() == sourceZoneName;
         pending.sourceCardRef = card->getCardRef();
         pending.faceIndex = faceIndex;
         pending.targetOids = targets;
@@ -11046,8 +11047,9 @@ TEST_F(RuledBatchTest, CommandZoneCastSourceAndPublicBindingRoundTripThroughProj
     EXPECT_EQ(command.cast_spell().source().expected_zone_change_generation(), 4u);
 }
 
-TEST_F(RuledBatchTest, CommanderPaymentCancellationRestoresTheExactPhysicalCardAndOrder)
+TEST_F(RuledBatchTest, CommanderStaysInCommandZoneUntilTheExactCardIsCast)
 {
+    seedCardCatalog({"Grizzly Bears"});
     auto *zone = new Server_CardZone(p1, ZoneNames::COMMAND, false, ServerInfo_Zone::PublicZone);
     p1->addZone(zone);
     auto *first = new Server_Card({"Grizzly Bears", "print-one"}, p1->newCardId(), 0, 0);
@@ -11062,6 +11064,8 @@ TEST_F(RuledBatchTest, CommanderPaymentCancellationRestoresTheExactPhysicalCardA
     *seed.mutable_batch()->add_events()->mutable_zone_view()->add_per_player() = view;
     ASSERT_TRUE(callBatchApply(seed).zoneViewApplied);
     const auto originalOrder = zone->getCards();
+    auto *stack = p1->getZones().value(ZoneNames::STACK);
+    const int secondPhysicalId = second->getId();
     ruled::v1::RuledCommand begin;
     auto *announcement = begin.mutable_begin_spell_cast()->mutable_announcement();
     announcement->mutable_source()->set_command_zone_object_id(902);
@@ -11073,16 +11077,43 @@ TEST_F(RuledBatchTest, CommanderPaymentCancellationRestoresTheExactPhysicalCardA
     pending->set_transaction_id(77);
     pending->set_reserved_object_id(902);
     pending->mutable_announcement()->CopyFrom(*announcement);
+    auto payingView = buildPerPlayerView(p1, {}, {});
+    payingView.add_command_zone_object_ids(901);
+    *begun.mutable_batch()->add_events()->mutable_zone_view()->add_per_player() = payingView;
     applyAcceptedCommandVisuals(p1->getPlayerId(), begin, begun);
-    EXPECT_FALSE(zone->getCards().contains(second));
-    EXPECT_TRUE(p1->getZones().value(ZoneNames::STACK)->getCards().contains(second));
+    ASSERT_TRUE(callBatchApply(begun).zoneViewApplied);
+    EXPECT_EQ(zone->getCards(), originalOrder);
+    EXPECT_TRUE(stack->getCards().isEmpty());
+    EXPECT_EQ(bindingFor(p1).commandZoneEngineOidToServerCardId.value(902, -1), secondPhysicalId);
+
     ruled::v1::RuledCommand cancel;
     cancel.mutable_cancel_spell_cast()->set_transaction_id(77);
     ruled::v1::IpcResponse cancelled;
     cancelled.set_ok(true);
+    *cancelled.mutable_batch()->add_events()->mutable_zone_view()->add_per_player() = view;
     applyAcceptedCommandVisuals(p1->getPlayerId(), cancel, cancelled);
+    ASSERT_TRUE(callBatchApply(cancelled).zoneViewApplied);
     EXPECT_EQ(zone->getCards(), originalOrder);
-    EXPECT_TRUE(p1->getZones().value(ZoneNames::STACK)->getCards().isEmpty());
+    EXPECT_TRUE(stack->getCards().isEmpty());
+    EXPECT_EQ(second->getId(), secondPhysicalId);
+
+    pending->set_transaction_id(78);
+    applyAcceptedCommandVisuals(p1->getPlayerId(), begin, begun);
+    ASSERT_TRUE(callBatchApply(begun).zoneViewApplied);
+    ruled::v1::RuledCommand commit;
+    commit.mutable_commit_spell_cast()->set_transaction_id(78);
+    ruled::v1::IpcResponse committed;
+    committed.set_ok(true);
+    auto *pushed = committed.mutable_batch()->add_events()->mutable_stack_pushed();
+    pushed->set_object_id(902);
+    pushed->set_card_id("grizzly_bears");
+    *committed.mutable_batch()->add_events()->mutable_zone_view()->add_per_player() = payingView;
+    applyAcceptedCommandVisuals(p1->getPlayerId(), commit, committed);
+    ASSERT_TRUE(callBatchApply(committed).zoneViewApplied);
+    EXPECT_EQ(zone->getCards(), (QList<Server_Card *>{first}));
+    EXPECT_EQ(stack->getCards(), (QList<Server_Card *>{second}));
+    EXPECT_EQ(boundStackServerCardId(902), second->getId());
+    EXPECT_FALSE(bindingFor(p1).commandZoneEngineOidToServerCardId.contains(902));
     EXPECT_EQ(second->getCardRef().providerId, QString("print-two"));
 }
 
