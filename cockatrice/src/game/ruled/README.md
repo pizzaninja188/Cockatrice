@@ -105,6 +105,15 @@ and every new legal snapshot clears the local selection. The prompt owns no card
 Members are public on purpose — this is a shared view model, and an accessor pair per field would
 be noise. The `[[nodiscard]]` query methods are the read API consumers should prefer.
 
+### `ruled_interaction_ui.{h,cpp}` — card and player affordances
+
+Projects the current target-click eligibility onto visible physical card and player surfaces.
+Illegal candidates receive a 45% black veil; legal candidates have a cyan inset boundary.
+`ruled_interaction_visual.h` owns the shared painter. It runs after artwork and before counters,
+annotations and selection markers, preserving their contrast and the upstream inspection behavior.
+Choice-local and historical reveal tiles must not be resolved as physical card IDs. Legal-action,
+target-zone, combat and session changes invalidate the display, including open zone-view copies.
+
 ### `ruled_card_popup.{h,cpp}` — face-down exile inspection
 
 An authoritative ruled move into face-down exile clears the common card identity with an explicit

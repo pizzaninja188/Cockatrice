@@ -13,6 +13,7 @@
 #include "../../game/ruled/ruled_actions.h"
 #include "../../game/ruled/ruled_card_display_identity.h"
 #include "../../game/ruled/ruled_card_phasing_painter.h"
+#include "../../game/ruled/ruled_interaction_ui.h"
 #include "../../game/ruled/ruled_client_state.h"
 #include "../../game/ruled/ruled_payment_ui.h"
 #include "../../game/ruled/ruled_token_display.h"
@@ -79,6 +80,7 @@ CardItem::CardItem(PlayerLogic *_owner,
 {
     state->setZone(_zone);
     owner->addCard(this);
+    RuledInteractionUi::connectCard(this);
 
     connect(&SettingsCache::instance().cardCounters(), &CardCounterSettings::colorChanged, this, [this](int counterId) {
         if (state->getCounters().contains(counterId)) {
@@ -165,6 +167,7 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
 
     painter->save();
     AbstractCardItem::paint(painter, option, widget);
+    RuledInteractionUi::paintCard(this, painter);
 
     int i = 0;
     QMapIterator<int, int> counterIterator(state->getCounters());

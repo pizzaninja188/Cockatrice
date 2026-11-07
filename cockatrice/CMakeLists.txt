@@ -135,6 +135,7 @@ set(cockatrice_SOURCES
     src/game/ruled/ruled_zone_menus.cpp
     src/game/ruled/ruled_player_actions.cpp
     src/game/ruled/ruled_actions.cpp
+    src/game/ruled/ruled_interaction_ui.cpp
     src/game/ruled/ruled_card_popup.cpp
     src/game/ruled/ruled_preparation_display.cpp
     src/game/ruled/ruled_autopilot.cpp

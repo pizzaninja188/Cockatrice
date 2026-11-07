@@ -9,6 +9,7 @@
 #include <libcockatrice/game/player/player_manager.h>
 #include "../../game/ruled/ruled_actions.h"
 #include "../../game/ruled/ruled_client_state.h"
+#include "../../game/ruled/ruled_interaction_ui.h"
 #include <libcockatrice/game/player/player_logic.h>
 
 #include <QDebug>
@@ -146,6 +147,7 @@ bool PlayerCounter::animationEvent()
 PlayerTarget::PlayerTarget(PlayerLogic *_owner, QGraphicsItem *parentItem)
     : ArrowTarget(_owner, parentItem), playerCounter(nullptr)
 {
+    RuledInteractionUi::connectPlayer(this);
     setCacheMode(DeviceCoordinateCache);
 
     if (auto *game = _owner ? _owner->getGame() : nullptr) {
@@ -235,6 +237,7 @@ void PlayerTarget::paint(QPainter *painter, const QStyleOptionGraphicsItem * /*o
     painter->drawPixmap(translatedRect, cachedPixmap, cachedPixmap.rect());
     painter->restore();
 
+    RuledInteractionUi::paintPlayer(this, painter, avatarBoundingRect);
     QRectF nameRect = QRectF(0, boundingRect().height() - 20, 110, 20);
     painter->fillRect(nameRect, QColor(0, 0, 0, 160));
     QRectF translatedNameRect = painter->combinedTransform().mapRect(nameRect);
