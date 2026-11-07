@@ -1,3 +1,4 @@
+#include "../../game/ruled/ruled_automation_ui.h"
 #include <libcockatrice/settings/cards_display_settings.h>
 #include "card_item.h"
 
@@ -914,6 +915,10 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
         return;
     }
     if (event->button() == Qt::RightButton) {
+        if (RuledAutomationUi::tryStackMenu(this, event->screenPos())) {
+            AbstractCardItem::mouseReleaseEvent(event);
+            return;
+        }
         if (RuledActions::tryHandlePublicZonePlay(this, true)) {
             AbstractCardItem::mouseReleaseEvent(event);
             return;

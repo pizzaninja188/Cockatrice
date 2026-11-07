@@ -103,12 +103,123 @@ message RuledCommand {
     // CR 103.6: a private, generation-bound Gemstone Caverns opening-hand action.
     BeginWithGemstoneCaverns begin_with_gemstone_caverns = 38;
     FinishOpeningHandActions finish_opening_hand_actions = 39;
+    // Seat-private preferences and temporary yields. Accepted even without priority; logged.
+    UpdateAutomation update_automation = 40;
+    // Relay-scheduled, bounded execution of an engine-offered automatic action. Stale tokens
+    // are rejected. A client cannot authorize passing merely by sending this command.
+    ContinueAutomation continue_automation = 41;
   }
 }
 
 message SetAutoPassPolicy {
   repeated PhaseId stop_on_own_turn = 1;
   repeated PhaseId stop_on_opponent_turn = 2;
+}
+
+enum AutomationYieldMode {
+  AUTOMATION_YIELD_MODE_NONE = 0;
+  AUTOMATION_YIELD_MODE_UNTIL_RESPONSE = 1;
+  AUTOMATION_YIELD_MODE_TURN = 2;
+  AUTOMATION_YIELD_MODE_END_STEP = 3;
+  AUTOMATION_YIELD_MODE_STACK_ITEM = 4;
+  AUTOMATION_YIELD_MODE_CURRENT_STACK = 5;
+  AUTOMATION_YIELD_MODE_ENTIRE_STACK = 6;
+  AUTOMATION_YIELD_MODE_PHASE = 7;
+}
+
+enum AutomationTriggerScope {
+  AUTOMATION_TRIGGER_SCOPE_SOURCE = 0;
+  AUTOMATION_TRIGGER_SCOPE_MATCHING_ABILITY = 1;
+}
+
+enum AutomationAnswer {
+  AUTOMATION_ANSWER_ASK = 0;
+  AUTOMATION_ANSWER_YES = 1;
+  AUTOMATION_ANSWER_NO = 2;
+}
+
+// Exact stack occurrence, also used for ordinary spells whose ObjectId survives recasting.
+message AutomationStackRef {
+  uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  optional uint64 zone_change_generation = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message AutomationPhaseStop {
+  PhaseId phase = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool on_own_turn = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message AutomationYield {
+  AutomationYieldMode mode = 1;
+  AutomationStackRef stack = 2;
+  AutomationPhaseStop phase = 3;
+}
+
+message ConfigureTriggerAutomation {
+  AutomationStackRef stack = 1;
+  AutomationTriggerScope scope = 2;
+  bool yield_priority = 3;
+  AutomationAnswer answer = 4;
+}
+
+message UpdateAutomation {
+  oneof action {
+    bool clear_all = 1;
+    bool auto_pass = 2;
+    bool full_control = 3;
+    AutomationYield yield_to = 4;
+    ConfigureTriggerAutomation trigger_rule = 5;
+    uint64 remove_rule = 6;
+    AutomationPhaseStop stop_once = 7;
+    // Disconnect and explicit pause cancel temporary yields without deleting preferences.
+    bool pause = 8;
+  }
+}
+
+message ContinueAutomation {
+  uint64 expected_command_index = 1;
+  uint64 expected_revision = 2;
+}
+
+message AutomationRuleInfo {
+  uint64 rule_id = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string description = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  AutomationTriggerScope scope = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool yield_priority = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  AutomationAnswer answer = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  int32 controller_player_id = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message StackAutomationOffer {
+  AutomationStackRef stack = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool can_yield_trigger = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool can_answer_optional = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint64 source_rule_id = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint64 matching_rule_id = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool can_source_rule = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message AutomationState {
+  uint64 revision = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool full_control = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool auto_pass = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool paused = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  AutomationYieldMode yield_mode = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  AutomationPhaseStop yield_phase = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  AutomationPhaseStop stop_once = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated AutomationRuleInfo rules = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated StackAutomationOffer stack_offers = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint64 command_index = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Only a genuine free binary resolution choice exposes these prompt-bound shortcuts.
+  optional uint32 yes_branch_index = 11 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool can_answer_no = 12 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool can_start_yield = 13 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message AutomationContinuation {
+  int32 player_id = 1 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+  uint64 expected_command_index = 2 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+  uint64 expected_revision = 3 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
 }
 
 message AutoPassPolicy {
@@ -673,6 +784,7 @@ message RuledEventBatch {
   // The relay's reconnect presentation contains a complete ordered replay of the current stack.
   // Clients replace tracked stack presentation before applying its events, even when it is empty.
   bool replace_stack_presentation = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  AutomationContinuation automation_continuation = 6 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
 }
 
 // Authoritative final status of the engine's single parked resolution choice. The public active
@@ -1306,6 +1418,7 @@ message LegalActions {
   // hand_actions. Other sources retain exact object generation, including library permissions.
   repeated uint32 affordable_hand_indices = 30 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated CostObjectRef affordable_objects = 31 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  AutomationState automation = 32 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // The bounded CR 602.3 contract targets battlefield creatures. This identity is an engine

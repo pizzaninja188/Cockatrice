@@ -73,10 +73,12 @@ bool supportedSchema()
             appendEnum(contract, file->enum_type(i));
         const QByteArray digest = QCryptographicHash::hash(
             QByteArray(contract.data(), static_cast<qsizetype>(contract.size())), QCryptographicHash::Sha256).toHex();
-        // LegalActions affordability hints are recipient-private. Hand indices remain slots;
-        // affordable_objects recurse through the existing CostObjectRef object/generation pair.
-        // Neither field creates public identity or changes command authorization.
-        const QByteArray expected("52bb6ce117fa830a5c40dea3b7dd79bb15e64610c359014c6502a38492cb5017");
+        // AutomationState and its rules/offers are recipient-private; continuation tokens are
+        // server-only. AutomationStackRef is the sole new object reference, paired below with
+        // its optional generation (absent for virtual abilities/copies). Rule ids, revisions,
+        // command indices, player ids and phase ids never enter the object-identity domain.
+        // can_source_rule is a recipient-private eligibility bit, not an identity handle.
+        const QByteArray expected("1ef16942094227d26bf31c762e622791aeca0dabe63c663fd5c941befd3edb42");
         if (digest != expected)
             qCritical() << "ruled presentation schema needs an identity audit:" << digest;
         return digest == expected;
@@ -556,6 +558,7 @@ bool RuledPresentationIdentity::walk(Message *message, Walk &context)
     // Each entry associates an object reference with the generation of that same incarnation.
     // Source-generation metadata on triggers is server-only, but still chooses the old epoch.
     static const QHash<QString, QString> pairs = {
+        {"AutomationStackRef.object_id", "zone_change_generation"},
         {"CastSource.graveyard_object_id", "expected_zone_change_generation"},
         {"CastSource.exile_object_id", "expected_zone_change_generation"},
         {"CastSource.library_object_id", "expected_zone_change_generation"},

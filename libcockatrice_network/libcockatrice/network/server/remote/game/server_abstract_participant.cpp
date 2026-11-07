@@ -641,6 +641,9 @@ void Server_AbstractParticipant::setUserInterface(Server_AbstractUserInterface *
     userInterface = _userInterface;
     playerMutex.unlock();
 
+    if (!_userInterface && !isSpectator() && game->ruled())
+        game->ruled()->pauseAutomationForDisconnect(playerId);
+
     pingTime = _userInterface ? 0 : -1;
 
     Event_PlayerPropertiesChanged event;

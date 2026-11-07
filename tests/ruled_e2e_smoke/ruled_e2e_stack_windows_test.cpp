@@ -183,6 +183,11 @@ TEST_F(RuledE2ESmokeTest, DiagnosticReplayShowsProtectedStackWindow)
     EXPECT_EQ(gameMenu.value("active_manual_phase_actions").toInt(), 0);
     EXPECT_TRUE(gameMenu.value("priority_label").toBool());
     EXPECT_FALSE(gameMenu.value("priority_enabled_before_offer").toBool());
+    EXPECT_TRUE(gameMenu.value("automation_controls_created").toBool());
+    EXPECT_EQ(gameMenu.value("automation_control_count").toInt(), 8);
+    EXPECT_TRUE(gameMenu.value("automation_primary_follows_prompt").toBool());
+    for (const auto &entry : menus)
+        EXPECT_FALSE(entry.toObject().value("automation_menu").toBool()) << "replay has no live automation menu";
     bool stackVisible = false;
     for (const auto &entry : playback.value("zone_windows").toArray()) {
         const auto window = entry.toObject();

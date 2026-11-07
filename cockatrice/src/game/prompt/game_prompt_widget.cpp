@@ -11,6 +11,7 @@
 #include <QPushButton>
 #include <QSet>
 #include <QSignalBlocker>
+#include <QScopeGuard>
 #include <QTextLayout>
 #include <QVBoxLayout>
 #include <QtAlgorithms>
@@ -356,6 +357,18 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
 
 void GamePromptWidget::activatePrimaryAction()
 {
+    if (auto *primary = primaryActionButton(); primary && primary->isEnabled())
+        primary->click();
+}
+
+bool GamePromptWidget::primaryActionAvailable() const
+{
+    const auto *primary = primaryActionButton();
+    return primary && primary->isEnabled();
+}
+
+QPushButton *GamePromptWidget::primaryActionButton() const
+{
     QPushButton *primary = nullptr;
     for (auto *button : {passPriorityButton, confirmAttackersButton, confirmBlockersButton,
                          confirmCombatDamageButton, confirmSpellDamageButton, confirmTargetsButton,
@@ -363,12 +376,11 @@ void GamePromptWidget::activatePrimaryAction()
                          resolutionPaymentConfirmButton, zoneSelectionConfirmButton}) {
         if (button && !button->isHidden()) {
             if (primary)
-                return; // An ambiguous layout never authorizes an implicit choice.
+                return nullptr; // An ambiguous layout never authorizes an implicit choice.
             primary = button;
         }
     }
-    if (primary && primary->isEnabled())
-        primary->click();
+    return primary;
 }
 
 void GamePromptWidget::retranslateUi()
@@ -605,6 +617,7 @@ void GamePromptWidget::setSpellDamageAllocationStatus(bool active, int assigned,
                          "Click targets to add, right-click to reduce.")
                           .arg(total).arg(assigned).arg(total));
         confirmSpellDamageButton->setEnabled(legal);
+        emit primaryActionAvailabilityChanged();
     }
     updateCombatButtonsVisibility();
 }
@@ -631,6 +644,7 @@ void GamePromptWidget::setPromptFromRuledLog(const QString &ruledLog)
 void GamePromptWidget::setPassPriorityEnabled(bool enabled)
 {
     passPriorityButton->setEnabled(enabled);
+    emit primaryActionAvailabilityChanged();
 }
 
 void GamePromptWidget::setActivePhase(int phase)
@@ -786,6 +800,7 @@ void GamePromptWidget::setCombatDamageStatus(const QString &attackerName, int as
 {
     if (attackerName.isEmpty()) {
         confirmCombatDamageButton->setEnabled(false);
+        emit primaryActionAvailabilityChanged();
         return;
     }
     QString detail;
@@ -801,6 +816,7 @@ void GamePromptWidget::setCombatDamageStatus(const QString &attackerName, int as
     setPromptText(tr("Assign combat damage for %1\n%2").arg(attackerName).arg(detail));
     // OK button: legal already validates totals; power > 0 guards against 0-power edge case.
     confirmCombatDamageButton->setEnabled(legal && power > 0);
+    emit primaryActionAvailabilityChanged();
 }
 
 void GamePromptWidget::hideActionAndCombatButtons()
@@ -846,6 +862,7 @@ int GamePromptWidget::matchingZoneSelectionOption() const
 
 void GamePromptWidget::updateZoneSelectionControls()
 {
+    const auto notifyAvailability = qScopeGuard([this] { emit primaryActionAvailabilityChanged(); });
     const bool active = effectiveMode() == PromptMode::ZoneSelection;
     QSet<int> available;
     if (active) {
@@ -864,6 +881,7 @@ void GamePromptWidget::updateZoneSelectionControls()
 
 void GamePromptWidget::updateCombatButtonsVisibility()
 {
+    const auto notifyAvailability = qScopeGuard([this] { emit primaryActionAvailabilityChanged(); });
     const PromptMode mode = effectiveMode();
     castCostDeclineButton->setVisible((mode == PromptMode::CastCostOptions || mode == PromptMode::CastCostObject) &&
                                       promptState.canDecline);

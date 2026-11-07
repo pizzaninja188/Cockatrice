@@ -4505,6 +4505,8 @@ pub(crate) struct ChainVeilPermission {
 #[derive(serde::Serialize, Clone, Debug)]
 pub struct GameState {
     pub seed: u64,
+    /// Seat-private shortcut preferences; reconstructed from accepted automation commands.
+    pub(crate) automation: BTreeMap<PlayerId, crate::engine::automation::Policy>,
     pub players: Vec<PlayerState>,
     pub objects: HashMap<ObjectId, GameObject>,
     /// Optional facts for exact departed or phased-out incarnations.

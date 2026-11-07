@@ -586,6 +586,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
         batch.legal_by_player.insert(
             p.id,
             LegalActions {
+                automation: Some(eng.automation_snapshot(p.id)),
                 affordable_hand_indices: Vec::new(),
                 affordable_objects: Vec::new(),
                 pending_ability_activation: eng.pending_ability_activation_for(p.id),

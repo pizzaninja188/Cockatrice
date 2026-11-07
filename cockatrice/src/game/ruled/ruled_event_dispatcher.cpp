@@ -2843,6 +2843,7 @@ void RuledEventDispatcher::applyManaPoolUpdated(const ruled::v1::ManaPoolUpdated
 
 void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &actions, BatchContext &ctx)
 {
+    state->automation = actions.automation();
     if (actions.has_pending_ability_activation())
         state->pendingAbilityActivation = actions.pending_ability_activation();
     else
@@ -3155,6 +3156,7 @@ void RuledEventDispatcher::applyNoLegalActions(bool preserveCombatCapabilities)
     // Only the explicit relay courtesy shape preserves the current engine snapshot. An
     // authoritative omission retracts every combat capability, just like empty LegalActions.
     if (!preserveCombatCapabilities) {
+        state->automation.Clear();
         state->attackRequirementOids.clear();
         state->minimumAttackRequirementCount = 0;
         state->attackDeclarationLimits.clear();

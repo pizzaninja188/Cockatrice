@@ -57,18 +57,16 @@ bool tryHandlePublicZonePlay(CardItem *card, bool contextMenu = false);
 /// The ruled view model for this game, or nullptr when the game is freeform / unavailable.
 [[nodiscard]] RuledClientState *stateFor(const AbstractGame *game);
 [[nodiscard]] RuledClientState *stateForCard(const CardItem *card);
-/// True only while a server-authoritative gameplay command is awaiting completion. UI-only policy
-/// and combat-preview messages do not enter this state.
+/// True only while a gameplay command is awaiting completion. Policy updates and combat previews
+/// bypass this input lock so automation can still be cancelled; automation updates remain logged.
 [[nodiscard]] bool gameplayInputLocked(const AbstractGame *game);
 /// CR 508.1b destination selection after an attacker with multiple published defenders is staged.
 [[nodiscard]] bool isCombatDefenderPlayerCandidate(const PlayerLogic *player);
 bool tryHandleCombatDefenderPlayerClick(PlayerLogic *player);
 
-/// Send a ready-built ruled command that does not originate in the view model — today only the
-/// dev console, whose input is text rather than a click or an engine event.
+/// Send a ready-built ruled command from the dev console or engine-offered automation controls.
 ///
-/// Every other ruled send goes through a `RuledClientState` slot, and `GameEventHandler` keeps its
-/// `RuledClientHost` overrides private so that stays true. Routing the console through here keeps
+/// Other ruled sends go through a `RuledClientState` slot. Routing these controls through here keeps
 /// its transport among the other ruled sends instead of putting one in an upstream file.
 /// No-op outside a ruled game.
 void sendRuledCommand(const AbstractGame *game, const ruled::v1::RuledCommand &command);

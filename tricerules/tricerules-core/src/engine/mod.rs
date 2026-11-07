@@ -202,6 +202,7 @@ mod action_availability;
 mod activation;
 #[cfg(test)]
 mod activation_tests;
+pub(crate) mod automation;
 mod blight;
 mod card_predicates;
 mod casting;
@@ -1915,6 +1916,7 @@ impl GameEngine {
 
         let state = GameState {
             seed,
+            automation: BTreeMap::new(),
             players,
             objects,
             last_known_information: Default::default(),
@@ -2601,7 +2603,13 @@ impl GameEngine {
                 self.first_strike_step_pending_cache,
             )
         });
-        let mut result = self.dispatch_command(player, cmd);
+        let mut result = match cmd.cmd.as_ref() {
+            Some(Cmd::UpdateAutomation(change)) => self.update_automation(player, change),
+            Some(Cmd::ContinueAutomation(request)) => {
+                self.continue_automation(player, request, auto_pass_policies.unwrap_or(&[]))
+            }
+            _ => self.dispatch_command(player, cmd),
+        };
         if result
             .as_ref()
             .err()
@@ -2616,7 +2624,11 @@ impl GameEngine {
         if let (Ok(batch), Some(policies), Some(cache_before)) =
             (result.as_mut(), auto_pass_policies, zone_view_cache_before)
         {
-            if let Err(error) = self.settle_automatic_priority(policies, batch, cache_before) {
+            if let Err(error) = if matches!(cmd.cmd, Some(Cmd::UpdateAutomation(_))) {
+                Ok(()) // Updating preferences never passes priority in the same command.
+            } else {
+                self.settle_automatic_priority(policies, batch, cache_before)
+            } {
                 if requires_complete_command_rollback(&error) {
                     self.restore_numeric_checkpoint(numeric_checkpoint);
                 } else {
@@ -2631,6 +2643,7 @@ impl GameEngine {
                 return Err(error);
             }
             self.refresh_resolution_prompt_state(batch);
+            self.reconcile_automation(player, cmd, batch);
         }
         // Replay determinism: `command_index` seeds shuffles (mulligan/search) and stamps
         // continuous-effect timestamps (CR 613.7). Only a command that is actually applied may
@@ -2640,6 +2653,7 @@ impl GameEngine {
         if let Ok(batch) = result.as_mut() {
             reveals::identify_reveals(batch, self.state.command_index);
             self.state.command_index += 1;
+            self.publish_automation(auto_pass_policies.unwrap_or(&[]), batch);
         }
         // CR 701.20: report the becomes-untapped edges this command produced, so Servatrice can
         // apply them without having to guess which mid-turn untaps are legitimate. Drained (not
@@ -2772,6 +2786,14 @@ impl GameEngine {
     }
 
     fn can_automatically_pass_priority(&self, policies: &[rv1::AutoPassPolicy]) -> bool {
+        // Explicit automation is serviced through bounded, cancellable relay continuations.
+        if self
+            .state
+            .automation
+            .contains_key(&self.state.priority_player_id())
+        {
+            return false;
+        }
         if self.state.is_terminal()
             || self.state.opening.is_some()
             || self.state.blocking_choice().is_some()
@@ -3176,7 +3198,12 @@ impl GameEngine {
             ) => {
                 unreachable!("preview rejected before command_index bump")
             }
-            Some(Cmd::SetAutoPassPolicy(_) | Cmd::CanonicalGameplay(_)) => {
+            Some(
+                Cmd::SetAutoPassPolicy(_)
+                | Cmd::CanonicalGameplay(_)
+                | Cmd::UpdateAutomation(_)
+                | Cmd::ContinueAutomation(_),
+            ) => {
                 unreachable!("UI-only and canonical commands rejected before dispatch")
             }
             Some(Cmd::Mulligan(_)) => {

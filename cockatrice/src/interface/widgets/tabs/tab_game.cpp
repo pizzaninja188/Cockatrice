@@ -1,3 +1,4 @@
+#include "../../../game/ruled/ruled_automation_ui.h"
 #include "../../../game_graphics/player/player_target.h"
 #include "../../../game/ruled/ruled_game_controller.h"
 #include "../../../game/ruled/ruled_game_menu.h"
@@ -850,6 +851,7 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
     RuledClientState *h = game->getGameEventHandler()->ruled();
     if (!h) {
         gamePromptWidget->setRuledPromptState(state);
+        RuledAutomationUi::refresh(*this);
         return state.mode;
     }
     const int localPlayerId = game->getPlayerManager()->getLocalPlayerId();
@@ -1129,6 +1131,7 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         }
     }
     gamePromptWidget->setRuledPromptState(state);
+    RuledAutomationUi::refresh(*this);
     return state.mode;
 }
 

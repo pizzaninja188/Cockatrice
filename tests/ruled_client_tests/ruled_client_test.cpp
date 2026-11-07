@@ -21148,3 +21148,27 @@ TEST_F(RuledClientTest, HybridPhyrexianAggregateOwnedSnapshotCannotSubstituteThe
     EXPECT_FALSE(modalOwner.applyCounterGroupFlexibleChoiceAfterPrompt(*state, modalCapture, payments));
     EXPECT_EQ(modal.fixedFlexPayments.front().mana_color(), ruled::v1::MANA_COLOR_GREEN);
 }
+
+TEST_F(RuledClientTest, AutomationSnapshotSurvivesCourtesyPreviewButNotAuthorityRetraction)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *automation = (*batch.mutable_legal_by_player())[kLocalPlayer].mutable_automation();
+    automation->set_revision(18);
+    automation->set_full_control(true);
+    automation->set_auto_pass(true);
+    automation->add_stack_offers()->mutable_stack()->set_object_id(701);
+    applyRaw(batch);
+    EXPECT_EQ(state->automation.SerializeAsString(), automation->SerializeAsString());
+    ruled::v1::RuledEventBatch preview;
+    preview.add_events()->mutable_attackers_preview()->set_declaring_player_id(kOpponent);
+    applyRaw(preview);
+    EXPECT_EQ(state->automation.revision(), 18u);
+    EXPECT_TRUE(state->automation.full_control());
+    EXPECT_EQ(state->automation.stack_offers_size(), 1);
+    applyRaw(ruled::v1::RuledEventBatch{});
+    EXPECT_EQ(state->automation.revision(), 0u);
+    EXPECT_TRUE(state->automation.stack_offers().empty());
+    applyRaw(batch);
+    state->revokeLocalActionAuthority();
+    EXPECT_EQ(state->automation.revision(), 0u);
+}

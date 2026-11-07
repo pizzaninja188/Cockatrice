@@ -69,7 +69,7 @@ still depend on the embedded corpus.
 
 ### Fork wire compatibility
 
-The upstream integration uses the shared `kRuledProtocolVersion` (10016) on both client and
+The upstream integration uses the shared `kRuledProtocolVersion` (10017) on both client and
 server. Deploy matching updated fork clients and Servatrice together; protocol 14 peers are
 rejected before login. `Command_CreateGame.ruled_game` keeps field 15 and upstream
 `shuffle_players` uses field 16. The create-game UI and relay disable player shuffling for ruled
@@ -79,6 +79,23 @@ casting/payment transaction. `CommandZoneObjectMap` publishes the public physica
 including empty replacements; its entries reuse the established public-zone entry type.
 Tax counts advance only on committed casts. Commander combat damage is tracked independently
 for each physical commander and recipient (CR 903.8, 903.10a; September 25, 2026 rules).
+
+Priority automation is engine-owned seat state. `UpdateAutomation` changes a player's private
+preferences without passing priority in that command. Accepted updates and `ContinueAutomation`
+decisions use the canonical logged gameplay envelope; policy state participates in replay hashes.
+Each authoritative batch may offer one server-only continuation with the exact command index and
+policy revision. Servatrice schedules it on a bounded timer, rejects client-supplied continuations,
+and invalidates queued work on a newer batch or session reset. Disconnect submits a logged pause;
+retained preferences remain paused until an explicit pass or control update.
+
+Trigger rules use the existing `TriggerUseKey` origin and captured controller, with optional source
+incarnation matching; display strings have no matching role. `AutomationStackRef` translates the
+physical spell's object/generation pair or a virtual ability/copy id through the existing recipient
+identity projection. Preferences and stack offers are private, and continuation tokens never leave
+the relay. Automatic actions still dispatch ordinary passes or the exact optional-choice answer;
+targets, payments, ordering, combat and other required decisions remain interactive. Smart auto-pass
+requires a proved absence of structural actions; an empty positive affordability-hint set is not
+such proof. These shortcuts preserve CR 117.2e, 117.3b-d, 117.4-5, 603.3b and 603.5 (November 6, 2026).
 
 ### Where things live
 

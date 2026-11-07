@@ -533,6 +533,7 @@ void RuledClientState::clearResolutionPromptStaging()
 
 void RuledClientState::revokeLocalActionAuthority()
 {
+    automation.Clear();
     affordableHandSlots.clear();
     affordableObjectGenerations.clear();
     clearPendingChoice();
@@ -2370,6 +2371,7 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     // for the answer. Not a leak risk either way — resetPerBatchLegalActions() rebuilds all of
     // it at the head of every payload.
     if (scope == RuledSessionResetScope::All) {
+        automation.Clear();
         resolutionPromptSnapshotValid = false;
         resolutionPromptActive = false;
         resolutionPromptDeciderPlayerId = -1;

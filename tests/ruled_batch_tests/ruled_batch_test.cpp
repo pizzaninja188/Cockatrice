@@ -12713,3 +12713,56 @@ TEST(RuledProtocolVisibilityTest, CounterAllocationUsesPublicTargetQuantityAndPr
     clearRuledFieldsByVisibility(&offered, ruled::v1::FIELD_VISIBILITY_PER_PLAYER);
     EXPECT_FALSE(offered.has_counter_allocation());
 }
+
+TEST_F(RuledBatchTest, AutomationContinuationIsNeverAcceptedFromAClient)
+{
+    ruled::v1::RuledCommand command;
+    command.mutable_continue_automation()->set_expected_command_index(42);
+    command.mutable_continue_automation()->set_expected_revision(3);
+    Command_RuledPayload payload;
+    payload.set_payload(command.SerializeAsString());
+    GameEventStorage events;
+    EXPECT_EQ(game->ruled()->processRuledPayload(p1->getPlayerId(), payload, events), Response::RespInvalidCommand);
+}
+
+TEST_F(RuledBatchTest, AutomationOffersArePrivateAndRoundTripExactStackReferences)
+{
+    auto *spectator = new Server_Player(game, 3, userA, true, nullptr);
+    insertParticipant(3, spectator);
+    ruled::v1::RuledEventBatch batch;
+    auto *state = (*batch.mutable_legal_by_player())[p1->getPlayerId()].mutable_automation();
+    state->set_revision(7);
+    state->set_auto_pass(true);
+    auto *rule = state->add_rules();
+    rule->set_rule_id(11);
+    rule->set_description("private preference");
+    auto *reference = state->add_stack_offers()->mutable_stack();
+    reference->set_object_id(4567);
+    reference->set_zone_change_generation(4);
+    auto *boundary = batch.add_events()->mutable_presentation_identity_break();
+    boundary->set_object_id(4567);
+    boundary->set_zone_change_generation(4);
+    auto *token = batch.mutable_automation_continuation();
+    token->set_player_id(p1->getPlayerId());
+    token->set_expected_command_index(123);
+    token->set_expected_revision(7);
+    ASSERT_TRUE(prepareIdentityBatch(batch));
+    auto mine = redactFor(batch, p1);
+    ASSERT_TRUE(mine.legal_by_player().contains(p1->getPlayerId()));
+    ASSERT_TRUE(mine.legal_by_player().at(p1->getPlayerId()).has_automation());
+    const auto &offer = mine.legal_by_player().at(p1->getPlayerId()).automation().stack_offers(0);
+    EXPECT_FALSE(mine.has_automation_continuation());
+    EXPECT_NE(offer.stack().object_id(), reference->object_id());
+    EXPECT_EQ(mine.legal_by_player().at(p1->getPlayerId()).automation().rules(0).rule_id(), 11u);
+    ruled::v1::RuledCommand command;
+    auto *yield = command.mutable_update_automation()->mutable_yield_to();
+    yield->set_mode(ruled::v1::AUTOMATION_YIELD_MODE_STACK_ITEM);
+    yield->mutable_stack()->CopyFrom(offer.stack());
+    ASSERT_TRUE(canonicalizeClientCommand(p1->getPlayerId(), command));
+    EXPECT_EQ(command.update_automation().yield_to().stack().SerializeAsString(), reference->SerializeAsString());
+    for (auto *recipient : {p2, spectator}) {
+        const auto other = redactFor(batch, recipient);
+        EXPECT_FALSE(other.has_automation_continuation());
+        EXPECT_TRUE(other.legal_by_player().empty());
+    }
+}

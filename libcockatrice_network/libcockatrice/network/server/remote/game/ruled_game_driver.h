@@ -46,6 +46,8 @@ public:
     /// Ruled mode: forward a serialized `ruled.v1.RuledCommand` to tricerules and broadcast the batch
     /// (used for mana-pool sync on land taps — not every payload goes through `Command_RuledPayload`).
     void relayRuledPayloadAndBroadcast(int playerId, const QByteArray &ruledCmdBytes);
+    /// Logged engine pause on connection loss; saved preferences survive, transient yields do not.
+    void pauseAutomationForDisconnect(int playerId);
     void broadcastRuledResponse(const ruled::v1::IpcResponse &resp, bool authoritative = true);
     /// Returns false when the session was refused because a deck contains unimplemented
     /// cards (the game must not start; players were already notified). Infrastructure
@@ -103,6 +105,7 @@ private:
     std::unique_ptr<RuledGameSession> session;
     std::unique_ptr<RuledBatchSynchronizer> synchronizer;
     std::unique_ptr<RuledBroadcastRouter> broadcaster;
+    quint64 automationEpoch = 0;
 };
 
 #endif

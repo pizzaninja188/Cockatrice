@@ -160,6 +160,7 @@ public:
 public slots:
     /// Confirm the visible, enabled primary action, never an arbitrary option or Cancel.
     void activatePrimaryAction();
+    [[nodiscard]] bool primaryActionAvailable() const;
     /// The single entry point for the exclusive prompt modes.
     void setRuledPromptState(RuledPromptState newState);
     void setPromptText(const QString &promptText);
@@ -209,6 +210,7 @@ public slots:
     }
 
 signals:
+    void primaryActionAvailabilityChanged();
     void ruledActivationOpponentRequested(int playerId, quint64 transactionId, quint64 revision);
     void passPriorityRequested();
     void confirmAttackersRequested();
@@ -241,6 +243,7 @@ signals:
     void ruledActivationPaymentRetryRequested(quint64 transactionId, quint64 revision);
 
 private:
+    QPushButton *primaryActionButton() const;
     RuledControlBindings *bindings;
     void updatePassPriorityButtonText();
     void updateCombatButtonsVisibility();

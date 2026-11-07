@@ -5,9 +5,7 @@
 #include "../prompt/game_prompt_widget.h"
 #include "ruled_actions.h"
 #include "ruled_game_mode_ui.h"
-#include "ruled_control_bindings.h"
-#include "../../client/settings/cache_settings.h"
-#include "../../client/settings/shortcuts_settings.h"
+#include "ruled_automation_ui.h"
 
 #include <QAction>
 #include <QPushButton>
@@ -40,15 +38,7 @@ void RuledGameMenu::configure(TabGame &tab)
     if (!RuledActions::isRuledGame(tab.game)) {
         return;
     }
-    auto *bindings = tab.gamePromptWidget->controlBindings();
-    bindings->setScope(&tab);
-    const auto refresh = [bindings] {
-        bindings->setKeys(QStringLiteral("primary"),
-                          SettingsCache::instance().shortcuts().getShortcut("Player/ruledPrimary"));
-    };
-    QObject::connect(&SettingsCache::instance().shortcuts(), &ShortcutsSettings::shortCutChanged,
-                     bindings, refresh);
-    refresh();
+    RuledAutomationUi::configure(tab);
     for (auto *action : {tab.aReverseTurn, tab.aTurnOrder, tab.phasesMenu->menuAction(), tab.aNextPhase,
                          tab.aNextPhaseAction, tab.aCardMenu}) {
         suppressAction(action);

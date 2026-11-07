@@ -917,6 +917,8 @@ mod opponent_targets;
 mod performance;
 #[path = "scenario/priority_and_turns.rs"]
 mod priority_and_turns;
+#[path = "scenario/priority_automation.rs"]
+mod priority_automation;
 #[path = "scenario/regenerate.rs"]
 mod regenerate;
 #[path = "scenario/resultless_battlefield_search.rs"]

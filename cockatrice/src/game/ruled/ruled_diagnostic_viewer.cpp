@@ -28,6 +28,8 @@
 #include "../prompt/game_prompt_widget.h"
 #include "ruled_client_diagnostics.h"
 #include "ruled_client_state.h"
+#include "ruled_automation_controls.h"
+#include "ruled_automation_ui.h"
 
 #include <QApplication>
 #include <QCommandLineParser>
@@ -336,9 +338,11 @@ void RuledDiagnosticViewer::openFromCommandLine(MainWindow *window, const QComma
                     for (auto *card : RuledActions::cardItems(zone->getCards())) {
                         scene->setActiveCard(card);
                         auto *menu = graphics->getPlayerMenu()->updateCardMenu(card->getState());
+                        std::unique_ptr<QMenu> automationMenu(RuledAutomationUi::stackMenu(card));
                         cardMenus.append(QJsonObject{{"player_id", player->getPlayerInfo()->getId()},
                                                      {"zone", zone->getName()},
                                                      {"card_id", card->getId()},
+                                                     {"automation_menu", automationMenu != nullptr},
                                                      {"legacy_menu", menu != nullptr}});
                         delete menu;
                     }
@@ -384,6 +388,20 @@ void RuledDiagnosticViewer::openFromCommandLine(MainWindow *window, const QComma
             gameMenu.insert("priority_label", liveTab->aNextTurn->text() ==
                                                     QCoreApplication::translate("TabGame", "Pass priority"));
             gameMenu.insert("priority_enabled_before_offer", liveTab->aNextTurn->isEnabled());
+            auto *controls = liveTab->findChild<RuledAutomationControls *>(QStringLiteral("ruledAutomationControls"));
+            gameMenu.insert("automation_controls_created", controls != nullptr);
+            int controlCount = 0;
+            if (controls) {
+                for (int key : {1, 2, 3, 4, 5, 6, 8, 0})
+                    controlCount += controls->findChild<QPushButton *>(QStringLiteral("ruledControl%1").arg(key)) != nullptr;
+                auto *primary = controls->findChild<QPushButton *>(QStringLiteral("ruledControl1"));
+                liveTab->getGame()->getGameMetaInfo()->setStarted(true);
+                liveTab->gamePromptWidget->setLocalPlayerHasPriority(true);
+                const bool enabled = primary && primary->isEnabled();
+                liveTab->gamePromptWidget->setLocalPlayerHasPriority(false);
+                gameMenu.insert("automation_primary_follows_prompt", enabled && !primary->isEnabled());
+            }
+            gameMenu.insert("automation_control_count", controlCount);
             viewer->comparison.insert("live_game_menu", gameMenu);
             liveTab.reset();
             QString error;

@@ -8,7 +8,9 @@
 #include "ruled_game_session.h"
 #include "ruled_server_diagnostics.h"
 #include "server_game.h"
+#include "server_abstract_participant.h"
 
+#include <QTimer>
 #include <QUuid>
 #include <libcockatrice/protocol/pb/game_replay.pb.h>
 
@@ -84,6 +86,7 @@ bool RuledGameDriver::validateDecksForStart()
 
 void RuledGameDriver::resetForNewGame()
 {
+    ++automationEpoch;
     // Per-player engine identity maps are rebuilt from the new session's zone views. Carrying
     // them across games republishes dead Server_Card ids (notably in GraveyardObjectMap, which
     // is only re-sent when non-empty) and lets stale oids resolve to cards that no longer exist.
@@ -94,6 +97,7 @@ void RuledGameDriver::resetForNewGame()
 
 void RuledGameDriver::endSidecarSession()
 {
+    ++automationEpoch;
     session->end();
 }
 
@@ -145,7 +149,7 @@ RuledGameDriver::processRuledPayloadImpl(int playerId, const Command_RuledPayloa
         return cacheAutoPassPolicy(playerId, ruledCmd.set_auto_pass_policy()) ? Response::RespOk
                                                                               : Response::RespContextError;
     }
-    if (ruledCmd.has_canonical_gameplay()) {
+    if (ruledCmd.has_canonical_gameplay() || ruledCmd.has_continue_automation()) {
         // The canonical envelope is a trusted Servatrice->engine/replay shape, never client input.
         return Response::RespInvalidCommand;
     }
@@ -271,6 +275,40 @@ void RuledGameDriver::relayRuledPayloadAndBroadcast(int playerId, const QByteArr
 void RuledGameDriver::broadcastRuledResponse(const ruled::v1::IpcResponse &response, bool authoritative)
 {
     broadcaster->broadcast(response, authoritative);
+    if (!authoritative || !response.ok() || !response.has_batch())
+        return;
+    const auto epoch = ++automationEpoch;
+    if (!response.batch().has_automation_continuation())
+        return;
+    const auto token = response.batch().automation_continuation();
+    // One engine-authorized action per event-loop turn. The delay gives a queued Clear/Full
+    // Control command a chance to interrupt between resolutions, including a repeating trigger.
+    QTimer::singleShot(100, game, [this, epoch, token] {
+        QMutexLocker locker(&game->gameMutex);
+        if (epoch != automationEpoch || !session->isActive())
+            return;
+        auto *participant = game->getParticipants().value(token.player_id(), nullptr);
+        if (!participant || participant->isSpectator())
+            return;
+        if (!participant->getUserInterface()) {
+            pauseAutomationForDisconnect(token.player_id());
+            return;
+        }
+        ruled::v1::RuledCommand command;
+        auto *continuation = command.mutable_continue_automation();
+        continuation->set_expected_command_index(token.expected_command_index());
+        continuation->set_expected_revision(token.expected_revision());
+        relayRuledPayloadAndBroadcast(token.player_id(), QByteArray::fromStdString(command.SerializeAsString()));
+    });
+}
+
+void RuledGameDriver::pauseAutomationForDisconnect(int playerId)
+{
+    QMutexLocker locker(&game->gameMutex);
+    ++automationEpoch;
+    ruled::v1::RuledCommand command;
+    command.mutable_update_automation()->set_pause(true);
+    relayRuledPayloadAndBroadcast(playerId, QByteArray::fromStdString(command.SerializeAsString()));
 }
 
 void RuledGameDriver::enqueuePendingResolutionChoiceForParticipant(Server_AbstractParticipant *participant,

@@ -273,6 +273,7 @@ impl GameEngine {
                             payment_preview: None,
                             resolution_prompt_state: None,
                             replace_stack_presentation: false,
+                            automation_continuation: None,
                             events,
                             legal_by_player: Default::default(),
                         };
@@ -440,6 +441,7 @@ impl GameEngine {
             payment_preview: None,
             resolution_prompt_state: None,
             replace_stack_presentation: false,
+            automation_continuation: None,
             events,
             legal_by_player: Default::default(),
         };

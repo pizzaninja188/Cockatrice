@@ -9,6 +9,7 @@
 #include <QPainter>
 #include <QPen>
 #include <QGraphicsSceneMouseEvent>
+#include <QGraphicsSceneContextMenuEvent>
 #include <QPixmap>
 #include <QRect>
 #include <QRectF>
@@ -77,6 +78,10 @@ void PhaseButton::paint(QPainter *painter, const QStyleOptionGraphicsItem * /*op
         painter->drawRect(oppRect);
         painter->setBrush(myTurnStopEnabled ? QColor(50, 170, 220) : QColor(45, 45, 45));
         painter->drawRect(myRect);
+    }
+    if (!automationMarker.isEmpty()) {
+        painter->setPen(Qt::yellow);
+        painter->drawText(boundingRect().adjusted(2, 0, -2, 0), Qt::AlignRight | Qt::AlignTop, automationMarker);
     }
 }
 
@@ -156,10 +161,24 @@ void PhaseButton::updateAnimation()
 
 void PhaseButton::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
+    if (automationContextEnabled && event->button() == Qt::RightButton) {
+        event->accept();
+        return;
+    }
     if (event && toggleStopAtPosition(event->pos())) {
         return;
     }
     emit clicked();
+}
+
+void PhaseButton::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
+{
+    if (!automationContextEnabled) {
+        QGraphicsItem::contextMenuEvent(event);
+        return;
+    }
+    event->accept();
+    emit automationContextMenuRequested(event->screenPos());
 }
 
 bool PhaseButton::toggleStopAtPosition(const QPointF &pos)
@@ -230,6 +249,8 @@ PhasesToolbar::PhasesToolbar(QGraphicsItem *parent)
 
     for (int i = 0; i < buttonList.size(); ++i) {
         connect(buttonList[i], &PhaseButton::clicked, this, &PhasesToolbar::phaseButtonClicked);
+        connect(buttonList[i], &PhaseButton::automationContextMenuRequested, this,
+                [this, i](const QPoint &position) { emit automationContextMenuRequested(i, position); });
         connect(buttonList[i], &PhaseButton::stopToggled, this, [this, i](bool opponentTurn, bool enabled) {
             if (opponentTurn) {
                 stopOnOpponentTurn[i] = enabled;
@@ -252,6 +273,19 @@ PhasesToolbar::PhasesToolbar(QGraphicsItem *parent)
 QRectF PhasesToolbar::boundingRect() const
 {
     return {0, 0, width, height};
+}
+
+void PhasesToolbar::setAutomationContextMenusEnabled(bool enabled)
+{
+    for (int i = 0; i < buttonList.size(); ++i)
+        buttonList[i]->setAutomationContextEnabled(enabled && i != 0);
+}
+
+void PhasesToolbar::setAutomationMarkers(int stopIndex, int yieldIndex)
+{
+    for (int i = 0; i < buttonList.size(); ++i)
+        buttonList[i]->setAutomationMarker((i == stopIndex ? QStringLiteral("!") : QString()) +
+                                           (i == yieldIndex ? QStringLiteral("→") : QString()));
 }
 
 void PhasesToolbar::retranslateUi()

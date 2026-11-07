@@ -89,6 +89,14 @@ Display rotation, arrows, chat, game information and session actions remain avai
 Batch `live_game_menu` probes construct an offline live tab and exercise lifecycle refreshes;
 historical replay tabs retain their existing smaller menu.
 
+`ruled_automation_controls` owns the eight-button control bar, guarded keyboard bindings,
+acknowledged status, and stack/phase/management menus. `ruled_automation_ui` connects it to the
+live tab, the existing prompt's primary action, physical or synthetic stack-card identity, and
+the phase toolbar. The view model mirrors only the local seat's `AutomationState`; courtesy
+combat previews preserve it, while authority retraction clears it. Automation changes bypass
+the local gameplay transport lock so Clear and Full Control remain usable, but still enter the
+engine and deterministic command log. See [controls and pending acceptance](../../../../docs/RULED-CONTROLS.md).
+
 ### `ruled_client_state.{h,cpp}` — `RuledClientState`
 
 A `QObject` parented to `RuledGameController`; the client's whole picture of the ruled game.

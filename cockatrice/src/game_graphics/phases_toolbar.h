@@ -28,6 +28,8 @@ private:
     bool hasStops;
     bool opponentTurnStopEnabled;
     bool myTurnStopEnabled;
+    bool automationContextEnabled = false;
+    QString automationMarker;
     int activeAnimationCounter;
     QTimer *activeAnimationTimer;
     QAction *doubleClickAction;
@@ -61,7 +63,10 @@ public:
         return active;
     }
     void triggerDoubleClickAction();
+    void setAutomationContextEnabled(bool enabled) { automationContextEnabled = enabled; }
+    void setAutomationMarker(const QString &marker) { automationMarker = marker; update(); }
 signals:
+    void automationContextMenuRequested(const QPoint &screenPosition);
     void clicked();
     void stopToggled(bool opponentTurn, bool enabled);
 
@@ -69,6 +74,7 @@ protected:
     void paint(QPainter *painter, const QStyleOptionGraphicsItem * /*option*/, QWidget * /*widget*/) override;
     void mousePressEvent(QGraphicsSceneMouseEvent *event) override;
     void mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event) override;
+    void contextMenuEvent(QGraphicsSceneContextMenuEvent *event) override;
 };
 
 class PhasesToolbar : public QObject, public QGraphicsItem
@@ -111,12 +117,15 @@ public:
         return stopOnOpponentTurn;
     }
     void syncButtonStopsFromState();
+    void setAutomationContextMenusEnabled(bool enabled);
+    void setAutomationMarkers(int stopIndex, int yieldIndex);
 public slots:
     void setActivePhase(int phase);
     void triggerPhaseAction(int phase);
 private slots:
     void phaseButtonClicked();
 signals:
+    void automationContextMenuRequested(int phase, const QPoint &screenPosition);
     /// A phase-stop preference changed. Ruled mode publishes the complete policy to Servatrice;
     /// freeform ignores this signal and retains its local behavior.
     void phaseStopsChanged();

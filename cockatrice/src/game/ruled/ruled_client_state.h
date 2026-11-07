@@ -906,6 +906,8 @@ public:
     // Legal actions offered to the local player this batch.
     // -----------------------------------------------------------------------------------
     // One entry per hand-action kind the engine offered this batch; absent kind = nothing legal.
+    // Acknowledged seat-private policy and exact engine-authored stack/menu offers.
+    ruled::v1::AutomationState automation;
     // Written wholesale by RuledEventDispatcher::applyLegalActions.
     QHash<RuledHandActionKind, RuledHandActionSet> handActions;
     QSet<int> affordableHandSlots;

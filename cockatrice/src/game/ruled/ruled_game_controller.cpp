@@ -83,13 +83,15 @@ RuledGameController::~RuledGameController()
 }
 namespace
 {
-bool isRuledUiOnlyCommand(const ruled::v1::RuledCommand &command)
+bool bypassesGameplayLock(const ruled::v1::RuledCommand &command)
 {
-    return command.has_preview_payment() || command.has_set_auto_pass_policy() ||
+    // Automation changes must remain cancellable during gameplay transport. They still enter
+    // the engine and deterministic log; this exemption applies only to the local input lock.
+    return command.has_update_automation() || command.has_preview_payment() || command.has_set_auto_pass_policy() ||
            command.has_preview_declare_attackers() || command.has_preview_declare_blockers();
 }
 
-bool containsEngineBoundRuledCommand(const PendingCommand *pending)
+bool containsGameplayLockedRuledCommand(const PendingCommand *pending)
 {
     if (!pending) {
         return false;
@@ -104,7 +106,7 @@ bool containsEngineBoundRuledCommand(const PendingCommand *pending)
         if (payload.has_diagnostic_report_id() && !payload.has_payload()) {
             continue;
         }
-        if (!command.ParseFromString(payload.payload()) || !isRuledUiOnlyCommand(command)) {
+        if (!command.ParseFromString(payload.payload()) || !bypassesGameplayLock(command)) {
             return true;
         }
     }
@@ -282,15 +284,15 @@ void RuledGameController::sendRuledCommand(const ruled::v1::RuledCommand &comman
     }
     Command_RuledPayload cmd;
     cmd.set_payload(payload);
-    const bool engineBound = !isRuledUiOnlyCommand(command);
-    if (engineBound && !beginRuledGameplayCommand()) {
+    const bool gameplayBound = !bypassesGameplayLock(command);
+    if (gameplayBound && !beginRuledGameplayCommand()) {
         ruledDiagnostics->blocked(command, QStringLiteral("engine_command_pending"));
         return;
     }
-    const quint64 token = engineBound ? ++ruledPendingCommandToken : 0;
+    const quint64 token = gameplayBound ? ++ruledPendingCommandToken : 0;
     PendingCommand *pend = prepareGameCommand(cmd);
     connect(pend, &PendingCommand::finished, game->getGameEventHandler(), &GameEventHandler::commandFinished);
-    if (engineBound) {
+    if (gameplayBound) {
         connect(pend, &PendingCommand::finished, this,
                 [this, token](const Response &, const CommandContainer &, const QVariant &) {
                     finishRuledGameplayCommand(token);
@@ -315,21 +317,21 @@ void RuledGameController::sendRuledCommandExpectingAck(const ruled::v1::RuledCom
     }
     Command_RuledPayload cmd;
     cmd.set_payload(payload);
-    const bool engineBound = !isRuledUiOnlyCommand(command);
-    if (engineBound && !beginRuledGameplayCommand()) {
+    const bool gameplayBound = !bypassesGameplayLock(command);
+    if (gameplayBound && !beginRuledGameplayCommand()) {
         ruledDiagnostics->blocked(command, QStringLiteral("engine_command_pending"));
         onFinished(false);
         return;
     }
-    const quint64 token = engineBound ? ++ruledPendingCommandToken : 0;
+    const quint64 token = gameplayBound ? ++ruledPendingCommandToken : 0;
     PendingCommand *pend = prepareGameCommand(cmd);
     QObject::connect(pend, &PendingCommand::finished, this,
-                     [this, engineBound, token, handler = std::move(onFinished)](
+                     [this, gameplayBound, token, handler = std::move(onFinished)](
                          const Response &response, const CommandContainer &, const QVariant &) {
-                         if (engineBound && token != ruledPendingCommandToken) {
+                         if (gameplayBound && token != ruledPendingCommandToken) {
                              return;
                          }
-                         if (engineBound) {
+                         if (gameplayBound) {
                              finishRuledGameplayCommand(token);
                          }
                          handler(response.response_code() == Response::RespOk);
@@ -510,16 +512,16 @@ void RuledGameController::sendGameCommand(PendingCommand *pend, int playerId)
         return;
     }
 
-    const bool engineBound = RuledActions::isRuledGame(game) && containsEngineBoundRuledCommand(pend);
-    if (engineBound && !beginRuledGameplayCommand()) {
+    const bool gameplayBound = RuledActions::isRuledGame(game) && containsGameplayLockedRuledCommand(pend);
+    if (gameplayBound && !beginRuledGameplayCommand()) {
         ruledDiagnostics->blocked(pend->getCommandContainer(), QStringLiteral("engine_command_pending"));
         delete pend;
         return;
     }
-    const quint64 token = engineBound ? ++ruledPendingCommandToken : 0;
+    const quint64 token = gameplayBound ? ++ruledPendingCommandToken : 0;
 
     connect(pend, &PendingCommand::finished, game->getGameEventHandler(), &GameEventHandler::commandFinished);
-    if (engineBound) {
+    if (gameplayBound) {
         connect(pend, &PendingCommand::finished, this,
                 [this, token](const Response &, const CommandContainer &, const QVariant &) {
                     finishRuledGameplayCommand(token);

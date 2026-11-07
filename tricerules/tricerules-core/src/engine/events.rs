@@ -1335,6 +1335,7 @@ pub(super) fn finish_with_events(eng: &GameEngine, events: Vec<RuledEvent>) -> R
         payment_preview: None,
         resolution_prompt_state: None,
         replace_stack_presentation: false,
+        automation_continuation: None,
         events,
         legal_by_player: Default::default(),
     };
