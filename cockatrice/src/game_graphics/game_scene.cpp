@@ -1,6 +1,7 @@
 #include "game_scene.h"
 
 #include "../client/settings/cache_settings.h"
+#include "../game/ruled/ruled_interaction_ui.h"
 #include "../interface/theme_manager.h"
 #include "animated_item.h"
 #include "board/abstract_card_item.h"
@@ -725,6 +726,9 @@ void GameScene::onCardViewRefreshRequested(CardState *card, bool zoneChanged, Pl
     item->deleteDragItem();
     if (zoneChanged) {
         item->setBeingPointedAt(false);
+        if (hoveredCard == item) {
+            updateHoveredCard(nullptr);
+        }
         item->setHovered(false);
     }
     if (newOwner) {
@@ -761,6 +765,7 @@ void GameScene::updateHover(const QPointF &scenePos)
 
 void GameScene::updateHoveredCard(CardItem *newCard)
 {
+    const bool changed = hoveredCard != newCard;
     if (hoveredCard && (newCard != hoveredCard)) {
         endCardHover(hoveredCard);
     }
@@ -768,6 +773,14 @@ void GameScene::updateHoveredCard(CardItem *newCard)
         beginCardHover(newCard);
     }
     hoveredCard = newCard;
+    if (changed) {
+        RuledInteractionUi::refreshScene(this);
+    }
+}
+
+CardItem *GameScene::getHoveredCard() const
+{
+    return hoveredCard;
 }
 
 void GameScene::beginCardHover(CardItem *card)

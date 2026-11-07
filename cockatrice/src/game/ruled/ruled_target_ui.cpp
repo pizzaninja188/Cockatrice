@@ -11,6 +11,7 @@
 #include "ruled_activation.h"
 #include "ruled_payment_ui.h"
 #include "ruled_pending_cast.h"
+#include "ruled_interaction_selection.h"
 
 #include <libcockatrice/utility/zone_names.h>
 
@@ -178,6 +179,62 @@ void RuledTargetUi::reconcile(RuledPlayerActions *actions)
     }
     state->emitSpellTargetSelectionChanged();
     state->emitSpellDamageAllocationUiChanged();
+}
+
+RuledTargetClickEligibility RuledPlayerActions::ruledCardCostEligibility(CardItem *card) const
+{
+    auto *state = RuledActions::stateFor(player->getGame());
+    if (!state || !card || !card->getZone() || !card->getOwner()) {
+        return RuledTargetClickEligibility::NotTargeting;
+    }
+    const int owner = card->getOwner()->getPlayerInfo()->getId();
+    const auto &zoneName = card->getZone()->getName();
+    const auto zone = zoneName == ZoneNames::HAND    ? RuledCostChoiceZone::Hand
+                      : zoneName == ZoneNames::GRAVE ? RuledCostChoiceZone::Graveyard
+                                                     : RuledCostChoiceZone::Battlefield;
+    quint32 id = 0;
+    quint32 stableId = 0;
+    quint64 generation = 0;
+    if (zoneName == ZoneNames::HAND && owner == player->getPlayerInfo()->getId()) {
+        const int slot = state->engineHandSlotForServerCard(owner, card->getId());
+        if (slot >= 0) {
+            id = static_cast<quint32>(slot);
+            stableId = static_cast<quint32>(card->getId());
+        } else {
+            return isAwaitingRuledSpellCostSelection() || isAwaitingRuledAbilityCostSelection()
+                       ? RuledTargetClickEligibility::Illegal
+                       : RuledTargetClickEligibility::NotTargeting;
+        }
+    } else if (zoneName == ZoneNames::GRAVE && owner == player->getPlayerInfo()->getId()) {
+        id = state->graveyardEngineOidForOwnedCard(owner, card->getId());
+        stableId = id;
+        generation = state->abilitySourceGeneration(id);
+    } else if (zoneName == ZoneNames::TABLE) {
+        id = state->engineOidForCardId(owner, card->getId());
+        stableId = id;
+        generation = state->abilitySourceGeneration(id);
+    } else {
+        return isAwaitingRuledSpellCostSelection() || isAwaitingRuledAbilityCostSelection()
+                   ? RuledTargetClickEligibility::Illegal
+                   : RuledTargetClickEligibility::NotTargeting;
+    }
+    if (isAwaitingRuledCounterGroupSelection()) {
+        for (const auto &choice : pendingActivatedAbility.costChoices) {
+            if (!choice.counterRemovalGroup || zoneName != ZoneNames::TABLE) {
+                continue;
+            }
+            for (const auto &candidate : choice.counterRemovalGroup->candidates) {
+                if (id != 0 && candidate.objectId == id && candidate.zoneChangeGeneration == generation) {
+                    return RuledTargetClickEligibility::Legal;
+                }
+            }
+        }
+        return RuledTargetClickEligibility::Illegal;
+    }
+    const auto spell = ruledPendingCostCandidateEligibility(pendingRuledSpellCast, zone, id, stableId, generation);
+    return spell != RuledTargetClickEligibility::NotTargeting
+               ? spell
+               : ruledPendingCostCandidateEligibility(pendingActivatedAbility, zone, id, stableId, generation);
 }
 
 RuledTargetClickEligibility RuledTargetUi::cardEligibility(const RuledPlayerActions *actions, CardItem *card)

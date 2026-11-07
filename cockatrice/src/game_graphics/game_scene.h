@@ -126,6 +126,7 @@ public:
 
     /** @brief Card the currently open context menu targets, or null. */
     CardItem *getActiveCard() const;
+    CardItem *getHoveredCard() const;
 
     /** @brief Sets the card the currently open context menu targets. */
     void setActiveCard(CardItem *card);

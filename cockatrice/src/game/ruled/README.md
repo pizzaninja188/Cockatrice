@@ -177,6 +177,16 @@ directly to `RuledPaymentUi`; `TabGame` selects prompt modes. The bridges keep `
 as the QObject connection context and preserve existing translation contexts, acknowledgement
 behavior, and nested-payment lifetimes.
 
+### `ruled_interaction_ui.{h,cpp}`
+
+Paints the common card/player selection dimming and hover focus beneath counters and selection
+markers. Target and payment candidates come from the existing click/offer contracts; view-local
+picker IDs are never interpreted as physical cards. `ruled_interaction_focus.h` follows published
+stack targets, captured source generations, copy origins, and combat assignments. Selection takes
+precedence over incidental hover. Scene hover/zone changes and ruled state signals invalidate the
+visuals, including cached player avatars. Appearance settings control dim strength and hover dimming.
+These are presentation hints, not authority to submit an action.
+
 ### `ruled_replacement_picker.{h,cpp}`
 
 Owns the public replacement/prevention image window. `ReplacementEffectOption` supplies each

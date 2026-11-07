@@ -1,6 +1,7 @@
 #include "appearance_settings_page.h"
 
 #include "../../../client/settings/cache_settings.h"
+#include "../../../game/ruled/ruled_interaction_settings_widget.h"
 #include "../../client/settings/card_counter_settings.h"
 #include "../../palette_editor/palette_editor_dialog.h"
 #include "../../theme_config.h"
@@ -297,6 +298,7 @@ AppearanceSettingsPage::AppearanceSettingsPage()
     cardsGrid->addWidget(&roundCardCornersCheckBox, 3, 0, 1, 2);
     cardsGrid->addWidget(&maxFontSizeForCardsLabel, 4, 0, 1, 1);
     cardsGrid->addWidget(&maxFontSizeForCardsEdit, 4, 1, 1, 1);
+    cardsGrid->addWidget(new RuledInteractionSettingsWidget(settings.cardsDisplay(), this), 5, 0, 1, 2);
 
     cardsGroupBox = new QGroupBox;
     cardsGroupBox->setLayout(cardsGrid);

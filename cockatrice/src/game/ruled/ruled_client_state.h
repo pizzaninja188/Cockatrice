@@ -1136,6 +1136,7 @@ public:
     QHash<quint32, QVector<quint32>> stackTargetsByStackOid;
     // Preserve occurrences: copied targets may share an ObjectId across different generations.
     QHash<quint32, QVector<ruled::v1::TargetRef>> stackTargetReceiptsByStackOid;
+    QHash<quint32, quint32> stackCopySourceByStackOid;
     /// Where a target sat when it was targeted (CR 608.2b). Latched the first time a targeting
     /// arrow resolves and never revised, because an object that changes zones becomes a new object
     /// and is no longer the thing that was targeted: an arrow must vanish when its target dies, not

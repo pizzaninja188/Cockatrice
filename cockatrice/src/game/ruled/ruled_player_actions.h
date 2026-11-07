@@ -91,6 +91,7 @@ public:
     bool tryHandleRuledSpellTargetPlayerClick(PlayerLogic *targetPlayer);
     /// Exact engine-authored left-click affordance while a true target choice is pending.
     [[nodiscard]] RuledTargetClickEligibility ruledCardTargetEligibility(CardItem *card) const;
+    [[nodiscard]] RuledTargetClickEligibility ruledCardCostEligibility(CardItem *card) const;
     [[nodiscard]] RuledTargetClickEligibility ruledPlayerTargetEligibility(PlayerLogic *targetPlayer) const;
     [[nodiscard]] bool isTargetSelectedForPendingSpell(quint32 oid) const;
     [[nodiscard]] bool isTargetSelectedForPendingAbility(quint32 oid) const;

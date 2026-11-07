@@ -2,6 +2,7 @@
 #include "arrow_item.h"
 
 #include "../../client/settings/cache_settings.h"
+#include "../../game/ruled/ruled_interaction_ui.h"
 #include "../game_scene.h"
 #include "../player/player_target.h"
 #include "../z_values.h"
@@ -265,6 +266,8 @@ void ArrowItem::paint(QPainter *painter, const QStyleOptionGraphicsItem * /*opti
     }
 
     painter->save();
+    const qreal focusOpacity = RuledInteractionUi::arrowOpacity(this) * painter->opacity();
+    painter->setOpacity(focusOpacity);
     const QPen outlinePen = painter->pen();
     painter->setBrush(paintColor);
 
@@ -293,13 +296,13 @@ void ArrowItem::paint(QPainter *painter, const QStyleOptionGraphicsItem * /*opti
         // instead of slicing the triangle into a growing stub.
         drawShaft();
         const qreal headFadeIn = (drawProgress - headBaseFraction) / (1.0 - headBaseFraction);
-        painter->setOpacity(headFadeIn);
+        painter->setOpacity(headFadeIn * focusOpacity);
         painter->setPen(Qt::NoPen);
         painter->drawPath(headPath);
         painter->setPen(outlinePen);
         painter->setBrush(Qt::NoBrush);
         painter->drawPath(headPath);
-        painter->setOpacity(1.0);
+        painter->setOpacity(focusOpacity);
         painter->setBrush(paintColor);
     }
 
@@ -316,7 +319,7 @@ void ArrowItem::paint(QPainter *painter, const QStyleOptionGraphicsItem * /*opti
         painter->setPen(Qt::NoPen);
         painter->setClipPath(path);
         painter->setBrush(sheen);
-        painter->setOpacity(glowAlpha * anticipation);
+        painter->setOpacity(glowAlpha * anticipation * focusOpacity);
         painter->drawRect(QRectF(sweep.x() - kSheenHalfWidth - glowExtent, path.boundingRect().top() - glowExtent,
                                  (kSheenHalfWidth + glowExtent) * 2.0,
                                  path.boundingRect().height() + glowExtent * 2.0));

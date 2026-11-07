@@ -865,6 +865,7 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
         state->prototypedStackOids.clear();
         state->stackTargetsByStackOid.clear();
         state->stackTargetReceiptsByStackOid.clear();
+        state->stackCopySourceByStackOid.clear();
         state->stackTargetKindByStackAndTargetOid.clear();
         state->stackAnnotationByOid.clear();
         state->stackSourceOidByStackOid.clear();
@@ -1146,6 +1147,7 @@ void RuledEventDispatcher::applyPhaseChanged(const ruled::v1::PhaseChanged &pc, 
     state->prototypedStackOids.clear();
     state->stackTargetsByStackOid.clear();
     state->stackTargetReceiptsByStackOid.clear();
+    state->stackCopySourceByStackOid.clear();
     state->stackTargetKindByStackAndTargetOid.clear();
     state->stackSourceOidByStackOid.clear();
     state->stackSourceCapturedOidByStackOid.clear();
@@ -1212,6 +1214,11 @@ void RuledEventDispatcher::applyStackPushed(const ruled::v1::StackPushed &sp, Ba
         state->pendingChoice->candidateOids.contains(sp.object_id()))
         state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast);
     state->stackOidOrder.prepend(sp.object_id());
+    if (sp.is_copy() && sp.copy_source_object_id() != 0) {
+        state->stackCopySourceByStackOid.insert(sp.object_id(), sp.copy_source_object_id());
+    } else {
+        state->stackCopySourceByStackOid.remove(sp.object_id());
+    }
     // CR 603.3b: a candidate reaching the stack means the ordering prompt has been answered. The
     // deciding client already cleared it in submitTriggerOrder(); this covers every other path to
     // the same fact (a resynced batch, a reconnect) and closes opponents' "waiting" state.
@@ -1225,7 +1232,14 @@ void RuledEventDispatcher::applyStackPushed(const ruled::v1::StackPushed &sp, Ba
     QVector<ruled::v1::TargetRef> receipts;
     tlist.reserve(sp.targets_size());
     for (int ti = 0; ti < sp.targets_size(); ++ti) {
-        const auto &target = sp.targets(ti);
+        auto target = sp.targets(ti);
+        // Older ordinary casts omit a generation. Capture the already published incarnation
+        // once, at StackPushed; never rebind it to a later battlefield snapshot.
+        if (target.kind() == ruled::v1::TARGET_REF_KIND_PERMANENT &&
+            !target.has_expected_zone_change_generation() &&
+            state->battlefieldGenerationByOid.contains(target.object_id())) {
+            target.set_expected_zone_change_generation(state->battlefieldGenerationByOid.value(target.object_id()));
+        }
         receipts.append(target);
         const quint32 targetOid = static_cast<quint32>(target.object_id());
         tlist.append(targetOid);
@@ -1388,6 +1402,7 @@ void RuledEventDispatcher::retireStackObject(quint32 objectId, BatchContext &ctx
     state->stackOidOrder.removeOne(rid);
     state->stackTargetsByStackOid.remove(rid);
     state->stackTargetReceiptsByStackOid.remove(rid);
+    state->stackCopySourceByStackOid.remove(rid);
     for (quint32 t : spellTargets) {
         state->stackTargetKindByStackAndTargetOid.remove(RuledClientState::stackTargetKey(rid, t));
     }

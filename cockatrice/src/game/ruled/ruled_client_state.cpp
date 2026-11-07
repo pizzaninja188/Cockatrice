@@ -2270,6 +2270,7 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     triggerOrderCandidateOids.clear();
     stackTargetsByStackOid.clear();
     stackTargetReceiptsByStackOid.clear();
+    stackCopySourceByStackOid.clear();
     stackTargetKindByStackAndTargetOid.clear();
     stackAnnotationByOid.clear();
     stackSourceOidByStackOid.clear();

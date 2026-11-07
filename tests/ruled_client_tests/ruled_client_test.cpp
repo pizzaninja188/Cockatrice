@@ -10719,6 +10719,30 @@ TEST_F(RuledClientTest, TargetKindIsLatchedOnceAndNotRevisedWhenTheTargetDies)
 
 // An unresolvable target (its CardItem does not exist yet) leaves the entry unlatched so a later
 // sync can classify it, rather than freezing Unknown and never drawing the arrow.
+TEST_F(RuledClientTest, StackFocusReceiptsRetainOriginalGenerationAndRetireWithTheStackItem)
+{
+    state->battlefieldGenerationByOid.insert(100, 4);
+    ruled::v1::RuledEventBatch push;
+    auto *copy = push.add_events()->mutable_stack_pushed();
+    copy->set_object_id(12);
+    copy->set_is_copy(true);
+    copy->set_copy_source_object_id(11);
+    auto *target = copy->add_targets();
+    target->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    target->set_object_id(100);
+    apply(push);
+    ASSERT_EQ(state->stackTargetReceiptsByStackOid.value(12).size(), 1);
+    EXPECT_EQ(state->stackTargetReceiptsByStackOid.value(12).first().expected_zone_change_generation(), 4u);
+    EXPECT_EQ(state->stackCopySourceByStackOid.value(12), 11u);
+    state->battlefieldGenerationByOid.insert(100, 5);
+    EXPECT_EQ(state->stackTargetReceiptsByStackOid.value(12).first().expected_zone_change_generation(), 4u);
+    ruled::v1::RuledEventBatch resolve;
+    resolve.add_events()->mutable_stack_resolved()->set_object_id(12);
+    apply(resolve);
+    EXPECT_FALSE(state->stackCopySourceByStackOid.contains(12));
+    EXPECT_FALSE(state->stackTargetReceiptsByStackOid.contains(12));
+}
+
 TEST_F(RuledClientTest, UnknownTargetKindIsNotLatched)
 {
     state->latchTargetKind(11, 100, RuledTargetItemKind::Unknown);

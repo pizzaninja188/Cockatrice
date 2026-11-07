@@ -68,6 +68,28 @@ bool CardsDisplaySettings::getScaleCards() const
     return getValue("scaleCards", QString(), QString(), true).toBool();
 }
 
+int CardsDisplaySettings::getRuledDimPercent() const
+{
+    return qBound(0, getValue("ruledDimPercent", QString(), QString(), 45).toInt(), 100);
+}
+
+bool CardsDisplaySettings::getRuledHoverDimming() const
+{
+    return getValue("ruledHoverDimming", QString(), QString(), true).toBool();
+}
+
+void CardsDisplaySettings::setRuledDimPercent(int percent)
+{
+    setValue(qBound(0, percent, 100), "ruledDimPercent");
+    emit ruledInteractionAppearanceChanged();
+}
+
+void CardsDisplaySettings::setRuledHoverDimming(bool enabled)
+{
+    setValue(enabled, "ruledHoverDimming");
+    emit ruledInteractionAppearanceChanged();
+}
+
 int CardsDisplaySettings::getStackCardOverlapPercent() const
 {
     return getValue("verticalCardOverlapPercent", QString(), QString(), 33).toInt();

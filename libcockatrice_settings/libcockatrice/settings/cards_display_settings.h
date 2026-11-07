@@ -26,6 +26,8 @@ public:
     [[nodiscard]] bool getArrowDrawAnimation() const override;
     [[nodiscard]] bool getAutoRotateSidewaysLayoutCards() const override;
     [[nodiscard]] bool getScaleCards() const override;
+    [[nodiscard]] int getRuledDimPercent() const;
+    [[nodiscard]] bool getRuledHoverDimming() const;
     [[nodiscard]] int getStackCardOverlapPercent() const override;
     [[nodiscard]] int getCardInfoViewMode() const override;
     [[nodiscard]] int getVisualDeckStorageCardSize() const override;
@@ -49,6 +51,8 @@ public:
     void setArrowDrawAnimation(bool _arrowDrawAnimation);
     void setAutoRotateSidewaysLayoutCards(bool _autoRotateSidewaysLayoutCards);
     void setCardScaling(bool _scaleCards);
+    void setRuledDimPercent(int percent);
+    void setRuledHoverDimming(bool enabled);
     void setStackCardOverlapPercent(int _verticalCardOverlapPercent);
     void setCardInfoViewMode(int _viewMode);
     void setVisualDeckStorageCardSize(int _cardSize);
@@ -62,6 +66,7 @@ public:
     void setCardSearchLanguage(int _cardSearchLanguage);
 
 signals:
+    void ruledInteractionAppearanceChanged();
     void displayCardNamesChanged();
     void roundCardCornersChanged(bool roundCardCorners);
     void overrideAllCardArtWithPersonalPreferenceChanged(bool _overrideAllCardArtWithPersonalPreference);
