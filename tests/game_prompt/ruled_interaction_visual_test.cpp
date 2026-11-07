@@ -33,6 +33,16 @@ TEST(RuledInteractionVisual, CandidatesStayBrightAndHaveAVisibleBoundary)
     EXPECT_EQ(render({}).pixelColor(10, 50), QColor(Qt::white));
 }
 
+TEST(RuledInteractionVisual, AffordableCardsUseWhiteWithDarkBackingAndSelectionTakesPrecedence)
+{
+    const auto image = render({false, false, true});
+    EXPECT_EQ(image.pixelColor(10, 50), QColor(Qt::white));
+    EXPECT_LT(image.pixelColor(13, 50).red(), 80);
+    EXPECT_EQ(image.pixelColor(40, 50), QColor(Qt::white));
+    EXPECT_EQ(render({true, false, true}), render({true}));
+    EXPECT_EQ(render({false, true, true}), render({false, true}));
+}
+
 TEST(RuledInteractionVisual, DimStrengthIsBoundedAndPainterStateIsRestored)
 {
     EXPECT_EQ(render({true}, -10).pixelColor(40, 50), QColor(Qt::white));

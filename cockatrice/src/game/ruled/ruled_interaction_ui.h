@@ -7,11 +7,17 @@ class CardItem;
 class PlayerTarget;
 class GameScene;
 class ArrowItem;
+class PileZone;
+class QWidget;
+class RuledClientState;
 
 namespace RuledInteractionUi
 {
 void connectCard(CardItem *card);
 void connectPlayer(PlayerTarget *player);
+void connectPile(PileZone *pile);
+void paintPile(PileZone *pile, QPainter *painter);
+void refreshLibraryTop(QWidget *widget, const RuledClientState &state);
 void paintCard(CardItem *card, QPainter *painter);
 void paintPlayer(PlayerTarget *player, QPainter *painter, const QRectF &avatar);
 void refreshScene(GameScene *scene);

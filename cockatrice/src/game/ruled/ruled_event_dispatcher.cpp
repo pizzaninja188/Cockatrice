@@ -2859,6 +2859,12 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
     else
         state->pendingAttackDeclaration.reset();
     state->handActions = copyHandActions(actions, presentationResolver);
+    for (const auto slot : actions.affordable_hand_indices()) {
+        state->affordableHandSlots.insert(static_cast<int>(slot));
+    }
+    for (const auto &source : actions.affordable_objects()) {
+        state->affordableObjectGenerations.insert(source.object_id(), source.zone_change_generation());
+    }
     QHash<quint64, RuledExilePlayPermissionGroup> permissionGroups;
     for (const auto &group : actions.exile_play_permission_groups()) {
         RuledExilePlayPermissionGroup parsed;

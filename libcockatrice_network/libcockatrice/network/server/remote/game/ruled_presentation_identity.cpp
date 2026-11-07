@@ -73,10 +73,10 @@ bool supportedSchema()
             appendEnum(contract, file->enum_type(i));
         const QByteArray digest = QCryptographicHash::hash(
             QByteArray(contract.data(), static_cast<qsizetype>(contract.size())), QCryptographicHash::Sha256).toHex();
-        // Format enums, private validation reports, sideboard names and catalogue provenance
-        // add no object references. None is reachable from RuledEventBatch; the identity-bearing
-        // command and event fields retain their audited projection and recipient classification.
-        const QByteArray expected("f4fc05476a59cb5f09f1209f9422df62739d5f48ac028db8470d6f274e5f37e8");
+        // LegalActions affordability hints are recipient-private. Hand indices remain slots;
+        // affordable_objects recurse through the existing CostObjectRef object/generation pair.
+        // Neither field creates public identity or changes command authorization.
+        const QByteArray expected("52bb6ce117fa830a5c40dea3b7dd79bb15e64610c359014c6502a38492cb5017");
         if (digest != expected)
             qCritical() << "ruled presentation schema needs an identity audit:" << digest;
         return digest == expected;

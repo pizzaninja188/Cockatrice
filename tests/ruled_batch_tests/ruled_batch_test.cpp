@@ -2325,6 +2325,10 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
 
     auto &p1Legal = (*batch.mutable_legal_by_player())[1];
     p1Legal.add_labels("P1 legal");
+    p1Legal.add_affordable_hand_indices(3);
+    auto *affordable = p1Legal.add_affordable_objects();
+    affordable->set_object_id(901);
+    affordable->set_zone_change_generation(8);
     p1Legal.add_attack_requirement_ids(101);
     p1Legal.set_minimum_attack_requirement_count(1);
     auto *playerCap = p1Legal.add_attack_declaration_limits();
@@ -2511,6 +2515,11 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     const auto forP2 = redactFor(batch, p2);
     ASSERT_EQ(forP2.legal_by_player_size(), 1);
     EXPECT_TRUE(forP2.legal_by_player().contains(2));
+    EXPECT_EQ(forP1.legal_by_player().at(1).affordable_hand_indices(0), 3u);
+    EXPECT_EQ(forP1.legal_by_player().at(1).affordable_objects(0).object_id(), 901u);
+    EXPECT_EQ(forP1.legal_by_player().at(1).affordable_objects(0).zone_change_generation(), 8u);
+    EXPECT_EQ(forP2.legal_by_player().at(2).affordable_hand_indices_size(), 0);
+    EXPECT_EQ(forP2.legal_by_player().at(2).affordable_objects_size(), 0);
     EXPECT_EQ(forP2.legal_by_player().at(2).attack_requirement_ids_size(), 0);
     EXPECT_EQ(forP2.legal_by_player().at(2).minimum_attack_requirement_count(), 0u);
     EXPECT_EQ(forP2.legal_by_player().at(2).attack_declaration_limits_size(), 0);

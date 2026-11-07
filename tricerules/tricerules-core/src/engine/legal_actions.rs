@@ -60,6 +60,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
         let mut cost_choices_by_ability = BTreeMap::new();
         let mut mana_payment_by_ability = BTreeMap::new();
         let mut mana_ability_keys = HashSet::new();
+        let mut battlefield_abilities = Vec::new();
 
         if let Some(idx) = eng.state.player_idx(p.id) {
             for (slot, &oid) in eng.state.players[idx].hand.iter().enumerate() {
@@ -117,7 +118,8 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 if !eng.state.objects.contains_key(&poid) {
                     continue;
                 }
-                for effective in eng.effective_activated_abilities(poid) {
+                let effective_abilities = eng.effective_activated_abilities(poid);
+                for effective in &effective_abilities {
                     let ai = effective.slot as usize;
                     let ability = effective.definition.clone();
                     let key = (poid as u64) << 32 | ai as u64;
@@ -230,6 +232,9 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                         );
                         valid_targets_by_ability.insert(key, targets);
                     }
+                }
+                if !effective_abilities.is_empty() {
+                    battlefield_abilities.push((poid, effective_abilities));
                 }
             }
             for action in &zone_ability_actions {
@@ -581,6 +586,8 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
         batch.legal_by_player.insert(
             p.id,
             LegalActions {
+                affordable_hand_indices: Vec::new(),
+                affordable_objects: Vec::new(),
                 pending_ability_activation: eng.pending_ability_activation_for(p.id),
                 opening: opening_actions(eng, p.id),
                 labels,
@@ -608,6 +615,23 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 pending_attack_declaration,
             },
         );
+        let actions = batch
+            .legal_by_player
+            .get_mut(&p.id)
+            .expect("inserted legal actions");
+        let affordable = super::action_availability::affordable_objects(
+            eng,
+            p.id,
+            actions,
+            &battlefield_abilities,
+        );
+        for oid in affordable {
+            if let Some(slot) = p.hand.iter().position(|&hand_oid| hand_oid == oid) {
+                actions.affordable_hand_indices.push(slot as u32);
+            } else {
+                actions.affordable_objects.push(eng.payment_object_ref(oid));
+            }
+        }
     }
 }
 

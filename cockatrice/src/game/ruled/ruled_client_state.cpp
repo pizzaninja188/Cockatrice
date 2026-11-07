@@ -208,6 +208,32 @@ bool RuledClientState::handActionNeedsTarget(RuledHandActionKind kind, int handI
 void RuledClientState::clearHandActions()
 {
     handActions.clear();
+    affordableHandSlots.clear();
+    affordableObjectGenerations.clear();
+}
+
+bool RuledClientState::isAffordableObjectCurrent(quint32 oid) const
+{
+    if (battlefieldGenerationByOid.contains(oid)) {
+        return hasAffordableAction(oid, battlefieldGenerationByOid.value(oid));
+    }
+    if (abilitySourceGenerationByOid.contains(oid)) {
+        return hasAffordableAction(oid, abilitySourceGenerationByOid.value(oid));
+    }
+    if (privateLibraryTop && privateLibraryTop->objectId == oid) {
+        return hasAffordableAction(oid, privateLibraryTop->zoneChangeGeneration);
+    }
+    for (const auto &offer : zoneCastActions.faceOptionsByIndex.value(static_cast<int>(oid))) {
+        if (hasAffordableAction(oid, offer.zoneChangeGeneration)) {
+            return true;
+        }
+    }
+    for (const auto &offer : zoneLandFacesByOid.value(oid)) {
+        if (hasAffordableAction(oid, offer.zoneChangeGeneration)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool RuledClientState::localPlayerMustCleanupDiscard() const
@@ -507,6 +533,8 @@ void RuledClientState::clearResolutionPromptStaging()
 
 void RuledClientState::revokeLocalActionAuthority()
 {
+    affordableHandSlots.clear();
+    affordableObjectGenerations.clear();
     clearPendingChoice();
     // Submitting a choice already empties the holder. Its outstanding ACK must still expire.
     ++pendingChoiceRevision;

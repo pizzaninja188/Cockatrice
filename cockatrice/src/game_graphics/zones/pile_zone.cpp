@@ -1,6 +1,7 @@
 #include "pile_zone.h"
 
 #include "../../game/ruled/ruled_actions.h"
+#include "../../game/ruled/ruled_interaction_ui.h"
 #include <libcockatrice/game/abstract_game.h>
 #include "../../client/settings/cache_settings.h"
 #include "../board/card_drag_item.h"
@@ -34,6 +35,7 @@ PileZone::PileZone(PileZoneLogic *_logic, QGraphicsItem *parent) : CardZone(_log
 {
     setCacheMode(DeviceCoordinateCache); // Do not move this line to the parent constructor!
     setAcceptHoverEvents(true);
+    RuledInteractionUi::connectPile(this);
     setCursor(Qt::OpenHandCursor);
 
     setTransform(QTransform()
@@ -71,6 +73,7 @@ void PileZone::paint(QPainter *painter, const QStyleOptionGraphicsItem * /*optio
     if (!cardItems().isEmpty()) {
         cardItems().at(0)->paintPicture(painter, cardItems().at(0)->getTranslatedSize(painter), 90);
     }
+    RuledInteractionUi::paintPile(this, painter);
 
     painter->translate(CardDimensions::WIDTH_HALF_F, CardDimensions::HEIGHT_HALF_F);
     painter->rotate(-90);

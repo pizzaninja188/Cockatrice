@@ -4,9 +4,11 @@
 //! trigger staging, priority, and legal-action publication. This module owns only the reusable
 //! resource transaction.
 
+pub(super) mod candidates;
 pub(super) mod components;
 pub(super) mod convoke;
 pub(super) mod demand;
+mod feasibility;
 #[cfg(test)]
 mod hybrid_phyrexian_tests;
 pub(super) mod mana;

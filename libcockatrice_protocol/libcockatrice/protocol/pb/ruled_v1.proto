@@ -1300,6 +1300,12 @@ message LegalActions {
   // ability_index); permanent target candidates include their current zone-change generation.
   map<uint64, LegalActivatedAbilityModes> activated_ability_modes = 29
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Positive read-only payment witnesses for at least one currently offered action. These are
+  // presentation hints, never command authorization. The bounded search may omit a feasible
+  // action; absence must not disable an offer. Hand slots use the same private HandSlotMap as
+  // hand_actions. Other sources retain exact object generation, including library permissions.
+  repeated uint32 affordable_hand_indices = 30 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated CostObjectRef affordable_objects = 31 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // The bounded CR 602.3 contract targets battlefield creatures. This identity is an engine

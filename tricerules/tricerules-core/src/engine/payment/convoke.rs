@@ -110,7 +110,7 @@ impl GameEngine {
         }
     }
 
-    fn convoke_candidate(
+    pub(super) fn convoke_candidate(
         &self,
         player: PlayerId,
         costs: &PreparedPaymentCosts,

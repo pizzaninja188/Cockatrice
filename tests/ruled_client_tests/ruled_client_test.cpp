@@ -9688,6 +9688,30 @@ TEST_F(RuledClientTest, LegalActionsBatchEmitsUndoableManaCount)
     EXPECT_EQ(spy.at(1).at(0).toInt(), 0);
 }
 
+TEST_F(RuledClientTest, AffordableActionHintsArePrivateGenerationBoundAndRetracted)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    actions.add_affordable_hand_indices(2);
+    auto *source = actions.add_affordable_objects();
+    source->set_object_id(400);
+    source->set_zone_change_generation(7);
+    (*batch.mutable_legal_by_player())[kOpponent].add_affordable_hand_indices(9);
+    apply(batch);
+    EXPECT_TRUE(state->affordableHandSlots.contains(2));
+    EXPECT_FALSE(state->affordableHandSlots.contains(9));
+    EXPECT_TRUE(state->hasAffordableAction(400, 7));
+    EXPECT_FALSE(state->hasAffordableAction(400, 8));
+    EXPECT_FALSE(state->hasAffordableAction(401, 7));
+    state->revokeLocalActionAuthority();
+    EXPECT_TRUE(state->affordableHandSlots.isEmpty());
+    EXPECT_TRUE(state->affordableObjectGenerations.isEmpty());
+    apply(batch);
+    apply(phaseBatch(ruled::v1::PHASE_ID_MAIN1, kLocalPlayer));
+    EXPECT_TRUE(state->affordableHandSlots.isEmpty());
+    EXPECT_TRUE(state->affordableObjectGenerations.isEmpty());
+}
+
 TEST_F(RuledClientTest, PendingAttackReceiptUndoabilityDrivesTheUndoAffordance)
 {
     QSignalSpy spy(state, &RuledClientState::undoableManaAbilitiesChanged);

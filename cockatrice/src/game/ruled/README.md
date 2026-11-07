@@ -187,6 +187,39 @@ precedence over incidental hover. Scene hover/zone changes and ruled state signa
 visuals, including cached player avatars. Appearance settings control dim strength and hover dimming.
 These are presentation hints, not authority to submit an action.
 
+White outlines use recipient-private `LegalActions.affordable_hand_indices` and
+`affordable_objects`, rather than the permission-only `activatable` flag. The Rust
+`action_availability` query proposes announcements and reuses payment transaction validation;
+it searches usable mana abilities on a cloned engine, including competing tap/sacrifice costs,
+restricted mana, life, counters, Convoke and Waterbend. Grizzly Bears with untapped lands and
+Mind Stone's competing mana/draw activations exercise the distinction. A positive hint means at
+least one payment witness exists; bounded proposal/mana search can omit feasible actions and
+must never disable an offered command. Special actions and land plays share the outline.
+
+The relay projects each non-hand `CostObjectRef` through the existing generation-aware identity
+path and redacts the complete legal-action snapshot to its recipient. Qt uses hand-slot mappings
+or current object generations, including public-zone views, closed piles and the authorized
+library-top panel. Hints are replaced on each legal-action batch and cleared when authority is
+revoked. Selection and hover focus take precedence over ordinary action outlines.
+
+Hands-on acceptance for these interaction visuals remains pending. Launch
+`scripts/launch-ruled-game.ps1 -Dev`, complete opening prompts, and check both seats:
+
+1. Put Grizzly Bears in hand and ready Forest/Island on the battlefield. Its white outline
+   should follow available mana and priority. Begin casting, cancel, then retry; payment cues
+   should replace ordinary outlines and cancellation should restore current offers.
+2. Put two Lightning Bolts in hand and Grizzly Bears on the opposing battlefield. Add `R`,
+   cast one Bolt and select the Bears. Ineligible cards should darken while the target remains
+   readable. Hover the committed spell to emphasize its exact target. Resolve it and confirm
+   that no stale focus remains; the second copy must retain its own hand identity.
+3. With Think Twice in the graveyard and enough blue mana, inspect the closed graveyard and
+   its open view for the action outline. Check a command-zone cast and an authorized library-top
+   action similarly. The other seat must not receive private hand/library action hints.
+4. Declare attackers and blockers, hover each side before and after assignments, and inspect
+   player/planeswalker defenders. Hover an attached Aura/Equipment and its host. Adjust the
+   Appearance dim strength and hover-dimming toggle; counters and selected markers must remain
+   readable. Reconnect or seek a replay and confirm that stale hints and relationships clear.
+
 ### `ruled_replacement_picker.{h,cpp}`
 
 Owns the public replacement/prevention image window. `ReplacementEffectOption` supplies each

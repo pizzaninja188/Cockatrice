@@ -3672,6 +3672,13 @@ TEST_F(RuledE2ESmokeTest, SpellCastTransactionAllowsManaAbilitiesCancelRetryAndC
     const int handSlot = static_cast<int>(action->hand_index());
     ASSERT_NE(p1.handServerCardBySlot.find(handSlot), p1.handServerCardBySlot.end());
     const int physicalCardId = p1.handServerCardBySlot.at(handSlot);
+    const auto hasAffordableHand = [](const OpeningDriver &client, int slot) {
+        const auto &offered = client.latestLegal.affordable_hand_indices();
+        return std::find(offered.begin(), offered.end(), static_cast<quint32>(slot)) != offered.end();
+    };
+    EXPECT_TRUE(hasAffordableHand(p1, handSlot)) << "untapped Islands must make Divination affordable";
+    EXPECT_EQ(p2.latestLegal.affordable_hand_indices_size(), 0);
+    EXPECT_EQ(p2.latestLegal.affordable_objects_size(), 0);
     const auto wasMovedFromHand = [physicalCardId](const OpeningDriver &client) {
         return std::any_of(client.physicalMoveEvents.cbegin(), client.physicalMoveEvents.cend(),
                            [physicalCardId](const Event_MoveCard &move) {
@@ -3695,6 +3702,8 @@ TEST_F(RuledE2ESmokeTest, SpellCastTransactionAllowsManaAbilitiesCancelRetryAndC
     };
     ASSERT_TRUE(begin());
     EXPECT_EQ(p1.latestLegal.pending_spell_cast().locked_total_cost(), "{2}{U}");
+    EXPECT_EQ(p1.latestLegal.affordable_hand_indices_size(), 0);
+    EXPECT_EQ(p1.latestLegal.affordable_objects_size(), 3) << "mana sources stay outlined during payment";
     EXPECT_FALSE(p2.latestLegal.has_pending_spell_cast());
     const quint64 firstTransaction = p1.latestLegal.pending_spell_cast().transaction_id();
     EXPECT_FALSE(wasMovedFromHand(p1)) << "the caster still sees the card in hand during payment";
@@ -3724,6 +3733,7 @@ TEST_F(RuledE2ESmokeTest, SpellCastTransactionAllowsManaAbilitiesCancelRetryAndC
     ASSERT_TRUE(sendSettled(cancel, QStringLiteral("cancel Divination cast transaction")));
     EXPECT_FALSE(p1.latestLegal.has_pending_spell_cast());
     EXPECT_EQ(p1.myPool.u, 3) << "cancel must not reverse legal mana abilities";
+    EXPECT_TRUE(hasAffordableHand(p1, handSlot)) << "cancellation restores the paid-from-pool cast hint";
     ASSERT_NE(p1.handServerCardBySlot.find(handSlot), p1.handServerCardBySlot.end());
     EXPECT_EQ(p1.handServerCardBySlot.at(handSlot), physicalCardId);
     EXPECT_FALSE(wasMovedFromHand(p1)) << "cancel leaves the same physical card in hand";
@@ -3786,6 +3796,8 @@ TEST_F(RuledE2ESmokeTest, SpellCastTransactionAllowsManaAbilitiesCancelRetryAndC
     ASSERT_TRUE(resumed2.pumpUntil([&] { return resumed2.stateVersion == expectedVersion2; }, 20000,
                                    "resumed spell-payment observer state"));
     EXPECT_EQ(resumed1.latestLegal.pending_spell_cast().SerializeAsString(), expectedPending);
+    EXPECT_EQ(resumed1.latestLegal.affordable_hand_indices_size(), 0);
+    EXPECT_EQ(resumed1.latestLegal.affordable_objects_size(), 0) << "tapped Islands stay unavailable after reconnect";
     EXPECT_FALSE(resumed2.latestLegal.has_pending_spell_cast());
     EXPECT_EQ(resumed1.myPool.u, 3);
     EXPECT_FALSE(wasMovedFromHand(resumed1));

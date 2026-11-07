@@ -908,6 +908,14 @@ public:
     // One entry per hand-action kind the engine offered this batch; absent kind = nothing legal.
     // Written wholesale by RuledEventDispatcher::applyLegalActions.
     QHash<RuledHandActionKind, RuledHandActionSet> handActions;
+    QSet<int> affordableHandSlots;
+    QHash<quint32, quint64> affordableObjectGenerations;
+    [[nodiscard]] bool isAffordableObjectCurrent(quint32 oid) const;
+    [[nodiscard]] bool hasAffordableAction(quint32 oid, quint64 generation) const
+    {
+        const auto found = affordableObjectGenerations.constFind(oid);
+        return found != affordableObjectGenerations.constEnd() && found.value() == generation;
+    }
     // Public-zone casts use the engine ObjectId as their index and share the hand cast shape.
     RuledHandActionSet zoneCastActions;
     QHash<quint32, quint32> preparedCopyBySourceOid;

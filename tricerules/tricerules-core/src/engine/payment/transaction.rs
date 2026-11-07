@@ -641,6 +641,59 @@ impl PreparedPaymentCosts {
 }
 
 impl GameEngine {
+    /// Read-only counterpart of the accepted aggregate announcement. No plan escapes the
+    /// availability query; normal Begin still captures its own authorization and receipts.
+    #[allow(clippy::too_many_arguments)]
+    pub(in crate::engine) fn prepare_availability_ability_costs(
+        &self,
+        player: PlayerId,
+        idx: usize,
+        source: ObjectId,
+        effective: &EffectiveActivatedAbility,
+        flex: &[rv1::FlexPipPayment],
+        selections: &[rv1::CostSelection],
+        x: u32,
+        extra: u32,
+        reduction: ActivatedManaReduction,
+    ) -> Result<PreparedPaymentCosts, EngineError> {
+        let ability = &effective.definition;
+        let aggregate = ability
+            .costs
+            .iter()
+            .any(|cost| matches!(cost, AbilityCost::RemoveCountersFromPermanents { .. }));
+        let context = if aggregate {
+            if self.controller_of(source) != Some(player)
+                || !self.ability_activatable(source, effective.slot as usize, ability)
+                || !self.supports_accepted_aggregate_counter_shape(
+                    source,
+                    effective.slot as usize,
+                    ability,
+                )
+            {
+                return Err(EngineError::Illegal("aggregate activation is unavailable"));
+            }
+            Some(TrustedAggregateCounterCosts {
+                player,
+                source: self.payment_object_ref(source),
+            })
+        } else {
+            None
+        };
+        self.prepare_ability_costs_internal(
+            player,
+            idx,
+            source,
+            &ability.costs,
+            flex,
+            selections,
+            &[],
+            x,
+            extra,
+            reduction,
+            context,
+        )
+    }
+
     /// CR 603.6a: a permanent sacrificed to pay an activation cost still dies, so leaves-the-
     /// battlefield abilities (Blood Artist, Bottle Gnomes' own controller triggers) see it. The
     /// triggers go on the stack *above* the ability whose cost they paid, so this runs after the

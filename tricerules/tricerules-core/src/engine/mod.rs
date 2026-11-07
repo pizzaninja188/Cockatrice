@@ -198,6 +198,7 @@ impl<'a> ConditionContext<'a> {
 
 use card_predicates::zone_card_matches_filter;
 
+mod action_availability;
 mod activation;
 #[cfg(test)]
 mod activation_tests;

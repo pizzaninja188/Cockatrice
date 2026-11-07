@@ -5,12 +5,14 @@
 #include "../../game_graphics/board/card_item.h"
 #include "../../game_graphics/game_scene.h"
 #include "../../game_graphics/player/player_target.h"
+#include "../../game_graphics/zones/pile_zone.h"
 #include "ruled_actions.h"
 #include "ruled_card_display_identity.h"
 #include "ruled_interaction_focus.h"
 #include "ruled_player_actions.h"
 
 #include <QTimer>
+#include <QWidget>
 #include <libcockatrice/game/abstract_game.h>
 #include <libcockatrice/game/board/card_state.h>
 #include <libcockatrice/game/player/player_info.h>
@@ -168,6 +170,19 @@ bool relatedCard(const RuledInteractionFocus &focus, const CardItem *card)
                                       : false;
 }
 
+bool cardActionable(const RuledClientState &state, const CardItem *card)
+{
+    if (!card || !card->getOwner() || !card->getZone() || !ruledCardSurfaceHasPhysicalIdentity(card->getZone())) {
+        return false;
+    }
+    if (card->getZone()->getName() == ZoneNames::HAND) {
+        const auto *owner = card->getOwner()->getPlayerInfo();
+        return owner->getLocal() && state.affordableHandSlots.contains(
+            state.engineHandSlotForServerCard(owner->getId(), card->getId()));
+    }
+    return state.isAffordableObjectCurrent(physicalOid(state, card));
+}
+
 bool relatedEndpoint(const RuledInteractionFocus &focus, ArrowTarget *target)
 {
     if (auto *card = qobject_cast<CardItem *>(target)) {
@@ -247,11 +262,56 @@ void RuledInteractionUi::paintCard(CardItem *card, QPainter *painter)
                 visual = selectionVisual(ruledCombatSelection(
                     *state, card->getOwner()->getGame()->getPlayerManager()->getLocalPlayerId(),
                     card->getZone()->getName() == ZoneNames::TABLE ? physicalOid(*state, card) : 0));
+                if (!visual.dimmed && !visual.candidate) {
+                    visual.actionable = cardActionable(*state, card);
+                }
             }
         }
     }
     RuledInteractionPainter::paint(painter, card->shape(), visual,
                                    SettingsCache::instance().cardsDisplay().getRuledDimPercent());
+}
+
+void RuledInteractionUi::connectPile(PileZone *pile)
+{
+    auto *owner = pile->getLogic()->getPlayer();
+    auto *state = RuledActions::stateFor(owner ? owner->getGame() : nullptr);
+    if (!state || !RuledActions::isRuledGameForPlayer(owner)) {
+        return;
+    }
+    const auto refresh = [pile] { pile->update(); };
+    QObject::connect(state, &RuledClientState::legalActionsChanged, pile, refresh);
+    QObject::connect(state, &RuledClientState::privateLibraryTopChanged, pile, refresh);
+    QObject::connect(state, &RuledClientState::sessionReset, pile, refresh);
+    QObject::connect(state, &RuledClientState::localActionAuthorityRevoked, pile, refresh);
+    QObject::connect(state, &RuledClientState::battlefieldMapUpdated, pile, refresh);
+    QObject::connect(state, &RuledClientState::spellTargetSelectionChanged, pile, refresh);
+}
+
+void RuledInteractionUi::paintPile(PileZone *pile, QPainter *painter)
+{
+    auto *owner = pile->getLogic()->getPlayer();
+    auto *state = RuledActions::stateFor(owner ? owner->getGame() : nullptr);
+    if (!state || !RuledActions::isRuledGameForPlayer(owner) || selectionInProgress(localActions(owner), *state, owner)) {
+        return;
+    }
+    bool actionable = false;
+    if (pile->getLogic()->getName() == ZoneNames::DECK) {
+        actionable = owner->getPlayerInfo()->getLocal() && state->privateLibraryTop &&
+                     state->isAffordableObjectCurrent(state->privateLibraryTop->objectId);
+    } else {
+        for (auto *card : pile->cardItems()) {
+            actionable |= cardActionable(*state, card);
+        }
+    }
+    RuledInteractionPainter::paint(painter, pile->shape(), {false, false, actionable});
+}
+
+void RuledInteractionUi::refreshLibraryTop(QWidget *widget, const RuledClientState &state)
+{
+    const bool actionable = state.privateLibraryTop && state.isAffordableObjectCurrent(state.privateLibraryTop->objectId);
+    widget->setObjectName(QStringLiteral("ruledLibraryTopAffordance"));
+    widget->setStyleSheet(actionable ? QStringLiteral("QWidget#ruledLibraryTopAffordance { border: 2px solid white; }") : QString{});
 }
 
 void RuledInteractionUi::paintPlayer(PlayerTarget *player, QPainter *painter, const QRectF &avatar)

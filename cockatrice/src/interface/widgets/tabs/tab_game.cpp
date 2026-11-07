@@ -20,6 +20,7 @@
 #include "../game/prompt/game_prompt_widget.h"
 #include <libcockatrice/game/replay.h>
 #include "../../../game/ruled/ruled_actions.h"
+#include "../../../game/ruled/ruled_interaction_ui.h"
 #include "../../../game/ruled/ruled_activation_prompt.h"
 #include "../../../game/ruled/ruled_auto_pass_policy.h"
 #include "../../../game/ruled/ruled_card_display_identity.h"
@@ -3368,6 +3369,7 @@ void TabGame::refreshRuledLibraryTopUi()
     }
 
     const RuledPrivateLibraryTop top = *state->privateLibraryTop;
+    RuledInteractionUi::refreshLibraryTop(ruledLibraryTopWidget, *state);
     ruledLibraryTopLabel->setText(tr("Top of your library: %1").arg(top.cardName));
     ruledLibraryTopWidget->show();
 
