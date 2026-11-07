@@ -3,6 +3,61 @@
 
 #include <gtest/gtest.h>
 
+TEST(RuledInteractionSelection, PaymentManaSourcesBelongToTheActingSeat)
+{
+    RuledClientState state(nullptr);
+    state.payment.begin();
+    RuledAbilityEntry mana;
+    mana.activatable = true;
+    mana.manaAbility = true;
+    // Public metadata describes both seats' untapped lands; it is not local permission.
+    state.activatedAbilitiesByOid.insert(10, {mana});
+    state.activatedAbilitiesByOid.insert(20, {mana});
+    const auto eligibility = [&](quint32 oid, int controller, int actor) {
+        return ruledPaymentCandidateEligibility(state, oid, true, controller, actor);
+    };
+    using E = RuledTargetClickEligibility;
+    EXPECT_EQ(eligibility(10, 17, 17), E::Legal);
+    EXPECT_EQ(eligibility(20, 29, 17), E::Illegal);
+    EXPECT_EQ(eligibility(10, 17, 29), E::Illegal);
+    EXPECT_EQ(eligibility(20, 29, 29), E::Legal);
+    // A control change follows the current controller, not the printed card's owner.
+    EXPECT_EQ(eligibility(20, 17, 17), E::Legal);
+    EXPECT_EQ(eligibility(10, 17, -1), E::Illegal);
+    state.activatedAbilitiesByOid[10][0]->activatable = false;
+    EXPECT_EQ(eligibility(10, 17, 17), E::Illegal);
+    state.payment.clear();
+    EXPECT_EQ(eligibility(20, 29, 29), E::NotTargeting);
+}
+
+TEST(RuledInteractionSelection, PaymentContributionsKeepTheirExactPreviewAndGeneration)
+{
+    RuledClientState state(nullptr);
+    state.payment.begin();
+    state.battlefieldGenerationByOid.insert(30, 4);
+    const auto request = state.payment.request({});
+    ruled::v1::PaymentPreview preview;
+    preview.set_transaction_id(request.transaction_id());
+    preview.set_revision(request.revision());
+    preview.set_valid(true);
+    auto *candidate = preview.add_candidates();
+    candidate->mutable_object()->set_object_id(30);
+    candidate->mutable_object()->set_zone_change_generation(4);
+    candidate->add_options(ruled::v1::OBJECT_PAYMENT_KIND_GENERIC);
+    ASSERT_TRUE(state.payment.apply(preview));
+    using E = RuledTargetClickEligibility;
+    EXPECT_EQ(ruledPaymentCandidateEligibility(state, 30, true, 17, 17), E::Legal);
+    EXPECT_EQ(ruledPaymentCandidateEligibility(state, 30, false, 17, 17), E::Illegal);
+    EXPECT_EQ(ruledPaymentCandidateEligibility(state, 31, true, 17, 17), E::Illegal);
+    state.battlefieldGenerationByOid[30] = 5;
+    EXPECT_EQ(ruledPaymentCandidateEligibility(state, 30, true, 17, 17), E::Illegal);
+    state.battlefieldGenerationByOid[30] = 4;
+    ASSERT_TRUE(state.payment.select(30, ruled::v1::OBJECT_PAYMENT_KIND_GENERIC));
+    state.payment.view.clear_candidates();
+    // A selected contribution remains selectable so the player can remove it.
+    EXPECT_EQ(ruledPaymentCandidateEligibility(state, 30, true, 17, 17), E::Legal);
+}
+
 TEST(RuledInteractionFocus, CombatSelectionOnlyUsesTheActingSeatsCandidates)
 {
     RuledClientState state(nullptr);

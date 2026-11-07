@@ -31,9 +31,7 @@ paint(QPainter *painter, const QPainterPath &shape, const RuledInteractionVisual
         backing.setWidthF(8);
         painter->setPen(backing);
         painter->drawPath(shape);
-        QPen outline(visual.candidate ? QColor(80, 200, 255)
-                     : visual.related ? QColor(255, 204, 64)
-                                      : QColor(Qt::white));
+        QPen outline(!visual.candidate && visual.related ? QColor(255, 204, 64) : QColor(Qt::white));
         outline.setWidthF(5);
         painter->setPen(outline);
         painter->drawPath(shape);

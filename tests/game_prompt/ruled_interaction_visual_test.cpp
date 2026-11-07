@@ -25,11 +25,12 @@ TEST(RuledInteractionVisual, DarkensIneligibleArtWithoutCoveringOutsideTheCard)
     EXPECT_EQ(image.pixelColor(10, 10), QColor(Qt::white));
 }
 
-TEST(RuledInteractionVisual, CandidatesStayBrightAndHaveAVisibleBoundary)
+TEST(RuledInteractionVisual, CandidatesUseWhiteWithDarkBacking)
 {
     const auto image = render({false, true});
     EXPECT_EQ(image.pixelColor(40, 50), QColor(Qt::white));
-    EXPECT_NE(image.pixelColor(10, 50), QColor(Qt::white));
+    EXPECT_EQ(image.pixelColor(10, 50), QColor(Qt::white));
+    EXPECT_LT(image.pixelColor(13, 50).red(), 80);
     EXPECT_EQ(render({}).pixelColor(10, 50), QColor(Qt::white));
 }
 

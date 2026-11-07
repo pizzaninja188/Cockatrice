@@ -9,6 +9,7 @@
 #include "ruled_actions.h"
 #include "ruled_card_display_identity.h"
 #include "ruled_interaction_focus.h"
+#include "ruled_interaction_selection.h"
 #include "ruled_player_actions.h"
 
 #include <QTimer>
@@ -138,19 +139,10 @@ RuledTargetClickEligibility cardSelection(RuledPlayerActions *actions, CardItem 
                          state->engineHandSlotForServerCard(owner->getId(), card->getId()) >= 0);
     }
     if (state->payment.active) {
-        const auto oid = physicalOid(*state, card);
-        bool legal = false;
-        if (oid != 0 && card->getZone()->getName() == ZoneNames::TABLE) {
-            const auto *offered = state->payment.candidate(oid);
-            legal = state->payment.selected(oid) ||
-                    (offered && offered->options_size() > 0 &&
-                     offered->object().zone_change_generation() == state->abilitySourceGeneration(oid));
-        }
-        // Mana activations stay available in the same payment window as object contributions.
-        for (const auto &ability : state->activatedAbilitiesForOid(oid)) {
-            legal |= ability && ability->activatable && ability->isManaAbility();
-        }
-        return candidate(legal);
+        return ruledPaymentCandidateEligibility(
+            *state, physicalOid(*state, card), card->getZone()->getName() == ZoneNames::TABLE,
+            card->getOwner()->getPlayerInfo()->getId(),
+            card->getOwner()->getGame()->getPlayerManager()->getLocalPlayerId());
     }
     return E::NotTargeting;
 }
