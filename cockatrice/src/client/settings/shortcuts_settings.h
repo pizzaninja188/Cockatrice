@@ -506,6 +506,8 @@ private:
         {"Player/aNextPhaseAction", ShortcutKey(QT_TRANSLATE_NOOP("shortcutsTab", "Next Phase Action"),
                                                 parseSequenceString("Shift+Tab"),
                                                 ShortcutGroup::Game_Phases)},
+        {"Player/ruledPrimary", ShortcutKey(QT_TRANSLATE_NOOP("shortcutsTab", "OK / Pass"),
+                                           parseSequenceString("1;Num+1"), ShortcutGroup::Game_Phases)},
         {"Player/aNextTurn", ShortcutKey(QT_TRANSLATE_NOOP("shortcutsTab", "Next Turn"),
                                          parseSequenceString("Ctrl+Return;Ctrl+Enter"),
                                          ShortcutGroup::Game_Phases)},

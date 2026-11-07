@@ -1,5 +1,6 @@
 #include "game_prompt_widget.h"
 #include "../ruled/ruled_large_choice_picker.h"
+#include "../ruled/ruled_control_bindings.h"
 
 #include <QCheckBox>
 #include <QHBoxLayout>
@@ -131,6 +132,9 @@ QString nextStepButtonTextForPhase(int phase)
 
 GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
 {
+    bindings = new RuledControlBindings(this);
+    bindings->bind(QStringLiteral("primary"), {QKeySequence(Qt::Key_1), QKeySequence(Qt::KeypadModifier | Qt::Key_1)},
+                   [this] { activatePrimaryAction(); });
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(6, 6, 6, 6);
     layout->setSpacing(4);
@@ -348,6 +352,23 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     fallbackPromptText = tr("Waiting for ruled action prompt...");
     updateCombatButtonsVisibility();
     retranslateUi();
+}
+
+void GamePromptWidget::activatePrimaryAction()
+{
+    QPushButton *primary = nullptr;
+    for (auto *button : {passPriorityButton, confirmAttackersButton, confirmBlockersButton,
+                         confirmCombatDamageButton, confirmSpellDamageButton, confirmTargetsButton,
+                         openingKeepButton, openingBottomDoneButton, resolutionHandPickConfirmButton,
+                         resolutionPaymentConfirmButton, zoneSelectionConfirmButton}) {
+        if (button && !button->isHidden()) {
+            if (primary)
+                return; // An ambiguous layout never authorizes an implicit choice.
+            primary = button;
+        }
+    }
+    if (primary && primary->isEnabled())
+        primary->click();
 }
 
 void GamePromptWidget::retranslateUi()

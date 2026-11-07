@@ -1,5 +1,6 @@
 #include "game/ruled/ruled_resolution_choice_dialog.h"
 #include "game/ruled/ruled_counter_quantity_dialog.h"
+#include "game/ruled/ruled_control_bindings.h"
 #include "game_prompt_widget.h"
 
 #include <QApplication>
@@ -7,6 +8,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QLabel>
+#include <QKeyEvent>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QPushButton>
@@ -71,6 +73,84 @@ protected:
         return widget->findChild<QLabel *>(objectName);
     }
 };
+
+TEST_F(GamePromptWidgetTest, PrimaryControlUsesOnlyTheCurrentEnabledConfirmation)
+{
+    widget->setLocalPlayerHasPriority(true);
+    widget->setPassPriorityEnabled(true);
+    QSignalSpy passed(widget.get(), &GamePromptWidget::passPriorityRequested);
+    QSignalSpy confirmed(widget.get(), &GamePromptWidget::ruledResolutionHandPickConfirmRequested);
+    ASSERT_TRUE(QMetaObject::invokeMethod(widget.get(), "activatePrimaryAction"));
+    EXPECT_EQ(passed.count(), 1);
+
+    GamePromptWidget::RuledPromptState prompt;
+    prompt.mode = GamePromptWidget::PromptMode::ResolutionPick;
+    prompt.required = 2;
+    prompt.selected = 1;
+    widget->setRuledPromptState(prompt);
+    ASSERT_TRUE(QMetaObject::invokeMethod(widget.get(), "activatePrimaryAction"));
+    EXPECT_EQ(passed.count(), 1);
+    EXPECT_EQ(confirmed.count(), 0);
+    prompt.selected = 2;
+    prompt.resolutionPickConfirmable = true;
+    widget->setRuledPromptState(prompt);
+    ASSERT_TRUE(QMetaObject::invokeMethod(widget.get(), "activatePrimaryAction"));
+    EXPECT_EQ(confirmed.count(), 1);
+
+    prompt.mode = GamePromptWidget::PromptMode::CommandPending;
+    widget->setRuledPromptState(prompt);
+    ASSERT_TRUE(QMetaObject::invokeMethod(widget.get(), "activatePrimaryAction"));
+    EXPECT_EQ(confirmed.count(), 1);
+    EXPECT_EQ(passed.count(), 1);
+}
+
+TEST_F(GamePromptWidgetTest, PrimaryDigitPassesOnceAndDoesNotChooseAnOption)
+{
+    widget->setLocalPlayerHasPriority(true);
+    widget->setPassPriorityEnabled(true);
+    widget->show();
+    widget->activateWindow();
+    widget->setFocus();
+    QApplication::processEvents();
+    QSignalSpy passed(widget.get(), &GamePromptWidget::passPriorityRequested);
+    QTest::keyClick(widget.get(), Qt::Key_1);
+    EXPECT_EQ(passed.count(), 1);
+    GamePromptWidget::RuledPromptState prompt;
+    prompt.mode = GamePromptWidget::PromptMode::ChoiceOptions;
+    prompt.choiceOptions = {{1, "First", true}, {2, "Second", true}};
+    widget->setRuledPromptState(prompt);
+    QSignalSpy chosen(widget.get(), &GamePromptWidget::ruledChoiceOptionRequested);
+    QTest::keyClick(widget.get(), Qt::Key_1);
+    EXPECT_EQ(passed.count(), 1);
+    EXPECT_EQ(chosen.count(), 0);
+}
+
+TEST_F(GamePromptWidgetTest, PrimaryShortcutRespectsTextFocusRebindingAndKeyRepeat)
+{
+    widget->setLocalPlayerHasPriority(true);
+    widget->setPassPriorityEnabled(true);
+    auto *edit = new QLineEdit(widget.get());
+    widget->show();
+    widget->activateWindow();
+    edit->show();
+    edit->setFocus();
+    QApplication::processEvents();
+    QSignalSpy passed(widget.get(), &GamePromptWidget::passPriorityRequested);
+    QTest::keyClicks(edit, "131");
+    EXPECT_EQ(edit->text(), "131");
+    EXPECT_EQ(passed.count(), 0);
+    widget->setFocus();
+    QTest::keyClick(widget.get(), Qt::Key_1, Qt::KeypadModifier);
+    EXPECT_EQ(passed.count(), 1);
+    QKeyEvent repeat(QEvent::KeyPress, Qt::Key_1, Qt::NoModifier, "1", true);
+    QApplication::sendEvent(widget.get(), &repeat);
+    EXPECT_EQ(passed.count(), 1);
+    widget->controlBindings()->setKeys("primary", {QKeySequence("Ctrl+K")});
+    QTest::keyClick(widget.get(), Qt::Key_1);
+    EXPECT_EQ(passed.count(), 1);
+    QTest::keyClick(widget.get(), Qt::Key_K, Qt::ControlModifier);
+    EXPECT_EQ(passed.count(), 2);
+}
 
 TEST_F(GamePromptWidgetTest, AbilityAnnouncementUsesTypedOpponentButtonsAndActorCancel)
 {

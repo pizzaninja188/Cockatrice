@@ -5,6 +5,7 @@ add_executable(
   ruled_interaction_visual_test.cpp
   ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_auxiliary_area.cpp
   ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_game_mode_ui.cpp
+  ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_control_bindings.cpp
   ${CMAKE_SOURCE_DIR}/cockatrice/src/game/prompt/game_prompt_widget.cpp
   ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_large_choice_picker.cpp
   ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_resolution_choice_dialog.cpp

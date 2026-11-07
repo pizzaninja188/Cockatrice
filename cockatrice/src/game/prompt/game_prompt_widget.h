@@ -13,6 +13,7 @@ class QHBoxLayout;
 class QVBoxLayout;
 class QCheckBox;
 class RuledLargeChoicePicker;
+class RuledControlBindings;
 
 class GamePromptWidget : public QWidget
 {
@@ -151,11 +152,14 @@ public:
 
     explicit GamePromptWidget(QWidget *parent = nullptr);
     void retranslateUi();
+    RuledControlBindings *controlBindings() const { return bindings; }
 
     /// The mode actually in force once the targeting sources are folded in.
     [[nodiscard]] PromptMode effectiveMode() const;
 
 public slots:
+    /// Confirm the visible, enabled primary action, never an arbitrary option or Cancel.
+    void activatePrimaryAction();
     /// The single entry point for the exclusive prompt modes.
     void setRuledPromptState(RuledPromptState newState);
     void setPromptText(const QString &promptText);
@@ -237,6 +241,7 @@ signals:
     void ruledActivationPaymentRetryRequested(quint64 transactionId, quint64 revision);
 
 private:
+    RuledControlBindings *bindings;
     void updatePassPriorityButtonText();
     void updateCombatButtonsVisibility();
     /// Write the label the current mode owns (composed here, or the caller's `text`).
