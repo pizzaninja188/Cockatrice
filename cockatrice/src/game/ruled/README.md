@@ -245,7 +245,7 @@ Every signal is declared on `RuledClientState` and emitted by it or by the dispa
 | `battlefieldMapUpdated()` | `CardItem`, `TabGame` | Repaint after the identity maps change. |
 | `stackHasItemsChanged(bool)` | `TabGame`, `GamePromptWidget` | Stack window visibility; pass-priority button text. |
 | `stackOrderChanged(QList<quint32>)` | `TabGame` | Re-sort the stack window (LIFO; `Event_MoveCard` may arrive before `stack_pushed`). |
-| `graveyardTargetsNeeded(QList<int>)` | `TabGame` | Open/close graveyard views. Four sources union in `emitGraveyardTargetsNeeded()`: pending cast and trigger targets, object candidates in the active local copy-retarget offer, and latched graveyard targets of anything still on the stack (so a view stays open until that stack object resolves). Copy-target player candidates stay in their separate ID domain. Names players, not a bool: a spell may target any graveyard (Reanimate). |
+| `targetZoneViewsChanged()` | `TabGame` | Refresh graveyard and exile windows after target offers or zone mappings change. The tab also refreshes when a local spell, activated ability or trigger changes target groups. Windows follow the active group's candidate owners or the local copy-retarget offer and close when selection ends if the client opened them. |
 | `firstStrikeStepPendingChanged(bool)` | `GamePromptWidget` | "First Strike Damage" vs "Combat Damage" button label. |
 | `firstStrikeDamageStepActiveChanged(bool)` | `GamePromptWidget` | Same, once inside the substep (CR 510.4). |
 | `undoableManaAbilitiesChanged(int)` | `TabGame` | The undo-land-tap affordance (CR 605 float courtesy). |

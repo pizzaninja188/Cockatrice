@@ -46,7 +46,6 @@ QJsonObject RuledClientState::diagnosticSnapshot() const
     FIELD(graveyardOidToServerCardId);
     FIELD(exileOidToPlayerId);
     FIELD(exileOidToServerCardId);
-    FIELD(pendingCastGraveyardOids);
     FIELD(currentActivePlayerId);
     FIELD(pendingAttackerOids);
     FIELD(currentAttackerOids);

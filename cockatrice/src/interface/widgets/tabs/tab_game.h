@@ -128,11 +128,10 @@ private:
     /// game — guard every use, the way replayDock is guarded.
     RuledDevConsoleWidget *devConsoleWidget = nullptr;
     QList<QPointer<ArrowItem>> ruledCombatArrows;
-    /// Graveyard views a pending trigger or cast opened for us, keyed by the player whose
-    /// graveyard it is, so each can be closed again without touching one the player opened
-    /// themselves. A spell may target any graveyard (Reanimate), so this is per-player rather
-    /// than a single widget. Empty when we have none open.
+    /// Exact widgets opened for the current ruled selection, indexed by zone owner.
     QHash<int, QPointer<ZoneViewWidget>> ruledAutoOpenedGraveyardViews;
+    QHash<int, QPointer<ZoneViewWidget>> ruledAutoOpenedExileViews;
+    QSet<int> ruledGraveyardCostViewPlayers;
     QPointer<ZoneViewWidget> stackView;
     CardZoneLogic *stackViewZone = nullptr;
     // Deck zone view auto-opened for LibrarySearch (Gifts Ungiven search step).
@@ -220,6 +219,7 @@ private:
     void saveStackWindowLayout();
     CardZoneLogic *findVisibleStackZone() const;
     void syncStackWindowVisibility();
+    void syncRuledTargetZoneViews();
     void updateInviteButtonState();
 signals:
     void gameClosing(TabGame *tab);

@@ -1152,6 +1152,7 @@ enum class RuledTargetCandidateKind
     Battlefield,
     Stack,
     Graveyard,
+    Exile,
     Player,
 };
 
@@ -1166,6 +1167,8 @@ enum class RuledTargetCandidateKind
             return ruled::v1::TARGET_REF_KIND_STACK;
         case RuledTargetCandidateKind::Graveyard:
             return ruled::v1::TARGET_REF_KIND_GRAVEYARD;
+        case RuledTargetCandidateKind::Exile:
+            return ruled::v1::TARGET_REF_KIND_UNSPECIFIED; // The copy picker submits object IDs.
         case RuledTargetCandidateKind::Player:
             return ruled::v1::TARGET_REF_KIND_PLAYER;
     }
@@ -1230,6 +1233,8 @@ ruledTargetDataContains(const RuledTargetGroupData &data, RuledTargetCandidateKi
             return data.validStackIds.contains(oid);
         case RuledTargetCandidateKind::Graveyard:
             return data.validGraveyardIds.contains(oid);
+        case RuledTargetCandidateKind::Exile:
+            return false;
         case RuledTargetCandidateKind::Player:
             return oid == static_cast<quint32>(localPlayerId) ? data.canTargetSelf : data.canTargetOpponent;
     }
@@ -1479,6 +1484,10 @@ currentRuledPendingAbilityTargetData(const PendingActivatedAbility &ability, con
                                                                   : nullptr;
 }
 
+[[nodiscard]] QSet<quint32> ruledPendingGraveyardTargetOids(const PendingRuledSpellCast &spell,
+                                                            const PendingActivatedAbility &ability,
+                                                            const RuledClientState &state);
+
 [[nodiscard]] inline int ruledPendingAbilityTargetGroupCount(const RuledSpellTargetData &data)
 {
     return data.groups.isEmpty() ? 1 : data.groups.size();
@@ -1606,11 +1615,7 @@ ruledAdvancePendingActivatedTargetGroup(PendingActivatedAbility &ability,
             return state.isPendingCopyTargetPlayerCandidate(oid) ? RuledTargetClickEligibility::Legal
                                                                  : RuledTargetClickEligibility::Illegal;
         }
-        const bool supportedObjectSurface = kind == RuledTargetCandidateKind::Battlefield ||
-                                            kind == RuledTargetCandidateKind::Stack ||
-                                            kind == RuledTargetCandidateKind::Graveyard;
-        return supportedObjectSurface &&
-                       state.isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopyTarget, oid)
+        return state.isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopyTarget, oid)
                    ? RuledTargetClickEligibility::Legal
                    : RuledTargetClickEligibility::Illegal;
     }
@@ -1646,10 +1651,7 @@ ruledAdvancePendingActivatedTargetGroup(PendingActivatedAbility &ability,
         return legal ? RuledTargetClickEligibility::Legal : RuledTargetClickEligibility::Illegal;
     }
     if (state.hasPendingTriggerTarget()) {
-        const auto refKind = kind == RuledTargetCandidateKind::Graveyard ? ruled::v1::TARGET_REF_KIND_GRAVEYARD
-                             : kind == RuledTargetCandidateKind::Stack   ? ruled::v1::TARGET_REF_KIND_STACK
-                             : kind == RuledTargetCandidateKind::Player  ? ruled::v1::TARGET_REF_KIND_PLAYER
-                                                                         : ruled::v1::TARGET_REF_KIND_PERMANENT;
+        const auto refKind = ruledTargetCandidateRefKind(kind);
         const int targetPlayerId = kind == RuledTargetCandidateKind::Player ? static_cast<int>(oid) : localPlayerId;
         return state.isPendingTriggerTargetCandidate(refKind, oid, targetPlayerId)
                    ? RuledTargetClickEligibility::Legal

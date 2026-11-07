@@ -812,9 +812,6 @@ void RuledPaymentUi::clearPendingRuledSpellCast()
         emit actions->ruledSpellCastPendingChanged(false);
         actions->player->getGame()->getGameEventHandler()->ruled()->emitSpellTargetSelectionChanged();
     }
-    // Every exit from a pending cast runs through here, so this is the one place that has to
-    // retract the graveyard-view hint.
-    RuledActions::updateGraveyardTargetHint(actions->player, -1, 0);
 }
 
 bool RuledPaymentUi::promptForRuledSpellXIfNeeded()
@@ -1312,8 +1309,6 @@ void RuledPaymentUi::continuePendingSpellAfterCastCostGroups()
             emit actions->ruledMultiTargetSelectionUpdated(0, actions->pendingRuledSpellCast.minTargets,
                                                            ruledTargetSelectionDisplayMaximum(*activeGroup));
         }
-        RuledActions::updateGraveyardTargetHint(actions->player, actions->pendingRuledSpellCast.handIndex,
-                                                actions->pendingRuledSpellCast.faceIndex);
         geh->emitLocalLog(effectText);
         return;
     }

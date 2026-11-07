@@ -412,41 +412,12 @@ void TabGame::connectToGameEventHandler()
             geh->refreshRuledSpellTargetArrows();
         }
     });
-    connect(game->getGameEventHandler()->ruled(), &RuledClientState::graveyardTargetsNeeded, this,
-            [this](const QList<int> &playerIds) {
-                if (!game || !scene) {
-                    return;
-                }
-                const QString graveName = QStringLiteral("grave");
-                // Open any newly-needed graveyard. Leave one the player opened themselves alone —
-                // we only ever tidy up after ourselves.
-                for (int pid : playerIds) {
-                    if (ruledAutoOpenedGraveyardViews.contains(pid)) {
-                        continue;
-                    }
-                    PlayerLogic *owner = game->getPlayerManager()->getPlayer(pid);
-                    if (!owner || scene->isZoneViewOpen(owner, graveName)) {
-                        continue;
-                    }
-                    scene->toggleZoneView(owner, graveName, -1);
-                    ruledAutoOpenedGraveyardViews.insert(pid, scene->zoneViewWidgetFor(owner, graveName));
-                }
-                // Close the ones no longer needed, and only the exact widgets we opened. A bare
-                // "did we open one?" flag is not enough: the player may have closed ours and
-                // opened their own while the target was still pending, and that one is theirs.
-                for (auto it = ruledAutoOpenedGraveyardViews.begin(); it != ruledAutoOpenedGraveyardViews.end();) {
-                    if (playerIds.contains(it.key())) {
-                        ++it;
-                        continue;
-                    }
-                    PlayerLogic *owner = game->getPlayerManager()->getPlayer(it.key());
-                    if (owner && it.value() && scene->zoneViewWidgetFor(owner, graveName) == it.value()) {
-                        it.value()->close();
-                    }
-                    it = ruledAutoOpenedGraveyardViews.erase(it);
-                }
-            });
     if (gamePromptWidget) {
+        auto *ruled = game->getGameEventHandler()->ruled();
+        connect(ruled, &RuledClientState::targetZoneViewsChanged, this, &TabGame::syncRuledTargetZoneViews,
+                Qt::QueuedConnection);
+        connect(ruled, &RuledClientState::triggerTargetSelectionChanged, this, &TabGame::syncRuledTargetZoneViews,
+                Qt::QueuedConnection);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::blockerRejected, gamePromptWidget, [this]() {
             if (gamePromptWidget) {
                 gamePromptWidget->setStickyBlockerError(tr("Illegal blocks."));
@@ -1895,6 +1866,45 @@ CardItem *TabGame::findVisibleGraveyardCardItem(int playerId, int serverCardId) 
     return nullptr;
 }
 
+void TabGame::syncRuledTargetZoneViews()
+{
+    const auto *state = RuledActions::stateFor(game);
+    if (!state || !scene) {
+        return;
+    }
+    auto *players = game->getPlayerManager();
+    auto *localPlayer = players->getPlayers().value(players->getLocalPlayerId());
+    auto *actions = localPlayer ? RuledActions::actions(localPlayer) : nullptr;
+    auto owners = state->pendingTargetZoneOwners(actions ? actions->pendingGraveyardTargetOids() : QSet<quint32>{});
+    owners.graveyards.unite(ruledGraveyardCostViewPlayers);
+
+    const auto sync = [&](const QString &zone, const QSet<int> &needed, auto &opened) {
+        for (auto it = opened.begin(); it != opened.end();) {
+            if (needed.contains(it.key())) {
+                ++it;
+                continue;
+            }
+            auto *owner = players->getPlayer(it.key());
+            // The player may have closed our window and opened a new one during the prompt.
+            if (owner && it.value() && scene->zoneViewWidgetFor(owner, zone) == it.value()) {
+                it.value()->close();
+            }
+            it = opened.erase(it);
+        }
+        auto playerIds = needed.values();
+        std::sort(playerIds.begin(), playerIds.end());
+        for (int id : playerIds) {
+            auto *owner = players->getPlayer(id);
+            if (owner && !opened.contains(id) && !scene->isZoneViewOpen(owner, zone)) {
+                scene->toggleZoneView(owner, zone, -1);
+                opened.insert(id, scene->zoneViewWidgetFor(owner, zone));
+            }
+        }
+    };
+    sync(ZoneNames::GRAVE, owners.graveyards, ruledAutoOpenedGraveyardViews);
+    sync(ZoneNames::EXILE, owners.exiles, ruledAutoOpenedExileViews);
+}
+
 void TabGame::syncStackWindowVisibility()
 {
     if (!aToggleStackWindow) {
@@ -2074,6 +2084,10 @@ void TabGame::addLocalPlayer(PlayerLogic *newPlayer, int playerId)
     deckViewContainerLayout->addWidget(deckView);
 
     if (gamePromptWidget && RuledActions::actions(newPlayer)) {
+        connect(RuledActions::actions(newPlayer), &RuledPlayerActions::ruledSpellTargetingChanged, this,
+                &TabGame::syncRuledTargetZoneViews, Qt::QueuedConnection);
+        connect(RuledActions::actions(newPlayer), &RuledPlayerActions::ruledActivatedAbilityTargetPendingChanged, this,
+                &TabGame::syncRuledTargetZoneViews, Qt::QueuedConnection);
         connect(RuledActions::actions(newPlayer), &RuledPlayerActions::ruledSpellTargetingChanged, gamePromptWidget,
                 &GamePromptWidget::setTargetingMode);
         connect(gamePromptWidget, &GamePromptWidget::confirmSpellDamageRequested, RuledActions::actions(newPlayer),
@@ -2128,14 +2142,8 @@ void TabGame::addLocalPlayer(PlayerLogic *newPlayer, int playerId)
                         return;
                     }
                     const int playerId = newPlayer->getPlayerInfo()->getId();
-                    const QString graveName = QStringLiteral("grave");
                     if (active) {
-                        if (!ruledAutoOpenedGraveyardViews.contains(playerId) &&
-                            !scene->isZoneViewOpen(newPlayer, graveName)) {
-                            scene->toggleZoneView(newPlayer, graveName, -1);
-                            ruledAutoOpenedGraveyardViews.insert(playerId,
-                                                               scene->zoneViewWidgetFor(newPlayer, graveName));
-                        }
+                        ruledGraveyardCostViewPlayers.insert(playerId);
                         GamePromptWidget::RuledPromptState prompt;
                         prompt.mode = GamePromptWidget::PromptMode::CostSelection;
                         prompt.canDecline = true;
@@ -2144,15 +2152,10 @@ void TabGame::addLocalPlayer(PlayerLogic *newPlayer, int playerId)
                         prompt.text = RuledActions::actions(newPlayer)->pendingRuledAbilityCostPromptText();
                         gamePromptWidget->setRuledPromptState(prompt);
                     } else {
-                        auto it = ruledAutoOpenedGraveyardViews.find(playerId);
-                        if (it != ruledAutoOpenedGraveyardViews.end()) {
-                            if (it.value() && scene->zoneViewWidgetFor(newPlayer, graveName) == it.value()) {
-                                it.value()->close();
-                            }
-                            ruledAutoOpenedGraveyardViews.erase(it);
-                        }
+                        ruledGraveyardCostViewPlayers.remove(playerId);
                         refreshRuledPromptState();
                     }
+                    QMetaObject::invokeMethod(this, &TabGame::syncRuledTargetZoneViews, Qt::QueuedConnection);
                     scene->update();
                 });
         connect(RuledActions::actions(newPlayer), &RuledPlayerActions::ruledResolutionManaPromptChanged, this,
@@ -2197,6 +2200,7 @@ void TabGame::processPlayerLeave(PlayerLogic *leavingPlayer)
     // A shuffled local player has their seat changed, so the deck view container
     // keyed by their previous id must be cleaned up alongside the leaving player.
     int leavingPlayerId = leavingPlayer->getPlayerInfo()->getId();
+    ruledGraveyardCostViewPlayers.remove(leavingPlayerId);
     if (deckViewContainers.contains(leavingPlayerId)) {
         TabbedDeckViewContainer *deckView = deckViewContainers.take(leavingPlayerId);
         deckViewContainerLayout->removeWidget(deckView);
@@ -2333,6 +2337,9 @@ void TabGame::stopGame()
     playerListWidget->setGameStarted(false, false);
 
     scene->clearViews();
+    ruledAutoOpenedGraveyardViews.clear();
+    ruledAutoOpenedExileViews.clear();
+    ruledGraveyardCostViewPlayers.clear();
     if (stackView) {
         saveStackWindowLayout();
         stackView->close();

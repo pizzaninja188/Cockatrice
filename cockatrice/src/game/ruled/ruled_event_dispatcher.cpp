@@ -1258,11 +1258,8 @@ void RuledEventDispatcher::applyStackPushed(const ruled::v1::StackPushed &sp, Ba
                           << " (a spell with a card_id expects a REAL CardItem the relay moved onto"
                              " the stack zone; if the stack looks empty, that move is what to check)";
     // CR 608.2b: latch every target that sits in a graveyard *now*, while the choice is still fresh.
-    // This is the only kind the dispatcher can identify without the UI, and it is the one that has
-    // to be right immediately: `emitGraveyardTargetsNeeded` runs at the end of this batch, before
-    // the deferred arrow sync classifies the rest. Doing it here rather than there also means a
-    // permanent that later dies can never be mistaken for a graveyard target — by then the latch
-    // already says Battlefield.
+    // Do this before the deferred arrow sync classifies the rest. A permanent that later dies
+    // retains its latched Battlefield kind.
     for (quint32 targetOid : tlist) {
         if (state->graveyardOidToPlayerId.contains(targetOid)) {
             state->latchTargetKind(sp.object_id(), targetOid, RuledTargetItemKind::Graveyard);
@@ -3212,10 +3209,7 @@ void RuledEventDispatcher::finishBatch(BatchContext &ctx)
     if (ctx.reconcilePublicReveal && !ctx.replacementEffectSeen)
         state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::ReplacementEffect);
     emit state->replacementEffectUiChanged();
-    // Which graveyards need to be open: a pending trigger's targets (Gravedigger ETB) unioned
-    // with any pending cast's. `validTargetsByAbility` and the graveyard OID map are both
-    // populated in this same batch, so recompute after applying it.
-    state->emitGraveyardTargetsNeeded();
+    emit state->targetZoneViewsChanged();
     // Defer so stack window / zone views finish layout before we resolve CardItem positions.
     host->scheduleSpellTargetArrowSync();
 }

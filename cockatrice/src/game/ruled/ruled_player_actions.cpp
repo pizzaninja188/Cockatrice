@@ -38,6 +38,13 @@ QString RuledPlayerActions::pendingRuledSpellPromptText() const
     return ruledPendingCast->pendingRuledSpellPromptText();
 }
 
+QSet<quint32> RuledPlayerActions::pendingGraveyardTargetOids() const
+{
+    const auto *state = RuledActions::stateFor(player->getGame());
+    return state ? ruledPendingGraveyardTargetOids(pendingRuledSpellCast, pendingActivatedAbility, *state)
+                 : QSet<quint32>{};
+}
+
 void RuledPlayerActions::clearPendingRuledSpellCast()
 {
     ruledPayment->clearPendingRuledSpellCast();

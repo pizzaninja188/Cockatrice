@@ -64,15 +64,6 @@ bool tryHandlePublicZonePlay(CardItem *card, bool contextMenu = false);
 [[nodiscard]] bool isCombatDefenderPlayerCandidate(const PlayerLogic *player);
 bool tryHandleCombatDefenderPlayerClick(PlayerLogic *player);
 
-/// Tell the view model which graveyard OIDs the pending cast of `handSlot`/`faceIndex` may target,
-/// so `TabGame` can open the right players' graveyard views. Pass `handSlot < 0` to retract the
-/// hint (no cast pending). No-op outside a ruled game.
-///
-/// Casting Raise Dead used to require the player to open their own graveyard by hand — the view
-/// auto-opened only for a pending *trigger*. Reanimate makes that worse, because the card may sit
-/// in an opponent's graveyard.
-void updateGraveyardTargetHint(const PlayerLogic *player, int handSlot, int faceIndex);
-
 /// Send a ready-built ruled command that does not originate in the view model — today only the
 /// dev console, whose input is text rather than a click or an engine event.
 ///

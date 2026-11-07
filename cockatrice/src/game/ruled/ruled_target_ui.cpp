@@ -232,7 +232,10 @@ RuledTargetClickEligibility RuledTargetUi::cardEligibility(const RuledPlayerActi
             oid = state->engineOidForCardId(ownerPlayerId, card->getId());
         } else if (zoneName == ZoneNames::GRAVE) {
             kind = RuledTargetCandidateKind::Graveyard;
-            oid = state->graveyardEngineOidForOwnedCard(ownerPlayerId, card->getId());
+            oid = RuledActions::resolvePublicZoneObjectId(state, card);
+        } else if (zoneName == ZoneNames::EXILE) {
+            kind = RuledTargetCandidateKind::Exile;
+            oid = RuledActions::resolvePublicZoneObjectId(state, card);
         }
     }
     const auto eligibility = ::ruledPendingAbilityTargetClickEligibility(
@@ -552,8 +555,6 @@ bool RuledTargetUi::storeCurrentTargetGroupAndAdvance(RuledPlayerActions *action
     emit actions->ruledSpellTargetingChanged(true, prompt);
     emit actions->ruledMultiTargetSelectionUpdated(actions->pendingRuledSpellCast.selectedTargetOids.size(),
                                                    next.minTargets, ruledTargetSelectionDisplayMaximum(next));
-    RuledActions::updateGraveyardTargetHint(actions->player, actions->pendingRuledSpellCast.handIndex,
-                                            actions->pendingRuledSpellCast.faceIndex);
     state->emitLocalLog(prompt);
     state->emitSpellTargetSelectionChanged();
     RuledActions::scene(actions->player)->update();
@@ -575,8 +576,6 @@ bool RuledTargetUi::storeCurrentModalTargetsAndAdvance(RuledPlayerActions *actio
         emit actions->ruledMultiTargetSelectionUpdated(actions->pendingRuledSpellCast.selectedTargetOids.size(),
                                                        group.minTargets, ruledTargetSelectionDisplayMaximum(group));
     }
-    RuledActions::updateGraveyardTargetHint(actions->player, actions->pendingRuledSpellCast.handIndex,
-                                            actions->pendingRuledSpellCast.faceIndex);
     actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(prompt);
     actions->player->getGame()->getGameEventHandler()->ruled()->emitSpellTargetSelectionChanged();
     RuledActions::scene(actions->player)->update();
@@ -784,16 +783,15 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetClick(RuledPlayerActions *actions
             return false;
         }
         const QString zoneName = card->getZone()->getName();
-        const bool isGraveyard = zoneName == ZoneNames::GRAVE;
-        if (zoneName != ZoneNames::TABLE && zoneName != ZoneNames::STACK && !isGraveyard) {
+        const bool isPublicPile = zoneName == ZoneNames::GRAVE || zoneName == ZoneNames::EXILE;
+        if (zoneName != ZoneNames::TABLE && zoneName != ZoneNames::STACK && !isPublicPile) {
             handler->emitLocalLog(
-                RuledPlayerActions::tr("Select a target on the battlefield, stack, or graveyard for the copy."));
+                RuledPlayerActions::tr("Select a target on the battlefield, stack, graveyard, or exile for the copy."));
             return true;
         }
         const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
-        const quint32 targetOid = isGraveyard
-                                      ? handler->graveyardEngineOidForOwnedCard(ownerPlayerId, card->getId())
-                                      : handler->engineOidForCardId(ownerPlayerId, card->getId());
+        const quint32 targetOid = isPublicPile ? RuledActions::resolvePublicZoneObjectId(handler, card)
+                                               : handler->engineOidForCardId(ownerPlayerId, card->getId());
         if (targetOid == 0 || !handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopyTarget, targetOid)) {
             handler->emitLocalLog(RuledPlayerActions::tr("That is not a valid target for the copy."));
             return true;

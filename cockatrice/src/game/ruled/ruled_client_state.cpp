@@ -130,73 +130,29 @@ void RuledClientState::finishEngineCommand()
 // Identity
 // ---------------------------------------------------------------------------------------
 
-void RuledClientState::setPendingCastGraveyardTargets(const QSet<quint32> &oids)
+RuledClientState::TargetZoneOwners
+RuledClientState::pendingTargetZoneOwners(const QSet<quint32> &localGraveyardOids) const
 {
-    if (pendingCastGraveyardOids == oids) {
-        return;
-    }
-    pendingCastGraveyardOids = oids;
-    emitGraveyardTargetsNeeded();
-}
-
-void RuledClientState::emitGraveyardTargetsNeeded()
-{
-    // Union of the four things that can want a graveyard open. All go through here so the "which
-    // views are open" decision has a single owner — the alternative is several signals racing to
-    // open and close the same widget.
-    //
-    // 1. the pending cast's legal targets (choosing a target for Raise Dead / Reanimate);
-    QSet<quint32> oids = pendingCastGraveyardOids;
-    // 2. a pending trigger's legal targets (Gravedigger ETB);
-    if (hasPendingTriggerTarget()) {
-        const quint64 abilityKey = abilityTargetKey(lastTriggerSourceOid, static_cast<int>(lastTriggerAbilityIndex));
-        const auto &triggerTargets = validTargetsByAbility.value(abilityKey).validGraveyardIds;
-        for (quint32 oid : triggerTargets) {
-            oids.insert(oid);
+    TargetZoneOwners owners;
+    const auto addOwners = [](const auto &oids, const QHash<quint32, int> &ownersByOid, QSet<int> &result) {
+        for (const quint32 oid : oids) {
+            const auto owner = ownersByOid.constFind(oid);
+            if (owner != ownersByOid.cend()) {
+                result.insert(owner.value());
+            }
         }
-    }
-    // 3. the object candidates of an active local copy-retarget offer. Player candidates use their
-    //    own ID domain and never identify graveyard cards.
-    if (pendingChoice.has_value() && pendingChoice->kind == ChoiceKind::CopyTarget &&
+    };
+    if (hasPendingChoiceOfKind(ChoiceKind::CopyTarget) &&
         isCurrentResolutionPrompt(pendingChoice->resolutionPromptId)) {
-        for (quint32 oid : pendingChoice->candidateOids) {
-            if (graveyardOidToPlayerId.contains(oid)) {
-                oids.insert(oid);
-            }
-        }
+        // The copy offer keeps object candidates separate from player IDs.
+        addOwners(pendingChoice->candidateOids, graveyardOidToPlayerId, owners.graveyards);
+        addOwners(pendingChoice->candidateOids, exileOidToPlayerId, owners.exiles);
+    } else if (const auto group = pendingTriggerTargetGroupData()) {
+        addOwners(group->validGraveyardIds, graveyardOidToPlayerId, owners.graveyards);
+    } else {
+        addOwners(localGraveyardOids, graveyardOidToPlayerId, owners.graveyards);
     }
-    // 4. the graveyard targets of anything still *on the stack*. A spell that has been cast keeps
-    //    its graveyard open until it resolves or is countered, so the targeting arrow stays
-    //    anchored to the card rather than to a pile the player can no longer see. Falls out of the
-    //    stack order automatically the moment the spell leaves the stack.
-    //
-    //    Read from the latch, never from the live graveyard map: a permanent that dies while an
-    //    ability targeting it is on the stack lands in that map, and testing it would pop both
-    //    players' graveyard views open for an ability that never targeted a graveyard at all.
-    //    Only a target chosen *in* a graveyard (Reanimate) is latched Graveyard — see
-    //    `RuledEventDispatcher::applyStackPushed`.
-    const QList<quint32> stackOrder = getStackOidOrder();
-    for (auto it = stackTargetsByStackOid.constBegin(); it != stackTargetsByStackOid.constEnd(); ++it) {
-        if (!stackOrder.contains(it.key())) {
-            continue;
-        }
-        for (quint32 target : it.value()) {
-            if (latchedTargetKind(it.key(), target) == RuledTargetItemKind::Graveyard) {
-                oids.insert(target);
-            }
-        }
-    }
-
-    QList<int> playerIds;
-    for (quint32 oid : oids) {
-        const int pid = graveyardOidToPlayerId.value(oid, -1);
-        if (pid >= 0 && !playerIds.contains(pid)) {
-            playerIds.append(pid);
-        }
-    }
-    // Deterministic order so the views open the same way every time (QSet iteration is not).
-    std::sort(playerIds.begin(), playerIds.end());
-    emit graveyardTargetsNeeded(playerIds);
+    return owners;
 }
 
 // ---------------------------------------------------------------------------------------
@@ -419,8 +375,12 @@ void RuledClientState::teardownPendingChoice()
     }
     const bool wasCostSelection = pendingChoice->kind == ChoiceKind::CostObjects ||
                                   pendingChoice->kind == ChoiceKind::Proliferate || hasPermanentChoiceCohort();
+    const bool wasTargetSelection = hasPendingTriggerTarget() || hasPendingChoiceOfKind(ChoiceKind::CopyTarget);
     pendingChoice.reset();
     ++pendingChoiceRevision;
+    if (wasTargetSelection) {
+        emit targetZoneViewsChanged();
+    }
     if (wasCostSelection) {
         emit resolutionCostSelectionChanged();
         emit combatStateChanged();
@@ -2329,7 +2289,6 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     commandOidToServerCardId.clear();
     exileOidToPlayerId.clear();
     exileOidToServerCardId.clear();
-    pendingCastGraveyardOids.clear();
     restrictedManaByPlayer.clear();
     eligibleRestrictedManaByAbility.clear();
     battlefieldGenerationByOid.clear();

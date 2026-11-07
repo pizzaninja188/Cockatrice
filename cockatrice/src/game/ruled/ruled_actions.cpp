@@ -120,23 +120,6 @@ bool gameplayInputLocked(const AbstractGame *game)
     return state && state->isEngineCommandPending();
 }
 
-void updateGraveyardTargetHint(const PlayerLogic *player, int handSlot, int faceIndex)
-{
-    if (!player) {
-        return;
-    }
-    RuledClientState *state = stateFor(player->getGame());
-    if (!state) {
-        return;
-    }
-    QSet<quint32> oids;
-    if (handSlot >= 0) {
-        oids = state->validTargetsByHandSlot.value(RuledClientState::spellTargetKey(handSlot, faceIndex))
-                   .validGraveyardIds;
-    }
-    state->setPendingCastGraveyardTargets(oids);
-}
-
 void sendRuledCommand(const AbstractGame *game, const ruled::v1::RuledCommand &command)
 {
     if (!isRuledGame(game)) {

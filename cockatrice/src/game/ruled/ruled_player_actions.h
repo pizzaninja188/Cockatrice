@@ -94,6 +94,7 @@ public:
     [[nodiscard]] RuledTargetClickEligibility ruledPlayerTargetEligibility(PlayerLogic *targetPlayer) const;
     [[nodiscard]] bool isTargetSelectedForPendingSpell(quint32 oid) const;
     [[nodiscard]] bool isTargetSelectedForPendingAbility(quint32 oid) const;
+    [[nodiscard]] QSet<quint32> pendingGraveyardTargetOids() const;
     [[nodiscard]] bool isCastCostPermanentSelected(quint32 oid) const;
     [[nodiscard]] bool isPlayerSelectedAsPendingSpellTarget(int playerId) const;
     [[nodiscard]] bool isPlayerSelectedAsPendingAbilityTarget(int playerId) const;

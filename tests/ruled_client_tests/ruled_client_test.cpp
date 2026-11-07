@@ -3000,10 +3000,8 @@ TEST(RuledPendingTargetTest, ClickEligibilityCoversAbilitiesTriggersAndCopyRetar
               RuledTargetClickEligibility::Illegal);
 }
 
-TEST_F(RuledClientTest, PendingCopyTargetOffersOpenOnlyOfferedOwnersGraveyardUntilStackCopyResolves)
+TEST_F(RuledClientTest, CopyRetargetRequestsOnlyThePublicZonesOfItsLocalObjectCandidates)
 {
-    QSignalSpy spy(state, &RuledClientState::graveyardTargetsNeeded);
-
     const auto addGraveyardMap = [](ruled::v1::RuledEventBatch &batch) {
         auto *map = batch.add_events()->mutable_graveyard_object_map();
         auto *local = map->add_entries();
@@ -3049,12 +3047,26 @@ TEST_F(RuledClientTest, PendingCopyTargetOffersOpenOnlyOfferedOwnersGraveyardUnt
     // opponent's graveyard OID is offered although both owners have the same server card ID.
     ruled::v1::RuledEventBatch promptBatch;
     addGraveyardMap(promptBatch);
-    addPrompt(promptBatch, kLocalPlayer, 9401, {501u}, {kLocalPlayer});
+    auto *exile = promptBatch.add_events()->mutable_exile_object_map()->add_entries();
+    exile->set_player_id(kLocalPlayer);
+    exile->set_engine_object_id(502);
+    exile->set_server_card_id(11);
+    addPrompt(promptBatch, kLocalPlayer, 9401, {501u, 502u}, {kLocalPlayer});
     applyRaw(promptBatch);
-    ASSERT_GE(spy.count(), 1);
-    EXPECT_EQ(spy.last().at(0).value<QList<int>>(), QList<int>{kOpponent});
+    EXPECT_EQ(state->pendingTargetZoneOwners().graveyards, QSet<int>{kOpponent});
+    EXPECT_EQ(state->pendingTargetZoneOwners().exiles, QSet<int>{kLocalPlayer});
+    EXPECT_EQ(ruledTargetClickEligibility({}, {}, *state, RuledTargetCandidateKind::Exile, 502, kLocalPlayer),
+              RuledTargetClickEligibility::Legal);
+    EXPECT_EQ(ruledTargetClickEligibility({}, {}, *state, RuledTargetCandidateKind::Exile, 500, kLocalPlayer),
+              RuledTargetClickEligibility::Illegal);
 
-    // Once that occurrence is chosen, its copy stack object keeps only the latched graveyard open.
+    QSignalSpy changed(state, &RuledClientState::targetZoneViewsChanged);
+    state->submitPendingChoiceObject(502u);
+    ASSERT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));
+    EXPECT_EQ(changed.count(), 1);
+    EXPECT_TRUE(state->pendingTargetZoneOwners().exiles.isEmpty());
+
+    // A stack item retains its arrow kind after the selection windows close.
     ruled::v1::RuledEventBatch copyPushBatch;
     addInactivePrompt(copyPushBatch);
     addGraveyardMap(copyPushBatch);
@@ -3065,27 +3077,23 @@ TEST_F(RuledClientTest, PendingCopyTargetOffersOpenOnlyOfferedOwnersGraveyardUnt
     copy->mutable_targets(0)->set_kind(ruled::v1::TARGET_REF_KIND_GRAVEYARD);
     applyRaw(copyPushBatch);
     EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));
-    EXPECT_EQ(spy.last().at(0).value<QList<int>>(), QList<int>{kOpponent});
-
-    ruled::v1::RuledEventBatch resolvedBatch;
-    addInactivePrompt(resolvedBatch);
-    addGraveyardMap(resolvedBatch);
-    resolvedBatch.add_events()->mutable_stack_resolved()->set_object_id(900);
-    applyRaw(resolvedBatch);
-    EXPECT_TRUE(spy.last().at(0).value<QList<int>>().isEmpty());
+    EXPECT_EQ(state->latchedTargetKind(900, 501), RuledTargetItemKind::Graveyard);
+    EXPECT_TRUE(state->pendingTargetZoneOwners().graveyards.isEmpty());
 
     // Typed player candidates (including player 0) and an observer's offer never name a graveyard.
     ruled::v1::RuledEventBatch playerOnlyBatch;
     addGraveyardMap(playerOnlyBatch);
     addPrompt(playerOnlyBatch, kLocalPlayer, 9402, {}, {kLocalPlayer});
     applyRaw(playerOnlyBatch);
-    EXPECT_TRUE(spy.last().at(0).value<QList<int>>().isEmpty());
+    EXPECT_TRUE(state->pendingTargetZoneOwners().graveyards.isEmpty());
+    EXPECT_TRUE(state->pendingTargetZoneOwners().exiles.isEmpty());
 
     ruled::v1::RuledEventBatch observerBatch;
     addGraveyardMap(observerBatch);
     addPrompt(observerBatch, kOpponent, 0, {501u}, {});
     applyRaw(observerBatch);
-    EXPECT_TRUE(spy.last().at(0).value<QList<int>>().isEmpty());
+    EXPECT_TRUE(state->pendingTargetZoneOwners().graveyards.isEmpty());
+    EXPECT_TRUE(state->pendingTargetZoneOwners().exiles.isEmpty());
 }
 
 TEST(RuledXTargetChoiceTest, PublishesOnlyEngineBoundValuesAndGenerations)
@@ -10875,45 +10883,50 @@ TEST_F(RuledClientTest, TokenActivatedAbilityForwardsItsDisplayIdentityToTheSynt
     EXPECT_EQ(forwarded.abilityTexts, QStringList({QStringLiteral("{2}, Sacrifice this token: Draw a card.")}));
 }
 
-// Gravedigger ETB: a pending trigger whose only legal targets sit in a graveyard makes the tab
-// auto-open the local graveyard view, so the player can click the target without hunting for it.
-//
-// NB the engine currently only fills LegalActions.valid_targets_by_ability from a permanent's
-// *activated* abilities (engine/legal_actions.rs), so a triggered ability never gets an entry and
-// this never fires in a real game. This pins the client half of the contract; the engine half is
-// the open half.
-TEST_F(RuledClientTest, PendingTriggerWithGraveyardTargetsAsksForTheGraveyardView)
+TEST_F(RuledClientTest, TriggerTargetViewsFollowTheActiveGroup)
 {
-    QSignalSpy spy(state, &RuledClientState::graveyardTargetsNeeded);
+    QSignalSpy viewsChanged(state, &RuledClientState::targetZoneViewsChanged);
+    QSignalSpy selectionChanged(state, &RuledClientState::triggerTargetSelectionChanged);
 
     ruled::v1::RuledEventBatch batch;
     auto *tnt = batch.add_events()->mutable_trigger_needs_target();
     tnt->set_source_permanent_id(100);
     tnt->set_ability_index(0);
-    tnt->set_ability_text("Return target creature card from your graveyard to your hand.");
+    tnt->set_ability_text("Choose a creature card in each graveyard.");
     tnt->set_controller_player_id(kLocalPlayer);
-    // The signal names players, not a bool, so the oid has to be mapped to a graveyard first.
-    auto *ge = batch.add_events()->mutable_graveyard_object_map()->add_entries();
+    auto *map = batch.add_events()->mutable_graveyard_object_map();
+    auto *ge = map->add_entries();
     ge->set_player_id(kLocalPlayer);
     ge->set_engine_object_id(500);
     ge->set_server_card_id(11);
-    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
-    auto &abilityTargets = (*actions.mutable_valid_targets_by_ability())[(quint64(100) << 32) | 0u];
-    auto *triggerGroup = abilityTargets.add_groups();
+    auto *other = map->add_entries();
+    other->set_player_id(kOpponent);
+    other->set_engine_object_id(501);
+    other->set_server_card_id(11);
+    auto *triggerGroup = tnt->mutable_targets()->add_groups();
     triggerGroup->set_group_index(0);
     triggerGroup->set_prompt_text("Choose target creature card");
     triggerGroup->set_min(1);
     triggerGroup->set_max(1);
     triggerGroup->add_valid_graveyard_ids(500);
+    auto *secondGroup = tnt->mutable_targets()->add_groups();
+    secondGroup->set_group_index(1);
+    secondGroup->set_min(1);
+    secondGroup->set_max(1);
+    secondGroup->add_valid_graveyard_ids(501);
     apply(batch);
 
     ASSERT_TRUE(state->hasPendingTriggerTarget());
-    ASSERT_GE(spy.count(), 1);
-    EXPECT_EQ(spy.last().at(0).value<QList<int>>(), QList<int>{kLocalPlayer});
+    ASSERT_GE(viewsChanged.count(), 1);
+    EXPECT_EQ(state->pendingTargetZoneOwners().graveyards, QSet<int>{kLocalPlayer});
+
+    ASSERT_TRUE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_GRAVEYARD, 500, kLocalPlayer));
+    EXPECT_GT(selectionChanged.count(), 0);
+    EXPECT_EQ(state->pendingTargetZoneOwners().graveyards, QSet<int>{kOpponent});
 
     // Once the ability itself is on the stack the target has been chosen, so the view may close.
     // A *triggered* ability push (card_id-less, annotated, is_triggered) retires the prompt.
-    const int beforePush = spy.count();
+    const int beforePush = viewsChanged.count();
     ruled::v1::RuledEventBatch push;
     auto *sp = push.add_events()->mutable_stack_pushed();
     sp->set_object_id(900);
@@ -10921,15 +10934,13 @@ TEST_F(RuledClientTest, PendingTriggerWithGraveyardTargetsAsksForTheGraveyardVie
     sp->set_is_triggered(true);
     apply(push);
     EXPECT_FALSE(state->hasPendingTriggerTarget());
-    ASSERT_GT(spy.count(), beforePush);
-    EXPECT_TRUE(spy.last().at(0).value<QList<int>>().isEmpty());
+    ASSERT_GT(viewsChanged.count(), beforePush);
+    EXPECT_TRUE(state->pendingTargetZoneOwners().graveyards.isEmpty());
 }
 
 // Reanimate reads *a* graveyard, so a pending cast must be able to ask for the opponent's view.
-TEST_F(RuledClientTest, PendingCastGraveyardTargetsNameTheOwningPlayer)
+TEST_F(RuledClientTest, PendingSpellAndAbilityTargetViewsUseTheCurrentOffer)
 {
-    QSignalSpy spy(state, &RuledClientState::graveyardTargetsNeeded);
-
     ruled::v1::RuledEventBatch batch;
     auto *gy = batch.add_events()->mutable_graveyard_object_map();
     auto *mine = gy->add_entries();
@@ -10942,55 +10953,44 @@ TEST_F(RuledClientTest, PendingCastGraveyardTargetsNameTheOwningPlayer)
     theirs->set_server_card_id(11); // same card id, different owner — must not collide
     apply(batch);
 
-    // A cast whose only legal target sits in the opponent's graveyard.
-    state->setPendingCastGraveyardTargets({501u});
-    ASSERT_GE(spy.count(), 1);
-    EXPECT_EQ(spy.last().at(0).value<QList<int>>(), QList<int>{kOpponent});
+    RuledTargetGroupData localGroup;
+    localGroup.validGraveyardIds = {500u};
+    RuledTargetGroupData eitherGraveyard;
+    eitherGraveyard.validGraveyardIds = {500u, 501u};
 
-    // Targeting both graveyards asks for both views.
-    state->setPendingCastGraveyardTargets({500u, 501u});
-    QList<int> both = spy.last().at(0).value<QList<int>>();
-    std::sort(both.begin(), both.end());
-    EXPECT_EQ(both, (QList<int>{kLocalPlayer, kOpponent}));
+    // The cast source can itself be in exile. Only the active target group's owners are requested.
+    PendingRuledSpellCast spell;
+    spell.valid = true;
+    spell.waitingForTarget = true;
+    spell.source = RuledCastSource::Exile;
+    spell.handIndex = 600;
+    spell.faceIndex = 0;
+    spell.activeTargetGroupPosition = 0;
+    const auto spellKey = RuledClientState::zoneSpellTargetKey(600, 0);
+    state->validTargetsByZoneObject[spellKey].groups = {localGroup, eitherGraveyard};
+    auto owners = [&] {
+        return state->pendingTargetZoneOwners(ruledPendingGraveyardTargetOids(spell, {}, *state)).graveyards;
+    };
+    EXPECT_EQ(owners(), QSet<int>{kLocalPlayer});
+    spell.activeTargetGroupPosition = 1;
+    EXPECT_EQ(owners(), (QSet<int>{kLocalPlayer, kOpponent}));
+    spell.waitingForTarget = false;
+    EXPECT_TRUE(owners().isEmpty());
 
-    // Cancelling the cast retracts the request.
-    state->setPendingCastGraveyardTargets({});
-    EXPECT_TRUE(spy.last().at(0).value<QList<int>>().isEmpty());
+    // Daretti's loyalty ability uses its own published target group.
+    PendingActivatedAbility ability;
+    ability.valid = true;
+    ability.waitingForTarget = true;
+    ability.permanentOid = 100;
+    ability.abilityIndex = 1;
+    ability.activeTargetGroupPosition = 0;
+    state->validTargetsByAbility[RuledClientState::abilityTargetKey(100, 1)].groups = {localGroup};
+    EXPECT_EQ(state->pendingTargetZoneOwners(ruledPendingGraveyardTargetOids({}, ability, *state)).graveyards,
+              QSet<int>{kLocalPlayer});
+    ability.waitingForTarget = false;
+    EXPECT_TRUE(ruledPendingGraveyardTargetOids({}, ability, *state).isEmpty());
 }
 
-// A cast spell keeps its target's graveyard open until it leaves the stack, so the targeting
-// arrow stays anchored to the card instead of to a pile the player can no longer see.
-TEST_F(RuledClientTest, GraveyardStaysRequestedWhileTheSpellIsOnTheStack)
-{
-    QSignalSpy spy(state, &RuledClientState::graveyardTargetsNeeded);
-
-    // A creature in the opponent's graveyard, and a spell on the stack targeting it.
-    ruled::v1::RuledEventBatch batch;
-    auto *ge = batch.add_events()->mutable_graveyard_object_map()->add_entries();
-    ge->set_player_id(kOpponent);
-    ge->set_engine_object_id(700);
-    ge->set_server_card_id(21);
-    auto *sp = batch.add_events()->mutable_stack_pushed();
-    sp->set_object_id(800);
-    sp->add_targets()->set_object_id(700);
-    apply(batch);
-
-    // No pending cast any more — the spell has been cast — but the graveyard is still wanted.
-    ASSERT_GE(spy.count(), 1);
-    EXPECT_EQ(spy.last().at(0).value<QList<int>>(), QList<int>{kOpponent})
-        << "the spell is on the stack, so its target's graveyard must stay open";
-
-    // It resolves: nothing wants the graveyard any more.
-    ruled::v1::RuledEventBatch resolved;
-    auto *sr = resolved.add_events()->mutable_stack_resolved();
-    sr->set_object_id(800);
-    apply(resolved);
-    EXPECT_TRUE(spy.last().at(0).value<QList<int>>().isEmpty()) << "once the spell leaves the stack the view may close";
-}
-
-// A target chosen in a graveyard is latched as such the moment it is put on the stack, without
-// waiting for the (deferred) arrow sync — `emitGraveyardTargetsNeeded` runs first and needs the
-// answer already.
 TEST_F(RuledClientTest, GraveyardTargetIsLatchedWhenTheSpellIsPushed)
 {
     ruled::v1::RuledEventBatch batch;
@@ -11004,6 +11004,7 @@ TEST_F(RuledClientTest, GraveyardTargetIsLatchedWhenTheSpellIsPushed)
     apply(batch);
 
     EXPECT_EQ(state->latchedTargetKind(800, 700), RuledTargetItemKind::Graveyard);
+    EXPECT_TRUE(state->pendingTargetZoneOwners().graveyards.isEmpty());
 }
 
 // The regression this pairs with: an ability targeting a *permanent* must never open a graveyard
@@ -11019,8 +11020,6 @@ TEST_F(RuledClientTest, ADyingTargetDoesNotRequestAGraveyardView)
     apply(push);
     EXPECT_EQ(state->latchedTargetKind(800, 100), RuledTargetItemKind::Unknown);
 
-    QSignalSpy spy(state, &RuledClientState::graveyardTargetsNeeded);
-
     // The target is destroyed in response: its oid now appears in a graveyard map.
     ruled::v1::RuledEventBatch died;
     auto *ge = died.add_events()->mutable_graveyard_object_map()->add_entries();
@@ -11029,8 +11028,7 @@ TEST_F(RuledClientTest, ADyingTargetDoesNotRequestAGraveyardView)
     ge->set_server_card_id(21);
     apply(died);
 
-    ASSERT_GE(spy.count(), 1);
-    EXPECT_TRUE(spy.last().at(0).value<QList<int>>().isEmpty())
+    EXPECT_TRUE(state->pendingTargetZoneOwners().graveyards.isEmpty())
         << "an ability that targeted a permanent must not pop graveyard views when it dies";
 }
 

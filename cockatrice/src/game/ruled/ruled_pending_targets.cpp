@@ -2,6 +2,22 @@
 
 // Widget-independent local target staging. The engine continues to author legal choices.
 
+QSet<quint32> ruledPendingGraveyardTargetOids(const PendingRuledSpellCast &spell,
+                                              const PendingActivatedAbility &ability,
+                                              const RuledClientState &state)
+{
+    if (ability.valid && ability.waitingForTarget) {
+        const auto data = currentRuledPendingAbilityTargetData(ability, state);
+        const auto *group = data ? ruledPendingAbilityTargetGroup(ability, *data) : nullptr;
+        return group && !group->chosenByOpponent ? group->validGraveyardIds : QSet<quint32>{};
+    }
+    if (!spell.waitingForTarget || !ruledCastCostGroupsComplete(spell)) {
+        return {};
+    }
+    const auto group = currentRuledSpellTargetGroup(spell, state);
+    return group ? group->validGraveyardIds : QSet<quint32>{};
+}
+
 namespace
 {
 std::optional<QVector<int>> counterTargetIndices(const PendingActivatedAbility &ability,
