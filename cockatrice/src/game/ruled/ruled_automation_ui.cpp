@@ -13,9 +13,9 @@
 #include "ruled_control_bindings.h"
 #include "ruled_diagnostic_viewer.h"
 
+#include <QDockWidget>
 #include <QMenu>
 #include <QPointer>
-#include <QVBoxLayout>
 #include <libcockatrice/game/game.h>
 #include <libcockatrice/game/game_event_handler.h>
 #include <libcockatrice/game/game_meta_info.h>
@@ -37,6 +37,10 @@ RuledAutomationControls *controlsFor(TabGame &tab)
 {
     return tab.findChild<RuledAutomationControls *>(QStringLiteral("ruledAutomationControls"));
 }
+QDockWidget *dockFor(TabGame &tab)
+{
+    return tab.findChild<QDockWidget *>(QStringLiteral("ruledControlsDock"));
+}
 int toolbarIndex(rv1::PhaseId phase)
 {
     google::protobuf::RepeatedField<int> phases;
@@ -52,16 +56,17 @@ int toolbarIndex(rv1::PhaseId phase)
 } // namespace
 void RuledAutomationUi::configure(TabGame &tab)
 {
-    if (!tab.gamePromptWidget || controlsFor(tab)) {
+    if (!tab.gamePromptWidget || controlsFor(tab) || tab.game->getPlayerManager()->isSpectator()) {
         return;
     }
-    auto *controls = new RuledAutomationControls(tab.gamePromptWidget->parentWidget());
-    auto *layout = qobject_cast<QVBoxLayout *>(tab.gamePromptWidget->parentWidget()->layout());
-    if (!layout) {
-        delete controls;
-        return;
-    }
-    layout->insertWidget(layout->indexOf(tab.gamePromptWidget) + 1, controls);
+    auto *dock = new QDockWidget(&tab);
+    dock->setObjectName(QStringLiteral("ruledControlsDock"));
+    dock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable |
+                      QDockWidget::DockWidgetMovable);
+    auto *controls = new RuledAutomationControls(dock);
+    dock->setWidget(controls);
+    tab.addDockWidget(Qt::RightDockWidgetArea, dock);
+    QObject::connect(dock, &QDockWidget::topLevelChanged, &tab, [&tab] { retranslateUi(tab); });
     controls->setScope(&tab);
     tab.gamePromptWidget->controlBindings()->setKeys(QStringLiteral("primary"), {});
     QObject::connect(controls, &RuledAutomationControls::primaryRequested, tab.gamePromptWidget,
@@ -132,6 +137,33 @@ void RuledAutomationUi::configure(TabGame &tab)
                      });
     refresh(tab);
 }
+void RuledAutomationUi::registerDock(TabGame &tab)
+{
+    if (auto *dock = dockFor(tab)) {
+        tab.registerDockWidget(tab.viewMenu, dock, {350, 150});
+    }
+}
+void RuledAutomationUi::retranslateUi(TabGame &tab)
+{
+    if (auto *dock = dockFor(tab)) {
+        const auto title = QObject::tr("Game Controls");
+        dock->setWindowTitle(title + (dock->isFloating()
+                                         ? QObject::tr(" | Game #%1").arg(tab.game->getGameMetaInfo()->gameId())
+                                         : QString()));
+        if (tab.dockToActions.contains(dock)) {
+            tab.dockToActions[dock].menu->setTitle(title);
+        }
+    }
+}
+void RuledAutomationUi::resetLayout(TabGame &tab)
+{
+    if (auto *dock = dockFor(tab)) {
+        dock->setFloating(false);
+        tab.addDockWidget(Qt::RightDockWidgetArea, dock);
+        dock->show();
+        dock->resize(350, 150);
+    }
+}
 void RuledAutomationUi::refresh(TabGame &tab)
 {
     auto *controls = controlsFor(tab);
@@ -146,7 +178,7 @@ void RuledAutomationUi::refresh(TabGame &tab)
         state && state->isCurrentResolutionPrompt(state->resolutionPromptId) ? state->resolutionPromptId : 0;
     controls->setControlState(snapshot, prompt, live, state && state->isEngineCommandPending(),
                               tab.gamePromptWidget && tab.gamePromptWidget->primaryActionAvailable());
-    controls->setVisible(live);
+    controls->setEnabled(live);
     tab.phasesToolbar->setAutomationContextMenusEnabled(live);
     tab.phasesToolbar->setAutomationMarkers(
         live && snapshot.has_stop_once() ? toolbarIndex(snapshot.stop_once().phase()) : -1,

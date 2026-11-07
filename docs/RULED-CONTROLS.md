@@ -1,8 +1,12 @@
 # Ruled game controls
 
-The controls below the current prompt share their actions with configurable keyboard shortcuts.
+The separate **Game Controls** dock shares its actions with configurable keyboard shortcuts.
+Drag its title bar to move it or pop it out independently of the prompt in Messages. Use
+**View → Game Controls → Visible / Floating** to reopen or float it. Its position is saved with
+the game layout; **View → Reset layout** docks it again. Unavailable game controls are disabled.
 Change bindings in shortcut settings; top-row and numpad digits work by default. Shortcuts do not
 fire while typing in chat, search, or numeric fields, and holding a key does not repeat it.
+Shortcuts work from the battlefield and the floating controls dock.
 Spectators and replay viewers have no gameplay controls.
 
 | Key | Action |
@@ -59,6 +63,9 @@ rebuilding. Dev fixture commands are per seat; the control semantics are the sam
 
 1. While typing a message, enter `12345680`: it should remain text. Focus the battlefield and check
    the enabled controls using both top-row and numpad keys. Rebind one key and verify its new label.
+   Float Game Controls and repeat from that dock and the battlefield. Confirm Messages stays docked,
+   closing the controls keeps them closed through state updates, View can reopen them, and the saved
+   layout and Reset layout preserve and reset the dock respectively.
 2. Use `put bf Garruk's Packleader`, then `put bf Hill Giant`. Right-click the resulting trigger.
    Test source-only yield and its separate Always Yes/No options; confirm the optional prompt can
    still be configured while resolving. A required target or payment must remain interactive.

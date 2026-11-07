@@ -186,6 +186,11 @@ TEST_F(RuledE2ESmokeTest, DiagnosticReplayShowsProtectedStackWindow)
     EXPECT_TRUE(gameMenu.value("automation_controls_created").toBool());
     EXPECT_EQ(gameMenu.value("automation_control_count").toInt(), 8);
     EXPECT_TRUE(gameMenu.value("automation_primary_follows_prompt").toBool());
+    for (const QString check : {"automation_has_separate_dock", "automation_dock_in_view_menu",
+                                "automation_dock_floats_independently", "automation_closed_dock_stays_closed",
+                                "automation_dock_layout_restored", "automation_dock_layout_reset"}) {
+        EXPECT_TRUE(gameMenu.value(check).toBool()) << check.toStdString();
+    }
     for (const auto &entry : menus)
         EXPECT_FALSE(entry.toObject().value("automation_menu").toBool()) << "replay has no live automation menu";
     bool stackVisible = false;

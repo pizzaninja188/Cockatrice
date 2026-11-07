@@ -35,7 +35,9 @@ void RuledControlBindings::bind(const QString &name, const QList<QKeySequence> &
 {
     auto *shortcut = new QShortcut(scope);
     shortcut->setKeys(keys);
-    shortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    // Floating docks are separate Qt windows. The focus/visibility checks below keep these
+    // application shortcuts restricted to their owning game, including its floating docks.
+    shortcut->setContext(Qt::ApplicationShortcut);
     shortcut->setAutoRepeat(false);
     connect(shortcut, &QShortcut::activated, this, [this, invoke = std::move(invoke)] {
         if (acceptsInput())
@@ -58,17 +60,15 @@ bool RuledControlBindings::acceptsInput() const
         QApplication::activePopupWidget() || QApplication::activeModalWidget())
         return false;
     auto *focus = QApplication::focusWidget();
-    if (!focus || (focus != scope && !scope->isAncestorOf(focus)))
-        return false;
     for (auto *widget = focus; widget; widget = widget->parentWidget()) {
         if (qobject_cast<QLineEdit *>(widget) || qobject_cast<QTextEdit *>(widget) ||
             qobject_cast<QPlainTextEdit *>(widget) || qobject_cast<QAbstractSpinBox *>(widget) ||
             (qobject_cast<QComboBox *>(widget) && qobject_cast<QComboBox *>(widget)->isEditable()))
             return false;
         if (widget == scope)
-            break;
+            return true;
     }
-    return true;
+    return false;
 }
 
 void RuledControlBindings::refresh()

@@ -400,6 +400,29 @@ void RuledDiagnosticViewer::openFromCommandLine(MainWindow *window, const QComma
                 const bool enabled = primary && primary->isEnabled();
                 liveTab->gamePromptWidget->setLocalPlayerHasPriority(false);
                 gameMenu.insert("automation_primary_follows_prompt", enabled && !primary->isEnabled());
+                auto *dock = liveTab->findChild<QDockWidget *>(QStringLiteral("ruledControlsDock"));
+                gameMenu.insert("automation_has_separate_dock",
+                                dock && dock->widget() == controls &&
+                                    !liveTab->messageLayoutDock->isAncestorOf(controls) &&
+                                    liveTab->messageLayoutDock->isAncestorOf(liveTab->gamePromptWidget));
+                gameMenu.insert("automation_dock_in_view_menu", dock && liveTab->dockToActions.contains(dock));
+                if (dock) {
+                    dock->setFloating(true);
+                    dock->show();
+                    gameMenu.insert("automation_dock_floats_independently",
+                                    dock->isFloating() && !liveTab->messageLayoutDock->isFloating());
+                    const auto floatingLayout = liveTab->saveState();
+                    dock->close();
+                    RuledAutomationUi::refresh(*liveTab);
+                    gameMenu.insert("automation_closed_dock_stays_closed", dock->isHidden());
+                    const bool restored = liveTab->restoreState(floatingLayout);
+                    gameMenu.insert("automation_dock_layout_restored",
+                                    restored && dock->isFloating() && !dock->isHidden());
+                    liveTab->actResetLayout();
+                    gameMenu.insert("automation_dock_layout_reset",
+                                    !dock->isFloating() && !dock->isHidden() &&
+                                        liveTab->dockWidgetArea(dock) == Qt::RightDockWidgetArea);
+                }
             }
             gameMenu.insert("automation_control_count", controlCount);
             viewer->comparison.insert("live_game_menu", gameMenu);

@@ -2,9 +2,12 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QDialog>
+#include <QDockWidget>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMainWindow>
 #include <QMenu>
 #include <QPushButton>
 #include <QSignalSpy>
@@ -250,4 +253,87 @@ TEST(RuledAutomationControlsTest, DigitsNumpadAndRebindingsDoNotFireInTextEntryO
     EXPECT_EQ(sent.size(), 2u);
     QTest::keyClick(&scope, Qt::Key_R, Qt::ControlModifier);
     EXPECT_EQ(sent.size(), 3u);
+}
+
+TEST(RuledAutomationControlsTest, ShortcutsWorkFromBoardAndFloatingDockButNotTextEntryOrOtherWindows)
+{
+    QMainWindow game;
+    auto *board = new QWidget(&game);
+    board->setFocusPolicy(Qt::StrongFocus);
+    game.setCentralWidget(board);
+    auto *dock = new QDockWidget(&game);
+    auto *controls = new RuledAutomationControls(dock);
+    dock->setWidget(controls);
+    game.addDockWidget(Qt::RightDockWidgetArea, dock);
+    controls->setScope(&game);
+    controls->setControlState(ready(), 0, true, false, true);
+    std::vector<rv1::RuledCommand> sent;
+    QObject::connect(controls, &RuledAutomationControls::commandRequested, controls,
+                     [&](const auto &command) { sent.push_back(command); });
+    game.show();
+    game.activateWindow();
+    board->setFocus();
+    QApplication::processEvents();
+    QTest::keyClick(board, Qt::Key_2);
+    ASSERT_EQ(sent.size(), 1u);
+
+    dock->setFloating(true);
+    dock->show();
+    dock->activateWindow();
+    auto *clear = button(*controls, 5);
+    clear->setFocus();
+    QApplication::processEvents();
+    QTest::keyClick(clear, Qt::Key_2);
+    EXPECT_EQ(sent.size(), 2u);
+    QTest::keyClick(clear, Qt::Key_2, Qt::KeypadModifier);
+    EXPECT_EQ(sent.size(), 3u);
+
+    game.activateWindow();
+    board->setFocus();
+    QApplication::processEvents();
+    QTest::keyClick(board, Qt::Key_2);
+    EXPECT_EQ(sent.size(), 4u) << "Floating the controls must preserve battlefield shortcuts";
+    auto *chat = new QLineEdit(board);
+    chat->show();
+    chat->setFocus();
+    QApplication::processEvents();
+    QTest::keyClick(chat, Qt::Key_2);
+    EXPECT_EQ(chat->text(), QStringLiteral("2"));
+    EXPECT_EQ(sent.size(), 4u);
+
+    board->setFocus();
+    QMenu popup(&game);
+    popup.addAction(QStringLiteral("Inspect"));
+    popup.popup(QPoint(100, 100));
+    QApplication::processEvents();
+    QTest::keyClick(&popup, Qt::Key_2);
+    EXPECT_EQ(sent.size(), 4u);
+    popup.close();
+    QDialog choice(&game);
+    choice.setModal(true);
+    choice.show();
+    choice.activateWindow();
+    choice.setFocus();
+    QApplication::processEvents();
+    QTest::keyClick(&choice, Qt::Key_2);
+    EXPECT_EQ(sent.size(), 4u);
+    choice.close();
+
+    QWidget other;
+    auto *otherLayout = new QVBoxLayout(&other);
+    auto *otherControls = new RuledAutomationControls(&other);
+    otherLayout->addWidget(otherControls);
+    otherControls->setScope(&other);
+    otherControls->setControlState(ready(), 0, true, false, true);
+    int otherCommands = 0;
+    QObject::connect(otherControls, &RuledAutomationControls::commandRequested, otherControls,
+                     [&](const auto &) { ++otherCommands; });
+    other.setFocusPolicy(Qt::StrongFocus);
+    other.show();
+    other.activateWindow();
+    other.setFocus();
+    QApplication::processEvents();
+    QTest::keyClick(&other, Qt::Key_2);
+    EXPECT_EQ(sent.size(), 4u);
+    EXPECT_EQ(otherCommands, 1) << "Only the focused game may receive a shortcut shared by both games";
 }

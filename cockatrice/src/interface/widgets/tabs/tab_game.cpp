@@ -1323,6 +1323,7 @@ void TabGame::retranslateUi()
     dockToActions[cardInfoDock].menu->setTitle(tr("Card Info"));
     dockToActions[messageLayoutDock].menu->setTitle(tr("Messages"));
     dockToActions[playerListDock].menu->setTitle(tr("Player List"));
+    RuledAutomationUi::retranslateUi(*this);
 
     if (historyDock) {
         dockToActions[historyDock].menu->setTitle(tr("Game History"));
@@ -2641,6 +2642,7 @@ void TabGame::createViewMenuItems()
     registerDockWidget(viewMenu, cardInfoDock, {250, 360});
     registerDockWidget(viewMenu, messageLayoutDock, {250, 200});
     registerDockWidget(viewMenu, playerListDock, {250, 50});
+    RuledAutomationUi::registerDock(*this);
 
     if (historyDock) {
         registerDockWidget(viewMenu, historyDock, {280, 400});
@@ -2745,6 +2747,7 @@ void TabGame::actResetLayout()
         messageLayoutDock->resize(250, 250);
         playerListDock->resize(250, 50);
     }
+    RuledAutomationUi::resetLayout(*this);
 }
 
 void TabGame::createPlayAreaWidget(bool bReplay)
