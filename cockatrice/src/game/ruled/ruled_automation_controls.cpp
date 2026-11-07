@@ -325,7 +325,7 @@ QMenu *RuledAutomationControls::stackMenu(quint32 oid)
     }
     menu->addSeparator();
     auto *manager = managerMenu();
-    manager->setParent(menu);
+    manager->setParent(menu, manager->windowFlags());
     manager->setTitle(tr("Manage automation"));
     menu->addMenu(manager);
     return menu;

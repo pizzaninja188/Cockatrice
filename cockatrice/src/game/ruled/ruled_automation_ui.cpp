@@ -120,7 +120,7 @@ void RuledAutomationUi::configure(TabGame &tab)
                              menu = new QMenu(controls);
                              for (int phase : phases) {
                                  auto *child = controls->phaseMenu(static_cast<rv1::PhaseId>(phase));
-                                 child->setParent(menu);
+                                 child->setParent(menu, child->windowFlags());
                                  child->setTitle(phase == rv1::PHASE_ID_FIRST_STRIKE_DAMAGE
                                                      ? QObject::tr("First strike damage")
                                                      : QObject::tr("Combat damage"));

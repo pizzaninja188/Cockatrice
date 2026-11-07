@@ -161,6 +161,36 @@ TEST(RuledAutomationControlsTest, StackMenuUsesExactOfferedIdentityAndSeparatesY
     EXPECT_EQ(controls.stackMenu(999), nullptr);
 }
 
+TEST(RuledAutomationControlsTest, StackPopupKeepsManagerHiddenUntilItsSubmenuIsOpened)
+{
+    RuledAutomationControls controls;
+    auto state = ready();
+    state.add_stack_offers()->mutable_stack()->set_object_id(701);
+    controls.setControlState(state, 0, true, false, true);
+    std::unique_ptr<QMenu> menu(controls.stackMenu(701));
+    ASSERT_NE(menu, nullptr);
+    auto *manager = menu->findChild<QMenu *>("ruledAutomationManager");
+    ASSERT_NE(manager, nullptr);
+    EXPECT_EQ(manager->windowType(), Qt::Popup);
+
+    menu->popup(QPoint(100, 100));
+    QApplication::processEvents();
+    EXPECT_TRUE(menu->isVisible());
+    EXPECT_FALSE(manager->isVisible()) << "Opening the stack menu must not also display its manager";
+    EXPECT_EQ(QApplication::activePopupWidget(), menu.get());
+
+    menu->setActiveAction(manager->menuAction());
+    QTest::keyClick(menu.get(), Qt::Key_Right);
+    QApplication::processEvents();
+    EXPECT_TRUE(manager->isVisible());
+    EXPECT_EQ(QApplication::activePopupWidget(), manager);
+    QTest::keyClick(manager, Qt::Key_Escape);
+    QApplication::processEvents();
+    EXPECT_FALSE(manager->isVisible());
+    EXPECT_TRUE(menu->isVisible());
+    menu->close();
+}
+
 TEST(RuledAutomationControlsTest, PhaseMenuKeepsTurnScopeAndOneTimeStopSeparateFromYield)
 {
     RuledAutomationControls controls;
