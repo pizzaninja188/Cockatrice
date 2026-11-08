@@ -3,6 +3,6 @@
 
 // Upstream protocol 14 and older fork builds disagree about create-game field 15.
 // A distinct dialect rejects that ambiguity before either endpoint sends game commands.
-inline constexpr unsigned int kRuledProtocolVersion = 10017;
+inline constexpr unsigned int kRuledProtocolVersion = 10018;
 
 #endif

@@ -16,12 +16,24 @@ Spectators and replay viewers have no gameplay controls.
 | 3 / 4 | Answer the current engine-offered Yes / No choice. No is not a general Cancel action. |
 | 5 | Clear this game's trigger/answer rules, temporary yields and one-time stop; disable automatic passing. Keep the persistent phase-stop layout. |
 | 6 | Pass through the rest of this turn, including new stack items. Required choices still stop you. |
-| 8 | Toggle no-action auto-pass. The engine retains priority whenever availability is uncertain, and respects phase stops. |
+| 8 | Toggle no-action auto-pass (disable bluffing). Ordinary unused mana production does not hold priority. The engine retains priority for usable actions or uncertain availability, and respects phase stops. |
 | 0 | Yield toward this turn's end step, stopping for a response or required choice. If already there, stop there. |
 
 The status line shows acknowledged state. “Updating automation” means a request is awaiting its
 reply. Clear All and Full Control remain available while another gameplay command is in flight;
 they cannot undo a resolution already accepted by the engine.
+
+Auto-pass uses the engine's payment witnesses and conservative negative proofs. Mana sources such
+as Forest and Llanowar Elves still count toward paying for a spell or ability, but producing mana
+alone is not a reason to stop. Sacrifice costs, damage and tap triggers can matter independently
+and preserve priority. This preference does not prohibit manually activating mana abilities.
+
+The status explains phase stops, available land plays/spells/abilities/special actions, required
+choices, or uncertain availability. A failed bounded search is not proof that an action is
+unavailable. Negative proofs currently cover finite ordinary announcements and stable tap-mana
+resources; complex costs, X/modes, state-dependent mana and continuous/static interactions may
+retain priority with an uncertainty reason. Full Control and explicit phase stops remain overrides.
+Stop reasons are private to the seated player. Matching protocol-10018 clients and server are required.
 
 **Full Control / Hold Priority** stops automatic passing and answers without deleting saved rules.
 Manage can pause, resume, inspect or remove rules. A required choice cancels temporary yielding;
@@ -78,7 +90,12 @@ rebuilding. Dev fixture commands are per seat; the control semantics are the sam
    A new Packleader must require a new source rule. Explicit broader rules remain listed in Manage.
 5. Test a one-time end-step stop and Full Control after casting your own spell. On a server that retains
    disconnected seats, reconnect a yielding seat: preferences must display paused and require an explicit resume.
+6. With Auto-pass enabled, clear the current phase's stop and use your normal land play. With only
+   Forests in hand and an untapped Forest on the battlefield, priority should pass automatically.
+   Add Grizzly Bears to hand: one Forest is insufficient; two untapped Forests should hold priority
+   with “Spell available.” Reenable the phase stop and check “Stopped: phase stop.” Lotus Petal or
+   Karplusan Forest should retain priority for their sacrifice/damage possibilities.
 
 These controls implement ordinary priority and optional-choice decisions under CR 117.2e,
-117.3b–d, 117.4–5, 603.3b and 603.5 ([November 6, 2026 Comprehensive Rules](https://media.wizards.com/2026/downloads/MagicCompRules%2020261106.txt)).
+117.3b–d, 117.4–5, 603.3b, 603.5 and 605.3a–b ([November 6, 2026 Comprehensive Rules](https://media.wizards.com/2026/downloads/MagicCompRules%2020261106.txt)).
 They do not change card definitions, payment legality, state-based actions, or trigger ordering.

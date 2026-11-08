@@ -122,4 +122,65 @@ TEST_F(RuledE2ESmokeTest, EntireStackAutomationCanBeCancelledBetweenResolutions)
     EXPECT_TRUE(p1.latestLegal.automation().paused());
     EXPECT_EQ(p1.latestLegal.automation().yield_mode(), ruled::v1::AUTOMATION_YIELD_MODE_NONE);
 }
+TEST_F(RuledE2ESmokeTest, NoBluffAutoPassPublishesPrivateReasonsAndPassesUnusedMana)
+{
+    const auto started = startServers();
+    ASSERT_TRUE(started) << started.message();
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+    AutomationDriver p1(true, "nobluff1", &transcript);
+    AutomationDriver p2(false, "nobluff2", &transcript);
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, "Forest"}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, "Island"}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000, "no-bluff startup"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000, "no-bluff observer"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(10);
+        p2.pump(10);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p1.priorityPlayer == p1.myId &&
+            p2.phase == p1.phase && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    ruled::v1::RuledCommand enable;
+    enable.mutable_update_automation()->set_auto_pass(true);
+    p1.sendRuled(enable, "disable bluffing");
+    ASSERT_TRUE(p1.pumpUntil([&] {
+        return p1.latestLegal.automation().auto_pass() &&
+            p1.latestLegal.automation().stop_reason() == ruled::v1::AUTOMATION_STOP_REASON_PHASE_STOP;
+    }, 10000, "explicit phase stop takes precedence"));
+    ruled::v1::RuledCommand policy;
+    policy.mutable_set_auto_pass_policy();
+    p1.sendRuled(policy, "remove own explicit phase stops");
+    p1.sendRuled(enable, "refresh no-bluff availability");
+    ASSERT_TRUE(p1.pumpUntil([&] {
+        return p1.latestLegal.automation().stop_reason() == ruled::v1::AUTOMATION_STOP_REASON_LAND;
+    }, 10000, "available land play holds priority"));
+    const auto land = std::find_if(p1.latestLegal.hand_actions().begin(), p1.latestLegal.hand_actions().end(),
+                                  [](const auto &action) { return action.kind() == ruled::v1::HAND_ACTION_PLAY_LAND; });
+    ASSERT_NE(land, p1.latestLegal.hand_actions().end());
+    ruled::v1::RuledCommand play;
+    play.mutable_play_land()->mutable_source()->set_hand_index(land->hand_index());
+    p1.sendRuled(play, "use the land play; remaining action is Forest mana");
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.priorityPlayer == p2.myId; }, 10000, "unused mana auto-passes"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.priorityPlayer == p2.myId; }, 10000, "observer sees automatic pass"));
+    EXPECT_TRUE(p1.latestLegal.automation().auto_pass());
+    EXPECT_EQ(p1.latestLegal.automation().stop_reason(), ruled::v1::AUTOMATION_STOP_REASON_WAITING_FOR_PRIORITY);
+    EXPECT_FALSE(p2.latestLegal.automation().auto_pass());
+    EXPECT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+}
 } // namespace ruled_e2e

@@ -76,6 +76,42 @@ QString yieldLabel(rv1::AutomationYieldMode mode)
     }
     return QCoreApplication::translate("RuledAutomationControls", text);
 }
+QString autoPassStopLabel(rv1::AutomationStopReason reason)
+{
+    const char *text = "";
+    switch (reason) {
+        case rv1::AUTOMATION_STOP_REASON_NONE:
+            return {};
+        case rv1::AUTOMATION_STOP_REASON_PHASE_STOP:
+            text = QT_TRANSLATE_NOOP("RuledAutomationControls", "Stopped: phase stop");
+            break;
+        case rv1::AUTOMATION_STOP_REASON_LAND:
+            text = QT_TRANSLATE_NOOP("RuledAutomationControls", "Land play available");
+            break;
+        case rv1::AUTOMATION_STOP_REASON_SPELL:
+            text = QT_TRANSLATE_NOOP("RuledAutomationControls", "Spell available");
+            break;
+        case rv1::AUTOMATION_STOP_REASON_ABILITY:
+            text = QT_TRANSLATE_NOOP("RuledAutomationControls", "Ability available");
+            break;
+        case rv1::AUTOMATION_STOP_REASON_SPECIAL_ACTION:
+            text = QT_TRANSLATE_NOOP("RuledAutomationControls", "Special action available");
+            break;
+        case rv1::AUTOMATION_STOP_REASON_WAITING_FOR_PRIORITY:
+            text = QT_TRANSLATE_NOOP("RuledAutomationControls", "Waiting for priority");
+            break;
+        case rv1::AUTOMATION_STOP_REASON_REQUIRED_CHOICE:
+            text = QT_TRANSLATE_NOOP("RuledAutomationControls", "Waiting for a required choice or payment");
+            break;
+        case rv1::AUTOMATION_STOP_REASON_MISSING_POLICY:
+            text = QT_TRANSLATE_NOOP("RuledAutomationControls", "Waiting for phase-stop settings");
+            break;
+        default:
+            text = QT_TRANSLATE_NOOP("RuledAutomationControls", "Action availability uncertain — holding priority");
+            break;
+    }
+    return QCoreApplication::translate("RuledAutomationControls", text);
+}
 } // namespace
 
 RuledAutomationControls::RuledAutomationControls(QWidget *parent)
@@ -105,8 +141,8 @@ RuledAutomationControls::RuledAutomationControls(QWidget *parent)
                               "passing. Keep phase stops."));
     buttons[6]->setToolTip(
         tr("Yield through the rest of this turn, including new stack items. Required choices still stop you."));
-    buttons[8]->setToolTip(tr("Pass only when the engine proves no action is available. Uncertainty, phase stops, and "
-                              "Full Control keep priority."));
+    buttons[8]->setToolTip(tr("Disable bluffing: pass when no usable action is available. Ordinary mana production "
+                              "alone does not hold priority. Uncertainty, phase stops, and Full Control still stop you."));
     buttons[0]->setToolTip(
         tr("Yield to your first priority at this turn's end step; responses and required choices interrupt."));
     layout->addLayout(grid);
@@ -203,6 +239,12 @@ void RuledAutomationControls::refresh()
         }
         if (state.auto_pass()) {
             parts << tr("No-action auto-pass enabled");
+            if (!state.full_control() && !state.paused() && state.yield_mode() == rv1::AUTOMATION_YIELD_MODE_NONE) {
+                const auto reason = autoPassStopLabel(state.stop_reason());
+                if (!reason.isEmpty()) {
+                    parts << reason;
+                }
+            }
         }
         if (state.rules_size()) {
             parts << tr("%1 trigger rules").arg(state.rules_size());

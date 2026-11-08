@@ -243,8 +243,9 @@ fn end_step_yield_armed_at_end_step_stops_immediately() {
 }
 
 #[test]
-fn smart_auto_pass_keeps_priority_for_uncertain_spell_payment() {
+fn smart_auto_pass_skips_a_spell_with_provably_unpayable_mana() {
     let mut e = engine();
+    e.state.players[0].hand.clear();
     inject_card_into_hand(&mut e, 0, "grizzly_bears");
     let command = update(Action::AutoPass(true));
     let b = e
@@ -265,8 +266,8 @@ fn smart_auto_pass_keeps_priority_for_uncertain_spell_payment() {
         .unwrap();
     assert!(snapshot(&b, 4).auto_pass);
     assert!(
-        b.automation_continuation.is_none(),
-        "missing affordable hints never prove no action"
+        b.automation_continuation.is_some(),
+        "a proven impossible cost is different from a missing affordability hint"
     );
 }
 
@@ -479,9 +480,9 @@ fn turn_yield_expires_on_actual_turn_boundary_and_disconnect_pause_retains_prefe
 }
 
 #[test]
-fn smart_auto_pass_proves_tapped_mana_sources_unavailable_but_respects_stops() {
+fn smart_auto_pass_ignores_unused_mana_sources_but_respects_stops() {
     for (tapped, stop, should_pass) in [
-        (false, false, false),
+        (false, false, true),
         (true, false, true),
         (true, true, false),
     ] {
@@ -517,7 +518,136 @@ fn smart_auto_pass_proves_tapped_mana_sources_unavailable_but_respects_stops() {
             should_pass,
             "tapped={tapped} phase stop={stop}"
         );
+        assert_eq!(
+            snapshot(&b, 4).stop_reason,
+            if stop {
+                rv1::AutomationStopReason::PhaseStop
+            } else {
+                rv1::AutomationStopReason::None
+            } as i32
+        );
     }
+}
+
+#[test]
+fn no_bluff_auto_pass_uses_mana_for_spells_without_stopping_for_unused_mana() {
+    for (forests, spell, should_pass) in [
+        (1, None, true),
+        (1, Some("grizzly_bears"), true),
+        (2, Some("grizzly_bears"), false),
+    ] {
+        let mut e = engine();
+        e.state.players[0].hand.clear();
+        e.state.lands_played_this_turn = 1;
+        for _ in 0..forests {
+            inject_permanent_on_battlefield(&mut e, 0, "forest");
+        }
+        for _ in 0..7 {
+            inject_card_into_hand(&mut e, 0, "forest");
+        }
+        inject_permanent_on_battlefield(&mut e, 0, "hill_giant");
+        inject_permanent_on_battlefield(&mut e, 0, "elvish_visionary");
+        if let Some(card) = spell {
+            inject_card_into_hand(&mut e, 0, card);
+        }
+        let command = update(Action::AutoPass(true));
+        let b = e
+            .apply_scenario_command(
+                4,
+                &RuledCommand {
+                    cmd: Some(Cmd::CanonicalGameplay(rv1::CanonicalGameplayCommand {
+                        command: command.encode_to_vec(),
+                        auto_pass_policies: [4, 9, 27]
+                            .map(|player_id| rv1::AutoPassPolicy {
+                                player_id,
+                                ..Default::default()
+                            })
+                            .to_vec(),
+                    })),
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            b.automation_continuation.is_some(),
+            should_pass,
+            "forests={forests} spell={spell:?}"
+        );
+        assert_eq!(
+            snapshot(&b, 4).stop_reason,
+            if should_pass {
+                rv1::AutomationStopReason::None
+            } else {
+                rv1::AutomationStopReason::Spell
+            } as i32
+        );
+    }
+}
+
+fn arm_no_bluff(e: &mut GameEngine) -> RuledEventBatch {
+    e.apply_scenario_command(
+        4,
+        &RuledCommand {
+            cmd: Some(Cmd::CanonicalGameplay(rv1::CanonicalGameplayCommand {
+                command: update(Action::AutoPass(true)).encode_to_vec(),
+                auto_pass_policies: [4, 9, 27]
+                    .map(|player_id| rv1::AutoPassPolicy {
+                        player_id,
+                        ..Default::default()
+                    })
+                    .to_vec(),
+            })),
+        },
+    )
+    .unwrap()
+}
+
+#[test]
+fn no_bluff_auto_pass_preserves_mana_side_effects_and_real_land_plays() {
+    for card in ["lotus_petal", "karplusan_forest"] {
+        let mut e = engine();
+        e.state.players[0].hand.clear();
+        inject_permanent_on_battlefield(&mut e, 0, card);
+        let b = arm_no_bluff(&mut e);
+        assert!(b.automation_continuation.is_none(), "{card}");
+        assert_eq!(
+            snapshot(&b, 4).stop_reason,
+            rv1::AutomationStopReason::Ability as i32
+        );
+    }
+    let mut e = engine();
+    let b = arm_no_bluff(&mut e);
+    assert!(b.automation_continuation.is_none());
+    assert_eq!(
+        snapshot(&b, 4).stop_reason,
+        rv1::AutomationStopReason::Land as i32
+    );
+}
+
+#[test]
+fn no_bluff_auto_pass_checks_nonmana_activation_costs_and_wrong_colors() {
+    for (land, expected) in [("forest", true), ("mountain", false)] {
+        let mut e = engine();
+        e.state.players[0].hand.clear();
+        inject_permanent_on_battlefield(&mut e, 0, "shivan_dragon");
+        inject_permanent_on_battlefield(&mut e, 0, land);
+        let b = arm_no_bluff(&mut e);
+        assert_eq!(b.automation_continuation.is_some(), expected, "{land}");
+    }
+}
+
+#[test]
+fn no_bluff_auto_pass_reports_uncertainty_instead_of_using_missing_highlights() {
+    let mut e = engine();
+    e.state.players[0].hand.clear();
+    inject_card_into_hand(&mut e, 0, "grizzly_bears");
+    inject_permanent_on_battlefield(&mut e, 0, "forest");
+    inject_permanent_on_battlefield(&mut e, 0, "glorious_anthem");
+    let b = arm_no_bluff(&mut e);
+    assert!(b.automation_continuation.is_none());
+    assert_eq!(
+        snapshot(&b, 4).stop_reason,
+        rv1::AutomationStopReason::Uncertain as i32
+    );
 }
 
 #[test]

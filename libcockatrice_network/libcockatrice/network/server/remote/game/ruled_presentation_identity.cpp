@@ -78,7 +78,8 @@ bool supportedSchema()
         // its optional generation (absent for virtual abilities/copies). Rule ids, revisions,
         // command indices, player ids and phase ids never enter the object-identity domain.
         // can_source_rule is a recipient-private eligibility bit, not an identity handle.
-        const QByteArray expected("1ef16942094227d26bf31c762e622791aeca0dabe63c663fd5c941befd3edb42");
+        // stop_reason is a recipient-private enum; it carries no object or player identity.
+        const QByteArray expected("92590bffc058c029f86aea0d0ccec831062b09b3c147053da633ae7a4754237b");
         if (digest != expected)
             qCritical() << "ruled presentation schema needs an identity audit:" << digest;
         return digest == expected;

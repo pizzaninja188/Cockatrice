@@ -626,7 +626,10 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
             actions,
             &battlefield_abilities,
         );
-        for oid in affordable {
+        if let Some(automation) = &mut actions.automation {
+            automation.stop_reason = affordable.stop as i32;
+        }
+        for oid in affordable.objects {
             if let Some(slot) = p.hand.iter().position(|&hand_oid| hand_oid == oid) {
                 actions.affordable_hand_indices.push(slot as u32);
             } else {

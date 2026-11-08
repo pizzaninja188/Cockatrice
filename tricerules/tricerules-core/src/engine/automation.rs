@@ -474,37 +474,14 @@ impl GameEngine {
         }
         if policy.auto_pass {
             return actions
-                .filter(|actions| self.automation_definitely_no_action(player, actions))
+                .filter(|actions| {
+                    actions.automation.as_ref().is_some_and(|state| {
+                        state.stop_reason == rv1::AutomationStopReason::None as i32
+                    })
+                })
                 .map(|_| pass());
         }
         self.state.stack.is_empty().then(pass)
-    }
-
-    /// A bounded positive payment witness cannot prove a negative. Retain priority whenever
-    /// any structural action still needs a payment/target search, including special actions.
-    fn automation_definitely_no_action(
-        &self,
-        player: PlayerId,
-        actions: &rv1::LegalActions,
-    ) -> bool {
-        if !actions.hand_actions.is_empty()
-            || !actions.zone_cast_actions.is_empty()
-            || !actions.zone_land_actions.is_empty()
-            || !actions.zone_ability_actions.is_empty()
-            || !actions.permanent_actions.is_empty()
-        {
-            return false;
-        }
-        let Some(index) = self.state.player_idx(player) else {
-            return false;
-        };
-        self.state.players[index].battlefield.iter().all(|oid| {
-            self.effective_activated_abilities(*oid)
-                .iter()
-                .all(|ability| {
-                    !self.ability_activatable(*oid, ability.slot as usize, &ability.definition)
-                })
-        })
     }
 
     pub(super) fn continue_automation(
@@ -539,6 +516,7 @@ impl GameEngine {
             .unwrap_or(&default_policy);
         let binary = self.automation_binary_choice(player);
         rv1::AutomationState {
+            stop_reason: rv1::AutomationStopReason::Uncertain as i32,
             revision: policy.revision,
             full_control: policy.full_control,
             auto_pass: policy.auto_pass,
@@ -598,9 +576,6 @@ impl GameEngine {
         stops: &[rv1::AutoPassPolicy],
         batch: &mut RuledEventBatch,
     ) {
-        for (&player, actions) in &mut batch.legal_by_player {
-            actions.automation = Some(self.automation_snapshot(player));
-        }
         batch.automation_continuation = self.state.players.iter().find_map(|player| {
             if player.has_lost
                 || self
@@ -615,6 +590,35 @@ impl GameEngine {
                 expected_revision: self.state.automation[&player.id].revision,
             })
         });
+        for (&player, actions) in &mut batch.legal_by_player {
+            let availability = actions
+                .automation
+                .as_ref()
+                .map_or(rv1::AutomationStopReason::Uncertain as i32, |state| {
+                    state.stop_reason
+                });
+            let mut snapshot = self.automation_snapshot(player);
+            snapshot.stop_reason = if batch
+                .automation_continuation
+                .as_ref()
+                .is_some_and(|token| token.player_id == player)
+            {
+                rv1::AutomationStopReason::None as i32
+            } else if !self.automation_priority_window() {
+                rv1::AutomationStopReason::RequiredChoice as i32
+            } else if self.state.priority_player_id() != player {
+                rv1::AutomationStopReason::WaitingForPriority as i32
+            } else if let Some(policy) = stops.iter().find(|policy| policy.player_id == player) {
+                if self.policy_stops_at_current_phase(policy) {
+                    rv1::AutomationStopReason::PhaseStop as i32
+                } else {
+                    availability
+                }
+            } else {
+                rv1::AutomationStopReason::MissingPolicy as i32
+            };
+            actions.automation = Some(snapshot);
+        }
     }
 
     pub(super) fn reconcile_automation(

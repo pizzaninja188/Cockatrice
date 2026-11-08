@@ -1,16 +1,55 @@
-//! Positive, recipient-private action witnesses. These hints never authorize a command.
+//! Recipient-private payment witnesses and conservative no-action proofs for automation.
+//! Highlighting still requires a positive witness; uncertainty never authorizes a pass.
 use super::payment::candidates::{
     combinations, cost_selections, phyrexian_choices, product, AbilityInventory,
 };
 use super::*;
+mod proofs;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Availability {
+    Available,
+    Unavailable,
+    Unknown,
+}
+
+impl Availability {
+    fn available(self) -> bool {
+        self == Self::Available
+    }
+}
+
+pub(super) struct Report {
+    pub objects: BTreeSet<ObjectId>,
+    pub stop: rv1::AutomationStopReason,
+}
+
+impl Report {
+    fn record(&mut self, oid: ObjectId, result: Availability, reason: rv1::AutomationStopReason) {
+        if result.available() {
+            self.objects.insert(oid);
+            if matches!(
+                self.stop,
+                rv1::AutomationStopReason::None | rv1::AutomationStopReason::Uncertain
+            ) {
+                self.stop = reason;
+            }
+        } else if result == Availability::Unknown && self.stop == rv1::AutomationStopReason::None {
+            self.stop = rv1::AutomationStopReason::Uncertain;
+        }
+    }
+}
 
 pub(super) fn affordable_objects(
     engine: &GameEngine,
     player: PlayerId,
     actions: &LegalActions,
     battlefield_abilities: &AbilityInventory,
-) -> BTreeSet<ObjectId> {
-    let mut ready = BTreeSet::new();
+) -> Report {
+    let mut ready = Report {
+        objects: BTreeSet::new(),
+        stop: rv1::AutomationStopReason::None,
+    };
     let Some(idx) = engine.state.player_idx(player) else {
         return ready;
     };
@@ -25,7 +64,11 @@ pub(super) fn affordable_objects(
             continue;
         };
         if action.kind == rv1::HandActionKind::HandActionPlayLand as i32 {
-            ready.insert(oid);
+            ready.record(
+                oid,
+                Availability::Available,
+                rv1::AutomationStopReason::Land,
+            );
         } else if action.kind == rv1::HandActionKind::HandActionCastSpell as i32 {
             let command = rv1::CastSpell {
                 source: Some(rv1::CastSource {
@@ -37,7 +80,7 @@ pub(super) fn affordable_objects(
                 prototyped: action.prototyped,
                 ..Default::default()
             };
-            if spell_payable(
+            let result = spell_payable(
                 engine,
                 player,
                 oid,
@@ -53,13 +96,22 @@ pub(super) fn affordable_objects(
                 &action.as_foretold_costs,
                 action.base_cost_unpayable,
                 battlefield_abilities,
-            ) {
-                ready.insert(oid);
-            }
+            );
+            ready.record(oid, result, rv1::AutomationStopReason::Spell);
+        } else {
+            ready.record(
+                oid,
+                Availability::Unknown,
+                rv1::AutomationStopReason::SpecialAction,
+            );
         }
     }
     for action in &actions.zone_land_actions {
-        ready.insert(action.object_id);
+        ready.record(
+            action.object_id,
+            Availability::Available,
+            rv1::AutomationStopReason::Land,
+        );
     }
     for action in &actions.permanent_actions {
         let purpose = match rv1::PermanentActionKind::try_from(action.kind) {
@@ -67,10 +119,33 @@ pub(super) fn affordable_objects(
             Ok(rv1::PermanentActionKind::UnlockRoomDoor) => {
                 SpecialActionManaPurpose::UnlockRoomDoor
             }
-            _ => continue,
+            _ => {
+                ready.record(
+                    action.object_id,
+                    Availability::Unknown,
+                    rv1::AutomationStopReason::SpecialAction,
+                );
+                continue;
+            }
         };
         let Ok(mana) = ManaCost::parse(&action.mana_cost) else {
+            ready.record(
+                action.object_id,
+                Availability::Unknown,
+                rv1::AutomationStopReason::SpecialAction,
+            );
             continue;
+        };
+        let mut result = if proofs::announcements_complete(
+            engine,
+            &mana,
+            &rv1::LegalCostChoices::default(),
+            None,
+            &[],
+        ) {
+            Availability::Unavailable
+        } else {
+            Availability::Unknown
         };
         for flex in phyrexian_choices(&mana) {
             let Ok(cost) =
@@ -86,10 +161,17 @@ pub(super) fn affordable_objects(
                 &mut 512,
                 Some(battlefield_abilities),
             ) {
-                ready.insert(action.object_id);
+                result = Availability::Available;
                 break;
+            } else if !proofs::payment_impossible(engine, &cost, false, battlefield_abilities) {
+                result = Availability::Unknown;
             }
         }
+        ready.record(
+            action.object_id,
+            result,
+            rv1::AutomationStopReason::SpecialAction,
+        );
     }
     for action in &actions.zone_cast_actions {
         use rv1::cast_source::Location;
@@ -111,7 +193,7 @@ pub(super) fn affordable_objects(
             casting_permission_id: action.casting_permission_id,
             ..Default::default()
         };
-        if spell_payable(
+        let result = spell_payable(
             engine,
             player,
             action.object_id,
@@ -127,9 +209,8 @@ pub(super) fn affordable_objects(
             &action.as_foretold_costs,
             action.base_cost_unpayable,
             battlefield_abilities,
-        ) {
-            ready.insert(action.object_id);
-        }
+        );
+        ready.record(action.object_id, result, rv1::AutomationStopReason::Spell);
     }
     let payment_window = engine.resolving_mana_payment_for(player)
         || engine
@@ -157,27 +238,41 @@ pub(super) fn affordable_objects(
     if priority_window || payment_window {
         for (oid, effective_abilities) in battlefield_abilities {
             let oid = *oid;
-            if ready.contains(&oid) {
-                continue;
-            }
             for effective in effective_abilities {
-                if (priority_window || effective.definition.is_mana_ability())
-                    && ability_payable(
+                if priority_window || effective.definition.is_mana_ability() {
+                    let result = ability_payable(
                         engine,
                         player,
                         oid,
                         effective,
                         actions,
                         battlefield_abilities,
-                    )
-                {
-                    ready.insert(oid);
-                    break;
+                    );
+                    if result.available() {
+                        ready.objects.insert(oid);
+                    }
+                    if effective.definition.is_mana_ability() {
+                        match proofs::mana_only(engine, player, oid, &effective.definition) {
+                            Some(true) => continue,
+                            Some(false) => {}
+                            None => {
+                                if result != Availability::Unavailable {
+                                    ready.record(
+                                        oid,
+                                        Availability::Unknown,
+                                        rv1::AutomationStopReason::Ability,
+                                    );
+                                }
+                                continue;
+                            }
+                        }
+                    }
+                    ready.record(oid, result, rv1::AutomationStopReason::Ability);
                 }
             }
         }
         for action in &actions.zone_ability_actions {
-            if !priority_window || ready.contains(&action.object_id) {
+            if !priority_window {
                 continue;
             }
             let zone = if action.source_zone == rv1::AbilitySourceZone::Hand as i32 {
@@ -198,16 +293,15 @@ pub(super) fn affordable_objects(
                 );
                 let effective =
                     EffectiveActivatedAbility::authored(action.ability_index, ability, definition);
-                if ability_payable(
+                let result = ability_payable(
                     engine,
                     player,
                     action.object_id,
                     &effective,
                     actions,
                     battlefield_abilities,
-                ) {
-                    ready.insert(action.object_id);
-                }
+                );
+                ready.record(action.object_id, result, rv1::AutomationStopReason::Ability);
             }
         }
     }
@@ -449,18 +543,18 @@ fn spell_payable(
     alternatives: &[rv1::AsForetoldCostOption],
     base_unpayable: bool,
     battlefield_abilities: &AbilityInventory,
-) -> bool {
+) -> Availability {
     let Some(idx) = engine.state.player_idx(player) else {
-        return false;
+        return Availability::Unknown;
     };
     let Some(object) = engine.state.objects.get(&oid) else {
-        return false;
+        return Availability::Unknown;
     };
     let Some(def) = engine.registry.get(&object.card_id) else {
-        return false;
+        return Availability::Unknown;
     };
     let Some(face) = def.face(base.face_index as usize) else {
-        return false;
+        return Availability::Unknown;
     };
     let characteristic_face = if base.prototyped {
         face.prototyped_face()
@@ -468,10 +562,10 @@ fn spell_payable(
         Some(face.clone())
     };
     let Some(characteristic_face) = characteristic_face else {
-        return false;
+        return Availability::Unknown;
     };
     let Ok(mana) = ManaCost::parse(mana) else {
-        return false;
+        return Availability::Unknown;
     };
     let costs = costs.cloned().unwrap_or_default();
     if base.cast_method == rv1::CastMethod::Normal as i32
@@ -487,8 +581,10 @@ fn spell_payable(
         && !face.keywords.contains(&Keyword::Convoke)
         && !engine.minimum_printed_mana_possible(player, &mana, battlefield_abilities)
     {
-        return false;
+        return Availability::Unavailable;
     }
+    let mut uncertain = base.cast_method != rv1::CastMethod::Normal as i32
+        || !proofs::announcements_complete(engine, &mana, &costs, targets, modes);
     let selections = cost_selections(&costs);
     let cast_groups = cast_group_variants(&costs);
     let mut remaining = 512;
@@ -501,7 +597,7 @@ fn spell_payable(
                             // Every remaining witness would fail immediately once the shared
                             // mana search is exhausted. Do not enumerate more announcements.
                             if remaining == 0 {
-                                return false;
+                                return Availability::Unknown;
                             }
                             let mut command = base.clone();
                             command.x_value = if mana.has_x() { x } else { 0 };
@@ -521,6 +617,13 @@ fn spell_payable(
                                 else {
                                     continue;
                                 };
+                                uncertain |= !proofs::announcements_complete(
+                                    engine,
+                                    &prepared.payment.mana,
+                                    &costs,
+                                    None,
+                                    &[],
+                                );
                                 // Alternative and additional costs can replace or extend the pip
                                 // vector. Announce Phyrexian branches against that final vector.
                                 for final_flex in phyrexian_choices(&prepared.payment.mana) {
@@ -542,7 +645,14 @@ fn spell_payable(
                                         &mut remaining,
                                         Some(battlefield_abilities),
                                     ) {
-                                        return true;
+                                        return Availability::Available;
+                                    } else if !proofs::payment_impossible(
+                                        engine,
+                                        &prepared.payment,
+                                        prepared.convoke,
+                                        battlefield_abilities,
+                                    ) {
+                                        uncertain = true;
                                     }
                                 }
                             }
@@ -552,7 +662,11 @@ fn spell_payable(
             }
         }
     }
-    false
+    if uncertain {
+        Availability::Unknown
+    } else {
+        Availability::Unavailable
+    }
 }
 
 fn ability_payable(
@@ -562,10 +676,10 @@ fn ability_payable(
     effective: &EffectiveActivatedAbility,
     actions: &LegalActions,
     battlefield_abilities: &AbilityInventory,
-) -> bool {
+) -> Availability {
     let ability = &effective.definition;
     if !engine.ability_activatable(oid, effective.slot as usize, ability) {
-        return false;
+        return Availability::Unavailable;
     }
     if ability.is_mana_ability()
         && ability.storage_counter_split_mana().is_none()
@@ -573,7 +687,7 @@ fn ability_payable(
             .active_mana_options(oid, ability)
             .is_none_or(|options| options.is_empty())
     {
-        return false;
+        return Availability::Unavailable;
     }
     let idx = engine.state.player_idx(player).unwrap();
     let key = (u64::from(oid) << 32) | u64::from(effective.slot);
@@ -598,6 +712,14 @@ fn ability_payable(
     let program = engine.program_for_activation_occurrence(&effective.occurrence);
     let targets = actions.valid_targets_by_ability.get(&key);
     let modal = actions.activated_ability_modes.get(&key);
+    let mut uncertain = modal.is_some()
+        || ability.requires_opponent_target_choice()
+        || !proofs::announcements_complete(engine, &ManaCost::default(), &choices, targets, &[])
+        || ability.costs.iter().any(|cost| match cost {
+            AbilityCost::Mana(mana) => mana.has_x(),
+            AbilityCost::Tap | AbilityCost::SacrificeSelf | AbilityCost::Loyalty(_) => false,
+            _ => true,
+        });
     let mut xs = BTreeSet::from([0]);
     if ability.costs.iter().any(
         |c| matches!(c, AbilityCost::Mana(mana) | AbilityCost::Waterbend(mana) if mana.has_x()),
@@ -626,7 +748,7 @@ fn ability_payable(
                 );
                 for selected_modes in modes {
                     if remaining == 0 {
-                        return false;
+                        return Availability::Unknown;
                     }
                     let activation_targets = if let Some(modal) = &ability.modal {
                         let command = rv1::ActivateAbility {
@@ -697,6 +819,13 @@ fn ability_payable(
                     let Ok(preliminary) = prepare(&[]) else {
                         continue;
                     };
+                    uncertain |= !proofs::announcements_complete(
+                        engine,
+                        &preliminary.mana,
+                        &choices,
+                        None,
+                        &[],
+                    );
                     for flex in phyrexian_choices(&preliminary.mana) {
                         let Ok(cost) = prepare(&flex) else {
                             continue;
@@ -709,14 +838,25 @@ fn ability_payable(
                             &mut remaining,
                             Some(battlefield_abilities),
                         ) {
-                            return true;
+                            return Availability::Available;
+                        } else if !proofs::payment_impossible(
+                            engine,
+                            &cost,
+                            false,
+                            battlefield_abilities,
+                        ) {
+                            uncertain = true;
                         }
                     }
                 }
             }
         }
     }
-    false
+    if uncertain {
+        Availability::Unknown
+    } else {
+        Availability::Unavailable
+    }
 }
 #[cfg(test)]
 mod tests {
@@ -773,6 +913,19 @@ mod tests {
                     .map(|&slot| e.state.players[idx].hand[slot as usize]),
             )
             .collect()
+    }
+
+    #[test]
+    fn mana_only_probe_preserves_tap_triggers_and_does_not_mutate_state() {
+        let mut e = engine();
+        let forest = put(&mut e, "Forest", rv1::DevZone::Battlefield);
+        let creature = put(&mut e, "Volatile Wanderglyph", rv1::DevZone::Battlefield);
+        let mana = &e.effective_activated_abilities(forest)[0].definition;
+        let before = serde_json::to_vec(&e.state).unwrap();
+        assert_eq!(proofs::mana_only(&e, 0, forest, mana), Some(true));
+        // The same pure mana effect on this source would also cause its loot trigger.
+        assert_eq!(proofs::mana_only(&e, 0, creature, mana), Some(false));
+        assert_eq!(serde_json::to_vec(&e.state).unwrap(), before);
     }
 
     #[test]

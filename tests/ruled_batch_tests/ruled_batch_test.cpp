@@ -12733,6 +12733,7 @@ TEST_F(RuledBatchTest, AutomationOffersArePrivateAndRoundTripExactStackReference
     auto *state = (*batch.mutable_legal_by_player())[p1->getPlayerId()].mutable_automation();
     state->set_revision(7);
     state->set_auto_pass(true);
+    state->set_stop_reason(ruled::v1::AUTOMATION_STOP_REASON_SPELL);
     auto *rule = state->add_rules();
     rule->set_rule_id(11);
     rule->set_description("private preference");
@@ -12754,6 +12755,8 @@ TEST_F(RuledBatchTest, AutomationOffersArePrivateAndRoundTripExactStackReference
     EXPECT_FALSE(mine.has_automation_continuation());
     EXPECT_NE(offer.stack().object_id(), reference->object_id());
     EXPECT_EQ(mine.legal_by_player().at(p1->getPlayerId()).automation().rules(0).rule_id(), 11u);
+    EXPECT_EQ(mine.legal_by_player().at(p1->getPlayerId()).automation().stop_reason(),
+              ruled::v1::AUTOMATION_STOP_REASON_SPELL);
     ruled::v1::RuledCommand command;
     auto *yield = command.mutable_update_automation()->mutable_yield_to();
     yield->set_mode(ruled::v1::AUTOMATION_YIELD_MODE_STACK_ITEM);

@@ -21154,6 +21154,7 @@ TEST_F(RuledClientTest, AutomationSnapshotSurvivesCourtesyPreviewButNotAuthority
     ruled::v1::RuledEventBatch batch;
     auto *automation = (*batch.mutable_legal_by_player())[kLocalPlayer].mutable_automation();
     automation->set_revision(18);
+    automation->set_stop_reason(ruled::v1::AUTOMATION_STOP_REASON_UNCERTAIN);
     automation->set_full_control(true);
     automation->set_auto_pass(true);
     automation->add_stack_offers()->mutable_stack()->set_object_id(701);

@@ -69,7 +69,7 @@ still depend on the embedded corpus.
 
 ### Fork wire compatibility
 
-The upstream integration uses the shared `kRuledProtocolVersion` (10017) on both client and
+The upstream integration uses the shared `kRuledProtocolVersion` (10018) on both client and
 server. Deploy matching updated fork clients and Servatrice together; protocol 14 peers are
 rejected before login. `Command_CreateGame.ruled_game` keeps field 15 and upstream
 `shuffle_players` uses field 16. The create-game UI and relay disable player shuffling for ruled

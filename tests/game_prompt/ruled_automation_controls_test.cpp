@@ -113,6 +113,34 @@ TEST(RuledAutomationControlsTest, FullControlAndAutoPassDisplayOnlyAcknowledgedS
     EXPECT_EQ(sent.size(), before) << "spectators, replay and inactive games have no command authority";
 }
 
+TEST(RuledAutomationControlsTest, AutoPassExplainsEngineStopsWithoutOverridingFullControl)
+{
+    RuledAutomationControls controls;
+    auto state = ready();
+    state.set_auto_pass(true);
+    auto *status = controls.findChild<QLabel *>("ruledAutomationStatus");
+    ASSERT_NE(status, nullptr);
+    for (const auto &[reason, text] : std::vector<std::pair<rv1::AutomationStopReason, QString>>{
+             {rv1::AUTOMATION_STOP_REASON_PHASE_STOP, "phase stop"},
+             {rv1::AUTOMATION_STOP_REASON_LAND, "Land play available"},
+             {rv1::AUTOMATION_STOP_REASON_SPELL, "Spell available"},
+             {rv1::AUTOMATION_STOP_REASON_ABILITY, "Ability available"},
+             {rv1::AUTOMATION_STOP_REASON_SPECIAL_ACTION, "Special action available"},
+             {rv1::AUTOMATION_STOP_REASON_UNCERTAIN, "availability uncertain"},
+             {rv1::AUTOMATION_STOP_REASON_WAITING_FOR_PRIORITY, "Waiting for priority"},
+             {rv1::AUTOMATION_STOP_REASON_REQUIRED_CHOICE, "choice"},
+             {rv1::AUTOMATION_STOP_REASON_MISSING_POLICY, "phase-stop settings"}}) {
+        state.set_stop_reason(reason);
+        controls.setControlState(state, 0, true, false, true);
+        EXPECT_TRUE(status->text().contains(text)) << status->text().toStdString();
+    }
+    state.set_full_control(true);
+    state.set_stop_reason(rv1::AUTOMATION_STOP_REASON_SPELL);
+    controls.setControlState(state, 0, true, false, true);
+    EXPECT_TRUE(status->text().contains("Full Control"));
+    EXPECT_FALSE(status->text().contains("Spell available"));
+}
+
 TEST(RuledAutomationControlsTest, StackMenuUsesExactOfferedIdentityAndSeparatesYieldFromAnswers)
 {
     RuledAutomationControls controls;
