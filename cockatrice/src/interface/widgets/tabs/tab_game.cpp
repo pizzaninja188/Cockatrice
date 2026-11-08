@@ -83,6 +83,7 @@
 #include <QClipboard>
 #include <QCloseEvent>
 #include <QCompleter>
+#include <QDataStream>
 #include <QDateTime>
 #include <QDebug>
 #include <QDir>
@@ -164,6 +165,19 @@ class Message;
 
 namespace
 {
+// QMainWindow's saved state stores each dock's object name as a QDataStream QString — a 32-bit
+// length in UTF-16 code units followed by UTF-16 data — so searching the raw bytes for the ASCII
+// name never matches. Serializing the name the same way (QMainWindow::saveState uses Qt_5_0)
+// yields exactly the bytes the state contains for a dock that was present when it was saved.
+QByteArray serializedDockName(const QString &name)
+{
+    QByteArray encoded;
+    QDataStream stream(&encoded, QIODevice::WriteOnly);
+    stream.setVersion(QDataStream::Qt_5_0);
+    stream << name;
+    return encoded;
+}
+
 class RuledCombatArrowItem : public ArrowItem
 {
 public:
@@ -2721,13 +2735,14 @@ void TabGame::loadLayout()
         const QByteArray savedState = layouts.getGamePlayAreaLayoutState();
         restoreGeometry(layouts.getGamePlayAreaGeometry());
         restoreState(savedState);
-        // Fork: a layout saved before the Prompt dock existed does not mention it, which leaves the
-        // dock outside the restored layout. Dock it above the message log for those sessions only;
-        // afterwards its own saved position, floating state and visibility win.
-        if (promptDock && !savedState.contains("promptDock")) {
+        // Fork: a layout saved before the Prompt dock existed does not mention it, and Qt only
+        // re-adds an unmentioned dock when the path it held before the restore still exists in the
+        // restored layout. Place the new dock itself in that case — never re-dock or split another
+        // dock, which would pull it out of the area the saved layout gave it. Every dock the state
+        // does mention, including a hidden or floating Prompt dock, keeps its restored state.
+        if (promptDock && !savedState.contains(serializedDockName(promptDock->objectName()))) {
             promptDock->setFloating(false);
             addDockWidget(Qt::RightDockWidgetArea, promptDock);
-            splitDockWidget(promptDock, messageLayoutDock, Qt::Vertical);
             promptDock->show();
         }
     }
