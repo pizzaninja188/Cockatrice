@@ -119,6 +119,9 @@ private:
     QVBoxLayout *deckViewContainerLayout;
     QWidget *gamePlayAreaWidget, *deckViewContainerWidget;
     QDockWidget *cardInfoDock, *messageLayoutDock, *playerListDock, *replayDock, *historyDock;
+    /// Fork: the ruled prompt panel lives in its own dock so it can be floated or closed
+    /// independently of the message log. Null on replay tabs and in non-ruled games.
+    QDockWidget *promptDock = nullptr;
     GamePromptWidget *gamePromptWidget = nullptr;
     /// Owner-private current library top and engine-offered actions for it.
     QWidget *ruledLibraryTopWidget = nullptr;

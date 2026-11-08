@@ -430,7 +430,7 @@ The command path stays fork-owned:
   the text stops being text — everything past it is a typed oneof, which is what keeps the wire
   contract self-documenting and the replay log readable (the fork's no-scripting-DSL rule).
 - **`RuledDevConsoleWidget`** emits submissions and sends nothing. It owns command history,
-  file preview and busy controls in the existing Messages dock under the prompt panel.
+  file preview and busy controls in the Messages dock above the log.
 - **`RuledDevConsoleRunner`** parses through the existing parser, prevalidates every preset line
   and resolves seat ordinals before sending anything, then waits for each engine acknowledgment.
 - **`ruled_dev_console_game`** attaches the runner to `RuledActions::sendRuledCommandExpectingAck`

@@ -299,6 +299,10 @@ TabGame::TabGame(TabSupervisor *_tabSupervisor,
     addDockWidget(Qt::RightDockWidgetArea, cardInfoDock);
     addDockWidget(Qt::RightDockWidgetArea, playerListDock);
     addDockWidget(Qt::RightDockWidgetArea, messageLayoutDock);
+    if (promptDock) {
+        addDockWidget(Qt::RightDockWidgetArea, promptDock);
+        splitDockWidget(promptDock, messageLayoutDock, Qt::Vertical);
+    }
 
     mainWidget = new QStackedWidget(this);
     mainWidget->setObjectName("mainWidget");
@@ -1237,6 +1241,9 @@ void TabGame::retranslateUi()
     }
     cardInfoDock->setWindowTitle(tr("Card Info") + (cardInfoDock->isWindow() ? tabText : QString()));
     messageLayoutDock->setWindowTitle(tr("Messages") + (messageLayoutDock->isWindow() ? tabText : QString()));
+    if (promptDock) {
+        promptDock->setWindowTitle(tr("Prompt") + (promptDock->isWindow() ? tabText : QString()));
+    }
     if (historyDock) {
         historyDock->setWindowTitle(tr("Game History") + (historyDock->isWindow() ? tabText : QString()));
     }
@@ -1323,6 +1330,9 @@ void TabGame::retranslateUi()
     dockToActions[cardInfoDock].menu->setTitle(tr("Card Info"));
     dockToActions[messageLayoutDock].menu->setTitle(tr("Messages"));
     dockToActions[playerListDock].menu->setTitle(tr("Player List"));
+    if (promptDock) {
+        dockToActions[promptDock].menu->setTitle(tr("Prompt"));
+    }
     RuledAutomationUi::retranslateUi(*this);
 
     if (historyDock) {
@@ -2640,6 +2650,9 @@ void TabGame::createViewMenuItems()
     viewMenu = new QMenu(this);
 
     registerDockWidget(viewMenu, cardInfoDock, {250, 360});
+    if (promptDock) {
+        registerDockWidget(viewMenu, promptDock, {250, 180});
+    }
     registerDockWidget(viewMenu, messageLayoutDock, {250, 200});
     registerDockWidget(viewMenu, playerListDock, {250, 50});
     RuledAutomationUi::registerDock(*this);
@@ -2705,8 +2718,18 @@ void TabGame::loadLayout()
         restoreGeometry(layouts.getReplayPlayAreaGeometry());
         restoreState(layouts.getReplayPlayAreaLayoutState());
     } else {
+        const QByteArray savedState = layouts.getGamePlayAreaLayoutState();
         restoreGeometry(layouts.getGamePlayAreaGeometry());
-        restoreState(layouts.getGamePlayAreaLayoutState());
+        restoreState(savedState);
+        // Fork: a layout saved before the Prompt dock existed does not mention it, which leaves the
+        // dock outside the restored layout. Dock it above the message log for those sessions only;
+        // afterwards its own saved position, floating state and visibility win.
+        if (promptDock && !savedState.contains("promptDock")) {
+            promptDock->setFloating(false);
+            addDockWidget(Qt::RightDockWidgetArea, promptDock);
+            splitDockWidget(promptDock, messageLayoutDock, Qt::Vertical);
+            promptDock->show();
+        }
     }
 }
 
@@ -2723,6 +2746,12 @@ void TabGame::actResetLayout()
     addDockWidget(Qt::RightDockWidgetArea, cardInfoDock);
     addDockWidget(Qt::RightDockWidgetArea, playerListDock);
     addDockWidget(Qt::RightDockWidgetArea, messageLayoutDock);
+    if (promptDock) {
+        promptDock->setVisible(true);
+        promptDock->setFloating(false);
+        addDockWidget(Qt::RightDockWidgetArea, promptDock);
+        splitDockWidget(promptDock, messageLayoutDock, Qt::Vertical);
+    }
 
     if (historyDock) {
         historyDock->setVisible(true);
@@ -2746,6 +2775,9 @@ void TabGame::actResetLayout()
         cardInfoDock->resize(250, 360);
         messageLayoutDock->resize(250, 250);
         playerListDock->resize(250, 50);
+    }
+    if (promptDock) {
+        promptDock->resize(250, 180);
     }
     RuledAutomationUi::resetLayout(*this);
 }
@@ -2933,7 +2965,15 @@ void TabGame::createMessageDock(bool bReplay)
         }
         connect(gamePromptWidget, &GamePromptWidget::passPriorityRequested, game->getGameEventHandler(),
                 &GameEventHandler::handleNextTurn);
-        messageLogLayout->addWidget(gamePromptWidget);
+
+        // Fork: the prompt gets its own dock so it can be floated or closed independently of the
+        // message log. Placement happens with the other docks in the constructor.
+        promptDock = new QDockWidget(this);
+        promptDock->setObjectName("promptDock");
+        promptDock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable |
+                                QDockWidget::DockWidgetMovable);
+        promptDock->setWidget(gamePromptWidget);
+        promptDock->setFloating(false);
 
         ruledLibraryTopWidget = new QWidget(this);
         auto *libraryTopLayout = new QHBoxLayout(ruledLibraryTopWidget);
@@ -2967,8 +3007,9 @@ void TabGame::createMessageDock(bool bReplay)
         ruledLibraryTopActions = nullptr;
     }
 
-    // Fork: dev-loop console, under the prompt panel in the same dock. Hidden unless explicitly
-    // asked for; the enforcing gate is engine-side, this only keeps it out of a normal session.
+    // Fork: dev-loop console, under the library-top bar in the Messages dock. Hidden unless
+    // explicitly asked for; the enforcing gate is engine-side, this only keeps it out of a normal
+    // session.
     if (!bReplay && RuledActions::isRuledGame(game) && RuledDevConsoleWidget::isEnabled()) {
         devConsoleWidget = new RuledDevConsoleWidget(this);
         connectRuledDevConsole(devConsoleWidget, game);

@@ -401,10 +401,23 @@ void RuledDiagnosticViewer::openFromCommandLine(MainWindow *window, const QComma
                 liveTab->gamePromptWidget->setLocalPlayerHasPriority(false);
                 gameMenu.insert("automation_primary_follows_prompt", enabled && !primary->isEnabled());
                 auto *dock = liveTab->findChild<QDockWidget *>(QStringLiteral("ruledControlsDock"));
+                auto *promptDock = liveTab->findChild<QDockWidget *>(QStringLiteral("promptDock"));
                 gameMenu.insert("automation_has_separate_dock",
                                 dock && dock->widget() == controls &&
-                                    !liveTab->messageLayoutDock->isAncestorOf(controls) &&
-                                    liveTab->messageLayoutDock->isAncestorOf(liveTab->gamePromptWidget));
+                                    !liveTab->messageLayoutDock->isAncestorOf(controls));
+                gameMenu.insert("prompt_has_separate_dock",
+                                promptDock && promptDock->widget() == liveTab->gamePromptWidget &&
+                                    !liveTab->messageLayoutDock->isAncestorOf(liveTab->gamePromptWidget) &&
+                                    !liveTab->messageLayoutDock->isAncestorOf(controls));
+                gameMenu.insert("prompt_dock_in_view_menu",
+                                promptDock && liveTab->dockToActions.contains(promptDock));
+                if (promptDock) {
+                    promptDock->setFloating(true);
+                    promptDock->show();
+                    gameMenu.insert("prompt_dock_floats_independently",
+                                    promptDock->isFloating() && !liveTab->messageLayoutDock->isFloating());
+                    promptDock->setFloating(false);
+                }
                 gameMenu.insert("automation_dock_in_view_menu", dock && liveTab->dockToActions.contains(dock));
                 if (dock) {
                     dock->setFloating(true);

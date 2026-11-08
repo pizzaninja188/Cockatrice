@@ -19,7 +19,9 @@ to graphics objects. Keep widget dependencies out of `libcockatrice_game`.
 
 ## Prompt UI
 
-`game_prompt_widget` is fork-owned and stays in the Messages dock above the log, ruled and non-replay only.
+`game_prompt_widget` is fork-owned and lives in its own **Prompt** dock above the Messages dock, ruled
+and non-replay only. Keep the two docks independent: never re-parent the prompt into the message log
+layout, and place the dock with the other docks in `TabGame` so each can be floated or closed alone.
 
 - One exclusive `PromptMode` and one `RuledPromptState` carry the active prompt. Add a new mechanic as an enum case and handle it in both visibility and label switches; do not add parallel booleans.
 - `TabGame::refreshRuledPromptState()` owns mode selection. `TabGame` otherwise handles placement and signal connections.
