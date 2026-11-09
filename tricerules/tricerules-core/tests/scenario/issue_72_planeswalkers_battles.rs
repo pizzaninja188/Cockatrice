@@ -457,6 +457,7 @@ fn defeated_siege_casts_back_face_with_exact_physical_identity() {
     };
     let command = RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            flex_payments: vec![],
             resolution_prompt_id: 0,
             chosen_object_ids: Vec::new(),
             decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision::CastSpell as i32,

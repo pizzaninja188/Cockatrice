@@ -57,7 +57,8 @@ namespace ruled_e2e
 constexpr quint64 kForcedSeed = 421700421700ULL;
 constexpr int kServatricePort = 47997;
 constexpr int kTriceRulesPort = 17391;
-constexpr int kOverallDeadlineMs = 120 * 1000;
+// The complete seeded scenario measured 139 seconds on Windows; leave bounded headroom.
+constexpr int kOverallDeadlineMs = 180 * 1000;
 
 QString envOr(const char *name, const QString &fallback);
 QString servatriceExePath();

@@ -403,6 +403,9 @@ message SubmitResolutionChoice {
   repeated int32 chosen_player_ids = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Required, nonzero identity of the exact active ResolutionChoiceRequired being answered.
   uint64 resolution_prompt_id = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // CR 118.13b: indexed Phyrexian color/life choices made immediately before this payment.
+  // Valid only for PAY_MANA and bound to resolution_prompt_id, including private previews.
+  repeated FlexPipPayment flex_payments = 11 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // A player's answer to a TriggerOrderRequired (CR 603.3b): put THIS trigger on the stack next.

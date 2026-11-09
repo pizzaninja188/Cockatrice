@@ -1710,6 +1710,7 @@ pub(crate) fn token_created_events(
 pub(crate) fn submit_resolution_choice(chosen: Vec<u32>) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            flex_payments: vec![],
             resolution_prompt_id: 0,
             chosen_object_ids: chosen,
             decision: 0,
@@ -1736,6 +1737,7 @@ pub(crate) fn submit_resolution_player_choice(chosen: Vec<i32>) -> RuledCommand 
 pub(crate) fn submit_resolution_decision(decision: rv1::ResolutionChoiceDecision) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            flex_payments: vec![],
             resolution_prompt_id: 0,
             chosen_object_ids: Vec::new(),
             decision: decision as i32,

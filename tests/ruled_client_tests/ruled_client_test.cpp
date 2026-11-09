@@ -21173,3 +21173,43 @@ TEST_F(RuledClientTest, AutomationSnapshotSurvivesCourtesyPreviewButNotAuthority
     state->revokeLocalActionAuthority();
     EXPECT_EQ(state->automation.revision(), 0u);
 }
+
+TEST_F(RuledClientTest, HybridPhyrexianResolutionChoicesRemainBoundAcrossPreviewSuspensionAndClear)
+{
+    RuledPayment model;
+    model.begin();
+    ruled::v1::FlexPipPayment white;
+    white.set_pip_index(2);
+    white.set_mana_color(ruled::v1::MANA_COLOR_WHITE);
+    EXPECT_FALSE(model.bindResolutionChoices(0, {white}));
+    ASSERT_TRUE(model.bindResolutionChoices(811, {white}));
+    EXPECT_FALSE(model.resolutionCommand(812));
+    auto command = model.resolutionCommand(811);
+    ASSERT_TRUE(command);
+    auto preview = model.requestAction(*command);
+    ASSERT_EQ(preview.resolution_choice().flex_payments_size(), 1);
+    EXPECT_EQ(preview.resolution_choice().flex_payments(0).mana_color(), ruled::v1::MANA_COLOR_WHITE);
+    EXPECT_EQ(preview.resolution_choice().flex_payments(0).pip_index(), 2u);
+    auto parent = model.suspend();
+    EXPECT_FALSE(model.resolutionCommand(811));
+    model.begin();
+    ruled::v1::FlexPipPayment life;
+    life.set_pip_index(0);
+    life.set_pay_life(true);
+    ASSERT_TRUE(model.bindResolutionChoices(812, {life}));
+    ASSERT_TRUE(parent.resolutionCommand(811));
+    EXPECT_FALSE(parent.resolutionCommand(812));
+    model = std::move(parent);
+    // Both the shared UI builder and the state-level Pay action retain the private choice.
+    ruled::v1::RuledCommand submitted;
+    submitted.mutable_submit_resolution_choice()->set_resolution_prompt_id(811);
+    submitted.mutable_submit_resolution_choice()->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
+    model.writePayment(submitted);
+    ASSERT_EQ(submitted.submit_resolution_choice().flex_payments_size(), 1);
+    EXPECT_EQ(submitted.submit_resolution_choice().flex_payments(0).mana_color(), ruled::v1::MANA_COLOR_WHITE);
+    model.clear();
+    EXPECT_FALSE(model.resolutionCommand(811));
+    model.begin();
+    ASSERT_TRUE(model.bindResolutionChoices(813, {life}));
+    EXPECT_TRUE(model.resolutionCommand(813)->submit_resolution_choice().flex_payments(0).pay_life());
+}

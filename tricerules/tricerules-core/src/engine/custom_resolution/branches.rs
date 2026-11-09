@@ -148,6 +148,7 @@ impl GameEngine {
                         player,
                         &payment,
                         &answer.restricted_mana,
+                        &answer.flex_payments,
                     )?;
                     let selection = answer
                         .payment

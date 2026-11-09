@@ -182,6 +182,7 @@ fn open_reflexive_program_choice(engine: &mut GameEngine) {
 fn select_branch(index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            flex_payments: vec![],
             resolution_prompt_id: 0,
             chosen_object_ids: Vec::new(),
             decision: ResolutionChoiceDecision::SelectBranch as i32,

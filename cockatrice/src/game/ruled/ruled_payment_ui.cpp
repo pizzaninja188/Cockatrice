@@ -524,12 +524,17 @@ bool RuledPaymentUi::beginAbilityActivation()
                     : (local.selectedTargets.size() != 1 || local.selectedTargets.first().ref.group_index() != 0)) ||
         RuledActions::gameplayInputLocked(actions->player->getGame()))
         return false;
+    // CR 118.13a: choose the Phyrexian branch before sending the announcement.
+    if (!resolvePendingAbilityFlexiblePips())
+        return false;
     ruled::v1::RuledCommand command;
     auto *begin = command.mutable_begin_ability_activation();
     begin->set_source_object_id(local.permanentOid);
     begin->set_expected_zone_change_generation(local.expectedZoneChangeGeneration);
     begin->set_ability_index(static_cast<quint32>(local.abilityIndex));
     begin->set_source_zone(local.sourceZone);
+    for (const auto &payment : local.flexPayments)
+        *begin->add_flex_payments() = payment;
     if (!handReturn) {
         const auto &target = local.selectedTargets.first();
         begin->mutable_own_target()->set_object_id(target.ref.object_id());
@@ -661,11 +666,7 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildPaymentCommand() con
             if (!state || !state->pendingChoice.has_value() ||
                 !state->isCurrentResolutionPrompt(state->pendingChoice->resolutionPromptId))
                 return std::nullopt;
-            ruled::v1::RuledCommand command;
-            auto *submission = command.mutable_submit_resolution_choice();
-            submission->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
-            submission->set_resolution_prompt_id(state->pendingChoice->resolutionPromptId);
-            return command;
+            return state->payment.resolutionCommand(state->pendingChoice->resolutionPromptId);
         }
         case Context::Attack: {
             const auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
@@ -741,6 +742,44 @@ bool RuledPaymentUi::startOrRefresh()
     }
     if (!model.active) {
         model.begin(nextContext != Context::Spell);
+        if (nextContext == Context::Resolution) {
+            const auto captured = *state->pendingChoice;
+            const auto transaction = model.transaction();
+            const auto cost = state->resolutionPaymentManaCost();
+            QVector<RuledFlexPip> pips;
+            for (const auto &pip : RuledPendingCast::parseFlexPips(cost))
+                if (pip.phyrexian)
+                    pips.append(pip);
+            QVector<ruled::v1::FlexPipPayment> payments;
+            if (!pips.isEmpty()) {
+                QPointer<RuledPlayerActions> actionsGuard(actions);
+                QScopedValueRollback<bool> guard(choosingLifePayment, true);
+                QVector<int> alternatives;
+                const bool accepted = promptFlexiblePipChoices(cost, captured.promptText, pips, alternatives);
+                if (!actionsGuard)
+                    return true;
+                if (!model.active || model.transaction() != transaction ||
+                    !state->isCurrentResolutionPrompt(captured.resolutionPromptId) || !state->pendingChoice ||
+                    state->pendingChoice->resolutionPromptSemantics != captured.resolutionPromptSemantics) {
+                    // A replacement offer may have arrived while the modal suppressed refresh.
+                    QTimer::singleShot(0, actionsGuard, [this] { startOrRefresh(); });
+                    return true;
+                }
+                if (!accepted) {
+                    model.clear();
+                    declineRuledResolutionPayment();
+                    return true;
+                }
+                QMap<QChar, int> unusedCost;
+                if (!RuledPendingCast::applyFlexChoicesToCost(unusedCost, payments, pips, alternatives)) {
+                    model.clear();
+                    declineRuledResolutionPayment();
+                    return true;
+                }
+            }
+            if (!model.bindResolutionChoices(captured.resolutionPromptId, payments))
+                return true;
+        }
         // Reuse the existing life-payment announcement. Hybrid mana remains flexible in the
         // authoritative preview; only Phyrexian life choices must be fixed before payment.
         QVector<RuledFlexPip> lifeChoices;

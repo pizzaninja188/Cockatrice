@@ -153,7 +153,26 @@ pub(in crate::engine) fn normalize(
     reduction: u32,
     life_pips: &[rv1::FlexPipPayment],
 ) -> Result<Vec<Demand>, EngineError> {
-    let phyrexian = validated_phyrexian_choices(cost, life_pips)?;
+    normalize_branches(cost, x, increase, reduction, Some(life_pips))
+}
+
+/// Read-only offers consider every Phyrexian branch; commits still require explicit choices.
+/// Deduplicate equal demands as each pip is expanded, as for ordinary hybrid costs.
+pub(in crate::engine) fn unannounced_demands(cost: &ManaCost) -> Result<Vec<Demand>, EngineError> {
+    normalize_branches(cost, 0, 0, 0, None)
+}
+
+fn normalize_branches(
+    cost: &ManaCost,
+    x: u32,
+    increase: u32,
+    reduction: u32,
+    life_pips: Option<&[rv1::FlexPipPayment]>,
+) -> Result<Vec<Demand>, EngineError> {
+    let phyrexian = life_pips
+        .map(|choices| validated_phyrexian_choices(cost, choices))
+        .transpose()?;
+
     let mut demands = vec![Demand {
         amounts: [0, 0, 0, 0, 0, 0, increase],
         life: 0,
@@ -174,9 +193,23 @@ pub(in crate::engine) fn normalize(
             ],
             ManaSymbol::MonoHybrid(n, c) => vec![(super::mana::color_index(*c), 1), (6, *n)],
             ManaSymbol::Phyrexian(_) | ManaSymbol::HybridPhyrexian(_, _) => {
-                match phyrexian[index].expect("validated Phyrexian choice") {
-                    PhyrexianPayment::Life => vec![(7, 2)],
-                    PhyrexianPayment::Mana(color) => vec![(super::mana::color_index(color), 1)],
+                if let Some(phyrexian) = &phyrexian {
+                    match phyrexian[index].expect("validated Phyrexian choice") {
+                        PhyrexianPayment::Life => vec![(7, 2)],
+                        PhyrexianPayment::Mana(color) => vec![(super::mana::color_index(color), 1)],
+                    }
+                } else {
+                    match pip {
+                        ManaSymbol::Phyrexian(color) => {
+                            vec![(super::mana::color_index(*color), 1), (7, 2)]
+                        }
+                        ManaSymbol::HybridPhyrexian(a, b) => vec![
+                            (super::mana::color_index(*a), 1),
+                            (super::mana::color_index(*b), 1),
+                            (7, 2),
+                        ],
+                        _ => unreachable!(),
+                    }
                 }
             }
         };

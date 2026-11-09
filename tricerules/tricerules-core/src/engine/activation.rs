@@ -476,9 +476,9 @@ impl GameEngine {
             .map_err(|_| EngineError::Illegal("unknown activation source zone"))?
         {
             rv1::AbilitySourceZone::Hand => {
-                if !command.cost_selections.is_empty() || !command.flex_payments.is_empty() {
+                if !command.cost_selections.is_empty() {
                     return Err(EngineError::Illegal(
-                        "pre-announced ability cost and flex payments are unsupported",
+                        "pre-announced ability cost selections are unsupported",
                     ));
                 }
                 return self.begin_hand_tapped_creature_activation(player, command);
@@ -548,9 +548,9 @@ impl GameEngine {
                 "activation source is not controlled on the battlefield",
             ));
         }
-        if !command.cost_selections.is_empty() || !command.flex_payments.is_empty() {
+        if !command.cost_selections.is_empty() {
             return Err(EngineError::Illegal(
-                "pre-announced ability cost and flex payments are unsupported",
+                "pre-announced ability cost selections are unsupported",
             ));
         }
         let program = self.program_for_activation_occurrence(&effective.occurrence);
@@ -565,6 +565,24 @@ impl GameEngine {
                 "ability does not support this opponent-choice announcement",
             ));
         }
+        // Validate the indexed branch before another player receives the target prompt.
+        // Preparation records costs but does not spend mana, life, or tap the source.
+        let announced_costs = self.prepare_ability_costs(
+            player,
+            idx,
+            source.id,
+            &effective.definition.costs,
+            &command.flex_payments,
+            &[],
+            &[],
+            0,
+            0,
+            self.activated_mana_reduction(player, source.id, &effective.definition)?,
+        )?;
+        super::payment::demand::validated_phyrexian_choices(
+            &announced_costs.mana,
+            &command.flex_payments,
+        )?;
         let own = command
             .own_target
             .as_ref()
@@ -580,6 +598,7 @@ impl GameEngine {
             reserved_object_id: self.state.next_object_id,
             announced_targets: vec![*own],
             source_description: events::object_display_name(&self.state, self.registry, source.id),
+            flex_payments: command.flex_payments.clone(),
             ..Default::default()
         };
         let groups =
@@ -808,7 +827,7 @@ impl GameEngine {
             idx,
             source.id,
             &base_costs,
-            &[],
+            &command.flex_payments,
             &[],
             &[],
             0,
@@ -842,6 +861,7 @@ impl GameEngine {
             reserved_object_id: self.state.next_object_id,
             source_description: events::object_display_name(&self.state, self.registry, source.id),
             locked_total_cost: prepared_costs.total_cost_label()?,
+            flex_payments: command.flex_payments.clone(),
             return_tapped_creature_candidates: self
                 .tapped_creature_return_candidates(player)
                 .into_iter()
@@ -968,7 +988,7 @@ impl GameEngine {
                         .ok_or(EngineError::UnknownPlayer(pending.actor_player_id))?,
                     pending.source_object_id,
                     &ability.costs,
-                    &[],
+                    &pending.flex_payments,
                     &[],
                     &[],
                     0,
@@ -1027,6 +1047,23 @@ impl GameEngine {
                     && pending.stage() == rv1::AbilityActivationStage::Payment
                     && self.state.pending_resolution.is_none()
             })
+    }
+
+    fn apply_staged_activation_flex_payment(
+        costs: &mut PreparedPaymentCosts,
+        pending: &rv1::PendingAbilityActivation,
+        command: &rv1::CommitAbilityActivation,
+    ) -> Result<(), EngineError> {
+        if pending.flex_payments.is_empty() {
+            // Legacy non-Phyrexian flexible costs still finish their selection at payment.
+            costs.flex_payments = command.flex_payments.clone();
+        } else if !command.flex_payments.is_empty() || costs.flex_payments != pending.flex_payments
+        {
+            return Err(EngineError::Illegal(
+                "announced activation flex choices are locked",
+            ));
+        }
+        Ok(())
     }
 
     pub(super) fn prepare_pending_ability_payment(
@@ -1155,7 +1192,7 @@ impl GameEngine {
             costs.eligible_restricted_mana =
                 self.eligible_restricted_mana_for_ability(idx, source.id);
             costs.restricted_mana = command.restricted_mana.clone();
-            costs.flex_payments = command.flex_payments.clone();
+            Self::apply_staged_activation_flex_payment(&mut costs, pending, command)?;
             return Ok((costs, self.payment_object_ref(source.id), false));
         }
         if command.return_tapped_creature.is_some() {
@@ -1193,7 +1230,7 @@ impl GameEngine {
             .ok_or(EngineError::Illegal("missing locked activation cost"))?;
         costs.eligible_restricted_mana = self.eligible_restricted_mana_for_ability(idx, source.id);
         costs.restricted_mana = command.restricted_mana.clone();
-        costs.flex_payments = command.flex_payments.clone();
+        Self::apply_staged_activation_flex_payment(&mut costs, pending, command)?;
         Ok((costs, self.payment_object_ref(source.id), false))
     }
 

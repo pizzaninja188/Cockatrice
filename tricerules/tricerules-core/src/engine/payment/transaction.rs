@@ -820,6 +820,7 @@ impl GameEngine {
         player: PlayerId,
         payment: &PendingManaPayment,
         restricted_mana: &[rv1::ManaSpendSelection],
+        flex_payments: &[rv1::FlexPipPayment],
     ) -> Result<PreparedPaymentCosts, EngineError> {
         let idx = self
             .state
@@ -832,17 +833,7 @@ impl GameEngine {
         } else {
             payment.mana_cost.clone()
         };
-        // Resolution choices have no flexible-pip announcement field. Do not offer or
-        // infer a hybrid Phyrexian branch that the player cannot submit.
-        if cost
-            .pips
-            .iter()
-            .any(|pip| matches!(pip, ManaSymbol::HybridPhyrexian(_, _)))
-        {
-            return Err(EngineError::Illegal(
-                "hybrid Phyrexian resolution payment is unavailable",
-            ));
-        }
+        super::demand::validated_phyrexian_choices(&cost, flex_payments)?;
         Ok(PreparedPaymentCosts {
             waterbend_limit: payment
                 .waterbend
@@ -863,7 +854,7 @@ impl GameEngine {
             x_value: 0,
             extra_generic: 0,
             generic_reduction: 0,
-            flex_payments: vec![],
+            flex_payments: flex_payments.to_vec(),
             restricted_mana: restricted_mana.to_vec(),
             eligible_restricted_mana: self.eligible_restricted_mana_for_resolution_payment(idx),
         })
@@ -4124,7 +4115,7 @@ mod convoke_transaction_tests {
                 .unwrap();
             let pending = PendingManaPayment::from_cost(0, ManaCost::parse("{1}").unwrap(), 0);
             let costs = engine
-                .prepare_resolution_payment_costs(0, &pending, &[])
+                .prepare_resolution_payment_costs(0, &pending, &[], &[])
                 .unwrap();
             let mut plan = costs.finish(&engine.state).unwrap();
             plan.debits.extend(object_plan.debits);
@@ -4193,7 +4184,7 @@ mod convoke_transaction_tests {
         let (mut engine, _, _) = battlefield_self_exile_fixture();
         let pending = PendingManaPayment::from_cost(0, ManaCost::parse("{1}{G}").unwrap(), 0);
         let costs = engine
-            .prepare_resolution_payment_costs(0, &pending, &[])
+            .prepare_resolution_payment_costs(0, &pending, &[], &[])
             .unwrap();
         let plan = costs.finish(&engine.state).unwrap();
         let receipt = engine.commit_cost_transaction(plan).unwrap();

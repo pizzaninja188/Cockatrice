@@ -79,7 +79,10 @@ bool supportedSchema()
         // command indices, player ids and phase ids never enter the object-identity domain.
         // can_source_rule is a recipient-private eligibility bit, not an identity handle.
         // stop_reason is a recipient-private enum; it carries no object or player identity.
-        const QByteArray expected("92590bffc058c029f86aea0d0ccec831062b09b3c147053da633ae7a4754237b");
+        // SubmitResolutionChoice.flex_payments reuses the private FlexPipPayment value:
+        // pip indices, life flags and color enums are not object identities. The enclosing
+        // resolution_prompt_id remains checked on both direct submissions and previews.
+        const QByteArray expected("548ae30b9f97173f2e17a6b831ac4ac4afa412ab9418426c40f38f75605b1dba");
         if (digest != expected)
             qCritical() << "ruled presentation schema needs an identity audit:" << digest;
         return digest == expected;

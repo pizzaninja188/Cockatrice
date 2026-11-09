@@ -172,7 +172,11 @@ replies, and allows one submission after an authoritative complete preview. Spel
 engine transaction without accepting a client-supplied total. `RuledPaymentUi` adapts that model
 to spell casts, activated abilities, permanent actions, and parked resolution payments. It owns
 object highlights, mana contribution clicks, engine cancellation, and nested suspension around
-mana abilities. Previews never tap cards or spend mana. Historical Waterbend acceptance
+mana abilities. Previews never tap cards or spend mana.
+Resolution Phyrexian choices are bound to the exact prompt in `RuledPayment`; its suspended copy
+retains them through nested mana work. A new prompt or cleared model cannot reuse the receipt.
+Staged opponent-target and hand-return activations announce their Phyrexian choices in Begin;
+reconnect consumes the private engine receipt and already-normalized locked cost. Historical Waterbend acceptance
 [is recorded on issue #146](https://github.com/pizzaninja188/Cockatrice/issues/146#issuecomment-5458728218).
 
 `ruled_payment_progression.cpp` implements the same `RuledPaymentUi` bridge's cast/activation

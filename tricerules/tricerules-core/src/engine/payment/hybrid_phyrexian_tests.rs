@@ -221,13 +221,13 @@ fn hybrid_chosen_color_needs_as_any_color_permission_and_insufficient_life_stays
 }
 
 #[test]
-fn hybrid_resolution_payment_has_no_submit_path_and_is_unavailable_even_with_mana() {
+fn hybrid_resolution_payment_offers_mana_or_life_but_requires_an_explicit_branch() {
     let e = payment_engine();
     let cost = ManaCost::parse("{G/W/P}").unwrap();
-    assert!(!e.can_pay_resolution_mana(0, &cost));
+    assert!(e.can_pay_resolution_mana(0, &cost));
     let payment = crate::state::PendingManaPayment::from_cost(0, cost, 0);
     assert!(e
-        .prepare_resolution_payment_costs(0, &payment, &[])
+        .prepare_resolution_payment_costs(0, &payment, &[], &[])
         .is_err());
     assert!(e.can_pay_resolution_mana(0, &ManaCost::parse("{G/P}").unwrap()));
 }
@@ -500,86 +500,270 @@ const HYBRID_DEFERRED_OPPONENT: &str = r#"(id:"hybrid_opponent_probe",name:"Hybr
 const HYBRID_HAND_RETURN: &str = r#"(id:"hybrid_hand_return_probe",name:"Hybrid Hand Return Probe",face_id:"hybrid_hand_return_probe",types:["Land"],
  activated_abilities:[(ability_id:"activate",presentation:Fallback,source_zone:Hand,timing:SorcerySpeed,
  costs:[Mana("{G/W/P}"),ReturnTappedCreature],effect:[PutAbilitySourceOntoBattlefield])])"#;
+const HYBRID_PAYMENT_MANA: &str = r#"(id:"hybrid_payment_mana",name:"Hybrid Payment Mana",face_id:"hybrid_payment_mana",types:["Land"],
+ activated_abilities:[(ability_id:"mana",presentation:Fallback,costs:[Tap],effect:[ProduceMana(options:[(c:1)]),DamagePlayer(amount:1,who:Controller)])])"#;
+
+fn hybrid_nested_mana(e: &mut GameEngine, source: ObjectId) {
+    e.state.add_damage_prevention_shield(0, 1);
+    e.state.add_damage_prevention_shield(0, 1);
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::ActivateAbility(
+                rv1::ActivateAbility {
+                    source_object_id: source,
+                    ..Default::default()
+                },
+            )),
+        },
+    )
+    .unwrap();
+    let nested = e.state.pending_resolution.as_ref().unwrap();
+    let answer = rv1::SubmitResolutionChoice {
+        resolution_prompt_id: nested.resolution_prompt_id.get(),
+        chosen_object_ids: vec![nested.presentation.candidates[0]],
+        ..Default::default()
+    };
+    if e.state.pending_ability_activation.is_some() {
+        for viewer in [0, 1, -1] {
+            assert!(e
+                .pending_ability_activation_for(viewer)
+                .unwrap()
+                .flex_payments
+                .is_empty());
+        }
+    }
+    let before = e.diagnostic_snapshot().unwrap();
+    let unrelated = rv1::SubmitResolutionChoice {
+        flex_payments: vec![rv1::FlexPipPayment {
+            pip_index: 0,
+            pay_life: true,
+            mana_color: 0,
+        }],
+        ..answer.clone()
+    };
+    assert!(e
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(unrelated))
+            }
+        )
+        .is_err());
+    assert_eq!(e.diagnostic_snapshot().unwrap(), before);
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(answer)),
+        },
+    )
+    .unwrap();
+}
+
 const HYBRID_CREATURE: &str = r#"(id:"hybrid_creature_probe",name:"Hybrid Creature Probe",face_id:"hybrid_creature_probe",types:["Creature"],power:2,toughness:2)"#;
 
 #[test]
-fn hybrid_announcement_deferred_ability_profiles_are_unoffered_and_reject_before_pending_state() {
+fn hybrid_deferred_activation_branches_are_announced_locked_and_paid_once() {
     for (card, zone) in [
         ("hybrid_opponent_probe", Zone::Battlefield),
         ("hybrid_hand_return_probe", Zone::Hand),
     ] {
-        let mut e = cast_fixture(&[
-            HYBRID_DEFERRED_OPPONENT,
-            HYBRID_HAND_RETURN,
-            HYBRID_CREATURE,
-        ]);
-        let own = put_probe(&mut e, "hybrid_creature_probe", Zone::Battlefield, 0, true);
-        put_probe(&mut e, "hybrid_creature_probe", Zone::Battlefield, 1, false);
-        let source = put_probe(&mut e, card, zone, 0, false);
-        let ability = e
-            .registry
-            .get(card)
-            .unwrap()
-            .primary_face()
-            .activated_abilities[0]
-            .clone();
-        let ability_index = 0u32;
-        assert!(!e.ability_activatable(source, ability_index as usize, &ability));
-        let batch = e.initial_response_batch();
-        if zone == Zone::Hand {
-            let action = batch.legal_by_player[&0]
-                .zone_ability_actions
-                .iter()
-                .find(|action| action.object_id == source && action.ability_index == ability_index)
-                .unwrap();
-            assert!(!action.ability.as_ref().unwrap().activatable);
-        } else {
-            let info = batch
-                .events
-                .iter()
-                .find_map(|event| match &event.ev {
-                    Some(rv1::ruled_event::Ev::ZoneView(v)) => Some(v),
-                    _ => None,
-                })
+        for (color, life) in [
+            (rv1::ManaColor::Green, false),
+            (rv1::ManaColor::White, false),
+            (rv1::ManaColor::Unspecified, true),
+        ] {
+            let mut e = cast_fixture(&[
+                HYBRID_DEFERRED_OPPONENT,
+                HYBRID_HAND_RETURN,
+                HYBRID_CREATURE,
+                HYBRID_PAYMENT_MANA,
+            ]);
+            let mana_source = put_probe(&mut e, "hybrid_payment_mana", Zone::Battlefield, 0, false);
+            let own = put_probe(&mut e, "hybrid_creature_probe", Zone::Battlefield, 0, true);
+            let opponent = put_probe(&mut e, "hybrid_creature_probe", Zone::Battlefield, 1, false);
+            let source = put_probe(&mut e, card, zone, 0, false);
+            let ability = e
+                .registry
+                .get(card)
                 .unwrap()
-                .per_player
-                .iter()
-                .find(|p| p.player_id == 0)
-                .unwrap()
-                .battlefield_objects
-                .iter()
-                .find(|o| o.object_id == source)
-                .unwrap()
-                .activated_abilities
-                .iter()
-                .find(|a| a.ability_index == ability_index)
-                .unwrap();
-            assert!(!info.activatable);
-        }
-        let before = e.diagnostic_snapshot().unwrap();
-        let command = RuledCommand {
-            cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(
-                rv1::BeginAbilityActivation {
-                    source_object_id: source,
-                    expected_zone_change_generation: 0,
-                    ability_index,
-                    source_zone: if zone == Zone::Hand {
-                        rv1::AbilitySourceZone::Hand as i32
-                    } else {
-                        rv1::AbilitySourceZone::Battlefield as i32
-                    },
-                    own_target: Some(rv1::AbilityActivationTarget {
-                        object_id: own,
-                        zone_change_generation: 0,
-                        ..Default::default()
-                    }),
-                    ..Default::default()
+                .primary_face()
+                .activated_abilities[0]
+                .clone();
+            assert!(e.ability_activatable(source, 0, &ability));
+            let flex = rv1::FlexPipPayment {
+                pip_index: 0,
+                pay_life: life,
+                mana_color: color as i32,
+            };
+            let begin = rv1::BeginAbilityActivation {
+                source_object_id: source,
+                source_zone: if zone == Zone::Hand {
+                    rv1::AbilitySourceZone::Hand as i32
+                } else {
+                    rv1::AbilitySourceZone::Battlefield as i32
                 },
-            )),
-        };
-        assert!(e.apply_command(0, &command).is_err());
-        assert_eq!(e.diagnostic_snapshot().unwrap(), before);
-        assert!(e.state.pending_ability_activation.is_none());
+                own_target: (zone == Zone::Battlefield).then_some(rv1::AbilityActivationTarget {
+                    object_id: own,
+                    ..Default::default()
+                }),
+                flex_payments: vec![flex],
+                ..Default::default()
+            };
+            for invalid in [
+                vec![],
+                vec![rv1::FlexPipPayment {
+                    mana_color: rv1::ManaColor::Blue as i32,
+                    pay_life: false,
+                    ..flex
+                }],
+                vec![flex, flex],
+            ] {
+                let before = e.diagnostic_snapshot().unwrap();
+                assert!(e
+                    .apply_command(
+                        0,
+                        &RuledCommand {
+                            cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(
+                                rv1::BeginAbilityActivation {
+                                    flex_payments: invalid,
+                                    ..begin.clone()
+                                }
+                            ))
+                        }
+                    )
+                    .is_err());
+                assert_eq!(e.diagnostic_snapshot().unwrap(), before);
+            }
+            e.apply_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(
+                        begin.clone(),
+                    )),
+                },
+            )
+            .unwrap();
+            let pending = e.state.pending_ability_activation.clone().unwrap();
+            assert_eq!(pending.flex_payments, vec![flex]);
+            assert_eq!(e.state.players[0].life, 20);
+            assert_eq!(e.state.players[0].mana_pool.white, 2);
+            // Cancelling an announcement neither pays nor strands its branch choice.
+            e.apply_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::CancelAbilityActivation(
+                        rv1::CancelAbilityActivation {
+                            transaction_id: pending.transaction_id,
+                            expected_revision: pending.revision,
+                        },
+                    )),
+                },
+            )
+            .unwrap();
+            e.apply_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(begin)),
+                },
+            )
+            .unwrap();
+            if zone == Zone::Battlefield {
+                let pending = e.state.pending_ability_activation.clone().unwrap();
+                e.apply_command(
+                    1,
+                    &RuledCommand {
+                        cmd: Some(rv1::ruled_command::Cmd::SubmitAbilityActivationChoice(
+                            rv1::SubmitAbilityActivationChoice {
+                                transaction_id: pending.transaction_id,
+                                expected_revision: pending.revision,
+                                target: Some(rv1::AbilityActivationTarget {
+                                    object_id: opponent,
+                                    group_index: 1,
+                                    ..Default::default()
+                                }),
+                                ..Default::default()
+                            },
+                        )),
+                    },
+                )
+                .unwrap();
+            }
+            let current = e.state.pending_ability_activation.clone().unwrap();
+            assert_eq!(
+                e.pending_ability_activation_for(0).unwrap().flex_payments,
+                vec![flex]
+            );
+            for viewer in [1, -1] {
+                assert!(e
+                    .pending_ability_activation_for(viewer)
+                    .unwrap()
+                    .flex_payments
+                    .is_empty());
+            }
+            hybrid_nested_mana(&mut e, mana_source);
+            assert_eq!(
+                e.state
+                    .pending_ability_activation
+                    .as_ref()
+                    .unwrap()
+                    .flex_payments,
+                vec![flex]
+            );
+            assert_eq!(
+                e.pending_ability_activation_for(0).unwrap().flex_payments,
+                vec![flex]
+            );
+            let commit = rv1::CommitAbilityActivation {
+                transaction_id: current.transaction_id,
+                expected_revision: current.revision,
+                return_tapped_creature: (zone == Zone::Hand).then_some(e.payment_object_ref(own)),
+                ..Default::default()
+            };
+            for invalid in [
+                rv1::CommitAbilityActivation {
+                    flex_payments: vec![flex],
+                    ..commit.clone()
+                },
+                rv1::CommitAbilityActivation {
+                    transaction_id: pending.transaction_id,
+                    ..commit.clone()
+                },
+            ] {
+                let before = e.diagnostic_snapshot().unwrap();
+                assert!(e
+                    .apply_command(
+                        0,
+                        &RuledCommand {
+                            cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(invalid))
+                        }
+                    )
+                    .is_err());
+                assert_eq!(e.diagnostic_snapshot().unwrap(), before);
+            }
+            e.apply_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(commit)),
+                },
+            )
+            .unwrap();
+            assert_eq!(e.state.players[0].life, if life { 18 } else { 20 });
+            assert_eq!(
+                e.state.players[0].mana_pool.white,
+                if color == rv1::ManaColor::White { 1 } else { 2 }
+            );
+            assert_eq!(
+                e.state.players[0].mana_pool.green,
+                if color == rv1::ManaColor::Green { 1 } else { 2 }
+            );
+            assert_eq!(e.state.stack.len(), 1);
+            if zone == Zone::Hand {
+                assert_eq!(e.state.objects[&own].zone, Zone::Hand);
+            } else {
+                assert!(e.state.objects[&source].tapped);
+            }
+        }
     }
 }
 
@@ -1166,4 +1350,309 @@ fn hybrid_prepared_command_log_replays_exact_color_life_cancel_and_compleated_st
         );
     }
     assert_eq!(replay.state.players[0].life, 18);
+}
+
+const HYBRID_RESOLUTION: &str = r#"(id:"hybrid_resolution_probe",name:"Hybrid Resolution Probe",face_id:"hybrid_resolution_probe",types:["Artifact"],
+ activated_abilities:[(ability_id:"activate",presentation:Fallback,costs:[],effect:[],program:Some((body:(steps:[
+ (id:"choose",kind:Choose(choice:"pay",chooser:Controller,optional:true,branches:[(
+ branch_id:"paid",presentation:Fallback,cost:Mana("{G/W/P}"),body:(steps:[
+ (id:"gain",kind:Perform(GainLife(amount:4))) ]))],otherwise:())) ]))))])"#;
+
+fn hybrid_resolution_fixture() -> GameEngine {
+    let mut e = cast_fixture(&[HYBRID_RESOLUTION, HYBRID_PAYMENT_MANA]);
+    put_probe(&mut e, "hybrid_payment_mana", Zone::Battlefield, 0, false);
+    let source = put_probe(
+        &mut e,
+        "hybrid_resolution_probe",
+        Zone::Battlefield,
+        0,
+        false,
+    );
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::ActivateAbility(
+                rv1::ActivateAbility {
+                    source_object_id: source,
+                    ..Default::default()
+                },
+            )),
+        },
+    )
+    .unwrap();
+    for _ in 0..2 {
+        let actor = e.state.priority_player_id();
+        e.apply_command(
+            actor,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+            },
+        )
+        .unwrap();
+    }
+    let prompt = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .unwrap()
+        .resolution_prompt_id
+        .get();
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: prompt,
+                    decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                    ..Default::default()
+                },
+            )),
+        },
+    )
+    .unwrap();
+    assert!(e
+        .state
+        .pending_resolution
+        .as_ref()
+        .unwrap()
+        .continuation
+        .mana_payment()
+        .is_some());
+    e
+}
+
+#[test]
+fn hybrid_resolution_preview_commit_decline_and_stale_receipts_preserve_exact_payment() {
+    use prost::Message;
+    for (color, life) in [
+        (rv1::ManaColor::Green, false),
+        (rv1::ManaColor::White, false),
+        (rv1::ManaColor::Unspecified, true),
+    ] {
+        let mut e = hybrid_resolution_fixture();
+        let prompt = e
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .resolution_prompt_id
+            .get();
+        let mut answer = rv1::SubmitResolutionChoice {
+            resolution_prompt_id: prompt,
+            decision: rv1::ResolutionChoiceDecision::PayMana as i32,
+            flex_payments: vec![rv1::FlexPipPayment {
+                pip_index: 0,
+                mana_color: color as i32,
+                pay_life: life,
+            }],
+            payment: Some(rv1::PaymentSelection {
+                mana: Some(rv1::PaymentMana {
+                    w: u32::from(color == rv1::ManaColor::White),
+                    g: u32::from(color == rv1::ManaColor::Green),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        if life {
+            e.state.players[0].mana_pool = Default::default();
+        }
+        let before = e.diagnostic_snapshot().unwrap();
+        for invalid in [
+            rv1::SubmitResolutionChoice {
+                flex_payments: vec![],
+                ..answer.clone()
+            },
+            rv1::SubmitResolutionChoice {
+                resolution_prompt_id: prompt + 1,
+                ..answer.clone()
+            },
+            rv1::SubmitResolutionChoice {
+                decision: rv1::ResolutionChoiceDecision::Decline as i32,
+                ..answer.clone()
+            },
+        ] {
+            let view = e.preview_payment(
+                0,
+                &rv1::PreviewPayment {
+                    resolution_choice: Some(invalid.clone()),
+                    ..Default::default()
+                },
+            );
+            assert!(!view.valid);
+            assert!(e
+                .apply_command(
+                    0,
+                    &RuledCommand {
+                        cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(invalid))
+                    }
+                )
+                .is_err());
+            assert_eq!(e.diagnostic_snapshot().unwrap(), before);
+        }
+        if life {
+            e.state.players[0].life = 1;
+            assert!(!e.can_pay_resolution_mana(0, &ManaCost::parse("{G/W/P}").unwrap()));
+            assert!(
+                !e.preview_payment(
+                    0,
+                    &rv1::PreviewPayment {
+                        resolution_choice: Some(answer.clone()),
+                        ..Default::default()
+                    }
+                )
+                .valid
+            );
+            e.state.players[0].life = 20;
+        }
+        let preview = e.preview_payment(
+            0,
+            &rv1::PreviewPayment {
+                resolution_choice: Some(answer.clone()),
+                ..Default::default()
+            },
+        );
+        assert!(preview.valid && preview.complete, "{preview:?}");
+        answer.payment = preview.selection;
+        let command = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(answer)),
+        };
+        let bytes = command.encode_to_vec();
+        e.apply_command(0, &command).unwrap();
+        assert!(e.state.pending_resolution.is_none());
+        assert_eq!(e.state.players[0].life, if life { 22 } else { 24 });
+        assert_eq!(
+            e.state.players[0].mana_pool.white,
+            if life {
+                0
+            } else if color == rv1::ManaColor::White {
+                1
+            } else {
+                2
+            }
+        );
+        assert_eq!(
+            e.state.players[0].mana_pool.green,
+            if life {
+                0
+            } else if color == rv1::ManaColor::Green {
+                1
+            } else {
+                2
+            }
+        );
+        let mut replay = hybrid_resolution_fixture();
+        if life {
+            replay.state.players[0].mana_pool = Default::default();
+        }
+        replay
+            .apply_command(0, &RuledCommand::decode(bytes.as_slice()).unwrap())
+            .unwrap();
+        assert_eq!(
+            replay.diagnostic_snapshot().unwrap(),
+            e.diagnostic_snapshot().unwrap()
+        );
+    }
+    let mut e = hybrid_resolution_fixture();
+    let prompt = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .unwrap()
+        .resolution_prompt_id
+        .get();
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    resolution_prompt_id: prompt,
+                    decision: rv1::ResolutionChoiceDecision::Decline as i32,
+                    ..Default::default()
+                },
+            )),
+        },
+    )
+    .unwrap();
+    assert_eq!(e.state.players[0].life, 20);
+    assert_eq!(e.state.players[0].mana_pool.white, 2);
+    assert!(e.state.pending_resolution.is_none());
+}
+
+#[test]
+fn hybrid_resolution_nested_mana_reissues_the_prompt_and_rejects_old_receipts() {
+    let mut e = hybrid_resolution_fixture();
+    let prompt = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .unwrap()
+        .resolution_prompt_id
+        .get();
+    let mana_source = e.state.players[0]
+        .battlefield
+        .iter()
+        .copied()
+        .find(|id| e.state.objects[id].card_id == "hybrid_payment_mana")
+        .unwrap();
+    let mut answer = rv1::SubmitResolutionChoice {
+        resolution_prompt_id: prompt,
+        decision: rv1::ResolutionChoiceDecision::PayMana as i32,
+        flex_payments: vec![rv1::FlexPipPayment {
+            pip_index: 0,
+            pay_life: true,
+            mana_color: 0,
+        }],
+        ..Default::default()
+    };
+    let preview = e.preview_payment(
+        0,
+        &rv1::PreviewPayment {
+            resolution_choice: Some(answer.clone()),
+            ..Default::default()
+        },
+    );
+    assert!(preview.valid && preview.complete);
+    answer.payment = preview.selection;
+    hybrid_nested_mana(&mut e, mana_source);
+    let restored_prompt = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .unwrap()
+        .resolution_prompt_id
+        .get();
+    assert_ne!(restored_prompt, prompt);
+    let before = e.diagnostic_snapshot().unwrap();
+    assert!(e
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                    answer.clone()
+                ))
+            }
+        )
+        .is_err());
+    assert_eq!(e.diagnostic_snapshot().unwrap(), before);
+    answer.resolution_prompt_id = restored_prompt;
+    let refreshed = e.preview_payment(
+        0,
+        &rv1::PreviewPayment {
+            resolution_choice: Some(answer.clone()),
+            ..Default::default()
+        },
+    );
+    assert!(refreshed.valid && refreshed.complete);
+    answer.payment = refreshed.selection;
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(answer)),
+        },
+    )
+    .unwrap();
+    assert_eq!(e.state.players[0].life, 22);
+    assert_eq!(e.state.players[0].mana_pool.colorless, 2);
 }

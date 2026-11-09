@@ -1079,6 +1079,19 @@ impl GameEngine {
         player: PlayerId,
         answer: &rv1::SubmitResolutionChoice,
     ) -> Result<RuledEventBatch, EngineError> {
+        // Reject irrelevant receipts centrally, before any continuation consumes the prompt.
+        if !answer.flex_payments.is_empty()
+            && (answer.decision != rv1::ResolutionChoiceDecision::PayMana as i32
+                || self
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .is_none_or(|pending| pending.continuation.mana_payment().is_none()))
+        {
+            return Err(EngineError::Illegal(
+                "flex choices require the current resolution mana payment",
+            ));
+        }
         if self
             .state
             .pending_resolution

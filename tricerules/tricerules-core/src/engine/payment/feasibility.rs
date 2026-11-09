@@ -579,6 +579,7 @@ mod tests {
             0,
             &PendingManaPayment::from_cost(0, ManaCost::parse(mana).unwrap(), 0),
             &[],
+            &[],
         )
         .unwrap()
     }
@@ -773,7 +774,7 @@ mod tests {
         let mut payment = PendingManaPayment::from_cost(0, ManaCost::parse("{1}").unwrap(), 0);
         payment.waterbend = true;
         let prepared = e
-            .prepare_resolution_payment_costs(0, &payment, &[])
+            .prepare_resolution_payment_costs(0, &payment, &[], &[])
             .unwrap();
         let witness = e
             .payment_from_current_pool(&prepared, Default::default(), false)
@@ -784,7 +785,7 @@ mod tests {
         );
         payment.mana_cost = ManaCost::parse("{G}").unwrap();
         let colored = e
-            .prepare_resolution_payment_costs(0, &payment, &[])
+            .prepare_resolution_payment_costs(0, &payment, &[], &[])
             .unwrap();
         assert!(e
             .payment_from_current_pool(&colored, Default::default(), false)

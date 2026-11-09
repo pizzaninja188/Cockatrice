@@ -9,6 +9,7 @@ use tricerules_proto::ruled::v1::{self as rv1, ResolutionChoiceDecision};
 fn branch_choice(decision: ResolutionChoiceDecision) -> rv1::RuledCommand {
     rv1::RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(rv1::SubmitResolutionChoice {
+            flex_payments: vec![],
             resolution_prompt_id: 0,
             chosen_object_ids: Vec::new(),
             decision: decision as i32,

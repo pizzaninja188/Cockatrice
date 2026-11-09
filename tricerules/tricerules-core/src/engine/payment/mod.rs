@@ -1041,27 +1041,38 @@ impl GameEngine {
     }
 
     pub(super) fn can_pay_resolution_mana(&self, player: PlayerId, cost: &ManaCost) -> bool {
-        if cost
-            .pips
-            .iter()
-            .any(|pip| matches!(pip, ManaSymbol::HybridPhyrexian(_, _)))
-        {
-            return false; // The resolution choice has no branch selector.
-        }
-        self.state.player_idx(player).is_some_and(|player_idx| {
-            mana::plan_mana_payment_with_any_color(
-                &self.state,
-                player_idx,
-                cost,
-                0,
-                0,
-                0,
-                &[],
-                &[],
-                &[],
-                self.may_spend_mana_as_any_color(player),
-            )
-            .is_ok()
+        let Some(idx) = self.state.player_idx(player) else {
+            return false;
+        };
+        let payer = &self.state.players[idx];
+        let pool = &payer.mana_pool;
+        let available = [
+            pool.white,
+            pool.blue,
+            pool.black,
+            pool.red,
+            pool.green,
+            pool.colorless,
+        ];
+        let any_color = self.may_spend_mana_as_any_color(player);
+        demand::unannounced_demands(cost).is_ok_and(|demands| {
+            demands.iter().any(|demand| {
+                if (demand.life > 0 && i64::from(demand.life) > i64::from(payer.life))
+                    || demand.amounts[5] > available[5]
+                {
+                    return false;
+                }
+                if !any_color
+                    && demand.amounts[..5]
+                        .iter()
+                        .zip(&available[..5])
+                        .any(|(need, have)| need > have)
+                {
+                    return false;
+                }
+                demand.amounts.iter().map(|n| u64::from(*n)).sum::<u64>()
+                    <= available.iter().map(|n| u64::from(*n)).sum::<u64>()
+            })
         })
     }
 }

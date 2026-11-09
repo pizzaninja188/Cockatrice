@@ -46,8 +46,12 @@ impl GameEngine {
         }
 
         let payment_result = (|| {
-            let mut costs =
-                self.prepare_resolution_payment_costs(player, &payment, &answer.restricted_mana)?;
+            let mut costs = self.prepare_resolution_payment_costs(
+                player,
+                &payment,
+                &answer.restricted_mana,
+                &answer.flex_payments,
+            )?;
             let selection = answer.payment.as_ref().ok_or(EngineError::Illegal(
                 "Join Forces payment was not previewed",
             ))?;

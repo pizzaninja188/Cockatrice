@@ -368,6 +368,7 @@ impl GameEngine {
                     player,
                     payment,
                     &command.restricted_mana,
+                    &command.flex_payments,
                 )?;
                 if payment.variable_mana_contribution {
                     let amount = selected_mana_total(

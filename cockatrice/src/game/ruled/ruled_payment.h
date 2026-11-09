@@ -34,6 +34,8 @@ public:
     ruled::v1::PreviewPayment request(ruled::v1::CastSpell cast);
     ruled::v1::PreviewPayment requestAction(ruled::v1::RuledCommand command);
     void writePayment(ruled::v1::RuledCommand &command) const;
+    bool bindResolutionChoices(quint64 promptId, const QVector<ruled::v1::FlexPipPayment> &choices);
+    [[nodiscard]] std::optional<ruled::v1::RuledCommand> resolutionCommand(quint64 promptId) const;
     static std::optional<ruled::v1::RuledCommand>
     undoManaAbilityCommand(const ruled::v1::PendingAttackDeclaration *pendingAttack,
                            std::optional<quint64> selectedActivationCommandIndex = std::nullopt,
@@ -77,6 +79,8 @@ private:
     };
 
     void reconcileOptimisticManaCounters();
+    quint64 resolutionPromptId = 0;
+    QVector<ruled::v1::FlexPipPayment> resolutionChoices;
     quint64 transactionId = 0;
     quint64 revision = 0;
     bool guardSanitizedPayment = false;

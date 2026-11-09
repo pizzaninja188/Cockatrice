@@ -148,15 +148,20 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     const auto milestonesDone = [&] { return preOmenMilestonesDone() && omenMilestonesDone(); };
     QElapsedTimer deadline;
     deadline.start();
+    qint64 lastProgressMs = 0;
     while (!milestonesDone() && deadline.elapsed() < kOverallDeadlineMs) {
         if (preOmenMilestonesDone()) {
             p1.omenSequenceEnabled = true;
         }
-        p1.pump(25);
-        p2.pump(25);
+        const bool firstProgress = p1.pump(25);
+        const bool secondProgress = p2.pump(25);
+        if (firstProgress || secondProgress)
+            lastProgressMs = deadline.elapsed();
         p1.act();
         p2.act();
     }
+    fprintf(stderr, "Seeded game: elapsed %lld ms; last received message at %lld ms\n",
+            static_cast<long long>(deadline.elapsed()), static_cast<long long>(lastProgressMs));
 
     // The forced seed must have reached the engine (server-side only; the seed is never
     // broadcast to clients, so the check reads the sidecar's session-start log line).

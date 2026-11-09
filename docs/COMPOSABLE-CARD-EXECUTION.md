@@ -396,11 +396,38 @@ the existing grouped Compleated entry replacement; unrelated life costs do not c
 The client retains the exact payment vector through staging and reconnect, fixes the selected
 local color before mana selection, and rejects modal results after the draft/source/generation/
 transaction or pip cohort changes. Aggregate Begin receipts compare the color as well as the pip
-and life flag. Ordinary direct activations and permanent actions reuse explicit choices. Resolution
-mana payments and the two deferred activation profiles (opponent-chosen targets and hand-source
-return of a tapped creature) lack an early hybrid choice path and remain unavailable for such
-costs. Accepted aggregate counter-cost Begin already has that path. These are capability fixtures;
-Ajani and Tamiyo whole-card admission and user GUI acceptance remain separate.
+and life flag. Ordinary direct activations and permanent actions reuse explicit choices. The staged
+opponent-target and hand-source tapped-creature-return profiles now accept the same indexed choices
+in `BeginAbilityActivation`. They retain the actor-private receipt while targets are chosen, publish
+the normalized locked cost at Payment, and reject replacement choices at Commit. Cancellation
+spends neither mana nor life; nested mana work masks and then restores the original receipt.
+
+Resolution payments use the appended private `SubmitResolutionChoice.flex_payments` field (tag 11),
+including `PreviewPayment.resolution_choice`. The exact resolution prompt ID and preview revision
+bind the submitted choice. Only a current PayMana answer accepts it; decline and unrelated
+continuations reject stray choices before consuming their prompt. Read-only affordability considers
+both mana colors and life, while payment always validates an explicit hybrid branch. Qt preserves
+these choices with the suspended payment model, discards them for a new prompt, and may ask again
+after reconnect because a resolution choice is not committed before payment. Servatrice translates
+no identity inside `FlexPipPayment`: its pip index and color enum are private values, not ObjectIds.
+
+This reuses the existing Ajani/Tamiyo `FlexPipPayment` vocabulary rather than introducing a new
+payment primitive. Arena's opponent-chosen target activation, Urban Retreat's hand activation, and
+Flameshadow Conjuring's resolution mana payment are the existing mechanics extended by synthetic
+hybrid-cost probes; this does not claim hybrid costs on those real cards or admit new card data.
+The rules basis is CR 107.4f, 118.13a-b and 119.4 in the
+[November 6, 2026 Comprehensive Rules](https://media.wizards.com/2026/downloads/MagicCompRules%2020261106.pdf).
+
+Automated capability coverage lives in `engine/payment/hybrid_phyrexian_tests.rs`, the ruled client
+payment/model tests, and the relay visibility/identity tests. User GUI acceptance remains pending.
+In a two-client dev fixture build containing Hybrid Opponent Probe, Hybrid Hand Return Probe and
+Hybrid Resolution Probe (definitions in that Rust test module), exercise each component color and
+life: choose before the opponent target prompt, return only the selected tapped creature, and pay
+or decline the resolution prompt. Confirm previews make no debits, cancellation makes no payment,
+reconnect restores the activation branch, and nested mana prompts preserve that branch. A newly
+issued resolution prompt must request fresh choices and reject its predecessor's receipt.
+The other seat must see neither the private choice nor payment preview. Whole-card admission
+and normal-game GUI acceptance remain separate from these capability fixtures.
 
 `RevealTopCardToHandIfMatches` retains its default `KeepTop` unmatched policy and canonical
 serialization for Esper Maduin. Ajani, Sleeper Agent's `MayPutBottom` policy offers one public

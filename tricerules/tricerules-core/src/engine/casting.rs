@@ -3546,22 +3546,6 @@ impl GameEngine {
         if self.state.opening.is_some() {
             return false;
         }
-        // These deferred Begin profiles have no early flexible-pip announcement path.
-        // Keep them unavailable until that path can lock a hybrid Phyrexian branch.
-        let hybrid_phyrexian_cost = ability.costs.iter().any(|cost| match cost {
-            AbilityCost::Mana(cost) | AbilityCost::Waterbend(cost) => cost
-                .pips
-                .iter()
-                .any(|pip| matches!(pip, ManaSymbol::HybridPhyrexian(_, _))),
-            _ => false,
-        });
-        if hybrid_phyrexian_cost
-            && (ability.requires_opponent_target_choice()
-                || (ability.source_zone == AbilitySourceZone::Hand
-                    && ability.costs.contains(&AbilityCost::ReturnTappedCreature)))
-        {
-            return false;
-        }
         let Some(object) = self.state.objects.get(&permanent_id) else {
             return false;
         };

@@ -12769,3 +12769,43 @@ TEST_F(RuledBatchTest, AutomationOffersArePrivateAndRoundTripExactStackReference
         EXPECT_TRUE(other.legal_by_player().empty());
     }
 }
+
+TEST(RuledProtocolVisibilityTest, HybridPhyrexianResolutionChoiceUsesPrivateAppendedTag)
+{
+    const auto *field = ruled::v1::SubmitResolutionChoice::descriptor()->FindFieldByName("flex_payments");
+    ASSERT_NE(field, nullptr);
+    EXPECT_EQ(field->number(), 11);
+    EXPECT_EQ(field->options().GetExtension(ruled::v1::field_visibility), ruled::v1::FIELD_VISIBILITY_PER_PLAYER);
+    ruled::v1::SubmitResolutionChoice answer;
+    answer.set_resolution_prompt_id(81);
+    answer.set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
+    answer.add_flex_payments()->set_mana_color(ruled::v1::MANA_COLOR_GREEN);
+    clearRuledFieldsByVisibility(&answer, ruled::v1::FIELD_VISIBILITY_PER_PLAYER);
+    EXPECT_EQ(answer.flex_payments_size(), 0);
+}
+
+TEST_F(RuledBatchTest, HybridPhyrexianResolutionReceiptSurvivesRelayWithoutIdentityTranslation)
+{
+    ruled::v1::IpcResponse response;
+    auto *choice = response.mutable_batch()->add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(p1->getPlayerId());
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_MANA_PAYMENT);
+    choice->set_resolution_prompt_id(841);
+    auto *prompt = response.mutable_batch()->mutable_resolution_prompt_state();
+    prompt->set_active(true);
+    prompt->set_deciding_player_id(p1->getPlayerId());
+    prompt->set_resolution_prompt_id(841);
+    updatePendingResolutionChoiceCache(response);
+    ruled::v1::RuledCommand command;
+    auto *answer = command.mutable_submit_resolution_choice();
+    answer->set_resolution_prompt_id(841);
+    answer->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
+    auto *receipt = answer->add_flex_payments();
+    receipt->set_pip_index(2);
+    receipt->set_mana_color(ruled::v1::MANA_COLOR_WHITE);
+    const auto original = receipt->SerializeAsString();
+    ASSERT_TRUE(canonicalizeClientCommand(p1->getPlayerId(), command));
+    EXPECT_EQ(command.submit_resolution_choice().flex_payments(0).SerializeAsString(), original);
+    command.mutable_submit_resolution_choice()->set_resolution_prompt_id(842);
+    EXPECT_FALSE(canonicalizeClientCommand(p1->getPlayerId(), command));
+}

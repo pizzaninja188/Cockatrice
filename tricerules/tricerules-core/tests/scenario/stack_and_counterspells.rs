@@ -441,6 +441,7 @@ fn convolute_rejects_stale_or_malformed_payment_atomically() {
 
     let malformed = RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            flex_payments: vec![],
             resolution_prompt_id: 0,
             chosen_object_ids: vec![bolt_oid],
             decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline as i32,

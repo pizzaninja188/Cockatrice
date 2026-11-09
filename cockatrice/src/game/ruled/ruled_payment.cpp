@@ -29,10 +29,34 @@ void RuledPayment::clear()
     revision = 0;
     active = pending = submitting = false;
     guardSanitizedPayment = submissionArmed = false;
+    resolutionPromptId = 0;
+    resolutionChoices.clear();
     selection.Clear();
     restrictedMana.Clear();
     view.Clear();
     optimisticManaCounters.clear();
+}
+
+bool RuledPayment::bindResolutionChoices(quint64 promptId, const QVector<ruled::v1::FlexPipPayment> &choices)
+{
+    if (!active || submitting || promptId == 0)
+        return false;
+    resolutionPromptId = promptId;
+    resolutionChoices = choices;
+    return true;
+}
+
+std::optional<ruled::v1::RuledCommand> RuledPayment::resolutionCommand(quint64 promptId) const
+{
+    if (!active || promptId == 0 || promptId != resolutionPromptId)
+        return std::nullopt;
+    ruled::v1::RuledCommand command;
+    auto *answer = command.mutable_submit_resolution_choice();
+    answer->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
+    answer->set_resolution_prompt_id(promptId);
+    for (const auto &choice : resolutionChoices)
+        *answer->add_flex_payments() = choice;
+    return command;
 }
 
 RuledPayment RuledPayment::suspend()
@@ -134,6 +158,11 @@ void RuledPayment::writePayment(ruled::v1::RuledCommand &command) const
         *command.mutable_activate_ability()->mutable_payment() = selection;
         *command.mutable_activate_ability()->mutable_restricted_mana() = restrictedMana;
     } else if (command.has_submit_resolution_choice()) {
+        if (command.submit_resolution_choice().decision() == ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA) {
+            if (const auto bound = resolutionCommand(command.submit_resolution_choice().resolution_prompt_id()))
+                *command.mutable_submit_resolution_choice()->mutable_flex_payments() =
+                    bound->submit_resolution_choice().flex_payments();
+        }
         *command.mutable_submit_resolution_choice()->mutable_payment() = selection;
         *command.mutable_submit_resolution_choice()->mutable_restricted_mana() = restrictedMana;
     } else if (command.has_execute_permanent_action()) {
