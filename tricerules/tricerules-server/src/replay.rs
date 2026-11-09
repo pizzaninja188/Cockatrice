@@ -10541,11 +10541,11 @@ mod tests {
         let receipt_decks = narset_normal_fixed_decks();
         println!(
             "P17 exact deck order={:?}",
-            &receipt_decks[0].mainboard_card_name
+            receipt_decks[0].mainboard_card_name
         );
         println!(
             "P29 exact deck order={:?}",
-            &receipt_decks[1].mainboard_card_name
+            receipt_decks[1].mainboard_card_name
         );
         println!("frozen normal SessionStart seed=19, game_id=7281102, effective_dev=false");
 

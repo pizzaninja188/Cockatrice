@@ -58,7 +58,7 @@ fn activate_mana_option(
 #[test]
 fn issue_333_pilfer_publicly_reveals_and_discards_only_a_nonland() {
     let mut engine = main1_engine(333_001, &["pilfer"], &[]);
-    let cleared: Vec<_> = engine.state.players[1].hand.drain(..).collect();
+    let cleared = std::mem::take(&mut engine.state.players[1].hand);
     engine.state.players[1].library.extend(cleared);
     let nonland = inject_card_into_hand(&mut engine, 1, "grizzly_bears");
     let land = inject_card_into_hand(&mut engine, 1, "forest");
@@ -133,7 +133,7 @@ fn issue_333_pilfer_publicly_reveals_and_discards_only_a_nonland() {
 #[test]
 fn issue_333_pilfer_rejects_ineligible_and_stale_choices_atomically() {
     let mut engine = main1_engine(333_002, &["pilfer"], &[]);
-    let cleared: Vec<_> = engine.state.players[1].hand.drain(..).collect();
+    let cleared = std::mem::take(&mut engine.state.players[1].hand);
     engine.state.players[1].library.extend(cleared);
     let nonland = inject_card_into_hand(&mut engine, 1, "grizzly_bears");
     let land = inject_card_into_hand(&mut engine, 1, "forest");
@@ -213,7 +213,7 @@ fn issue_333_pilfer_requires_its_target_opponent() {
 #[test]
 fn issue_333_pilfer_fizzles_when_its_target_opponent_has_left_the_game() {
     let mut engine = main1_engine(333_004, &["pilfer"], &[]);
-    let cleared: Vec<_> = engine.state.players[1].hand.drain(..).collect();
+    let cleared = std::mem::take(&mut engine.state.players[1].hand);
     engine.state.players[1].library.extend(cleared);
     let nonland = inject_card_into_hand(&mut engine, 1, "grizzly_bears");
     relocate_to_hand(&mut engine, 0, "pilfer");

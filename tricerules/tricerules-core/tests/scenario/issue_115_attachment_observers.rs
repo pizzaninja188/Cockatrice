@@ -371,7 +371,7 @@ fn issue_143_coercion_publicly_reveals_and_can_choose_any_card() {
     .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
-    let cleared: Vec<_> = engine.state.players[1].hand.drain(..).collect();
+    let cleared = std::mem::take(&mut engine.state.players[1].hand);
     engine.state.players[1].library.extend(cleared);
     let land = inject_card_into_hand(&mut engine, 1, "forest");
     let creature = inject_card_into_hand(&mut engine, 1, "grizzly_bears");
@@ -444,7 +444,7 @@ fn issue_143_cracked_skull_remains_a_private_look() {
     .expect("engine");
     advance_to_main1_from_game_start(&mut engine);
 
-    let cleared: Vec<_> = engine.state.players[1].hand.drain(..).collect();
+    let cleared = std::mem::take(&mut engine.state.players[1].hand);
     engine.state.players[1].library.extend(cleared);
     let land = inject_card_into_hand(&mut engine, 1, "forest");
     let nonland = inject_card_into_hand(&mut engine, 1, "grizzly_bears");

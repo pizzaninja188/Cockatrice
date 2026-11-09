@@ -22,7 +22,7 @@ fn engine(seed: u64) -> GameEngine {
     .expect("new engine");
     advance_to_main1_from_game_start(&mut engine);
     for player in 0..2 {
-        let cleared: Vec<_> = engine.state.players[player].hand.drain(..).collect();
+        let cleared = std::mem::take(&mut engine.state.players[player].hand);
         engine.state.players[player].library.extend(cleared);
     }
     engine
@@ -45,7 +45,7 @@ fn engine_three(seed: u64) -> GameEngine {
     .expect("new three-player engine");
     advance_to_main1_from_game_start(&mut engine);
     for player in 0..3 {
-        let cleared: Vec<_> = engine.state.players[player].hand.drain(..).collect();
+        let cleared = std::mem::take(&mut engine.state.players[player].hand);
         engine.state.players[player].library.extend(cleared);
     }
     engine

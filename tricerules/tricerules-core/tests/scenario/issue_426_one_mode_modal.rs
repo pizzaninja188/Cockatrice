@@ -74,7 +74,7 @@ fn jace_with_loyalty(engine: &mut GameEngine, player: usize, loyalty: u32) -> u3
 #[test]
 fn cerebral_confiscation_reveals_and_discards_a_chosen_nonland() {
     let mut engine = modal_engine(426_001);
-    let cleared: Vec<_> = engine.state.players[1].hand.drain(..).collect();
+    let cleared = std::mem::take(&mut engine.state.players[1].hand);
     engine.state.players[1].library.extend(cleared);
     let nonland = inject_card_into_hand(&mut engine, 1, "grizzly_bears");
     let land = inject_card_into_hand(&mut engine, 1, "mountain");
@@ -122,7 +122,7 @@ fn cerebral_confiscation_reveals_and_discards_a_chosen_nonland() {
 #[test]
 fn cerebral_confiscation_discard_two_mode_uses_the_affected_player_choice() {
     let mut engine = modal_engine(426_002);
-    let cleared: Vec<_> = engine.state.players[1].hand.drain(..).collect();
+    let cleared = std::mem::take(&mut engine.state.players[1].hand);
     engine.state.players[1].library.extend(cleared);
     let first = inject_card_into_hand(&mut engine, 1, "grizzly_bears");
     let second = inject_card_into_hand(&mut engine, 1, "storm_crow");

@@ -26,7 +26,7 @@ fn grant_llanowar_tap_ability(engine: &mut GameEngine, source: u32) {
 }
 
 fn move_hand_to_library(engine: &mut GameEngine, player: usize) {
-    let moved: Vec<_> = engine.state.players[player].hand.drain(..).collect();
+    let moved = std::mem::take(&mut engine.state.players[player].hand);
     for object_id in &moved {
         engine
             .state

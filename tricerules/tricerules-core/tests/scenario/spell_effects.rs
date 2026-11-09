@@ -2752,7 +2752,7 @@ fn resolve_hymn_random_discard(random_seed: u64, affected_player: i32) -> Vec<St
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
-    let cleared: Vec<_> = e.state.players[1].hand.drain(..).collect();
+    let cleared = std::mem::take(&mut e.state.players[1].hand);
     e.state.players[1].library.extend(cleared);
     let controlled_hand = ["plains", "island", "swamp", "mountain"]
         .into_iter()
@@ -2849,7 +2849,7 @@ fn hymn_to_tourach_discards_all_when_hand_smaller_than_count() {
     advance_to_main1_from_game_start(&mut e);
 
     // Clear P1's hand and inject exactly 1 card so count(2) > hand_size(1).
-    let cleared: Vec<_> = e.state.players[1].hand.drain(..).collect();
+    let cleared = std::mem::take(&mut e.state.players[1].hand);
     e.state.players[1].library.extend(cleared);
     inject_card_into_hand(&mut e, 1, 1, "grizzly_bears");
     assert_eq!(e.state.players[1].hand.len(), 1);
@@ -2896,7 +2896,7 @@ fn hymn_to_tourach_empty_hand_is_no_op() {
     advance_to_main1_from_game_start(&mut e);
 
     // Empty P1's hand entirely.
-    let cleared: Vec<_> = e.state.players[1].hand.drain(..).collect();
+    let cleared = std::mem::take(&mut e.state.players[1].hand);
     e.state.players[1].library.extend(cleared);
     assert_eq!(e.state.players[1].hand.len(), 0);
 
@@ -2941,7 +2941,7 @@ fn coercion_caster_chooses_which_card_to_discard() {
     advance_to_main1_from_game_start(&mut e);
 
     // Clear P1's hand and inject exactly 2 cards so the test is unambiguous.
-    let cleared: Vec<_> = e.state.players[1].hand.drain(..).collect();
+    let cleared = std::mem::take(&mut e.state.players[1].hand);
     e.state.players[1].library.extend(cleared);
     let bear_oid = inject_card_into_hand(&mut e, 1, 1, "grizzly_bears");
     inject_card_into_hand(&mut e, 1, 1, "storm_crow");
@@ -3025,7 +3025,7 @@ fn issue_58_mind_rot_affected_player_chooses_cards_to_discard() {
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
 
-    let cleared: Vec<_> = e.state.players[1].hand.drain(..).collect();
+    let cleared = std::mem::take(&mut e.state.players[1].hand);
     e.state.players[1].library.extend(cleared);
     inject_card_into_hand(&mut e, 1, 1, "grizzly_bears");
     inject_card_into_hand(&mut e, 1, 1, "storm_crow");
@@ -3345,7 +3345,7 @@ fn issue_275_yuyan_archers_empty_hand_cannot_pay_and_does_not_draw() {
     let idx = hand_index_for_card(&e, 0, "yuyan_archers");
     e.apply_scenario_command(0, &cast_spell(idx, vec![]))
         .expect("cast Yuyan Archers");
-    let emptied_hand: Vec<_> = e.state.players[0].hand.drain(..).collect();
+    let emptied_hand = std::mem::take(&mut e.state.players[0].hand);
     e.state.players[0].library.extend(emptied_hand);
     let library_before = e.state.players[0].library.len();
     pass_both_players(&mut e);
@@ -3375,7 +3375,7 @@ fn issue_58_lilianas_steward_sacrifices_and_affected_opponent_chooses() {
     .expect("new");
     advance_to_main1_from_game_start(&mut e);
     let steward = inject_creature_on_battlefield(&mut e, 0, "lilianas_steward");
-    let cleared: Vec<_> = e.state.players[1].hand.drain(..).collect();
+    let cleared = std::mem::take(&mut e.state.players[1].hand);
     e.state.players[1].library.extend(cleared);
     inject_card_into_hand(&mut e, 1, 1, "grizzly_bears");
     inject_card_into_hand(&mut e, 1, 1, "storm_crow");
@@ -3700,7 +3700,7 @@ fn issue_143_thoughtseize_publicly_reveals_then_loses_two_life() {
     advance_to_main1_from_game_start(&mut e);
 
     // Two cards in P1's hand so the choice is a real one and the resolution parks.
-    let cleared: Vec<_> = e.state.players[1].hand.drain(..).collect();
+    let cleared = std::mem::take(&mut e.state.players[1].hand);
     e.state.players[1].library.extend(cleared);
     let bear_oid = inject_card_into_hand(&mut e, 1, 1, "grizzly_bears");
     inject_card_into_hand(&mut e, 1, 1, "storm_crow");
@@ -3798,7 +3798,7 @@ fn thoughtseize_loses_life_even_when_the_discard_does_not_park() {
     advance_to_main1_from_game_start(&mut e);
 
     // Empty P1 hand: nothing to choose from, so the discard resolves without suspending.
-    let cleared: Vec<_> = e.state.players[1].hand.drain(..).collect();
+    let cleared = std::mem::take(&mut e.state.players[1].hand);
     e.state.players[1].library.extend(cleared);
 
     relocate_to_hand(&mut e, 0, "thoughtseize");

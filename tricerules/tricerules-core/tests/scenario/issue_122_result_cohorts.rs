@@ -488,7 +488,7 @@ fn cast_gerrards_verdict(cards: &[&str], seed: u64) -> (GameEngine, Vec<u32>) {
     )
     .unwrap();
     advance_to_main1_from_game_start(&mut engine);
-    let cleared: Vec<_> = engine.state.players[1].hand.drain(..).collect();
+    let cleared = std::mem::take(&mut engine.state.players[1].hand);
     engine.state.players[1].library.extend(cleared);
     let chosen = cards
         .iter()
@@ -576,7 +576,7 @@ fn cast_gerrards_verdict_with_three_players(cards: &[&str], seed: u64) -> (GameE
     )
     .unwrap();
     advance_to_main1_from_game_start(&mut engine);
-    let cleared: Vec<_> = engine.state.players[1].hand.drain(..).collect();
+    let cleared = std::mem::take(&mut engine.state.players[1].hand);
     engine.state.players[1].library.extend(cleared);
     let chosen = cards
         .iter()
@@ -692,7 +692,7 @@ fn prepare_gerrards_verdict_with_library_of_leng(seed: u64) -> (GameEngine, Vec<
     .unwrap();
     advance_to_main1_from_game_start(&mut engine);
     inject_permanent_on_battlefield(&mut engine, 1, "library_of_leng");
-    let cleared: Vec<_> = engine.state.players[1].hand.drain(..).collect();
+    let cleared = std::mem::take(&mut engine.state.players[1].hand);
     engine.state.players[1].library.extend(cleared);
     let chosen = ["forest", "mountain"]
         .into_iter()

@@ -54,7 +54,7 @@ fn mulligan_redraw(
     let idx = state
         .player_idx(player)
         .ok_or(EngineError::UnknownPlayer(player))?;
-    let hand: Vec<ObjectId> = state.players[idx].hand.drain(..).collect();
+    let hand: Vec<ObjectId> = std::mem::take(&mut state.players[idx].hand);
     for oid in hand {
         move_object_to_zone(state, registry, oid, Zone::Library, None)?;
     }

@@ -2507,10 +2507,7 @@ impl GameEngine {
                 };
                 let player = pending.deciding_player;
                 self.state.pending_resolution = Some(pending);
-                match self.cast_spell(player, cast) {
-                    Ok(batch) => return Ok(batch),
-                    Err(error) => return Err(error),
-                }
+                return self.cast_spell(player, cast);
             }
             _ => {
                 self.state.pending_resolution = Some(pending);
