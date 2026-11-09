@@ -9,6 +9,7 @@ pub(super) mod components;
 pub(super) mod convoke;
 pub(super) mod demand;
 mod feasibility;
+pub(super) use feasibility::PoolPaymentFeasibility;
 #[cfg(test)]
 mod hybrid_phyrexian_tests;
 pub(super) mod mana;

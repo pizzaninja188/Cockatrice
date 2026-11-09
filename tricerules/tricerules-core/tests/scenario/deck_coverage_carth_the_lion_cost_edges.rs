@@ -293,15 +293,15 @@ fn carth_staged_cost_is_live_before_target_choice_and_locked_after_it() {
 }
 
 #[test]
-fn carth_staged_cancellation_and_retry_pay_only_the_successful_activation() {
+fn carth_staged_rejected_cancellation_preserves_the_single_loyalty_payment() {
     let (mut engine, _, source, own, opponent) = staged_fixture(2_610_271_042, false);
     announce(&mut engine, source, own);
     select_target(&mut engine, opponent);
     let command = cancel(&engine);
     engine
         .apply_scenario_command(0, &command)
-        .expect("cancel the unpaid announcement");
-    assert!(engine.state.pending_ability_activation.is_none());
+        .expect_err("the opponent's announcement prevents a voluntary takeback");
+    assert!(engine.state.pending_ability_activation.is_some());
     assert!(engine.state.stack.is_empty());
     assert!(!engine.state.objects[&source].tapped);
     assert_eq!(
@@ -317,8 +317,6 @@ fn carth_staged_cancellation_and_retry_pay_only_the_successful_activation() {
             .player(0)
             .activated_planeswalker_loyalty
     );
-    announce(&mut engine, source, own);
-    select_target(&mut engine, opponent);
     pay(&mut engine);
     assert_eq!(
         engine.state.objects[&source].counter_count(CounterKind::Loyalty),

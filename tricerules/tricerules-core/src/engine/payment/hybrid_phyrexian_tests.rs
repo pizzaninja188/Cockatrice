@@ -648,26 +648,28 @@ fn hybrid_deferred_activation_branches_are_announced_locked_and_paid_once() {
             assert_eq!(pending.flex_payments, vec![flex]);
             assert_eq!(e.state.players[0].life, 20);
             assert_eq!(e.state.players[0].mana_pool.white, 2);
-            // Cancelling an announcement neither pays nor strands its branch choice.
-            e.apply_command(
-                0,
-                &RuledCommand {
-                    cmd: Some(rv1::ruled_command::Cmd::CancelAbilityActivation(
-                        rv1::CancelAbilityActivation {
-                            transaction_id: pending.transaction_id,
-                            expected_revision: pending.revision,
-                        },
-                    )),
-                },
-            )
-            .unwrap();
-            e.apply_command(
-                0,
-                &RuledCommand {
-                    cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(begin)),
-                },
-            )
-            .unwrap();
+            // Only the single-actor hand route retains voluntary cancellation.
+            if zone == Zone::Hand {
+                e.apply_command(
+                    0,
+                    &RuledCommand {
+                        cmd: Some(rv1::ruled_command::Cmd::CancelAbilityActivation(
+                            rv1::CancelAbilityActivation {
+                                transaction_id: pending.transaction_id,
+                                expected_revision: pending.revision,
+                            },
+                        )),
+                    },
+                )
+                .unwrap();
+                e.apply_command(
+                    0,
+                    &RuledCommand {
+                        cmd: Some(rv1::ruled_command::Cmd::BeginAbilityActivation(begin)),
+                    },
+                )
+                .unwrap();
+            }
             if zone == Zone::Battlefield {
                 let pending = e.state.pending_ability_activation.clone().unwrap();
                 e.apply_command(
@@ -726,7 +728,7 @@ fn hybrid_deferred_activation_branches_are_announced_locked_and_paid_once() {
                     ..commit.clone()
                 },
                 rv1::CommitAbilityActivation {
-                    transaction_id: pending.transaction_id,
+                    transaction_id: current.transaction_id + 1,
                     ..commit.clone()
                 },
             ] {

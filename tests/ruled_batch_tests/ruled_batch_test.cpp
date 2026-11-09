@@ -1245,6 +1245,7 @@ TEST_F(RuledBatchTest, AggregateCounterSchemaDescriptorsAndAbsentWireRemainCompa
                             "ruled.v1.CostSelection"));
     ASSERT_TRUE(expectField(pendingActivation, "flex_payments", 23, Field::TYPE_MESSAGE, true, false, nullptr,
                             "ruled.v1.FlexPipPayment"));
+    ASSERT_TRUE(expectField(pendingActivation, "can_cancel", 24, Field::TYPE_BOOL, false, false, nullptr, nullptr));
 
     google::protobuf::DynamicMessageFactory factory;
     const auto *beginPrototype = factory.GetPrototype(beginActivation);
@@ -1304,6 +1305,7 @@ TEST_F(RuledBatchTest, AggregateCounterSchemaDescriptorsAndAbsentWireRemainCompa
     EXPECT_EQ(pendingActivationMessage.source_zone_change_generation(), 4u);
     EXPECT_EQ(pendingActivationMessage.cost_selections_size(), 0);
     EXPECT_EQ(pendingActivationMessage.flex_payments_size(), 0);
+    EXPECT_FALSE(pendingActivationMessage.can_cancel());
     EXPECT_EQ(pendingActivationMessage.SerializeAsString(), pendingActivationBytes);
 }
 
@@ -11479,6 +11481,7 @@ TEST_F(RuledBatchTest, PendingAbilityActivationReconnectRetainsPublicStageAndOnl
         for (Server_Player *seat : {p1, p2}) {
             auto *pending = (*batch->mutable_legal_by_player())[seat->getPlayerId()].mutable_pending_ability_activation();
             pending->set_transaction_id(77u);
+            pending->set_can_cancel(stage == ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT && seat == p1);
             pending->set_revision(2u);
             pending->set_stage(stage);
             pending->set_source_object_id(700u);
@@ -11521,6 +11524,7 @@ TEST_F(RuledBatchTest, PendingAbilityActivationReconnectRetainsPublicStageAndOnl
             ASSERT_EQ(restored.legal_by_player().size(), 1u);
             const auto &pending = restored.legal_by_player().at(recipient->getPlayerId()).pending_ability_activation();
             EXPECT_EQ(pending.transaction_id(), 77u);
+            EXPECT_EQ(pending.can_cancel(), stage == ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT && recipient == p1);
             EXPECT_EQ(pending.stage(), stage);
             EXPECT_EQ(pending.announced_targets(0).object_id(), 701u);
             EXPECT_EQ(pending.target_candidates_size(), stage == ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET && recipient == p2 ? 1 : 0);

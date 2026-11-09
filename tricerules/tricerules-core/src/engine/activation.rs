@@ -14,6 +14,8 @@ pub(super) struct PendingAbilityActivationInternal {
     route: PendingAbilityActivationRoute,
     prepared_costs: Option<PreparedPaymentCosts>,
     announcement: super::casting::AnnouncedAbilityActivation,
+    // A departure can return the procedure to ChooseOpponent, but cannot retract its handoff.
+    handed_to_opponent: bool,
 }
 
 #[derive(Clone)]
@@ -653,6 +655,7 @@ impl GameEngine {
             route: PendingAbilityActivationRoute::OpponentChoice,
             prepared_costs: None,
             announcement,
+            handed_to_opponent: selected.is_some(),
         });
         Ok(RuledEventBatch::default())
     }
@@ -759,6 +762,7 @@ impl GameEngine {
             },
             prepared_costs: Some(prepared_costs),
             announcement,
+            handed_to_opponent: false,
         });
         Ok(RuledEventBatch::default())
     }
@@ -882,6 +886,7 @@ impl GameEngine {
             route: PendingAbilityActivationRoute::HandPayment,
             prepared_costs: Some(prepared_costs),
             announcement,
+            handed_to_opponent: false,
         });
         Ok(RuledEventBatch::default())
     }
@@ -1034,6 +1039,12 @@ impl GameEngine {
             .as_mut()
             .unwrap()
             .announcement = announcement;
+        if pending.chosen_opponent_id.is_some() {
+            self.pending_ability_activation_internal
+                .as_mut()
+                .unwrap()
+                .handed_to_opponent = true;
+        }
         self.state.pending_ability_activation = Some(pending);
         Ok(RuledEventBatch::default())
     }
@@ -1284,6 +1295,68 @@ impl GameEngine {
         self.finish_ability_cost_transaction(plan, announcement, replay)
     }
 
+    fn ability_activation_can_cancel(&self) -> bool {
+        let Some(pending) = self.state.pending_ability_activation.as_ref() else {
+            return false;
+        };
+        let Some(internal) = self.pending_ability_activation_internal.as_ref() else {
+            return false;
+        };
+        if self.state.pending_resolution.is_some() {
+            return false;
+        }
+        if !internal.handed_to_opponent {
+            return true;
+        }
+        if pending.stage() != rv1::AbilityActivationStage::Payment {
+            return false;
+        }
+        // CR 602.2/734.1: an impossible procedure may be abandoned, but an invalid payment
+        // submission or a missing bounded positive witness does not establish impossibility.
+        let command = rv1::CommitAbilityActivation {
+            transaction_id: pending.transaction_id,
+            expected_revision: pending.revision,
+            ..Default::default()
+        };
+        let Ok((costs, source, _)) =
+            self.prepare_pending_ability_payment(pending.actor_player_id, &command)
+        else {
+            return true; // The exact source can no longer pay the locked nonmana cost.
+        };
+        if !matches!(
+            self.pool_payment_feasibility(&costs, source, false),
+            super::payment::PoolPaymentFeasibility::Impossible
+        ) {
+            return false;
+        }
+        let Some(idx) = self.state.player_idx(pending.actor_player_id) else {
+            return false;
+        };
+        let inventory = self.state.players[idx]
+            .battlefield
+            .iter()
+            .map(|&oid| (oid, self.effective_activated_abilities(oid)))
+            .collect::<Vec<_>>();
+        // With no legal first mana activation there is no future resource-producing path,
+        // including in static-effect contexts excluded by the conservative resource ceiling.
+        if inventory.iter().all(|(oid, abilities)| {
+            abilities.iter().all(|ability| {
+                !ability.definition.is_mana_ability()
+                    || !super::legal_actions::legal_ability_cost_choices(
+                        self,
+                        pending.actor_player_id,
+                        *oid,
+                        ability.slot as usize,
+                        &ability.definition,
+                    )
+                    .non_mana_costs_payable
+            })
+        }) {
+            return true;
+        }
+        super::action_availability::proofs::payment_impossible(self, &costs, false, &inventory)
+    }
+
     pub(super) fn cancel_ability_activation(
         &mut self,
         player: PlayerId,
@@ -1302,6 +1375,11 @@ impl GameEngine {
                 "wrong actor or stale activation cancellation",
             ));
         }
+        if !self.ability_activation_can_cancel() {
+            return Err(EngineError::Illegal(
+                "activation announcement is committed to another player",
+            ));
+        }
         self.state.pending_ability_activation = None;
         self.pending_ability_activation_internal = None;
         Ok(RuledEventBatch::default())
@@ -1315,6 +1393,8 @@ impl GameEngine {
             .pending_ability_activation
             .clone()
             .map(|mut pending| {
+                pending.can_cancel =
+                    player == pending.actor_player_id && self.ability_activation_can_cancel();
                 if player != pending.actor_player_id || self.state.pending_resolution.is_some() {
                     pending.cost_selections.clear();
                     pending.flex_payments.clear();

@@ -1669,7 +1669,7 @@ void RuledPaymentUi::cancelPendingActivatedAbility()
     if (state->pendingAbilityActivation && local.chosenOpponentTargets) {
         const auto &engine = *state->pendingAbilityActivation;
         if (engine.actor_player_id() != actions->player->getPlayerInfo()->getId() ||
-            ruledActivationNestedChoice(*state) || state->isEngineCommandPending())
+            !engine.can_cancel() || ruledActivationNestedChoice(*state) || state->isEngineCommandPending())
             return;
         ruled::v1::RuledCommand command;
         command.mutable_cancel_ability_activation()->set_transaction_id(engine.transaction_id());

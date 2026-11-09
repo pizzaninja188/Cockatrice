@@ -306,10 +306,11 @@ mod tests {
             engine.state.players[0].life = 20;
             engine.apply_scenario_command(0, &command).unwrap();
             assert_eq!(engine.state.players[0].life, 21);
-            let cancel = if ability_payment {
+            let finish = if ability_payment {
                 RuledCommand {
-                    cmd: Some(rv1::ruled_command::Cmd::CancelAbilityActivation(
-                        rv1::CancelAbilityActivation {
+                    // The restored opponent announcement remains committed; complete it.
+                    cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(
+                        rv1::CommitAbilityActivation {
                             transaction_id: engine
                                 .state
                                 .pending_ability_activation
@@ -322,6 +323,7 @@ mod tests {
                                 .as_ref()
                                 .unwrap()
                                 .revision,
+                            ..Default::default()
                         },
                     )),
                 }
@@ -339,7 +341,7 @@ mod tests {
                     )),
                 }
             };
-            engine.apply_scenario_command(0, &cancel).unwrap();
+            engine.apply_scenario_command(0, &finish).unwrap();
             assert!(engine.pending_spell_cast_internal.is_none());
             assert!(engine.pending_ability_activation_internal.is_none());
             assert_eq!(engine.state.objects[&spell].zone, Zone::Hand);

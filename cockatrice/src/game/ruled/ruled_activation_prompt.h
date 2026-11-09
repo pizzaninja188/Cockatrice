@@ -16,7 +16,7 @@ ruledActivationPrompt(const RuledClientState &state, int localPlayerId, const QS
     prompt.mode = GamePromptWidget::PromptMode::AbilityAnnouncement;
     prompt.activationTransactionId = engine.transaction_id();
     prompt.activationRevision = engine.revision();
-    prompt.canCancel = engine.actor_player_id() == localPlayerId;
+    prompt.canCancel = engine.actor_player_id() == localPlayerId && engine.can_cancel();
     const auto tr = [](const char *text) { return QCoreApplication::translate("GamePromptWidget", text); };
     const QString source = QString::fromStdString(engine.source_description());
     if (engine.stage() == ruled::v1::ABILITY_ACTIVATION_STAGE_CHOOSE_OPPONENT &&
@@ -34,7 +34,7 @@ ruledActivationPrompt(const RuledClientState &state, int localPlayerId, const QS
                 .arg(QString::fromStdString(engine.locked_total_cost()), source)
             : paymentText;
     } else {
-        prompt.text = tr("Waiting for Player %1 to finish announcing %2.").arg(engine.deciding_player_id()).arg(source);
+        prompt.mode = GamePromptWidget::PromptMode::WaitingForChoice;
     }
     return prompt;
 }

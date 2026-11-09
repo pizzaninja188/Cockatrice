@@ -280,6 +280,7 @@ ruledCancelCounterGroupPayment(RuledClientState &state, PendingActivatedAbility 
     const quint64 revision = local.revision();
     if (actorPlayerId < 0 || state.isEngineCommandPending() || ruledActivationNestedChoice(state) ||
         !matchesAcceptedCounterGroupPayment(state, local, actorPlayerId, transactionId, revision) ||
+        !state.pendingAbilityActivation->can_cancel() ||
         !local.beginCancel()) {
         return std::nullopt;
     }

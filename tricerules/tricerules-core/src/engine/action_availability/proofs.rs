@@ -105,7 +105,7 @@ pub(super) fn mana_only(
 
 /// Overestimate every color independently and ignore spending restrictions. Even this
 /// generous pool cannot meet any normalized demand => the selected payment is impossible.
-pub(super) fn payment_impossible(
+pub(in crate::engine) fn payment_impossible(
     engine: &GameEngine,
     cost: &PreparedPaymentCosts,
     convoke: bool,

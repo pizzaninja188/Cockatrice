@@ -8,6 +8,14 @@ pub(in crate::engine) struct PaymentWitness {
     pub restricted_mana: Vec<rv1::ManaSpendSelection>,
 }
 
+/// Exhaustive current-pool search is distinct from the bounded search over future mana
+/// activations. Numeric/normalization failures must never authorize an illegal-action rollback.
+pub(in crate::engine) enum PoolPaymentFeasibility {
+    Payable(PaymentWitness),
+    Impossible,
+    Unknown,
+}
+
 impl GameEngine {
     /// Optimistic lower bound for a normal printed spell cost, before enumerating targets.
     /// All generic cost is removed and every Phyrexian pip may use life. A false result is
@@ -300,8 +308,22 @@ impl GameEngine {
         source: rv1::CostObjectRef,
         convoke: bool,
     ) -> Option<PaymentWitness> {
+        match self.pool_payment_feasibility(cost, source, convoke) {
+            PoolPaymentFeasibility::Payable(witness) => Some(witness),
+            PoolPaymentFeasibility::Impossible | PoolPaymentFeasibility::Unknown => None,
+        }
+    }
+
+    pub(in crate::engine) fn pool_payment_feasibility(
+        &self,
+        cost: &PreparedPaymentCosts,
+        source: rv1::CostObjectRef,
+        convoke: bool,
+    ) -> PoolPaymentFeasibility {
         let player = cost.transaction.player();
-        let idx = self.state.player_idx(player)?;
+        let Some(idx) = self.state.player_idx(player) else {
+            return PoolPaymentFeasibility::Unknown;
+        };
         let pool = &self.state.players[idx].mana_pool;
         let mut available = [
             pool.white,
@@ -325,18 +347,25 @@ impl GameEngine {
                 .into_iter()
                 .enumerate()
             {
-                available[slot] = available[slot].checked_add(n)?;
-                entry[slot] = entry[slot].checked_add(n)?;
+                let Some(total) = available[slot].checked_add(n) else {
+                    return PoolPaymentFeasibility::Unknown;
+                };
+                let Some(group_total) = entry[slot].checked_add(n) else {
+                    return PoolPaymentFeasibility::Unknown;
+                };
+                available[slot] = total;
+                entry[slot] = group_total;
             }
         }
-        let demands = super::demand::normalize(
+        let Ok(demands) = super::demand::normalize(
             &cost.mana,
             cost.x_value,
             cost.extra_generic,
             cost.generic_reduction,
             &cost.flex_payments,
-        )
-        .ok()?;
+        ) else {
+            return PoolPaymentFeasibility::Unknown;
+        };
         // A color permission cannot increase the quantity of available mana. Reject an
         // impossible pool before querying global characteristics or validating transactions.
         // Object contributions are the exception and retain their normal search below.
@@ -355,7 +384,7 @@ impl GameEngine {
                     > total_available
             })
         {
-            return None;
+            return PoolPaymentFeasibility::Impossible;
         }
         let as_any_color = self.may_spend_mana_as_any_color(player);
         let mut candidates = Vec::new();
@@ -401,10 +430,10 @@ impl GameEngine {
                 ..Default::default()
             };
             if let Some(witness) = context.search(0, &demand, &mut selection, &mut failed) {
-                return Some(witness);
+                return PoolPaymentFeasibility::Payable(witness);
             }
         }
-        None
+        PoolPaymentFeasibility::Impossible
     }
 }
 

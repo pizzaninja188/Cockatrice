@@ -82,7 +82,9 @@ bool supportedSchema()
         // SubmitResolutionChoice.flex_payments reuses the private FlexPipPayment value:
         // pip indices, life flags and color enums are not object identities. The enclosing
         // resolution_prompt_id remains checked on both direct submissions and previews.
-        const QByteArray expected("548ae30b9f97173f2e17a6b831ac4ac4afa412ab9418426c40f38f75605b1dba");
+        // PendingAbilityActivation.can_cancel is an actor-private permission bit, not an
+        // identity. Reflection redaction clears it from other seats and spectator snapshots.
+        const QByteArray expected("9d979787bd2fcf7d4fdd8bf35c92a8147c72317b634ede71a41d12c2463d082d");
         if (digest != expected)
             qCritical() << "ruled presentation schema needs an identity audit:" << digest;
         return digest == expected;

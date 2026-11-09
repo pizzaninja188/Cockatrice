@@ -1,3 +1,4 @@
+#include "game/ruled/ruled_activation_prompt.h"
 // Headless client-core tests for the ruled view model.
 //
 // The client mirror of tests/ruled_batch_tests/: synthetic `ruled::v1::RuledEventBatch`
@@ -623,6 +624,7 @@ ruled::v1::PendingAbilityActivation makeOwnedAggregateCounterPaymentSnapshot(
     current.set_ability_index(captured.announcement.ability_index());
     current.set_reserved_object_id(kUnsupportedCostSourceOid + 5000);
     current.set_source_description("Aggregate counter activation");
+    current.set_can_cancel(true);
     current.set_locked_total_cost("opaque engine cost label");
     for (const auto &selection : captured.announcement.cost_selections())
         current.add_cost_selections()->CopyFrom(selection);
@@ -21212,4 +21214,28 @@ TEST_F(RuledClientTest, HybridPhyrexianResolutionChoicesRemainBoundAcrossPreview
     model.begin();
     ASSERT_TRUE(model.bindResolutionChoices(813, {life}));
     EXPECT_TRUE(model.resolutionCommand(813)->submit_resolution_choice().flex_payments(0).pay_life());
+}
+
+TEST_F(RuledClientTest, EngineActivationHandoffUsesGenericWaitingAndAuthoritativeCancel)
+{
+    RuledClientState engineState(nullptr);
+    engineState.pendingAbilityActivation.emplace();
+    auto &activation = *engineState.pendingAbilityActivation;
+    activation.set_actor_player_id(10);
+    activation.set_deciding_player_id(20);
+    activation.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET);
+    activation.set_source_description("Arena");
+    auto prompt = ruledActivationPrompt(engineState, 10, {});
+    ASSERT_TRUE(prompt.has_value());
+    EXPECT_EQ(prompt->mode, GamePromptWidget::PromptMode::WaitingForChoice);
+    EXPECT_FALSE(prompt->canCancel);
+    activation.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT);
+    activation.set_deciding_player_id(10);
+    prompt = ruledActivationPrompt(engineState, 10, {});
+    EXPECT_FALSE(prompt->canCancel);
+    activation.set_can_cancel(true);
+    prompt = ruledActivationPrompt(engineState, 10, {});
+    EXPECT_TRUE(prompt->canCancel);
+    prompt = ruledActivationPrompt(engineState, 20, {});
+    EXPECT_FALSE(prompt->canCancel);
 }

@@ -203,6 +203,10 @@ fn choice_engine() -> (GameEngine, rv1::ActivateAbility) {
 }
 
 fn choice_engine_players(players: &[PlayerId]) -> (GameEngine, rv1::ActivateAbility) {
+    let discard_mana = PAYMENT_CREATURE
+        .replace("payment_creature", "discard_payment_creature")
+        .replace("Payment Creature", "Discard Payment Creature")
+        .replace("SacrificeSelf", "Discard");
     let magus = OPPONENT_CHOICE_LAND
         .replace("opponent_choice_land", "opponent_choice_magus")
         .replace("Opponent Choice Land", "Opponent Choice Magus")
@@ -245,6 +249,7 @@ fn choice_engine_players(players: &[PlayerId]) -> (GameEngine, rv1::ActivateAbil
             include_str!("../../../tricerules-cards/data/doubling_season.ron"),
             OPPONENT_CHOICE_LAND,
             PAYMENT_CREATURE,
+            &discard_mana,
             RESTRICTED_PAYMENT_LAND,
             SPELL_PAYMENT_LAND,
             PAIN_PAYMENT_LAND,
@@ -6921,6 +6926,25 @@ fn arena_staged_departing_chooser_refreshes_explicit_actor_choice() {
     assert_eq!(pending.deciding_player_id, 10);
     assert_eq!(pending.chosen_opponent_id, None);
     assert_eq!(pending.valid_opponent_ids, vec![30, 40]);
+    assert!(
+        !batch.legal_by_player[&10]
+            .pending_ability_activation
+            .as_ref()
+            .unwrap()
+            .can_cancel
+    );
+    let cancel = RuledCommand {
+        cmd: Some(rv1::ruled_command::Cmd::CancelAbilityActivation(
+            rv1::CancelAbilityActivation {
+                transaction_id: pending.transaction_id,
+                expected_revision: pending.revision,
+            },
+        )),
+    };
+    let pending = pending.clone();
+    engine
+        .apply_scenario_command(10, &cancel)
+        .expect_err("departure cannot erase the prior handoff");
     assert_eq!(pending.announced_targets.len(), 1);
     assert!(batch.legal_by_player[&30]
         .pending_ability_activation
@@ -7405,6 +7429,14 @@ fn arena_staged_snapshots_target_observers_repoints_allocated_id_and_commits_cri
         let command = if finish {
             rv1::ruled_command::Cmd::CommitAbilityActivation(commit.clone())
         } else {
+            // A paid, handed-off announcement is no longer voluntarily cancellable. Make
+            // the tap cost impossible to exercise illegal-procedure recovery instead.
+            engine
+                .state
+                .objects
+                .get_mut(&legacy.source_object_id)
+                .unwrap()
+                .tapped = true;
             rv1::ruled_command::Cmd::CancelAbilityActivation(rv1::CancelAbilityActivation {
                 transaction_id: commit.transaction_id,
                 expected_revision: commit.expected_revision,
@@ -7487,7 +7519,7 @@ fn arena_staged_snapshots_target_observers_repoints_allocated_id_and_commits_cri
                 tricerules_card_model::TriggerCondition::WheneverPlayerCommitsCrime { .. }
             )));
             assert_eq!(engine.state.players[0].mana_pool.colorless, 3);
-            assert!(!engine.state.objects[&legacy.source_object_id].tapped);
+            assert!(engine.state.objects[&legacy.source_object_id].tapped);
         }
     }
 }
@@ -8454,6 +8486,8 @@ fn arena_staged_announcement_hands_target_choice_to_opponent_before_payment() {
         rv1::AbilityActivationStage::OpponentTarget
     );
     assert_eq!(actor.deciding_player_id, 20);
+    assert!(!actor.can_cancel);
+    assert!(!opponent.can_cancel);
     assert_eq!(actor.actor_player_id, 10);
     assert_eq!(actor.announced_targets.len(), 1);
     assert_eq!(
@@ -9324,7 +9358,7 @@ fn loyalty_x_offer_uses_signed_domain_at_high_loyalty_and_rejects_overflow() {
 }
 
 #[test]
-fn arena_staged_invalid_target_answers_are_atomic_and_actor_can_cancel() {
+fn arena_staged_invalid_target_answers_and_post_handoff_cancel_are_atomic() {
     let (mut engine, legacy) = choice_engine();
     let batch = engine
         .apply_scenario_command(10, &begin_choice(&engine, &legacy))
@@ -9384,13 +9418,204 @@ fn arena_staged_invalid_target_answers_are_atomic_and_actor_can_cancel() {
         .apply_scenario_command(20, &cancel)
         .expect_err("only the actor may cancel");
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
-    let batch = engine.apply_scenario_command(10, &cancel).unwrap();
-    assert!(engine.state.pending_ability_activation.is_none());
-    assert!(engine.state.blocking_choice().is_none());
-    assert!(batch
-        .legal_by_player
-        .values()
-        .all(|legal| legal.pending_ability_activation.is_none()));
+    engine
+        .apply_scenario_command(10, &cancel)
+        .expect_err("the actor cannot retract an announcement handed to an opponent");
+    assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
+    engine
+        .apply_scenario_command(
+            20,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::SubmitAbilityActivationChoice(
+                    valid,
+                )),
+            },
+        )
+        .unwrap();
+    let pending = engine.state.pending_ability_activation.as_ref().unwrap();
+    let cancel = RuledCommand {
+        cmd: Some(rv1::ruled_command::Cmd::CancelAbilityActivation(
+            rv1::CancelAbilityActivation {
+                transaction_id: pending.transaction_id,
+                expected_revision: pending.revision,
+            },
+        )),
+    };
+    let before = serde_json::to_value(&engine.state).unwrap();
+    engine
+        .apply_scenario_command(10, &cancel)
+        .expect_err("seeing the opponent's answer must not reopen cancellation");
+    assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
     assert!(!engine.state.objects[&legacy.source_object_id].tapped);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 3);
+}
+
+#[test]
+fn arena_cancel_before_handoff_and_impossible_payment_recovery() {
+    let (mut engine, legacy) = choice_engine_players(&[10, 20, 30]);
+    place_ready(&mut engine, 30, "Grizzly Bears");
+    let mut begin = begin_choice(&engine, &legacy);
+    let Some(rv1::ruled_command::Cmd::BeginAbilityActivation(command)) = begin.cmd.as_mut() else {
+        unreachable!()
+    };
+    command.opponent_player_id = None;
+    let batch = engine.apply_scenario_command(10, &begin).unwrap();
+    let pending = batch.legal_by_player[&10]
+        .pending_ability_activation
+        .as_ref()
+        .unwrap();
+    assert!(pending.can_cancel);
+    assert!(
+        !batch.legal_by_player[&20]
+            .pending_ability_activation
+            .as_ref()
+            .unwrap()
+            .can_cancel
+    );
+    let cancel = RuledCommand {
+        cmd: Some(rv1::ruled_command::Cmd::CancelAbilityActivation(
+            rv1::CancelAbilityActivation {
+                transaction_id: pending.transaction_id,
+                expected_revision: pending.revision,
+            },
+        )),
+    };
+    engine.apply_scenario_command(10, &cancel).unwrap();
+    assert!(engine.state.pending_ability_activation.is_none());
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 3);
+
+    // A bad payment proposal does not authorize a takeback while sources can pay.
+    let (mut engine, legacy) = choice_engine();
+    engine.state.players[0].mana_pool.colorless = 0;
+    for _ in 0..3 {
+        place_ready(&mut engine, 10, "Forest");
+    }
+    let commit = announce_both(&mut engine, &legacy);
+    assert!(
+        !engine
+            .pending_ability_activation_for(10)
+            .unwrap()
+            .can_cancel
+    );
+    let cancel = RuledCommand {
+        cmd: Some(rv1::ruled_command::Cmd::CancelAbilityActivation(
+            rv1::CancelAbilityActivation {
+                transaction_id: commit.transaction_id,
+                expected_revision: commit.expected_revision,
+            },
+        )),
+    };
+    engine
+        .apply_scenario_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::CommitAbilityActivation(commit)),
+            },
+        )
+        .expect_err("empty pool cannot pay yet");
+    engine
+        .apply_scenario_command(10, &cancel)
+        .expect_err("mana can still be produced");
+
+    // If the resources really are insufficient, only the actor receives recovery permission.
+    let (mut engine, legacy) = choice_engine();
+    engine.state.players[0].mana_pool.colorless = 1;
+    let commit = announce_both(&mut engine, &legacy);
+    assert!(
+        engine
+            .pending_ability_activation_for(10)
+            .unwrap()
+            .can_cancel
+    );
+    assert!(
+        !engine
+            .pending_ability_activation_for(20)
+            .unwrap()
+            .can_cancel
+    );
+    engine
+        .apply_scenario_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::CancelAbilityActivation(
+                    rv1::CancelAbilityActivation {
+                        transaction_id: commit.transaction_id,
+                        expected_revision: commit.expected_revision,
+                    },
+                )),
+            },
+        )
+        .unwrap();
+    assert!(engine.state.pending_ability_activation.is_none());
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 1);
+    assert!(!engine.state.objects[&legacy.source_object_id].tapped);
+}
+
+#[test]
+fn arena_impossible_payment_recovery_ignores_unpayable_discard_mana() {
+    let (mut engine, legacy) = choice_engine();
+    place_ready(&mut engine, 10, "Discard Payment Creature");
+    let hand = engine.state.players[0].hand.clone();
+    for oid in hand {
+        resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            oid,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+    }
+    engine.state.players[0].mana_pool.colorless = 0;
+    let commit = announce_both(&mut engine, &legacy);
+    assert!(
+        engine
+            .pending_ability_activation_for(10)
+            .unwrap()
+            .can_cancel,
+        "a discard mana ability with no cards to discard cannot keep the procedure locked"
+    );
+    engine
+        .apply_scenario_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::CancelAbilityActivation(
+                    rv1::CancelAbilityActivation {
+                        transaction_id: commit.transaction_id,
+                        expected_revision: commit.expected_revision,
+                    },
+                )),
+            },
+        )
+        .unwrap();
+    assert!(engine.state.pending_ability_activation.is_none());
+}
+
+#[test]
+fn arena_pool_witness_numeric_limit_is_not_impossible_payment() {
+    let (mut engine, legacy) = choice_engine();
+    let source = place_ready(&mut engine, 10, "Restricted Payment Land");
+    engine.state.players[0].mana_pool.colorless = u32::MAX;
+    let commit = announce_both(&mut engine, &legacy);
+    activate_fixture_mana(&mut engine, source);
+    assert!(
+        !engine
+            .pending_ability_activation_for(10)
+            .unwrap()
+            .can_cancel,
+        "an overflowing witness pool is unknown, never proof that payment is impossible"
+    );
+    engine
+        .apply_scenario_command(
+            10,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::CancelAbilityActivation(
+                    rv1::CancelAbilityActivation {
+                        transaction_id: commit.transaction_id,
+                        expected_revision: commit.expected_revision,
+                    },
+                )),
+            },
+        )
+        .expect_err("the ordinary pool alone can pay for Arena");
 }

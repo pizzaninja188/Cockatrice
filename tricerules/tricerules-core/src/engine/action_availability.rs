@@ -4,7 +4,7 @@ use super::payment::candidates::{
     combinations, cost_selections, phyrexian_choices, product, AbilityInventory,
 };
 use super::*;
-mod proofs;
+pub(super) mod proofs;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Availability {

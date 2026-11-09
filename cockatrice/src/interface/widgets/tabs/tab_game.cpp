@@ -875,6 +875,11 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
     const int localPlayerId = game->getPlayerManager()->getLocalPlayerId();
     PlayerLogic *localPlayer = game->getPlayerManager()->getPlayers().value(localPlayerId, nullptr);
     RuledPlayerActions *localActions = localPlayer ? RuledActions::actions(localPlayer) : nullptr;
+    const auto waitingForPlayer = [&](int playerId) {
+        if (PlayerLogic *decider = game->getPlayerManager()->getPlayer(playerId))
+            return tr("Waiting for %1...").arg(decider->getPlayerInfo()->getName());
+        return tr("Waiting for opponent...");
+    };
     const auto setCounterGroupCostSelectionPrompt = [&]() {
         if (!localActions || !localActions->isAwaitingRuledCounterGroupSelection()) {
             return false;
@@ -904,7 +909,7 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.mode = PromptMode::AbilityAnnouncement;
         state.required = 0;
         state.selected = 0;
-        state.canCancel = true;
+        state.canCancel = activation.can_cancel();
         state.activationTransactionId = activation.transaction_id();
         state.activationRevision = activation.revision();
         state.activationPayment = true;
@@ -1000,11 +1005,7 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         }
     } else if (h->isWaitingForChoice()) {
         state.mode = PromptMode::WaitingForChoice;
-        if (PlayerLogic *decider = game->getPlayerManager()->getPlayer(h->choiceWaitingPlayer())) {
-            state.text = tr("Waiting for %1...").arg(decider->getPlayerInfo()->getName());
-        } else {
-            state.text = tr("Waiting for opponent...");
-        }
+        state.text = waitingForPlayer(h->choiceWaitingPlayer());
     } else if (h->isResolutionHandPickActive()) {
         state.mode = PromptMode::ResolutionPick;
         state.canDecline = h->pendingClickChoiceMayDecline();
@@ -1022,6 +1023,8 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
     } else if (const auto activation = ruledActivationPrompt(*h, localPlayerId,
                      localActions ? localActions->pendingRuledAbilityPromptText() : QString{})) {
         state = *activation;
+        if (state.mode == PromptMode::WaitingForChoice)
+            state.text = waitingForPlayer(h->pendingAbilityActivation->deciding_player_id());
     } else if (opening == OpeningKind::ChooseFirst) {
         state.mode = PromptMode::OpeningChooseFirst;
         state.openingPickSeatIds = h->getOpeningPickSeatIds();
