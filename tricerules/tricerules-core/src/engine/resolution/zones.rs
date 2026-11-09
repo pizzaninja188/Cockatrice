@@ -1636,22 +1636,12 @@ pub(super) fn put_in_owners_library(
             // CR 701.24c: the departed Aura's LKI still identifies which owner's library to
             // shuffle, but the stale attached object cannot move or bind to a returned object.
             // A player who has left the game has no library to shuffle (CR 800.4a).
-            let owner_is_active = cx
-                .engine
-                .state
-                .player_idx(attachment.owner)
-                .is_some_and(|index| !cx.engine.state.players[index].has_lost);
-            if owner_is_active {
-                crate::engine::shuffle_player_library_for_current_command(
-                    &mut cx.engine.state,
-                    attachment.owner,
-                );
-                cx.events.push(ev_log(format!(
-                    "P{} shuffles their library.",
-                    attachment.owner
-                )));
-            }
-            return Ok(EffectOutcome::Continue);
+            return super::battlefield_returns::begin_battlefield_cohort_move(
+                cx,
+                Vec::new(),
+                Zone::Library,
+                vec![attachment.owner],
+            );
         }
     } else {
         resolve_zone_effect_subject(
@@ -1663,6 +1653,16 @@ pub(super) fn put_in_owners_library(
             &subject,
         )
     };
+    if placement == LibraryPlacement::Shuffle {
+        // Single-object and simultaneous shuffles share the same exact-incarnation cohort,
+        // precommit Commander choices and retained owner shuffle receipts.
+        return super::battlefield_returns::begin_battlefield_cohort_move(
+            cx,
+            tid.into_iter().collect(),
+            Zone::Library,
+            Vec::new(),
+        );
+    }
     if let Some(tid) = tid {
         let Some(object) = cx.engine.state.objects.get(&tid) else {
             return Ok(EffectOutcome::Continue);

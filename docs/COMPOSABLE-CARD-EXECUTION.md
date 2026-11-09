@@ -1,5 +1,21 @@
 # Composable card execution and authoring contract
 
+Library-return consolidation (2026-11-09, first increment): individual
+`PutInOwnersLibrary(Shuffle)` instructions now share the existing owner-zone cohort transaction
+with Floodpits Drowner and Teferi, Temporal Pilgrim. Deglamer and Unravel the Aether collect
+Commander destination choices before committing the exact object and one owner shuffle.
+A departed enchanted object's captured owner still supplies the shuffle receipt independently of
+the moving cohort. Fixed and owner-chosen library positions remain on their existing continuation
+until the next increment. Brainstorm's private ordered hand-return transaction remains distinct;
+its hidden selection and reveal boundary do not match public battlefield returns.
+
+This reuses existing branch and movement messages: protobuf, Servatrice redaction/physical binding,
+Qt choice handling and freeform are unchanged. Existing library/Commander, attachment-departure,
+Program-tail and multiplayer scenarios characterize behavior before and after this mechanical
+rerouting; no new card admission or authored syntax is introduced. Governing rules are CR 400.7,
+608.2m, 701.24c, 800.4a and 903.9b in the
+[official rules effective November 6, 2026](https://media.wizards.com/2026/downloads/MagicCompRules%2020261106.pdf).
+
 Implementation update (2026-11-02): the private `EffectResult` carrier is retired. Program
 instructions retain their explicit input value and admitted type through `OperationInput`;
 primitives publish tagged `OperationResults`, including multiple outputs and completed empty
