@@ -3,7 +3,7 @@
 param(
     [string] $Repository,
     [ValidateRange(0, 1000000)]
-    [double] $MinimumFreeGiB = 20,
+    [double] $MinimumFreeGiB = 10,
     [switch] $SkipRustCache
 )
 $ErrorActionPreference = 'Stop'
@@ -62,9 +62,11 @@ function Reset-RustCacheIfNeeded {
                 else { $bytes += $entry.Length }
             }
         }
+        # Low free space alone must not turn a warm build into a cold rebuild.
+        # Enforce the explicit cache budget here; the capacity check below reports
+        # insufficient headroom without deleting an otherwise valid cache.
+        if ($bytes / 1GB -le $budgetGiB) { return }
         $freeGiB = (Get-VerificationDrive $debug).AvailableFreeSpace / 1GB
-        if ($bytes / 1GB -le $budgetGiB -and ($freeGiB -ge $MinimumFreeGiB -or
-                $freeGiB + $bytes / 1GB -lt $MinimumFreeGiB)) { return }
         if (Get-Process cargo,rustc,clippy-driver -ErrorAction SilentlyContinue) {
             throw 'Managed Cargo cleanup requires idle builds. Retry when Cargo and compiler processes have exited.'
         }

@@ -81,13 +81,16 @@ for Windows sessions, and retain Windows build and packaging coverage for Window
 Use the explicit Linux gate for ruled E2E evidence. The ordinary Linux desktop CI
 configuration can skip those tests when the Rust sidecar is absent.
 
-The default preflight requires a conservative 20 GiB free-space reserve to guard against
+The default preflight requires a 10 GiB free-space reserve to guard against
 disk exhaustion during a build. It checks the repository,
 temporary directory and Cargo target filesystem, plus native path canonicalization.
 A low-space failure is environment evidence. Keep evidence and unrelated service
 data intact. After measuring build usage on the host, pass `-MinimumFreeGiB` with an
 explicit reserve if needed for later runs. Native path canonicalization and the other
 verification checks still run.
+The default is informed by a Windows build measurement, not a Linux capacity guarantee;
+fresh C++ builds and different toolchains may need a larger reserve. See the
+[measurement and limits](AGENT-VERIFICATION.md#final-verification-entry-point).
 
 Explicit `CARGO_PROFILE_DEV_DEBUG=0` and `CARGO_INCREMENTAL=0` trade debug information
 and incremental rebuild speed for smaller Rust artifacts. Changing these settings

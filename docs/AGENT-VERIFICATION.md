@@ -103,7 +103,7 @@ fingerprint table, and checks Cargo's library artifact freshness. It restores ea
 bytes in `finally`, rebuilds restored inputs, and retains timings and Cargo logs. This is an
 explicit mutation test, not part of ordinary final verification.
 
-Every real run starts with `check-verification-environment.ps1`. By default it requires 20 GiB
+Every real run starts with `check-verification-environment.ps1`. By default it requires 10 GiB
 free on the repository, temporary-directory, and Cargo-target volumes, and probes native
 path canonicalization in the checkout and temporary directory (Windows handles or Linux
 `realpath`). Replay uses this capability
@@ -114,6 +114,15 @@ With default settings it only checks the environment. `CARGO_TARGET_DIR` overrid
 relative overrides resolve from `tricerules`. The capacity check is a minimum headroom check,
 not a guarantee that an arbitrary build will fit. Pass `-MinimumFreeGiB` to the full gate
 or standalone preflight to select a reserve based on the host's measured build usage.
+
+The 10 GiB default leaves about 2 GiB above a measured peak of 8.03 GiB additional disk usage on
+Windows (2026-11-08, Rust 1.95.0, normal development profile). That measurement sampled
+volume free space every 200 ms while an empty, isolated Cargo target ran CardData Check,
+compiled all test targets, and ran all-target Clippy; the existing checkout's full verification
+was concurrently executing replay tests. It includes other activity on that volume and is
+an observed workload, not a universal minimum. Fully cold C++ builds, different toolchains,
+profile overrides, and large rebuilds can need more headroom; increase `-MinimumFreeGiB`
+for those cases. The free-space reserve and the optional cache-size budget below are separate.
 
 The workspace development profile (also inherited by tests) uses limited debug information
 and enables incremental compilation. Shared card-test suites reduce duplicated binaries and
@@ -137,8 +146,9 @@ Set-Content -LiteralPath build/rust-cache-budget-gib -Value '20'
 ./scripts/verify.ps1 -Side Rust -CardData
 ```
 
-Rust and combined verification recycle the dev profile before building if its size exceeds
-the budget or it can make up a shortfall on the Cargo target volume. The next build starts
+Rust and combined verification recycle the dev profile before building only if its size exceeds
+the explicit cache budget. Low free space alone never recycles a cache within budget: preflight
+reports the capacity failure and preserves the warm cache. Recycling starts the next build
 with a cold dev cache. The normal free-space check still runs afterward. This is a threshold
 checked between runs. A single build can temporarily exceed it. Leave headroom above the
 budget for a cold build. Automatic cleanup requires Cargo metadata to identify the default

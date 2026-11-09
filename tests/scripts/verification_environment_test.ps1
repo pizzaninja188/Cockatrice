@@ -55,6 +55,43 @@ edition = "2021"
         throw "Preflight discarded a cache within budget: $output"
     }
 
+    # Simulate a shortfall that deleting this small, within-budget cache could cover.
+    # A capacity failure must preserve the warm cache instead of forcing a cold build.
+    $lowSpaceCheck = Join-Path $fixture 'check-low-space.ps1'
+    $source = Get-Content -LiteralPath $check -Raw
+    $driveProbe = '[IO.DriveInfo]::new($Path)'
+    if (-not $source.Contains($driveProbe)) { throw 'Missing drive probe for low-space fixture.' }
+    [IO.File]::WriteAllText($lowSpaceCheck, $source.Replace($driveProbe,
+        '[pscustomobject]@{ AvailableFreeSpace = 1GB; Name = "fixture-volume" }'))
+    $cacheFile = Join-Path $debug 'test.pdb'
+    $cacheHash = (Get-FileHash -LiteralPath $cacheFile).Hash
+    $output = (& $PowerShell -NoProfile -File $lowSpaceCheck -Repository $fixture -MinimumFreeGiB 1.000001 2>&1) -join "`n"
+    if ($LASTEXITCODE -eq 0 -or $output -notmatch 'Insufficient free space' -or
+            $output -match 'Recycling the Cargo dev cache' -or -not (Test-Path -LiteralPath $cacheFile)) {
+        throw "Low space must fail without recycling a cache within budget: $output"
+    }
+    if ((Get-FileHash -LiteralPath $cacheFile).Hash -ne $cacheHash) {
+        throw 'Low-space preflight modified the retained cache.'
+    }
+
+    # The measured default reserve must accept 10 GiB and still reject less.
+    foreach ($freeGiB in @(10, 9)) {
+        [IO.File]::WriteAllText($lowSpaceCheck, $source.Replace($driveProbe,
+            ('[pscustomobject]@{{ AvailableFreeSpace = {0}GB; Name = "fixture-volume" }}' -f $freeGiB)))
+        $output = (& $PowerShell -NoProfile -File $lowSpaceCheck -Repository $fixture 2>&1) -join "`n"
+        if ($freeGiB -eq 10) {
+            if ($LASTEXITCODE -ne 0 -or $output -notmatch 'minimum free space: 10 GiB') {
+                throw "Default preflight must accept the measured 10 GiB reserve: $output"
+            }
+        }
+        elseif ($LASTEXITCODE -eq 0 -or $output -notmatch 'Insufficient free space') {
+            throw "Default preflight must reject less than 10 GiB: $output"
+        }
+        if (-not (Test-Path -LiteralPath $cacheFile) -or (Get-FileHash -LiteralPath $cacheFile).Hash -ne $cacheHash) {
+            throw 'Default capacity checks modified the retained cache.'
+        }
+    }
+
     $env:COCKATRICE_RUST_CACHE_BUDGET_GIB = '0.000001'
     $env:CARGO_TARGET_DIR = 'redirected-target'
     $output = (& $PowerShell -NoProfile -File $check -Repository $fixture -MinimumFreeGiB 0 2>&1) -join "`n"
