@@ -6,8 +6,9 @@ use super::super::presentation::{
 use super::candidate_identities;
 use super::*;
 use crate::state::{
-    EntryCounterPlacement, EntryCounterSource, ManifestDreadLibraryRef, PendingLinkedExileAction,
-    PendingLinkedExileChoiceStage, SpecialCastCompletion,
+    BattlefieldCohortMember, EntryCounterPlacement, EntryCounterSource, ManifestDreadLibraryRef,
+    OwnerZoneDestination, PendingLinkedExileAction, PendingLinkedExileChoiceStage,
+    SpecialCastCompletion,
 };
 
 fn entry_counter_instruction(
@@ -1305,292 +1306,40 @@ pub(super) fn return_to_owners_hand(
 pub(in crate::engine) fn move_permanent_to_owners_library(
     engine: &mut GameEngine,
     events: &mut Vec<rv1::RuledEvent>,
-    tid: ObjectId,
+    object_id: ObjectId,
     placement: LibraryPlacement,
     spell_label: &str,
 ) -> Result<(), EngineError> {
-    let target_name = object_display_name(&engine.state, engine.registry, tid);
-    let owner = engine
+    let object = engine
         .state
         .objects
-        .get(&tid)
-        .map(|object| object.owner)
+        .get(&object_id)
         .ok_or(EngineError::Illegal("no target object"))?;
-
-    let zone_snapshot = engine.snapshot_zone_event();
-
-    let leave_event = engine.battlefield_leave_event(tid);
-    move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Library, None)?;
-    engine.fire_zone_triggers(
-        zone_snapshot,
-        leave_event.into_iter().collect::<Vec<_>>(),
-        events,
-    );
-    let owner_idx = engine
-        .state
-        .player_idx(owner)
-        .ok_or(EngineError::UnknownPlayer(owner))?;
-    match placement {
-        LibraryPlacement::Top => {
-            engine.state.players[owner_idx]
-                .library
-                .retain(|&oid| oid != tid);
-            engine.state.players[owner_idx].library.push_front(tid);
-            events.push(ev_log(format!(
-                "{spell_label} puts {target_name} on top of its owner's library."
-            )));
-        }
-        LibraryPlacement::SecondFromTop => {
-            engine.state.players[owner_idx]
-                .library
-                .retain(|&oid| oid != tid);
-            let index = usize::min(1, engine.state.players[owner_idx].library.len());
-            engine.state.players[owner_idx].library.insert(index, tid);
-            events.push(ev_log(format!(
-                "{spell_label} puts {target_name} second from the top of its owner's library."
-            )));
-        }
-        LibraryPlacement::Bottom => {
-            events.push(ev_log(format!(
-                "{spell_label} puts {target_name} on the bottom of its owner's library."
-            )));
-        }
-        LibraryPlacement::Shuffle => {
-            crate::engine::shuffle_player_library_for_current_command(&mut engine.state, owner);
-            events.push(ev_log(format!("P{owner} shuffles their library.")));
-        }
-        LibraryPlacement::OwnerChoiceTopOrBottom
-        | LibraryPlacement::OwnerChoiceSecondFromTopOrBottom => {
-            return Err(EngineError::Illegal(
-                "owner library placement choice must be resolved before movement",
-            ));
-        }
-    }
-    events.push(permanent_moved_event(
-        &engine.state,
-        tid,
-        owner,
-        rv1::permanent_moved::Destination::Library,
-    ));
-    Ok(())
-}
-
-pub(in crate::engine) fn move_permanent_to_command_zone(
-    engine: &mut GameEngine,
-    events: &mut Vec<rv1::RuledEvent>,
-    tid: ObjectId,
-) -> Result<(), EngineError> {
-    let target_name = object_display_name(&engine.state, engine.registry, tid);
-    let owner = engine
-        .state
-        .objects
-        .get(&tid)
-        .map(|object| object.owner)
-        .ok_or(EngineError::Illegal("no target object"))?;
-    let zone_snapshot = engine.snapshot_zone_event();
-    let leave_event = engine.battlefield_leave_event(tid);
-    move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Command, None)?;
-    engine.fire_zone_triggers(
-        zone_snapshot,
-        leave_event.into_iter().collect::<Vec<_>>(),
-        events,
-    );
-    events.push(permanent_moved_event(
-        &engine.state,
-        tid,
-        owner,
-        rv1::permanent_moved::Destination::Command,
-    ));
-    events.push(ev_log(format!(
-        "P{owner} puts {target_name} into the command zone instead."
-    )));
-    Ok(())
-}
-
-pub(in crate::engine) struct OwnerLibraryPlacementOffer<'a> {
-    pub object_id: ObjectId,
-    pub owner: PlayerId,
-    pub zone_change_generation: u64,
-    pub placement: LibraryPlacement,
-    pub stack_source_departed: bool,
-    pub spell_label: &'a str,
-}
-
-pub(in crate::engine) fn publish_owner_library_placement_choice(
-    engine: &mut GameEngine,
-    events: &mut Vec<rv1::RuledEvent>,
-    stack: crate::state::ParkedStackResolution,
-    offer: OwnerLibraryPlacementOffer<'_>,
-) -> Result<(), EngineError> {
-    let OwnerLibraryPlacementOffer {
+    let card = BattlefieldCohortMember {
         object_id,
-        owner,
-        zone_change_generation,
-        placement,
-        stack_source_departed,
-        spell_label,
-    } = offer;
-    if !matches!(
-        placement,
-        LibraryPlacement::OwnerChoiceTopOrBottom
-            | LibraryPlacement::OwnerChoiceSecondFromTopOrBottom
-    ) {
-        return Err(EngineError::Illegal(
-            "owner library placement choice requires an owner-choice placement",
-        ));
-    }
-    let nonbottom_placement = if placement == LibraryPlacement::OwnerChoiceSecondFromTopOrBottom {
-        LibraryPlacement::SecondFromTop
-    } else {
-        LibraryPlacement::Top
+        zone_change_generation: engine
+            .state
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0),
+        owner: object.owner,
+        origin: object.zone,
     };
-    let nonbottom_label = if nonbottom_placement == LibraryPlacement::SecondFromTop {
-        "second from the top"
+    let library_owners = if placement == LibraryPlacement::Shuffle {
+        vec![card.owner]
     } else {
-        "the top"
+        Vec::new()
     };
-    let prompt = format!(
-        "P{owner}: put {} on {nonbottom_label} or the bottom of its owner's library.",
-        object_display_name(&engine.state, engine.registry, object_id)
-    );
-    events.push(rv1::RuledEvent {
-        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
-            rv1::ResolutionChoiceRequired {
-                resolution_prompt_id: 0,
-                accepted_permanent_selections: Vec::new(),
-                candidate_token_identities: Vec::new(),
-                candidate_player_ids: Vec::new(),
-                deciding_player_id: owner,
-                source_object_id: stack.item.id,
-                prompt_text: prompt.clone(),
-                choice_kind: custom::ChoiceKind::ResolutionBranch as i32,
-                candidate_object_ids: Vec::new(),
-                candidate_card_ids: Vec::new(),
-                min: 1,
-                max: 1,
-                ordered: false,
-                candidate_names: Vec::new(),
-                candidate_server_card_ids: Vec::new(),
-                unique_names: false,
-                resolution_branches: vec![
-                    rv1::ResolutionBranchOption {
-                        branch_index: 0,
-                        label: if nonbottom_placement == LibraryPlacement::SecondFromTop {
-                            "Second from top".into()
-                        } else {
-                            "Top".into()
-                        },
-                        selectable: true,
-                        ..Default::default()
-                    },
-                    rv1::ResolutionBranchOption {
-                        branch_index: 1,
-                        label: "Bottom".into(),
-                        selectable: true,
-                        ..Default::default()
-                    },
-                ],
-                candidate_selectable: Vec::new(),
-                public_reveal: None,
-                candidate_source_zones: Vec::new(),
-                ..Default::default()
-            },
-        )),
-    });
-    events.push(ev_log(prompt.clone()));
-    engine.state.pending_resolution = Some(PendingResolution::new_choice(
-        owner,
-        PendingResolutionPresentation {
-            source_object_id: stack.item.id,
-            candidates: Vec::new(),
-            min: 1,
-            max: 1,
-            ordered: false,
-            prompt,
-            choice_kind: custom::ChoiceKind::ResolutionBranch,
-            unique_names: false,
-        },
-        ResolutionContinuation::OwnerLibraryPlacement {
-            stack,
-            object_id,
-            owner,
-            zone_change_generation,
-            placement,
-            commander_destination_choice: false,
-            stack_source_departed,
-            spell_label: spell_label.to_owned(),
-        },
-    ));
-    Ok(())
-}
-
-pub(in crate::engine) fn publish_owner_library_commander_choice(
-    engine: &mut GameEngine,
-    events: &mut Vec<rv1::RuledEvent>,
-    stack: crate::state::ParkedStackResolution,
-    offer: OwnerLibraryPlacementOffer<'_>,
-) {
-    let OwnerLibraryPlacementOffer {
-        object_id,
-        owner,
-        zone_change_generation,
-        placement,
-        stack_source_departed,
+    super::battlefield_returns::commit_owner_zone_cohort(
+        engine,
+        events,
+        &[card],
+        OwnerZoneDestination::Library(placement),
+        &[],
+        &library_owners,
         spell_label,
-    } = offer;
-    let prompt =
-        format!("P{owner}: put this commander into the command zone or its owner's library?");
-    events.push(rv1::RuledEvent {
-        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
-            rv1::ResolutionChoiceRequired {
-                deciding_player_id: owner,
-                source_object_id: stack.item.id,
-                prompt_text: prompt.clone(),
-                choice_kind: custom::ChoiceKind::ResolutionBranch as i32,
-                min: 1,
-                max: 1,
-                resolution_branches: vec![
-                    rv1::ResolutionBranchOption {
-                        branch_index: 0,
-                        label: "Command zone".into(),
-                        selectable: true,
-                        ..Default::default()
-                    },
-                    rv1::ResolutionBranchOption {
-                        branch_index: 1,
-                        label: "Library".into(),
-                        selectable: true,
-                        ..Default::default()
-                    },
-                ],
-                ..Default::default()
-            },
-        )),
-    });
-    events.push(ev_log(prompt.clone()));
-    engine.state.pending_resolution = Some(PendingResolution::new_choice(
-        owner,
-        PendingResolutionPresentation {
-            source_object_id: stack.item.id,
-            candidates: Vec::new(),
-            min: 1,
-            max: 1,
-            ordered: false,
-            prompt,
-            choice_kind: custom::ChoiceKind::ResolutionBranch,
-            unique_names: false,
-        },
-        ResolutionContinuation::OwnerLibraryPlacement {
-            stack,
-            object_id,
-            owner,
-            zone_change_generation,
-            placement,
-            commander_destination_choice: true,
-            stack_source_departed,
-            spell_label: spell_label.to_owned(),
-        },
-    ));
+    )
 }
 
 pub(super) fn put_in_owners_library(
@@ -1639,7 +1388,7 @@ pub(super) fn put_in_owners_library(
             return super::battlefield_returns::begin_battlefield_cohort_move(
                 cx,
                 Vec::new(),
-                Zone::Library,
+                OwnerZoneDestination::Library(LibraryPlacement::Shuffle),
                 vec![attachment.owner],
             );
         }
@@ -1653,74 +1402,12 @@ pub(super) fn put_in_owners_library(
             &subject,
         )
     };
-    if placement == LibraryPlacement::Shuffle {
-        // Single-object and simultaneous shuffles share the same exact-incarnation cohort,
-        // precommit Commander choices and retained owner shuffle receipts.
-        return super::battlefield_returns::begin_battlefield_cohort_move(
-            cx,
-            tid.into_iter().collect(),
-            Zone::Library,
-            Vec::new(),
-        );
-    }
-    if let Some(tid) = tid {
-        let Some(object) = cx.engine.state.objects.get(&tid) else {
-            return Ok(EffectOutcome::Continue);
-        };
-        let owner = object.owner;
-        let generation = cx
-            .engine
-            .state
-            .zone_change_generation
-            .get(&tid)
-            .copied()
-            .unwrap_or(0);
-        let is_declared_commander = cx.engine.state.player_idx(owner).is_some_and(|index| {
-            !cx.engine.state.players[index].has_lost
-                && cx.engine.state.players[index]
-                    .declared_commander_object_ids
-                    .contains(&tid)
-        });
-        if is_declared_commander {
-            publish_owner_library_commander_choice(
-                cx.engine,
-                cx.events,
-                cx.parked_stack(),
-                OwnerLibraryPlacementOffer {
-                    object_id: tid,
-                    owner,
-                    zone_change_generation: generation,
-                    placement,
-                    stack_source_departed: false,
-                    spell_label: cx.spell_label,
-                },
-            );
-            return Ok(EffectOutcome::Suspended);
-        }
-        if matches!(
-            placement,
-            LibraryPlacement::OwnerChoiceTopOrBottom
-                | LibraryPlacement::OwnerChoiceSecondFromTopOrBottom
-        ) {
-            publish_owner_library_placement_choice(
-                cx.engine,
-                cx.events,
-                cx.parked_stack(),
-                OwnerLibraryPlacementOffer {
-                    object_id: tid,
-                    owner,
-                    zone_change_generation: generation,
-                    placement,
-                    stack_source_departed: false,
-                    spell_label: cx.spell_label,
-                },
-            )?;
-            return Ok(EffectOutcome::Suspended);
-        }
-        move_permanent_to_owners_library(cx.engine, cx.events, tid, placement, cx.spell_label)?;
-    }
-
-    Ok(EffectOutcome::Continue)
+    super::battlefield_returns::begin_battlefield_cohort_move(
+        cx,
+        tid.into_iter().collect(),
+        OwnerZoneDestination::Library(placement),
+        Vec::new(),
+    )
 }
 
 pub(super) fn shuffle_permanents_into_owners_libraries(
@@ -1816,7 +1503,7 @@ pub(super) fn shuffle_permanents_into_owners_libraries(
     super::battlefield_returns::begin_battlefield_cohort_move(
         cx,
         object_ids,
-        Zone::Library,
+        OwnerZoneDestination::Library(LibraryPlacement::Shuffle),
         affected_owners,
     )
 }
@@ -1902,7 +1589,7 @@ pub(super) fn shuffle_nonland_permanents_into_owners_libraries(
     super::battlefield_returns::begin_battlefield_cohort_move(
         cx,
         object_ids,
-        Zone::Library,
+        OwnerZoneDestination::Library(LibraryPlacement::Shuffle),
         affected_owners,
     )
 }
@@ -9547,6 +9234,52 @@ mod tests {
             engine.state.objects.get(&target).expect("target").zone,
             Zone::Library
         );
+    }
+
+    #[test]
+    fn unresolved_library_position_rejects_without_moving_the_card() {
+        for placement in [
+            LibraryPlacement::OwnerChoiceTopOrBottom,
+            LibraryPlacement::OwnerChoiceSecondFromTopOrBottom,
+        ] {
+            let mut engine = GameEngine::new(
+                tricerules_cards::registry::global(),
+                89_061,
+                &[0, 1],
+                20,
+                Some(vec![vec!["forest".into(); 12], vec!["forest".into(); 12]]),
+                true,
+            )
+            .expect("new game");
+            let target = *engine.state.players[1].library.front().unwrap();
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                target,
+                Zone::Battlefield,
+                Some(1),
+            )
+            .expect("target begins on the battlefield");
+            let before = format!("{:?}", engine.state);
+            let mut events = Vec::new();
+
+            assert!(move_permanent_to_owners_library(
+                &mut engine,
+                &mut events,
+                target,
+                placement,
+                "unanswered placement",
+            )
+            .is_err());
+            assert!(
+                format!("{:?}", engine.state) == before,
+                "an unanswered library-position choice must not mutate zones, generations or history"
+            );
+            assert!(
+                events.is_empty(),
+                "rejected placement must not publish movement or triggers"
+            );
+        }
     }
 
     #[test]

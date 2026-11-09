@@ -1,6 +1,6 @@
 //! Memory Jar's private, occurrence-bound hand cohort.
 use super::*;
-use crate::state::MemoryJarCohort;
+use crate::state::{MemoryJarCohort, OwnerZoneDestination};
 
 pub(super) fn exile_hands(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
     let key = cx.top.id;
@@ -103,8 +103,12 @@ pub(super) fn return_hands(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
     // collects every CR 903.9b choice before moving the whole cohort. If it parks, its stack
     // retains the occurrence key and ordinary stack completion retires the cohort after commit.
     let ids = cards.into_iter().map(|card| card.object_id).collect();
-    let outcome =
-        super::battlefield_returns::begin_battlefield_cohort_move(cx, ids, Zone::Hand, Vec::new())?;
+    let outcome = super::battlefield_returns::begin_battlefield_cohort_move(
+        cx,
+        ids,
+        OwnerZoneDestination::Hand,
+        Vec::new(),
+    )?;
     if outcome == EffectOutcome::Continue {
         cx.engine.state.memory_jar_cohorts.remove(&key);
     }

@@ -1376,6 +1376,7 @@ impl GameEngine {
                 plan.stage.as_ref(),
                 Some(
                     crate::state::PendingBattlefieldCohortMoveStage::ChoosingCommanderDestination { .. }
+                    | crate::state::PendingBattlefieldCohortMoveStage::ChoosingLibraryPlacement { .. }
                 )
             ) {
                 return self.finish_battlefield_cohort_move_branch(pending, answer, decision);
@@ -1387,12 +1388,7 @@ impl GameEngine {
         ) {
             return self.finish_revealed_top_bottom(pending, answer, decision);
         }
-        if matches!(
-            pending.continuation,
-            ResolutionContinuation::OwnerLibraryPlacement { .. }
-        ) {
-            return self.finish_owner_library_placement(pending, answer, decision);
-        }
+
         if matches!(
             pending.continuation,
             ResolutionContinuation::ChaosWarpCommander { .. }
@@ -1636,9 +1632,6 @@ impl GameEngine {
             }
             ResolutionContinuation::RevealedTopBottom { .. } => {
                 unreachable!("revealed top branch handled before object-choice validation")
-            }
-            ResolutionContinuation::OwnerLibraryPlacement { .. } => {
-                unreachable!("owner placement branch handled before object-choice validation")
             }
             ResolutionContinuation::ChaosWarpCommander { .. } => {
                 unreachable!("commander replacement handled before object-choice validation")

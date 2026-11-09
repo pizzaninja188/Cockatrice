@@ -1,20 +1,32 @@
 # Composable card execution and authoring contract
 
-Library-return consolidation (2026-11-09, first increment): individual
-`PutInOwnersLibrary(Shuffle)` instructions now share the existing owner-zone cohort transaction
-with Floodpits Drowner and Teferi, Temporal Pilgrim. Deglamer and Unravel the Aether collect
-Commander destination choices before committing the exact object and one owner shuffle.
-A departed enchanted object's captured owner still supplies the shuffle receipt independently of
-the moving cohort. Fixed and owner-chosen library positions remain on their existing continuation
-until the next increment. Brainstorm's private ordered hand-return transaction remains distinct;
-its hidden selection and reveal boundary do not match public battlefield returns.
+Library-return consolidation (2026-11-09): individual `PutInOwnersLibrary` instructions
+now share the existing owner-zone cohort transaction with Floodpits Drowner and Teferi,
+Temporal Pilgrim. A typed destination retains top, second-from-top, bottom, shuffle or owner-chosen
+placement. Commander destination choices precede position choices, and all choices finish before
+the exact object moves. Deglamer and Unravel the Aether retain one owner shuffle even when the
+Commander replacement redirects the move. A departed enchanted object's captured owner still
+supplies the shuffle receipt independently of the moving cohort.
 
-This reuses existing branch and movement messages: protobuf, Servatrice redaction/physical binding,
-Qt choice handling and freeform are unchanged. Existing library/Commander, attachment-departure,
-Program-tail and multiplayer scenarios characterize behavior before and after this mechanical
-rerouting; no new card admission or authored syntax is introduced. Governing rules are CR 400.7,
-608.2m, 701.24c, 800.4a and 903.9b in the
+The duplicate `OwnerLibraryPlacement` continuation, answer dispatcher and departure lifecycle are
+removed. Chaos Warp shares the movement commit while retaining its coupled shuffle/reveal/entry
+sequence. Brainstorm's private ordered hand-return transaction remains distinct because its hidden
+selection and reveal boundary differ. Positional returns remain single-object instructions;
+simultaneous positional cohorts require an explicit owner-ordering contract before admission.
+An unresolved position is rejected before any movement, generation/history change or event.
+
+Existing library/Commander, attachment-departure, Program-tail and multiplayer scenarios cover
+the consolidation; `unresolved_library_position_rejects_without_moving_the_card` guards atomic
+rejection. Card syntax, admission and protocol messages are unchanged. Protobuf, Servatrice
+redaction/physical binding, Qt choice handling and freeform therefore need no implementation
+changes. Governing rules are CR 400.7, 401.4, 608.2m, 701.24c, 800.4a and 903.9b in the
 [official rules effective November 6, 2026](https://media.wizards.com/2026/downloads/MagicCompRules%2020261106.pdf).
+
+User GUI acceptance remains pending. In two clients, cast Return to the Sewers targeting a
+commander: choose Library, then Bottom; the card must remain on the battlefield until the final
+choice, then move once and create one Mutagen. Repeat with Command zone; no placement choice
+should follow. Griptide with Library chosen must put the commander on top. Both clients must
+agree on the physical card and final zone. No agent-operated GUI acceptance is claimed.
 
 Implementation update (2026-11-02): the private `EffectResult` carrier is retired. Program
 instructions retain their explicit input value and admitted type through `OperationInput`;
@@ -178,8 +190,8 @@ basic-land search remained on its existing legacy branch; the tranche added no c
 The 2026-10-15 Wash Out port uses an all-free color `Choose` and the resultless
 `ReturnAllToOwnersHand` program leaf. Mass and single-card owner-hand returns share the Commander
 replacement handler, which parks the exact resolving operation through APNAP ordering and
-destination choices. Library-return cohort consolidation remains deferred; its existing path is
-still separate, and this port adds no card admission.
+destination choices. The subsequently completed 2026-11-09 library-return consolidation shares
+that owner-zone transaction; neither change adds card admission.
 The 2026-10-16 Battlefield-search increment adds one closed resultless `SearchLibrary` form:
 controller's fixed Library, one Basic Land, bounds 0..1, Battlefield tapped, shuffle, no reveal or
 result. Lumbering Worldwagon's ETB and actual-attack triggers and Solemn Simulacrum's ETB use it;
@@ -1076,8 +1088,8 @@ Keep `custom_resolution/*` where it implements
 shared mechanic transactions, copy legality or entry/APNAP work; its directory name does not make every
 contained mechanism card-specific.
 Wash Out uses the shared owner-hand return continuation for matching mass returns and individual
-returns. Library-return cohort consolidation is a distinct future capability, deferred outside the
-migration batch documented here.
+returns. Public battlefield-to-library returns joined that transaction in the 2026-11-09
+consolidation documented above; private ordered hand-to-library returns remain separate.
 
 Fanatic of the Harrowing's exact `triggered_01` owner now uses an authored ability Program. It
 collects each live player's private `Exact(1)` discard choice in APNAP order, commits the complete

@@ -1502,6 +1502,14 @@ pub(crate) struct BattlefieldCohortMember {
     pub origin: Zone,
 }
 
+/// The owner-zone operation retains its library placement until any owner choice is answered.
+/// Unlike a bare Zone, this cannot accidentally shuffle a fixed-position library return.
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum OwnerZoneDestination {
+    Hand,
+    Library(LibraryPlacement),
+}
+
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PendingBattlefieldCohortMoveStage {
     OrderingCommanders {
@@ -1509,6 +1517,10 @@ pub(crate) enum PendingBattlefieldCohortMoveStage {
         candidates: Vec<ObjectId>,
     },
     ChoosingCommanderDestination {
+        owner: PlayerId,
+        object_id: ObjectId,
+    },
+    ChoosingLibraryPlacement {
         owner: PlayerId,
         object_id: ObjectId,
     },
@@ -1520,7 +1532,7 @@ pub(crate) enum PendingBattlefieldCohortMoveStage {
 pub(crate) struct PendingBattlefieldCohortMove {
     pub stack: ParkedStackResolution,
     pub spell_label: String,
-    pub destination: Zone,
+    pub destination: OwnerZoneDestination,
     /// Live library owners named by CR 701.24c, including a captured source owner whose source
     /// may no longer be a current object. Retained independently of movement/Commander choices.
     pub library_owners: Vec<PlayerId>,
@@ -2292,19 +2304,6 @@ pub enum ResolutionContinuation {
         zone_change_generation: u64,
         public_reveal: tricerules_proto::ruled::v1::CardsRevealed,
     },
-    OwnerLibraryPlacement {
-        stack: ParkedStackResolution,
-        object_id: ObjectId,
-        owner: PlayerId,
-        zone_change_generation: u64,
-        placement: LibraryPlacement,
-        commander_destination_choice: bool,
-        /// CR 608.2m: this exact operation began before the resolving source left the game or
-        /// its controller departed. Only the guarded owner choice may resume from that cursor.
-        #[serde(default)]
-        stack_source_departed: bool,
-        spell_label: String,
-    },
     ChaosWarpCommander {
         stack: ParkedStackResolution,
         owner: PlayerId,
@@ -2672,7 +2671,6 @@ impl ResolutionContinuation {
             | Self::SearchZoneScope { stack, .. }
             | Self::OptionalSearch { stack, .. }
             | Self::RevealedTopBottom { stack, .. }
-            | Self::OwnerLibraryPlacement { stack, .. }
             | Self::ChaosWarpCommander { stack, .. }
             | Self::SpecialCastCommanderCleanup { stack, .. }
             | Self::LibraryPartition { stack, .. }
@@ -2751,7 +2749,6 @@ impl ResolutionContinuation {
             | Self::SearchZoneScope { stack, .. }
             | Self::OptionalSearch { stack, .. }
             | Self::RevealedTopBottom { stack, .. }
-            | Self::OwnerLibraryPlacement { stack, .. }
             | Self::ChaosWarpCommander { stack, .. }
             | Self::SpecialCastCommanderCleanup { stack, .. }
             | Self::LibraryPartition { stack, .. }

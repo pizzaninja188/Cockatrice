@@ -685,15 +685,6 @@ impl GameEngine {
                     // and run its remaining cleanup and parent tail.
                     preserve = true;
                 }
-                ResolutionContinuation::OwnerLibraryPlacement {
-                    stack_source_departed,
-                    ..
-                } => {
-                    // The selected object is still validated independently. Preserve only this
-                    // begun operation and its cursor when its exact source/controller departs.
-                    *stack_source_departed = true;
-                    preserve = true;
-                }
                 ResolutionContinuation::ProgramChoose { .. } => {
                     // The compiled parent program began resolving before the chooser or its
                     // physical source left. Retain the exact cursor so departure reconciliation
@@ -816,7 +807,7 @@ impl GameEngine {
                 ResolutionContinuation::BattlefieldCohortMove { .. } => {
                     // This object cohort belongs to one begun instruction. Preserve the complete
                     // parked cursor until concession removes exact departed-owner members and
-                    // the simultaneous hand replacements can be refreshed (CR 608.2m).
+                    // the owner-zone choices can be refreshed (CR 608.2m).
                     preserve = true;
                 }
                 ResolutionContinuation::SearchLibrary { stack, .. }
@@ -1479,7 +1470,6 @@ impl GameEngine {
         self.advance_departed_join_forces_payer(events)?;
         self.refresh_departed_standalone_mana_payment(events)?;
         self.refresh_departed_ward_payment(events)?;
-        self.refresh_owner_library_placement_departure(events)?;
         self.refresh_revealed_top_bottom_departure(events)?;
         self.flush_staged_triggers(events);
         if was_waiting_for_trigger_target && self.state.blocking_choice().is_none() {

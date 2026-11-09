@@ -2,7 +2,8 @@
 
 use super::*;
 use crate::state::{
-    BattlefieldCohortMember, PendingBattlefieldCohortMove, PendingBattlefieldCohortMoveStage,
+    BattlefieldCohortMember, OwnerZoneDestination, PendingBattlefieldCohortMove,
+    PendingBattlefieldCohortMoveStage,
 };
 
 enum CohortMoveProgress {
@@ -22,13 +23,35 @@ fn completion_result(stack: &ParkedStackResolution) -> OperationResults {
     }
 }
 
-fn owner_destination_label(destination: Zone) -> Result<&'static str, EngineError> {
-    match destination {
-        Zone::Hand => Ok("hand"),
-        Zone::Library => Ok("library"),
-        _ => Err(EngineError::ProgramInvariant(
-            "battlefield cohort move has an unsupported owner destination",
-        )),
+impl OwnerZoneDestination {
+    fn zone(self) -> Zone {
+        match self {
+            Self::Hand => Zone::Hand,
+            Self::Library(_) => Zone::Library,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Hand => "hand",
+            Self::Library(_) => "library",
+        }
+    }
+
+    fn shuffles(self) -> bool {
+        self == Self::Library(LibraryPlacement::Shuffle)
+    }
+
+    fn placement_choices(self) -> Option<[LibraryPlacement; 2]> {
+        match self {
+            Self::Library(LibraryPlacement::OwnerChoiceTopOrBottom) => {
+                Some([LibraryPlacement::Top, LibraryPlacement::Bottom])
+            }
+            Self::Library(LibraryPlacement::OwnerChoiceSecondFromTopOrBottom) => {
+                Some([LibraryPlacement::SecondFromTop, LibraryPlacement::Bottom])
+            }
+            _ => None,
+        }
     }
 }
 
@@ -64,7 +87,7 @@ pub(super) fn return_to_owners_hand(
         }
         _ => return Err(EngineError::Illegal("resolution dispatch mismatch")),
     };
-    begin_battlefield_cohort_move(cx, subjects, Zone::Hand, Vec::new())
+    begin_battlefield_cohort_move(cx, subjects, OwnerZoneDestination::Hand, Vec::new())
 }
 
 /// Begin one simultaneous owner-zone instruction. Battlefield returns and Memory Jar's exact
@@ -74,20 +97,25 @@ pub(super) fn return_to_owners_hand(
 pub(super) fn begin_battlefield_cohort_move(
     cx: &mut EffectCx<'_>,
     object_ids: Vec<ObjectId>,
-    destination: Zone,
+    destination: OwnerZoneDestination,
     mut library_owners: Vec<PlayerId>,
 ) -> Result<EffectOutcome, EngineError> {
-    if !matches!(destination, Zone::Hand | Zone::Library) {
+    // Current positional instructions name one permanent. A future multi-card positional
+    // instruction must first supply its owner's ordering contract (CR 401.4).
+    if matches!(destination, OwnerZoneDestination::Library(_))
+        && !destination.shuffles()
+        && object_ids.len() > 1
+    {
         return Err(EngineError::ProgramInvariant(
-            "battlefield cohort move supports only Hand or Library destinations",
+            "multiple positional library returns require an owner ordering contract",
         ));
     }
-    if destination != Zone::Library && !library_owners.is_empty() {
+    if !destination.shuffles() && !library_owners.is_empty() {
         return Err(EngineError::ProgramInvariant(
             "only a library cohort move may retain shuffle-owner receipts",
         ));
     }
-    if destination == Zone::Library {
+    if destination.shuffles() {
         let mut seen_owners = HashSet::new();
         library_owners.retain(|owner| seen_owners.insert(*owner));
         for &owner in &library_owners {
@@ -114,7 +142,7 @@ pub(super) fn begin_battlefield_cohort_move(
                 .objects
                 .get(&object_id)
                 .ok_or(EngineError::Illegal("no battlefield cohort object"))?;
-            if destination == Zone::Library && !library_owners.contains(&object.owner) {
+            if destination.shuffles() && !library_owners.contains(&object.owner) {
                 library_owners.push(object.owner);
             }
             Ok(BattlefieldCohortMember {
@@ -208,8 +236,7 @@ fn publish_order_choice(
     candidates: Vec<ObjectId>,
     events: &mut Vec<rv1::RuledEvent>,
 ) {
-    let destination = owner_destination_label(plan.destination)
-        .expect("validated battlefield cohort move destination");
+    let destination = plan.destination.label();
     let prompt = format!(
         "P{owner}: order your commanders before their simultaneous move to their owners' {destination}."
     );
@@ -263,36 +290,85 @@ fn publish_order_choice(
 
 fn publish_destination_choice(
     engine: &mut GameEngine,
-    mut plan: PendingBattlefieldCohortMove,
+    plan: PendingBattlefieldCohortMove,
     owner: PlayerId,
     object_id: ObjectId,
     events: &mut Vec<rv1::RuledEvent>,
 ) {
     let label = object_display_name(&engine.state, engine.registry, object_id);
-    let destination = owner_destination_label(plan.destination)
-        .expect("validated battlefield cohort move destination");
+    let destination = plan.destination.label();
     let prompt = format!(
         "P{owner}: put {label} into the command zone instead of their {destination} (CR 903.9b)?"
     );
-    plan.stage =
-        Some(PendingBattlefieldCohortMoveStage::ChoosingCommanderDestination { owner, object_id });
-    let branches = [
-        "Command zone",
-        if plan.destination == Zone::Library {
-            "Library"
-        } else {
-            "Hand"
-        },
-    ]
-    .into_iter()
-    .enumerate()
-    .map(|(branch_index, label)| rv1::ResolutionBranchOption {
-        branch_index: branch_index as u32,
-        label: label.into(),
-        selectable: true,
-        ..Default::default()
-    })
-    .collect();
+    let ordinary_label = if plan.destination.zone() == Zone::Library {
+        "Library"
+    } else {
+        "Hand"
+    };
+    publish_branch_choice(
+        engine,
+        plan,
+        owner,
+        PendingBattlefieldCohortMoveStage::ChoosingCommanderDestination { owner, object_id },
+        prompt,
+        ["Command zone", ordinary_label],
+        events,
+    );
+}
+
+fn publish_library_placement_choice(
+    engine: &mut GameEngine,
+    plan: PendingBattlefieldCohortMove,
+    owner: PlayerId,
+    object_id: ObjectId,
+    events: &mut Vec<rv1::RuledEvent>,
+) -> Result<(), EngineError> {
+    let choices = plan
+        .destination
+        .placement_choices()
+        .ok_or(EngineError::ProgramInvariant(
+            "library placement offer has no owner-choice destination",
+        ))?;
+    let (position, label) = if choices[0] == LibraryPlacement::SecondFromTop {
+        ("second from the top", "Second from top")
+    } else {
+        ("the top", "Top")
+    };
+    let name = object_display_name(&engine.state, engine.registry, object_id);
+    let prompt =
+        format!("P{owner}: put {name} on {position} or the bottom of its owner's library.");
+    publish_branch_choice(
+        engine,
+        plan,
+        owner,
+        PendingBattlefieldCohortMoveStage::ChoosingLibraryPlacement { owner, object_id },
+        prompt,
+        [label, "Bottom"],
+        events,
+    );
+    Ok(())
+}
+
+fn publish_branch_choice(
+    engine: &mut GameEngine,
+    mut plan: PendingBattlefieldCohortMove,
+    owner: PlayerId,
+    stage: PendingBattlefieldCohortMoveStage,
+    prompt: String,
+    labels: [&str; 2],
+    events: &mut Vec<rv1::RuledEvent>,
+) {
+    plan.stage = Some(stage);
+    let branches = labels
+        .into_iter()
+        .enumerate()
+        .map(|(branch_index, label)| rv1::ResolutionBranchOption {
+            branch_index: branch_index as u32,
+            label: label.into(),
+            selectable: true,
+            ..Default::default()
+        })
+        .collect();
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
@@ -428,38 +504,86 @@ fn advance_cohort_move(
             ));
         }
     }
-    let command_destinations = plan
-        .commander_destinations
+    if plan.destination.placement_choices().is_some() {
+        if let Some(card) = plan.cohort.first().filter(|card| {
+            !plan
+                .commander_destinations
+                .contains(&(card.object_id, Zone::Command))
+        }) {
+            publish_library_placement_choice(
+                engine,
+                plan.clone(),
+                card.owner,
+                card.object_id,
+                events,
+            )?;
+            return Ok(CohortMoveProgress::Parked);
+        }
+    }
+    commit_owner_zone_cohort(
+        engine,
+        events,
+        &plan.cohort,
+        plan.destination,
+        &plan.commander_destinations,
+        &plan.library_owners,
+        &plan.spell_label,
+    )?;
+    Ok(CohortMoveProgress::Committed(Box::new(plan.stack.clone())))
+}
+
+/// Commit only after all destination/position choices have completed. Chaos Warp reuses this
+/// exact movement boundary while retaining its own coupled reveal/entry continuation.
+pub(super) fn commit_owner_zone_cohort(
+    engine: &mut GameEngine,
+    events: &mut Vec<rv1::RuledEvent>,
+    cohort: &[BattlefieldCohortMember],
+    destination: OwnerZoneDestination,
+    commander_destinations: &[(ObjectId, Zone)],
+    library_owners: &[PlayerId],
+    spell_label: &str,
+) -> Result<(), EngineError> {
+    if !cohort_is_current(engine, cohort) {
+        return Err(EngineError::ProgramInvariant(
+            "owner-zone cohort changed before commitment",
+        ));
+    }
+    let command_destinations = commander_destinations
         .iter()
-        .filter(|(object_id, _)| !plan.removed_cohort_ids.contains(object_id))
-        .map(|(object_id, destination)| (*object_id, *destination))
+        .copied()
         .collect::<HashMap<_, _>>();
-    let planned = plan
-        .cohort
+    let planned = cohort
         .iter()
         .map(|card| {
-            let destination = command_destinations
+            let target_zone = command_destinations
                 .get(&card.object_id)
                 .copied()
-                .unwrap_or(plan.destination);
+                .unwrap_or(destination.zone());
             let label = object_display_name(&engine.state, engine.registry, card.object_id);
-            (card, destination, label)
+            (card, target_zone, label)
         })
         .collect::<Vec<_>>();
+    if destination.placement_choices().is_some()
+        && planned.iter().any(|(_, zone, _)| *zone == Zone::Library)
+    {
+        return Err(EngineError::ProgramInvariant(
+            "library position must be chosen before movement",
+        ));
+    }
     let moves = planned
         .iter()
-        .map(|(card, destination, _)| (card.object_id, *destination, None))
+        .map(|(card, zone, _)| (card.object_id, *zone, None))
         .collect::<Vec<_>>();
     if !moves.is_empty() {
         let receipts = engine.commit_observed_zone_move_batch(&moves, events)?;
         if receipts.len() != planned.len()
-            || planned.iter().any(|(card, destination, _)| {
+            || planned.iter().any(|(card, zone, _)| {
                 !receipts.iter().any(|receipt| {
                     receipt.object_id == card.object_id
                         && receipt.owner == card.owner
                         && receipt.origin == card.origin
                         && receipt.before_zone_change_generation == card.zone_change_generation
-                        && receipt.destination == *destination
+                        && receipt.destination == *zone
                         && receipt.destination_generation == card.zone_change_generation + 1
                 })
             })
@@ -468,31 +592,56 @@ fn advance_cohort_move(
                 "battlefield cohort move did not produce every exact incarnation receipt",
             ));
         }
-        for (card, destination, label) in planned {
-            let (proto_destination, message) = match destination {
+        for (card, zone, label) in planned {
+            let (proto_destination, message) = match zone {
                 Zone::Command => (
                     rv1::permanent_moved::Destination::Command,
                     format!(
                         "P{} puts {label} into the command zone instead of their {}.",
                         card.owner,
-                        owner_destination_label(plan.destination)?
+                        destination.label()
                     ),
                 ),
                 Zone::Hand => (
                     rv1::permanent_moved::Destination::Hand,
-                    format!("{} returns {label} to its owner's hand", plan.spell_label),
+                    format!("{spell_label} returns {label} to its owner's hand"),
                 ),
-                Zone::Library => (
-                    rv1::permanent_moved::Destination::Library,
-                    format!(
-                        "{} puts {label} into its owner's library.",
-                        plan.spell_label
-                    ),
-                ),
+                Zone::Library => {
+                    let owner_index = engine
+                        .state
+                        .player_idx(card.owner)
+                        .ok_or(EngineError::UnknownPlayer(card.owner))?;
+                    let library = &mut engine.state.players[owner_index].library;
+                    let position = match destination {
+                        OwnerZoneDestination::Library(LibraryPlacement::Top) => {
+                            library.retain(|id| *id != card.object_id);
+                            library.push_front(card.object_id);
+                            "on top of"
+                        }
+                        OwnerZoneDestination::Library(LibraryPlacement::SecondFromTop) => {
+                            library.retain(|id| *id != card.object_id);
+                            library.insert(usize::min(1, library.len()), card.object_id);
+                            "second from the top of"
+                        }
+                        OwnerZoneDestination::Library(LibraryPlacement::Bottom) => {
+                            "on the bottom of"
+                        }
+                        OwnerZoneDestination::Library(LibraryPlacement::Shuffle) => "into",
+                        _ => {
+                            return Err(EngineError::ProgramInvariant(
+                                "unresolved library position at commitment",
+                            ))
+                        }
+                    };
+                    (
+                        rv1::permanent_moved::Destination::Library,
+                        format!("{spell_label} puts {label} {position} its owner's library."),
+                    )
+                }
                 _ => {
                     return Err(EngineError::ProgramInvariant(
-                        "battlefield cohort move planned an unsupported destination",
-                    ));
+                        "owner-zone cohort has an unsupported destination",
+                    ))
                 }
             };
             events.push(permanent_moved_event(
@@ -504,12 +653,12 @@ fn advance_cohort_move(
             events.push(super::super::events::ev_log(message));
         }
     }
-    if plan.destination == Zone::Library {
+    if destination.shuffles() {
         let shuffle_owners = engine
             .state
             .players
             .iter()
-            .filter(|player| !player.has_lost && plan.library_owners.contains(&player.id))
+            .filter(|player| !player.has_lost && library_owners.contains(&player.id))
             .map(|player| player.id)
             .collect::<Vec<_>>();
         for owner in shuffle_owners {
@@ -519,7 +668,7 @@ fn advance_cohort_move(
             )));
         }
     }
-    Ok(CohortMoveProgress::Committed(Box::new(plan.stack.clone())))
+    Ok(())
 }
 
 impl GameEngine {
@@ -601,15 +750,17 @@ impl GameEngine {
             ResolutionContinuation::BattlefieldCohortMove { pending } => pending.as_ref().clone(),
             _ => unreachable!("battlefield cohort move branch continuation"),
         };
-        let Some(PendingBattlefieldCohortMoveStage::ChoosingCommanderDestination {
-            owner,
-            object_id,
-        }) = plan.stage.clone()
-        else {
-            self.state.pending_resolution = Some(pending);
-            return Err(EngineError::Illegal(
-                "battlefield cohort move is not waiting for a Commander destination",
-            ));
+        let stage = plan.stage.clone();
+        let branch_member = match &stage {
+            Some(PendingBattlefieldCohortMoveStage::ChoosingCommanderDestination {
+                owner,
+                object_id,
+            })
+            | Some(PendingBattlefieldCohortMoveStage::ChoosingLibraryPlacement {
+                owner,
+                object_id,
+            }) => Some((*owner, *object_id)),
+            _ => None,
         };
         let clean = answer.chosen_object_ids.is_empty()
             && answer.chosen_player_ids.is_empty()
@@ -621,38 +772,73 @@ impl GameEngine {
         if !clean
             || decision != rv1::ResolutionChoiceDecision::SelectBranch
             || answer.selected_branch_index > 1
-            || owner != pending.deciding_player
             || !cohort_is_current(self, &plan.cohort)
-            || !plan
-                .ordered_commanders
-                .get(plan.next_commander_destination)
-                .is_some_and(|(current_owner, current_object)| {
-                    *current_owner == owner && *current_object == object_id
-                })
+            || !branch_member.is_some_and(|(owner, object_id)| {
+                owner == pending.deciding_player
+                    && plan
+                        .cohort
+                        .iter()
+                        .any(|card| card.owner == owner && card.object_id == object_id)
+            })
         {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
-                "battlefield cohort move destination answer is stale or invalid",
+                "owner-zone cohort answer is stale or invalid",
             ));
         }
-        let destination = if answer.selected_branch_index == 0 {
-            Zone::Command
-        } else {
-            plan.destination
-        };
-        plan.commander_destinations.push((object_id, destination));
-        plan.next_commander_destination += 1;
-        plan.stage = None;
-        let mut events = vec![super::super::events::ev_log(format!(
-            "P{owner} chooses {} for their commander.",
-            if destination == Zone::Command {
-                "the command zone"
-            } else if plan.destination == Zone::Library {
-                "their library"
-            } else {
-                "their hand"
+        let (owner, object_id) = branch_member.expect("validated owner-zone branch member");
+        let mut events = Vec::new();
+        match stage {
+            Some(PendingBattlefieldCohortMoveStage::ChoosingCommanderDestination { .. }) => {
+                if plan.ordered_commanders.get(plan.next_commander_destination)
+                    != Some(&(owner, object_id))
+                {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "commander destination is not the current cohort choice",
+                    ));
+                }
+                let target_zone = if answer.selected_branch_index == 0 {
+                    Zone::Command
+                } else {
+                    plan.destination.zone()
+                };
+                plan.commander_destinations.push((object_id, target_zone));
+                plan.next_commander_destination += 1;
+                events.push(super::super::events::ev_log(format!(
+                    "P{owner} chooses {} for their commander.",
+                    if target_zone == Zone::Command {
+                        "the command zone"
+                    } else if target_zone == Zone::Library {
+                        "their library"
+                    } else {
+                        "their hand"
+                    }
+                )));
             }
-        ))];
+            Some(PendingBattlefieldCohortMoveStage::ChoosingLibraryPlacement { .. }) => {
+                let Some(choices) = plan.destination.placement_choices() else {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "owner-zone cohort has no library position choice",
+                    ));
+                };
+                if plan.cohort.len() != 1
+                    || plan
+                        .commander_destinations
+                        .contains(&(object_id, Zone::Command))
+                {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "library position choice no longer matches its moving object",
+                    ));
+                }
+                plan.destination =
+                    OwnerZoneDestination::Library(choices[answer.selected_branch_index as usize]);
+            }
+            _ => unreachable!("validated owner-zone branch stage"),
+        }
+        plan.stage = None;
         match advance_cohort_move(self, &mut plan, &mut events) {
             Ok(CohortMoveProgress::Parked) => {
                 Ok(super::super::events::finish_with_events(self, events))
@@ -747,7 +933,21 @@ impl GameEngine {
                     object_id,
                 },
             ),
-            PendingBattlefieldCohortMoveStage::ChoosingCommanderDestination { .. } => None,
+            PendingBattlefieldCohortMoveStage::ChoosingLibraryPlacement { owner, object_id }
+                if plan
+                    .cohort
+                    .iter()
+                    .any(|card| card.object_id == object_id && card.owner == owner) =>
+            {
+                Some(
+                    PendingBattlefieldCohortMoveStage::ChoosingLibraryPlacement {
+                        owner,
+                        object_id,
+                    },
+                )
+            }
+            PendingBattlefieldCohortMoveStage::ChoosingCommanderDestination { .. }
+            | PendingBattlefieldCohortMoveStage::ChoosingLibraryPlacement { .. } => None,
         };
         let mut refresh_events = Vec::new();
         let progress = if plan.stage.is_some() {
@@ -805,6 +1005,21 @@ fn republish_current_choice(
                 ));
             }
             publish_destination_choice(engine, plan, owner, object_id, events);
+        }
+        Some(PendingBattlefieldCohortMoveStage::ChoosingLibraryPlacement { owner, object_id }) => {
+            if !cohort_is_current(engine, &plan.cohort)
+                || plan.cohort.len() != 1
+                || plan.cohort[0].object_id != object_id
+                || plan.cohort[0].owner != owner
+                || plan
+                    .commander_destinations
+                    .contains(&(object_id, Zone::Command))
+            {
+                return Err(EngineError::ProgramInvariant(
+                    "library position choice changed during departure refresh",
+                ));
+            }
+            publish_library_placement_choice(engine, plan, owner, object_id, events)?;
         }
         None => {
             return Err(EngineError::ProgramInvariant(

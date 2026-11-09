@@ -566,30 +566,23 @@ fn commander_position_choice_survives_source_controller_departure_between_stages
         .as_ref()
         .expect("commander destination choice is first");
     assert_eq!(pending.deciding_player, 2);
-    assert!(matches!(
-        &pending.continuation,
-        tricerules_core::state::ResolutionContinuation::OwnerLibraryPlacement {
-            commander_destination_choice: true,
-            ..
-        }
-    ));
+    assert_eq!(engine.state.objects[&commander].zone, Zone::Battlefield);
+    assert!(pending.presentation.prompt.contains("command zone"));
 
     engine
         .apply_scenario_command(0, &concede())
         .expect("spell owner leaves while the surviving controller's commander choice is pending");
     assert!(engine.state.players[0].has_lost);
-    assert!(matches!(
-        &engine
+    assert_eq!(engine.state.objects[&commander].zone, Zone::Battlefield);
+    assert_eq!(
+        engine
             .state
             .pending_resolution
             .as_ref()
             .unwrap()
-            .continuation,
-        tricerules_core::state::ResolutionContinuation::OwnerLibraryPlacement {
-            stack_source_departed: true,
-            ..
-        }
-    ));
+            .deciding_player,
+        2
+    );
 
     let position = engine
         .apply_scenario_command(2, &select_owner_library_branch(1))
@@ -600,18 +593,16 @@ fn commander_position_choice_survives_source_controller_departure_between_stages
             .deciding_player_id,
         2
     );
-    assert!(matches!(
-        &engine
+    assert_eq!(engine.state.objects[&commander].zone, Zone::Battlefield);
+    assert_eq!(
+        engine
             .state
             .pending_resolution
             .as_ref()
             .unwrap()
-            .continuation,
-        tricerules_core::state::ResolutionContinuation::OwnerLibraryPlacement {
-            stack_source_departed: true,
-            ..
-        }
-    ));
+            .deciding_player,
+        2
+    );
 
     let completed = engine
         .apply_scenario_command(2, &select_owner_library_branch(1))
@@ -747,15 +738,16 @@ fn owner_library_choice_survives_spell_owner_and_controller_departure() {
         pass_priority_round(&mut engine);
         assert!(engine.state.pending_resolution.is_some());
         assert_eq!(engine.state.objects[&target].owner, 2);
-        assert!(matches!(
-            &engine
+        assert_eq!(
+            engine
                 .state
                 .pending_resolution
                 .as_ref()
                 .unwrap()
-                .continuation,
-            tricerules_core::state::ResolutionContinuation::OwnerLibraryPlacement { .. }
-        ));
+                .deciding_player,
+            2
+        );
+        assert_eq!(engine.state.objects[&target].zone, Zone::Battlefield);
 
         engine
             .apply_scenario_command(departed, &concede())
