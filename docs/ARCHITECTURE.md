@@ -7,11 +7,11 @@ workflow. Current work and dependencies live in GitHub Issues, not a historical 
 For local structured evidence, privacy boundaries, deterministic reconstruction, and live resume,
 see [RULED-DIAGNOSTICS.md](RULED-DIAGNOSTICS.md).
 
-The [composable card execution and authoring contract](COMPOSABLE-CARD-EXECUTION.md) describes the
-broader composition target. A bounded authored-program runner now supports targetless operations
-and four targetful role signatures on spell faces, modal modes, activated abilities and triggered
-abilities; the [active authoring reference](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-authored-programs)
-defines accepted syntax. Prompt-ID propagation and the broader migration stay separate.
+The [composable card execution contract](COMPOSABLE-CARD-EXECUTION.md) owns typed result flow,
+operation completion and resolution-prompt identity. The
+[active authoring reference](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-authored-programs)
+defines accepted syntax, owner contexts and finite profiles; architectural constraints do not
+expand that admission.
 
 ---
 

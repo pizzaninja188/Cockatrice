@@ -176,7 +176,14 @@ mana abilities. Previews never tap cards or spend mana.
 Resolution Phyrexian choices are bound to the exact prompt in `RuledPayment`; its suspended copy
 retains them through nested mana work. A new prompt or cleared model cannot reuse the receipt.
 Staged opponent-target and hand-return activations announce their Phyrexian choices in Begin;
-reconnect consumes the private engine receipt and already-normalized locked cost. Historical Waterbend acceptance
+reconnect consumes the private engine receipt and already-normalized locked cost.
+`SubmitResolutionChoice.flex_payments` is private payment data: pip indices and colors are values,
+not ObjectIds for the relay to translate. The engine binds them to the current prompt and payment
+revision. Hybrid Opponent, Hand Return and Resolution Probe definitions exist only in Rust tests;
+they cannot be conjured in a normal dev game. Hands-on acceptance of those new hybrid paths remains
+pending; existing-card payment checks do not establish it. Two-client acceptance of the shared
+library-placement transaction also remains pending.
+Historical Waterbend acceptance
 [is recorded on issue #146](https://github.com/pizzaninja188/Cockatrice/issues/146#issuecomment-5458728218).
 
 `ruled_payment_progression.cpp` implements the same `RuledPaymentUi` bridge's cast/activation

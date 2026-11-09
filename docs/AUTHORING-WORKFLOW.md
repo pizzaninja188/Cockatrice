@@ -24,8 +24,8 @@ worker rediscover them. Reuse dependency-fresh sources, candidate decisions, che
 for unchanged content; refresh affected evidence when its inputs or assumptions change. Packets retain
 mechanical facts, not semantic approval. No new index, schema, packet or timing file is needed for
 routine work; use optional tools only when they save work on the actual batch.
-The [composable execution contract](COMPOSABLE-CARD-EXECUTION.md) is the broader migration target;
-its proposed types and operations are not all accepted authoring syntax.
+The [composable execution contract](COMPOSABLE-CARD-EXECUTION.md) defines architectural constraints
+for typed results, completion and prompt identity; use the authoring reference for accepted syntax.
 Checked-in RON files are the authoritative hand-edited source; clone and scaffold drafts remain
 incomplete and retain review sentinels until reviewed.
 

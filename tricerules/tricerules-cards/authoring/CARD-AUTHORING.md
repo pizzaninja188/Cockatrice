@@ -175,6 +175,30 @@ For Rust engine behavior, reject illegal input with `EngineError::Illegal` rathe
 Keep steps, priority, event-time facts, new-object identity, hidden information, and player roles
 explicit. Use player-set-generic logic rather than two-player arithmetic.
 
+### Hybrid Phyrexian costs
+
+`{G/W/P}` (Ajani, Sleeper Agent) and `{G/U/P}` (Tamiyo, Compleated Sage) parse as one
+`HybridPhyrexian(ColorPip, ColorPip)` symbol. It is both colors and contributes one mana value.
+The payment explicitly selects either component color or two life using the existing indexed
+`FlexPipPayment`; mono-Phyrexian costs retain their omitted/default mana branch.
+Reject missing hybrid choices, duplicates, incompatible colors, conflicting life/color fields,
+and choices outside the active cost. Generic reductions retain indexed zero placeholders;
+an alternative cost that removes a symbol accepts no stale printed-cost choice. Committed
+life-symbol counts feed Compleated; unrelated life costs do not.
+
+Casting and activation choices are announced before payment. This includes staged opponent-target
+and hand-source tapped-creature-return activations: Begin retains the actor-private choice,
+Payment uses the normalized locked cost, and Commit cannot replace that choice. Resolution
+payments instead carry choices in the current prompt-bound answer and preview. Affordability may
+consider all branches, but a payment must validate the explicit hybrid branch. The rules basis is
+CR 107.4f, 118.13a-b and 119.4, as recorded in the
+[November 6, 2026 rules](https://media.wizards.com/2026/downloads/MagicCompRules%2020261106.pdf).
+
+The [hybrid payment tests](../../tricerules-core/src/engine/payment/hybrid_phyrexian_tests.rs)
+exercise synthetic variants of Arena, Urban Retreat and Flameshadow Conjuring's existing
+mechanics. Those real cards do not have hybrid Phyrexian costs, and the probes are not registered
+cards or native GUI fixtures. Capability coverage does not admit a complete card.
+
 ### Finite authored programs
 
 Use a `CardProgram` at one exact resolution owner when its supported ordered actions need explicit
@@ -948,7 +972,12 @@ target group whose `max` is 1, and leave `effect_indices` empty for that Program
 effect validator checks the filter; the chosen permanent's owner makes any `OwnerChoiceTopOrBottom`
 or `OwnerChoiceSecondFromTopOrBottom` placement choice. The resultless instruction resumes its
 following Program step after the owner finishes that choice. The other existing placements remain
-available: `Top`, `SecondFromTop`, `Bottom`, and `Shuffle`. Keep this operation in the owning
+available: `Top`, `SecondFromTop`, `Bottom`, and `Shuffle`. These placements share the owner-zone
+movement transaction: Commander destination choices precede position choices, and all required
+choices finish before the exact object moves. Positional returns remain single-object instructions;
+simultaneous positional cohorts require an explicit owner-ordering contract. Brainstorm's private
+ordered hand-return transaction retains its separate selection and reveal boundary.
+Keep this operation in the owning
 spell Program, not in its legacy `effects` list; registry validation rejects flat
 `PutInOwnersLibrary` entries. For example, an owner-choice mode is authored as:
 
