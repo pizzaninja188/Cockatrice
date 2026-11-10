@@ -43,6 +43,7 @@ fn begin(engine: &GameEngine, source: u32, own: u32) -> RuledCommand {
             ability_index: 0,
             source_zone: rv1::AbilitySourceZone::Battlefield as i32,
             own_target: Some(rv1::AbilityActivationTarget {
+                kind: rv1::TargetRefKind::Permanent as i32,
                 object_id: own,
                 zone_change_generation: engine.state.zone_change_generation[&own],
                 group_index: 0,
@@ -57,9 +58,11 @@ fn answer(engine: &GameEngine, opponent: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitAbilityActivationChoice(
             rv1::SubmitAbilityActivationChoice {
+                targets: Vec::new(),
                 transaction_id: pending.transaction_id,
                 expected_revision: pending.revision,
                 target: Some(rv1::AbilityActivationTarget {
+                    kind: rv1::TargetRefKind::Permanent as i32,
                     object_id: opponent,
                     zone_change_generation: engine.state.zone_change_generation[&opponent],
                     group_index: 1,

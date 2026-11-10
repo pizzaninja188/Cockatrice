@@ -67,6 +67,10 @@ pub struct TargetGroupDef {
     /// Arena and Magus of the Arena delegate this group's announcement under CR 602.3.
     #[serde(default, skip_serializing_if = "TargetChooser::is_controller")]
     pub chooser: TargetChooser,
+    /// Arena and Magus of the Arena require the chosen opponent to control their target.
+    /// Choosing a target alone imposes no controller restriction (Cuombajj Witches, Diaochan).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub controlled_by_chooser: bool,
     pub min: u32,
     pub max: u32,
     /// Optional presentation override for a target group with a generated default.
@@ -1335,6 +1339,13 @@ impl TargetingDef {
         {
             return Err("per-opponent targeting requires a battlefield activated ability".into());
         }
+        if targeting.is_some_and(Self::requires_opponent_choice) && effects.iter().any(|effect| {
+            matches!(effect, SpellEffectKind::DamageTargets { division: super::DamageDivision::ChooseAtCast, .. }
+                | SpellEffectKind::CopyTargetArtifactWithManaValueX { .. })
+                || matches!(effect, SpellEffectKind::DamageTargets { extra_mana_per_target, .. } if *extra_mana_per_target != 0)
+        }) {
+            return Err("staged opponent targets do not support damage allocations, per-target mana surcharges or X-bound targets".into());
+        }
         Self::validate_kaya_exile_target_binding(targeting, effects)?;
         let schema = TargetSchema::compile(effects, targeting)?;
         Self::validate_equip_planeswalker_binding(effects, &schema, targeting)?;
@@ -1396,46 +1407,50 @@ impl TargetingDef {
         if !targeting.is_some_and(Self::requires_opponent_choice) {
             return Ok(());
         }
-        let source_tap_and_mana = (costs.len() == 2 || costs.len() == 3)
-            && costs.contains(&super::AbilityCost::Tap)
-            && costs.iter().any(|cost| {
-                matches!(cost, super::AbilityCost::Mana(mana)
-                    if !mana.pips.contains(&crate::ManaSymbol::X))
-            })
-            && costs
-                .iter()
-                .filter(|cost| matches!(cost, super::AbilityCost::Loyalty(delta) if *delta > 0))
-                .count()
-                == costs.len().saturating_sub(2);
-        if source_zone != super::AbilitySourceZone::Battlefield || !source_tap_and_mana {
+        let supported_costs = costs.iter().all(|cost| match cost {
+            super::AbilityCost::Tap => true,
+            super::AbilityCost::Mana(mana) => !mana.pips.contains(&crate::ManaSymbol::X),
+            super::AbilityCost::Loyalty(delta) => *delta > 0,
+            _ => false,
+        });
+        if source_zone != super::AbilitySourceZone::Battlefield || !supported_costs {
             return Err(
-                "opponent target choices require battlefield mana and source-tap activation costs"
+                "opponent target choices require battlefield fixed mana, source-tap or positive loyalty costs"
                     .into(),
             );
         }
-        if schema.groups.len() != 2
-            || schema.groups[0].chooser != TargetChooser::Controller
-            || schema.groups[1].chooser != TargetChooser::ChosenOpponent
-        {
-            return Err(
-                "opponent target choices require controller then chosen-opponent groups".into(),
-            );
-        }
-        for (group, controller) in schema
-            .groups
-            .iter()
-            .zip([TargetController::You, TargetController::Opponent])
-        {
-            if group.min != 1
-                || group.max != 1
-                || group.same_graveyard
+        // CR 602.3b: controller announcements precede the opponent's announcements.
+        // Cardinality and distinctness are the ordinary declared target-group contract.
+        let mut opponent_started = false;
+        for (index, group) in schema.groups.iter().enumerate() {
+            if group.chooser == TargetChooser::ChosenOpponent {
+                opponent_started = true;
+            } else if opponent_started {
+                return Err("controller target groups must precede opponent target groups".into());
+            }
+            if group.same_graveyard
                 || !group.bindings.iter().all(|binding| {
-                    matches!(binding.role, TargetRole::Filtered(filter)
-                        if filter.all_terminal_filters_match(|leaf|
-                            leaf.kind == TargetKind::Creature && leaf.controller == controller))
+                    matches!(
+                        binding.role,
+                        TargetRole::Filtered(_) | TargetRole::CreaturePermanent
+                    )
                 })
             {
-                return Err("opponent target choices require singleton creatures with the declared controller".into());
+                return Err(
+                    "staged opponent choices currently support battlefield and player targets"
+                        .into(),
+                );
+            }
+            if targeting.unwrap().groups[index].controlled_by_chooser
+                && (group.chooser != TargetChooser::ChosenOpponent
+                    || !group
+                        .bindings
+                        .iter()
+                        .all(|binding| binding.role.is_permanent_only()))
+            {
+                return Err(
+                    "chooser-controlled targets require a permanent-only opponent group".into(),
+                );
             }
         }
         if targeting
@@ -2451,6 +2466,7 @@ mod tests {
     fn target_group(min: u32, max: u32, effect_indices: Vec<u32>) -> TargetingDef {
         TargetingDef {
             groups: vec![TargetGroupDef {
+                controlled_by_chooser: false,
                 for_each_opponent: false,
                 chooser: TargetChooser::Controller,
                 min,
@@ -2466,6 +2482,7 @@ mod tests {
 
     fn counter_move_targeting() -> TargetingDef {
         let group = |prompt: &str, distinct_from| TargetGroupDef {
+            controlled_by_chooser: false,
             for_each_opponent: false,
             chooser: TargetChooser::Controller,
             min: 1,
@@ -2509,6 +2526,7 @@ mod tests {
 
         let mut extra_group = valid.clone();
         extra_group.groups.push(TargetGroupDef {
+            controlled_by_chooser: false,
             for_each_opponent: false,
             chooser: TargetChooser::Controller,
             min: 1,
@@ -2695,6 +2713,7 @@ mod tests {
         for (min, max) in [(0, 1), (1, 2)] {
             let targeting = TargetingDef {
                 groups: vec![TargetGroupDef {
+                    controlled_by_chooser: false,
                     for_each_opponent: false,
                     chooser: Default::default(),
                     min,
@@ -2739,6 +2758,7 @@ mod tests {
         ];
         let targeting = TargetingDef {
             groups: vec![TargetGroupDef {
+                controlled_by_chooser: false,
                 for_each_opponent: false,
                 chooser: TargetChooser::Controller,
                 min: 1,
@@ -2776,6 +2796,7 @@ mod tests {
         );
         let group = |min, max| TargetingDef {
             groups: vec![TargetGroupDef {
+                controlled_by_chooser: false,
                 for_each_opponent: false,
                 chooser: Default::default(),
                 min,
@@ -2960,6 +2981,7 @@ mod tests {
         let targeting = TargetingDef {
             groups: vec![
                 TargetGroupDef {
+                    controlled_by_chooser: false,
                     for_each_opponent: false,
                     chooser: Default::default(),
                     min: 1,
@@ -2971,6 +2993,7 @@ mod tests {
                     cast_cost_expansion: None,
                 },
                 TargetGroupDef {
+                    controlled_by_chooser: false,
                     for_each_opponent: false,
                     chooser: Default::default(),
                     min: 1,
@@ -3102,6 +3125,7 @@ mod tests {
         }];
         let same_graveyard = TargetingDef {
             groups: vec![TargetGroupDef {
+                controlled_by_chooser: false,
                 for_each_opponent: false,
                 chooser: Default::default(),
                 min: 0,

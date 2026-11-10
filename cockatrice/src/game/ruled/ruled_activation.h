@@ -60,10 +60,11 @@ ruledActivationChoice(const RuledClientState &state, int localPlayerId, quint64 
             return std::nullopt;
         choice->set_opponent_player_id(*opponent);
     } else {
-        if (pending.stage() != ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET)
+        if (pending.stage() != ruled::v1::ABILITY_ACTIVATION_STAGE_TARGET_SELECTION)
             return std::nullopt;
         const auto offered = std::find_if(pending.target_candidates().begin(), pending.target_candidates().end(),
-                                          [target](const auto &entry) { return entry.object_id() == *target; });
+                                          [target](const auto &entry) { return entry.object_id() == *target &&
+                                              entry.kind() == ruled::v1::TARGET_REF_KIND_PERMANENT; });
         if (offered == pending.target_candidates().end())
             return std::nullopt;
         *choice->mutable_target() = *offered;
@@ -103,7 +104,7 @@ inline void ruledApplyActivationView(PendingActivatedAbility &local,
         PendingActivatedAbility::Target selected;
         selected.ref.set_object_id(target.object_id());
         selected.ref.set_group_index(target.group_index());
-        selected.ref.set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+        selected.ref.set_kind(target.kind());
         selected.zoneChangeGeneration = target.zone_change_generation();
         local.selectedTargets.append(selected);
     }

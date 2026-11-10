@@ -1552,6 +1552,7 @@ fn narset_phase_b_model_admits_only_the_flat_captured_spell_grant_profile() {
     let mut targeted = grant.clone();
     narset_phase_b_triggered_mut(&mut targeted, "triggered_01").targeting = Some(TargetingDef {
         groups: vec![TargetGroupDef {
+            controlled_by_chooser: false,
             for_each_opponent: false,
             chooser: TargetChooser::Controller,
             min: 1,

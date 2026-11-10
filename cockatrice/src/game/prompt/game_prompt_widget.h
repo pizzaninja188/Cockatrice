@@ -211,7 +211,7 @@ public slots:
 
 signals:
     void primaryActionAvailabilityChanged();
-    void ruledActivationOpponentRequested(int playerId, quint64 transactionId, quint64 revision);
+    void ruledActivationChoiceRequested(int playerId, quint64 transactionId, quint64 revision);
     void passPriorityRequested();
     void confirmAttackersRequested();
     void confirmBlockersRequested();

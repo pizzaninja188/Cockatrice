@@ -3191,6 +3191,19 @@ impl GameEngine {
         Ok(snapshot)
     }
 
+    pub(super) fn ability_announcement_controllers_current(
+        &self,
+        snapshot: &AnnouncedAbilityActivation,
+    ) -> bool {
+        snapshot.stack_targets.iter().all(|target| {
+            super::targeting::required_target_controller_is_current(
+                self,
+                target.object_id,
+                target.required_controller,
+            )
+        })
+    }
+
     pub(super) fn append_ability_announcement_targets(
         &self,
         snapshot: &mut AnnouncedAbilityActivation,

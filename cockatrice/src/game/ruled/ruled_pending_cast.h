@@ -1659,11 +1659,15 @@ ruledAdvancePendingActivatedTargetGroup(PendingActivatedAbility &ability,
     }
     if (state.pendingAbilityActivation && !state.pendingChoice && !state.isWaitingForChoice()) {
         const auto &pending = *state.pendingAbilityActivation;
-        if (pending.stage() == ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET &&
+        if (pending.stage() == ruled::v1::ABILITY_ACTIVATION_STAGE_TARGET_SELECTION &&
             pending.deciding_player_id() == localPlayerId) {
-            const bool legal = kind == RuledTargetCandidateKind::Battlefield &&
-                               std::any_of(pending.target_candidates().begin(), pending.target_candidates().end(),
-                                           [oid](const auto &target) { return target.object_id() == oid; });
+            const auto refKind = ruledTargetCandidateRefKind(kind);
+            const bool legal = std::any_of(pending.target_candidates().begin(), pending.target_candidates().end(),
+                                           [&state, oid, refKind](const auto &target) {
+                                               return target.object_id() == oid && target.kind() == refKind &&
+                                                      (refKind != ruled::v1::TARGET_REF_KIND_PERMANENT ||
+                                                       state.battlefieldGenerationByOid.value(oid, 0) == target.zone_change_generation());
+                                           });
             return legal ? RuledTargetClickEligibility::Legal : RuledTargetClickEligibility::Illegal;
         }
     }

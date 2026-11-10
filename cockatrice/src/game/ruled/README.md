@@ -177,6 +177,17 @@ Resolution Phyrexian choices are bound to the exact prompt in `RuledPayment`; it
 retains them through nested mana work. A new prompt or cleared model cannot reuse the receipt.
 Staged opponent-target and hand-return activations announce their Phyrexian choices in Begin;
 reconnect consumes the private engine receipt and already-normalized locked cost.
+Target announcement follows the engine's declared group cursor. Both controller and opponent
+use `formatRuledTargetPrompt`, typed player/permanent candidates, and the same card/player click
+path. One required target advances on click; optional/multiple selections expose Confirm and
+Clear. Local selections are bound to transaction and revision and clear when the offer changes.
+`TargetChooser` assigns the deciding seat independently of target control; Arena explicitly
+requires the chosen opponent to control its creature. Completed group receipts keep that captured
+restriction even if the chooser leaves. CR 800.4g replaces a departed chooser for unfinished groups
+without replaying completed choices or reopening cancellation. Cuombajj Witches demonstrates the
+shared target-announcement shape, but remains unregistered pending simultaneous damage across
+groups; Diaochan remains unregistered pending its additional timing restriction.
+
 Opponent-target announcements become committed when the engine hands the choice to another
 player. `PendingAbilityActivation.can_cancel` is an actor-private engine permission; reconnect
 and a departed chooser cannot reopen voluntary cancellation. The actor may abandon a locked
@@ -187,7 +198,9 @@ use the shared `WaitingForChoice` prompt and the deciding player's display name.
 This boundary implements CR 602.2, 602.3 and illegal-action recovery under CR 734.1 in the
 [official rules effective November 6, 2026](https://media.wizards.com/2026/downloads/MagicCompRules%2020261106.pdf).
 Two-client acceptance remains pending: activate Arena with three mana and a creature on each
-side; the actor should see `Waiting for <opponent name>...` without Cancel. After the opponent
+side. The actor should first see the shared source heading and `Target 1 of 2`; after selecting
+a creature the opponent should see the same layout with `Target 2 of 2`. Only eligible creatures
+should respond to clicks. During handoff, the actor should see `Waiting for <opponent name>...` without Cancel. After the opponent
 chooses, payment must still have no Cancel; reconnect the actor and confirm the same behavior,
 then pay once and resolve. In a fresh game with only one mana and no mana sources, the actor
 should receive cancellation after the opponent's answer, leaving Arena untapped and mana unspent.

@@ -130,6 +130,7 @@ fn token_copy_requires_one_permanent_source() {
     };
     let targeting = TargetingDef {
         groups: vec![TargetGroupDef {
+            controlled_by_chooser: false,
             for_each_opponent: false,
             chooser: Default::default(),
             min: 1,

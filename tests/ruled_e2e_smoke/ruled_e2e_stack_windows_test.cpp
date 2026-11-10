@@ -169,6 +169,12 @@ TEST_F(RuledE2ESmokeTest, DiagnosticReplayShowsProtectedStackWindow)
     }
     ASSERT_TRUE(playback.contains("zone_windows"));
     ASSERT_TRUE(exported.contains("live_game_menu"));
+    ASSERT_TRUE(exported.contains("live_activation_prompt"));
+    const auto activationPrompt = exported.value("live_activation_prompt").toObject();
+    for (const QString check : {"initial_confirm_disabled", "selection_enables_confirm", "selection_enables_clear",
+                               "clear_button_resets_selection", "clear_disables_confirm", "clear_disables_clear"}) {
+        EXPECT_TRUE(activationPrompt.value(check).toBool()) << check.toStdString();
+    }
     const auto gameMenu = exported.value("live_game_menu").toObject();
     for (const QString name : {"reverse_turn", "turn_order", "phases", "next_phase", "next_phase_action",
                                "selected_cards"}) {

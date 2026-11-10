@@ -138,6 +138,7 @@ fn battlefield(
     plural: bool,
     chooser: TargetChooser,
     per_opponent: bool,
+    controlled_by_chooser: bool,
 ) -> Option<Phrase> {
     let TargetFilter {
         any_of,
@@ -171,7 +172,9 @@ fn battlefield(
         return alternatives(
             branches
                 .iter()
-                .map(|branch| battlefield(branch, plural, chooser, per_opponent))
+                .map(|branch| {
+                    battlefield(branch, plural, chooser, per_opponent, controlled_by_chooser)
+                })
                 .collect::<Option<Vec<_>>>()?,
             None,
         );
@@ -281,23 +284,31 @@ fn battlefield(
     }
     let mut phrase = Phrase::new(with_adjectives(adjectives, subject));
     phrase.qualifiers.extend(kind_qualifier);
-    match (controller, chooser, per_opponent) {
-        (TargetController::Any, _, _) | (TargetController::Opponent, _, true) => (),
-        (TargetController::You, TargetChooser::Controller, _)
-        | (TargetController::Opponent, TargetChooser::ChosenOpponent, _) => {
-            phrase.add("you control")
+    if controlled_by_chooser {
+        phrase.add("you control");
+    } else {
+        match (controller, chooser, per_opponent) {
+            (TargetController::Any, _, _) | (TargetController::Opponent, _, true) => (),
+            (TargetController::You, TargetChooser::Controller, _) => phrase.add("you control"),
+            (TargetController::You, TargetChooser::ChosenOpponent, _) => {
+                phrase.add("the ability's controller controls")
+            }
+            (TargetController::Opponent, TargetChooser::Controller, _) => {
+                phrase.add("an opponent controls")
+            }
+            (TargetController::Opponent, TargetChooser::ChosenOpponent, _) => {
+                phrase.add("an opponent of the ability's controller controls")
+            }
+            (TargetController::NotYou, TargetChooser::Controller, _) => {
+                phrase.add("you don't control")
+            }
+            (TargetController::NotYou, TargetChooser::ChosenOpponent, _) => {
+                phrase.add("the ability's controller doesn't control")
+            }
+            (TargetController::DefendingPlayer, _, _) => {
+                phrase.add("the defending player controls")
+            }
         }
-        (TargetController::You, TargetChooser::ChosenOpponent, _) => {
-            phrase.add("the ability's controller controls")
-        }
-        (TargetController::Opponent, TargetChooser::Controller, _) => {
-            phrase.add("an opponent controls")
-        }
-        (TargetController::NotYou, TargetChooser::Controller, _) => phrase.add("you don't control"),
-        (TargetController::NotYou, TargetChooser::ChosenOpponent, _) => {
-            phrase.add("the ability's controller doesn't control")
-        }
-        (TargetController::DefendingPlayer, _, _) => phrase.add("the defending player controls"),
     }
     if *owner == TargetOwner::You {
         phrase.add(match chooser {
@@ -512,9 +523,13 @@ fn constrained_prompt(
         return None;
     }
     let mut phrase = match first.role {
-        TargetRole::Filtered(filter) => {
-            battlefield(filter, plural, group.chooser, group.for_each_opponent)?
-        }
+        TargetRole::Filtered(filter) => battlefield(
+            filter,
+            plural,
+            group.chooser,
+            group.for_each_opponent,
+            group.controlled_by_chooser,
+        )?,
         TargetRole::CreaturePermanent => Phrase::new(noun("creature", plural)),
         TargetRole::StackSpell(filter) => spell(filter, plural)?,
         TargetRole::StackAbility => Phrase::new(noun("activated or triggered ability", plural)),
@@ -528,7 +543,7 @@ fn constrained_prompt(
         selection(phrase, quantity, plural, group_index, earlier_distinct)
     );
     if let Some(expansion) = &group.cast_cost_expansion {
-        let restricted = battlefield(&expansion.without_cost, plural, group.chooser, false)?;
+        let restricted = battlefield(&expansion.without_cost, plural, group.chooser, false, false)?;
         let restricted = selection(restricted, quantity, plural, group_index, earlier_distinct);
         text.push_str(&format!(
             ". Without the additional cost, choose {restricted}."
@@ -577,6 +592,9 @@ pub(super) fn target_group_prompt<'a>(
     matches_activation_x: bool,
 ) -> Result<Cow<'a, str>, String> {
     let group = &groups[group_index];
+    if group.controlled_by_chooser && group.chooser != TargetChooser::ChosenOpponent {
+        return Err("chooser-controlled targets require an opponent-chosen group".into());
+    }
     if !group.prompt.trim().is_empty() {
         return Ok(Cow::Borrowed(&group.prompt));
     }

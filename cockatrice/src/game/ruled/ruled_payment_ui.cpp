@@ -517,11 +517,8 @@ bool RuledPaymentUi::beginAbilityActivation()
             });
         return true;
     }
-    const bool handReturn = local.deferredReturnTappedCreature &&
-                            local.sourceZone == ruled::v1::ABILITY_SOURCE_ZONE_HAND;
     if (!local.valid || !local.chosenOpponentTargets || local.stage() != PendingActivatedAbility::Stage::Announcing ||
-        (handReturn ? !local.selectedTargets.isEmpty()
-                    : (local.selectedTargets.size() != 1 || local.selectedTargets.first().ref.group_index() != 0)) ||
+        !local.selectedTargets.isEmpty() ||
         RuledActions::gameplayInputLocked(actions->player->getGame()))
         return false;
     // CR 118.13a: choose the Phyrexian branch before sending the announcement.
@@ -535,12 +532,6 @@ bool RuledPaymentUi::beginAbilityActivation()
     begin->set_source_zone(local.sourceZone);
     for (const auto &payment : local.flexPayments)
         *begin->add_flex_payments() = payment;
-    if (!handReturn) {
-        const auto &target = local.selectedTargets.first();
-        begin->mutable_own_target()->set_object_id(target.ref.object_id());
-        begin->mutable_own_target()->set_group_index(target.ref.group_index());
-        begin->mutable_own_target()->set_zone_change_generation(target.zoneChangeGeneration);
-    }
     local.beginOrdinaryAnnouncement();
     const auto source = local.permanentOid;
     const auto generation = local.expectedZoneChangeGeneration;
@@ -558,17 +549,9 @@ bool RuledPaymentUi::beginAbilityActivation()
                 startOrRefresh();
             } else if (current.stage() == PendingActivatedAbility::Stage::BeginPending &&
                        actions->ruledPendingCast->rejectOrdinaryAbilityBegin(draftId)) {
-                if (current.deferredReturnTappedCreature) {
-                    actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-                        RuledPlayerActions::tr("Urban Retreat's activation could not start. Refresh the game state and try again."));
-                } else {
-                    current.waitingForTarget = true;
-                    current.activeTargetGroupPosition = 0;
-                    current.selectedTargets.clear();
-                    emit actions->ruledActivatedAbilityTargetPendingChanged(
-                        true, ruledPendingAbilityTargetPrompt(current,
-                                                              *actions->player->getGame()->getGameEventHandler()->ruled()));
-                }
+                actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
+                    RuledPlayerActions::tr("This activation could not start. Choose the ability again."));
+                cancelPendingActivatedAbility();
             }
         });
     return true;

@@ -492,7 +492,7 @@ void GamePromptWidget::setRuledPromptState(RuledPromptState newState)
         connect(button, &QPushButton::clicked, this, [this, index = option.index, mode = promptState.mode,
                 transaction = promptState.activationTransactionId, revision = promptState.activationRevision] {
             if (mode == PromptMode::AbilityAnnouncement) {
-                emit ruledActivationOpponentRequested(index, transaction, revision);
+                emit ruledActivationChoiceRequested(index, transaction, revision);
             } else if (promptState.mode == PromptMode::CastCostOptions) {
                 emit ruledCastCostOptionRequested(index);
             } else {

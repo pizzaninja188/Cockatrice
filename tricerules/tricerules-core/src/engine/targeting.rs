@@ -581,21 +581,6 @@ impl TargetSourceIdentity {
     }
 }
 
-/// Player, creature, planeswalker, or battle on the battlefield (CR 115.4).
-fn damage_spell_target_legal(engine: &GameEngine, tid: ObjectId) -> bool {
-    if engine.state.player_idx(tid as i32).is_some() {
-        return true;
-    }
-    engine
-        .state
-        .objects
-        .get(&tid)
-        .is_some_and(|o| o.zone == Zone::Battlefield && o.phase_status.is_none())
-        && engine.characteristics(tid).is_some_and(|value| {
-            value.is_creature() || value.has_type("Planeswalker") || value.has_type("Battle")
-        })
-}
-
 fn destroy_spell_target_legal(engine: &GameEngine, tid: ObjectId) -> bool {
     engine
         .state
@@ -822,9 +807,45 @@ pub(super) fn target_role_legality_error(
     source: TargetSourceIdentity,
     trigger_context: TriggerContext,
 ) -> Result<(), EngineError> {
+    target_ref_role_legality_error(
+        engine,
+        role,
+        &rv1::TargetRef {
+            object_id: tid,
+            ..Default::default()
+        },
+        caster,
+        source,
+        trigger_context,
+    )
+}
+
+pub(super) fn target_ref_role_legality_error(
+    engine: &GameEngine,
+    role: TargetRole<'_>,
+    target: &rv1::TargetRef,
+    caster: PlayerId,
+    source: TargetSourceIdentity,
+    trigger_context: TriggerContext,
+) -> Result<(), EngineError> {
+    let tid = target.object_id;
+    let kind = target.kind();
+    if kind != rv1::TargetRefKind::Unspecified && !matches!(role, TargetRole::Filtered(_)) {
+        let expected = match role {
+            TargetRole::CreaturePermanent => rv1::TargetRefKind::Permanent,
+            TargetRole::StackSpell(_) | TargetRole::StackAbility => rv1::TargetRefKind::Stack,
+            TargetRole::GraveyardCard(_) => rv1::TargetRefKind::Graveyard,
+            TargetRole::Filtered(_) => unreachable!(),
+        };
+        if kind != expected {
+            return Err(EngineError::Illegal(
+                "target domain does not match its role",
+            ));
+        }
+    }
     let (legal, message) = match role {
         TargetRole::Filtered(filter) => {
-            target_filter_legal_with_context(engine, filter, tid, caster, source, trigger_context)
+            target_filter_legal_for_ref(engine, filter, target, caster, source, trigger_context)
                 .then_some(())
                 .map_or_else(
                     || {
@@ -1238,20 +1259,64 @@ fn target_filter_legal_with_context(
     source: TargetSourceIdentity,
     trigger_context: TriggerContext,
 ) -> bool {
+    target_filter_legal_for_ref(
+        engine,
+        filter,
+        &rv1::TargetRef {
+            object_id: tid,
+            ..Default::default()
+        },
+        caster,
+        source,
+        trigger_context,
+    )
+}
+
+fn target_filter_legal_for_ref(
+    engine: &GameEngine,
+    filter: &TargetFilter,
+    target: &rv1::TargetRef,
+    caster: PlayerId,
+    source: TargetSourceIdentity,
+    trigger_context: TriggerContext,
+) -> bool {
+    let tid = target.object_id;
     if let Some(branches) = &filter.any_of {
         return branches.iter().any(|branch| {
-            target_filter_legal_with_context(engine, branch, tid, caster, source, trigger_context)
+            target_filter_legal_for_ref(engine, branch, target, caster, source, trigger_context)
         });
     }
-    let kind_ok = match filter.kind {
-        TargetKind::AnyTarget => damage_spell_target_legal(engine, tid),
-        TargetKind::Creature => destroy_spell_target_legal(engine, tid),
-        TargetKind::AnyPlayer => player_target_legal(&engine.state, tid),
-        TargetKind::OpponentPlayer => {
-            player_target_legal(&engine.state, tid)
-                && engine.state.are_opponents(tid as i32, caster)
+    let target_is_player = match target.kind() {
+        rv1::TargetRefKind::Player => true,
+        rv1::TargetRefKind::Permanent => false,
+        rv1::TargetRefKind::Unspecified => {
+            filter.is_player()
+                || (filter.kind == TargetKind::AnyTarget
+                    && engine.state.player_idx(tid as i32).is_some())
         }
-        TargetKind::AnyPermanent => any_battlefield_permanent_target_legal(&engine.state, tid),
+        _ => return false,
+    };
+    let kind_ok = if target_is_player {
+        player_target_legal(&engine.state, tid)
+            && match filter.kind {
+                TargetKind::AnyTarget | TargetKind::AnyPlayer => true,
+                TargetKind::OpponentPlayer => engine.state.are_opponents(tid as PlayerId, caster),
+                _ => false,
+            }
+    } else {
+        match filter.kind {
+            TargetKind::AnyTarget => {
+                any_battlefield_permanent_target_legal(&engine.state, tid)
+                    && engine.characteristics(tid).is_some_and(|value| {
+                        value.is_creature()
+                            || value.has_type("Planeswalker")
+                            || value.has_type("Battle")
+                    })
+            }
+            TargetKind::Creature => destroy_spell_target_legal(engine, tid),
+            TargetKind::AnyPermanent => any_battlefield_permanent_target_legal(&engine.state, tid),
+            TargetKind::AnyPlayer | TargetKind::OpponentPlayer => false,
+        }
     };
     if !kind_ok {
         return false;
@@ -1259,7 +1324,6 @@ fn target_filter_legal_with_context(
     // Characteristic filters — only apply to non-player targets. `is_player()` covers the
     // player-only kinds; `AnyTarget` is decided per target, since the same filter accepts both a
     // creature and a player (Lightning Bolt) and a player carries no characteristics.
-    let target_is_player = engine.state.player_idx(tid as i32).is_some();
     if !target_is_player
         && object_is_excluded(
             &engine.state,
@@ -1544,14 +1608,7 @@ fn target_legality_error_for_binding(
     source: TargetSourceIdentity,
     trigger_context: TriggerContext,
 ) -> Result<(), EngineError> {
-    target_role_legality_error(
-        engine,
-        role,
-        target.object_id,
-        caster,
-        source,
-        trigger_context,
-    )
+    target_ref_role_legality_error(engine, role, target, caster, source, trigger_context)
 }
 
 fn counter_allocation_for_schema(
@@ -1654,6 +1711,84 @@ fn validate_grouped_targets(
     targets: &[rv1::TargetRef],
     target_context: TargetResolutionContext<'_>,
 ) -> Result<(), EngineError> {
+    validate_grouped_targets_at(engine, caster, source, targets, target_context, None)
+}
+
+/// Validate one complete announcement group against the same typed target rules as an atomic
+/// activation. Earlier accepted receipts participate in distinctness, not fresh announcements.
+pub(super) fn validate_ability_announcement_group(
+    engine: &GameEngine,
+    caster: PlayerId,
+    source: TargetSourceIdentity,
+    targets: &[rv1::TargetRef],
+    target_context: TargetResolutionContext<'_>,
+    group_index: usize,
+) -> Result<(), EngineError> {
+    validate_grouped_targets_at(
+        engine,
+        caster,
+        source,
+        targets,
+        target_context,
+        Some(group_index),
+    )
+}
+
+/// Candidate publication must use the declared target domain, especially when a player's
+/// numeric ID is also an object's ID. The ability controller remains the legality reference.
+pub(super) fn ability_announcement_target_is_legal(
+    engine: &GameEngine,
+    caster: PlayerId,
+    source: TargetSourceIdentity,
+    target: &rv1::TargetRef,
+    target_context: TargetResolutionContext<'_>,
+) -> bool {
+    let (schema, _) = runtime_target_schema(
+        engine,
+        caster,
+        target_context.effects,
+        target_context.targeting,
+        target_context.program,
+    );
+    schema
+        .groups
+        .get(target.group_index as usize)
+        .is_some_and(|group| {
+            target_ref_domain_exists(engine, target)
+                && target
+                    .expected_zone_change_generation
+                    .is_none_or(|generation| {
+                        target.kind != rv1::TargetRefKind::Player as i32
+                            && engine
+                                .state
+                                .zone_change_generation
+                                .get(&target.object_id)
+                                .copied()
+                                .unwrap_or(0)
+                                == generation
+                    })
+                && group.bindings.iter().all(|binding| {
+                    target_legality_error_for_binding(
+                        engine,
+                        binding.role,
+                        target,
+                        caster,
+                        source,
+                        target_context.trigger_context,
+                    )
+                    .is_ok()
+                })
+        })
+}
+
+fn validate_grouped_targets_at(
+    engine: &GameEngine,
+    caster: PlayerId,
+    source: TargetSourceIdentity,
+    targets: &[rv1::TargetRef],
+    target_context: TargetResolutionContext<'_>,
+    only_group: Option<usize>,
+) -> Result<(), EngineError> {
     let (schema, controllers) = runtime_target_schema(
         engine,
         caster,
@@ -1662,7 +1797,12 @@ fn validate_grouped_targets(
         target_context.program,
     );
     let allocation = counter_allocation_for_schema(target_context.effects, &schema);
-    validate_counter_allocation(engine, targets, allocation.as_ref())?;
+    if only_group.is_none() {
+        validate_counter_allocation(engine, targets, allocation.as_ref())?;
+    }
+    if only_group.is_some_and(|index| index >= schema.groups.len()) {
+        return Err(EngineError::Illegal("unknown announcement target group"));
+    }
     for target in targets {
         let fixed_poison = schema
             .groups
@@ -1711,6 +1851,9 @@ fn validate_grouped_targets(
         })
         .collect::<Vec<_>>();
     for (group_index, group) in schema.groups.iter().enumerate() {
+        if only_group.is_some_and(|index| index != group_index) {
+            continue;
+        }
         let selected = &grouped[group_index];
         if selected.len() < group.min as usize || selected.len() > group.max as usize {
             if target_context.targeting.is_none() && group.min == 1 && group.max == 1 {
@@ -1787,12 +1930,15 @@ fn validate_grouped_targets(
                 )?;
             }
         }
-        for &other_index in group.distinct_from.iter() {
-            let other = grouped
-                .get(other_index as usize)
-                .ok_or(EngineError::Illegal(
-                    "target group distinctness index is invalid",
-                ))?;
+        for other_index in (0..schema.groups.len()).filter(|other| {
+            group.distinct_from.contains(&(*other as u32))
+                || schema.groups[*other]
+                    .distinct_from
+                    .contains(&(group_index as u32))
+        }) {
+            let other = grouped.get(other_index).ok_or(EngineError::Illegal(
+                "target group distinctness index is invalid",
+            ))?;
             if selected.iter().any(|target| {
                 other.iter().any(|candidate| {
                     target_ref_identity(engine, candidate) == target_ref_identity(engine, target)
@@ -1805,7 +1951,8 @@ fn validate_grouped_targets(
         }
     }
     for (effect_index, effect) in target_context.effects.iter().enumerate() {
-        if matches!(effect, SpellEffectKind::ExchangeArtifactWithGraveyard) {
+        if only_group.is_none() && matches!(effect, SpellEffectKind::ExchangeArtifactWithGraveyard)
+        {
             let (first, second) = schema
                 .artifact_exchange_groups(effect_index)
                 .expect("registry validated artifact exchange roles");
@@ -3725,6 +3872,7 @@ mod tests {
         let targeting = TargetingDef {
             groups: vec![
                 TargetGroupDef {
+                    controlled_by_chooser: false,
                     for_each_opponent: false,
                     chooser: Default::default(),
                     min: 1,
@@ -3736,6 +3884,7 @@ mod tests {
                     cast_cost_expansion: None,
                 },
                 TargetGroupDef {
+                    controlled_by_chooser: false,
                     for_each_opponent: false,
                     chooser: Default::default(),
                     min: 1,

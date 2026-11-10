@@ -4726,6 +4726,7 @@ fn activated_modal_shape_rejects_unsupported_owners_and_cost_contexts() {
     cast_cost_expansion.modal.as_mut().unwrap().modes[0].targeting =
         Some(crate::primitives::TargetingDef {
             groups: vec![crate::primitives::TargetGroupDef {
+                controlled_by_chooser: false,
                 for_each_opponent: false,
                 chooser: crate::primitives::TargetChooser::Controller,
                 min: 1,
@@ -4805,6 +4806,39 @@ fn arena_opponent_chooser_survives_ron_roundtrip() {
 }
 
 #[test]
+fn opponent_target_groups_admit_tap_only_any_targets_and_declared_cardinalities() {
+    // Cuombajj Witches needs the same announcement procedure as Arena, without Arena's
+    // mana cost or ownership restrictions. Additional groups exercise the shared cursor.
+    let mut ability = arena_opponent_chooser_ability();
+    ability.costs = vec![AbilityCost::Tap];
+    ability.effect = vec![
+        SpellEffectKind::DamageTarget {
+            amount: Amount::Fixed(1),
+            target: TargetFilter {
+                kind: TargetKind::AnyTarget,
+                ..Default::default()
+            },
+        };
+        2
+    ];
+    let groups = &mut ability.targeting.as_mut().unwrap().groups;
+    groups[0].effect_indices = vec![0];
+    groups[1].effect_indices = vec![1];
+    ability
+        .validate_shape()
+        .expect("tap-only any-target opponent announcement");
+    ability.effect.push(ability.effect[1].clone());
+    let mut third = ability.targeting.as_ref().unwrap().groups[1].clone();
+    third.effect_indices = vec![2];
+    third.min = 0;
+    third.max = 2;
+    ability.targeting.as_mut().unwrap().groups.push(third);
+    ability
+        .validate_shape()
+        .expect("declared optional multi-target opponent group");
+}
+
+#[test]
 fn arena_opponent_chooser_is_not_a_spell_or_trigger_target_contract() {
     let ability = arena_opponent_chooser_ability();
     let error = TargetingDef::validate_optional(ability.targeting.as_ref(), &ability.effect)
@@ -4834,10 +4868,10 @@ fn arena_opponent_chooser_rejects_unsupported_activation_shapes() {
     assert!(loyalty_debit.validate_shape().is_err());
     let mut optional = ability.clone();
     optional.targeting.as_mut().unwrap().groups[1].min = 0;
-    assert!(optional.validate_shape().is_err());
+    assert!(optional.validate_shape().is_ok());
     let mut several = ability.clone();
     several.targeting.as_mut().unwrap().groups[1].max = 2;
-    assert!(several.validate_shape().is_err());
+    assert!(several.validate_shape().is_ok());
     let mut wrong_controller = ability;
     wrong_controller.effect[1] = SpellEffectKind::Tap {
         subject: EffectSubject::Chosen(Box::new(TargetFilter {
@@ -4846,7 +4880,7 @@ fn arena_opponent_chooser_rejects_unsupported_activation_shapes() {
             ..Default::default()
         })),
     };
-    assert!(wrong_controller.validate_shape().is_err());
+    assert!(wrong_controller.validate_shape().is_ok());
 }
 
 #[test]
@@ -5612,6 +5646,7 @@ fn typed_optional_exile_result_is_available_for_ability_programs() {
     });
     let targeting = crate::primitives::TargetingDef {
         groups: vec![crate::primitives::TargetGroupDef {
+            controlled_by_chooser: false,
             for_each_opponent: false,
             chooser: crate::primitives::TargetChooser::Controller,
             min: 0,
@@ -5694,6 +5729,7 @@ fn typed_exile_result_accepts_permanent_filters_and_lexically_scoped_inputs() {
                     panic!("valid generic Exile ability Program fixture: {error}\n{source}")
                 });
             let target_group = |min, max| crate::primitives::TargetGroupDef {
+                controlled_by_chooser: false,
                 for_each_opponent: false,
                 chooser: crate::primitives::TargetChooser::Controller,
                 min,
@@ -5786,6 +5822,7 @@ fn typed_exile_result_accepts_permanent_filters_and_lexically_scoped_inputs() {
         let program: crate::primitives::CardProgram =
             ron::from_str(&source).expect("scoped Exile receipt fixture parses");
         let target_group = |min, max| crate::primitives::TargetGroupDef {
+            controlled_by_chooser: false,
             for_each_opponent: false,
             chooser: crate::primitives::TargetChooser::Controller,
             min,
@@ -12458,6 +12495,7 @@ fn program_compiler_types_fixed_cost_counter_payment_results() {
     };
     let targeting = crate::primitives::TargetingDef {
         groups: vec![crate::primitives::TargetGroupDef {
+            controlled_by_chooser: false,
             for_each_opponent: false,
             chooser: crate::primitives::TargetChooser::Controller,
             min: 1,
@@ -12525,6 +12563,7 @@ fn counter_payment_outputs_remain_optional_and_conditions_are_typed() {
         );
         let targeting = crate::primitives::TargetingDef {
             groups: vec![crate::primitives::TargetGroupDef {
+                controlled_by_chooser: false,
                 for_each_opponent: false,
                 chooser: crate::primitives::TargetChooser::Controller,
                 min: 1,
@@ -12637,6 +12676,7 @@ fn nonpayment_counter_controller_receipt_is_an_opt_in_typed_program_input() {
     .expect("the controller receipt consumer fixture parses");
     let targeting = crate::primitives::TargetingDef {
         groups: vec![crate::primitives::TargetGroupDef {
+            controlled_by_chooser: false,
             for_each_opponent: false,
             chooser: crate::primitives::TargetChooser::Controller,
             min: 1,
@@ -12676,6 +12716,7 @@ fn nonpayment_counter_controller_receipt_is_an_opt_in_typed_program_input() {
 fn counter_controller_input_rejects_missing_or_wrong_typed_producers() {
     let targeting = crate::primitives::TargetingDef {
         groups: vec![crate::primitives::TargetGroupDef {
+            controlled_by_chooser: false,
             for_each_opponent: false,
             chooser: crate::primitives::TargetChooser::Controller,
             min: 1,
@@ -13608,6 +13649,7 @@ fn program_compiler_lowers_owner_local_named_target_alias() {
         ron::from_str(source).expect("named target aliases must parse as CardProgram source");
     let targeting = TargetingDef {
         groups: vec![TargetGroupDef {
+            controlled_by_chooser: false,
             for_each_opponent: false,
             chooser: TargetChooser::Controller,
             min: 1,
@@ -13668,6 +13710,7 @@ fn program_target_aliases_preserve_singleton_requiredness_and_reject_invalid_use
     };
     let targeting = |min, max| TargetingDef {
         groups: vec![TargetGroupDef {
+            controlled_by_chooser: false,
             for_each_opponent: false,
             chooser: TargetChooser::Controller,
             min,
@@ -14135,6 +14178,7 @@ fn program_target_aliases_lower_recursively_through_if_result_and_choose_conditi
         ron::from_str(source).expect("the recursive target-alias Program parses");
     let targeting = TargetingDef {
         groups: vec![TargetGroupDef {
+            controlled_by_chooser: false,
             for_each_opponent: false,
             chooser: TargetChooser::Controller,
             min: 1,
@@ -14264,6 +14308,7 @@ fn program_target_aliases_reuse_subject_and_shuffle_role_mappings() {
     };
     let targeting = TargetingDef {
         groups: vec![TargetGroupDef {
+            controlled_by_chooser: false,
             for_each_opponent: false,
             chooser: TargetChooser::Controller,
             min: 1,
@@ -17791,6 +17836,7 @@ fn spell_program_accepts_fixed_controller_of_target_group_damage_riders() {
     };
     let targeting = |min, max| crate::primitives::TargetingDef {
         groups: vec![crate::primitives::TargetGroupDef {
+            controlled_by_chooser: false,
             for_each_opponent: false,
             chooser: crate::primitives::TargetChooser::Controller,
             min,
@@ -18107,6 +18153,7 @@ fn spell_program_target_group_damage_rider_rejects_unsupported_contracts() {
     };
     let targeting = |min, max| crate::primitives::TargetingDef {
         groups: vec![crate::primitives::TargetGroupDef {
+            controlled_by_chooser: false,
             for_each_opponent: false,
             chooser: crate::primitives::TargetChooser::Controller,
             min,
@@ -21670,6 +21717,7 @@ mod combustible_gearhulk_program_compiler_tests {
     fn targeting_with_bounds(min: u32, max: u32) -> TargetingDef {
         TargetingDef {
             groups: vec![TargetGroupDef {
+                controlled_by_chooser: false,
                 for_each_opponent: false,
                 chooser: TargetChooser::Controller,
                 min,
@@ -22382,6 +22430,7 @@ mod tidebinder_program_compiler_tests {
 
     fn group(min: u32, max: u32) -> TargetGroupDef {
         TargetGroupDef {
+            controlled_by_chooser: false,
             for_each_opponent: false,
             chooser: TargetChooser::Controller,
             min,
@@ -22483,6 +22532,7 @@ mod tidebinder_program_compiler_tests {
         };
         let targeting = TargetingDef {
             groups: vec![TargetGroupDef {
+                controlled_by_chooser: false,
                 for_each_opponent: false,
                 chooser: TargetChooser::Controller,
                 min: 0,
@@ -23371,5 +23421,21 @@ fn vronos_per_opponent_default_false_preserves_legacy_serialization() {
     assert_eq!(
         ron::from_str::<crate::primitives::TargetingDef>(&serialized).unwrap(),
         explicit
+    );
+}
+
+#[test]
+fn opponent_target_groups_reject_unrepresented_damage_allocation() {
+    let ability: ActivatedAbilityDef = ron::from_str(
+        r#"(
+        ability_id: "activated_01", presentation: Fallback, costs: [Tap],
+        effect: [DamageTargets(amount: 2, target: (kind: AnyTarget), division: ChooseAtCast)],
+        targeting: Some((groups: [(min: 1, max: 2, effect_indices: [0], chooser: ChosenOpponent)]))
+    )"#,
+    )
+    .unwrap();
+    assert!(
+        ability.validate_shape().is_err(),
+        "staged replies cannot carry chosen damage allocations"
     );
 }

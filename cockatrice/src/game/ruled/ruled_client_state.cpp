@@ -541,6 +541,7 @@ void RuledClientState::revokeLocalActionAuthority()
     ++pendingChoiceRevision;
     pendingSpellCast.reset();
     pendingAbilityActivation.reset();
+    reconcileAbilityActivationTargets();
     payment.takeAllOptimisticManaCounterIds();
     payment.clear();
     emit localActionAuthorityRevoked();
@@ -898,11 +899,105 @@ void RuledClientState::declinePendingClickChoice()
     host->sendRuledCommand(command);
 }
 
-void RuledClientState::submitAbilityActivationOpponent(int playerId, quint64 transaction, quint64 revision)
+void RuledClientState::reconcileAbilityActivationTargets()
 {
-    const auto command = ruledActivationChoice(*this, host->localPlayerId(), transaction, revision, playerId, std::nullopt);
-    if (command)
-        host->sendRuledCommandExpectingAck(*command, [](bool) {});
+    bool changed = false;
+    if (!pendingAbilityActivation ||
+        pendingAbilityActivation->transaction_id() != activationTargetTransaction ||
+        pendingAbilityActivation->revision() != activationTargetRevision ||
+        pendingAbilityActivation->stage() != ruled::v1::ABILITY_ACTIVATION_STAGE_TARGET_SELECTION ||
+        !pendingAbilityActivation->has_target_group()) {
+        changed = !activationTargetSelection.isEmpty();
+        activationTargetSelection.clear();
+    }
+    activationTargetTransaction = pendingAbilityActivation ? pendingAbilityActivation->transaction_id() : 0;
+    activationTargetRevision = pendingAbilityActivation ? pendingAbilityActivation->revision() : 0;
+    if (changed)
+        emit activationTargetSelectionChanged();
+}
+
+bool RuledClientState::stageAbilityActivationTarget(ruled::v1::TargetRefKind kind, quint32 oid)
+{
+    reconcileAbilityActivationTargets();
+    if (!host || !pendingAbilityActivation || isEngineCommandPending() || ruledActivationNestedChoice(*this))
+        return false;
+    const auto &pending = *pendingAbilityActivation;
+    if (pending.stage() != ruled::v1::ABILITY_ACTIVATION_STAGE_TARGET_SELECTION ||
+        pending.deciding_player_id() != host->localPlayerId() || !pending.has_target_group())
+        return false;
+    const auto offered = std::find_if(pending.target_candidates().begin(), pending.target_candidates().end(),
+                                     [kind, oid](const auto &entry) {
+                                         return entry.kind() == kind && entry.object_id() == oid;
+                                     });
+    if (offered == pending.target_candidates().end() ||
+        (kind == ruled::v1::TARGET_REF_KIND_PERMANENT &&
+         battlefieldGenerationByOid.value(oid, 0) != offered->zone_change_generation()))
+        return false;
+    const auto selected = std::find_if(activationTargetSelection.begin(), activationTargetSelection.end(),
+                                      [kind, oid](const auto &entry) {
+                                          return entry.kind() == kind && entry.object_id() == oid;
+                                      });
+    if (selected != activationTargetSelection.end()) {
+        activationTargetSelection.erase(selected);
+    } else {
+        if (activationTargetSelection.size() >= pending.target_group().max())
+            return false;
+        activationTargetSelection.append(*offered);
+    }
+    if (pending.target_group().min() == 1 && pending.target_group().max() == 1 &&
+        activationTargetSelection.size() == 1) {
+        submitAbilityActivationPromptChoice(ActivationConfirmTargets, pending.transaction_id(), pending.revision());
+    }
+    emit activationTargetSelectionChanged();
+    emit legalActionsChanged();
+    return true;
+}
+
+void RuledClientState::submitAbilityActivationPromptChoice(int option, quint64 transaction, quint64 revision)
+{
+    reconcileAbilityActivationTargets();
+    if (!host || !pendingAbilityActivation || isEngineCommandPending() || ruledActivationNestedChoice(*this))
+        return;
+    const auto &pending = *pendingAbilityActivation;
+    if (pending.transaction_id() != transaction || pending.revision() != revision ||
+        pending.deciding_player_id() != host->localPlayerId())
+        return;
+    if (pending.stage() == ruled::v1::ABILITY_ACTIVATION_STAGE_CHOOSE_OPPONENT) {
+        const auto command = ruledActivationChoice(*this, host->localPlayerId(), transaction, revision, option, std::nullopt);
+        if (command)
+            host->sendRuledCommandExpectingAck(*command, [](bool) {});
+        return;
+    }
+    if (pending.stage() != ruled::v1::ABILITY_ACTIVATION_STAGE_TARGET_SELECTION || !pending.has_target_group())
+        return;
+    if (option == ActivationClearTargets) {
+        activationTargetSelection.clear();
+        emit activationTargetSelectionChanged();
+        emit legalActionsChanged();
+        return;
+    }
+    const auto count = activationTargetSelection.size();
+    if (option != ActivationConfirmTargets || count < pending.target_group().min() || count > pending.target_group().max())
+        return;
+    for (const auto &target : activationTargetSelection) {
+        const bool offered = std::any_of(pending.target_candidates().begin(), pending.target_candidates().end(),
+                                         [&target](const auto &candidate) {
+                                             return candidate.kind() == target.kind() &&
+                                                    candidate.object_id() == target.object_id() &&
+                                                    candidate.group_index() == target.group_index() &&
+                                                    candidate.zone_change_generation() == target.zone_change_generation();
+                                         });
+        if (!offered || (target.kind() == ruled::v1::TARGET_REF_KIND_PERMANENT &&
+                         battlefieldGenerationByOid.value(target.object_id(), 0) != target.zone_change_generation()))
+            return;
+    }
+    ruled::v1::RuledCommand command;
+    auto *choice = command.mutable_submit_ability_activation_choice();
+    choice->set_transaction_id(transaction);
+    choice->set_expected_revision(revision);
+    for (const auto &target : activationTargetSelection)
+        *choice->add_targets() = target;
+    host->sendRuledCommandExpectingAck(command, [](bool) {});
 }
 
 void RuledClientState::submitPendingChoiceOption(int optionIndex)
@@ -2398,6 +2493,7 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
         pendingSpellCast.reset();
         pendingAttackDeclaration.reset();
         pendingAbilityActivation.reset();
+        reconcileAbilityActivationTargets();
         validTargetsByHandSlot.clear();
         validTargetsByZoneObject.clear();
         activatedAbilityModesByAbility.clear();

@@ -3,6 +3,9 @@ use super::*;
 #[path = "activation_tests/poison_difference.rs"]
 mod poison_difference;
 
+#[path = "activation_tests/target_announcement.rs"]
+mod target_announcement;
+
 #[path = "activation_tests/counter_distribution.rs"]
 mod counter_distribution;
 
@@ -39,7 +42,7 @@ const OPPONENT_CHOICE_LAND: &str = r#"(
         targeting: Some((groups: [
             (min: 1, max: 1, prompt: "Choose your creature", effect_indices: [0, 2]),
             (min: 1, max: 1, prompt: "Choose your creature", effect_indices: [1, 2],
-             chooser: ChosenOpponent),
+             chooser: ChosenOpponent, controlled_by_chooser: true),
         ])),
     )],
 )"#;
@@ -62,7 +65,7 @@ const AUTHORED_OPPONENT_CHOICE_LAND: &str = r#"(
         targeting: Some((groups: [
             (min: 1, max: 1, prompt: "Choose your creature", effect_indices: []),
             (min: 1, max: 1, prompt: "Choose an opponent's creature", effect_indices: [],
-             chooser: ChosenOpponent)
+             chooser: ChosenOpponent, controlled_by_chooser: true)
         ]))
     )]
 )"#;
@@ -5440,6 +5443,7 @@ fn aggregate_counter_unsupported_shapes_stay_unoffered_and_begin_atomic() {
             cost_selections: vec![group_selection],
             flex_payments,
             own_target: (shape == "targeted").then_some(rv1::AbilityActivationTarget {
+                kind: rv1::TargetRefKind::Permanent as i32,
                 object_id: creature,
                 zone_change_generation: engine.payment_object_ref(creature).zone_change_generation,
                 group_index: 0,
@@ -6530,6 +6534,7 @@ fn authored_battlefield_chosen_opponent_uses_the_staged_target_and_exact_owner()
                 ability_index: 0,
                 source_zone: rv1::AbilitySourceZone::Battlefield as i32,
                 own_target: Some(rv1::AbilityActivationTarget {
+                    kind: rv1::TargetRefKind::Permanent as i32,
                     object_id: own_creature,
                     zone_change_generation: own_generation,
                     group_index: 0,
@@ -6584,6 +6589,7 @@ fn authored_battlefield_chosen_opponent_uses_the_staged_target_and_exact_owner()
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitAbilityActivationChoice(
                     rv1::SubmitAbilityActivationChoice {
+                        targets: Vec::new(),
                         transaction_id: pending.transaction_id,
                         expected_revision: pending.revision,
                         target: Some(candidate),
@@ -6954,6 +6960,7 @@ fn arena_staged_departing_chooser_refreshes_explicit_actor_choice() {
         .is_empty());
     assert!(!engine.state.objects[&legacy.source_object_id].tapped);
     let choose = rv1::SubmitAbilityActivationChoice {
+        targets: Vec::new(),
         transaction_id: pending.transaction_id,
         expected_revision: pending.revision,
         opponent_player_id: Some(30),
@@ -7159,6 +7166,33 @@ fn arena_legacy_payment_preview_requires_opponents_announcement() {
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
 }
 
+#[test]
+fn staged_activation_begins_with_engine_owned_controller_target_group() {
+    let (mut engine, legacy) = choice_engine();
+    let mut begin = begin_choice(&engine, &legacy);
+    let Some(rv1::ruled_command::Cmd::BeginAbilityActivation(command)) = begin.cmd.as_mut() else {
+        unreachable!();
+    };
+    command.own_target = None;
+    command.opponent_player_id = None;
+    let batch = engine
+        .apply_scenario_command(10, &begin)
+        .expect("the shared framework offers the first declared group to its chooser");
+    let pending = engine.state.pending_ability_activation.as_ref().unwrap();
+    assert_eq!(pending.deciding_player_id, 10);
+    assert!(pending.announced_targets.is_empty());
+    assert_eq!(pending.target_group.as_ref().unwrap().group_index, 0);
+    assert!(
+        batch.legal_by_player[&10]
+            .pending_ability_activation
+            .as_ref()
+            .unwrap()
+            .can_cancel
+    );
+    assert!(!engine.state.objects[&legacy.source_object_id].tapped);
+    assert!(engine.state.stack.is_empty());
+}
+
 fn begin_choice(engine: &GameEngine, legacy: &rv1::ActivateAbility) -> RuledCommand {
     let own = engine.payment_object_ref(legacy.targets[0].object_id);
     RuledCommand {
@@ -7169,6 +7203,7 @@ fn begin_choice(engine: &GameEngine, legacy: &rv1::ActivateAbility) -> RuledComm
                 ability_index: legacy.ability_index,
                 source_zone: rv1::AbilitySourceZone::Battlefield as i32,
                 own_target: Some(rv1::AbilityActivationTarget {
+                    kind: rv1::TargetRefKind::Permanent as i32,
                     object_id: own.object_id,
                     zone_change_generation: own.zone_change_generation,
                     group_index: 0,
@@ -7191,6 +7226,7 @@ fn announce_both(
         .as_ref()
         .unwrap();
     let reply = rv1::SubmitAbilityActivationChoice {
+        targets: Vec::new(),
         transaction_id: pending.transaction_id,
         expected_revision: pending.revision,
         target: Some(pending.target_candidates[0]),
@@ -7551,7 +7587,7 @@ fn arena_staged_unrelated_departure_refreshes_candidates_without_repicking_recei
         .clone();
     assert_eq!(
         refreshed.stage(),
-        rv1::AbilityActivationStage::OpponentTarget
+        rv1::AbilityActivationStage::TargetSelection
     );
     assert_eq!(refreshed.transaction_id, before.transaction_id);
     assert!(refreshed.revision > before.revision);
@@ -7576,6 +7612,7 @@ fn arena_staged_unrelated_departure_refreshes_candidates_without_repicking_recei
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitAbilityActivationChoice(
                     rv1::SubmitAbilityActivationChoice {
+                        targets: Vec::new(),
                         transaction_id: before.transaction_id,
                         expected_revision: before.revision,
                         target: Some(
@@ -7598,6 +7635,7 @@ fn arena_staged_unrelated_departure_refreshes_candidates_without_repicking_recei
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitAbilityActivationChoice(
                     rv1::SubmitAbilityActivationChoice {
+                        targets: Vec::new(),
                         transaction_id: refreshed.transaction_id,
                         expected_revision: refreshed.revision,
                         target: Some(target),
@@ -8092,6 +8130,7 @@ fn arena_staged_mana_sacrifice_keeps_announced_incarnation_and_partial_resolutio
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
     let pending = engine.state.pending_ability_activation.as_ref().unwrap();
     let reply = rv1::SubmitAbilityActivationChoice {
+        targets: Vec::new(),
         transaction_id: pending.transaction_id,
         expected_revision: pending.revision,
         target: Some(pending.target_candidates[0]),
@@ -8191,6 +8230,7 @@ fn pending_staged_loyalty_cost_replacement() -> (
                 ability_index: 0,
                 source_zone: rv1::AbilitySourceZone::Battlefield as i32,
                 own_target: Some(rv1::AbilityActivationTarget {
+                    kind: rv1::TargetRefKind::Permanent as i32,
                     object_id: legacy.targets[0].object_id,
                     zone_change_generation: engine
                         .payment_object_ref(legacy.targets[0].object_id)
@@ -8207,6 +8247,7 @@ fn pending_staged_loyalty_cost_replacement() -> (
         .expect("announce ability");
     let pending = engine.state.pending_ability_activation.as_ref().unwrap();
     let opponent_choice = rv1::SubmitAbilityActivationChoice {
+        targets: Vec::new(),
         transaction_id: pending.transaction_id,
         expected_revision: pending.revision,
         target: Some(pending.target_candidates[0]),
@@ -8483,7 +8524,7 @@ fn arena_staged_announcement_hands_target_choice_to_opponent_before_payment() {
         .unwrap();
     assert_eq!(
         opponent.stage(),
-        rv1::AbilityActivationStage::OpponentTarget
+        rv1::AbilityActivationStage::TargetSelection
     );
     assert_eq!(actor.deciding_player_id, 20);
     assert!(!actor.can_cancel);
@@ -8514,6 +8555,7 @@ fn arena_staged_announcement_hands_target_choice_to_opponent_before_payment() {
     let answer = RuledCommand {
         cmd: Some(rv1::ruled_command::Cmd::SubmitAbilityActivationChoice(
             rv1::SubmitAbilityActivationChoice {
+                targets: Vec::new(),
                 transaction_id: opponent.transaction_id,
                 expected_revision: opponent.revision,
                 opponent_player_id: None,
@@ -8677,7 +8719,7 @@ fn aggregate_counter_begin_payloads_reject_without_state_or_resource_change() {
             .as_ref()
             .unwrap()
             .stage(),
-        rv1::AbilityActivationStage::OpponentTarget
+        rv1::AbilityActivationStage::TargetSelection
     );
     assert_eq!(battlefield_control.state.players[0].mana_pool.colorless, 3);
 
@@ -8832,7 +8874,7 @@ fn aggregate_pending_projection_keeps_announcements_actor_private() {
             .as_ref()
             .unwrap()
             .stage(),
-        rv1::AbilityActivationStage::OpponentTarget
+        rv1::AbilityActivationStage::TargetSelection
     );
     let own_identity = engine.payment_object_ref(legacy.targets[0].object_id);
     let (announcements, flex_announcements) = synthetic_counter_group_announcements(own_identity);
@@ -9368,28 +9410,29 @@ fn arena_staged_invalid_target_answers_and_post_handoff_cancel_are_atomic() {
         .as_ref()
         .unwrap();
     let valid = rv1::SubmitAbilityActivationChoice {
+        targets: Vec::new(),
         transaction_id: pending.transaction_id,
         expected_revision: pending.revision,
         target: Some(pending.target_candidates[0]),
         opponent_player_id: None,
     };
     let mut invalid = Vec::new();
-    let mut own = valid;
+    let mut own = valid.clone();
     own.target.as_mut().unwrap().object_id = legacy.targets[0].object_id;
     invalid.push(own);
-    let mut group = valid;
+    let mut group = valid.clone();
     group.target.as_mut().unwrap().group_index = 0;
     invalid.push(group);
-    let mut generation = valid;
+    let mut generation = valid.clone();
     generation.target.as_mut().unwrap().zone_change_generation += 1;
     invalid.push(generation);
-    let mut transaction = valid;
+    let mut transaction = valid.clone();
     transaction.transaction_id += 1;
     invalid.push(transaction);
-    let mut revision = valid;
+    let mut revision = valid.clone();
     revision.expected_revision += 1;
     invalid.push(revision);
-    let mut change_opponent = valid;
+    let mut change_opponent = valid.clone();
     change_opponent.opponent_player_id = Some(10);
     invalid.push(change_opponent);
     let before = serde_json::to_value(&engine.state).unwrap();

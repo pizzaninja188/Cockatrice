@@ -439,6 +439,40 @@ void RuledDiagnosticViewer::openFromCommandLine(MainWindow *window, const QComma
             }
             gameMenu.insert("automation_control_count", controlCount);
             viewer->comparison.insert("live_game_menu", gameMenu);
+            // Exercise production signal/button wiring for the seat choosing another player's targets.
+            auto *liveState = liveTab->getGame()->getGameEventHandler()->ruled();
+            const int localSeat = joined.player_id();
+            auto &activation = liveState->pendingAbilityActivation.emplace();
+            activation.set_transaction_id(6023);
+            activation.set_revision(1);
+            activation.set_actor_player_id(localSeat == 0 ? 1 : 0);
+            activation.set_deciding_player_id(localSeat);
+            activation.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_TARGET_SELECTION);
+            activation.mutable_target_group()->set_min(1);
+            activation.mutable_target_group()->set_max(2);
+            auto *candidate = activation.add_target_candidates();
+            candidate->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
+            candidate->set_object_id(localSeat);
+            liveTab->refreshRuledPromptState();
+            const auto choiceButton = [&](int option) {
+                return liveTab->gamePromptWidget->findChild<QPushButton *>(
+                    QStringLiteral("ruledChoiceOptionButton_%1").arg(option));
+            };
+            const auto enabled = [&](int option) {
+                auto *button = choiceButton(option);
+                return button && !button->isHidden() && button->isEnabled();
+            };
+            QJsonObject activationPrompt;
+            activationPrompt.insert("initial_confirm_disabled", !enabled(RuledClientState::ActivationConfirmTargets));
+            const bool selected = liveState->stageAbilityActivationTarget(ruled::v1::TARGET_REF_KIND_PLAYER, localSeat);
+            activationPrompt.insert("selection_enables_confirm", selected && enabled(RuledClientState::ActivationConfirmTargets));
+            activationPrompt.insert("selection_enables_clear", enabled(RuledClientState::ActivationClearTargets));
+            if (auto *clear = choiceButton(RuledClientState::ActivationClearTargets))
+                clear->click();
+            activationPrompt.insert("clear_button_resets_selection", liveState->activationTargetSelection.isEmpty());
+            activationPrompt.insert("clear_disables_confirm", !enabled(RuledClientState::ActivationConfirmTargets));
+            activationPrompt.insert("clear_disables_clear", !enabled(RuledClientState::ActivationClearTargets));
+            viewer->comparison.insert("live_activation_prompt", activationPrompt);
             liveTab.reset();
             QString error;
             const bool ok = RuledDiagnosticJournal::writeJson(output, viewer->comparison, &error);

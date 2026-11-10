@@ -169,7 +169,7 @@ TEST_F(GamePromptWidgetTest, AbilityAnnouncementUsesTypedOpponentButtonsAndActor
     EXPECT_FALSE(btn("cancelTargetingButton")->isHidden());
     ASSERT_NE(btn("ruledChoiceOptionButton_7"), nullptr);
     EXPECT_FALSE(btn("ruledChoiceOptionButton_7")->isHidden());
-    QSignalSpy typed(widget.get(), &GamePromptWidget::ruledActivationOpponentRequested);
+    QSignalSpy typed(widget.get(), &GamePromptWidget::ruledActivationChoiceRequested);
     QSignalSpy resolution(widget.get(), &GamePromptWidget::ruledChoiceOptionRequested);
     btn("ruledChoiceOptionButton_7")->click();
     ASSERT_EQ(typed.count(), 1);
@@ -221,7 +221,7 @@ TEST_F(GamePromptWidgetTest, AbilityAnnouncementGroupedPaymentOffersExplicitRetr
     QSignalSpy retrySpy(widget.get(), &GamePromptWidget::ruledActivationPaymentRetryRequested);
     QSignalSpy handPickSpy(widget.get(), &GamePromptWidget::ruledResolutionHandPickConfirmRequested);
     QSignalSpy costSpy(widget.get(), &GamePromptWidget::ruledCostSelectionConfirmRequested);
-    QSignalSpy opponentSpy(widget.get(), &GamePromptWidget::ruledActivationOpponentRequested);
+    QSignalSpy opponentSpy(widget.get(), &GamePromptWidget::ruledActivationChoiceRequested);
     retry->click();
 
     ASSERT_EQ(retrySpy.count(), 1);

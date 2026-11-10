@@ -16,12 +16,12 @@ pub(super) struct PendingAbilityActivationInternal {
     announcement: super::casting::AnnouncedAbilityActivation,
     // A departure can return the procedure to ChooseOpponent, but cannot retract its handoff.
     handed_to_opponent: bool,
+    replacing_departed_chooser: bool,
 }
 
 #[derive(Clone)]
 enum PendingAbilityActivationRoute {
-    OpponentChoice,
-    OpponentPayment,
+    Targets,
     HandPayment,
     AcceptedAggregate {
         actor: PlayerId,
@@ -39,14 +39,7 @@ pub(super) struct PendingCounterCostInternal {
     pub(super) announcement: super::casting::AnnouncedAbilityActivation,
 }
 
-fn target_ref(target: &rv1::AbilityActivationTarget) -> rv1::TargetRef {
-    rv1::TargetRef {
-        object_id: target.object_id,
-        group_index: target.group_index,
-        kind: rv1::TargetRefKind::Permanent as i32,
-        ..Default::default()
-    }
-}
+mod target_announcement;
 
 impl GameEngine {
     pub(super) fn supports_accepted_aggregate_counter_shape(
@@ -147,45 +140,6 @@ impl GameEngine {
         Ok(())
     }
 
-    fn eligible_activation_opponents(
-        &self,
-        pending: &rv1::PendingAbilityActivation,
-        ability: &ActivatedAbilityDef,
-    ) -> Vec<PlayerId> {
-        self.eligible_activation_opponents_with_program(
-            pending,
-            ability,
-            self.activation_program(pending),
-        )
-    }
-
-    fn eligible_activation_opponents_with_program(
-        &self,
-        pending: &rv1::PendingAbilityActivation,
-        ability: &ActivatedAbilityDef,
-        program: Option<&tricerules_card_model::primitives::CompiledProgram>,
-    ) -> Vec<PlayerId> {
-        let groups = self.activation_target_groups_with_program(pending, ability, program);
-        let Some(group) = groups.groups.get(1) else {
-            return Vec::new();
-        };
-        self.state
-            .players
-            .iter()
-            .filter(|candidate| {
-                !candidate.has_lost
-                    && self
-                        .state
-                        .are_opponents(pending.actor_player_id, candidate.id)
-                    && group.valid_permanent_ids.iter().any(|oid| {
-                        self.characteristics(*oid)
-                            .is_some_and(|c| c.controller == candidate.id)
-                    })
-            })
-            .map(|candidate| candidate.id)
-            .collect()
-    }
-
     /// Reconcile accepted independent mana work and departures without undoing that work.
     pub(super) fn reconcile_pending_ability_activation(
         &mut self,
@@ -265,19 +219,9 @@ impl GameEngine {
             });
         let valid = actor_current
             && (accepted_aggregate || (!route_is_accepted && source_current))
-            && ability.is_some_and(|ability| {
-                pending.stage() == rv1::AbilityActivationStage::Payment
-                    || pending.announced_targets.first().is_some_and(|own| {
-                        self.activation_target_receipt(own.object_id, 0) == *own
-                            && self
-                                .activation_target_groups(&pending, ability)
-                                .groups
-                                .first()
-                                .is_some_and(|group| {
-                                    group.valid_permanent_ids.contains(&own.object_id)
-                                })
-                    })
-            });
+            && ability.is_some()
+            && (pending.stage() == rv1::AbilityActivationStage::Payment
+                || self.announcement_receipts_are_current(&pending));
         if !valid {
             self.state.pending_ability_activation = None;
             self.pending_ability_activation_internal = None;
@@ -305,82 +249,11 @@ impl GameEngine {
             }
             return;
         }
-        let ability = ability.unwrap();
-        let eligible = self.eligible_activation_opponents(&pending, ability);
-        if eligible.is_empty() {
+        if !self.refresh_target_announcement(&mut pending) {
             self.state.pending_ability_activation = None;
             self.pending_ability_activation_internal = None;
-            if self.pending_counter_cost_internal.is_some() {
-                self.state.pending_resolution = None;
-                self.state.pending_replacement_event = None;
-                self.pending_counter_cost_internal = None;
-            }
-            events.push(events::ev_log("Unfinished ability activation abandoned because no opponent can complete its target choice.".into()));
-            return;
+            events.push(events::ev_log("Unfinished ability activation abandoned because its remaining target choice is unavailable.".into()));
         }
-        let old = pending.clone();
-        pending.valid_opponent_ids = eligible;
-        if let Some(selected) = pending
-            .chosen_opponent_id
-            .filter(|selected| pending.valid_opponent_ids.contains(selected))
-        {
-            // A refreshed candidate list retires stale generation/revision receipts.
-            self.set_activation_opponent(&mut pending, ability, selected)
-                .expect("eligible opponent has a legal target");
-        } else {
-            pending.stage = rv1::AbilityActivationStage::ChooseOpponent as i32;
-            pending.deciding_player_id = pending.actor_player_id;
-            pending.chosen_opponent_id = None;
-            pending.target_group = None;
-            pending.target_candidates.clear();
-        }
-        if pending != old {
-            pending.revision = pending.revision.saturating_add(1);
-            self.state.pending_ability_activation = Some(pending);
-        }
-    }
-    fn activation_target_receipt(
-        &self,
-        object_id: ObjectId,
-        group_index: u32,
-    ) -> rv1::AbilityActivationTarget {
-        rv1::AbilityActivationTarget {
-            object_id,
-            zone_change_generation: self.payment_object_ref(object_id).zone_change_generation,
-            group_index,
-        }
-    }
-
-    fn activation_target_groups(
-        &self,
-        pending: &rv1::PendingAbilityActivation,
-        ability: &ActivatedAbilityDef,
-    ) -> rv1::SpellTargets {
-        self.activation_target_groups_with_program(
-            pending,
-            ability,
-            self.activation_program(pending),
-        )
-    }
-
-    fn activation_target_groups_with_program(
-        &self,
-        pending: &rv1::PendingAbilityActivation,
-        ability: &ActivatedAbilityDef,
-        program: Option<&tricerules_card_model::primitives::CompiledProgram>,
-    ) -> rv1::SpellTargets {
-        compute_ability_targets_with_program(
-            self,
-            pending.actor_player_id,
-            TargetSourceIdentity::captured_for_ability(
-                pending.source_object_id,
-                pending.source_zone_change_generation,
-                ability,
-            ),
-            &ability.effect,
-            ability.targeting.as_ref(),
-            program,
-        )
     }
 
     pub(super) fn program_for_activation_occurrence(
@@ -396,66 +269,6 @@ impl GameEngine {
         };
         let owner = tricerules_card_model::ProgramOwnerId::ability(definition.clone());
         self.registry.compiled_program_for_owner(&owner)
-    }
-
-    fn activation_program(
-        &self,
-        _pending: &rv1::PendingAbilityActivation,
-    ) -> Option<&tricerules_card_model::primitives::CompiledProgram> {
-        let effective = &self.pending_ability_activation_internal.as_ref()?.effective;
-        self.program_for_activation_occurrence(&effective.occurrence)
-    }
-
-    fn set_activation_opponent(
-        &self,
-        pending: &mut rv1::PendingAbilityActivation,
-        ability: &ActivatedAbilityDef,
-        opponent: PlayerId,
-    ) -> Result<(), EngineError> {
-        self.set_activation_opponent_with_program(
-            pending,
-            ability,
-            opponent,
-            self.activation_program(pending),
-        )
-    }
-
-    fn set_activation_opponent_with_program(
-        &self,
-        pending: &mut rv1::PendingAbilityActivation,
-        ability: &ActivatedAbilityDef,
-        opponent: PlayerId,
-        program: Option<&tricerules_card_model::primitives::CompiledProgram>,
-    ) -> Result<(), EngineError> {
-        if !pending.valid_opponent_ids.contains(&opponent) {
-            return Err(EngineError::Illegal("ineligible opponent for activation"));
-        }
-        let mut group = self
-            .activation_target_groups_with_program(pending, ability, program)
-            .groups
-            .into_iter()
-            .nth(1)
-            .ok_or(EngineError::Illegal("missing opponent target group"))?;
-        group.valid_permanent_ids.retain(|oid| {
-            self.characteristics(*oid)
-                .is_some_and(|c| c.controller == opponent)
-        });
-        if group.valid_permanent_ids.is_empty() {
-            return Err(EngineError::Illegal(
-                "opponent has no legal creature choice",
-            ));
-        }
-        pending.target_candidates = group
-            .valid_permanent_ids
-            .iter()
-            .map(|&oid| self.activation_target_receipt(oid, 1))
-            .collect();
-        pending.target_group = Some(group);
-        pending.chosen_opponent_id = Some(opponent);
-        pending.deciding_player_id = opponent;
-        pending.stage = rv1::AbilityActivationStage::OpponentTarget as i32;
-        pending.valid_opponent_ids.clear();
-        Ok(())
     }
 
     pub(super) fn begin_ability_activation(
@@ -555,109 +368,7 @@ impl GameEngine {
                 "pre-announced ability cost selections are unsupported",
             ));
         }
-        let program = self.program_for_activation_occurrence(&effective.occurrence);
-        if !effective.definition.requires_opponent_target_choice()
-            || !self.ability_activatable(
-                source.id,
-                command.ability_index as usize,
-                &effective.definition,
-            )
-        {
-            return Err(EngineError::Illegal(
-                "ability does not support this opponent-choice announcement",
-            ));
-        }
-        // Validate the indexed branch before another player receives the target prompt.
-        // Preparation records costs but does not spend mana, life, or tap the source.
-        let announced_costs = self.prepare_ability_costs(
-            player,
-            idx,
-            source.id,
-            &effective.definition.costs,
-            &command.flex_payments,
-            &[],
-            &[],
-            0,
-            0,
-            self.activated_mana_reduction(player, source.id, &effective.definition)?,
-        )?;
-        super::payment::demand::validated_phyrexian_choices(
-            &announced_costs.mana,
-            &command.flex_payments,
-        )?;
-        let own = command
-            .own_target
-            .as_ref()
-            .ok_or(EngineError::Illegal("missing controller target"))?;
-        let mut pending = rv1::PendingAbilityActivation {
-            transaction_id: self.state.next_ability_activation_transaction_id,
-            revision: 1,
-            actor_player_id: player,
-            deciding_player_id: player,
-            source_object_id: source.id,
-            source_zone_change_generation: command.expected_zone_change_generation,
-            ability_index: command.ability_index,
-            reserved_object_id: self.state.next_object_id,
-            announced_targets: vec![*own],
-            source_description: events::object_display_name(&self.state, self.registry, source.id),
-            flex_payments: command.flex_payments.clone(),
-            ..Default::default()
-        };
-        let groups =
-            self.activation_target_groups_with_program(&pending, &effective.definition, program);
-        if own.group_index != 0
-            || self.activation_target_receipt(own.object_id, 0) != *own
-            || !groups
-                .groups
-                .first()
-                .is_some_and(|group| group.valid_permanent_ids.contains(&own.object_id))
-        {
-            return Err(EngineError::Illegal(
-                "illegal or stale controller creature target",
-            ));
-        }
-        pending.valid_opponent_ids = self.eligible_activation_opponents_with_program(
-            &pending,
-            &effective.definition,
-            program,
-        );
-        if pending.valid_opponent_ids.is_empty() {
-            return Err(EngineError::Illegal(
-                "no opponent can complete this activation",
-            ));
-        }
-        let selected = command.opponent_player_id.or_else(|| {
-            (pending.valid_opponent_ids.len() == 1).then(|| pending.valid_opponent_ids[0])
-        });
-        if let Some(opponent) = selected {
-            self.set_activation_opponent_with_program(
-                &mut pending,
-                &effective.definition,
-                opponent,
-                program,
-            )?;
-        }
-        let announcement = self.capture_ability_announcement(
-            player,
-            source.id,
-            &effective,
-            &[target_ref(own)],
-            0,
-            self.effective_card_identity(source.id)
-                .map(|(id, face)| (id.to_string(), face))
-                .ok_or(EngineError::Illegal("bad activation face"))?,
-        )?;
-        self.state.next_ability_activation_transaction_id =
-            pending.transaction_id.saturating_add(1);
-        self.state.pending_ability_activation = Some(pending);
-        self.pending_ability_activation_internal = Some(PendingAbilityActivationInternal {
-            effective,
-            route: PendingAbilityActivationRoute::OpponentChoice,
-            prepared_costs: None,
-            announcement,
-            handed_to_opponent: selected.is_some(),
-        });
-        Ok(RuledEventBatch::default())
+        self.begin_targeted_ability_activation(player, idx, &source, effective, command)
     }
 
     fn begin_accepted_aggregate_counter_activation(
@@ -763,6 +474,7 @@ impl GameEngine {
             prepared_costs: Some(prepared_costs),
             announcement,
             handed_to_opponent: false,
+            replacing_departed_chooser: false,
         });
         Ok(RuledEventBatch::default())
     }
@@ -887,165 +599,8 @@ impl GameEngine {
             prepared_costs: Some(prepared_costs),
             announcement,
             handed_to_opponent: false,
+            replacing_departed_chooser: false,
         });
-        Ok(RuledEventBatch::default())
-    }
-
-    pub(super) fn submit_ability_activation_choice(
-        &mut self,
-        player: PlayerId,
-        command: &rv1::SubmitAbilityActivationChoice,
-    ) -> Result<RuledEventBatch, EngineError> {
-        let mut pending = self
-            .state
-            .pending_ability_activation
-            .clone()
-            .ok_or(EngineError::Illegal("no pending ability activation"))?;
-        if pending.deciding_player_id != player
-            || pending.transaction_id != command.transaction_id
-            || pending.revision != command.expected_revision
-        {
-            return Err(EngineError::Illegal(
-                "wrong actor or stale activation choice",
-            ));
-        }
-        let internal = self
-            .pending_ability_activation_internal
-            .as_ref()
-            .ok_or(EngineError::Illegal("missing activation snapshot"))?;
-        let ability = &internal.effective.definition;
-        let mut prepared = None;
-        let mut announcement = internal.announcement.clone();
-        match pending.stage() {
-            rv1::AbilityActivationStage::ChooseOpponent => {
-                if command.target.is_some() {
-                    return Err(EngineError::Illegal(
-                        "opponent selection cannot replace announced targets",
-                    ));
-                }
-                self.set_activation_opponent(
-                    &mut pending,
-                    ability,
-                    command
-                        .opponent_player_id
-                        .ok_or(EngineError::Illegal("missing opponent choice"))?,
-                )?;
-            }
-            rv1::AbilityActivationStage::OpponentTarget => {
-                if command.opponent_player_id.is_some() {
-                    return Err(EngineError::Illegal(
-                        "target reply cannot change the chosen opponent",
-                    ));
-                }
-                let target = command
-                    .target
-                    .as_ref()
-                    .ok_or(EngineError::Illegal("missing opponent target"))?;
-                if target.group_index != 1
-                    || !pending.target_candidates.contains(target)
-                    || self.activation_target_receipt(target.object_id, 1) != *target
-                    || self
-                        .characteristics(target.object_id)
-                        .is_none_or(|c| Some(c.controller) != pending.chosen_opponent_id)
-                {
-                    return Err(EngineError::Illegal("illegal or stale opponent target"));
-                }
-                pending.announced_targets.push(*target);
-                let targets: Vec<_> = pending.announced_targets.iter().map(target_ref).collect();
-                super::targeting::validate_ability_targets_with_context_and_program(
-                    self,
-                    pending.actor_player_id,
-                    TargetSourceIdentity::captured_for_ability(
-                        pending.source_object_id,
-                        pending.source_zone_change_generation,
-                        ability,
-                    ),
-                    &targets,
-                    TargetResolutionContext {
-                        effects: &ability.effect,
-                        targeting: ability.targeting.as_ref(),
-                        trigger_context: TriggerContext::default(),
-                        program: self.activation_program(&pending),
-                    },
-                )?;
-                if pending.announced_targets.iter().any(|target| {
-                    self.activation_target_receipt(target.object_id, target.group_index) != *target
-                }) {
-                    return Err(EngineError::Illegal("announced target incarnation changed"));
-                }
-                if !self.ability_activatable(
-                    pending.source_object_id,
-                    pending.ability_index as usize,
-                    ability,
-                ) || self
-                    .payment_object_ref(pending.source_object_id)
-                    .zone_change_generation
-                    != pending.source_zone_change_generation
-                {
-                    return Err(EngineError::Illegal(
-                        "announced activation is no longer legal",
-                    ));
-                }
-                let costs = self.prepare_ability_costs(
-                    pending.actor_player_id,
-                    self.state
-                        .player_idx(pending.actor_player_id)
-                        .ok_or(EngineError::UnknownPlayer(pending.actor_player_id))?,
-                    pending.source_object_id,
-                    &ability.costs,
-                    &pending.flex_payments,
-                    &[],
-                    &[],
-                    0,
-                    self.targeting_cost_increase(
-                        pending.actor_player_id,
-                        TargetingCostAction::ActivatedAbilities,
-                        &targets,
-                    ),
-                    self.activated_mana_reduction(
-                        pending.actor_player_id,
-                        pending.source_object_id,
-                        ability,
-                    )?,
-                )?;
-                pending.locked_total_cost = costs.total_cost_label()?;
-                self.append_ability_announcement_targets(
-                    &mut announcement,
-                    &[target_ref(target)],
-                    pending.chosen_opponent_id,
-                );
-                prepared = Some(costs);
-                pending.stage = rv1::AbilityActivationStage::Payment as i32;
-                pending.deciding_player_id = pending.actor_player_id;
-                pending.target_group = None;
-                pending.target_candidates.clear();
-            }
-            rv1::AbilityActivationStage::Payment => {
-                return Err(EngineError::Illegal(
-                    "activation targets are already locked",
-                ))
-            }
-        }
-        pending.revision = pending.revision.saturating_add(1);
-        if let Some(costs) = prepared {
-            let internal = self
-                .pending_ability_activation_internal
-                .as_mut()
-                .expect("the current activation snapshot remains present");
-            internal.prepared_costs = Some(costs);
-            internal.route = PendingAbilityActivationRoute::OpponentPayment;
-        }
-        self.pending_ability_activation_internal
-            .as_mut()
-            .unwrap()
-            .announcement = announcement;
-        if pending.chosen_opponent_id.is_some() {
-            self.pending_ability_activation_internal
-                .as_mut()
-                .unwrap()
-                .handed_to_opponent = true;
-        }
-        self.state.pending_ability_activation = Some(pending);
         Ok(RuledEventBatch::default())
     }
 
@@ -1232,7 +787,20 @@ impl GameEngine {
                 "activation source incarnation changed",
             ));
         }
-        self.check_tappable(source.id, &source.card_id)?;
+        if self
+            .pending_ability_activation_internal
+            .as_ref()
+            .is_some_and(|internal| {
+                internal
+                    .effective
+                    .definition
+                    .costs
+                    .iter()
+                    .any(|cost| matches!(cost, AbilityCost::Tap))
+            })
+        {
+            self.check_tappable(source.id, &source.card_id)?;
+        }
         let mut costs = self
             .pending_ability_activation_internal
             .as_ref()

@@ -908,17 +908,14 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetClick(RuledPlayerActions *actions
     if (actions->ruledPayment->tryHandleAdditionalCostClick(card))
         return true;
 
-    // An opponent answers the engine offer directly; they never own the actor's local draft.
+    // Both choosers answer the same engine-owned target-group offer.
     if (handler->pendingAbilityActivation && !ruledActivationNestedChoice(*handler)) {
         const auto &pending = *handler->pendingAbilityActivation;
-        if (pending.stage() == ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET &&
+        if (pending.stage() == ruled::v1::ABILITY_ACTIVATION_STAGE_TARGET_SELECTION &&
             pending.deciding_player_id() == actions->player->getPlayerInfo()->getId()) {
             if (card && card->getZone() && card->getOwner() && card->getZone()->getName() == ZoneNames::TABLE) {
                 const auto oid = handler->engineOidForCardId(card->getOwner()->getPlayerInfo()->getId(), card->getId());
-                const auto command = ruledActivationChoice(*handler, actions->player->getPlayerInfo()->getId(),
-                                                           pending.transaction_id(), pending.revision(), std::nullopt, oid);
-                if (command)
-                    RuledActions::sendRuledCommandExpectingAck(actions->player->getGame(), *command, [](bool) {});
+                handler->stageAbilityActivationTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, oid);
             }
             return true;
         }
@@ -1030,6 +1027,15 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetPlayerClick(RuledPlayerActions *a
                                                 targetPlayer->getPlayerInfo()->getId())) {
             handler->emitLocalLog(RuledPlayerActions::tr("That player is not a legal target for the current target group."));
         }
+        return true;
+    }
+
+    if (handler && handler->pendingAbilityActivation && !ruledActivationNestedChoice(*handler) &&
+        handler->pendingAbilityActivation->stage() == ruled::v1::ABILITY_ACTIVATION_STAGE_TARGET_SELECTION &&
+        handler->pendingAbilityActivation->deciding_player_id() == actions->player->getPlayerInfo()->getId()) {
+        if (targetPlayer)
+            handler->stageAbilityActivationTarget(ruled::v1::TARGET_REF_KIND_PLAYER,
+                                                  static_cast<quint32>(targetPlayer->getPlayerInfo()->getId()));
         return true;
     }
 

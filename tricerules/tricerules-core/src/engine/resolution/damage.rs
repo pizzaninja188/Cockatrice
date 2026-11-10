@@ -1,6 +1,32 @@
 use super::*;
 use crate::engine::damage::{DamageEvent, DamageRecipient, DamageSpec};
 
+// Resolve the retained typed occurrence, never an unrelated player with the same number.
+fn current_damage_recipient(engine: &GameEngine, target: &StackTarget) -> Option<DamageRecipient> {
+    let player = match rv1::TargetRefKind::try_from(target.kind).ok()? {
+        rv1::TargetRefKind::Player => true,
+        rv1::TargetRefKind::Permanent => false,
+        rv1::TargetRefKind::Unspecified => target.zone_change_generation.is_none(),
+        _ => return None,
+    };
+    if player {
+        return engine
+            .state
+            .player_idx(target.object_id as PlayerId)
+            .filter(|index| !engine.state.players[*index].has_lost)
+            .map(|index| DamageRecipient::Player(engine.state.players[index].id));
+    }
+    (stack_target_identity_is_current(engine, target)
+        && engine
+            .state
+            .objects
+            .get(&target.object_id)
+            .is_some_and(|object| {
+                object.zone == Zone::Battlefield && object.phase_status.is_none()
+            }))
+    .then_some(DamageRecipient::Permanent(target.object_id))
+}
+
 pub(super) fn damage_target(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -23,6 +49,12 @@ pub(super) fn damage_target(
     else {
         return Ok(EffectOutcome::Continue);
     };
+    let Some(recipient) = cx
+        .target_receipt_in_role(tid, 0)
+        .and_then(|receipt| current_damage_recipient(cx.engine, receipt))
+    else {
+        return Ok(EffectOutcome::Continue);
+    };
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let top = cx.top;
@@ -34,11 +66,6 @@ pub(super) fn damage_target(
         AmountContext::for_stack_item(top, top.controller)
             .with_previous_effect_result(cx.previous_effect_result),
     );
-    let recipient = engine
-        .state
-        .player_idx(tid as i32)
-        .map(|index| DamageRecipient::Player(engine.state.players[index].id))
-        .unwrap_or(DamageRecipient::Permanent(tid));
     let damage = vec![DamageSpec {
         event: DamageEvent::noncombat(
             resolving_damage_source_id(top),
@@ -279,14 +306,14 @@ pub(super) fn damage_targets(
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let targets = cx.targets;
-    let targets_by_role = cx.targets_by_role;
-    let target_receipts = cx.target_receipts;
-    let target_role_group_indices = cx.target_role_group_indices;
-    let target_role = targets_by_role
-        .first()
-        .map(Vec::as_slice)
-        .unwrap_or_default();
-    let target_group_index = target_role_group_indices.first().copied();
+    let target_group_index = cx.target_role_group_indices.first().copied();
+    let target_receipts = cx
+        .target_receipts
+        .iter()
+        .filter(|target| {
+            Some(target.group_index) == target_group_index && targets.contains(&target.object_id)
+        })
+        .collect::<Vec<_>>();
     let controller = cx.controller;
     let spell_label = cx.spell_label;
 
@@ -294,20 +321,9 @@ pub(super) fn damage_targets(
     // calculated only after that filtering; Fire's choose-at-cast allocation remains attached to
     // each target independently.
     let even_damage = if matches!(division, DamageDivision::EvenAtResolution) {
-        let legal_count = targets
+        let legal_count = target_receipts
             .iter()
-            .filter(|&&tid| {
-                target_group_index.is_some_and(|group_index| {
-                    super::target_receipt_is_current_in_role(
-                        engine,
-                        target_role,
-                        target_receipts,
-                        group_index,
-                        tid,
-                        None,
-                    )
-                })
-            })
+            .filter(|target| current_damage_recipient(engine, target).is_some())
             .count() as u32;
         if legal_count == 0 {
             0
@@ -334,41 +350,23 @@ pub(super) fn damage_targets(
         0
     };
     let mut damage = Vec::new();
-    for (i, &tid) in targets.iter().enumerate() {
+    for target in &target_receipts {
+        let tid = target.object_id;
         let damage_amount = if matches!(division, DamageDivision::EvenAtResolution) {
             even_damage
         } else if matches!(division, DamageDivision::PerTarget) {
             per_target_damage
         } else {
-            target_receipts
-                .get(i)
-                .map_or(0, |target| target.damage_amount)
+            target.damage_amount
         };
         if damage_amount == 0 {
             continue;
         }
-        let current_target = target_group_index.is_some_and(|group_index| {
-            super::target_receipt_is_current_in_role(
-                engine,
-                target_role,
-                target_receipts,
-                group_index,
-                tid,
-                None,
-            )
-        });
-        if !current_target {
+        let Some(recipient) = current_damage_recipient(engine, target) else {
             events.push(ev_log(format!(
-                "{spell_label}: target {} is no longer legal, skipping.",
-                tid
+                "{spell_label}: target {tid} is no longer legal, skipping."
             )));
             continue;
-        }
-        let recipient = if let Some(pi) = engine.state.player_idx(tid as i32) {
-            let pid = engine.state.players[pi].id;
-            DamageRecipient::Player(pid)
-        } else {
-            DamageRecipient::Permanent(tid)
         };
         damage.push(DamageSpec {
             event: DamageEvent::noncombat(

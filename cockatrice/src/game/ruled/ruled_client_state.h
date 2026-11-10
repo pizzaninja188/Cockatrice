@@ -876,7 +876,11 @@ public:
         return hasPendingChoiceOfKind(ChoiceKind::ReplacementEffect);
     }
     void submitReplacementEffect(int tileIndex, quint64 choiceRevision);
-    void submitAbilityActivationOpponent(int playerId, quint64 transaction, quint64 revision);
+    void submitAbilityActivationPromptChoice(int option, quint64 transaction, quint64 revision);
+    bool stageAbilityActivationTarget(ruled::v1::TargetRefKind kind, quint32 oid);
+    void reconcileAbilityActivationTargets();
+    static constexpr int ActivationConfirmTargets = -1;
+    static constexpr int ActivationClearTargets = -2;
     struct ReplacementImage
     {
         int tileIndex;
@@ -964,6 +968,10 @@ public:
     std::optional<ruled::v1::PendingAttackDeclaration> pendingAttackDeclaration;
     /// Public activation announcement and only this seat's engine-authored choice/payment offers.
     std::optional<ruled::v1::PendingAbilityActivation> pendingAbilityActivation;
+    // A local draft is bound to the exact private engine offer, never carried across revisions.
+    quint64 activationTargetTransaction = 0;
+    quint64 activationTargetRevision = 0;
+    QVector<ruled::v1::AbilityActivationTarget> activationTargetSelection;
     [[nodiscard]] bool hasPendingSpellCast() const
     {
         return pendingSpellCast.has_value();
@@ -2397,6 +2405,7 @@ signals:
     /// Local trigger-target staging changed without an authoritative batch; refresh the prompt's
     /// selected count and active target-group text immediately.
     void triggerTargetSelectionChanged();
+    void activationTargetSelectionChanged();
     /// Emitted once after each settled batch rebuilds the acting player's authoritative legal
     /// actions. Pending target UI uses it to discard selections that became stale mid-cast.
     void legalActionsChanged();

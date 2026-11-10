@@ -379,7 +379,7 @@ fn drain(e: &mut GameEngine, mut batch: RuledEventBatch, budget: usize) -> Resul
                         ..Default::default()
                     })
                 }
-                AbilityActivationStage::OpponentTarget => {
+                AbilityActivationStage::TargetSelection => {
                     Cmd::SubmitAbilityActivationChoice(SubmitAbilityActivationChoice {
                         transaction_id: view.transaction_id,
                         expected_revision: view.revision,

@@ -5845,6 +5845,7 @@ mod luxior_model_contract_tests {
         effect_indices: Vec<u32>,
     ) -> crate::primitives::TargetGroupDef {
         crate::primitives::TargetGroupDef {
+            controlled_by_chooser: false,
             chooser,
             for_each_opponent: false,
             min,

@@ -219,6 +219,7 @@ mod tests {
                             ability_index: 0,
                             source_zone: rv1::AbilitySourceZone::Battlefield as i32,
                             own_target: Some(rv1::AbilityActivationTarget {
+                                kind: rv1::TargetRefKind::Permanent as i32,
                                 object_id: permanents[3],
                                 zone_change_generation: engine.state.zone_change_generation
                                     [&permanents[3]],
@@ -250,9 +251,11 @@ mod tests {
                 let choice = RuledCommand {
                     cmd: Some(rv1::ruled_command::Cmd::SubmitAbilityActivationChoice(
                         rv1::SubmitAbilityActivationChoice {
+                            targets: Vec::new(),
                             transaction_id: pending.transaction_id,
                             expected_revision: pending.revision,
                             target: Some(rv1::AbilityActivationTarget {
+                                kind: rv1::TargetRefKind::Permanent as i32,
                                 object_id: opponent,
                                 zone_change_generation: engine.state.zone_change_generation
                                     [&opponent],

@@ -84,7 +84,11 @@ bool supportedSchema()
         // resolution_prompt_id remains checked on both direct submissions and previews.
         // PendingAbilityActivation.can_cancel is an actor-private permission bit, not an
         // identity. Reflection redaction clears it from other seats and spectator snapshots.
-        const QByteArray expected("9d979787bd2fcf7d4fdd8bf35c92a8147c72317b634ede71a41d12c2463d082d");
+        // Staged target lists reuse AbilityActivationTarget. Its new kind distinguishes player
+        // ids (unchanged, zero generation) from permanent handles (paired generation below).
+        // Cursor/count and renamed stage values carry no object identity; enclosing private
+        // candidate/group fields remain recipient-only. Legacy singleton targets are permanent.
+        const QByteArray expected("60b9a87b42a6f1af3e12b44cfc3873f8ea3e60e1594a494e60dc6859f39ec29d");
         if (digest != expected)
             qCritical() << "ruled presentation schema needs an identity audit:" << digest;
         return digest == expected;
@@ -553,6 +557,14 @@ bool RuledPresentationIdentity::walk(Message *message, Walk &context)
         const auto *submission = static_cast<const ruled::v1::SubmitResolutionChoice *>(message);
         if (!context.choice || !context.choice->resolution_prompt_id() ||
             submission->resolution_prompt_id() != context.choice->resolution_prompt_id())
+            return false;
+    }
+    if (type == QLatin1String("AbilityActivationTarget")) {
+        const auto *target = static_cast<const ruled::v1::AbilityActivationTarget *>(message);
+        if (target->kind() == ruled::v1::TARGET_REF_KIND_PLAYER)
+            return target->zone_change_generation() == 0;
+        if (target->kind() != ruled::v1::TARGET_REF_KIND_PERMANENT &&
+            target->kind() != ruled::v1::TARGET_REF_KIND_UNSPECIFIED)
             return false;
     }
     if (type == QLatin1String("PreparationState")) {

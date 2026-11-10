@@ -604,6 +604,7 @@ fn hybrid_deferred_activation_branches_are_announced_locked_and_paid_once() {
                     rv1::AbilitySourceZone::Battlefield as i32
                 },
                 own_target: (zone == Zone::Battlefield).then_some(rv1::AbilityActivationTarget {
+                    kind: rv1::TargetRefKind::Permanent as i32,
                     object_id: own,
                     ..Default::default()
                 }),
@@ -677,9 +678,11 @@ fn hybrid_deferred_activation_branches_are_announced_locked_and_paid_once() {
                     &RuledCommand {
                         cmd: Some(rv1::ruled_command::Cmd::SubmitAbilityActivationChoice(
                             rv1::SubmitAbilityActivationChoice {
+                                targets: Vec::new(),
                                 transaction_id: pending.transaction_id,
                                 expected_revision: pending.revision,
                                 target: Some(rv1::AbilityActivationTarget {
+                                    kind: rv1::TargetRefKind::Permanent as i32,
                                     object_id: opponent,
                                     group_index: 1,
                                     ..Default::default()

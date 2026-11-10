@@ -9,7 +9,7 @@ use super::targeting::{
     ability_mode_program, attachment_recipient_for_target, battlefield_objects_matching,
     effect_has_legal_target_at_resolution, face_mode_program, face_program, graveyard_target_legal,
     object_matches_mass_filter, object_matches_scoped_mass_filter, runtime_target_schema,
-    stack_target_identity_is_current, target_role_legal_at_resolution, target_schema_with_program,
+    stack_target_identity_is_current, target_ref_role_legality_error, target_schema_with_program,
     TargetSourceIdentity,
 };
 use super::*;
@@ -1481,14 +1481,21 @@ impl GameEngine {
                         .characteristics(target.object_id)
                         .is_some_and(|value| value.mana_value == chosen_x))
                 && requirements.iter().all(|&role| {
-                    target_role_legal_at_resolution(
+                    target_ref_role_legality_error(
                         self,
                         role,
-                        target.object_id,
+                        &rv1::TargetRef {
+                            object_id: target.object_id,
+                            kind: target.kind,
+                            group_index: target.group_index,
+                            expected_zone_change_generation: target.zone_change_generation,
+                            ..Default::default()
+                        },
                         controller,
                         source,
                         trigger_context,
                     )
+                    .is_ok()
                 })
         };
 

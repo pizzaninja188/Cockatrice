@@ -203,6 +203,7 @@ pub(crate) fn activation(
                     ability_index: index,
                     source_zone: AbilitySourceZone::Battlefield as i32,
                     own_target: Some(AbilityActivationTarget {
+                        kind: tricerules_proto::TargetRefKind::Permanent as i32,
                         object_id: target,
                         zone_change_generation: e
                             .state

@@ -1883,7 +1883,7 @@ TEST_F(RuledBatchTest, AggregateActivationAnnouncementsStayActorPrivateAcrossBro
                                                  quint64 revision) {
         EXPECT_EQ(pending.transaction_id(), transactionId);
         EXPECT_EQ(pending.revision(), revision);
-        EXPECT_EQ(pending.stage(), ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET);
+        EXPECT_EQ(pending.stage(), ruled::v1::ABILITY_ACTIVATION_STAGE_TARGET_SELECTION);
         EXPECT_EQ(pending.source_object_id(), sourceId);
         EXPECT_EQ(pending.source_zone_change_generation(), sourceGeneration);
         EXPECT_EQ(pending.actor_player_id(), p1->getPlayerId());
@@ -1949,7 +1949,7 @@ TEST_F(RuledBatchTest, AggregateActivationAnnouncementsStayActorPrivateAcrossBro
             auto *pending = (*batch->mutable_legal_by_player())[seat->getPlayerId()].mutable_pending_ability_activation();
             pending->set_transaction_id(transactionId);
             pending->set_revision(revision);
-            pending->set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET);
+            pending->set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_TARGET_SELECTION);
             pending->set_source_object_id(sourceId);
             pending->set_source_zone_change_generation(sourceGeneration);
             pending->set_actor_player_id(p1->getPlayerId());
@@ -11466,7 +11466,7 @@ TEST_F(RuledBatchTest, PendingAttackDeclarationReconnectRestoresOnlyThePayersPri
 
 TEST_F(RuledBatchTest, PendingAbilityActivationReconnectRetainsPublicStageAndOnlyEachSeatsOffers)
 {
-    for (const auto stage : {ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET,
+    for (const auto stage : {ruled::v1::ABILITY_ACTIVATION_STAGE_TARGET_SELECTION,
                              ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT}) {
         ruled::v1::IpcResponse seed;
         seed.set_ok(true);
@@ -11495,7 +11495,7 @@ TEST_F(RuledBatchTest, PendingAbilityActivationReconnectRetainsPublicStageAndOnl
             own->set_object_id(701u);
             own->set_zone_change_generation(5u);
             own->set_group_index(0u);
-            if (stage == ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET && seat == p2) {
+            if (stage == ruled::v1::ABILITY_ACTIVATION_STAGE_TARGET_SELECTION && seat == p2) {
                 auto *candidate = pending->add_target_candidates();
                 candidate->set_object_id(702u);
                 candidate->set_zone_change_generation(6u);
@@ -11527,7 +11527,7 @@ TEST_F(RuledBatchTest, PendingAbilityActivationReconnectRetainsPublicStageAndOnl
             EXPECT_EQ(pending.can_cancel(), stage == ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT && recipient == p1);
             EXPECT_EQ(pending.stage(), stage);
             EXPECT_EQ(pending.announced_targets(0).object_id(), 701u);
-            EXPECT_EQ(pending.target_candidates_size(), stage == ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET && recipient == p2 ? 1 : 0);
+            EXPECT_EQ(pending.target_candidates_size(), stage == ruled::v1::ABILITY_ACTIVATION_STAGE_TARGET_SELECTION && recipient == p2 ? 1 : 0);
             EXPECT_EQ(pending.has_payment_preview(), stage == ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT && recipient == p1);
             EXPECT_EQ(pending.eligible_restricted_mana_group_ids_size(), stage == ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT && recipient == p1 ? 1 : 0);
             EXPECT_TRUE(std::any_of(restored.events().begin(), restored.events().end(), [](const auto &event) { return event.has_zone_view(); }));
@@ -12811,5 +12811,57 @@ TEST_F(RuledBatchTest, HybridPhyrexianResolutionReceiptSurvivesRelayWithoutIdent
     ASSERT_TRUE(canonicalizeClientCommand(p1->getPlayerId(), command));
     EXPECT_EQ(command.submit_resolution_choice().flex_payments(0).SerializeAsString(), original);
     command.mutable_submit_resolution_choice()->set_resolution_prompt_id(842);
+    EXPECT_FALSE(canonicalizeClientCommand(p1->getPlayerId(), command));
+}
+
+TEST_F(RuledBatchTest, StagedActivationTargetsKeepPlayerAndPermanentIdentityDomains)
+{
+    const quint32 collision = static_cast<quint32>(p2->getPlayerId());
+    ruled::v1::RuledEventBatch batch;
+    auto *object = batch.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+    object->set_object_id(collision);
+    object->set_zone_change_generation(7);
+    auto *pending = (*batch.mutable_legal_by_player())[p1->getPlayerId()].mutable_pending_ability_activation();
+    pending->set_transaction_id(913);
+    pending->set_revision(5);
+    pending->set_actor_player_id(p2->getPlayerId());
+    pending->set_deciding_player_id(p1->getPlayerId());
+    pending->set_active_target_group_index(2);
+    pending->set_target_group_count(3);
+    for (const auto kind : {ruled::v1::TARGET_REF_KIND_PLAYER, ruled::v1::TARGET_REF_KIND_PERMANENT}) {
+        auto *target = pending->add_target_candidates();
+        target->set_kind(kind);
+        target->set_object_id(collision);
+        target->set_group_index(2);
+        target->set_zone_change_generation(kind == ruled::v1::TARGET_REF_KIND_PLAYER ? 0 : 7);
+        *pending->add_announced_targets() = *target;
+    }
+    ASSERT_TRUE(prepareIdentityBatch(batch));
+    const auto projected = redactFor(batch, p1);
+    ASSERT_EQ(projected.legal_by_player().count(p1->getPlayerId()), 1u);
+    const auto &offer = projected.legal_by_player().at(p1->getPlayerId()).pending_ability_activation();
+    ASSERT_EQ(offer.target_candidates_size(), 2);
+    EXPECT_EQ(offer.target_candidates(0).object_id(), collision);
+    EXPECT_EQ(offer.target_candidates(0).zone_change_generation(), 0u);
+    EXPECT_NE(offer.target_candidates(1).object_id(), collision);
+    EXPECT_NE(offer.target_candidates(1).zone_change_generation(), 7u);
+    EXPECT_EQ(offer.announced_targets(0).kind(), ruled::v1::TARGET_REF_KIND_PLAYER);
+    EXPECT_EQ(offer.announced_targets(0).object_id(), collision);
+    EXPECT_EQ(offer.active_target_group_index(), 2u);
+    EXPECT_EQ(offer.target_group_count(), 3u);
+    ruled::v1::RuledCommand command;
+    auto *reply = command.mutable_submit_ability_activation_choice();
+    reply->set_transaction_id(913);
+    reply->set_expected_revision(5);
+    for (const auto &target : offer.target_candidates())
+        *reply->add_targets() = target;
+    ASSERT_TRUE(canonicalizeClientCommand(p1->getPlayerId(), command));
+    EXPECT_EQ(reply->targets(0).object_id(), collision);
+    EXPECT_EQ(reply->targets(0).zone_change_generation(), 0u);
+    EXPECT_EQ(reply->targets(1).object_id(), collision);
+    EXPECT_EQ(reply->targets(1).zone_change_generation(), 7u);
+    const auto otherSeat = redactFor(batch, p2);
+    EXPECT_EQ(otherSeat.legal_by_player().count(p1->getPlayerId()), 0u);
+    reply->mutable_targets(0)->set_zone_change_generation(1);
     EXPECT_FALSE(canonicalizeClientCommand(p1->getPlayerId(), command));
 }

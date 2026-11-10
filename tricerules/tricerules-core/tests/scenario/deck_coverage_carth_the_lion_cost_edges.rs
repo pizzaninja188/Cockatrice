@@ -150,6 +150,7 @@ fn begin(engine: &GameEngine, source: u32, own: u32) -> RuledCommand {
             source_zone: rv1::AbilitySourceZone::Battlefield as i32,
             opponent_player_id: Some(1),
             own_target: Some(rv1::AbilityActivationTarget {
+                kind: rv1::TargetRefKind::Permanent as i32,
                 object_id: own,
                 zone_change_generation: engine
                     .state
@@ -169,9 +170,11 @@ fn answer(engine: &GameEngine, opponent: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitAbilityActivationChoice(
             rv1::SubmitAbilityActivationChoice {
+                targets: Vec::new(),
                 transaction_id: pending.transaction_id,
                 expected_revision: pending.revision,
                 target: Some(rv1::AbilityActivationTarget {
+                    kind: rv1::TargetRefKind::Permanent as i32,
                     object_id: opponent,
                     zone_change_generation: engine
                         .state
@@ -220,7 +223,7 @@ fn announce(engine: &mut GameEngine, source: u32, own: u32) {
             .as_ref()
             .unwrap()
             .stage(),
-        rv1::AbilityActivationStage::OpponentTarget
+        rv1::AbilityActivationStage::TargetSelection
     );
 }
 

@@ -3160,6 +3160,12 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         }
     }
 
+    if (actions->pendingActivatedAbility.chosenOpponentTargets) {
+        actions->pendingActivatedAbility.waitingForTarget = false;
+        beginAbilityActivation();
+        return true;
+    }
+
     if (needsTarget) {
         // Target first, then mana payment after target is chosen.
         const QString prompt = ruledPendingAbilityTargetPrompt(actions->pendingActivatedAbility, *handler);

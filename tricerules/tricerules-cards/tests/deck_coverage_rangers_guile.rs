@@ -43,6 +43,7 @@ fn rangers_guile_registers_its_complete_targeted_pump_and_hexproof() {
         ]
     );
     let [TargetGroupDef {
+        controlled_by_chooser: false,
         chooser: tricerules_cards::primitives::TargetChooser::Controller,
         min: 1,
         max: 1,

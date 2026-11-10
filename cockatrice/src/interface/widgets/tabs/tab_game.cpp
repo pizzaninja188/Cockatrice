@@ -485,6 +485,8 @@ void TabGame::connectToGameEventHandler()
                 [this]() { refreshRuledPromptState(); });
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::triggerTargetSelectionChanged, this,
                 [this]() { refreshRuledPromptState(); });
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::activationTargetSelectionChanged, this,
+                [this]() { refreshRuledPromptState(); });
         connect(gamePromptWidget, &GamePromptWidget::ruledOpeningPickSeatRequested,
                 game->getGameEventHandler()->ruled(), &RuledClientState::openingPickFirstSeat);
         connect(gamePromptWidget, &GamePromptWidget::ruledOpeningMulliganKeepRequested,
@@ -602,8 +604,8 @@ void TabGame::connectToGameEventHandler()
         });
         connect(gamePromptWidget, &GamePromptWidget::ruledChoiceOptionRequested, game->getGameEventHandler()->ruled(),
                 &RuledClientState::submitPendingChoiceOption);
-        connect(gamePromptWidget, &GamePromptWidget::ruledActivationOpponentRequested, game->getGameEventHandler()->ruled(),
-                &RuledClientState::submitAbilityActivationOpponent);
+        connect(gamePromptWidget, &GamePromptWidget::ruledActivationChoiceRequested, game->getGameEventHandler()->ruled(),
+                &RuledClientState::submitAbilityActivationPromptChoice);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::resolutionPaymentSubmissionFinished, this,
                 [this](bool accepted) {
                     const int localId = game->getPlayerManager()->getLocalPlayerId();

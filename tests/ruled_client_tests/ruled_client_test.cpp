@@ -3816,8 +3816,9 @@ TEST(RuledPendingTargetTest, ActivationChoiceUsesOnlyTheOfferedSeatRevisionAndGe
     engine.set_revision(3);
     engine.set_actor_player_id(kLocalPlayer);
     engine.set_deciding_player_id(kOpponent);
-    engine.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET);
+    engine.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_TARGET_SELECTION);
     auto *target = engine.add_target_candidates();
+    target->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
     target->set_object_id(40);
     target->set_group_index(1);
     target->set_zone_change_generation(8);
@@ -3924,7 +3925,7 @@ TEST(RuledPendingTargetTest, ActivationCancelRaceInitializesPaymentWithoutDroppi
 {
     ruled::v1::PendingAbilityActivation engine;
     engine.set_transaction_id(91);
-    engine.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET);
+    engine.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_TARGET_SELECTION);
     PendingActivatedAbility local;
     ruledApplyActivationView(local, engine);
     ASSERT_TRUE(local.beginCancel());
@@ -17811,7 +17812,7 @@ TEST_F(RuledClientTest, PendingAbilityActivationIsAuthoritativePerBatchState)
     pending->set_revision(3u);
     pending->set_actor_player_id(kLocalPlayer);
     pending->set_deciding_player_id(kLocalPlayer + 1);
-    pending->set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET);
+    pending->set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_TARGET_SELECTION);
     pending->set_source_object_id(700u);
     pending->add_announced_targets()->set_object_id(701u);
     apply(begun);
@@ -21223,7 +21224,7 @@ TEST_F(RuledClientTest, EngineActivationHandoffUsesGenericWaitingAndAuthoritativ
     auto &activation = *engineState.pendingAbilityActivation;
     activation.set_actor_player_id(10);
     activation.set_deciding_player_id(20);
-    activation.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET);
+    activation.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_TARGET_SELECTION);
     activation.set_source_description("Arena");
     auto prompt = ruledActivationPrompt(engineState, 10, {});
     ASSERT_TRUE(prompt.has_value());
@@ -21238,4 +21239,136 @@ TEST_F(RuledClientTest, EngineActivationHandoffUsesGenericWaitingAndAuthoritativ
     EXPECT_TRUE(prompt->canCancel);
     prompt = ruledActivationPrompt(engineState, 20, {});
     EXPECT_FALSE(prompt->canCancel);
+}
+
+TEST_F(RuledClientTest, EngineActivationTargetPromptUsesSharedGroupPresentation)
+{
+    RuledClientState state(nullptr);
+    state.pendingAbilityActivation.emplace();
+    auto &activation = *state.pendingAbilityActivation;
+    activation.set_actor_player_id(10);
+    activation.set_deciding_player_id(20);
+    activation.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_TARGET_SELECTION);
+    activation.set_source_description("Arena");
+    activation.set_active_target_group_index(1);
+    activation.set_target_group_count(2);
+    activation.mutable_target_group()->set_min(1);
+    activation.mutable_target_group()->set_max(1);
+    activation.mutable_target_group()->set_prompt_text("Choose a creature you control");
+    const auto prompt = ruledActivationPrompt(state, 20, {});
+    ASSERT_TRUE(prompt);
+    RuledTargetGroupData group;
+    group.minTargets = 1;
+    group.maxTargets = 1;
+    group.promptText = "Choose a creature you control";
+    EXPECT_EQ(prompt->text, formatRuledTargetPrompt("Arena", group, 1, 2));
+}
+
+TEST_F(RuledClientTest, EngineActivationDraftKeepsTypedTargetsAndRejectsStaleReceipts)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    auto &pending = state.pendingAbilityActivation.emplace();
+    pending.set_transaction_id(72);
+    pending.set_revision(4);
+    pending.set_actor_player_id(kOpponent);
+    pending.set_deciding_player_id(kLocalPlayer);
+    pending.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_TARGET_SELECTION);
+    pending.mutable_target_group()->set_min(0);
+    pending.mutable_target_group()->set_max(2);
+    for (const auto kind : {ruled::v1::TARGET_REF_KIND_PLAYER, ruled::v1::TARGET_REF_KIND_PERMANENT}) {
+        auto *target = pending.add_target_candidates();
+        target->set_kind(kind);
+        target->set_object_id(1);
+        target->set_group_index(1);
+        target->set_zone_change_generation(kind == ruled::v1::TARGET_REF_KIND_PLAYER ? 0 : 8);
+    }
+    state.battlefieldGenerationByOid[1] = 8;
+    EXPECT_TRUE(state.stageAbilityActivationTarget(ruled::v1::TARGET_REF_KIND_PLAYER, 1));
+    EXPECT_TRUE(state.stageAbilityActivationTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, 1));
+    EXPECT_EQ(state.activationTargetSelection.size(), 2);
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+    state.submitAbilityActivationPromptChoice(RuledClientState::ActivationConfirmTargets, 72, 3);
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+    state.battlefieldGenerationByOid[1] = 9;
+    state.submitAbilityActivationPromptChoice(RuledClientState::ActivationConfirmTargets, 72, 4);
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+    state.battlefieldGenerationByOid[1] = 8;
+    state.submitAbilityActivationPromptChoice(RuledClientState::ActivationConfirmTargets, 72, 4);
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const auto &choice = host.sentCommands.first().submit_ability_activation_choice();
+    ASSERT_EQ(choice.targets_size(), 2);
+    EXPECT_EQ(choice.targets(0).kind(), ruled::v1::TARGET_REF_KIND_PLAYER);
+    EXPECT_EQ(choice.targets(1).kind(), ruled::v1::TARGET_REF_KIND_PERMANENT);
+    EXPECT_EQ(choice.targets(1).zone_change_generation(), 8u);
+    EXPECT_FALSE(choice.has_target());
+    pending.set_revision(5);
+    state.reconcileAbilityActivationTargets();
+    EXPECT_TRUE(state.activationTargetSelection.isEmpty());
+    state.submitAbilityActivationPromptChoice(RuledClientState::ActivationConfirmTargets, 72, 5);
+    ASSERT_EQ(host.sentCommands.size(), 2);
+    EXPECT_EQ(host.sentCommands.last().submit_ability_activation_choice().targets_size(), 0);
+    EXPECT_FALSE(host.sentCommands.last().submit_ability_activation_choice().has_opponent_player_id());
+}
+
+TEST_F(RuledClientTest, EngineActivationSelectionRefreshesOpponentPromptOptions)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    auto &pending = state.pendingAbilityActivation.emplace();
+    pending.set_transaction_id(73);
+    pending.set_revision(1);
+    pending.set_actor_player_id(kOpponent);
+    pending.set_deciding_player_id(kLocalPlayer);
+    pending.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_TARGET_SELECTION);
+    pending.mutable_target_group()->set_min(1);
+    pending.mutable_target_group()->set_max(2);
+    auto *candidate = pending.add_target_candidates();
+    candidate->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
+    candidate->set_object_id(kOpponent);
+    auto prompt = ruledActivationPrompt(state, kLocalPlayer, {});
+    ASSERT_TRUE(prompt);
+    ASSERT_EQ(prompt->choiceOptions.size(), 2);
+    EXPECT_FALSE(prompt->choiceOptions[0].enabled);
+    QObject::connect(&state, &RuledClientState::activationTargetSelectionChanged, &state, [&] {
+        prompt = ruledActivationPrompt(state, kLocalPlayer, {});
+    });
+    EXPECT_TRUE(state.stageAbilityActivationTarget(ruled::v1::TARGET_REF_KIND_PLAYER, kOpponent));
+    ASSERT_TRUE(prompt);
+    EXPECT_TRUE(prompt->choiceOptions[0].enabled);
+    EXPECT_TRUE(prompt->choiceOptions[1].enabled);
+    EXPECT_TRUE(prompt->text.contains("Selected: 1"));
+    state.submitAbilityActivationPromptChoice(RuledClientState::ActivationClearTargets, 73, 1);
+    EXPECT_FALSE(prompt->choiceOptions[0].enabled);
+    EXPECT_FALSE(prompt->choiceOptions[1].enabled);
+    EXPECT_TRUE(prompt->text.contains("Selected: 0"));
+    EXPECT_TRUE(state.stageAbilityActivationTarget(ruled::v1::TARGET_REF_KIND_PLAYER, kOpponent));
+    pending.set_revision(2);
+    state.reconcileAbilityActivationTargets();
+    EXPECT_FALSE(prompt->choiceOptions[0].enabled);
+    EXPECT_FALSE(prompt->choiceOptions[1].enabled);
+}
+
+TEST_F(RuledClientTest, EngineActivationSingletonAutoSubmitsFromEitherSeat)
+{
+    for (const int chooser : {kLocalPlayer, kOpponent}) {
+        FakeHost host;
+        host.local = chooser;
+        RuledClientState state(&host);
+        auto &pending = state.pendingAbilityActivation.emplace();
+        pending.set_transaction_id(81);
+        pending.set_revision(2);
+        pending.set_deciding_player_id(chooser);
+        pending.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_TARGET_SELECTION);
+        pending.mutable_target_group()->set_min(1);
+        pending.mutable_target_group()->set_max(1);
+        auto *target = pending.add_target_candidates();
+        target->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
+        target->set_object_id(kOpponent);
+        EXPECT_FALSE(state.stageAbilityActivationTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, kOpponent));
+        EXPECT_TRUE(state.stageAbilityActivationTarget(ruled::v1::TARGET_REF_KIND_PLAYER, kOpponent));
+        ASSERT_EQ(host.sentCommands.size(), 1);
+        EXPECT_EQ(host.sentCommands.first().submit_ability_activation_choice().targets(0).kind(),
+                  ruled::v1::TARGET_REF_KIND_PLAYER);
+    }
 }

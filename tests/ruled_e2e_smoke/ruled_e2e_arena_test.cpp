@@ -166,18 +166,32 @@ TEST_F(RuledE2ESmokeTest, ArenaOpponentChoosesBeforePaymentAndDuplicateCreatures
         activation->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD);
         ASSERT_FALSE(arena.abilityIndices.empty());
         activation->set_ability_index(arena.abilityIndices.front());
-        auto *target = activation->mutable_own_target();
-        target->set_object_id(own.oid);
-        target->set_zone_change_generation(own.generation);
-        target->set_group_index(0);
-        ASSERT_TRUE(send(p1, command, QStringLiteral("Announce Arena own target")));
+        ASSERT_TRUE(send(p1, command, QStringLiteral("Begin Arena target announcement")));
+        ASSERT_TRUE(p1.latestLegal.has_pending_ability_activation());
+        const auto &pending = p1.latestLegal.pending_ability_activation();
+        EXPECT_EQ(pending.active_target_group_index(), 0U);
+        EXPECT_EQ(pending.deciding_player_id(), p1.myId);
+        EXPECT_TRUE(pending.can_cancel());
+        EXPECT_EQ(p2.latestLegal.pending_ability_activation().target_candidates_size(), 0);
+        const auto offered = std::find_if(pending.target_candidates().begin(), pending.target_candidates().end(),
+                                         [&](const auto &candidate) {
+                                             return candidate.kind() == ruled::v1::TARGET_REF_KIND_PERMANENT &&
+                                                    candidate.object_id() == own.oid;
+                                         });
+        ASSERT_NE(offered, pending.target_candidates().end());
+        ruled::v1::RuledCommand selection;
+        auto *choice = selection.mutable_submit_ability_activation_choice();
+        choice->set_transaction_id(pending.transaction_id());
+        choice->set_expected_revision(pending.revision());
+        choice->add_targets()->CopyFrom(*offered);
+        ASSERT_TRUE(send(p1, selection, QStringLiteral("Announce Arena own target")));
     };
     begin();
     ASSERT_TRUE(p1.latestLegal.has_pending_ability_activation());
     ASSERT_TRUE(p2.latestLegal.has_pending_ability_activation());
     auto actorView = p1.latestLegal.pending_ability_activation();
     auto chooserView = p2.latestLegal.pending_ability_activation();
-    EXPECT_EQ(actorView.stage(), ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET);
+    EXPECT_EQ(actorView.stage(), ruled::v1::ABILITY_ACTIVATION_STAGE_TARGET_SELECTION);
     EXPECT_EQ(actorView.deciding_player_id(), p2.myId);
     EXPECT_EQ(actorView.announced_targets_size(), 1);
     EXPECT_EQ(actorView.target_candidates_size(), 0);
@@ -200,7 +214,7 @@ TEST_F(RuledE2ESmokeTest, ArenaOpponentChoosesBeforePaymentAndDuplicateCreatures
     const auto offered = std::find_if(chooserView.target_candidates().begin(), chooserView.target_candidates().end(),
                                     [&](const auto &candidate) { return candidate.object_id() == chosen.oid; });
     ASSERT_NE(offered, chooserView.target_candidates().end());
-    answer->mutable_target()->CopyFrom(*offered);
+    answer->add_targets()->CopyFrom(*offered);
     ASSERT_TRUE(reject(p1, reply, QStringLiteral("Reject actor spoof of opponent target")));
     auto stale = reply;
     stale.mutable_submit_ability_activation_choice()->set_expected_revision(chooserView.revision() + 1);

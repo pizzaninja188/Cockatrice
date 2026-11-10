@@ -2848,6 +2848,7 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
         state->pendingAbilityActivation = actions.pending_ability_activation();
     else
         state->pendingAbilityActivation.reset();
+    state->reconcileAbilityActivationTargets();
     if (actions.has_pending_spell_cast()) {
         state->pendingSpellCast = actions.pending_spell_cast();
         if (actions.pending_spell_cast().resolution_time_offer())
