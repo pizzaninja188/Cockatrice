@@ -45,8 +45,7 @@ can use the same layout and keep their own engine locations and interactions.
 Command-zone clicks use engine-offered casts and explicit public physical bindings; payment,
 cancellation, stack movement and reconnect use the existing casting transaction.
 
-See [format admission and acceptance](../../../../docs/FORMATS.md) for format data updates,
-validation and the pending end-user checks.
+See [format admission](../../../../docs/FORMATS.md) for format data updates and validation.
 
 Both deck editors use the shared deck model and its Commander board. Native deck files
 continue to encode those cards as commander declarations for Servatrice.
@@ -97,7 +96,7 @@ View menu and layout persistence/reset paths; Messages retains the prompt. Guard
 work while a game-owned dock is floating. The view model mirrors only the local seat's `AutomationState`; courtesy
 combat previews preserve it, while authority retraction clears it. Automation changes bypass
 the local gameplay transport lock so Clear and Full Control remain usable, but still enter the
-engine and deterministic command log. See [controls and pending acceptance](../../../../docs/RULED-CONTROLS.md).
+engine and deterministic command log. See [controls](../../../../docs/RULED-CONTROLS.md).
 
 ### `ruled_client_state.{h,cpp}` — `RuledClientState`
 
@@ -197,21 +196,10 @@ and accepted aggregate-counter payment keep their existing cancellation boundari
 use the shared `WaitingForChoice` prompt and the deciding player's display name.
 This boundary implements CR 602.2, 602.3 and illegal-action recovery under CR 734.1 in the
 [official rules effective November 6, 2026](https://media.wizards.com/2026/downloads/MagicCompRules%2020261106.pdf).
-Two-client acceptance remains pending: activate Arena with three mana and a creature on each
-side. The actor should first see the shared source heading and `Target 1 of 2`; after selecting
-a creature the opponent should see the same layout with `Target 2 of 2`. Only eligible creatures
-should respond to clicks. During handoff, the actor should see `Waiting for <opponent name>...` without Cancel. After the opponent
-chooses, payment must still have no Cancel; reconnect the actor and confirm the same behavior,
-then pay once and resolve. In a fresh game with only one mana and no mana sources, the actor
-should receive cancellation after the opponent's answer, leaving Arena untapped and mana unspent.
 `SubmitResolutionChoice.flex_payments` is private payment data: pip indices and colors are values,
 not ObjectIds for the relay to translate. The engine binds them to the current prompt and payment
 revision. Hybrid Opponent, Hand Return and Resolution Probe definitions exist only in Rust tests;
-they cannot be conjured in a normal dev game. Hands-on acceptance of those new hybrid paths remains
-pending; existing-card payment checks do not establish it. Two-client acceptance of the shared
-library-placement transaction also remains pending.
-Historical Waterbend acceptance
-[is recorded on issue #146](https://github.com/pizzaninja188/Cockatrice/issues/146#issuecomment-5458728218).
+they cannot be conjured in a normal dev game.
 
 `ruled_payment_progression.cpp` implements the same `RuledPaymentUi` bridge's cast/activation
 entry and face/cast-method selection, initialization, cost-group progression, cost-object clicks,
@@ -225,7 +213,7 @@ directly to `RuledPaymentUi`; `TabGame` selects prompt modes. The bridges keep `
 as the QObject connection context and preserve existing translation contexts, acknowledgement
 behavior, and nested-payment lifetimes.
 
-### `ruled_interaction_ui.{h,cpp}`
+### `ruled_interaction_visual.h` — selection and hover projection
 
 Paints the common card/player selection dimming and hover focus beneath counters and selection
 markers. Target and payment candidates come from the existing click/offer contracts; view-local
@@ -249,24 +237,6 @@ path and redacts the complete legal-action snapshot to its recipient. Qt uses ha
 or current object generations, including public-zone views, closed piles and the authorized
 library-top panel. Hints are replaced on each legal-action batch and cleared when authority is
 revoked. Selection and hover focus take precedence over ordinary action outlines.
-
-Hands-on acceptance for these interaction visuals remains pending. Launch
-`scripts/launch-ruled-game.ps1 -Dev`, complete opening prompts, and check both seats:
-
-1. Put Grizzly Bears in hand and ready Forest/Island on the battlefield. Its white outline
-   should follow available mana and priority. Begin casting, cancel, then retry; payment cues
-   should replace ordinary outlines and cancellation should restore current offers.
-2. Put two Lightning Bolts in hand and Grizzly Bears on the opposing battlefield. Add `R`,
-   cast one Bolt and select the Bears. Ineligible cards should darken while the target remains
-   readable. Hover the committed spell to emphasize its exact target. Resolve it and confirm
-   that no stale focus remains; the second copy must retain its own hand identity.
-3. With Think Twice in the graveyard and enough blue mana, inspect the closed graveyard and
-   its open view for the action outline. Check a command-zone cast and an authorized library-top
-   action similarly. The other seat must not receive private hand/library action hints.
-4. Declare attackers and blockers, hover each side before and after assignments, and inspect
-   player/planeswalker defenders. Hover an attached Aura/Equipment and its host. Adjust the
-   Appearance dim strength and hover-dimming toggle; counters and selected markers must remain
-   readable. Reconnect or seek a replay and confirm that stale hints and relationships clear.
 
 ### `ruled_replacement_picker.{h,cpp}`
 
@@ -402,6 +372,10 @@ The `connect` lines live in `tab_game.cpp` and are the accepted residual fork de
    are gated by those selectable sets, keeping continuous restrictions engine-authoritative.
 5. **Labels are display-only.** Gameplay reads `LegalActions.hand_actions` (structured
    `LegalHandAction`); `LegalActions.labels` feeds the prompt text and nothing else.
+6. **The ruled stack window is engine-owned.** While it has published objects, its close button and
+   View-menu dismissal are disabled. Replay tabs restore physical spells and synthetic ability tiles
+   when seeking. Mandatory choice windows keep close protection and reject Escape/window-close;
+   completed reveals and optional exile-cast views retain local dismissal.
 
 ---
 
@@ -541,124 +515,3 @@ opening labels or counts button clicks. Seat buttons use the published player ID
 continues to use `HAND_ACTION_OPENING_BOTTOM` and the existing acknowledged command sequence.
 Waiting seats receive no actionable permissions. The relay retains opening snapshots for
 reconnect and clears them when opening ends; session reset clears the client mirror.
-
-## Acceptance carried forward from retired reports
-
-These are retained limits and repeatable checks, not new acceptance claims or a request to run
-every historical check on each task. Issue delivery comments preserve dated results. Only the
-applicable changed interaction needs new acceptance; use the game guidance for execution.
-
-- Convoke (#145), Earthbend (#150), counter/Wither work (#157), and token copies (#46) have
-  agent-operated GUI results on their closed issues; these do not establish human acceptance.
-- Waterbend [#146](https://github.com/pizzaninja188/Cockatrice/issues/146#issuecomment-5458728218)
-  did not complete desktop combat-timing or live zone-change stale-selection checks. A pre-existing
-  freeform hidden-stack observation was outside that delivery; a clean general freeform-stack pass
-  was not claimed. Token-copy #46 did not exercise separate freeform or missing-image fallback.
-- Historical card deferrals to #155/#159 must not be treated as current blockers: both issues are
-  now closed. Check current code and tracker for those cards rather than copying old report status.
-- Blight's full six-card desktop checklist remains recommended beyond its focused performed checks.
-- Colorstorm Stallion/double-faced token copies and registered-seat reconnect were not manually
-  accepted in #237. Public reveal acceptance was explicitly deferred. Architecture fixtures did not
-  establish visible acceptance of draw-replacement/private-discard consumers.
-
-### Public reveals — deferred
-
-Start two clients with `scripts/launch-ruled-game.ps1 -Dev`.
-
-1. Behold a hand card with Elven Passage. Both clients should see the same named card; close the
-   window on one client and confirm it remains on the other.
-2. Put Spyglass Siren onto the battlefield, resolve its trigger, and use the Map on a creature.
-   Use a Forest-only deck for this case so the top card is a land. Both clients should
-   see the land window after it moves to hand, with no extra decision or counter.
-3. Repeat in a game with a Storm Crow-only deck for a nonland top card. There should be one
-   public window per client. Only its controller can choose graveyard or top; after confirming,
-   both windows remain read-only and closeable.
-4. Leave that completed window open during a second public choice. Clicking an old image must
-   not select a candidate in the new choice. Reveal the same card again and check that it is a
-   distinct occurrence; ordinary priority updates must not duplicate either window.
-5. Resolve Mystical Tutor and Commune with Nature. Only the actually revealed card becomes
-   public; the rest of the library/look remains private. Check source labels and retained images
-   after movement/shuffling. Check Gifts Ungiven's split from both seats.
-6. Leave a cast-cost/Ninjutsu reveal active while resolving another reveal; neither window should
-   overwrite the other. Rejoin during the active reveal, then let its source leave the stack and
-   confirm that the restored window becomes a dismissible snapshot.
-
-### Colorstorm Stallion and double-faced copies — not performed
-
-In two ruled dev clients, reach a main phase and use the active player's dev console:
-
-```text
-put bf Colorstorm Stallion ready
-put hand Tidings
-mana UUUUU
-```
-
-1. Cast Tidings and resolve only Opus. Both boards should show the original at 4/4 and one
-   distinct 3/3 token while Tidings remains on the stack. Inspect haste, ward, and Opus on the
-   copy. Resolve Tidings. A later five-mana spell should trigger both Stallions independently.
-2. Put Reckless Waif on the battlefield and Cackling Counterpart in hand; add `UUU`, cast
-   Counterpart targeting Waif, and resolve. Remove the original with the dev command or a
-   spell. After a turn with no spells, resolve the token's upkeep trigger. Both clients should
-   show Merciless Predator at 3/2 with its back-face ability and no duplicate token.
-3. Reconnect a registered seat. Verify the transformed token's face, base/effective P/T,
-   abilities, and count match the other client. Bounce the token with Unsummon; it should
-   disappear on both boards and never remain in hand.
-
-### Blight — remaining recommended matrix
-
-Start two dev clients with seed 153 and arrange the named cards/mana.
-
-- With a ready Gristle Glutton, a tapped/newly controlled Grizzly Bears, and Tatterkite, activate Glutton. The prompt must say “Blight 1”; Bears is selectable, Tatterkite is not. Cancel once: neither seat should see a committed tap or counter. Repeat and confirm: both seats see the source tap and Bears become 1/1. Only the controller chooses a discard; one card is drawn after an actual discard.
-- Cast Cinder Strike, first skipping Blight, then paying it. Confirm 2 versus 4 damage. The Blight creature picker must not become a target-selection prompt or offer hand cards. Wild Unraveling must require exactly one of Blight 2 or the additional {1}.
-- Resolve Dream Seizer with the 1/1 Bears available. Choose Blight, select Bears, and leave the opponent's discard prompt open. Both clients must still show the same Bears on the battlefield. Only the opponent sees discard candidates. Complete discard: that exact Bears moves to its owner's graveyard on both clients.
-- Resolve both Blighted Blackthorn's entry and attack triggers. Paying Blight 2 draws one card and loses one life; declining does neither. A tapped attacker can be chosen to receive the counters.
-- Resolve Chaos Spewer. Choosing Pay opens the staged {2} picker; Undo keeps that payment offer available, and final Decline enters Blight directly. Blight requires exactly one eligible creature when available. If the source has left and no eligible creature remains, final Decline completes without a creature prompt or counters.
-- Verify that create/reset always selects ruled play and no local-game action is available. Shared card movement and activation presentation remain covered through ruled games.
-
-### Draw replacement and simultaneous discard — not established by architecture fixtures
-
-For affected consumers, check threshold/one-versus-all library choices; zero/partial/full
-discard with count-only announcements and private identities; Abundance's public revealed prefix
-with private bottom ordering; Tomorrow's private selection; reconnect at pending stages;
-source/drawer/controller concession; exact physical movement and effect tail once. These steps
-are retained from the architecture delivery; later card-level evidence must be checked separately.
-
-
-### Upstream integration — user acceptance pending
-
-On 2026-11-04 the user confirmed priority passing after casting, nonempty live-stack close
-protection, and debug-replay stack visibility through backward/forward seeks. Remaining payment,
-identity, privacy, resolution-choice and broader playback checks below are pending.
-
-The ruled stack is an engine-owned view: while it has published objects, its close button and
-View-menu dismissal are disabled. Replay tabs create the same stack action and automatically
-restore physical spells and synthetic ability tiles when seeking. Mandatory choice windows keep
-their close protection; resolution dialogs also reject Escape/window-close dismissal. Their UI
-owners can still close them when the engine completes or replaces the choice. Completed reveals
-and optional exile-cast permission views retain local dismissal.
-
-The live-stack close protection and debug-replay seek checks are user-confirmed. For the remaining
-resolution-choice check, Escape must keep an unanswered choice open, while a legal choice (or
-explicit Decline when offered) advances normally. That hands-on check remains pending; automated
-offscreen tests cover dismissal and a replay containing both a spell and a triggered ability.
-
-Use matching protocol-10014 fork clients and Servatrice. From the integration checkout, run
-`scripts/launch-ruled-game.ps1 -Dev` in the interactive user session. Complete the opening prompts.
-The integration build uses the short `X:` drive alias; keep that alias while using its build cache.
-
-1. Conjure `Lightning Bolt` in the first seat's hand and `Grizzly Bears` on the other battlefield;
-   add `R` to the first seat. Use the card's context-menu Play action, select the opposing Bears,
-   pay and submit. Both clients must show one physical spell on the stack, with an arrow to the
-   selected permanent; resolving it must remove that exact creature and move the spell once.
-2. Repeat with multiple spells or abilities pending. The stack window must retain every item in
-   engine order, with arrows anchored to the visible stack copies. Payment counters, restricted
-   mana rows and cancel/retry prompts must update on the same primary action controller.
-3. Reconnect a registered seat during a pending choice or payment. Its hand, public zones,
-   command-zone view, priority and current prompt must match the other seat's permitted view;
-   private choices and face-down identities must remain recipient-only. Repeat with a spectator
-   whose omniscient permission is disabled.
-4. Open an exported ruled report, seek backward and forward repeatedly, and confirm that prompts,
-   stack items, player graphics and zone views rebuild without duplicates or stale windows.
-
-These are requested user checks, not evidence of completed GUI acceptance. Automated offscreen
-playback, model, relay and network tests establish their own narrower contracts.

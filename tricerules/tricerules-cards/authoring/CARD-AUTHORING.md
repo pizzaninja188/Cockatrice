@@ -1119,7 +1119,7 @@ instructed player. The predicate has no ambient `PreviousEffect` or `Payment` so
 action/player selector. `Sacrifice(Source)` in an ability Program, `Mill`, and Grab the Prize's
 imported discard are typed producer examples; this compiler surface does not establish complete-card
 readiness for other owners. The flat `ChooseResolutionBranch` `CardResultCount` requirement was
-retired on 2026-10-20 after its card owners moved to typed Programs. Named Program
+retired; its card owners moved to typed Programs. Named Program
 `ProgramResultCondition::CardResultCount` and `CountExpression` result-count consumers remain live;
 this retirement covers that branch requirement only.
 
@@ -1341,7 +1341,7 @@ selection and bound library-top placement; that body also fits Brainstone and Ja
 Sculptor's draw/put-back ability, without admitting their other mechanics or ability contexts.
 Selection does not move cards; the placement instruction uses generation-bound selected identities.
 The two hand-selection/placement leaves are program-only and are rejected in ordinary effect lists.
-The retired `DrawDiscard` effect and its legacy source-lowering path are no longer accepted. Express
+`DrawDiscard` and its legacy source-lowering path are not accepted. Express
 an ordered sequence as separate `Draw` and `Discard` program instructions, adding a typed
 `IfResult` branch when later actions depend on the discard outcome. The finite authored face, mode,
 activated-ability and triggered-ability programs, including the target signatures described above,
@@ -1813,7 +1813,7 @@ face, ability, mode, and choice IDs. Do not add card-specific Rust handlers or a
 If a card requires unsupported mechanics or composition, record a scoped blocker rather than
 admitting a partial definition.
 
-### Inspect and check presentation
+### Check the direct-RON presentation
 
 From the repository root, use the offline authoring CLI:
 
@@ -1935,7 +1935,7 @@ completion. `complete` counts individual commands, including priority passes and
 answers. It consults the engine's blocking-choice state as well as the stack and pending cast.
 Supply explicit, reviewed choice commands through its callback; it never guesses an answer.
 Its result proves only completion. Check the expected state before reporting semantic evidence.
-`exercise_draw` demonstrates that sequence for the three registered pilot consumers.
+`exercise_draw` demonstrates that sequence for its registered consumers.
 
 - **Exercised:** every listed card ran accepted commands, finished all relevant choices/effects,
   and passed independent state expectations. Require `require_exercised()` for each required case.
@@ -1958,36 +1958,6 @@ control/ownership, target revalidation, visibility, or resumable-choice behavior
 fixture does not prove. Preserve existing unusual regressions. Internal state assertions do not
 prove public offers or privacy; test those surfaces separately. Do not manufacture behavioral
 tests for generated metadata, clerical edits, or illegal targeting of an untargeted effect.
-
-The #448 pilot retains these behavioral contracts:
-
-| Before | After | Retained or added evidence |
-|---|---|---|
-| `cast_divination_draws_two_cards` | Same test delegates to `exercise_draw(divination())` | Cast consumes one hand card and draws two; adds exact top-card identities, both players' hands/libraries, source graveyard/generation and completed resolution |
-| `pawpatch_formation_draws_and_creates_a_food_token` | Same test delegates to `exercise_draw(pawpatch())` | One draw and one Food; adds stable selected mode, source identity, recipient and completion checks |
-| Existing Visionary copy/populate/return interactions | Unchanged dedicated tests; shared pilot adds a normal cast | Real entry creates one trigger; no early draw; trigger resolution draws one and leaves the creature on the battlefield |
-| #412 eight-card registry identity loop | Same reviewed rows through `FaceExpectation` | Name, face ID, cost, types, keywords and printed P/T; all existing mode/effect/target-schema assertions remain |
-
-The two ported scenario bodies remove 75 lines of repeated setup/assertion code; their original
-hand/draw and token assertions are subsumed by stronger exact-state checks. Shared helpers and
-failure-detection tests add code overall. This is a reduction in repeated authoring, not evidence
-of correctness by line count. Authors now (1) review the full source/definition, (2) supply typed
-fixture inputs and independent expectations, (3) require each row to be exercised, and (4) add
-applicable illegal/interaction coverage. They no longer duplicate deck/setup/cast/pass bookkeeping.
-
-Pilot source review on 2026-09-19 fetched Scryfall's exact-name and `rulings_uri` endpoints for
-Divination, Elvish Visionary and Pawpatch Formation. The first two had no rulings; Pawpatch's Food
-rulings were reviewed. The [official rules page](https://magic.wizards.com/en/rules) then linked
-the 2026-09-25 text: CR 121.1 (draw), 603.6a (entry triggers), 700.2a (mode announcement),
-608.2c (instruction order), and 111.10b (Food) govern these unchanged expectations.
-
-Interaction audit: authority remains real engine commands; source/face/object/generation and
-owner/controller are asserted; spell, ETB and modal timing remain distinct; applicable rejected
-casts, activations, targets, mode indices and unauthorized choices have explicit failure tests.
-Visibility/public-offer proof is N/A for this internal fixture extraction, with existing tests
-retained. Runtime, protobuf, relay, Qt and freeform contracts are unchanged, so C++/GUI gates are
-N/A. Focused fixture/registry tests, existing conformance, generator tests and full Rust/card-data
-gates remain required. No new rules capability or card identity is introduced.
 
 ### Offline authoring workbench
 
