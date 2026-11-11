@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle d7548770-5c60-4c3f-b1d6-554ab5f931f9.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "scare_tactics",
+  name: "Scare Tactics",
+  face_id: "scare_tactics",
+  mana_cost: "{B}",
+  types: ["Instant"],
+  spell_effect: [PumpAll(filter: (controller: YouControl), power: 1, toughness: 0)],
+)

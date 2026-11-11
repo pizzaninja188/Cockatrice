@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 0e24c0d2-2333-425c-952e-9a13e6519cd3.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "ethereal_guidance",
+  name: "Ethereal Guidance",
+  face_id: "ethereal_guidance",
+  mana_cost: "{2}{W}",
+  types: ["Sorcery"],
+  spell_effect: [PumpAll(filter: (controller: YouControl), power: 2, toughness: 1)],
+)

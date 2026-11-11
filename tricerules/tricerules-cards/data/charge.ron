@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 36b5022d-fa62-46ea-97ab-23c0f60f62a5.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "charge",
+  name: "Charge",
+  face_id: "charge",
+  mana_cost: "{W}",
+  types: ["Instant"],
+  spell_effect: [PumpAll(filter: (controller: YouControl), power: 1, toughness: 1)],
+)

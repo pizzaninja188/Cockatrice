@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 98b802f3-4785-41af-adfe-e77d0ae4648c.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "vitalizing_wind",
+  name: "Vitalizing Wind",
+  face_id: "vitalizing_wind",
+  mana_cost: "{8}{G}",
+  types: ["Instant"],
+  spell_effect: [PumpAll(filter: (controller: YouControl), power: 7, toughness: 7)],
+)

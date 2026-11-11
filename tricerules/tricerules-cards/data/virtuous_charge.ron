@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 5315ed83-cb93-4522-b439-3784e7f31e37.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "virtuous_charge",
+  name: "Virtuous Charge",
+  face_id: "virtuous_charge",
+  mana_cost: "{2}{W}",
+  types: ["Sorcery"],
+  spell_effect: [PumpAll(filter: (controller: YouControl), power: 1, toughness: 1)],
+)

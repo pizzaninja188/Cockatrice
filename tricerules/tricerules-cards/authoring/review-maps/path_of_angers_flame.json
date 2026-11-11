@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "9e89db98-fc9f-4574-b5bc-ee421fa29428",
+  "spans": [
+    {
+      "face_id": "path_of_angers_flame",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario pump_team_batch::pump_team_cards_apply_exact_printed_delta_to_controlled_creatures",
+      "covers": "actual path_of_angers_flame gives exactly +2/+0 to each creature its controller controls at resolution, leaves opponents unchanged and consumes its exact mana cost"
+    },
+    {
+      "test": "scenario pump_team_batch::pump_team_cards_exclude_later_entrants_and_expire_at_cleanup",
+      "covers": "actual path_of_angers_flame does not pump a creature that enters after resolution, and its pump expires during cleanup"
+    },
+    {
+      "test": "mechanic_registry::pump_team_batch::pump_team_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and team-pump effect of path_of_angers_flame"
+    },
+    {
+      "test": "mechanic_registry::pump_team_batch::pump_team_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for path_of_angers_flame"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -258,3 +258,6 @@ mod issue_removal_batch;
 
 #[path = "../damage_any_target_batch.rs"]
 mod damage_any_target_batch;
+
+#[path = "../pump_team_batch.rs"]
+mod pump_team_batch;
