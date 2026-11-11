@@ -1,0 +1,21 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 953a1a07-1bf2-480e-81a3-f2d5f19f6df5.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 702.9a: flying; CR 602.2: activated ability; CR 611.2a/514.2: pump until end of turn.
+(
+  id: "dungeon_shade",
+  name: "Dungeon Shade",
+  face_id: "dungeon_shade",
+  mana_cost: "{3}{B}",
+  types: ["Creature", "Shade", "Spirit"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{B}")],
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    ),
+  ],
+)

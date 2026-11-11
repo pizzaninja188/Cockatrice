@@ -1,0 +1,21 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle fcf0bb85-bca9-4f4c-b954-ca3bc5f91dd8.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 702.9a: flying; CR 602.2: activated ability; CR 611.2a/514.2: pump until end of turn.
+(
+  id: "aven_flock",
+  name: "Aven Flock",
+  face_id: "aven_flock",
+  mana_cost: "{4}{W}",
+  types: ["Creature", "Bird", "Soldier"],
+  power: 2,
+  toughness: 3,
+  keywords: [Flying],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{W}")],
+      effect: [PumpTarget(power: 0, toughness: 1, subject: Source)],
+    ),
+  ],
+)

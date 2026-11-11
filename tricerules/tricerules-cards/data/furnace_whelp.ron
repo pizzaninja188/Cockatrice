@@ -1,0 +1,21 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 8422f1e0-00ca-4ffb-a6b2-e2c9f96d7f23.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 702.9a: flying; CR 602.2: activated ability; CR 611.2a/514.2: pump until end of turn.
+(
+  id: "furnace_whelp",
+  name: "Furnace Whelp",
+  face_id: "furnace_whelp",
+  mana_cost: "{2}{R}{R}",
+  types: ["Creature", "Dragon"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{R}")],
+      effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
+    ),
+  ],
+)

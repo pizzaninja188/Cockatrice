@@ -1,0 +1,21 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 7cdbc115-cb15-4ada-8229-d40f0b22dd27.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 702.9a: flying; CR 602.2: activated ability; CR 611.2a/514.2: pump until end of turn.
+(
+  id: "balshan_collaborator",
+  name: "Balshan Collaborator",
+  face_id: "balshan_collaborator",
+  mana_cost: "{3}{U}",
+  types: ["Creature", "Bird", "Soldier"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{B}")],
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    ),
+  ],
+)

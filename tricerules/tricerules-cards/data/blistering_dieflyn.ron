@@ -1,0 +1,21 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 4cd6ad78-7441-4dd7-b486-d9575e8e0947.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 702.9a: flying; CR 602.2: activated ability; CR 611.2a/514.2: pump until end of turn.
+(
+  id: "blistering_dieflyn",
+  name: "Blistering Dieflyn",
+  face_id: "blistering_dieflyn",
+  mana_cost: "{3}{R}",
+  types: ["Creature", "Imp"],
+  power: 0,
+  toughness: 1,
+  keywords: [Flying],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{B/R}")],
+      effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
+    ),
+  ],
+)

@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "7cdbc115-cb15-4ada-8229-d40f0b22dd27",
+  "spans": [
+    {
+      "face_id": "balshan_collaborator",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "balshan_collaborator",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PumpTarget/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario pump_self_batch::pump_self_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual balshan_collaborator casts with its exact printed mana, enters under its owner/controller with exact power and toughness and flying, and leaves opponent hand and library unchanged"
+    },
+    {
+      "test": "scenario pump_self_batch::pump_self_batch_flying_rejects_ground_block_and_accepts_flying_block",
+      "covers": "actual balshan_collaborator rejects a ground-only block as an evasion violation and accepts a flying blocker"
+    },
+    {
+      "test": "scenario pump_self_batch::pump_self_batch_cards_activate_the_exact_self_pump_without_targeting",
+      "covers": "actual balshan_collaborator pays its exact pump cost, pumps only itself by +1/+1 without tapping or targeting, and preserves public hidden-zone sizes"
+    },
+    {
+      "test": "scenario pump_self_batch::pump_self_batch_cards_pump_expires_at_cleanup",
+      "covers": "actual balshan_collaborator returns to its printed power and toughness during cleanup"
+    },
+    {
+      "test": "scenario pump_self_batch::pump_self_batch_cards_reject_activation_when_the_cost_cannot_be_paid",
+      "covers": "actual balshan_collaborator rejects an unpayable pump activation without spending mana, changing characteristics, adding to the stack, or advancing the command position"
+    },
+    {
+      "test": "mechanic_registry::pump_self_batch::pump_self_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, flying, cost and source-only power pump of balshan_collaborator"
+    },
+    {
+      "test": "mechanic_registry::pump_self_batch::pump_self_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for balshan_collaborator"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,21 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle c3ea33f4-17ac-41a4-8320-361b6f8aba0d.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 702.9a: flying; CR 602.2: activated ability; CR 611.2a/514.2: pump until end of turn.
+(
+  id: "hellkite_punisher",
+  name: "Hellkite Punisher",
+  face_id: "hellkite_punisher",
+  mana_cost: "{5}{R}{R}",
+  types: ["Creature", "Dragon"],
+  power: 6,
+  toughness: 6,
+  keywords: [Flying],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{R}")],
+      effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
+    ),
+  ],
+)

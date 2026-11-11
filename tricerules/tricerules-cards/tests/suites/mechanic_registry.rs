@@ -273,3 +273,6 @@ mod regenerate_batch;
 
 #[path = "../shrink_batch.rs"]
 mod shrink_batch;
+
+#[path = "../pump_self_batch.rs"]
+mod pump_self_batch;

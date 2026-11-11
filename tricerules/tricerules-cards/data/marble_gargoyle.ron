@@ -1,0 +1,21 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 8a1fd464-760c-43d9-829a-424945d91eb9.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 702.9a: flying; CR 602.2: activated ability; CR 611.2a/514.2: pump until end of turn.
+(
+  id: "marble_gargoyle",
+  name: "Marble Gargoyle",
+  face_id: "marble_gargoyle",
+  mana_cost: "{2}{W}",
+  types: ["Artifact", "Creature", "Gargoyle"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{W}")],
+      effect: [PumpTarget(power: 0, toughness: 1, subject: Source)],
+    ),
+  ],
+)
