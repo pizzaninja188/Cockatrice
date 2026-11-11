@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle c7971968-c4ee-4437-92ec-1238bce1935f.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "cinder_storm",
+  name: "Cinder Storm",
+  face_id: "cinder_storm",
+  mana_cost: "{6}{R}",
+  types: ["Sorcery"],
+  spell_effect: [DamageTarget(amount: 7, target: (kind: AnyTarget))],
+)

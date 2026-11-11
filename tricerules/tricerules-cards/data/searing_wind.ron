@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle b196045d-ece1-46ac-a647-b65f04225c10.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "searing_wind",
+  name: "Searing Wind",
+  face_id: "searing_wind",
+  mana_cost: "{8}{R}",
+  types: ["Instant"],
+  spell_effect: [DamageTarget(amount: 10, target: (kind: AnyTarget))],
+)

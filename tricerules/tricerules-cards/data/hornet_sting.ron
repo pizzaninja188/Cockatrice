@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 25edeff3-7727-4b80-9459-2bb6b8587fb9.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "hornet_sting",
+  name: "Hornet Sting",
+  face_id: "hornet_sting",
+  mana_cost: "{G}",
+  types: ["Instant"],
+  spell_effect: [DamageTarget(amount: 1, target: (kind: AnyTarget))],
+)

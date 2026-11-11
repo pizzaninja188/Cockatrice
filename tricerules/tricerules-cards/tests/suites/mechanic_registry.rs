@@ -255,3 +255,6 @@ mod issue_89_battlefield_to_library;
 mod issue_94_player_auras;
 #[path = "../issue_removal_batch.rs"]
 mod issue_removal_batch;
+
+#[path = "../damage_any_target_batch.rs"]
+mod damage_any_target_batch;

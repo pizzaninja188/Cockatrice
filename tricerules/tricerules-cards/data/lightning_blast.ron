@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 91fd731c-e076-4f2d-9f22-872880c3cc3d.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "lightning_blast",
+  name: "Lightning Blast",
+  face_id: "lightning_blast",
+  mana_cost: "{3}{R}",
+  types: ["Instant"],
+  spell_effect: [DamageTarget(amount: 4, target: (kind: AnyTarget))],
+)

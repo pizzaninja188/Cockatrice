@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "90a2ec9c-2f1c-4ed4-820d-dfdb6b58c0db",
+  "spans": [
+    {
+      "face_id": "zukos_offense",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario damage_any_target_batch::damage_any_target_cards_deal_exact_damage_and_use_exact_costs",
+      "covers": "actual zukos_offense deals exactly 2 damage to a chosen player, consumes its exact printed mana cost, leaves the opponent's hidden zones unchanged, and puts the spell card in its owner's graveyard"
+    },
+    {
+      "test": "scenario damage_any_target_batch::damage_any_target_cards_mark_exact_nonlethal_damage_on_creatures",
+      "covers": "actual zukos_offense marks its exact nonlethal damage on a creature without damaging the controller"
+    },
+    {
+      "test": "scenario damage_any_target_batch::damage_any_target_cards_reject_non_damageable_targets_without_paying",
+      "covers": "actual zukos_offense rejects a noncreature artifact target without spending mana or moving the card"
+    },
+    {
+      "test": "scenario damage_any_target_batch::damage_any_target_cards_fizzle_when_the_chosen_creature_left",
+      "covers": "actual zukos_offense fizzles when its chosen creature target has left the battlefield"
+    },
+    {
+      "test": "mechanic_registry::damage_any_target_batch::damage_any_target_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and AnyTarget damage effect of zukos_offense"
+    },
+    {
+      "test": "mechanic_registry::damage_any_target_batch::damage_any_target_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for zukos_offense"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 50463946-1ce3-4ff0-ad68-2fb87adbe2fd.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "fire_ambush",
+  name: "Fire Ambush",
+  face_id: "fire_ambush",
+  mana_cost: "{1}{R}",
+  types: ["Sorcery"],
+  spell_effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
+)

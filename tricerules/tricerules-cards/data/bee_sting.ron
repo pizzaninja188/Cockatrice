@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle f637d525-2f29-488a-9269-8e5aa377fbb7.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "bee_sting",
+  name: "Bee Sting",
+  face_id: "bee_sting",
+  mana_cost: "{3}{G}",
+  types: ["Sorcery"],
+  spell_effect: [DamageTarget(amount: 2, target: (kind: AnyTarget))],
+)

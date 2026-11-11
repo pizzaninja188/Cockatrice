@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 4523c22b-363b-4bc6-ba23-b428054abc5d.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "cleansing_screech",
+  name: "Cleansing Screech",
+  face_id: "cleansing_screech",
+  mana_cost: "{4}{R}",
+  types: ["Sorcery"],
+  spell_effect: [DamageTarget(amount: 4, target: (kind: AnyTarget))],
+)

@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "9afb3b6e-4909-4efa-aa79-81c0229411c9",
+  "spans": [
+    {
+      "face_id": "gut_shot",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/mana_cost"
+      ]
+    },
+    {
+      "face_id": "gut_shot",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario damage_any_target_batch::damage_any_target_cards_deal_exact_damage_and_use_exact_costs",
+      "covers": "actual gut_shot deals exactly 1 damage to a chosen player, consumes its exact printed mana cost, leaves the opponent's hidden zones unchanged, and puts the spell card in its owner's graveyard"
+    },
+    {
+      "test": "scenario damage_any_target_batch::damage_any_target_cards_mark_exact_nonlethal_damage_on_creatures",
+      "covers": "actual gut_shot marks its exact nonlethal damage on a creature without damaging the controller"
+    },
+    {
+      "test": "scenario damage_any_target_batch::damage_any_target_cards_reject_non_damageable_targets_without_paying",
+      "covers": "actual gut_shot rejects a noncreature artifact target without spending mana or moving the card"
+    },
+    {
+      "test": "scenario damage_any_target_batch::damage_any_target_cards_fizzle_when_the_chosen_creature_left",
+      "covers": "actual gut_shot fizzles when its chosen creature target has left the battlefield"
+    },
+    {
+      "test": "scenario damage_any_target_batch::gut_shot_pays_red_or_two_life_and_rejects_life_payment_at_one",
+      "covers": "actual Gut Shot is payable with red mana or two life and rejects the two-life branch at one life"
+    },
+    {
+      "test": "mechanic_registry::damage_any_target_batch::damage_any_target_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and AnyTarget damage effect of gut_shot"
+    },
+    {
+      "test": "mechanic_registry::damage_any_target_batch::damage_any_target_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for gut_shot"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
