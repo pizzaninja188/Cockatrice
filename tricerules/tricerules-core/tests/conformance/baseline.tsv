@@ -471,6 +471,7 @@ canopy_vista	0	land	exercised
 canyon_crawler	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 canyon_crawler	0	cast	exercised
 canyon_minotaur	0	cast	exercised
+canyon_slough	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 capital_city	0	ability:0	exercised
 capital_city	0	ability:1	exercised
 capital_city	0	ability:2	unsupported: ability not offered by generic battlefield fixture
@@ -574,6 +575,7 @@ cloudbound_moogle	0	cast	exercised
 cloudcrown_oak	0	cast	exercised
 cloudkin_seer	0	cast	exercised
 cloudsculpt_technician	0	cast	exercised
+coastal_peak	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 coati_scavenger	0	cast	exercised
 cobblebrute	0	cast	exercised
 codex_shredder	0	ability:0	exercised
@@ -1048,6 +1050,7 @@ feral_shadow	0	cast	exercised
 ferocious_zheng	0	cast	exercised
 festering_gulch	0	ability:0	exercised
 festering_gulch	0	land	exercised
+festering_thicket	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 fetid_pools	0	ability:0	exercised
 fetid_pools	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 fetid_pools	0	land	exercised
@@ -1290,6 +1293,7 @@ glimmerburst	0	cast	exercised
 glimmerlight	0	ability:0	exercised
 glimmerlight	0	cast	exercised
 glimpse_the_core	0	cast	exercised
+glittering_massif	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 gloom_pangolin	0	cast	exercised
 gloom_ripper	0	cast	exercised
 gloom_sower	0	cast	exercised
@@ -1592,6 +1596,7 @@ impossible_inferno	0	cast	exercised
 impractical_joke	0	cast	exercised
 incinerating_blast	0	cast	exercised
 incurable_ogre	0	cast	exercised
+indatha_triome	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 independent_troops	0	cast	exercised
 indestructibility	0	cast	exercised
 indomitable_ancients	0	cast	exercised
@@ -1673,6 +1678,7 @@ jeskai_brushmaster	0	cast	exercised
 jeskai_devotee	0	ability:0	exercised
 jeskai_devotee	0	cast	exercised
 jeskai_shrinekeeper	0	cast	exercised
+jetmirs_garden	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 jhessian_lookout	0	cast	exercised
 jhovall_queen	0	cast	exercised
 jhovall_rider	0	cast	exercised
@@ -1719,6 +1725,7 @@ kelinore_bat	0	cast	exercised
 kellans_lightblades	0	cast	unsupported: target group 0 needs a richer fixture
 kembas_skyguard	0	cast	exercised
 kessig_recluse	0	cast	exercised
+ketria_triome	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 khalni_ambush_khalni_territory	0	cast	exercised
 khalni_ambush_khalni_territory	1	ability:0	exercised
 khalni_ambush_khalni_territory	1	land	exercised
@@ -2401,6 +2408,7 @@ rabid_gnaw	0	cast	exercised
 raccoon_rallier	0	ability:0	exercised
 raccoon_rallier	0	cast	exercised
 radiant_strike	0	cast	exercised
+raffines_tower	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 ragamuffin_raptor	0	cast	exercised
 ragefire	0	cast	exercised
 ragged_playmate	0	ability:0	exercised
@@ -2413,6 +2421,7 @@ raging_goblin	0	cast	exercised
 raging_kavu	0	cast	exercised
 raging_poltergeist	0	cast	exercised
 raging_redcap	0	cast	exercised
+rain-slicked_copse	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 raise_dead	0	cast	exercised
 raise_the_alarm	0	cast	exercised
 rakdos_guildgate	0	ability:0	exercised
@@ -2441,6 +2450,7 @@ rattleback_apothecary	0	cast	exercised
 raucous_carnival	0	ability:0	exercised
 raucous_carnival	0	land	exercised
 raucous_theater	0	land	exercised
+raugrin_triome	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 raven_of_fell_omens	0	cast	exercised
 ravenhill_flock	0	cast	exercised
 ravenous_giant	0	cast	exercised
@@ -2646,6 +2656,7 @@ savage_mansion	0	ability:0	exercised
 savage_mansion	0	ability:1	exercised
 savage_mansion	0	land	exercised
 savai_sabertooth	0	cast	exercised
+savai_triome	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 savannah	0	ability:0	exercised
 savannah	0	land	exercised
 savannah_lions	0	cast	exercised
@@ -2899,6 +2910,7 @@ soulstone_sanctuary	0	ability:1	exercised
 soulstone_sanctuary	0	land	exercised
 soured_springs	0	ability:0	exercised
 soured_springs	0	land	exercised
+sparas_headquarters	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 sparktongue_dragon	0	cast	exercised
 specimen_freighter	0	ability:0	exercised
 specimen_freighter	0	cast	exercised
@@ -3371,6 +3383,7 @@ ultron_drone	0	ability:0	exercised
 ultron_drone	0	cast	exercised
 umbral_collar_zealot	0	ability:0	exercised
 umbral_collar_zealot	0	cast	exercised
+umbral_expanse	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 unable_to_scream	0	cast	exercised
 unauthorized_exit	0	cast	exercised
 unburied_earthcarver	0	ability:0	exercised
@@ -3663,6 +3676,7 @@ wurmwall_sweeper	0	ability:0	exercised
 wurmwall_sweeper	0	cast	exercised
 wylie_duke,_atiin_hero	0	cast	exercised
 xande,_dark_mage	0	cast	exercised
+xanders_lounge	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 yargle,_glutton_of_urborg	0	cast	exercised
 yargle_and_multani	0	cast	exercised
 yavimaya_coast	0	ability:0	exercised
@@ -3677,6 +3691,7 @@ youre_not_alone	0	cast	exercised
 youthful_knight	0	cast	exercised
 youthful_valkyrie	0	cast	exercised
 yuyan_archers	0	cast	exercised
+zagoth_triome	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 zealous_display	0	cast	exercised
 zealous_guardian	0	cast	exercised
 zealous_lorecaster	0	cast	exercised
@@ -3686,6 +3701,7 @@ zephyr_sprite	0	cast	exercised
 zetalpa,_primal_dawn	0	cast	exercised
 zhao,_ruthless_admiral	0	cast	exercised
 zhao,_the_seething_flame	0	cast	exercised
+ziatoras_proving_ground	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 zog,_triceraton_castaway	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 zog,_triceraton_castaway	0	cast	exercised
 zombie_goliath	0	cast	exercised

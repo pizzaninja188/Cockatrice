@@ -1,0 +1,29 @@
+// Oracle ec2b3779-55f7-4169-aa66-6312fb52721f; source/rulings checked 2026-11-10.
+// CR 305.6 (basic land type mana abilities), CR 614.1c (enters tapped), and CR 702.29a (Cycling).
+(
+  id: "indatha_triome",
+  name: "Indatha Triome",
+  face_id: "indatha_triome",
+  mana_cost: "",
+  types: ["Land", "Plains", "Swamp", "Forest"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]), intrinsic_land_mana: true,
+      costs: [Tap],
+      effect: [ProduceMana(options: [(w: 1), (b: 1), (g: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
+      source_zone: Hand,
+      costs: [Mana("{3}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+  static_abilities: [(
+    ability_id: "enters_tapped",
+    presentation: OracleLines([2]),
+    definition: EntersTapped(affected: Self_),
+  )],
+)

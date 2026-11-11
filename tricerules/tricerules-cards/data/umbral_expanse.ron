@@ -1,0 +1,29 @@
+// Oracle 5a1dfc60-645d-4bc0-8883-e06ed9c80706; source/rulings checked 2026-11-10.
+// CR 305.6 (basic land type mana abilities), CR 614.1c (enters tapped), and CR 702.29a (Cycling).
+(
+  id: "umbral_expanse",
+  name: "Umbral Expanse",
+  face_id: "umbral_expanse",
+  mana_cost: "",
+  types: ["Land", "Plains", "Swamp"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]), intrinsic_land_mana: true,
+      costs: [Tap],
+      effect: [ProduceMana(options: [(w: 1), (b: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
+      source_zone: Hand,
+      costs: [Mana("{2}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+  static_abilities: [(
+    ability_id: "enters_tapped",
+    presentation: OracleLines([2]),
+    definition: EntersTapped(affected: Self_),
+  )],
+)
