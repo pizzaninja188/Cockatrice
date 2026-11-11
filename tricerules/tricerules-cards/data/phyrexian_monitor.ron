@@ -1,0 +1,19 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 1eb6c28d-ebac-4016-ad07-c90081ee4983.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "phyrexian_monitor",
+  name: "Phyrexian Monitor",
+  face_id: "phyrexian_monitor",
+  mana_cost: "{3}{B}",
+  types: ["Creature", "Phyrexian", "Skeleton"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{B}")],
+      effect: [Regenerate(subject: Source)],
+    ),
+  ],
+)

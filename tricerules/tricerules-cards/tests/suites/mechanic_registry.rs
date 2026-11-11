@@ -267,3 +267,6 @@ mod equipment_batch;
 
 #[path = "../forestwalk_batch.rs"]
 mod forestwalk_batch;
+
+#[path = "../regenerate_batch.rs"]
+mod regenerate_batch;

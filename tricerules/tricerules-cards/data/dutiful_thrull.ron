@@ -1,0 +1,19 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 744fcf77-b597-48a0-92ec-f3a617c03df1.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "dutiful_thrull",
+  name: "Dutiful Thrull",
+  face_id: "dutiful_thrull",
+  mana_cost: "{W}",
+  types: ["Creature", "Thrull"],
+  power: 1,
+  toughness: 1,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{B}")],
+      effect: [Regenerate(subject: Source)],
+    ),
+  ],
+)

@@ -1,0 +1,19 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 96a57ce0-f1ab-4af7-8c18-8e35aad11780.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "revered_dead",
+  name: "Revered Dead",
+  face_id: "revered_dead",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Spirit", "Soldier"],
+  power: 1,
+  toughness: 1,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{W}")],
+      effect: [Regenerate(subject: Source)],
+    ),
+  ],
+)
