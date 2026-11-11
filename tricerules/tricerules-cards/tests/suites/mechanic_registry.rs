@@ -261,3 +261,6 @@ mod damage_any_target_batch;
 
 #[path = "../pump_team_batch.rs"]
 mod pump_team_batch;
+
+#[path = "../equipment_batch.rs"]
+mod equipment_batch;

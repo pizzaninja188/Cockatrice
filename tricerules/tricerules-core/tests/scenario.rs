@@ -1248,6 +1248,9 @@ mod damage_any_target_batch;
 #[path = "scenario/pump_team_batch.rs"]
 mod pump_team_batch;
 
+#[path = "scenario/equipment_batch.rs"]
+mod equipment_batch;
+
 #[path = "scenario/deck_coverage_anarchomancer_mastermind.rs"]
 mod deck_coverage_anarchomancer_mastermind;
 
