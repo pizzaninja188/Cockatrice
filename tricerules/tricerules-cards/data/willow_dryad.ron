@@ -1,0 +1,12 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 19d5eb29-2d35-44e7-afa1-3ba8d812ed41.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "willow_dryad",
+  name: "Willow Dryad",
+  face_id: "willow_dryad",
+  mana_cost: "{G}",
+  types: ["Creature", "Dryad"],
+  power: 1,
+  toughness: 1,
+  evasions: [Landwalk(land_subtype: "Forest")],
+)

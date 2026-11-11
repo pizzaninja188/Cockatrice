@@ -1,0 +1,12 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle a8ba7a21-b2fe-42fd-87dd-6611c3105096.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "jukai_messenger",
+  name: "Jukai Messenger",
+  face_id: "jukai_messenger",
+  mana_cost: "{G}",
+  types: ["Creature", "Human", "Monk"],
+  power: 1,
+  toughness: 1,
+  evasions: [Landwalk(land_subtype: "Forest")],
+)

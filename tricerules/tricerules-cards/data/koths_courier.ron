@@ -1,0 +1,12 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 59f57c25-ebb7-49df-8cdd-c6f069d1358d.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "koths_courier",
+  name: "Koth's Courier",
+  face_id: "koths_courier",
+  mana_cost: "{1}{R}{R}",
+  types: ["Creature", "Human", "Rogue"],
+  power: 2,
+  toughness: 3,
+  evasions: [Landwalk(land_subtype: "Forest")],
+)

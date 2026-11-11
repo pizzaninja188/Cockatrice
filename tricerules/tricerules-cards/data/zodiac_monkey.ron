@@ -1,0 +1,12 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 47dd7ef4-7645-4878-ab91-261aa8fcf834.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "zodiac_monkey",
+  name: "Zodiac Monkey",
+  face_id: "zodiac_monkey",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Monkey"],
+  power: 2,
+  toughness: 1,
+  evasions: [Landwalk(land_subtype: "Forest")],
+)

@@ -1,0 +1,12 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle bb1963f9-261c-4d3f-a401-90aaced77e7f.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "rushwood_dryad",
+  name: "Rushwood Dryad",
+  face_id: "rushwood_dryad",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Dryad"],
+  power: 2,
+  toughness: 1,
+  evasions: [Landwalk(land_subtype: "Forest")],
+)

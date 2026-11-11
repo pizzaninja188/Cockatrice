@@ -264,3 +264,6 @@ mod pump_team_batch;
 
 #[path = "../equipment_batch.rs"]
 mod equipment_batch;
+
+#[path = "../forestwalk_batch.rs"]
+mod forestwalk_batch;
