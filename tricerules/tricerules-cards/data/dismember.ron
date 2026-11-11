@@ -1,0 +1,12 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle fd74f8eb-0253-42dd-8277-186d4934da38.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 613.4c: negative P/T applies in layer 7c until end of turn.
+// CR 107.4f/119.4: {B/P} is paid with black mana or 2 life.
+(
+  id: "dismember",
+  name: "Dismember",
+  face_id: "dismember",
+  mana_cost: "{1}{B/P}{B/P}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: -5, toughness: -5)],
+)

@@ -1257,6 +1257,9 @@ mod forestwalk_batch;
 #[path = "scenario/regenerate_batch.rs"]
 mod regenerate_batch;
 
+#[path = "scenario/shrink_batch.rs"]
+mod shrink_batch;
+
 #[path = "scenario/deck_coverage_anarchomancer_mastermind.rs"]
 mod deck_coverage_anarchomancer_mastermind;
 

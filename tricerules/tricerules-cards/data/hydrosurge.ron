@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 4c2059d5-9a2e-4b89-a617-9125eb0cd570.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 613.4c: negative P/T applies in layer 7c until end of turn.
+(
+  id: "hydrosurge",
+  name: "Hydrosurge",
+  face_id: "hydrosurge",
+  mana_cost: "{U}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: -5, toughness: -0)],
+)

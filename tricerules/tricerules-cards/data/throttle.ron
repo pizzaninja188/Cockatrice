@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 01823ab7-b9f6-48bc-b45c-9b0fabc6f657.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 613.4c: negative P/T applies in layer 7c until end of turn.
+(
+  id: "throttle",
+  name: "Throttle",
+  face_id: "throttle",
+  mana_cost: "{4}{B}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: -4, toughness: -4)],
+)

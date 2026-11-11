@@ -270,3 +270,6 @@ mod forestwalk_batch;
 
 #[path = "../regenerate_batch.rs"]
 mod regenerate_batch;
+
+#[path = "../shrink_batch.rs"]
+mod shrink_batch;

@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "fd74f8eb-0253-42dd-8277-186d4934da38",
+  "spans": [
+    {
+      "face_id": "dismember",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/mana_cost"
+      ]
+    },
+    {
+      "face_id": "dismember",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario shrink_batch::shrink_batch_cards_apply_exact_negative_pump_and_go_to_graveyard",
+      "covers": "actual dismember applies the exact printed negative P/T to the chosen creature, leaves opponent hidden zones unchanged, and puts the spell in its owner graveyard"
+    },
+    {
+      "test": "scenario shrink_batch::shrink_batch_cards_expire_at_cleanup",
+      "covers": "actual dismember returns the creature to its printed P/T during cleanup"
+    },
+    {
+      "test": "scenario shrink_batch::shrink_batch_cards_resolve_toughness_lethality_and_power_floor",
+      "covers": "actual dismember sends a two-toughness creature to the graveyard when the toughness penalty is lethal, or leaves a power-only case alive with power floored at zero"
+    },
+    {
+      "test": "scenario shrink_batch::shrink_batch_cards_fizzle_when_the_target_left",
+      "covers": "actual dismember fizzles without changing characteristics when its chosen creature left before resolution"
+    },
+    {
+      "test": "scenario shrink_batch::dismember_pays_black_mana_or_two_life_per_symbol_and_rejects_at_three_life",
+      "covers": "actual Dismember pays black mana or 4 life for its two Phyrexian symbols and rejects the life branch at 3 life"
+    },
+    {
+      "test": "mechanic_registry::shrink_batch::shrink_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and negative pump of dismember"
+    },
+    {
+      "test": "mechanic_registry::shrink_batch::shrink_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for dismember"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

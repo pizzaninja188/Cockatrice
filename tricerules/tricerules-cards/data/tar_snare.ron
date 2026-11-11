@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 3621bd8c-c883-462f-ad56-c01deecb2720.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 613.4c: negative P/T applies in layer 7c until end of turn.
+(
+  id: "tar_snare",
+  name: "Tar Snare",
+  face_id: "tar_snare",
+  mana_cost: "{2}{B}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: -3, toughness: -2)],
+)

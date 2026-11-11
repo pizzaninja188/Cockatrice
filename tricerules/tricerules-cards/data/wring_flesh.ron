@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 45bb536c-c173-4b6e-a5a8-354c74fd93a1.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 613.4c: negative P/T applies in layer 7c until end of turn.
+(
+  id: "wring_flesh",
+  name: "Wring Flesh",
+  face_id: "wring_flesh",
+  mana_cost: "{B}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: -3, toughness: -1)],
+)

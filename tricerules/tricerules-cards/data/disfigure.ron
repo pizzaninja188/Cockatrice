@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 77eafe49-b9c5-461d-89c5-cec217dd2974.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 613.4c: negative P/T applies in layer 7c until end of turn.
+(
+  id: "disfigure",
+  name: "Disfigure",
+  face_id: "disfigure",
+  mana_cost: "{B}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: -2, toughness: -2)],
+)

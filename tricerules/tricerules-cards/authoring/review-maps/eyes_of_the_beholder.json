@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "0fae0474-25ec-474f-8c7f-9e9061835030",
+  "spans": [
+    {
+      "face_id": "eyes_of_the_beholder",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario shrink_batch::shrink_batch_cards_apply_exact_negative_pump_and_go_to_graveyard",
+      "covers": "actual eyes_of_the_beholder applies the exact printed negative P/T to the chosen creature, leaves opponent hidden zones unchanged, and puts the spell in its owner graveyard"
+    },
+    {
+      "test": "scenario shrink_batch::shrink_batch_cards_expire_at_cleanup",
+      "covers": "actual eyes_of_the_beholder returns the creature to its printed P/T during cleanup"
+    },
+    {
+      "test": "scenario shrink_batch::shrink_batch_cards_resolve_toughness_lethality_and_power_floor",
+      "covers": "actual eyes_of_the_beholder sends a two-toughness creature to the graveyard when the toughness penalty is lethal, or leaves a power-only case alive with power floored at zero"
+    },
+    {
+      "test": "scenario shrink_batch::shrink_batch_cards_fizzle_when_the_target_left",
+      "covers": "actual eyes_of_the_beholder fizzles without changing characteristics when its chosen creature left before resolution"
+    },
+    {
+      "test": "mechanic_registry::shrink_batch::shrink_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and negative pump of eyes_of_the_beholder"
+    },
+    {
+      "test": "mechanic_registry::shrink_batch::shrink_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for eyes_of_the_beholder"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

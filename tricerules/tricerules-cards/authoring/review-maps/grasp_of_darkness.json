@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "494c819d-7d73-432b-8c96-4cb9dcd31094",
+  "spans": [
+    {
+      "face_id": "grasp_of_darkness",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario shrink_batch::shrink_batch_cards_apply_exact_negative_pump_and_go_to_graveyard",
+      "covers": "actual grasp_of_darkness applies the exact printed negative P/T to the chosen creature, leaves opponent hidden zones unchanged, and puts the spell in its owner graveyard"
+    },
+    {
+      "test": "scenario shrink_batch::shrink_batch_cards_expire_at_cleanup",
+      "covers": "actual grasp_of_darkness returns the creature to its printed P/T during cleanup"
+    },
+    {
+      "test": "scenario shrink_batch::shrink_batch_cards_resolve_toughness_lethality_and_power_floor",
+      "covers": "actual grasp_of_darkness sends a two-toughness creature to the graveyard when the toughness penalty is lethal, or leaves a power-only case alive with power floored at zero"
+    },
+    {
+      "test": "scenario shrink_batch::shrink_batch_cards_fizzle_when_the_target_left",
+      "covers": "actual grasp_of_darkness fizzles without changing characteristics when its chosen creature left before resolution"
+    },
+    {
+      "test": "mechanic_registry::shrink_batch::shrink_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and negative pump of grasp_of_darkness"
+    },
+    {
+      "test": "mechanic_registry::shrink_batch::shrink_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for grasp_of_darkness"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

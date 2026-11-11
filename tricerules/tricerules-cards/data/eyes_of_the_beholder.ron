@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 0fae0474-25ec-474f-8c7f-9e9061835030.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 613.4c: negative P/T applies in layer 7c until end of turn.
+(
+  id: "eyes_of_the_beholder",
+  name: "Eyes of the Beholder",
+  face_id: "eyes_of_the_beholder",
+  mana_cost: "{4}{B}{B}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: -11, toughness: -11)],
+)

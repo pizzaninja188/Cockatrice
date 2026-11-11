@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 444493a6-0f90-4847-9619-4ea8fbf7cf6f.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 613.4c: negative P/T applies in layer 7c until end of turn.
+(
+  id: "strangling_spores",
+  name: "Strangling Spores",
+  face_id: "strangling_spores",
+  mana_cost: "{3}{B}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: -3, toughness: -3)],
+)
