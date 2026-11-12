@@ -339,3 +339,6 @@ mod quirion_explorer_batch;
 
 #[path = "../mindstatic_batch.rs"]
 mod mindstatic_batch;
+
+#[path = "../colorless_two_mana_batch.rs"]
+mod colorless_two_mana_batch;

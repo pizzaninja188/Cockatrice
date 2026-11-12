@@ -1458,3 +1458,6 @@ mod quirion_explorer_batch;
 
 #[path = "scenario/mindstatic_batch.rs"]
 mod mindstatic_batch;
+
+#[path = "scenario/colorless_two_mana_batch.rs"]
+mod colorless_two_mana_batch;

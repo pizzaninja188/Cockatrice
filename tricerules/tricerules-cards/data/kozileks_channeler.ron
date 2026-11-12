@@ -1,0 +1,19 @@
+// Oracle 33826f91-7680-4a4c-be39-db6c2c0bd465; source/rulings checked 2026-11-12.
+// CR 605.1a/605.3b (mana ability, no stack) and 302.6 (summoning sickness).
+(
+  id: "kozileks_channeler",
+  name: "Kozilek's Channeler",
+  face_id: "kozileks_channeler",
+  mana_cost: "{5}",
+  types: ["Creature", "Eldrazi"],
+  power: 4,
+  toughness: 4,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 2)])],
+    ),
+  ],
+)

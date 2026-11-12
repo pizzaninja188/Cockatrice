@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "33826f91-7680-4a4c-be39-db6c2c0bd465",
+  "spans": [
+    {
+      "face_id": "kozileks_channeler",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario colorless_two_mana_batch::colorless_two_mana_batch_cards_add_exactly_two_colorless_without_the_stack",
+      "covers": "actual kozileks_channeler adds exactly two colorless mana without the stack and rejects a second activation"
+    },
+    {
+      "test": "scenario colorless_two_mana_batch::colorless_two_mana_batch_creatures_respect_summoning_sickness",
+      "covers": "actual kozileks_channeler respects summoning sickness for its tap ability where applicable"
+    },
+    {
+      "test": "mechanic_registry::colorless_two_mana_batch::colorless_two_mana_batch_maps_definitions",
+      "covers": "reviewed identity, cost, type/body and exact two-colorless output of kozileks_channeler"
+    },
+    {
+      "test": "mechanic_registry::colorless_two_mana_batch::colorless_two_mana_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for kozileks_channeler"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
