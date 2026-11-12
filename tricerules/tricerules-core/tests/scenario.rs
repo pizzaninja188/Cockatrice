@@ -1404,3 +1404,6 @@ mod vronos_per_opponent;
 
 #[path = "scenario/deck_coverage_vronos_masked_inquisitor.rs"]
 mod deck_coverage_vronos_masked_inquisitor;
+
+#[path = "scenario/warped_landscape_batch.rs"]
+mod warped_landscape_batch;

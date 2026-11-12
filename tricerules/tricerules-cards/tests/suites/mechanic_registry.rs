@@ -285,3 +285,6 @@ mod pump_trample_batch;
 
 #[path = "../pump_aura_batch.rs"]
 mod pump_aura_batch;
+
+#[path = "../warped_landscape_batch.rs"]
+mod warped_landscape_batch;

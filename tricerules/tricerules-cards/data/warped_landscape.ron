@@ -1,0 +1,26 @@
+// Oracle 543e6bb3-a867-43bf-a737-2f5d6d8dc631; source/rulings checked 2026-11-11.
+// CR 605.1a/605.3b (mana ability without the stack), 602.1a (activation cost payment), 701.23b/e (hidden-zone search), 701.24a (shuffle).
+(
+  id: "warped_landscape",
+  name: "Warped Landscape",
+  face_id: "warped_landscape",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Mana("{2}"), Tap, SacrificeSelf],
+      effect: [SearchLibrary(
+        filter: Some((card_type: Some(BasicLand))),
+        destination: Battlefield(tapped: true),
+      )],
+    ),
+  ],
+)
