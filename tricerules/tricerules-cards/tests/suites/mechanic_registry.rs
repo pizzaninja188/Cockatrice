@@ -306,3 +306,6 @@ mod agonizing_syphon_batch;
 
 #[path = "../glint_batch.rs"]
 mod glint_batch;
+
+#[path = "../high_rise_sawjack_batch.rs"]
+mod high_rise_sawjack_batch;

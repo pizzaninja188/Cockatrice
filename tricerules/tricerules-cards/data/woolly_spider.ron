@@ -1,0 +1,21 @@
+// Oracle 811c6f52-03cb-49a9-a3c7-7f4ae40e7155; source/rulings checked 2026-11-12.
+// CR 702.17 (reach), 509.3b (one trigger per attacker-blocker edge), 611.2a/514.2
+// (until-end-of-turn duration) and 613.4c (layer 7c pump of the source).
+(
+  id: "woolly_spider",
+  name: "Woolly Spider",
+  face_id: "woolly_spider",
+  mana_cost: "{1}{G}{G}",
+  types: ["Creature", "Spider"],
+  power: 2,
+  toughness: 3,
+  keywords: [Reach],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WheneverSelfBlocksCreature(attacker: (required_keywords: [Flying])),
+      effect: [PumpTarget(power: 0, toughness: 2, subject: Source)],
+    ),
+  ],
+)

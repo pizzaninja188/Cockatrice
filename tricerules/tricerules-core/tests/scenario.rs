@@ -1425,3 +1425,6 @@ mod agonizing_syphon_batch;
 
 #[path = "scenario/glint_batch.rs"]
 mod glint_batch;
+
+#[path = "scenario/high_rise_sawjack_batch.rs"]
+mod high_rise_sawjack_batch;
