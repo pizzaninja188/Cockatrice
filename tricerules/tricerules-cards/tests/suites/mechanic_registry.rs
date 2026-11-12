@@ -333,3 +333,6 @@ mod recollect_batch;
 
 #[path = "../aggressive_urge_batch.rs"]
 mod aggressive_urge_batch;
+
+#[path = "../quirion_explorer_batch.rs"]
+mod quirion_explorer_batch;

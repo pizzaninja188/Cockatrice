@@ -1452,3 +1452,6 @@ mod recollect_batch;
 
 #[path = "scenario/aggressive_urge_batch.rs"]
 mod aggressive_urge_batch;
+
+#[path = "scenario/quirion_explorer_batch.rs"]
+mod quirion_explorer_batch;

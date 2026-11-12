@@ -1,0 +1,19 @@
+// Oracle 95560508-7ac9-4be9-8a3f-3c7d5b52807b; source/rulings checked 2026-11-12.
+// CR 106.1a-b/106.5/106.7 (color filtering and current output), 605.1a/605.3b (mana ability, no stack) and 605.2 (zero-output retention).
+// The 2004-10-04 and 2009-10-01 rulings confirm tapped lands, costs/riders and colorless
+// lands never change the WUBRG-only union.
+(
+  id: "fellwar_stone",
+  name: "Fellwar Stone",
+  face_id: "fellwar_stone",
+  mana_cost: "{2}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceManaFromOpponentLands(options: [])],
+    ),
+  ],
+)

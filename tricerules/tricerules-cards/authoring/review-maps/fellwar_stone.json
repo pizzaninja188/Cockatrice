@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "95560508-7ac9-4be9-8a3f-3c7d5b52807b",
+  "spans": [
+    {
+      "face_id": "fellwar_stone",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceManaFromOpponentLands",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario quirion_explorer_batch::quirion_explorer_batch_cards_follow_the_opponents_land_union",
+      "covers": "actual fellwar_stone publishes and activates the opponent-land WUBRG union in order, excluding its controller's own lands"
+    },
+    {
+      "test": "scenario quirion_explorer_batch::quirion_explorer_batch_cards_ignore_tapped_lands_costs_and_restrictions",
+      "covers": "actual fellwar_stone includes tapped opponent lands and ignores their costs or riders"
+    },
+    {
+      "test": "scenario quirion_explorer_batch::quirion_explorer_batch_cards_allow_zero_output_and_reject_an_invalid_option",
+      "covers": "actual fellwar_stone allows a zero-output activation with no opposing lands or only colorless lands and rejects an invalid option atomically"
+    },
+    {
+      "test": "mechanic_registry::quirion_explorer_batch::quirion_explorer_batch_maps_definitions",
+      "covers": "reviewed identity, cost, type/body and opponent-land mana shape of fellwar_stone"
+    },
+    {
+      "test": "mechanic_registry::quirion_explorer_batch::quirion_explorer_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for fellwar_stone"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
