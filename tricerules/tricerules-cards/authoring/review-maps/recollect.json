@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "5b38fafb-3999-46dc-928b-1677625c1943",
+  "spans": [
+    {
+      "face_id": "recollect",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario recollect_batch::recollect_batch_cards_return_the_exact_chosen_graveyard_card",
+      "covers": "actual recollect returns the exact chosen own-graveyard card of any card type to hand"
+    },
+    {
+      "test": "scenario recollect_batch::recollect_batch_cards_fizzle_when_the_chosen_card_leaves_the_graveyard",
+      "covers": "actual recollect fizzles when the chosen card leaves the graveyard before resolution"
+    },
+    {
+      "test": "scenario recollect_batch::recollect_batch_cards_reject_an_opponents_graveyard_and_a_missing_target",
+      "covers": "actual recollect rejects an opponent's graveyard card and a missing target without spending mana"
+    },
+    {
+      "test": "mechanic_registry::recollect_batch::recollect_batch_maps_definitions",
+      "covers": "reviewed identity, cost, type and any-card-to-hand shape of recollect"
+    },
+    {
+      "test": "mechanic_registry::recollect_batch::recollect_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for recollect"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

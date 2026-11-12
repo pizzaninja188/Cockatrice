@@ -1446,3 +1446,6 @@ mod urborg_volcano_batch;
 
 #[path = "scenario/dueling_rapier_batch.rs"]
 mod dueling_rapier_batch;
+
+#[path = "scenario/recollect_batch.rs"]
+mod recollect_batch;

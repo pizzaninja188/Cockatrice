@@ -327,3 +327,6 @@ mod urborg_volcano_batch;
 
 #[path = "../dueling_rapier_batch.rs"]
 mod dueling_rapier_batch;
+
+#[path = "../recollect_batch.rs"]
+mod recollect_batch;
