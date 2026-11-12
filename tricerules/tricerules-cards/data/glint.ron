@@ -1,0 +1,15 @@
+// Oracle 2fc07680-3ffb-4507-a1e1-b9580f5ce878; source/rulings checked 2026-11-12.
+// CR 115.1 (one creature you control), 611.2a/514.2 (until-end-of-turn duration),
+// 613.1f (layer 6 hexproof grant) and 613.4c (layer 7c pump).
+(
+  id: "glint",
+  name: "Glint",
+  face_id: "glint",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 0, toughness: 3, subject: Chosen((kind: Creature, controller: You))),
+    GrantKeywords(subject: Chosen((kind: Creature, controller: You)), keywords: [Hexproof]),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0, 1])])),
+)

@@ -1,0 +1,15 @@
+// Oracle f88eeb04-4b8e-4c76-a8c6-90887b94d518; source/rulings checked 2026-11-12.
+// CR 115.1 (one creature you control), 611.2a/514.2 (until-end-of-turn duration),
+// 613.1f (layer 6 hexproof grant) and 613.4c (layer 7c pump).
+(
+  id: "beaming_defiance",
+  name: "Beaming Defiance",
+  face_id: "beaming_defiance",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 2, toughness: 2, subject: Chosen((kind: Creature, controller: You))),
+    GrantKeywords(subject: Chosen((kind: Creature, controller: You)), keywords: [Hexproof]),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0, 1])])),
+)

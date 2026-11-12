@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "7756d2b9-7b10-4d05-8ad3-8d8f39c1eb23",
+  "spans": [
+    {
+      "face_id": "woodcutters_grit",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario glint_batch::glint_batch_cards_pump_and_grant_hexproof_until_end_of_turn",
+      "covers": "actual woodcutters_grit pumps a chosen creature you control by +3/+3, grants hexproof, rejects an opponent's removal and ends at end of turn"
+    },
+    {
+      "test": "scenario glint_batch::glint_batch_cards_reject_an_opponents_creature",
+      "covers": "actual woodcutters_grit rejects an opponent's creature without spending mana"
+    },
+    {
+      "test": "scenario glint_batch::glint_batch_cards_fizzle_if_the_creature_changes_controller",
+      "covers": "actual woodcutters_grit fizzles when the chosen creature changes controller before resolution"
+    },
+    {
+      "test": "mechanic_registry::glint_batch::glint_batch_maps_definitions",
+      "covers": "reviewed identity, pump, hexproof and single-target group of woodcutters_grit"
+    },
+    {
+      "test": "mechanic_registry::glint_batch::glint_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for woodcutters_grit"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

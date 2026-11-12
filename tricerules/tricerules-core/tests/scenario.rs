@@ -1422,3 +1422,6 @@ mod viashino_racketeer_batch;
 
 #[path = "scenario/agonizing_syphon_batch.rs"]
 mod agonizing_syphon_batch;
+
+#[path = "scenario/glint_batch.rs"]
+mod glint_batch;

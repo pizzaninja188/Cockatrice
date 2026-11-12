@@ -303,3 +303,6 @@ mod viashino_racketeer_batch;
 
 #[path = "../agonizing_syphon_batch.rs"]
 mod agonizing_syphon_batch;
+
+#[path = "../glint_batch.rs"]
+mod glint_batch;
