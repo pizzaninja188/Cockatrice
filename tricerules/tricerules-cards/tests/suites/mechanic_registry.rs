@@ -291,3 +291,6 @@ mod warped_landscape_batch;
 
 #[path = "../arachnoid_adaptation_batch.rs"]
 mod arachnoid_adaptation_batch;
+
+#[path = "../hieromancers_cage_batch.rs"]
+mod hieromancers_cage_batch;
