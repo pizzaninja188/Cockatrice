@@ -1,0 +1,101 @@
+{
+  "format_version": 1,
+  "oracle_id": "aeaf3ce8-6bdf-4a90-8b81-cdbce0f3bb12",
+  "spans": [
+    {
+      "face_id": "mirran_banesplitter",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "mirran_banesplitter",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    },
+    {
+      "face_id": "mirran_banesplitter",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "mirran_banesplitter",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::AttachSource",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Equip",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario dueling_rapier_batch::dueling_rapier_batch_cards_attach_grant_and_move_the_printed_bonus",
+      "covers": "actual mirran_banesplitter attaches on entry, grants the printed bonus and moves it on re-equip"
+    },
+    {
+      "test": "scenario dueling_rapier_batch::dueling_rapier_batch_cards_reject_an_opponents_creature_as_an_equip_target",
+      "covers": "actual mirran_banesplitter rejects an opponent-controlled equip target without changing attachment or spending mana"
+    },
+    {
+      "test": "scenario dueling_rapier_batch::dueling_rapier_batch_cards_fizzle_the_entry_attach_when_the_target_leaves",
+      "covers": "actual mirran_banesplitter enters unattached when the chosen entry target leaves before the trigger resolves"
+    },
+    {
+      "test": "scenario dueling_rapier_batch::dueling_rapier_batch_cards_remove_the_entry_trigger_with_no_legal_creature",
+      "covers": "actual mirran_banesplitter removes its entry trigger and enters unattached with no legal creature"
+    },
+    {
+      "test": "scenario dueling_rapier_batch::dueling_rapier_batch_cards_flash_on_an_opponents_turn",
+      "covers": "actual mirran_banesplitter is cast at flash timing during the opponent's upkeep"
+    },
+    {
+      "test": "mechanic_registry::dueling_rapier_batch::dueling_rapier_batch_maps_definitions",
+      "covers": "reviewed identity, flash, entry attach, static modifier, equip cost and presentation of mirran_banesplitter"
+    },
+    {
+      "test": "mechanic_registry::dueling_rapier_batch::dueling_rapier_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for mirran_banesplitter"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

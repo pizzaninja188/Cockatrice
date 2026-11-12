@@ -1443,3 +1443,6 @@ mod izzet_chronarch_batch;
 
 #[path = "scenario/urborg_volcano_batch.rs"]
 mod urborg_volcano_batch;
+
+#[path = "scenario/dueling_rapier_batch.rs"]
+mod dueling_rapier_batch;
