@@ -6,7 +6,9 @@
     read-only canonical card checks and requires Rust. RecordRoutineBaseline captures stable
     inputs for a successful full Rust/CardData run. RoutineRonBaseline opts into a narrower
     gate, subject to that baseline and strict eligibility. Preview prints the full sequence
-    without executing it. Focused red/green commands remain on run-quiet-command.ps1.
+    without executing it. Real runs first prune expired build evidence; -EvidenceRetentionDays
+    selects the age in days and 0 disables retention. Focused red/green commands remain on
+    run-quiet-command.ps1.
 .EXAMPLE
     ./scripts/verify.ps1 -Side Both -CardData
 .EXAMPLE
@@ -25,7 +27,9 @@ param(
     [string] $OracleBulk,
     [string] $CardsXml,
     [ValidateRange(1, 1000000)]
-    [int] $MinimumFreeGiB
+    [int] $MinimumFreeGiB,
+    [ValidateRange(0, 3650)]
+    [int] $EvidenceRetentionDays = 14
 )
 
 $ErrorActionPreference = 'Stop'
@@ -157,6 +161,15 @@ if ($Preview) {
         if ($step.RequireE2E -and -not $isWindowsHost) { Write-Output 'Child environment: QT_QPA_PLATFORM=offscreen' }
     }
     exit 0
+}
+
+if ($EvidenceRetentionDays -gt 0) {
+    try {
+        & (Join-Path $PSScriptRoot 'prune-evidence.ps1') -Days $EvidenceRetentionDays -Apply -Quiet
+    }
+    catch {
+        Write-Output "Evidence retention skipped: $_"
+    }
 }
 
 $leaseDirectory = Join-Path $repo 'build'

@@ -48,7 +48,7 @@ requires separate authorization. The default Linux XML location is
 Use explicit source arguments to select paths outside the profile defaults.
 
 Preserve needed campaign receipts, source packets and acceptance notes from
-`build/deck-coverage` and `build/verification-logs` separately. Old logs remain
+`build/verification-logs` separately. Old logs remain
 historical evidence. Record routine RON baselines afresh on Linux because the
 paths, toolchain, environment and build commands have changed. Configure Git/GitHub
 credentials separately on the Linux host.

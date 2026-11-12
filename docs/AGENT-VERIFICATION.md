@@ -191,10 +191,10 @@ not permission to omit a required gate. Diagnose unrelated baseline drift before
 ### Archive closed evidence
 
 Archive a closed report, capture directory, or verification run with
-`scripts/archive-evidence.py`. Select one item within `build/campaign`,
-`build/deck-coverage`, or `build/verification-logs`. Keep active checkpoints and any paths
-still needed by a live review in place. The tool rejects recorded routine baselines,
-the canonical `oracle-map.tsv`, and verification runs without a completed summary.
+`scripts/archive-evidence.py`. Select one item within `build/campaign` or
+`build/verification-logs`. Keep active checkpoints and any paths
+still needed by a live review in place. The tool rejects recorded routine baselines
+and verification runs without a completed summary.
 
 ```powershell
 python scripts/archive-evidence.py pack 'build/verification-logs/verify-<closed-id>' --remove-source
@@ -206,6 +206,13 @@ python scripts/archive-evidence.py restore 'build/verification-logs/verify-<clos
 working copy. `restore` checks the archive before publishing the original directory or
 file path, which must be vacant. Restored captures can be replayed from their original
 paths. Use `python3` on hosts where that is the Python command.
+
+Expired evidence is pruned automatically before every real `verify.ps1` run
+(`-EvidenceRetentionDays`, default 14; `0` disables). Pruning removes old `build/campaign`
+items and old verification-log files, keeps each completed `verify-*` `summary.json`, and
+never touches `routine-inputs.json` baselines, incomplete runs, linked paths, or `.zip`
+archives. Preview the same pass with `./scripts/prune-evidence.ps1 -Days 14`; add `-Apply`
+to delete.
 
 ### Opt-in routine RON gate
 
