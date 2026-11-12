@@ -1419,3 +1419,6 @@ mod captains_tutelage_batch;
 
 #[path = "scenario/viashino_racketeer_batch.rs"]
 mod viashino_racketeer_batch;
+
+#[path = "scenario/agonizing_syphon_batch.rs"]
+mod agonizing_syphon_batch;

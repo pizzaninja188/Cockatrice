@@ -1,0 +1,14 @@
+// Oracle 11669fe5-9298-4e1a-a4f7-6a4598dbc8dd; source/rulings checked 2026-11-11.
+// CR 115.1 (single any-target), 120.1/120.3 (damage), 119.3 (life gain), and 608.2b (stale target fizzle).
+(
+  id: "agonizing_syphon",
+  name: "Agonizing Syphon",
+  face_id: "agonizing_syphon",
+  mana_cost: "{3}{B}",
+  types: ["Sorcery"],
+  spell_effect: [
+    DamageTarget(amount: 3, target: (kind: AnyTarget)),
+    GainLife(amount: 3),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+)
