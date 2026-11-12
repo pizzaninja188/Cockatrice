@@ -1,0 +1,19 @@
+// Oracle 1da438f3-db1c-4713-a60c-e078f31d809c; source/rulings checked 2026-11-12.
+// CR 603.6a (entry trigger), 406.3/400.7 (graveyard card identity), 608.2b (stale target).
+(
+  id: "izzet_chronarch",
+  name: "Izzet Chronarch",
+  face_id: "izzet_chronarch",
+  mana_cost: "{3}{U}{R}",
+  types: ["Creature", "Human", "Wizard"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [MoveGraveyardCards(filter: ( card: Some((card_type: Some(InstantOrSorcery)))), destination: Hand)],
+    ),
+  ],
+)

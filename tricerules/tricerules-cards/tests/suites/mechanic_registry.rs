@@ -318,3 +318,6 @@ mod soothsayer_adept_batch;
 
 #[path = "../darkness_batch.rs"]
 mod darkness_batch;
+
+#[path = "../izzet_chronarch_batch.rs"]
+mod izzet_chronarch_batch;

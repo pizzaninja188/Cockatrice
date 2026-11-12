@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "1edd4f50-05ee-43e0-a288-c26666910c8b",
+  "spans": [
+    {
+      "face_id": "ardent_elementalist",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario izzet_chronarch_batch::izzet_chronarch_batch_cards_return_an_instant_or_sorcery",
+      "covers": "actual ardent_elementalist returns one chosen own instant or sorcery from the graveyard to hand"
+    },
+    {
+      "test": "scenario izzet_chronarch_batch::izzet_chronarch_batch_cards_fizzle_when_the_target_leaves_the_graveyard",
+      "covers": "actual ardent_elementalist fizzles when its chosen graveyard card leaves before resolution"
+    },
+    {
+      "test": "mechanic_registry::izzet_chronarch_batch::izzet_chronarch_batch_maps_definitions",
+      "covers": "reviewed identity, entry trigger, graveyard filter and presentation of ardent_elementalist"
+    },
+    {
+      "test": "mechanic_registry::izzet_chronarch_batch::izzet_chronarch_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for ardent_elementalist"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

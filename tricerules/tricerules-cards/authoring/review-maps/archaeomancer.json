@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "a91a3266-cadd-47a0-9b20-160307f14c07",
+  "spans": [
+    {
+      "face_id": "archaeomancer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario izzet_chronarch_batch::izzet_chronarch_batch_cards_return_an_instant_or_sorcery",
+      "covers": "actual archaeomancer returns one chosen own instant or sorcery from the graveyard to hand"
+    },
+    {
+      "test": "scenario izzet_chronarch_batch::izzet_chronarch_batch_cards_fizzle_when_the_target_leaves_the_graveyard",
+      "covers": "actual archaeomancer fizzles when its chosen graveyard card leaves before resolution"
+    },
+    {
+      "test": "scenario izzet_chronarch_batch::izzet_chronarch_batch_archaeomancer_can_return_the_spell_that_reanimated_it",
+      "covers": "actual archaeomancer can return the resolving reanimation spell that put it onto the battlefield, per the saved ruling"
+    },
+    {
+      "test": "mechanic_registry::izzet_chronarch_batch::izzet_chronarch_batch_maps_definitions",
+      "covers": "reviewed identity, entry trigger, graveyard filter and presentation of archaeomancer"
+    },
+    {
+      "test": "mechanic_registry::izzet_chronarch_batch::izzet_chronarch_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for archaeomancer"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
