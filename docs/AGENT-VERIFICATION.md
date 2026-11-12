@@ -115,26 +115,20 @@ relative overrides resolve from `tricerules`. The capacity check is a minimum he
 not a guarantee that an arbitrary build will fit. Pass `-MinimumFreeGiB` to the full gate
 or standalone preflight to select a reserve based on the host's measured build usage.
 
-The 10 GiB default leaves about 2 GiB above a measured peak of 8.03 GiB additional disk usage on
-Windows (2026-11-08, Rust 1.95.0, normal development profile). That measurement sampled
-volume free space every 200 ms while an empty, isolated Cargo target ran CardData Check,
-compiled all test targets, and ran all-target Clippy; the existing checkout's full verification
-was concurrently executing replay tests. It includes other activity on that volume and is
-an observed workload, not a universal minimum. Fully cold C++ builds, different toolchains,
-profile overrides, and large rebuilds can need more headroom; increase `-MinimumFreeGiB`
-for those cases. The free-space reserve and the optional cache-size budget below are separate.
+The 10 GiB default is an observed-workload reserve, not a capacity guarantee: a measured full
+Windows Rust/CardData run added about 8 GiB to an isolated Cargo target. Fully cold C++ builds,
+different toolchains, profile overrides and large rebuilds can need more; pass `-MinimumFreeGiB`
+with a reserve measured for the host. The free-space reserve and the optional cache-size budget
+below are separate.
 
-The workspace development profile (also inherited by tests) uses limited debug information
-and enables incremental compilation. Shared card-test suites reduce duplicated binaries and
-symbols; incremental reuse speeds changed-crate rebuilds. Controlled local whitespace-invalidating
-workspace test builds took about 15-18 seconds with incremental compilation versus 45-58 seconds
-without it, with no hard-link warnings through the supported verification environment. These are
-build-stage measurements, not complete-card authoring times. Release settings are unchanged.
-Explicit Cargo profile/environment overrides still take precedence; `CARGO_INCREMENTAL=0` is an
-optional temporary storage tradeoff, not the development default. After changing profiles,
-old artifacts remain on disk: with no competing builds, verify the target path and use
-`cargo clean --profile dev` from `tricerules` to reclaim disposable debug output. Keep campaign
-checkpoints and verification logs outside that target directory; do not automatically clean them.
+The workspace development profile (also inherited by tests) uses limited debug information and
+incremental compilation; shared card-test suites reduce duplicated binaries and symbols. Release
+settings are unchanged, and explicit Cargo profile/environment overrides take precedence.
+`CARGO_INCREMENTAL=0` is an optional temporary storage tradeoff, not the development default.
+After changing profiles, old artifacts remain on disk: with no competing builds, verify the target
+path and use `cargo clean --profile dev` from `tricerules` to reclaim disposable debug output.
+Keep campaign checkpoints and verification logs outside that target directory; do not automatically
+clean them.
 
 To manage the main checkout's Cargo debug cache automatically, write a positive size in
 GiB to the ignored file `build/rust-cache-budget-gib`. A
@@ -491,7 +485,7 @@ For shared semantic-fixture changes, run the affected `scenario semantic_fixture
 and card regressions through the quiet runner. Mapping/modal registry regressions are modules
 in `--test mechanic_registry`, selected by their exact module/test filters. Generator changes
 also require generator-feature tests and lint. Finish with the normal Rust/CardData gate;
-unchanged fixture regressions need no separate pilot workflow.
+unchanged fixture regressions need no separate workflow.
 
 | Change touches | Iteration build | Focused tests | Final gate |
 |---|---|---|---|

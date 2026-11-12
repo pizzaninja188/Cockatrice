@@ -10,7 +10,7 @@ path; a missing card file alone does not.
 
 | Requirement | Source of truth |
 |---|---|
-| Scope, models, permissions and completion | Current user or campaign policy |
+| Scope, models, permissions and completion | The active campaign brief or task instructions |
 | Source research, typed semantics, presentation and admission | [Card authoring reference](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md) |
 | Supported finite authored-program syntax and target bindings | [Current program subset](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#finite-authored-programs) |
 | Commands and final affected-side verification | [Verification guide](AGENT-VERIFICATION.md) |

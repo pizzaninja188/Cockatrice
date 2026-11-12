@@ -67,35 +67,6 @@ for **Stop here once** or **Yield until here**, with an explicit own-turn/oppone
 An exclamation mark identifies a one-time stop; an arrow identifies a yield destination. The damage
 phase offers separate first-strike and regular combat-damage choices. Untap has no priority stop.
 
-## Pending user GUI acceptance
-
-Automated widget, relay and engine tests do not establish hands-on GUI acceptance. From the repository
-root, launch `./scripts/launch-ruled-game.ps1 -Dev` for the following checks, then use `-Stop` before
-rebuilding. Dev fixture commands are per seat; the control semantics are the same in ordinary games.
-
-1. While typing a message, enter `12345680`: it should remain text. Focus the battlefield and check
-   the enabled controls using both top-row and numpad keys. Rebind one key and verify its new label.
-   Float Game Controls and repeat from that dock and the battlefield. Confirm Messages stays docked,
-   closing the controls keeps them closed through state updates, View can reopen them, and the saved
-   layout and Reset layout preserve and reset the dock respectively. Then float the Prompt dock and
-   close Messages, and the reverse: each dock keeps its own position and visibility, View → Prompt and
-   View → Messages reopen them, and Reset layout re-docks the prompt above the message log.
-2. Use `put bf Garruk's Packleader`, then `put bf Hill Giant`. Right-click the resulting trigger.
-   Test source-only yield and its separate Always Yes/No options; confirm the optional prompt can
-   still be configured while resolving. A required target or payment must remain interactive.
-3. Put two Elvish Visionaries onto the battlefield. In both seats, yield to the stack. Clear All
-   between resolutions: remaining items must stop. Compare current-stack and entire-stack yields
-   by adding a response from the other seat. Check both seats' stack tiles and resolved-card zones.
-4. Move Packleader to the graveyard with `move gy Garruk's Packleader`; its source rule must disappear.
-   A new Packleader must require a new source rule. Explicit broader rules remain listed in Manage.
-5. Test a one-time end-step stop and Full Control after casting your own spell. On a server that retains
-   disconnected seats, reconnect a yielding seat: preferences must display paused and require an explicit resume.
-6. With Auto-pass enabled, clear the current phase's stop and use your normal land play. With only
-   Forests in hand and an untapped Forest on the battlefield, priority should pass automatically.
-   Add Grizzly Bears to hand: one Forest is insufficient; two untapped Forests should hold priority
-   with “Spell available.” Reenable the phase stop and check “Stopped: phase stop.” Lotus Petal or
-   Karplusan Forest should retain priority for their sacrifice/damage possibilities.
-
 These controls implement ordinary priority and optional-choice decisions under CR 117.2e,
 117.3b–d, 117.4–5, 603.3b, 603.5 and 605.3a–b ([November 6, 2026 Comprehensive Rules](https://media.wizards.com/2026/downloads/MagicCompRules%2020261106.txt)).
 They do not change card definitions, payment legality, state-based actions, or trigger ordering.

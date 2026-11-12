@@ -61,9 +61,6 @@ engine constructors. Engine tests may depend on the corpus as a dev dependency. 
 presentation-data edits rebuild the data crate and final consumers without recompiling engine
 library code. Definition or primitive edits correctly invalidate the engine. The final Rust
 verification includes `tests/scripts/card_data_boundary_test.ps1` to guard this graph.
-A controlled debug-build check on 2026-10-08 confirmed both RON and presentation-only edits
-reuse the model and core library artifacts; each warm rebuild took about 3.8 seconds on that
-checkout. This establishes the dependency boundary, not an end-to-end authoring speedup.
 Primitive/engine edits still require recompiling engine code, and actual-card test executables
 still depend on the embedded corpus.
 

@@ -78,31 +78,3 @@ section as it grows and shrinks. Kami of the Crescent Moon
 and Atraxa, Praetors' Voice use the card section. Future sections can display emblems such as
 Teferi, Hero of Dominaria's or Chandra, Torch of Defiance's using their own representation.
 Moving existing emblem and static-effect displays is deferred.
-
-## User GUI acceptance — pending
-
-Automated tests cover construction, source integrity, format-derived setup, private admission,
-sideboarding, commander payments/identity, combat loss and floating-area layout. They do not
-establish interactive GUI acceptance. The user elected to test after implementation.
-
-1. Run `scripts/launch-ruled-game.ps1 -Dev` in the interactive user session. The default Standard
-   samples are 60 basic lands. Verify 20 life, the format label and successful readiness.
-2. In Create Game, verify the Game setup options section is absent. Switch between formats.
-   Standard fixes two seats and Commander permits two to four seats with a default of four.
-   Reopen with remembered settings.
-3. In each editor, use **Add to Zone → Commander** or **Move to zone → Commander**. Undo/redo,
-   save and reopen. The banner remains independent. Export/re-import plain text and check the
-   Commander board. Validate a valid sample, an illegal copy count and an unsupported card.
-   Edit while a response is pending and verify that the old result is marked out of date.
-4. Select a legal deck, join from the second client, then reselect it. The second client sees
-   that a deck is loaded and only the owner can view the list. Select an illegal deck. Only its
-   owner receives card details and the previous accepted deck remains loaded. Repeat with an
-   invalid sideboard move, Ready and Force Start. No invalid configuration may start.
-5. In a Commander lobby, load `scripts/decks/commander-kami.cod` and verify that Commander
-   appears in the regular deck preview alongside the other boards. For an automated game setup,
-   run `scripts/launch-ruled-game.ps1 -Format Commander -Players 2 -Dev` after stopping the
-   previous run. Verify 40 life and one commander at the end of each land row during play.
-   Repeat with three/four seats, narrow windows and reconnect/spectator views.
-6. Cast, cancel, recast and return a commander to the command zone. Verify the exact card moves
-   once, payment tax increases only after committed casts, and opponents cannot cast it. Check
-   commander combat damage/loss, and that noncombat damage does not count toward 21.

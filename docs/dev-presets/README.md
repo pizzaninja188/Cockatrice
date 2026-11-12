@@ -17,23 +17,15 @@ stack, with no staged cast, payment or pending choice. Keep that phase stopped w
 In the Messages dock, choose **Load preset…**, select one of the files below, review its preview,
 then choose **Run (adds state)**. Loading alone sends nothing. For multiplayer, run from seat 1.
 
-| Preset | Prepared state after every command is accepted | Manual check |
+| Preset | Prepared state after every command is accepted | Check |
 | --- | --- | --- |
-| [aura-activation.txt](aura-activation.txt) | Local ready Drudge Skeletons, Stuck in Summoner's Sanctum in hand, and `2UBB` mana added (3 commands) | Activate Skeletons' regeneration for `B` before attaching the Aura. Cast the Aura for `2U` targeting Skeletons, pass priority to resolve it and its entry trigger, then check that Skeletons' regeneration action is disabled or absent even with `B` left. |
-| [multiplayer-targeting.txt](multiplayer-targeting.txt) | Local Decimate in hand and `2RG` mana added; seat 2 Sol Ring, seat 3 Grizzly Bears, seat 4 Propaganda and Forest (6 commands) | Cast Decimate. Select Sol Ring, Grizzly Bears, Propaganda and Forest in their respective target groups. Verify targets/arrows across all three other seats; resolve through all seats and verify the four cards move to their owners' graveyards. |
+| [aura-activation.txt](aura-activation.txt) | Local ready Drudge Skeletons, Stuck in Summoner's Sanctum in hand, and `2UBB` mana added (3 commands) | Activate regeneration for `B`, then cast the Aura; regeneration must be unavailable after it enters. |
+| [multiplayer-targeting.txt](multiplayer-targeting.txt) | Local Decimate in hand and `2RG` mana added; seat 2 Sol Ring, seat 3 Grizzly Bears, seat 4 Propaganda and Forest (6 commands) | Cast Decimate with one target per other seat; all four cards must reach their owners' graveyards. |
 
 Run sends one command at a time and advances only after engine acceptance. A syntax error anywhere
 in a file sends **zero commands**. In a two-player game, `multiplayer-targeting.txt` fails its seat-3
 preflight and sends **zero commands**, including no Decimate. A runtime rejection stops the tail;
-earlier accepted commands remain. For a small rejection check in a fresh dev game, load a scratch
-file containing the following three lines: the first adds `W`, the second is rejected because
-`put` cannot conjure into a graveyard, and the final `R` must never be added.
-
-```text
-mana W
-put gy Serra Angel
-mana R
-```
+earlier accepted commands remain.
 
 While a command is pending, input/Run are locked. **Cancel remaining** stops unsent lines and waits
 for the command already sent; it does not undo that command. Disconnecting, closing the game or
@@ -46,8 +38,6 @@ capture/replay/resume tools when a prepared state must be reconstructed, rather 
 preset as a saved engine snapshot. The [console reference](../../cockatrice/src/game/ruled/README.md#dev-loop-console)
 documents the file bounds and grammar.
 
-GUI acceptance for these checks remains pending until a user performs and confirms them. Automated
-runner/widget tests establish sequencing and failure handling, not those hands-on card interactions.
 Stop the launched processes when finished:
 
 ```powershell
