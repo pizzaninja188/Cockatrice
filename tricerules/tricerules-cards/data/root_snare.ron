@@ -1,0 +1,10 @@
+// Oracle cbf743a5-123f-4747-826d-7f8bb929a52c; source/rulings checked 2026-11-12.
+// CR 614.1a and 615.1a (prevention), 611.2a/514.2 (until-end-of-turn duration).
+(
+  id: "root_snare",
+  name: "Root Snare",
+  face_id: "root_snare",
+  mana_cost: "{1}{G}",
+  types: ["Instant"],
+  spell_effect: [PreventAllCombatDamageTurn],
+)

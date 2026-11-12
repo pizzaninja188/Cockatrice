@@ -1434,3 +1434,6 @@ mod puncturing_blow_batch;
 
 #[path = "scenario/soothsayer_adept_batch.rs"]
 mod soothsayer_adept_batch;
+
+#[path = "scenario/darkness_batch.rs"]
+mod darkness_batch;

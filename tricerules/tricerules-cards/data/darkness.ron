@@ -1,0 +1,10 @@
+// Oracle 932708ae-9d5c-4561-aa8b-0d2222d37fdc; source/rulings checked 2026-11-12.
+// CR 614.1a and 615.1a (prevention), 611.2a/514.2 (until-end-of-turn duration).
+(
+  id: "darkness",
+  name: "Darkness",
+  face_id: "darkness",
+  mana_cost: "{B}",
+  types: ["Instant"],
+  spell_effect: [PreventAllCombatDamageTurn],
+)

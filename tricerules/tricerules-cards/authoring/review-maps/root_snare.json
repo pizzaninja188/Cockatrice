@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "cbf743a5-123f-4747-826d-7f8bb929a52c",
+  "spans": [
+    {
+      "face_id": "root_snare",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PreventAllCombatDamageTurn",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario darkness_batch::darkness_batch_cards_prevent_all_combat_damage_this_turn",
+      "covers": "actual root_snare prevents all combat damage for the turn"
+    },
+    {
+      "test": "scenario darkness_batch::darkness_batch_cards_do_not_prevent_noncombat_damage",
+      "covers": "actual root_snare does not prevent noncombat damage"
+    },
+    {
+      "test": "scenario darkness_batch::darkness_batch_cards_prevention_expires_at_end_of_turn",
+      "covers": "actual root_snare prevention is active this turn and ends with the turn"
+    },
+    {
+      "test": "mechanic_registry::darkness_batch::darkness_batch_maps_definitions",
+      "covers": "reviewed identity, cost, type and prevention effect of root_snare"
+    },
+    {
+      "test": "mechanic_registry::darkness_batch::darkness_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for root_snare"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
