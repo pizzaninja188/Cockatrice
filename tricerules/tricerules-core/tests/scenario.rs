@@ -1431,3 +1431,6 @@ mod high_rise_sawjack_batch;
 
 #[path = "scenario/puncturing_blow_batch.rs"]
 mod puncturing_blow_batch;
+
+#[path = "scenario/soothsayer_adept_batch.rs"]
+mod soothsayer_adept_batch;
