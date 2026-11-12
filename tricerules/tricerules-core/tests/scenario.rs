@@ -1407,3 +1407,6 @@ mod deck_coverage_vronos_masked_inquisitor;
 
 #[path = "scenario/warped_landscape_batch.rs"]
 mod warped_landscape_batch;
+
+#[path = "scenario/arachnoid_adaptation_batch.rs"]
+mod arachnoid_adaptation_batch;

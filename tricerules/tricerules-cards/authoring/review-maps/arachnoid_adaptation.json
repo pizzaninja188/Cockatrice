@@ -1,0 +1,62 @@
+{
+  "format_version": 1,
+  "oracle_id": "042cc9d9-ad13-401f-b2f5-c2f1558d7e44",
+  "spans": [
+    {
+      "face_id": "arachnoid_adaptation",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Untap",
+      "typed_path": "/faces/0/spell_effect/2"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario arachnoid_adaptation_batch::arachnoid_adaptation_batch_cards_cast_with_exact_printed_effects",
+      "covers": "actual arachnoid_adaptation pumps its target by the printed values, grants reach, untaps it and sends the spell to its owner's graveyard"
+    },
+    {
+      "test": "scenario arachnoid_adaptation_batch::arachnoid_adaptation_batch_cards_buff_an_untapped_target",
+      "covers": "actual arachnoid_adaptation legally targets an untapped creature and still grants the printed pump and reach, per the saved Vines of the Recluse ruling"
+    },
+    {
+      "test": "scenario arachnoid_adaptation_batch::arachnoid_adaptation_batch_cards_expire_at_cleanup",
+      "covers": "actual arachnoid_adaptation pump and reach expire at cleanup while the untap remains"
+    },
+    {
+      "test": "scenario arachnoid_adaptation_batch::arachnoid_adaptation_batch_cards_reject_a_noncreature_target",
+      "covers": "actual arachnoid_adaptation rejects a land target without spending mana or moving the card"
+    },
+    {
+      "test": "scenario arachnoid_adaptation_batch::arachnoid_adaptation_batch_cards_fizzle_when_the_target_left",
+      "covers": "actual arachnoid_adaptation fizzles into its owner's graveyard when the target leaves before resolution"
+    },
+    {
+      "test": "mechanic_registry::arachnoid_adaptation_batch::arachnoid_adaptation_batch_maps_definitions",
+      "covers": "reviewed identity, pump, reach, untap and line presentation of arachnoid_adaptation"
+    },
+    {
+      "test": "mechanic_registry::arachnoid_adaptation_batch::arachnoid_adaptation_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for arachnoid_adaptation"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

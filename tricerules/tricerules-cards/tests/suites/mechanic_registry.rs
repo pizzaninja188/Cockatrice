@@ -288,3 +288,6 @@ mod pump_aura_batch;
 
 #[path = "../warped_landscape_batch.rs"]
 mod warped_landscape_batch;
+
+#[path = "../arachnoid_adaptation_batch.rs"]
+mod arachnoid_adaptation_batch;
