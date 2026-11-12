@@ -1,0 +1,15 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 0b3bdbc6-cde7-4187-b13c-82fd02ae4037.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 611.2a/514.2: pump and trample last until end of turn; CR 613.4c/613.1f: layer-7c pump,
+// layer-6 trample.
+(
+  id: "tread_upon",
+  name: "Tread Upon",
+  face_id: "tread_upon",
+  mana_cost: "{1}{G}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 2, toughness: 2),
+    GrantKeywords(keywords: [Trample]),
+  ],
+)

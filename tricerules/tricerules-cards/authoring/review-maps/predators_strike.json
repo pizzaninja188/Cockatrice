@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "f62e9a9f-9989-4a62-b063-cca32e21fe8b",
+  "spans": [
+    {
+      "face_id": "predators_strike",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/spell_effect/1/GrantKeywords/keywords"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario pump_trample_batch::pump_trample_batch_cards_cast_with_exact_printed_effects",
+      "covers": "actual predators_strike casts with its exact printed mana, targets an opponent's creature, applies its exact pump and trample, leaves hidden zones unchanged, and puts the spell in its owner's graveyard"
+    },
+    {
+      "test": "scenario pump_trample_batch::pump_trample_batch_cards_expire_at_cleanup",
+      "covers": "actual predators_strike returns the target to its printed power and toughness and removes trample during cleanup"
+    },
+    {
+      "test": "scenario pump_trample_batch::pump_trample_batch_cards_reject_a_noncreature_target",
+      "covers": "actual predators_strike rejects a land target without spending mana, moving the card from hand, adding to the stack, or advancing the command position"
+    },
+    {
+      "test": "scenario pump_trample_batch::pump_trample_batch_cards_fizzle_when_the_target_left",
+      "covers": "actual predators_strike fizzles without affecting a bystander when its only target leaves before resolution"
+    },
+    {
+      "test": "mechanic_registry::pump_trample_batch::pump_trample_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, exact pump and trample of predators_strike"
+    },
+    {
+      "test": "mechanic_registry::pump_trample_batch::pump_trample_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for predators_strike"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

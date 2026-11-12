@@ -1,0 +1,15 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle b7a16caa-96e0-40c5-8fcb-81e06d26f92a.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 611.2a/514.2: pump and trample last until end of turn; CR 613.4c/613.1f: layer-7c pump,
+// layer-6 trample.
+(
+  id: "brute_strength",
+  name: "Brute Strength",
+  face_id: "brute_strength",
+  mana_cost: "{1}{R}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 3, toughness: 1),
+    GrantKeywords(keywords: [Trample]),
+  ],
+)
