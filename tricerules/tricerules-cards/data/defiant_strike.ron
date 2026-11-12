@@ -1,0 +1,11 @@
+// Oracle f8c2d9c5-6fe6-4698-9972-83cdd625d94b; source/rulings checked 2026-11-12.
+// CR 611.2a/514.2 (until-end-of-turn pump), 121.1 (draw) and 608.2b (illegal target
+// fizzles the whole spell; the 2020-06-23 ruling confirms the draw does not happen).
+(
+  id: "defiant_strike",
+  name: "Defiant Strike",
+  face_id: "defiant_strike",
+  mana_cost: "{W}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: 1, toughness: 0), Draw(count: 1)],
+)

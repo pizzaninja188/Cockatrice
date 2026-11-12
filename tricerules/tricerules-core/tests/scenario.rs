@@ -1449,3 +1449,6 @@ mod dueling_rapier_batch;
 
 #[path = "scenario/recollect_batch.rs"]
 mod recollect_batch;
+
+#[path = "scenario/aggressive_urge_batch.rs"]
+mod aggressive_urge_batch;

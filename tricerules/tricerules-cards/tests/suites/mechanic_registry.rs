@@ -330,3 +330,6 @@ mod dueling_rapier_batch;
 
 #[path = "../recollect_batch.rs"]
 mod recollect_batch;
+
+#[path = "../aggressive_urge_batch.rs"]
+mod aggressive_urge_batch;

@@ -1,0 +1,11 @@
+// Oracle 43f5a93b-0f8d-48d2-ab9d-275d44cf88b5; source/rulings checked 2026-11-12.
+// CR 611.2a/514.2 (until-end-of-turn pump), 121.1 (draw) and 608.2b (illegal target
+// fizzles the whole spell; the 2018-01-19 ruling confirms the draw does not happen).
+(
+  id: "aggressive_urge",
+  name: "Aggressive Urge",
+  face_id: "aggressive_urge",
+  mana_cost: "{1}{G}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: 1, toughness: 1), Draw(count: 1)],
+)
