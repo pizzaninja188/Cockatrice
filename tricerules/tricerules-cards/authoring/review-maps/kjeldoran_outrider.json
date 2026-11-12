@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "7b8559a7-e11f-430d-8a7a-785a7005c4c4",
+  "spans": [
+    {
+      "face_id": "kjeldoran_outrider",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PumpTarget/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario pump_self_cohort::pump_self_cohort_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual kjeldoran_outrider casts with its exact printed mana, enters under its owner/controller with exact power and toughness, and leaves opponent hand and library unchanged"
+    },
+    {
+      "test": "scenario pump_self_cohort::pump_self_cohort_cards_activate_the_exact_self_pump_without_targeting",
+      "covers": "actual kjeldoran_outrider pays its exact pump cost, pumps only itself by the printed amount without targeting, and preserves public hidden-zone sizes"
+    },
+    {
+      "test": "scenario pump_self_cohort::pump_self_cohort_cards_pump_expires_at_cleanup",
+      "covers": "actual kjeldoran_outrider returns to its printed power and toughness during cleanup"
+    },
+    {
+      "test": "scenario pump_self_cohort::pump_self_cohort_cards_reject_activation_when_the_cost_cannot_be_paid",
+      "covers": "actual kjeldoran_outrider rejects an unpayable pump activation without spending mana or a tap, changing characteristics, adding to the stack, or advancing the command position"
+    },
+    {
+      "test": "mechanic_registry::pump_self_cohort::pump_self_cohort_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, cost and source-only pump of kjeldoran_outrider"
+    },
+    {
+      "test": "mechanic_registry::pump_self_cohort::pump_self_cohort_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for kjeldoran_outrider"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

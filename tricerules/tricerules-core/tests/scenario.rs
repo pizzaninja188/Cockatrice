@@ -1263,6 +1263,9 @@ mod shrink_batch;
 #[path = "scenario/pump_self_batch.rs"]
 mod pump_self_batch;
 
+#[path = "scenario/pump_self_cohort.rs"]
+mod pump_self_cohort;
+
 #[path = "scenario/deck_coverage_anarchomancer_mastermind.rs"]
 mod deck_coverage_anarchomancer_mastermind;
 

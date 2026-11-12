@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "fb260f5a-b937-435b-ab18-dcc57d6845df",
+  "spans": [
+    {
+      "face_id": "immolating_souleater",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PumpTarget/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario pump_self_cohort::pump_self_cohort_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual immolating_souleater casts with its exact printed mana, enters under its owner/controller with exact power and toughness, and leaves opponent hand and library unchanged"
+    },
+    {
+      "test": "scenario pump_self_cohort::pump_self_cohort_cards_activate_the_exact_self_pump_without_targeting",
+      "covers": "actual immolating_souleater pays its exact red pump cost, pumps only itself by the printed amount without targeting, and preserves public hidden-zone sizes"
+    },
+    {
+      "test": "scenario pump_self_cohort::pump_self_cohort_cards_pump_expires_at_cleanup",
+      "covers": "actual immolating_souleater returns to its printed power and toughness during cleanup"
+    },
+    {
+      "test": "scenario pump_self_cohort::pump_self_cohort_cards_reject_activation_when_the_cost_cannot_be_paid",
+      "covers": "actual immolating_souleater rejects an unpayable activation without spending mana, changing characteristics, adding to the stack, or advancing the command position"
+    },
+    {
+      "test": "scenario pump_self_cohort::immolating_souleater_pays_phyrexian_with_red_mana_or_two_life",
+      "covers": "actual Immolating Souleater activates with red mana or two life and rejects the life branch at one life without state change"
+    },
+    {
+      "test": "mechanic_registry::pump_self_cohort::pump_self_cohort_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, cost and source-only pump of immolating_souleater"
+    },
+    {
+      "test": "mechanic_registry::pump_self_cohort::pump_self_cohort_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for immolating_souleater"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
