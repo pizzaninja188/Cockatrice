@@ -1,0 +1,11 @@
+// Oracle 896ea218-3019-47e4-b0a0-2487335872bb; source/rulings checked 2026-11-12.
+// CR 701.6 (counter), 118.12/118.12a (optional payment as the spell resolves) and
+// 608.2b (stale target fizzles). The 2004-10-04 ruling confirms the payment is optional.
+(
+  id: "force_spike",
+  name: "Force Spike",
+  face_id: "force_spike",
+  mana_cost: "{U}",
+  types: ["Instant"],
+  spell_effect: [CounterTargetSpell(spell_filter: (), unless_controller_pays: Some(1))],
+)

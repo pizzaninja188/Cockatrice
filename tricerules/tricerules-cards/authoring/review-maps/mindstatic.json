@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "880e0177-f1d2-4bdc-83b4-cae6a0706ef9",
+  "spans": [
+    {
+      "face_id": "mindstatic",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario mindstatic_batch::mindstatic_batch_cards_decline_and_counter_the_exact_target",
+      "covers": "actual mindstatic offers the exact printed payment and counters the targeted spell when declined"
+    },
+    {
+      "test": "scenario mindstatic_batch::mindstatic_batch_cards_allow_the_targets_controller_to_pay",
+      "covers": "actual mindstatic lets the targeted spell's controller pay and leaves that spell on the stack"
+    },
+    {
+      "test": "scenario mindstatic_batch::mindstatic_batch_cards_reject_a_cast_with_no_spell_on_the_stack",
+      "covers": "actual mindstatic rejects a cast with no spell target without spending mana"
+    },
+    {
+      "test": "scenario mindstatic_batch::mindstatic_batch_cards_fizzle_when_the_target_spell_already_left",
+      "covers": "actual mindstatic fizzles when the targeted spell already left the stack"
+    },
+    {
+      "test": "mechanic_registry::mindstatic_batch::mindstatic_batch_maps_definitions",
+      "covers": "reviewed identity, cost, type and exact optional payment of mindstatic"
+    },
+    {
+      "test": "mechanic_registry::mindstatic_batch::mindstatic_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for mindstatic"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

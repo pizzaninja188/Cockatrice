@@ -1455,3 +1455,6 @@ mod aggressive_urge_batch;
 
 #[path = "scenario/quirion_explorer_batch.rs"]
 mod quirion_explorer_batch;
+
+#[path = "scenario/mindstatic_batch.rs"]
+mod mindstatic_batch;

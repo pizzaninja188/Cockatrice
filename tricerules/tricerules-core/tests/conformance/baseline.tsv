@@ -1137,6 +1137,7 @@ foot_headquarters	0	land	exercised
 foot_ninjas	0	cast	exercised
 foot_soldiers	0	cast	exercised
 force_of_savagery	0	cast	exercised
+force_spike	0	cast	unsupported: target group 0 needs a richer fixture
 forecasting_fortune_teller	0	cast	exercised
 forensic_researcher	0	ability:0	exercised
 forensic_researcher	0	ability:1	unsupported: nonmana costs need additional fixture resources
@@ -1923,7 +1924,9 @@ malevolent_chandelier	0	ability:0	exercised
 malevolent_chandelier	0	cast	exercised
 mammoth_bellow	0	cast	exercised
 mammoth_spider	0	cast	exercised
+mana_leak	0	cast	unsupported: target group 0 needs a richer fixture
 mana_reflection	0	cast	exercised
+mana_tithe	0	cast	unsupported: target group 0 needs a richer fixture
 manakin	0	ability:0	exercised
 manakin	0	cast	exercised
 mandroid_squadron	0	cast	exercised
@@ -2015,6 +2018,7 @@ mindful_biomancer	0	ability:0	exercised
 mindful_biomancer	0	cast	exercised
 minds_aglow	0	cast	exercised
 minds_eye	0	cast	exercised
+mindstatic	0	cast	unsupported: target group 0 needs a richer fixture
 mindwhisker	0	cast	exercised
 mine_raider	0	cast	exercised
 minecart_daredevil_ride_the_rails	0	cast	exercised
@@ -2391,6 +2395,7 @@ quaketusk_boar	0	cast	exercised
 quandrix_charm	0	cast	exercised
 quarrel	0	cast	exercised
 queens_bay_soldier	0	cast	exercised
+quench	0	cast	unsupported: target group 0 needs a richer fixture
 quick-draw_katana	0	ability:0	exercised
 quick-draw_katana	0	cast	exercised
 quick_study	0	cast	exercised

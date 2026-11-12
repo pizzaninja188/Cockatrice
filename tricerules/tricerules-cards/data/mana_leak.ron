@@ -1,0 +1,11 @@
+// Oracle c61fe162-2202-4e56-9ba0-393547f9875f; source/rulings checked 2026-11-12.
+// CR 701.6 (counter), 118.12/118.12a (optional payment as the spell resolves) and
+// 608.2b (stale target fizzles).
+(
+  id: "mana_leak",
+  name: "Mana Leak",
+  face_id: "mana_leak",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  spell_effect: [CounterTargetSpell(spell_filter: (), unless_controller_pays: Some(3))],
+)

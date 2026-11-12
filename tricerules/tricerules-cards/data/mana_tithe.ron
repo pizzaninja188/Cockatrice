@@ -1,0 +1,11 @@
+// Oracle 948217ac-289e-455f-8c7c-519aa75fa345; source/rulings checked 2026-11-12.
+// CR 701.6 (counter), 118.12/118.12a (optional payment as the spell resolves) and
+// 608.2b (stale target fizzles). The 2004-10-04 ruling confirms the payment is optional.
+(
+  id: "mana_tithe",
+  name: "Mana Tithe",
+  face_id: "mana_tithe",
+  mana_cost: "{W}",
+  types: ["Instant"],
+  spell_effect: [CounterTargetSpell(spell_filter: (), unless_controller_pays: Some(1))],
+)
