@@ -1,0 +1,66 @@
+{
+  "format_version": 1,
+  "oracle_id": "1128d2ab-0b6e-4912-8735-15521bc314e6",
+  "spans": [
+    {
+      "face_id": "puncturing_blow",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileIfWouldDieThisTurn",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario puncturing_blow_batch::puncturing_blow_batch_cards_deal_their_printed_damage",
+      "covers": "actual puncturing_blow deals its printed damage to a creature"
+    },
+    {
+      "test": "scenario puncturing_blow_batch::puncturing_blow_batch_cards_exile_a_lethally_damaged_creature",
+      "covers": "actual puncturing_blow exiles a creature it lethally damages"
+    },
+    {
+      "test": "scenario puncturing_blow_batch::puncturing_blow_batch_cards_exile_a_later_death_after_prevented_damage",
+      "covers": "actual puncturing_blow still exiles the target after prevented damage and a later sacrifice, per the saved rulings"
+    },
+    {
+      "test": "scenario puncturing_blow_batch::puncturing_blow_batch_cards_reject_a_land_target",
+      "covers": "actual puncturing_blow rejects a noncreature target without spending mana"
+    },
+    {
+      "test": "scenario puncturing_blow_batch::puncturing_blow_batch_cards_fizzle_when_the_target_leaves_before_resolution",
+      "covers": "actual puncturing_blow fizzles and applies no damage or replacement when its only target leaves the battlefield before resolution"
+    },
+    {
+      "test": "scenario puncturing_blow_batch::puncturing_blow_batch_sorceries_reject_instant_timing",
+      "covers": "actual puncturing_blow cannot be cast in the declare attackers step"
+    },
+    {
+      "test": "mechanic_registry::puncturing_blow_batch::puncturing_blow_batch_maps_definitions",
+      "covers": "reviewed identity, damage, exile replacement and one creature target of puncturing_blow"
+    },
+    {
+      "test": "mechanic_registry::puncturing_blow_batch::puncturing_blow_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for puncturing_blow"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

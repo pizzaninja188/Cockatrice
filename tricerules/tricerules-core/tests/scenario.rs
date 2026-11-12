@@ -1428,3 +1428,6 @@ mod glint_batch;
 
 #[path = "scenario/high_rise_sawjack_batch.rs"]
 mod high_rise_sawjack_batch;
+
+#[path = "scenario/puncturing_blow_batch.rs"]
+mod puncturing_blow_batch;

@@ -1,0 +1,15 @@
+// Oracle fe16f1ab-58b4-4452-abe4-cbd9addd348f; source/rulings checked 2026-11-12.
+// CR 115.1 (one creature target), 120.2/120.3 (damage), 614.6 (death replacement)
+// and 608.2b (stale target fizzles).
+(
+  id: "magma_spray",
+  name: "Magma Spray",
+  face_id: "magma_spray",
+  mana_cost: "{R}",
+  types: ["Instant"],
+  spell_effect: [
+    DamageTarget(amount: 2, target: (kind: Creature)),
+    ExileIfWouldDieThisTurn(target: (kind: Creature)),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0, 1])])),
+)

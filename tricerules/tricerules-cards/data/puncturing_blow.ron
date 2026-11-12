@@ -1,0 +1,15 @@
+// Oracle 1128d2ab-0b6e-4912-8735-15521bc314e6; source/rulings checked 2026-11-12.
+// CR 115.1 (one creature target), 120.2/120.3 (damage), 614.6 (death replacement)
+// and 608.2b (stale target fizzles).
+(
+  id: "puncturing_blow",
+  name: "Puncturing Blow",
+  face_id: "puncturing_blow",
+  mana_cost: "{2}{R}{R}",
+  types: ["Sorcery"],
+  spell_effect: [
+    DamageTarget(amount: 5, target: (kind: Creature)),
+    ExileIfWouldDieThisTurn(target: (kind: Creature)),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0, 1])])),
+)
