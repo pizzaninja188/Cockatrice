@@ -1440,3 +1440,6 @@ mod darkness_batch;
 
 #[path = "scenario/izzet_chronarch_batch.rs"]
 mod izzet_chronarch_batch;
+
+#[path = "scenario/urborg_volcano_batch.rs"]
+mod urborg_volcano_batch;

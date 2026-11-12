@@ -321,3 +321,6 @@ mod darkness_batch;
 
 #[path = "../izzet_chronarch_batch.rs"]
 mod izzet_chronarch_batch;
+
+#[path = "../urborg_volcano_batch.rs"]
+mod urborg_volcano_batch;
