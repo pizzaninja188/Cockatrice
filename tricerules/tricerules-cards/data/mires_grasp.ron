@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 1009d2a2-a145-46e1-ba14-7a42735062fc.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 303.4: Aura attach; CR 613.4c: layer-7c P/T modifier while attached.
+(
+  id: "mires_grasp",
+  name: "Mire's Grasp",
+  face_id: "mires_grasp",
+  mana_cost: "{1}{B}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(delta_power: -3, delta_toughness: -3),
+    ),
+  ],
+)

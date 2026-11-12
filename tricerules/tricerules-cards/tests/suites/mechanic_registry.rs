@@ -282,3 +282,6 @@ mod pump_self_cohort;
 
 #[path = "../pump_trample_batch.rs"]
 mod pump_trample_batch;
+
+#[path = "../pump_aura_batch.rs"]
+mod pump_aura_batch;

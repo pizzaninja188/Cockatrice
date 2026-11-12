@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 605624ee-b7ca-4728-993f-e13b18cc57f3.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 303.4: Aura attach; CR 613.4c: layer-7c P/T modifier while attached.
+(
+  id: "pin_to_the_earth",
+  name: "Pin to the Earth",
+  face_id: "pin_to_the_earth",
+  mana_cost: "{1}{U}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(delta_power: -6, delta_toughness: 0),
+    ),
+  ],
+)

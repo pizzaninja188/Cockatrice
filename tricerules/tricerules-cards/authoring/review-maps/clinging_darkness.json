@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "5ad3abf3-1ae5-4c4c-9950-ba7bff0d75ad",
+  "spans": [
+    {
+      "face_id": "clinging_darkness",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "clinging_darkness",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario pump_aura_batch::pump_aura_batch_cards_cast_and_modify_the_enchanted_creature",
+      "covers": "actual clinging_darkness casts with its exact printed mana, enters attached to an opponent's creature, applies its exact P/T modifier, leaves hidden zones unchanged, and does not change the creature's controller"
+    },
+    {
+      "test": "scenario pump_aura_batch::pump_aura_batch_cards_persist_after_cleanup",
+      "covers": "actual clinging_darkness remains attached and keeps its P/T modifier past cleanup"
+    },
+    {
+      "test": "scenario pump_aura_batch::pump_aura_batch_cards_reject_a_noncreature_target",
+      "covers": "actual clinging_darkness rejects a land target without spending mana, moving the card from hand, adding to the stack, or advancing the command position"
+    },
+    {
+      "test": "scenario pump_aura_batch::pump_aura_batch_cards_fizzle_when_the_target_left",
+      "covers": "actual clinging_darkness fizzles into its owner's graveyard when its only target leaves before resolution"
+    },
+    {
+      "test": "scenario pump_aura_batch::pump_aura_batch_attached_aura_follows_its_creature_to_the_graveyard",
+      "covers": "actual clinging_darkness is put into its owner's graveyard when the enchanted creature leaves the battlefield"
+    },
+    {
+      "test": "mechanic_registry::pump_aura_batch::pump_aura_batch_maps_definitions",
+      "covers": "reviewed identity, Aura attach target, exact attached modifier and line presentation of clinging_darkness"
+    },
+    {
+      "test": "mechanic_registry::pump_aura_batch::pump_aura_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for clinging_darkness"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
