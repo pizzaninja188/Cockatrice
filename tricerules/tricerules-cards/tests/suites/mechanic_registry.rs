@@ -297,3 +297,6 @@ mod hieromancers_cage_batch;
 
 #[path = "../captains_tutelage_batch.rs"]
 mod captains_tutelage_batch;
+
+#[path = "../viashino_racketeer_batch.rs"]
+mod viashino_racketeer_batch;
