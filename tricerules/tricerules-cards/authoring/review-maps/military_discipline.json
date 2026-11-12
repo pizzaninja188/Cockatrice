@@ -1,0 +1,96 @@
+{
+  "format_version": 1,
+  "oracle_id": "c910c1c0-2b78-4e0f-bb55-e0581b2e07e8",
+  "spans": [
+    {
+      "face_id": "military_discipline",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "military_discipline",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "military_discipline",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "military_discipline",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario captains_tutelage_batch::captains_tutelage_batch_cards_attach_grant_first_strike_and_keep_the_static_pump",
+      "covers": "actual military_discipline attaches, its entry trigger grants first strike, and the static pump applies"
+    },
+    {
+      "test": "scenario captains_tutelage_batch::captains_tutelage_batch_cards_flash_on_an_opponent_turn",
+      "covers": "actual military_discipline is cast at instant timing on an opponent's turn because it has flash"
+    },
+    {
+      "test": "scenario captains_tutelage_batch::captains_tutelage_batch_cards_first_strike_expires_but_the_pump_remains",
+      "covers": "actual military_discipline first strike expires at cleanup while the attached pump remains"
+    },
+    {
+      "test": "scenario captains_tutelage_batch::captains_tutelage_batch_cards_leaving_before_the_trigger_still_grants_first_strike",
+      "covers": "actual military_discipline last-enchanted creature gains first strike when the Aura leaves before its trigger resolves, per the saved Aspect of Manticore ruling"
+    },
+    {
+      "test": "scenario captains_tutelage_batch::captains_tutelage_batch_cards_fizzle_when_the_creature_left_before_the_aura_resolves",
+      "covers": "actual military_discipline fizzles into its owner's graveyard when its only target left"
+    },
+    {
+      "test": "scenario captains_tutelage_batch::captains_tutelage_batch_cards_reject_a_noncreature_target",
+      "covers": "actual military_discipline rejects a land target without spending mana, moving the card, or adding to the stack"
+    },
+    {
+      "test": "mechanic_registry::captains_tutelage_batch::captains_tutelage_batch_maps_definitions",
+      "covers": "reviewed identity, flash, attach, entry grant, static pump and line presentation of military_discipline"
+    },
+    {
+      "test": "mechanic_registry::captains_tutelage_batch::captains_tutelage_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for military_discipline"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1413,3 +1413,6 @@ mod arachnoid_adaptation_batch;
 
 #[path = "scenario/hieromancers_cage_batch.rs"]
 mod hieromancers_cage_batch;
+
+#[path = "scenario/captains_tutelage_batch.rs"]
+mod captains_tutelage_batch;
