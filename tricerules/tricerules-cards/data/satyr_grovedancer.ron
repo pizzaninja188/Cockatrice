@@ -1,0 +1,18 @@
+// Oracle 49f3bd5a-9c2a-45b8-aa10-9c6471028a0f; source/rulings checked 2026-11-13.
+// CR 603.6a (entry trigger), CR 115.1 (target), CR 122.1 (counter).
+(
+  id: "satyr_grovedancer",
+  name: "Satyr Grovedancer",
+  face_id: "satyr_grovedancer",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Satyr", "Shaman"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature)))],
+    targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+  )],
+)

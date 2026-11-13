@@ -1,0 +1,20 @@
+// Oracle b16cef02-dcf8-4866-ac42-6ee929ddbea2; source/rulings checked 2026-11-13.
+// CR 603.6a (land entry trigger), CR 611.2c/613.4c (until-end-of-turn pump).
+(
+  id: "steppe_lynx",
+  name: "Steppe Lynx",
+  face_id: "steppe_lynx",
+  mana_cost: "{W}",
+  types: ["Creature", "Cat"],
+  power: 0,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Land)),
+    ),
+    effect: [PumpTarget(power: 2, toughness: 2, subject: Source)],
+  )],
+)

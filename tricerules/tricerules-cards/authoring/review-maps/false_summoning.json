@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "4f891c68-c959-4210-94e5-94a8e487d5ef",
+  "spans": [
+    {
+      "face_id": "false_summoning",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardTypeFilter::Creature",
+      "typed_path": "/faces/0/spell_effect/0/CounterTargetSpell/spell_filter/card_type"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario counter_creature_spell_batch::counter_creature_spell_batch_cards_apply_the_printed_effect",
+      "covers": "actual false_summoning clause coverage"
+    },
+    {
+      "test": "scenario counter_creature_spell_batch::counter_creature_spell_batch_cards_reject_illegal_targets",
+      "covers": "actual false_summoning clause coverage"
+    },
+    {
+      "test": "scenario counter_creature_spell_batch::counter_creature_spell_batch_cards_handle_stale_or_expired_state",
+      "covers": "actual false_summoning clause coverage"
+    },
+    {
+      "test": "mechanic_registry::counter_creature_spell_batch::counter_creature_spell_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of false_summoning"
+    },
+    {
+      "test": "mechanic_registry::counter_creature_spell_batch::counter_creature_spell_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for false_summoning"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

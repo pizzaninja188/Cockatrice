@@ -1,0 +1,11 @@
+// Oracle a0b97e33-2d0c-4800-a9f5-9cd9be651ea8; source/rulings checked 2026-11-13.
+// CR 115.1a/601.2c (target at cast), CR 608.2b (stale target), CR 701.8 (destroy).
+(
+  id: "ice_storm",
+  name: "Ice Storm",
+  face_id: "ice_storm",
+  mana_cost: "{2}{G}",
+  types: ["Sorcery"],
+  spell_effect: [Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Land])))],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target land", effect_indices: [0])])),
+)

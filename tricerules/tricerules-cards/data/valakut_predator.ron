@@ -1,0 +1,20 @@
+// Oracle b86a5d90-0820-46cb-b43c-c03a423a3a9f; source/rulings checked 2026-11-13.
+// CR 603.6a (land entry trigger), CR 611.2c/613.4c (until-end-of-turn pump).
+(
+  id: "valakut_predator",
+  name: "Valakut Predator",
+  face_id: "valakut_predator",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Elemental"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Land)),
+    ),
+    effect: [PumpTarget(power: 2, toughness: 2, subject: Source)],
+  )],
+)

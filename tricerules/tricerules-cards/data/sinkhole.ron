@@ -1,0 +1,11 @@
+// Oracle 5a46ad2a-35b1-4dd5-b7c3-fec36b7c67ab; source/rulings checked 2026-11-13.
+// CR 115.1a/601.2c (target at cast), CR 608.2b (stale target), CR 701.8 (destroy).
+(
+  id: "sinkhole",
+  name: "Sinkhole",
+  face_id: "sinkhole",
+  mana_cost: "{B}{B}",
+  types: ["Sorcery"],
+  spell_effect: [Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Land])))],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target land", effect_indices: [0])])),
+)

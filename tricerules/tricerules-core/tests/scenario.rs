@@ -1506,3 +1506,30 @@ mod colorless_double_mana_batch;
 
 #[path = "scenario/destroy_artifact_batch.rs"]
 mod destroy_artifact_batch;
+
+#[path = "scenario/tap_target_activated_batch.rs"]
+mod tap_target_activated_batch;
+
+#[path = "scenario/destroy_land_batch.rs"]
+mod destroy_land_batch;
+
+#[path = "scenario/attack_pump_batch.rs"]
+mod attack_pump_batch;
+
+#[path = "scenario/etb_counter_target_batch.rs"]
+mod etb_counter_target_batch;
+
+#[path = "scenario/exile_artifact_enchantment_batch.rs"]
+mod exile_artifact_enchantment_batch;
+
+#[path = "scenario/destroy_tapped_batch.rs"]
+mod destroy_tapped_batch;
+
+#[path = "scenario/landfall_pump_batch.rs"]
+mod landfall_pump_batch;
+
+#[path = "scenario/attack_each_combat_batch.rs"]
+mod attack_each_combat_batch;
+
+#[path = "scenario/counter_creature_spell_batch.rs"]
+mod counter_creature_spell_batch;

@@ -1,0 +1,12 @@
+// Oracle 69ba7864-0d09-4517-ad1a-7efaf437ded0; source/rulings checked 2026-11-13.
+// CR 508.1d: this creature must be declared as an attacker whenever it is able.
+(
+  id: "tattermunge_maniac",
+  name: "Tattermunge Maniac",
+  face_id: "tattermunge_maniac",
+  mana_cost: "{R/G}",
+  types: ["Creature", "Goblin", "Warrior"],
+  power: 2,
+  toughness: 1,
+  must_attack_if_able: true,
+)

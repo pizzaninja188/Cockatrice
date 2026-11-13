@@ -1,0 +1,17 @@
+// Oracle bae86bb0-5a97-4f6a-8a3f-4e6848bfacc0; source/rulings checked 2026-11-13.
+// CR 602.1/602.2 (activation and costs), CR 118.3 (mana payment), CR 701.26 (tap).
+(
+  id: "gideons_lawkeeper",
+  name: "Gideon's Lawkeeper",
+  face_id: "gideons_lawkeeper",
+  mana_cost: "{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 1,
+  toughness: 1,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{W}"), Tap],
+    effect: [Tap(subject: Chosen((kind: Creature)))],
+  )],
+)

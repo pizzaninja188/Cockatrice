@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "06a3fe24-7e1f-4f98-ba2f-dbb5d38f4b9d",
+  "spans": [
+    {
+      "face_id": "bloodrock_cyclops",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/must_attack_if_able"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "must_attack_if_able",
+      "typed_path": "/faces/0/must_attack_if_able"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario attack_each_combat_batch::attack_each_combat_batch_cards_apply_the_printed_effect",
+      "covers": "actual bloodrock_cyclops clause coverage"
+    },
+    {
+      "test": "scenario attack_each_combat_batch::attack_each_combat_batch_cards_reject_omitting_an_able_attacker",
+      "covers": "actual bloodrock_cyclops clause coverage"
+    },
+    {
+      "test": "scenario attack_each_combat_batch::attack_each_combat_batch_cards_allow_skip_when_unable",
+      "covers": "actual bloodrock_cyclops clause coverage"
+    },
+    {
+      "test": "mechanic_registry::attack_each_combat_batch::attack_each_combat_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of bloodrock_cyclops"
+    },
+    {
+      "test": "mechanic_registry::attack_each_combat_batch::attack_each_combat_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for bloodrock_cyclops"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

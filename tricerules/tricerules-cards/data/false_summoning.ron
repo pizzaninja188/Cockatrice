@@ -1,0 +1,12 @@
+// Oracle 4f891c68-c959-4210-94e5-94a8e487d5ef; source/rulings checked 2026-11-13.
+// CR 701.6 (counter), CR 115.1a/601.2c (creature spell target).
+(
+  id: "false_summoning",
+  name: "False Summoning",
+  face_id: "false_summoning",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  spell_effect: [CounterTargetSpell(
+    spell_filter: (card_type: Some(Creature)),
+  )],
+)

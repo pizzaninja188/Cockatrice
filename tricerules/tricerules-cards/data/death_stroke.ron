@@ -1,0 +1,11 @@
+// Oracle 3ebaa91f-5cbf-4a82-9759-9bd4d93a3e87; source/rulings checked 2026-11-13.
+// CR 115.1a/601.2c (target at cast), CR 608.2b (stale target), CR 701.8 (destroy).
+(
+  id: "death_stroke",
+  name: "Death Stroke",
+  face_id: "death_stroke",
+  mana_cost: "{B}{B}",
+  types: ["Sorcery"],
+  spell_effect: [Destroy(subject: Chosen((kind: Creature, tapped: true)))],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target tapped creature", effect_indices: [0])])),
+)

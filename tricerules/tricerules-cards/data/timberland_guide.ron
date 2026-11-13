@@ -1,0 +1,18 @@
+// Oracle bd8ba76f-d9e1-4c4d-83e1-6782fa3d01ba; source/rulings checked 2026-11-13.
+// CR 603.6a (entry trigger), CR 115.1 (target), CR 122.1 (counter).
+(
+  id: "timberland_guide",
+  name: "Timberland Guide",
+  face_id: "timberland_guide",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Human", "Scout"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature)))],
+    targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+  )],
+)

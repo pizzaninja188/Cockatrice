@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "7471e445-4655-4336-9769-3debd197b77c",
+  "spans": [
+    {
+      "face_id": "frontline_rebel",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/must_attack_if_able"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "must_attack_if_able",
+      "typed_path": "/faces/0/must_attack_if_able"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario attack_each_combat_batch::attack_each_combat_batch_cards_apply_the_printed_effect",
+      "covers": "actual frontline_rebel clause coverage"
+    },
+    {
+      "test": "scenario attack_each_combat_batch::attack_each_combat_batch_cards_reject_omitting_an_able_attacker",
+      "covers": "actual frontline_rebel clause coverage"
+    },
+    {
+      "test": "scenario attack_each_combat_batch::attack_each_combat_batch_cards_allow_skip_when_unable",
+      "covers": "actual frontline_rebel clause coverage"
+    },
+    {
+      "test": "mechanic_registry::attack_each_combat_batch::attack_each_combat_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of frontline_rebel"
+    },
+    {
+      "test": "mechanic_registry::attack_each_combat_batch::attack_each_combat_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for frontline_rebel"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "ce979f36-84f2-4419-b400-971263494cc6",
+  "spans": [
+    {
+      "face_id": "assassinate",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter.tapped",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen/tapped"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario destroy_tapped_batch::destroy_tapped_batch_cards_apply_the_printed_effect",
+      "covers": "actual assassinate clause coverage"
+    },
+    {
+      "test": "scenario destroy_tapped_batch::destroy_tapped_batch_cards_reject_illegal_targets",
+      "covers": "actual assassinate clause coverage"
+    },
+    {
+      "test": "scenario destroy_tapped_batch::destroy_tapped_batch_cards_handle_stale_or_expired_state",
+      "covers": "actual assassinate clause coverage"
+    },
+    {
+      "test": "mechanic_registry::destroy_tapped_batch::destroy_tapped_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of assassinate"
+    },
+    {
+      "test": "mechanic_registry::destroy_tapped_batch::destroy_tapped_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for assassinate"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "b1e76ce9-6f39-419c-99e3-ede2dfa4858c",
+  "spans": [
+    {
+      "face_id": "nebelgast_beguiler",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario tap_target_activated_batch::tap_target_activated_batch_cards_apply_the_printed_effect",
+      "covers": "actual nebelgast_beguiler clause coverage"
+    },
+    {
+      "test": "scenario tap_target_activated_batch::tap_target_activated_batch_cards_reject_illegal_targets",
+      "covers": "actual nebelgast_beguiler clause coverage"
+    },
+    {
+      "test": "scenario tap_target_activated_batch::tap_target_activated_batch_cards_handle_stale_or_expired_state",
+      "covers": "actual nebelgast_beguiler clause coverage"
+    },
+    {
+      "test": "mechanic_registry::tap_target_activated_batch::tap_target_activated_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of nebelgast_beguiler"
+    },
+    {
+      "test": "mechanic_registry::tap_target_activated_batch::tap_target_activated_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for nebelgast_beguiler"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

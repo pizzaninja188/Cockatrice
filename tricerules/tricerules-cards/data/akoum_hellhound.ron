@@ -1,0 +1,20 @@
+// Oracle 05074b68-6b31-4f9f-b3ec-bffe3e7eab47; source/rulings checked 2026-11-13.
+// CR 603.6a (land entry trigger), CR 611.2c/613.4c (until-end-of-turn pump).
+(
+  id: "akoum_hellhound",
+  name: "Akoum Hellhound",
+  face_id: "akoum_hellhound",
+  mana_cost: "{R}",
+  types: ["Creature", "Elemental", "Dog"],
+  power: 0,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Land)),
+    ),
+    effect: [PumpTarget(power: 2, toughness: 2, subject: Source)],
+  )],
+)

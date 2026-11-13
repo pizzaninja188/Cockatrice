@@ -1,0 +1,11 @@
+// Oracle 5820d760-8ed7-4abf-a959-c06ed86a3730; source/rulings checked 2026-11-13.
+// CR 115.1a/601.2c (target at cast), CR 608.2b (stale target), CR 701.8 (destroy).
+(
+  id: "swift_response",
+  name: "Swift Response",
+  face_id: "swift_response",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  spell_effect: [Destroy(subject: Chosen((kind: Creature, tapped: true)))],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target tapped creature", effect_indices: [0])])),
+)

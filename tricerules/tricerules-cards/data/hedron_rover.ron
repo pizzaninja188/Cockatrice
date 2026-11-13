@@ -1,0 +1,20 @@
+// Oracle 1b2826ea-a3d5-4b8a-b362-0b0880d1cc48; source/rulings checked 2026-11-13.
+// CR 603.6a (land entry trigger), CR 611.2c/613.4c (until-end-of-turn pump).
+(
+  id: "hedron_rover",
+  name: "Hedron Rover",
+  face_id: "hedron_rover",
+  mana_cost: "{4}",
+  types: ["Artifact", "Creature", "Construct"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Land)),
+    ),
+    effect: [PumpTarget(power: 2, toughness: 2, subject: Source)],
+  )],
+)
