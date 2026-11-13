@@ -67,13 +67,13 @@ class ArchiveEvidenceTest(unittest.TestCase):
         self.invoke("pack", run, "--remove-source", success=False)
         self.assertTrue(log.exists())
 
-    def test_keeps_canonical_campaign_inputs(self):
-        coverage = self.root / "build" / "deck-coverage"
-        coverage.mkdir()
-        oracle_map = coverage / "oracle-map.tsv"
-        oracle_map.write_bytes(b"active campaign input")
-        self.invoke("pack", oracle_map, "--remove-source", success=False)
-        self.assertTrue(oracle_map.exists())
+    def test_keeps_protected_routine_inputs(self):
+        campaign = self.root / "build" / "campaign"
+        campaign.mkdir()
+        routine_inputs = campaign / "routine-inputs.json"
+        routine_inputs.write_bytes(b"active campaign input")
+        self.invoke("pack", routine_inputs, "--remove-source", success=False)
+        self.assertTrue(routine_inputs.exists())
 
     def test_pack_file_defaults_to_retaining_source(self):
         report = self.root / "build" / "campaign" / "old.report.json"

@@ -9,7 +9,7 @@ still loads embedded RON. Prepared outputs belong under ignored `build/`, not a 
 Write exact Oracle names, one per line, then:
 
 ```powershell
-./scripts/card-author.ps1 prepare --names build/next-names.txt --corpus build/deck-coverage/oracle-map.tsv --out build/next-preparation
+./scripts/card-author.ps1 prepare --names build/next-names.txt --corpus build/pinned-corpus.tsv --out build/next-preparation
 ./scripts/card-author.ps1 queue-check --entry build/next-preparation/dependencies.json
 ```
 

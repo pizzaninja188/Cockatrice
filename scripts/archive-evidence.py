@@ -13,9 +13,9 @@ from pathlib import Path
 
 
 REPOSITORY = Path(__file__).resolve().parents[1]
-EVIDENCE_ROOTS = ("campaign", "deck-coverage", "verification-logs")
+EVIDENCE_ROOTS = ("campaign", "verification-logs")
 MANIFEST = ".cockatrice-evidence-manifest.json"
-PROTECTED = {"routine-inputs.json", "oracle-map.tsv"}
+PROTECTED = {"routine-inputs.json"}
 WINDOWS_DEVICES = {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"} | {
     f"{prefix}{number}" for prefix in ("COM", "LPT") for number in "123456789¹²³"
 }
@@ -34,7 +34,7 @@ def locate(argument):
     path = Path(os.path.abspath(REPOSITORY / argument))
     parts = path.relative_to(REPOSITORY).parts
     if len(parts) < 3 or parts[0] != "build" or parts[1] not in EVIDENCE_ROOTS:
-        raise ValueError("Select one item inside build/campaign, build/deck-coverage or build/verification-logs.")
+        raise ValueError("Select one item inside build/campaign or build/verification-logs.")
     current = REPOSITORY
     for part in parts:
         current /= part

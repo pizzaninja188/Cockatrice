@@ -134,6 +134,20 @@ exit $code
     Assert-Workflow ($new.Count -eq 6) 'Verification continued beyond the failing second package format check.'
     Assert-Workflow (($new[5].Arguments -join ' ') -match 'tricerules-core') 'The expected formatting package did not fail.'
 
+    # Expired evidence is pruned before a real gate; completed summaries remain.
+    Remove-Item -LiteralPath (Join-Path $fixture 'fail-pattern') -ErrorAction SilentlyContinue
+    $pruneRun = Join-Path $fixture 'build/verification-logs/verify-expired'
+    New-Item -ItemType Directory -Path $pruneRun -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $pruneRun 'frames.pb') -Value 'frame'
+    Set-Content -LiteralPath (Join-Path $pruneRun 'summary.json') -Value '{"Status":"Pass","CompletedAt":"2026-01-01T00:00:00Z"}'
+    $stamp = [DateTime]::UtcNow.AddDays(-40)
+    Get-ChildItem -LiteralPath $pruneRun -Recurse -Force | ForEach-Object { $_.LastWriteTimeUtc = $stamp }
+    (Get-Item -LiteralPath $pruneRun -Force).LastWriteTimeUtc = $stamp
+    $result = Invoke-WorkflowFixture $fixture 'verify.ps1' @('-Side', 'Rust')
+    Assert-Workflow ($result.ExitCode -eq 0) "Retention verification failed: $($result.Output)"
+    Assert-Workflow (-not (Test-Path -LiteralPath (Join-Path $pruneRun 'frames.pb'))) 'Expired capture frames survived a verification run.'
+    Assert-Workflow (Test-Path -LiteralPath (Join-Path $pruneRun 'summary.json')) 'Completed verification summary was removed.'
+
     # Preview derives coverage from the workspace, including newly added packages, without tools.
     $extra = Join-Path $fixture 'tricerules/extra-member'
     New-Item -ItemType Directory -Path $extra | Out-Null
