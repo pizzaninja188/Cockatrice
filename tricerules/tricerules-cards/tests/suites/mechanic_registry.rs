@@ -486,3 +486,12 @@ mod vivid_lands_batch;
 
 #[path = "../explore_etb_batch.rs"]
 mod explore_etb_batch;
+
+#[path = "../dies_damage_any_target_batch.rs"]
+mod dies_damage_any_target_batch;
+
+#[path = "../dies_gain_life_batch.rs"]
+mod dies_gain_life_batch;
+
+#[path = "../team_pump_activated_batch.rs"]
+mod team_pump_activated_batch;

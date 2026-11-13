@@ -1,0 +1,20 @@
+// Oracle 1cb3f27c-2670-43b8-9305-8adf2e7bd3ae; source/rulings checked 2026-11-13.
+// CR 603.6c/700.4 (dies trigger), 119.3 (life gain), and 608.2c
+// (the controller of the trigger gains the life).
+(
+  id: "enatu_golem",
+  name: "Enatu Golem",
+  face_id: "enatu_golem",
+  mana_cost: "{6}",
+  types: ["Artifact", "Creature", "Golem"],
+  power: 3,
+  toughness: 5,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfDies,
+      effect: [GainLife(amount: 4)],
+    ),
+  ],
+)

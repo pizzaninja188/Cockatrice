@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "f1861fac-e0e5-4b96-b6e4-6b6573bd02d1",
+  "spans": [
+    {
+      "face_id": "charismatic_vanguard",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario team_pump_activated_batch::team_pump_activated_batch_cards_pump_only_their_controllers_creatures",
+      "covers": "actual charismatic_vanguard clause coverage"
+    },
+    {
+      "test": "scenario team_pump_activated_batch::team_pump_activated_batch_cards_require_the_printed_mana_cost",
+      "covers": "actual charismatic_vanguard clause coverage"
+    },
+    {
+      "test": "scenario team_pump_activated_batch::team_pump_activated_batch_cards_expire_at_end_of_turn",
+      "covers": "actual charismatic_vanguard clause coverage"
+    },
+    {
+      "test": "mechanic_registry::team_pump_activated_batch::team_pump_activated_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of charismatic_vanguard"
+    },
+    {
+      "test": "mechanic_registry::team_pump_activated_batch::team_pump_activated_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for charismatic_vanguard"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

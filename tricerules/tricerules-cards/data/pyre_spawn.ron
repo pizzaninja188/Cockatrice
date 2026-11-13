@@ -1,0 +1,20 @@
+// Oracle 13b0a3f3-04a5-465f-898b-13a28f795a16; source/rulings checked 2026-11-13.
+// CR 603.6c/700.4 (dies trigger), 115.1 (targets), 120.1/120.3 (damage), and
+// 608.2b (a target that left is not damaged).
+(
+  id: "pyre_spawn",
+  name: "Pyre Spawn",
+  face_id: "pyre_spawn",
+  mana_cost: "{4}{R}{R}",
+  types: ["Creature", "Elemental"],
+  power: 6,
+  toughness: 4,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfDies,
+      effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
+    ),
+  ],
+)

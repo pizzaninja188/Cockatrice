@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "13b0a3f3-04a5-465f-898b-13a28f795a16",
+  "spans": [
+    {
+      "face_id": "pyre_spawn",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetKind::AnyTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/DamageTarget/target/kind"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario dies_damage_any_target_batch::dies_damage_any_target_batch_cards_deal_their_printed_damage_to_players",
+      "covers": "actual pyre_spawn clause coverage"
+    },
+    {
+      "test": "scenario dies_damage_any_target_batch::dies_damage_any_target_batch_cards_can_target_creatures",
+      "covers": "actual pyre_spawn clause coverage"
+    },
+    {
+      "test": "scenario dies_damage_any_target_batch::dies_damage_any_target_batch_cards_do_not_damage_a_departed_target",
+      "covers": "actual pyre_spawn clause coverage"
+    },
+    {
+      "test": "scenario dies_damage_any_target_batch::dies_damage_any_target_batch_cards_do_not_trigger_when_exiled",
+      "covers": "actual pyre_spawn clause coverage"
+    },
+    {
+      "test": "mechanic_registry::dies_damage_any_target_batch::dies_damage_any_target_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of pyre_spawn"
+    },
+    {
+      "test": "mechanic_registry::dies_damage_any_target_batch::dies_damage_any_target_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for pyre_spawn"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

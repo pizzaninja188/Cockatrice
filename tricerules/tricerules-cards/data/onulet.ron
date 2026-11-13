@@ -1,0 +1,20 @@
+// Oracle 598f948b-bdd3-490f-b3e9-f0f9dc470522; source/rulings checked 2026-11-13.
+// CR 603.6c/700.4 (dies trigger), 119.3 (life gain), and 608.2c
+// (the controller of the trigger gains the life).
+(
+  id: "onulet",
+  name: "Onulet",
+  face_id: "onulet",
+  mana_cost: "{3}",
+  types: ["Artifact", "Creature", "Construct"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfDies,
+      effect: [GainLife(amount: 2)],
+    ),
+  ],
+)
