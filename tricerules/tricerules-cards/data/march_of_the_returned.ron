@@ -1,0 +1,19 @@
+// Oracle 53a40369-0e62-4ad2-a6bd-65a5ff0da65e; source/rulings checked 2026-11-12.
+// CR 115.1a/601.2c (up to two targets chosen at cast), 608.2b (stale targets) and 400.7 (a graveyard card moves to hand as a new object).
+(
+  id: "march_of_the_returned",
+  name: "March of the Returned",
+  face_id: "march_of_the_returned",
+  mana_cost: "{3}{B}",
+  types: ["Sorcery"],
+  spell_effect: [MoveGraveyardCards(
+    filter: ( card: Some((card_type: Some(Creature)))),
+    destination: Hand,
+  )],
+  targeting: Some((groups: [(
+    min: 0,
+    max: 2,
+    prompt: "Choose up to two target creature cards in your graveyard",
+    effect_indices: [0],
+  )])),
+)

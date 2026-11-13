@@ -1479,3 +1479,12 @@ mod sylvan_ranger_batch;
 
 #[path = "scenario/breath_of_life_batch.rs"]
 mod breath_of_life_batch;
+
+#[path = "scenario/tap_dual_remnants_batch.rs"]
+mod tap_dual_remnants_batch;
+
+#[path = "scenario/any_color_mana_batch.rs"]
+mod any_color_mana_batch;
+
+#[path = "scenario/graveyard_two_to_hand_batch.rs"]
+mod graveyard_two_to_hand_batch;

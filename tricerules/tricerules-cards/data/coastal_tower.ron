@@ -1,0 +1,23 @@
+// Oracle f0367926-4380-4d22-8cb8-46c2076f102a; source/rulings checked 2026-11-12.
+// CR 614.1d/614.12 (enters-tapped replacement) and 605.1a/605.3b (mana abilities).
+(
+  id: "coastal_tower",
+  name: "Coastal Tower",
+  face_id: "coastal_tower",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(w: 1), (u: 1)])],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: EntersTapped(affected: Self_),
+    ),
+  ],
+)

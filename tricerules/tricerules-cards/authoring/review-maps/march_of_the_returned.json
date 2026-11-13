@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "53a40369-0e62-4ad2-a6bd-65a5ff0da65e",
+  "spans": [
+    {
+      "face_id": "march_of_the_returned",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario graveyard_two_to_hand_batch::graveyard_two_to_hand_batch_cards_return_up_to_two_creature_cards",
+      "covers": "actual march_of_the_returned returns two target creature cards from its controller graveyard to hand"
+    },
+    {
+      "test": "scenario graveyard_two_to_hand_batch::graveyard_two_to_hand_batch_cards_reject_illegal_targets_and_three_targets",
+      "covers": "actual march_of_the_returned rejects noncreature, opponent-graveyard and three-target casts without spending mana"
+    },
+    {
+      "test": "scenario graveyard_two_to_hand_batch::graveyard_two_to_hand_batch_cards_fizzle_stale_targets",
+      "covers": "actual march_of_the_returned does not return a stale graveyard target"
+    },
+    {
+      "test": "mechanic_registry::graveyard_two_to_hand_batch::graveyard_two_to_hand_batch_maps_definitions",
+      "covers": "reviewed identity, creature-card graveyard filter and up-to-two target group of march_of_the_returned"
+    },
+    {
+      "test": "mechanic_registry::graveyard_two_to_hand_batch::graveyard_two_to_hand_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for march_of_the_returned"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "a9df60bf-f327-4d50-ab4d-99324fc2dcfe",
+  "spans": [
+    {
+      "face_id": "xenobotanist",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario any_color_mana_batch::any_color_mana_batch_cards_cast_and_apply_summoning_sickness",
+      "covers": "actual xenobotanist casts normally and a creature source obeys summoning sickness"
+    },
+    {
+      "test": "scenario any_color_mana_batch::any_color_mana_batch_cards_offer_all_five_colors",
+      "covers": "actual xenobotanist offers exactly five single-color outputs and taps as its cost"
+    },
+    {
+      "test": "mechanic_registry::any_color_mana_batch::any_color_mana_batch_maps_definitions",
+      "covers": "reviewed identity, tap cost and five-color mana options of xenobotanist"
+    },
+    {
+      "test": "mechanic_registry::any_color_mana_batch::any_color_mana_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for xenobotanist"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -360,3 +360,12 @@ mod sylvan_ranger_batch;
 
 #[path = "../breath_of_life_batch.rs"]
 mod breath_of_life_batch;
+
+#[path = "../tap_dual_remnants_batch.rs"]
+mod tap_dual_remnants_batch;
+
+#[path = "../any_color_mana_batch.rs"]
+mod any_color_mana_batch;
+
+#[path = "../graveyard_two_to_hand_batch.rs"]
+mod graveyard_two_to_hand_batch;

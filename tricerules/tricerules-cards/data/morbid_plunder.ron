@@ -1,0 +1,19 @@
+// Oracle 1bb7009b-aeb0-4545-be4c-c8c5d723bcf5; source/rulings checked 2026-11-12.
+// CR 115.1a/601.2c (up to two targets chosen at cast), 608.2b (stale targets) and 400.7 (a graveyard card moves to hand as a new object).
+(
+  id: "morbid_plunder",
+  name: "Morbid Plunder",
+  face_id: "morbid_plunder",
+  mana_cost: "{1}{B}{B}",
+  types: ["Sorcery"],
+  spell_effect: [MoveGraveyardCards(
+    filter: ( card: Some((card_type: Some(Creature)))),
+    destination: Hand,
+  )],
+  targeting: Some((groups: [(
+    min: 0,
+    max: 2,
+    prompt: "Choose up to two target creature cards in your graveyard",
+    effect_indices: [0],
+  )])),
+)

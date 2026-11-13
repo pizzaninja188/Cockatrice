@@ -1,0 +1,24 @@
+// Oracle 75a49bce-ab48-44d6-906d-6f51a30702ba; source/rulings checked 2026-11-12.
+// CR 205.4g (snow supertype), 614.1d/614.12 (enters-tapped replacement) and 605.1a/605.3b (mana abilities).
+(
+  id: "frost_marsh",
+  name: "Frost Marsh",
+  face_id: "frost_marsh",
+  types: ["Land"],
+  supertypes: ["Snow"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(u: 1), (b: 1)])],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: EntersTapped(affected: Self_),
+    ),
+  ],
+)

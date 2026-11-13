@@ -1,0 +1,24 @@
+// Oracle 841f0a1d-6f84-45fb-81cc-f2d99fa9e9a2; source/rulings checked 2026-11-12.
+// CR 205.4g (snow supertype), 614.1d/614.12 (enters-tapped replacement) and 605.1a/605.3b (mana abilities).
+(
+  id: "arctic_flats",
+  name: "Arctic Flats",
+  face_id: "arctic_flats",
+  types: ["Land"],
+  supertypes: ["Snow"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(g: 1), (w: 1)])],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: EntersTapped(affected: Self_),
+    ),
+  ],
+)
