@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "b9212596-3f65-41c9-9ee8-1f4cec7f0ecf",
+  "spans": [
+    {
+      "face_id": "keening_apparition",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario ronom_unicorn_batch::ronom_unicorn_batch_cards_sacrifice_as_a_cost_and_destroy_only_enchantments",
+      "covers": "actual keening_apparition sacrifices itself as a cost, rejects non-enchantments and destroys the chosen enchantment"
+    },
+    {
+      "test": "scenario ronom_unicorn_batch::ronom_unicorn_batch_cards_fizzle_when_the_enchantment_already_left",
+      "covers": "actual keening_apparition keeps its paid sacrifice when the enchantment target already left"
+    },
+    {
+      "test": "mechanic_registry::ronom_unicorn_batch::ronom_unicorn_batch_maps_definitions",
+      "covers": "reviewed identity, body, sacrifice cost and enchantment-only destroy of keening_apparition"
+    },
+    {
+      "test": "mechanic_registry::ronom_unicorn_batch::ronom_unicorn_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for keening_apparition"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

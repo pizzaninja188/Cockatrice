@@ -345,3 +345,6 @@ mod colorless_two_mana_batch;
 
 #[path = "../timber_gorge_batch.rs"]
 mod timber_gorge_batch;
+
+#[path = "../ronom_unicorn_batch.rs"]
+mod ronom_unicorn_batch;

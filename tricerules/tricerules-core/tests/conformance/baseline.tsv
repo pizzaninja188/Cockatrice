@@ -1701,6 +1701,8 @@ kaito,_bane_of_nightmares	0	cast	exercised
 kalakscion,_hunger_tyrant	0	cast	exercised
 kalonian_behemoth	0	cast	exercised
 kalonian_tusker	0	cast	exercised
+kami_of_ancient_law	0	ability:0	unsupported: target group 0 needs a richer fixture
+kami_of_ancient_law	0	cast	exercised
 kami_of_old_stone	0	cast	exercised
 kami_of_the_crescent_moon	0	cast	exercised
 karais_technique	0	cast	exercised
@@ -1719,6 +1721,8 @@ kavaron_skywarden	0	cast	exercised
 kavu_climber	0	cast	exercised
 kederekt_creeper	0	cast	exercised
 keen-eyed_archers	0	cast	exercised
+keening_apparition	0	ability:0	unsupported: target group 0 needs a richer fixture
+keening_apparition	0	cast	exercised
 keep_out	0	cast	unsupported: face not offered by generic hand fixture
 keepers_of_the_faith	0	cast	exercised
 keldon_raider	0	cast	exercised
@@ -2568,6 +2572,8 @@ rock_soldiers	0	cast	exercised
 rocky_rebuke	0	cast	exercised
 roiling_dragonstorm	0	cast	exercised
 romantic_rendezvous	0	cast	exercised
+ronom_unicorn	0	ability:0	unsupported: target group 0 needs a richer fixture
+ronom_unicorn	0	cast	exercised
 rooftop_assassin	0	cast	exercised
 rooftop_percher	0	cast	exercised
 rootbound_crag	0	ability:0	exercised
