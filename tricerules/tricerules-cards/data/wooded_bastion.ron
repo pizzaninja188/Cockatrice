@@ -1,0 +1,28 @@
+// Oracle 61b85077-64aa-4bcc-890d-2d88da9543c0; source/rulings checked 2026-11-13.
+// CR 107.4e (hybrid mana symbols), 605.1a/605.3b (mana abilities), 106.1 (mana) and
+// 118.3 (every printed cost must be payable).
+(
+  id: "wooded_bastion",
+  name: "Wooded Bastion",
+  face_id: "wooded_bastion",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Mana("{G/W}"), Tap],
+      effect: [ProduceMana(options: [
+        (g: 2),
+        (g: 1, w: 1),
+        (w: 2),
+      ])],
+    ),
+  ],
+)

@@ -1,0 +1,28 @@
+// Oracle e6415ffb-8b7a-41c3-bedf-0d4112b7b795; source/rulings checked 2026-11-13.
+// CR 107.4e (hybrid mana symbols), 605.1a/605.3b (mana abilities), 106.1 (mana) and
+// 118.3 (every printed cost must be payable).
+(
+  id: "sunken_ruins",
+  name: "Sunken Ruins",
+  face_id: "sunken_ruins",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Mana("{U/B}"), Tap],
+      effect: [ProduceMana(options: [
+        (u: 2),
+        (u: 1, b: 1),
+        (b: 2),
+      ])],
+    ),
+  ],
+)

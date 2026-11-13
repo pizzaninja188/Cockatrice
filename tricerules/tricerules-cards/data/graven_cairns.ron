@@ -1,0 +1,28 @@
+// Oracle 5004b84a-33b7-4f6f-b2c2-7086b9087535; source/rulings checked 2026-11-13.
+// CR 107.4e (hybrid mana symbols), 605.1a/605.3b (mana abilities), 106.1 (mana) and
+// 118.3 (every printed cost must be payable).
+(
+  id: "graven_cairns",
+  name: "Graven Cairns",
+  face_id: "graven_cairns",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Mana("{B/R}"), Tap],
+      effect: [ProduceMana(options: [
+        (b: 2),
+        (b: 1, r: 1),
+        (r: 2),
+      ])],
+    ),
+  ],
+)

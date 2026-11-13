@@ -1587,3 +1587,12 @@ mod flying_etb_loot_batch;
 
 #[path = "scenario/mana_any_color_batch.rs"]
 mod mana_any_color_batch;
+
+#[path = "scenario/filter_lands_batch.rs"]
+mod filter_lands_batch;
+
+#[path = "scenario/pain_lands_batch.rs"]
+mod pain_lands_batch;
+
+#[path = "scenario/cycling_lands_batch.rs"]
+mod cycling_lands_batch;

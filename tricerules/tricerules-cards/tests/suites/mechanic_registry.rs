@@ -468,3 +468,12 @@ mod flying_etb_loot_batch;
 
 #[path = "../mana_any_color_batch.rs"]
 mod mana_any_color_batch;
+
+#[path = "../filter_lands_batch.rs"]
+mod filter_lands_batch;
+
+#[path = "../pain_lands_batch.rs"]
+mod pain_lands_batch;
+
+#[path = "../cycling_lands_batch.rs"]
+mod cycling_lands_batch;

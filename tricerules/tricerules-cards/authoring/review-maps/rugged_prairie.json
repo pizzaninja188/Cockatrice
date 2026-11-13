@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "8e7641e1-e814-4d5a-9cb3-71ad2f4ceee8",
+  "spans": [
+    {
+      "face_id": "rugged_prairie",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "rugged_prairie",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario filter_lands_batch::filter_lands_batch_cards_add_colorless_and_each_filtered_pair",
+      "covers": "actual rugged_prairie clause coverage"
+    },
+    {
+      "test": "scenario filter_lands_batch::filter_lands_batch_cards_require_the_printed_hybrid_and_tap_costs",
+      "covers": "actual rugged_prairie clause coverage"
+    },
+    {
+      "test": "scenario filter_lands_batch::filter_lands_batch_cards_reject_a_tapped_or_foreign_source",
+      "covers": "actual rugged_prairie clause coverage"
+    },
+    {
+      "test": "mechanic_registry::filter_lands_batch::filter_lands_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of rugged_prairie"
+    },
+    {
+      "test": "mechanic_registry::filter_lands_batch::filter_lands_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for rugged_prairie"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

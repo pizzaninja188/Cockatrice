@@ -1,0 +1,30 @@
+// Oracle 857febd9-cdd7-4f8e-a852-d88084b0cfbc; source/rulings checked 2026-11-13.
+// CR 109.5 ("you" on an activated ability is its activator), 605.1a/605.3a-b (mana
+// ability and immediate resolution), 120.3a (damage causes life loss), and 118.3 (tap cost).
+(
+  id: "underground_river",
+  name: "Underground River",
+  face_id: "underground_river",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [
+        ProduceMana(options: [
+          (u: 1),
+          (b: 1),
+        ]),
+        DamagePlayer(amount: 1),
+      ],
+    ),
+  ],
+)
