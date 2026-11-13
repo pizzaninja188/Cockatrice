@@ -1,0 +1,50 @@
+{
+  "format_version": 1,
+  "oracle_id": "7d5dfa6b-f685-4925-b93a-ae5815a3c0a7",
+  "spans": [
+    {
+      "face_id": "rain_of_revelation",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_program",
+        "/faces/0/spell_program/body/steps/0/kind/Perform/Draw",
+        "/faces/0/spell_program/body/steps/1/kind/Perform/Discard"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Discard"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario draw_three_discard_batch::draw_three_discard_batch_cards_draw_three_then_discard_one",
+      "covers": "actual rain_of_revelation clause coverage"
+    },
+    {
+      "test": "scenario draw_three_discard_batch::draw_three_discard_batch_cards_discard_from_hand_to_graveyard",
+      "covers": "actual rain_of_revelation clause coverage"
+    },
+    {
+      "test": "scenario draw_three_discard_batch::draw_three_discard_batch_cards_reject_cast_without_mana",
+      "covers": "actual rain_of_revelation clause coverage"
+    },
+    {
+      "test": "mechanic_registry::draw_three_discard_batch::draw_three_discard_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of rain_of_revelation"
+    },
+    {
+      "test": "mechanic_registry::draw_three_discard_batch::draw_three_discard_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for rain_of_revelation"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

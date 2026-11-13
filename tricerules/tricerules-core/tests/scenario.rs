@@ -1533,3 +1533,30 @@ mod attack_each_combat_batch;
 
 #[path = "scenario/counter_creature_spell_batch.rs"]
 mod counter_creature_spell_batch;
+
+#[path = "scenario/flying_cant_block_batch.rs"]
+mod flying_cant_block_batch;
+
+#[path = "scenario/flying_prowess_batch.rs"]
+mod flying_prowess_batch;
+
+#[path = "scenario/etb_team_pump_batch.rs"]
+mod etb_team_pump_batch;
+
+#[path = "scenario/dies_draw_batch.rs"]
+mod dies_draw_batch;
+
+#[path = "scenario/etb_gain_four_life_batch.rs"]
+mod etb_gain_four_life_batch;
+
+#[path = "scenario/aura_tap_lock_batch.rs"]
+mod aura_tap_lock_batch;
+
+#[path = "scenario/destroy_all_enchantments_batch.rs"]
+mod destroy_all_enchantments_batch;
+
+#[path = "scenario/draw_three_discard_batch.rs"]
+mod draw_three_discard_batch;
+
+#[path = "scenario/pinger_batch.rs"]
+mod pinger_batch;

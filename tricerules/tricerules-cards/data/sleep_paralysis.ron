@@ -1,0 +1,21 @@
+// Oracle 5a8bd4a4-8b10-4eef-8341-28be2afa2c00; source/rulings checked 2026-11-13.
+// CR 303.4 (Auras), 603.6a (entry trigger), 611.3 and 502.3 (doesn't untap).
+(
+  id: "sleep_paralysis",
+  name: "Sleep Paralysis",
+  face_id: "sleep_paralysis",
+  mana_cost: "{3}{U}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Tap(subject: AttachedObject)],
+  )],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([3]),
+    definition: AttachedModifier(doesnt_untap_during_untap_step: true),
+  )],
+)

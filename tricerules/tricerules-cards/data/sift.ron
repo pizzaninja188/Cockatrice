@@ -1,0 +1,19 @@
+// Oracle 6e060984-2015-4dc4-b53d-ab6bf2abdacc; source/rulings checked 2026-11-13.
+// CR 121 (draw) and 701.9 (discard), applied in printed order.
+(
+  id: "sift",
+  name: "Sift",
+  face_id: "sift",
+  mana_cost: "{3}{U}",
+  types: ["Sorcery"],
+  spell_program: Some(
+    (
+      body: (
+        steps: [
+          (id: "draw_cards", kind: Perform(Draw(count: 3))),
+          (id: "discard_cards", kind: Perform(Discard(quantity: Exact(1)))),
+        ],
+      ),
+    ),
+  ),
+)

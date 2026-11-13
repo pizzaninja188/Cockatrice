@@ -1,0 +1,18 @@
+// Oracle 84dc0aae-029b-48dc-b8d0-e93c227e32e5; source/rulings checked 2026-11-13.
+// CR 702.9a-b (flying), 702.108a-b (Prowess) and 514.2 (pump ends at cleanup).
+(
+  id: "lotus_path_djinn",
+  name: "Lotus Path Djinn",
+  face_id: "lotus_path_djinn",
+  mana_cost: "{3}{U}",
+  types: ["Creature", "Djinn", "Monk"],
+  power: 2,
+  toughness: 3,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Noncreature))),
+    effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+  )],
+)

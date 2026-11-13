@@ -1,0 +1,19 @@
+// Oracle 689c5a47-24ec-4cbf-bc93-ebb492732cad; source/rulings checked 2026-11-13.
+// CR 702.9a-b (flying) and 509.1b (block restrictions).
+(
+  id: "daggerclaw_imp",
+  name: "Daggerclaw Imp",
+  face_id: "daggerclaw_imp",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Imp"],
+  power: 3,
+  toughness: 1,
+  keywords: [Flying],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: SelfCombatRestriction(restriction: (cant_block: true)),
+    ),
+  ],
+)

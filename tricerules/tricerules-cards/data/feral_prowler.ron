@@ -1,0 +1,17 @@
+// Oracle 5bebba2d-867f-4ed1-a308-904fac32c8b6; source/rulings checked 2026-11-13.
+// CR 603.6c and 700.4 (dies trigger).
+(
+  id: "feral_prowler",
+  name: "Feral Prowler",
+  face_id: "feral_prowler",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Cat"],
+  power: 1,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfDies,
+    effect: [Draw(count: 1)],
+  )],
+)

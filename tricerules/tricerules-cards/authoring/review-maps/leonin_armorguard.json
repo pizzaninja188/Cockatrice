@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "9738f9b7-f281-44f6-a746-9c83380b35b7",
+  "spans": [
+    {
+      "face_id": "leonin_armorguard",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_team_pump_batch::etb_team_pump_batch_cards_pump_team_on_entry",
+      "covers": "actual leonin_armorguard clause coverage"
+    },
+    {
+      "test": "scenario etb_team_pump_batch::etb_team_pump_batch_cards_scope_pump_to_the_resolving_board",
+      "covers": "actual leonin_armorguard clause coverage"
+    },
+    {
+      "test": "scenario etb_team_pump_batch::etb_team_pump_batch_cards_expire_at_end_of_turn",
+      "covers": "actual leonin_armorguard clause coverage"
+    },
+    {
+      "test": "mechanic_registry::etb_team_pump_batch::etb_team_pump_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of leonin_armorguard"
+    },
+    {
+      "test": "mechanic_registry::etb_team_pump_batch::etb_team_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for leonin_armorguard"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

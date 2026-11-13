@@ -1,0 +1,17 @@
+// Oracle 875c96ce-f6e4-438b-929d-de53afdd99a1; source/rulings checked 2026-11-13.
+// CR 603.6a (entry trigger) and 119.3 (life gain).
+(
+  id: "terohs_faithful",
+  name: "Teroh's Faithful",
+  face_id: "terohs_faithful",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Human", "Cleric"],
+  power: 1,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [GainLife(amount: 4)],
+  )],
+)

@@ -1,0 +1,19 @@
+// Oracle 99dcde0b-4f4d-4d7a-89aa-8a89c256e38f; source/rulings checked 2026-11-13.
+// CR 702.9a-b (flying) and 509.1b (block restrictions).
+(
+  id: "aesthir_glider",
+  name: "Aesthir Glider",
+  face_id: "aesthir_glider",
+  mana_cost: "{3}",
+  types: ["Artifact", "Creature", "Bird", "Construct"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flying],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: SelfCombatRestriction(restriction: (cant_block: true)),
+    ),
+  ],
+)

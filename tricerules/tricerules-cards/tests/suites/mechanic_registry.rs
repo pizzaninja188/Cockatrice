@@ -414,3 +414,30 @@ mod attack_each_combat_batch;
 
 #[path = "../counter_creature_spell_batch.rs"]
 mod counter_creature_spell_batch;
+
+#[path = "../flying_cant_block_batch.rs"]
+mod flying_cant_block_batch;
+
+#[path = "../flying_prowess_batch.rs"]
+mod flying_prowess_batch;
+
+#[path = "../etb_team_pump_batch.rs"]
+mod etb_team_pump_batch;
+
+#[path = "../dies_draw_batch.rs"]
+mod dies_draw_batch;
+
+#[path = "../etb_gain_four_life_batch.rs"]
+mod etb_gain_four_life_batch;
+
+#[path = "../aura_tap_lock_batch.rs"]
+mod aura_tap_lock_batch;
+
+#[path = "../destroy_all_enchantments_batch.rs"]
+mod destroy_all_enchantments_batch;
+
+#[path = "../draw_three_discard_batch.rs"]
+mod draw_three_discard_batch;
+
+#[path = "../pinger_batch.rs"]
+mod pinger_batch;

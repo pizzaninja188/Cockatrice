@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "5bebba2d-867f-4ed1-a308-904fac32c8b6",
+  "spans": [
+    {
+      "face_id": "feral_prowler",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario dies_draw_batch::dies_draw_batch_cards_draw_when_they_die",
+      "covers": "actual feral_prowler clause coverage"
+    },
+    {
+      "test": "scenario dies_draw_batch::dies_draw_batch_cards_draw_only_for_their_controller",
+      "covers": "actual feral_prowler clause coverage"
+    },
+    {
+      "test": "scenario dies_draw_batch::dies_draw_batch_cards_do_not_draw_when_exiled",
+      "covers": "actual feral_prowler clause coverage"
+    },
+    {
+      "test": "mechanic_registry::dies_draw_batch::dies_draw_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of feral_prowler"
+    },
+    {
+      "test": "mechanic_registry::dies_draw_batch::dies_draw_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for feral_prowler"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

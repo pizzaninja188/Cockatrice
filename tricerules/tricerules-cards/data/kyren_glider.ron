@@ -1,0 +1,19 @@
+// Oracle 6ae3a901-9f9a-4a99-94db-22c38fda7aef; source/rulings checked 2026-11-13.
+// CR 702.9a-b (flying) and 509.1b (block restrictions).
+(
+  id: "kyren_glider",
+  name: "Kyren Glider",
+  face_id: "kyren_glider",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Goblin"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: SelfCombatRestriction(restriction: (cant_block: true)),
+    ),
+  ],
+)

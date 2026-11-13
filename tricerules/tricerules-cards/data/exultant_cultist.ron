@@ -1,0 +1,17 @@
+// Oracle e802442e-6a78-4c15-9034-fc8872470208; source/rulings checked 2026-11-13.
+// CR 603.6c and 700.4 (dies trigger).
+(
+  id: "exultant_cultist",
+  name: "Exultant Cultist",
+  face_id: "exultant_cultist",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Human", "Wizard"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfDies,
+    effect: [Draw(count: 1)],
+  )],
+)

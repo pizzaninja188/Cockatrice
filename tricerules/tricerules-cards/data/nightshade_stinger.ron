@@ -1,0 +1,19 @@
+// Oracle c57edca9-b71e-4ec1-84d5-4b178969ccb7; source/rulings checked 2026-11-13.
+// CR 702.9a-b (flying) and 509.1b (block restrictions).
+(
+  id: "nightshade_stinger",
+  name: "Nightshade Stinger",
+  face_id: "nightshade_stinger",
+  mana_cost: "{B}",
+  types: ["Creature", "Faerie", "Rogue"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: SelfCombatRestriction(restriction: (cant_block: true)),
+    ),
+  ],
+)
