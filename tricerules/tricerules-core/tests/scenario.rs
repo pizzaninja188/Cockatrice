@@ -1614,3 +1614,12 @@ mod dies_gain_life_batch;
 
 #[path = "scenario/team_pump_activated_batch.rs"]
 mod team_pump_activated_batch;
+
+#[path = "scenario/refuge_lands_batch.rs"]
+mod refuge_lands_batch;
+
+#[path = "scenario/talisman_cycle_batch.rs"]
+mod talisman_cycle_batch;
+
+#[path = "scenario/islandwalk_batch.rs"]
+mod islandwalk_batch;

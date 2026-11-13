@@ -1,0 +1,30 @@
+// Oracle 00e35322-1a9a-41e3-9ce1-359c8eaa3bc7; source/rulings checked 2026-11-13.
+// CR 605.1a/605.3a-b (mana abilities and immediate resolution), 120.3a (damage to a
+// player), and 118.3 (tap cost must be payable).
+(
+  id: "talisman_of_progress",
+  name: "Talisman of Progress",
+  face_id: "talisman_of_progress",
+  mana_cost: "{2}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [
+        ProduceMana(options: [
+          (w: 1),
+          (u: 1),
+        ]),
+        DamagePlayer(amount: 1),
+      ],
+    ),
+  ],
+)

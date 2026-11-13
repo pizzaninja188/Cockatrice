@@ -495,3 +495,12 @@ mod dies_gain_life_batch;
 
 #[path = "../team_pump_activated_batch.rs"]
 mod team_pump_activated_batch;
+
+#[path = "../refuge_lands_batch.rs"]
+mod refuge_lands_batch;
+
+#[path = "../talisman_cycle_batch.rs"]
+mod talisman_cycle_batch;
+
+#[path = "../islandwalk_batch.rs"]
+mod islandwalk_batch;

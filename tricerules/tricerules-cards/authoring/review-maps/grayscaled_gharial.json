@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "59483597-4d8c-4cdc-8bb5-226b1eef10f5",
+  "spans": [
+    {
+      "face_id": "grayscaled_gharial",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/evasions/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Evasion::Landwalk",
+      "typed_path": "/faces/0/evasions/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario islandwalk_batch::islandwalk_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual grayscaled_gharial clause coverage"
+    },
+    {
+      "test": "scenario islandwalk_batch::islandwalk_batch_cards_cannot_be_blocked_while_defender_controls_an_island",
+      "covers": "actual grayscaled_gharial clause coverage"
+    },
+    {
+      "test": "scenario islandwalk_batch::islandwalk_batch_cards_can_be_blocked_without_an_island",
+      "covers": "actual grayscaled_gharial clause coverage"
+    },
+    {
+      "test": "mechanic_registry::islandwalk_batch::islandwalk_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of grayscaled_gharial"
+    },
+    {
+      "test": "mechanic_registry::islandwalk_batch::islandwalk_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for grayscaled_gharial"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
