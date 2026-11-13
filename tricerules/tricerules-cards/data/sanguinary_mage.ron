@@ -1,0 +1,19 @@
+// Oracle d3fb0388-bfa8-4d22-831c-40a81a11d8c6; source/rulings checked 2026-11-12.
+// CR 702.108a-b (Prowess) and 514.2 (the pump ends at cleanup).
+(
+  id: "sanguinary_mage",
+  name: "Sanguinary Mage",
+  face_id: "sanguinary_mage",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Vampire", "Wizard"],
+  power: 1,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Noncreature))),
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    ),
+  ],
+)

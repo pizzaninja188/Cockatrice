@@ -1,0 +1,19 @@
+// Oracle 3ad5af12-1741-427d-92c4-6a730cd4faa2; source/rulings checked 2026-11-12.
+// CR 702.108a-b (Prowess) and 514.2 (the pump ends at cleanup).
+(
+  id: "lightning_visionary",
+  name: "Lightning Visionary",
+  face_id: "lightning_visionary",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Minotaur", "Shaman"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Noncreature))),
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    ),
+  ],
+)

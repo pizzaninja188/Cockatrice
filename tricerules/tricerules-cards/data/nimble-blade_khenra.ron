@@ -1,0 +1,19 @@
+// Oracle 09c68fb5-2000-4bb8-b03b-94b093e50bca; source/rulings checked 2026-11-12.
+// CR 702.108a-b (Prowess) and 514.2 (the pump ends at cleanup).
+(
+  id: "nimble-blade_khenra",
+  name: "Nimble-Blade Khenra",
+  face_id: "nimble_blade_khenra",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Jackal", "Warrior"],
+  power: 1,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Noncreature))),
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    ),
+  ],
+)

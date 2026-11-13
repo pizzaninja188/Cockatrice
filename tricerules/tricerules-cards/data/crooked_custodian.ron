@@ -1,0 +1,18 @@
+// Oracle 9c39bc53-52d3-4610-920e-5607a625b01f; source/rulings checked 2026-11-12.
+// CR 614.1d/614.12 (enters-tapped replacement effect).
+(
+  id: "crooked_custodian",
+  name: "Crooked Custodian",
+  face_id: "crooked_custodian",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Ogre", "Rogue"],
+  power: 3,
+  toughness: 2,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: EntersTapped(affected: Self_),
+    ),
+  ],
+)

@@ -1,0 +1,18 @@
+// Oracle 549a3f53-f90e-4af0-bbc5-2c4b9df30008; source/rulings checked 2026-11-12.
+// CR 614.1d/614.12 (enters-tapped replacement effect).
+(
+  id: "wolf_cove_villager",
+  name: "Wolf Cove Villager",
+  face_id: "wolf_cove_villager",
+  mana_cost: "{W}",
+  types: ["Creature", "Human", "Peasant"],
+  power: 2,
+  toughness: 2,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: EntersTapped(affected: Self_),
+    ),
+  ],
+)

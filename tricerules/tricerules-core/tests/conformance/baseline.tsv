@@ -169,6 +169,7 @@ atraxa,_praetors_voice	0	cast	exercised
 attentive_sunscribe	0	cast	exercised
 attercop	0	cast	exercised
 audacious_thief	0	cast	exercised
+augury_owl	0	cast	exercised
 aurons_inspiration	0	cast	exercised
 auroral_procession	0	cast	exercised
 auspicious_arrival	0	cast	exercised
@@ -327,6 +328,7 @@ blood_tithe	0	cast	exercised
 bloodcrazed_paladin	0	cast	exercised
 bloodfell_caves	0	ability:0	exercised
 bloodfell_caves	0	land	exercised
+bloodfire_expert	0	cast	exercised
 bloodthirsty_aerialist	0	cast	exercised
 blooming_marsh	0	ability:0	exercised
 blooming_marsh	0	land	exercised
@@ -584,6 +586,7 @@ cloudbound_moogle	0	ability:0	unsupported: ability not offered by generic battle
 cloudbound_moogle	0	cast	exercised
 cloudcrown_oak	0	cast	exercised
 cloudkin_seer	0	cast	exercised
+cloudreader_sphinx	0	cast	exercised
 cloudsculpt_technician	0	cast	exercised
 coastal_peak	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 coastal_tower	0	ability:0	exercised
@@ -680,6 +683,7 @@ creosote_heath	0	ability:0	exercised
 creosote_heath	0	land	exercised
 crimson_operative	0	cast	exercised
 crippling_chill	0	cast	exercised
+crooked_custodian	0	cast	exercised
 crossroads_watcher	0	cast	exercised
 cruel_alliance	0	cast	exercised
 cruel_truths	0	cast	exercised
@@ -1021,6 +1025,7 @@ faerie_dreamthief	0	cast	exercised
 faerie_fencing	0	cast	exercised
 faerie_invaders	0	cast	exercised
 faerie_miscreant	0	cast	exercised
+faerie_seer	0	cast	exercised
 failed_fording	0	cast	exercised
 faithbearer_paladin	0	cast	exercised
 faithless_looting	0	cast	exercised
@@ -1166,6 +1171,7 @@ forest_bear	0	cast	exercised
 forgotten_cave	0	ability:0	exercised
 forgotten_cave	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 forgotten_cave	0	land	exercised
+forgotten_sentinel	0	cast	exercised
 forlorn_flats	0	ability:0	exercised
 forlorn_flats	0	land	exercised
 forsaken_sanctuary	0	ability:0	exercised
@@ -1550,6 +1556,7 @@ honor	0	cast	exercised
 hop_to_it	0	cast	exercised
 hopeful_vigil	0	ability:0	exercised
 hopeful_vigil	0	cast	exercised
+horizon_scholar	0	cast	exercised
 hornet_cobra	0	cast	exercised
 horrid_vigor	0	cast	exercised
 hostile_minotaur	0	cast	exercised
@@ -1700,6 +1707,7 @@ jeskai_brushmaster	0	cast	exercised
 jeskai_devotee	0	ability:0	exercised
 jeskai_devotee	0	cast	exercised
 jeskai_shrinekeeper	0	cast	exercised
+jeskai_student	0	cast	exercised
 jetmirs_garden	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 jhessian_lookout	0	cast	exercised
 jhovall_queen	0	cast	exercised
@@ -1861,6 +1869,7 @@ lightning_helix	0	cast	exercised
 lightning_hounds	0	cast	exercised
 lightning_stormkin	0	cast	exercised
 lightning_strike	0	cast	exercised
+lightning_visionary	0	cast	exercised
 lightshell_duo	0	cast	exercised
 lightshield_parry	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 lightshield_parry	0	cast	exercised
@@ -2173,6 +2182,7 @@ nightblade_brigade	0	cast	exercised
 nightguard_patrol	0	cast	exercised
 nightveil_predator	0	cast	exercised
 nightwhorl_hermit	0	cast	exercised
+nimble-blade_khenra	0	cast	exercised
 nimble_birdsticker	0	cast	exercised
 nimble_innovator	0	cast	exercised
 nimble_thopterist	0	cast	exercised
@@ -2620,6 +2630,7 @@ rorix_bladewing	0	cast	exercised
 rotted_hulk	0	cast	exercised
 rotted_hystrix	0	cast	exercised
 rotting_fensnake	0	cast	exercised
+rotting_legion	0	cast	exercised
 rotting_mastodon	0	cast	exercised
 rough_rhino_cavalry	0	ability:0	exercised
 rough_rhino_cavalry	0	cast	exercised
@@ -2654,6 +2665,7 @@ rune-sealed_wall	0	ability:0	exercised
 rune-sealed_wall	0	cast	exercised
 runeclaw_bear	0	cast	exercised
 russet_wolves	0	cast	exercised
+rusted_sentinel	0	cast	exercised
 rustler_rampage	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
 rustwing_falcon	0	cast	exercised
 rydias_return	0	cast	exercised
@@ -2694,6 +2706,7 @@ samis_curiosity	0	cast	exercised
 sandskitter_outrider	0	cast	exercised
 sandsteppe_citadel	0	ability:0	exercised
 sandsteppe_citadel	0	land	exercised
+sanguinary_mage	0	cast	exercised
 sanguine_syphoner	0	cast	exercised
 sanitation_automaton	0	cast	exercised
 sapling_nursery	0	ability:0	exercised
@@ -2724,6 +2737,7 @@ scarecrow_guide	0	ability:0	exercised
 scarecrow_guide	0	cast	exercised
 scarlet_witch,_wanda_maximoff	0	cast	exercised
 scarwood_goblins	0	cast	exercised
+scarwood_treefolk	0	cast	exercised
 scathe_zombies	0	cast	exercised
 scattered_groves	0	ability:0	exercised
 scattered_groves	0	ability:1	unsupported: ability not offered by generic battlefield fixture
@@ -2778,6 +2792,7 @@ seize_the_spoils	0	cast	unsupported: required cast-cost group needs a specialize
 seized_from_slumber	0	cast	exercised
 selesnya_guildgate	0	ability:0	exercised
 selesnya_guildgate	0	land	exercised
+senate_griffin	0	cast	exercised
 sentinel_spider	0	cast	exercised
 sentinels_of_glen_elendra	0	cast	exercised
 sephiroths_intervention	0	cast	exercised
@@ -2797,6 +2812,7 @@ sewn-eye_drake	0	cast	exercised
 shadow_glider	0	cast	exercised
 shadowy_backstreet	0	land	exercised
 shaman_of_spring	0	cast	exercised
+shambling_ghoul	0	cast	exercised
 shanodin_dryads	0	cast	exercised
 sharae_of_numbing_depths	0	cast	exercised
 shared_roots	0	cast	exercised
@@ -2853,6 +2869,7 @@ silent_observer	0	cast	exercised
 silver_erne	0	cast	exercised
 silver_myr	0	ability:0	exercised
 silver_myr	0	cast	exercised
+silver_raven	0	cast	exercised
 silverback_ape	0	cast	exercised
 silverbeak_griffin	0	cast	exercised
 silverclaw_griffin	0	cast	exercised
@@ -3266,6 +3283,7 @@ textbook_tabulator	0	cast	exercised
 tezzerets_gambit	0	cast	exercised
 thaumaton_torpedo	0	ability:0	exercised
 thaumaton_torpedo	0	cast	exercised
+thaumaturges_familiar	0	cast	exercised
 thawbringer	0	cast	exercised
 the_arkenstone_seek_the_heart	0	cast	exercised
 the_arkenstone_seek_the_heart	1	cast	exercised
@@ -3435,6 +3453,7 @@ tyrox,_saurid_tyrant	0	cast	exercised
 ukud_cobra	0	cast	exercised
 ultron_drone	0	ability:0	exercised
 ultron_drone	0	cast	exercised
+umara_entangler	0	cast	exercised
 umbral_collar_zealot	0	ability:0	exercised
 umbral_collar_zealot	0	cast	exercised
 umbral_expanse	0	ability:1	unsupported: ability not offered by generic battlefield fixture
@@ -3462,6 +3481,7 @@ unexpected_assistance	0	cast	exercised
 unflinching_courage	0	cast	exercised
 unforgiving_aim	0	cast	exercised
 unfortunate_accident	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
+unhallowed_phalanx	0	cast	exercised
 unholy_indenture	0	cast	exercised
 unholy_strength	0	cast	exercised
 university_campus	0	ability:0	exercised
@@ -3511,6 +3531,7 @@ vault_skirge	0	cast	exercised
 vaynes_treachery	0	cast	exercised
 vector,_imperial_capital	0	ability:0	exercised
 vector,_imperial_capital	0	land	exercised
+vedalken_blademaster	0	cast	exercised
 veloheart_bike	0	ability:0	exercised
 veloheart_bike	0	ability:1	unsupported: payment preview rejected: illegal command: missing tap cost selection
 veloheart_bike	0	cast	exercised
@@ -3686,6 +3707,7 @@ wildfire_wickerfolk	0	cast	exercised
 wildheart_invoker	0	ability:0	exercised
 wildheart_invoker	0	cast	exercised
 wildwood_patrol	0	cast	exercised
+willow-wind	0	cast	exercised
 willow_elf	0	cast	exercised
 willow_faerie	0	cast	exercised
 wilt-leaf_cavaliers	0	cast	exercised
@@ -3710,6 +3732,7 @@ witchs_familiar	0	cast	exercised
 witchstalker_frenzy	0	cast	exercised
 withering_torment	0	cast	exercised
 witness_protection	0	cast	exercised
+wolf_cove_villager	0	cast	exercised
 wood_elves	0	cast	exercised
 woodland_druid	0	cast	exercised
 woodland_mystic	0	ability:0	exercised

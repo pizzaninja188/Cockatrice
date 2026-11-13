@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "2acc1657-d716-41d7-aedf-9b080a58ec83",
+  "spans": [
+    {
+      "face_id": "shambling_ghoul",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario enters_tapped_creatures_batch::enters_tapped_creatures_batch_cards_enter_tapped_from_hand",
+      "covers": "actual shambling_ghoul enters tapped when cast and has its printed body"
+    },
+    {
+      "test": "scenario enters_tapped_creatures_batch::enters_tapped_creatures_batch_cards_untap_on_their_controllers_next_turn",
+      "covers": "actual shambling_ghoul untaps during its controller next untap step"
+    },
+    {
+      "test": "mechanic_registry::enters_tapped_creatures_batch::enters_tapped_creatures_batch_maps_definitions",
+      "covers": "reviewed identity, printed body and entry replacement of shambling_ghoul"
+    },
+    {
+      "test": "mechanic_registry::enters_tapped_creatures_batch::enters_tapped_creatures_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for shambling_ghoul"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,20 @@
+// Oracle 44c5f8e1-d9b8-4067-a60a-1ecc8bd11145; source/rulings checked 2026-11-12.
+// CR 702.9 (Flying), 603.6a (enters trigger) and 701.22 (Scry).
+(
+  id: "augury_owl",
+  name: "Augury Owl",
+  face_id: "augury_owl",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Bird"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Scry(count: 3)],
+    ),
+  ],
+)

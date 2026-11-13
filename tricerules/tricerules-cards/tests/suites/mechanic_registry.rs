@@ -369,3 +369,12 @@ mod any_color_mana_batch;
 
 #[path = "../graveyard_two_to_hand_batch.rs"]
 mod graveyard_two_to_hand_batch;
+
+#[path = "../enters_tapped_creatures_batch.rs"]
+mod enters_tapped_creatures_batch;
+
+#[path = "../prowess_creatures_batch.rs"]
+mod prowess_creatures_batch;
+
+#[path = "../flying_etb_scry_batch.rs"]
+mod flying_etb_scry_batch;

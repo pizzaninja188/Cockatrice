@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "7ddf9c12-8f75-481c-a218-d42f925c6503",
+  "spans": [
+    {
+      "face_id": "senate_griffin",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "senate_griffin",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flying_etb_scry_batch::flying_etb_scry_batch_cards_have_flying_and_scry_their_printed_count",
+      "covers": "actual senate_griffin has Flying and parks a scry choice with its printed count"
+    },
+    {
+      "test": "scenario flying_etb_scry_batch::flying_etb_scry_batch_cards_offer_only_their_printed_top_cards",
+      "covers": "actual senate_griffin scry candidates are exactly its printed top cards"
+    },
+    {
+      "test": "mechanic_registry::flying_etb_scry_batch::flying_etb_scry_batch_maps_definitions",
+      "covers": "reviewed identity, Flying and printed scry count of senate_griffin"
+    },
+    {
+      "test": "mechanic_registry::flying_etb_scry_batch::flying_etb_scry_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for senate_griffin"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

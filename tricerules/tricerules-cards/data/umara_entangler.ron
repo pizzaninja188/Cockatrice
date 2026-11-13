@@ -1,0 +1,19 @@
+// Oracle d32cf19d-a974-4161-851d-dcbf37069e26; source/rulings checked 2026-11-12.
+// CR 702.108a-b (Prowess) and 514.2 (the pump ends at cleanup).
+(
+  id: "umara_entangler",
+  name: "Umara Entangler",
+  face_id: "umara_entangler",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Merfolk", "Rogue", "Ally"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Noncreature))),
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    ),
+  ],
+)
