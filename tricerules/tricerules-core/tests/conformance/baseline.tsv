@@ -158,6 +158,7 @@ asgardian_citadel	0	ability:0	exercised
 asgardian_citadel	0	land	exercised
 ashcoat_bear	0	cast	exercised
 ashioks_reaper	0	cast	exercised
+assassinate	0	cast	unsupported: target group 0 needs a richer fixture
 assault_griffin	0	cast	exercised
 assault_zeppelid	0	cast	exercised
 assert_perfection	0	cast	exercised
@@ -771,6 +772,7 @@ deadly_precision	0	cast	unsupported: required cast-cost group needs a specialize
 deadly_recluse	0	cast	exercised
 deadly_riposte	0	cast	unsupported: target group 0 needs a richer fixture
 death_in_the_family	0	cast	exercised
+death_stroke	0	cast	unsupported: target group 0 needs a richer fixture
 deathcap_glade	0	ability:0	exercised
 deathcap_glade	0	land	exercised
 deathcap_marionette	0	cast	exercised
@@ -1034,6 +1036,7 @@ faithbearer_paladin	0	cast	exercised
 faithless_looting	0	cast	exercised
 falkenrath_reaver	0	cast	exercised
 false_defeat	0	cast	exercised
+false_summoning	0	cast	unsupported: target group 0 needs a richer fixture
 family_reunion	0	cast	exercised
 fanatic_of_the_harrowing	0	cast	exercised
 fanatical_offering	0	cast	unsupported: required cast-cost group needs a specialized fixture
@@ -2386,6 +2389,7 @@ prairie_stream	0	ability:0	exercised
 prairie_stream	0	land	exercised
 prakhata_club_security	0	cast	exercised
 prayer_of_binding	0	cast	exercised
+preemptive_strike	0	cast	unsupported: target group 0 needs a richer fixture
 preordain	0	cast	exercised
 preposterous_proportions	0	cast	exercised
 pretending_poxbearers	0	cast	exercised
@@ -2553,6 +2557,7 @@ reliquary_tower	0	ability:0	exercised
 reliquary_tower	0	land	exercised
 reluctant_dounguard	0	cast	exercised
 remnant_elemental	0	cast	exercised
+remove_soul	0	cast	unsupported: target group 0 needs a richer fixture
 renegade_demon	0	cast	exercised
 renegade_troops	0	cast	exercised
 repel_calamity	0	cast	unsupported: target group 0 needs a richer fixture
@@ -3195,6 +3200,7 @@ swamp	0	land	exercised
 swan_song	0	cast	unsupported: target group 0 needs a richer fixture
 sweettooth_witch	0	ability:0	unsupported: nonmana costs need additional fixture resources
 sweettooth_witch	0	cast	exercised
+swift_response	0	cast	unsupported: target group 0 needs a richer fixture
 swift_spinner	0	cast	exercised
 swiftblade_vindicator	0	cast	exercised
 swiftfoot_boots	0	ability:0	exercised
@@ -3223,6 +3229,7 @@ tajuru_pathwarden	0	cast	exercised
 tajuru_snarecaster	0	cast	exercised
 take_the_fall	0	cast	exercised
 take_up_the_shield	0	cast	exercised
+take_vengeance	0	cast	unsupported: target group 0 needs a richer fixture
 taken_by_nightmares	0	cast	exercised
 talas_air_ship	0	cast	exercised
 talas_merchant	0	cast	exercised
@@ -3550,6 +3557,7 @@ veloheart_bike	0	ability:1	unsupported: payment preview rejected: illegal comman
 veloheart_bike	0	cast	exercised
 venerable_lammasu	0	cast	exercised
 venerable_monk	0	cast	exercised
+vengeance	0	cast	unsupported: target group 0 needs a richer fixture
 vengeful_tracker	0	cast	exercised
 venomized_cat	0	cast	exercised
 venomthrope	0	cast	exercised
