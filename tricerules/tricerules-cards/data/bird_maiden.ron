@@ -1,0 +1,12 @@
+// Oracle bddd6b93-7c69-427a-97ee-0c1f9f950f09; source/rulings checked 2026-11-12.
+// CR 702.9a-b (Flying evasion ability).
+(
+  id: "bird_maiden",
+  name: "Bird Maiden",
+  face_id: "bird_maiden",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Human", "Bird"],
+  power: 1,
+  toughness: 2,
+  keywords: [Flying],
+)

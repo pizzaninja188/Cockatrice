@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "b5f4b732-099c-46e7-a03d-d8e4c78245b8",
+  "spans": [
+    {
+      "face_id": "smelt",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting/groups/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter.permanent_types",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen/permanent_types"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario destroy_artifact_batch::destroy_artifact_batch_cards_destroy_an_artifact",
+      "covers": "actual smelt destroys the targeted artifact"
+    },
+    {
+      "test": "scenario destroy_artifact_batch::destroy_artifact_batch_cards_reject_nonartifact_targets_without_spending_mana",
+      "covers": "actual smelt rejects a nonartifact target without spending mana"
+    },
+    {
+      "test": "scenario destroy_artifact_batch::destroy_artifact_batch_cards_fizzle_stale_targets",
+      "covers": "actual smelt does not destroy a stale artifact target"
+    },
+    {
+      "test": "mechanic_registry::destroy_artifact_batch::destroy_artifact_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of smelt"
+    },
+    {
+      "test": "mechanic_registry::destroy_artifact_batch::destroy_artifact_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for smelt"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

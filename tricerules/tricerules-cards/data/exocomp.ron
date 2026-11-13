@@ -1,0 +1,12 @@
+// Oracle fb208157-67e5-45e2-bf08-7671f65cf520; source/rulings checked 2026-11-12.
+// CR 702.9a-b (Flying evasion ability).
+(
+  id: "exocomp",
+  name: "Exocomp",
+  face_id: "exocomp",
+  mana_cost: "{2}{U}",
+  types: ["Artifact", "Creature", "Construct"],
+  power: 3,
+  toughness: 1,
+  keywords: [Flying],
+)

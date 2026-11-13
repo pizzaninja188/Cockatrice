@@ -1,0 +1,20 @@
+// Oracle 3d6314b5-3ace-4793-9549-7b17db2a735d; source/rulings checked 2026-11-12.
+// CR 605.1a/605.3b (tap mana ability) and 106.1a-b (colorless mana).
+(
+  id: "sunastian_falconer",
+  name: "Sunastian Falconer",
+  face_id: "sunastian_falconer",
+  mana_cost: "{3}{R}{G}",
+  types: ["Creature", "Human", "Shaman"],
+  supertypes: ["Legendary"],
+  power: 4,
+  toughness: 4,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 2)])],
+    ),
+  ],
+)

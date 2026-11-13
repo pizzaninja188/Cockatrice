@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "bddd6b93-7c69-427a-97ee-0c1f9f950f09",
+  "spans": [
+    {
+      "face_id": "bird_maiden",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flying_creatures_batch::flying_creatures_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual bird_maiden casts with its exact printed mana, color, type line, power and toughness"
+    },
+    {
+      "test": "scenario flying_creatures_batch::flying_creatures_batch_cards_cannot_be_blocked_by_ground_creatures",
+      "covers": "actual bird_maiden rejects a ground blocker"
+    },
+    {
+      "test": "scenario flying_creatures_batch::flying_creatures_batch_cards_can_be_blocked_by_flying_or_reach",
+      "covers": "actual bird_maiden can be blocked by a flying or reach creature"
+    },
+    {
+      "test": "mechanic_registry::flying_creatures_batch::flying_creatures_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of bird_maiden"
+    },
+    {
+      "test": "mechanic_registry::flying_creatures_batch::flying_creatures_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for bird_maiden"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

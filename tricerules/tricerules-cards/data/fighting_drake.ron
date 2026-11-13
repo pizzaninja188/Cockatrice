@@ -1,0 +1,12 @@
+// Oracle b13cc6be-ee35-491e-a437-f7fc191f24c7; source/rulings checked 2026-11-12.
+// CR 702.9a-b (Flying evasion ability).
+(
+  id: "fighting_drake",
+  name: "Fighting Drake",
+  face_id: "fighting_drake",
+  mana_cost: "{2}{U}{U}",
+  types: ["Creature", "Drake"],
+  power: 2,
+  toughness: 4,
+  keywords: [Flying],
+)

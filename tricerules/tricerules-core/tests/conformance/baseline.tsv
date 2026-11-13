@@ -143,6 +143,7 @@ argothian_sprite	0	cast	exercised
 argothian_swine	0	cast	exercised
 armored_cancrix	0	cast	exercised
 armored_griffin	0	cast	exercised
+armored_pegasus	0	cast	exercised
 armored_warhorse	0	cast	exercised
 armored_whirl_turtle	0	cast	exercised
 armored_wolf-rider	0	cast	exercised
@@ -295,6 +296,7 @@ billowing_shriekmass	0	cast	exercised
 biomechan_engineer	0	ability:0	exercised
 biomechan_engineer	0	cast	exercised
 biosynthic_burst	0	cast	exercised
+bird_maiden	0	cast	exercised
 birnin_zana_plaza	0	ability:0	exercised
 birnin_zana_plaza	0	land	exercised
 bishops_soldier	0	cast	exercised
@@ -1004,6 +1006,7 @@ evolving_wilds	0	land	exercised
 exclusion_mage	0	cast	exercised
 exdeath,_void_warlock_neo_exdeath,_dimensions_end	0	cast	exercised
 exdeath,_void_warlock_neo_exdeath,_dimensions_end	1	cast	intentional: face unavailable from hand
+exocomp	0	cast	exercised
 exorcise	0	cast	exercised
 exosuit_savior	0	cast	exercised
 expedition_envoy	0	cast	exercised
@@ -1085,6 +1088,7 @@ fiery_hellhound	0	ability:0	exercised
 fiery_hellhound	0	cast	exercised
 fiery_temper	0	cast	exercised
 fight_on!	0	cast	exercised
+fighting_drake	0	cast	exercised
 final_showdown	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
 final_vengeance	0	cast	unsupported: required cast-cost group needs a specialized fixture
 finishing_blow	0	cast	exercised
@@ -2610,6 +2614,7 @@ riverwalk_technique	0	cast	exercised
 roadside_blowout	0	cast	exercised
 roamers_routine	0	cast	exercised
 roc_hunter	0	cast	exercised
+roc_of_kher_ridges	0	cast	exercised
 rock_soldiers	0	cast	exercised
 rocky_rebuke	0	cast	exercised
 roiling_dragonstorm	0	cast	exercised
@@ -2770,6 +2775,7 @@ scrounging_skyray	0	ability:0	unsupported: ability not offered by generic battle
 scrounging_skyray	0	cast	exercised
 scrubland	0	ability:0	exercised
 scrubland	0	land	exercised
+scryb_sprites	0	cast	exercised
 sea_eagle	0	cast	exercised
 seacoast_drake	0	cast	exercised
 seagraf_skaab	0	cast	exercised
@@ -2818,6 +2824,7 @@ sharae_of_numbing_depths	0	cast	exercised
 shared_roots	0	cast	exercised
 sharlayan,_nation_of_scholars	0	ability:0	exercised
 sharlayan,_nation_of_scholars	0	land	exercised
+shatter	0	cast	exercised
 shattered_acolyte	0	ability:0	exercised
 shattered_acolyte	0	cast	exercised
 shattered_sanctum	0	ability:0	exercised
@@ -2946,6 +2953,7 @@ smaug,_the_great_calamity_spew_flame	0	cast	exercised
 smaug,_the_great_calamity_spew_flame	1	cast	exercised
 smaug_the_magnificent	0	cast	exercised
 smaugs_fury	0	cast	exercised
+smelt	0	cast	exercised
 smugglers_buggy	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
 snakeskin_veil	0	cast	exercised
 snapping_drake	0	cast	exercised
@@ -3025,6 +3033,7 @@ split_up	0	cast	exercised
 sporecap_spider	0	cast	exercised
 spotcycle_scouter	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
 spotcycle_scouter	0	cast	exercised
+spotted_griffin	0	cast	exercised
 spring_of_eternal_peace	0	cast	exercised
 spring_splasher	0	cast	exercised
 springleaf_drum	0	ability:0	exercised
@@ -3142,6 +3151,8 @@ sun-blessed_peak	0	ability:1	exercised
 sun-blessed_peak	0	land	exercised
 sun-dappled_celebrant	0	cast	exercised
 sun_sentinel	0	cast	exercised
+sunastian_falconer	0	ability:0	exercised
+sunastian_falconer	0	cast	exercised
 sunblade_angel	0	cast	exercised
 sunderflock	0	cast	exercised
 sundering_eruption_volcanic_fissure	0	cast	exercised
@@ -3494,6 +3505,8 @@ unsubtle_mockery	0	cast	exercised
 unsummon	0	cast	exercised
 untamed_hunger	0	cast	exercised
 updraft_elemental	0	cast	exercised
+ur-golems_eye	0	ability:0	exercised
+ur-golems_eye	0	cast	exercised
 urban_retreat	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 urenis_rebuff	0	cast	exercised
 urzas_cave	0	ability:0	exercised
@@ -3543,6 +3556,7 @@ venomthrope	0	cast	exercised
 vensers_sliver	0	cast	exercised
 verdant_outrider	0	ability:0	exercised
 verdant_outrider	0	cast	exercised
+verdigris	0	cast	exercised
 vernadi_shieldmate	0	cast	exercised
 veteran_cavalier	0	cast	exercised
 vexing_gull	0	cast	exercised
@@ -3678,6 +3692,8 @@ watery_grave	0	land	exercised
 wayward_giant	0	cast	exercised
 we_say_thee_nay!	0	cast	unsupported: target group 0 needs a richer fixture
 weave_fate	0	cast	exercised
+weaver_of_currents	0	ability:0	exercised
+weaver_of_currents	0	cast	exercised
 web-warriors	0	cast	exercised
 web_up	0	cast	exercised
 wedgelight_rammer	0	ability:0	exercised

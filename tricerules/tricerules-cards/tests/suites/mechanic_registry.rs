@@ -378,3 +378,12 @@ mod prowess_creatures_batch;
 
 #[path = "../flying_etb_scry_batch.rs"]
 mod flying_etb_scry_batch;
+
+#[path = "../flying_creatures_batch.rs"]
+mod flying_creatures_batch;
+
+#[path = "../colorless_double_mana_batch.rs"]
+mod colorless_double_mana_batch;
+
+#[path = "../destroy_artifact_batch.rs"]
+mod destroy_artifact_batch;
