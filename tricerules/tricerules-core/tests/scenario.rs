@@ -1596,3 +1596,12 @@ mod pain_lands_batch;
 
 #[path = "scenario/cycling_lands_batch.rs"]
 mod cycling_lands_batch;
+
+#[path = "scenario/cycling_color_lands_batch.rs"]
+mod cycling_color_lands_batch;
+
+#[path = "scenario/vivid_lands_batch.rs"]
+mod vivid_lands_batch;
+
+#[path = "scenario/explore_etb_batch.rs"]
+mod explore_etb_batch;

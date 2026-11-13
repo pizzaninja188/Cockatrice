@@ -1,0 +1,43 @@
+// Oracle 2da7c49f-cc1e-45d9-9cbf-067e92b0daef; source/rulings checked 2026-11-13.
+// CR 614.1c-d/614.12 and 616.1 (entry replacements and their ordering), 118.3/602.2
+// (counter removal cost), 122.6 (entering with counters), 605.1a/605.3b (mana
+// abilities), 105.4/106.1 (colored mana), and 118.3 (costs).
+(
+  id: "vivid_creek",
+  name: "Vivid Creek",
+  face_id: "vivid_creek",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(u: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
+      costs: [Tap, RemoveCounters(counter: Some(Charge), count: 1)],
+      effect: [ProduceMana(options: [
+        (w: 1),
+        (u: 1),
+        (b: 1),
+        (r: 1),
+        (g: 1),
+      ])],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: EntersTapped(affected: Self_),
+    ),
+    (
+      ability_id: "static_02",
+      presentation: OracleLines([1]),
+      definition: EntersWithCounters(counter: Charge, amount: 2),
+    ),
+  ],
+)

@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "86468528-833d-48f9-b299-cdf54dd47d77",
+  "spans": [
+    {
+      "face_id": "tishanas_wayfinder",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Explore",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario explore_etb_batch::explore_etb_batch_cards_explore_on_entry_and_take_the_land",
+      "covers": "actual tishanas_wayfinder clause coverage"
+    },
+    {
+      "test": "scenario explore_etb_batch::explore_etb_batch_cards_put_a_counter_on_a_nonland_and_choose_graveyard_or_top",
+      "covers": "actual tishanas_wayfinder clause coverage"
+    },
+    {
+      "test": "scenario explore_etb_batch::explore_etb_batch_cards_do_not_explore_when_they_do_not_enter",
+      "covers": "actual tishanas_wayfinder clause coverage"
+    },
+    {
+      "test": "scenario explore_etb_batch::explore_etb_batch_cards_explore_with_last_known_information_after_they_leave",
+      "covers": "actual tishanas_wayfinder explores with last-known information after leaving"
+    },
+    {
+      "test": "mechanic_registry::explore_etb_batch::explore_etb_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of tishanas_wayfinder"
+    },
+    {
+      "test": "mechanic_registry::explore_etb_batch::explore_etb_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for tishanas_wayfinder"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

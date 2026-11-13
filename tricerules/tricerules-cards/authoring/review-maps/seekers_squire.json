@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "a494cbe7-a4a5-4657-9f68-3811fe56a17e",
+  "spans": [
+    {
+      "face_id": "seekers_squire",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Explore",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario explore_etb_batch::explore_etb_batch_cards_explore_on_entry_and_take_the_land",
+      "covers": "actual seekers_squire clause coverage"
+    },
+    {
+      "test": "scenario explore_etb_batch::explore_etb_batch_cards_put_a_counter_on_a_nonland_and_choose_graveyard_or_top",
+      "covers": "actual seekers_squire clause coverage"
+    },
+    {
+      "test": "scenario explore_etb_batch::explore_etb_batch_cards_do_not_explore_when_they_do_not_enter",
+      "covers": "actual seekers_squire clause coverage"
+    },
+    {
+      "test": "scenario explore_etb_batch::explore_etb_batch_cards_explore_with_last_known_information_after_they_leave",
+      "covers": "actual seekers_squire explores with last-known information after leaving"
+    },
+    {
+      "test": "mechanic_registry::explore_etb_batch::explore_etb_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of seekers_squire"
+    },
+    {
+      "test": "mechanic_registry::explore_etb_batch::explore_etb_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for seekers_squire"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

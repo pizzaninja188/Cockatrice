@@ -3813,8 +3813,15 @@ zog,_triceraton_castaway	0	cast	exercised
 zombie_goliath	0	cast	exercised
 zombify	0	cast	exercised
 zukos_exile	0	cast	exercised
+barren_moor	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 drifting_meadow	0	ability:1	unsupported: ability not offered by generic battlefield fixture
+lonely_sandbar	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 polluted_mire	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 remote_isle	0	ability:1	unsupported: ability not offered by generic battlefield fixture
+secluded_steppe	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 slippery_karst	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 smoldering_crater	0	ability:1	unsupported: ability not offered by generic battlefield fixture
+vivid_crag	0	ability:1	unsupported: nonmana costs need additional fixture resources
+vivid_creek	0	ability:1	unsupported: nonmana costs need additional fixture resources
+vivid_marsh	0	ability:1	unsupported: nonmana costs need additional fixture resources
+vivid_meadow	0	ability:1	unsupported: nonmana costs need additional fixture resources

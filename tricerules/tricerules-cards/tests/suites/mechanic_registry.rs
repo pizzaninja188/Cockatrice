@@ -477,3 +477,12 @@ mod pain_lands_batch;
 
 #[path = "../cycling_lands_batch.rs"]
 mod cycling_lands_batch;
+
+#[path = "../cycling_color_lands_batch.rs"]
+mod cycling_color_lands_batch;
+
+#[path = "../vivid_lands_batch.rs"]
+mod vivid_lands_batch;
+
+#[path = "../explore_etb_batch.rs"]
+mod explore_etb_batch;

@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "24b5dbe3-578a-4897-8215-e723f00a8f1a",
+  "spans": [
+    {
+      "face_id": "merfolk_branchwalker",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Explore",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario explore_etb_batch::explore_etb_batch_cards_explore_on_entry_and_take_the_land",
+      "covers": "actual merfolk_branchwalker clause coverage"
+    },
+    {
+      "test": "scenario explore_etb_batch::explore_etb_batch_cards_put_a_counter_on_a_nonland_and_choose_graveyard_or_top",
+      "covers": "actual merfolk_branchwalker clause coverage"
+    },
+    {
+      "test": "scenario explore_etb_batch::explore_etb_batch_cards_do_not_explore_when_they_do_not_enter",
+      "covers": "actual merfolk_branchwalker clause coverage"
+    },
+    {
+      "test": "scenario explore_etb_batch::explore_etb_batch_cards_explore_with_last_known_information_after_they_leave",
+      "covers": "actual merfolk_branchwalker explores with last-known information after leaving"
+    },
+    {
+      "test": "mechanic_registry::explore_etb_batch::explore_etb_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of merfolk_branchwalker"
+    },
+    {
+      "test": "mechanic_registry::explore_etb_batch::explore_etb_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for merfolk_branchwalker"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
