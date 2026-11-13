@@ -588,6 +588,7 @@ coeurl	0	cast	exercised
 cogwork_wrestler	0	cast	exercised
 cold-water_snapper	0	cast	exercised
 coliseum_behemoth	0	cast	exercised
+collective_blessing	0	cast	exercised
 collectors_vault	0	ability:0	exercised
 collectors_vault	0	cast	exercised
 collision_course	0	cast	exercised
@@ -1085,6 +1086,7 @@ fire_nation_raider	0	cast	exercised
 fire_nation_soldier	0	cast	exercised
 fire_nation_warship	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
 fire_nation_warship	0	cast	exercised
+fire_nations_conquest	0	cast	exercised
 fire_prophecy	0	cast	exercised
 fire_sages	0	ability:0	exercised
 fire_sages	0	cast	exercised
@@ -1203,6 +1205,7 @@ futurist_forge	0	ability:0	exercised
 futurist_forge	0	cast	exercised
 fyndhorn_elves	0	ability:0	exercised
 fyndhorn_elves	0	cast	exercised
+gaeas_anthem	0	cast	exercised
 gaeas_skyfolk	0	cast	exercised
 galactic_wayfarer	0	cast	exercised
 gale_swooper	0	cast	exercised
@@ -2339,6 +2342,7 @@ potioners_trove	0	ability:0	exercised
 potioners_trove	0	ability:1	unsupported: nonmana costs need additional fixture resources
 potioners_trove	0	cast	exercised
 pouncing_cheetah	0	cast	exercised
+power_boost	0	cast	exercised
 prairie_stream	0	ability:0	exercised
 prairie_stream	0	land	exercised
 prakhata_club_security	0	cast	exercised

@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "fed58ccc-db56-4094-8b56-bd29b00e9327",
+  "spans": [
+    {
+      "face_id": "power_boost",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemPt",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario gaeas_anthem_batch::gaeas_anthem_batch_cards_buff_only_their_controllers_creatures",
+      "covers": "actual power_boost applies its printed pump only to its controller's creatures"
+    },
+    {
+      "test": "scenario gaeas_anthem_batch::gaeas_anthem_batch_cards_apply_dynamically_and_drain_with_the_source",
+      "covers": "actual power_boost buffs later creatures dynamically and drains when it leaves"
+    },
+    {
+      "test": "mechanic_registry::gaeas_anthem_batch::gaeas_anthem_batch_maps_definitions",
+      "covers": "reviewed identity, cost and exact anthem filter/pump of power_boost"
+    },
+    {
+      "test": "mechanic_registry::gaeas_anthem_batch::gaeas_anthem_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for power_boost"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1470,3 +1470,6 @@ mod ronom_unicorn_batch;
 
 #[path = "scenario/brazen_freebooter_batch.rs"]
 mod brazen_freebooter_batch;
+
+#[path = "scenario/gaeas_anthem_batch.rs"]
+mod gaeas_anthem_batch;

@@ -351,3 +351,6 @@ mod ronom_unicorn_batch;
 
 #[path = "../brazen_freebooter_batch.rs"]
 mod brazen_freebooter_batch;
+
+#[path = "../gaeas_anthem_batch.rs"]
+mod gaeas_anthem_batch;
