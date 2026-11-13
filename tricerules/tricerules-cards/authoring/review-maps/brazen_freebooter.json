@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "13e8d063-eece-4f38-83f6-02403130defa",
+  "spans": [
+    {
+      "face_id": "brazen_freebooter",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario brazen_freebooter_batch::brazen_freebooter_batch_cards_create_one_treasure_on_entry",
+      "covers": "actual brazen_freebooter creates exactly one canonical Treasure and the token's mana ability works"
+    },
+    {
+      "test": "scenario brazen_freebooter_batch::brazen_freebooter_batch_cards_create_one_treasure_per_entry",
+      "covers": "actual brazen_freebooter creates one Treasure per entry and no extra tokens"
+    },
+    {
+      "test": "mechanic_registry::brazen_freebooter_batch::brazen_freebooter_batch_maps_definitions",
+      "covers": "reviewed identity, body, entry trigger and Treasure token of brazen_freebooter"
+    },
+    {
+      "test": "mechanic_registry::brazen_freebooter_batch::brazen_freebooter_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for brazen_freebooter"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

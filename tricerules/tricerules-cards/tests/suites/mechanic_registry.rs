@@ -348,3 +348,6 @@ mod timber_gorge_batch;
 
 #[path = "../ronom_unicorn_batch.rs"]
 mod ronom_unicorn_batch;
+
+#[path = "../brazen_freebooter_batch.rs"]
+mod brazen_freebooter_batch;

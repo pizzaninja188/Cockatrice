@@ -388,6 +388,7 @@ brave-kin_duo	0	ability:0	exercised
 brave-kin_duo	0	cast	exercised
 brave_brawler	0	ability:0	exercised
 brave_brawler	0	cast	exercised
+brazen_freebooter	0	cast	exercised
 brazen_scourge	0	cast	exercised
 break_down_the_door	0	cast	exercised
 breakneck_berserker	0	cast	exercised
@@ -2646,6 +2647,7 @@ sagu_pummeler	0	ability:0	unsupported: ability not offered by generic battlefiel
 sagu_pummeler	0	cast	exercised
 sagu_wildling_roost_seek	0	cast	exercised
 sagu_wildling_roost_seek	1	cast	exercised
+sailor_of_means	0	cast	exercised
 sakura-tribe_elder	0	ability:0	exercised
 sakura-tribe_elder	0	cast	exercised
 salt_road_packbeast	0	cast	exercised
@@ -3650,6 +3652,7 @@ wildwood_patrol	0	cast	exercised
 willow_elf	0	cast	exercised
 willow_faerie	0	cast	exercised
 wilt-leaf_cavaliers	0	cast	exercised
+wily_goblin	0	cast	exercised
 wind-scarred_crag	0	ability:0	exercised
 wind-scarred_crag	0	land	exercised
 wind_drake	0	cast	exercised
