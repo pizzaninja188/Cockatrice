@@ -1473,3 +1473,6 @@ mod brazen_freebooter_batch;
 
 #[path = "scenario/gaeas_anthem_batch.rs"]
 mod gaeas_anthem_batch;
+
+#[path = "scenario/sylvan_ranger_batch.rs"]
+mod sylvan_ranger_batch;

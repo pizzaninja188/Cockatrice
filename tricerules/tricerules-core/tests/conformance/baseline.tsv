@@ -358,6 +358,7 @@ boomerang	0	cast	exercised
 border_guard	0	cast	exercised
 border_patrol	0	cast	exercised
 borderland_minotaur	0	cast	exercised
+borderland_ranger	0	cast	exercised
 boreal_druid	0	ability:0	exercised
 boreal_druid	0	cast	exercised
 boreal_elemental	0	cast	exercised
@@ -549,6 +550,7 @@ cinder_glade	0	land	exercised
 cinder_strike	0	cast	exercised
 circuitous_route	0	cast	exercised
 city_pigeon	0	cast	exercised
+civic_wayfinder	0	cast	exercised
 clachan_festival	0	ability:0	exercised
 clachan_festival	0	cast	exercised
 clammy_prowler	0	cast	exercised
@@ -2849,6 +2851,7 @@ skeletal_crocodile	0	cast	exercised
 skeletal_snake	0	cast	exercised
 skeleton_archer	0	cast	exercised
 skirmish_rhino	0	cast	exercised
+skittering_surveyor	0	cast	exercised
 skulduggery	0	cast	exercised
 skullcap_snail	0	cast	exercised
 sky_ruin_drake	0	cast	exercised
@@ -3151,6 +3154,7 @@ swordwise_centaur	0	cast	exercised
 sworn_guardian	0	cast	exercised
 syggs_command	0	cast	exercised
 sylvan_brushstrider	0	cast	exercised
+sylvan_ranger	0	cast	exercised
 synapse_necromage	0	cast	exercised
 synthesizer_labship	0	ability:0	exercised
 synthesizer_labship	0	cast	exercised

@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "b9e53414-c21f-4479-b8c1-8b36c3e6e006",
+  "spans": [
+    {
+      "face_id": "civic_wayfinder",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/SearchLibrary"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario sylvan_ranger_batch::sylvan_ranger_batch_cards_search_privately_for_a_basic_land",
+      "covers": "actual civic_wayfinder offers an optional private basic-land search and puts the chosen land into hand"
+    },
+    {
+      "test": "scenario sylvan_ranger_batch::sylvan_ranger_batch_cards_may_decline_the_search",
+      "covers": "actual civic_wayfinder may decline the search without moving a card"
+    },
+    {
+      "test": "mechanic_registry::sylvan_ranger_batch::sylvan_ranger_batch_maps_definitions",
+      "covers": "reviewed identity, body and optional private basic-land search program of civic_wayfinder"
+    },
+    {
+      "test": "mechanic_registry::sylvan_ranger_batch::sylvan_ranger_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for civic_wayfinder"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

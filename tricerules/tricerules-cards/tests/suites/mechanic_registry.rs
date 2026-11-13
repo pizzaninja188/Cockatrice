@@ -354,3 +354,6 @@ mod brazen_freebooter_batch;
 
 #[path = "../gaeas_anthem_batch.rs"]
 mod gaeas_anthem_batch;
+
+#[path = "../sylvan_ranger_batch.rs"]
+mod sylvan_ranger_batch;
