@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "9a538bd7-e665-4896-95df-bbab1e28f75e",
+  "spans": [
+    {
+      "face_id": "watcher_sliver",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemPt",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario sliver_anthem_batch::sliver_anthem_batch_cards_pump_every_sliver_including_the_source",
+      "covers": "actual watcher_sliver clause coverage"
+    },
+    {
+      "test": "scenario sliver_anthem_batch::sliver_anthem_batch_cards_do_not_pump_non_slivers",
+      "covers": "actual watcher_sliver clause coverage"
+    },
+    {
+      "test": "scenario sliver_anthem_batch::sliver_anthem_batch_cards_apply_symmetrically_to_each_players_slivers",
+      "covers": "actual watcher_sliver clause coverage"
+    },
+    {
+      "test": "mechanic_registry::sliver_anthem_batch::sliver_anthem_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of watcher_sliver"
+    },
+    {
+      "test": "mechanic_registry::sliver_anthem_batch::sliver_anthem_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for watcher_sliver"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

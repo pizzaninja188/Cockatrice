@@ -1,0 +1,23 @@
+// Oracle a0f6834c-faa9-4d90-adad-847a8b337fe6; source/rulings checked 2026-11-13.
+// CR 604.1/611.3a (continuous anthem), 613.4c (layer-7c P/T), and 109.2
+// (a subtype description means every permanent of that subtype on the battlefield).
+(
+  id: "bonesplitter_sliver",
+  name: "Bonesplitter Sliver",
+  face_id: "bonesplitter_sliver",
+  mana_cost: "{3}{R}",
+  types: ["Creature", "Sliver"],
+  power: 2,
+  toughness: 2,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: AnthemPt(
+        filter: (subtype: "Sliver"),
+        delta_power: 2,
+        delta_toughness: 0,
+      ),
+    ),
+  ],
+)

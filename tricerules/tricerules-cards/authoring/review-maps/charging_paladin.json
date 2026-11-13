@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "6cccf44e-c05e-4239-b643-54b559c98552",
+  "spans": [
+    {
+      "face_id": "charging_paladin",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario attack_pump_values_batch::attack_pump_values_batch_cards_apply_the_printed_pump_when_they_attack",
+      "covers": "actual charging_paladin clause coverage"
+    },
+    {
+      "test": "scenario attack_pump_values_batch::attack_pump_values_batch_cards_pump_only_the_attacking_source",
+      "covers": "actual charging_paladin clause coverage"
+    },
+    {
+      "test": "scenario attack_pump_values_batch::attack_pump_values_batch_cards_expire_at_end_of_turn",
+      "covers": "actual charging_paladin clause coverage"
+    },
+    {
+      "test": "mechanic_registry::attack_pump_values_batch::attack_pump_values_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of charging_paladin"
+    },
+    {
+      "test": "mechanic_registry::attack_pump_values_batch::attack_pump_values_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for charging_paladin"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,23 @@
+// Oracle 92f5f80c-de1a-44e8-93f1-e405241c1e82; source/rulings checked 2026-11-13.
+// CR 604.1/611.3a (continuous anthem), 613.4c (layer-7c P/T), and 109.2
+// (a subtype description means every permanent of that subtype on the battlefield).
+(
+  id: "might_sliver",
+  name: "Might Sliver",
+  face_id: "might_sliver",
+  mana_cost: "{4}{G}",
+  types: ["Creature", "Sliver"],
+  power: 2,
+  toughness: 2,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: AnthemPt(
+        filter: (subtype: "Sliver"),
+        delta_power: 2,
+        delta_toughness: 2,
+      ),
+    ),
+  ],
+)
