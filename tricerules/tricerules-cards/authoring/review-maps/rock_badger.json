@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "1f5ac983-a7a5-4b9d-a25c-727a7de6c465",
+  "spans": [
+    {
+      "face_id": "rock_badger",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/evasions/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Evasion::Landwalk",
+      "typed_path": "/faces/0/evasions/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario mountainwalk_batch::mountainwalk_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual rock_badger clause coverage"
+    },
+    {
+      "test": "scenario mountainwalk_batch::mountainwalk_batch_cards_cannot_be_blocked_while_defender_controls_a_mountain",
+      "covers": "actual rock_badger clause coverage"
+    },
+    {
+      "test": "scenario mountainwalk_batch::mountainwalk_batch_cards_can_be_blocked_without_a_mountain",
+      "covers": "actual rock_badger clause coverage"
+    },
+    {
+      "test": "mechanic_registry::mountainwalk_batch::mountainwalk_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of rock_badger"
+    },
+    {
+      "test": "mechanic_registry::mountainwalk_batch::mountainwalk_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for rock_badger"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

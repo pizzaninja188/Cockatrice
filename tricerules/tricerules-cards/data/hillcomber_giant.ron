@@ -1,0 +1,12 @@
+// Oracle a56b3434-7478-4704-b04b-92f32a1bc462; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "hillcomber_giant",
+  name: "Hillcomber Giant",
+  face_id: "hillcomber_giant",
+  mana_cost: "{2}{W}{W}",
+  types: ["Creature", "Giant", "Scout"],
+  power: 3,
+  toughness: 3,
+  evasions: [Landwalk(land_subtype: "Mountain")],
+)

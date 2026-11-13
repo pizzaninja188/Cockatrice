@@ -504,3 +504,21 @@ mod talisman_cycle_batch;
 
 #[path = "../islandwalk_batch.rs"]
 mod islandwalk_batch;
+
+#[path = "../mountainwalk_batch.rs"]
+mod mountainwalk_batch;
+
+#[path = "../etb_target_pump_batch.rs"]
+mod etb_target_pump_batch;
+
+#[path = "../aura_pump_values_batch.rs"]
+mod aura_pump_values_batch;
+
+#[path = "../sliver_anthem_batch.rs"]
+mod sliver_anthem_batch;
+
+#[path = "../attack_pump_values_batch.rs"]
+mod attack_pump_values_batch;
+
+#[path = "../self_pump_once_batch.rs"]
+mod self_pump_once_batch;

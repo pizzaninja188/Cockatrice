@@ -1,0 +1,20 @@
+// Oracle 0d996788-7193-45cd-bc6d-0f470521d1ca; source/rulings checked 2026-11-13.
+// CR 603.6a (entry trigger), 115.1 (target), 611.2c/613.4c (until-end-of-turn pump),
+// and 514.2 (cleanup).
+(
+  id: "vulshok_heartstoker",
+  name: "Vulshok Heartstoker",
+  face_id: "vulshok_heartstoker",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Human", "Shaman"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [PumpTarget(power: 2, toughness: 0, subject: Chosen((kind: Creature)))],
+    ),
+  ],
+)

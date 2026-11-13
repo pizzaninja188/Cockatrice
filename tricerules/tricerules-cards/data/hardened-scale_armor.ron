@@ -1,0 +1,18 @@
+// Oracle 9eb58db8-7934-485c-8606-fb1a6cc60d42; source/rulings checked 2026-11-13.
+// CR 303.4a (Aura target and attach), 613.4c (layer-7c attached P/T modifier), and
+// 704.5m (unattached Aura cleanup).
+(
+  id: "hardened-scale_armor",
+  name: "Hardened-Scale Armor",
+  face_id: "hardened_scale_armor",
+  mana_cost: "{2}{G}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(delta_power: 3, delta_toughness: 3),
+    ),
+  ],
+)

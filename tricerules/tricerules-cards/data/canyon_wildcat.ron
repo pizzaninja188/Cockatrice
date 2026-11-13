@@ -1,0 +1,12 @@
+// Oracle dbf7b3ef-1ca4-4b0d-bec2-f5e60b150013; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "canyon_wildcat",
+  name: "Canyon Wildcat",
+  face_id: "canyon_wildcat",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Cat"],
+  power: 2,
+  toughness: 1,
+  evasions: [Landwalk(land_subtype: "Mountain")],
+)

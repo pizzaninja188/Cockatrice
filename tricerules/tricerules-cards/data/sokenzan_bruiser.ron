@@ -1,0 +1,12 @@
+// Oracle 934d42b2-5dca-4a29-82d3-6778796178d9; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "sokenzan_bruiser",
+  name: "Sokenzan Bruiser",
+  face_id: "sokenzan_bruiser",
+  mana_cost: "{4}{R}",
+  types: ["Creature", "Ogre", "Warrior"],
+  power: 3,
+  toughness: 3,
+  evasions: [Landwalk(land_subtype: "Mountain")],
+)

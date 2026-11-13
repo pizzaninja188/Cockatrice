@@ -1623,3 +1623,21 @@ mod talisman_cycle_batch;
 
 #[path = "scenario/islandwalk_batch.rs"]
 mod islandwalk_batch;
+
+#[path = "scenario/mountainwalk_batch.rs"]
+mod mountainwalk_batch;
+
+#[path = "scenario/etb_target_pump_batch.rs"]
+mod etb_target_pump_batch;
+
+#[path = "scenario/aura_pump_values_batch.rs"]
+mod aura_pump_values_batch;
+
+#[path = "scenario/sliver_anthem_batch.rs"]
+mod sliver_anthem_batch;
+
+#[path = "scenario/attack_pump_values_batch.rs"]
+mod attack_pump_values_batch;
+
+#[path = "scenario/self_pump_once_batch.rs"]
+mod self_pump_once_batch;

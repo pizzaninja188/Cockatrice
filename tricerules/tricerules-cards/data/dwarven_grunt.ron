@@ -1,0 +1,12 @@
+// Oracle 6da00e2d-4287-48eb-8abe-d153318381fd; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "dwarven_grunt",
+  name: "Dwarven Grunt",
+  face_id: "dwarven_grunt",
+  mana_cost: "{R}",
+  types: ["Creature", "Dwarf"],
+  power: 1,
+  toughness: 1,
+  evasions: [Landwalk(land_subtype: "Mountain")],
+)
