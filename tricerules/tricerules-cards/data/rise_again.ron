@@ -1,0 +1,12 @@
+// Oracle 4600e968-fe3a-446a-a306-bd10e6763e0d; source/rulings checked 2026-11-12.
+// CR 601.2c (one graveyard target), 608.2b (stale target fizzles), 110.2/110.2a (owner and
+// effect controller) and 110.5b (untapped entry).
+(
+  id: "rise_again",
+  name: "Rise Again",
+  face_id: "rise_again",
+  mana_cost: "{4}{B}",
+  types: ["Sorcery"],
+  spell_effect: [MoveGraveyardCards(filter: ( card: Some((card_type: Some(Creature)))), destination: Battlefield(tapped: false))],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature card in your graveyard", effect_indices: [0])])),
+)

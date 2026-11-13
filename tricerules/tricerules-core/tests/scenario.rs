@@ -1476,3 +1476,6 @@ mod gaeas_anthem_batch;
 
 #[path = "scenario/sylvan_ranger_batch.rs"]
 mod sylvan_ranger_batch;
+
+#[path = "scenario/breath_of_life_batch.rs"]
+mod breath_of_life_batch;

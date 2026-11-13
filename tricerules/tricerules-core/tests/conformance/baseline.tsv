@@ -393,6 +393,7 @@ brazen_freebooter	0	cast	exercised
 brazen_scourge	0	cast	exercised
 break_down_the_door	0	cast	exercised
 breakneck_berserker	0	cast	exercised
+breath_of_life	0	cast	exercised
 breeding_pool	0	ability:0	exercised
 breeding_pool	0	land	exercised
 bridgeworks_battle_tanglespan_bridgeworks	0	cast	exercised
@@ -1013,6 +1014,7 @@ failed_fording	0	cast	exercised
 faithbearer_paladin	0	cast	exercised
 faithless_looting	0	cast	exercised
 falkenrath_reaver	0	cast	exercised
+false_defeat	0	cast	exercised
 family_reunion	0	cast	exercised
 fanatic_of_the_harrowing	0	cast	exercised
 fanatical_offering	0	cast	unsupported: required cast-cost group needs a specialized fixture
@@ -2531,6 +2533,7 @@ restless_reef	0	ability:0	exercised
 restless_reef	0	ability:1	exercised
 restless_reef	0	land	exercised
 restoration_magic	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
+resurrection	0	cast	exercised
 return_from_the_wilds	0	cast	exercised
 return_to_the_sewers	0	cast	exercised
 revenge_of_the_rats	0	cast	exercised
@@ -2555,6 +2558,7 @@ ripclaw_wrangler	0	ability:0	unsupported: payment preview rejected: illegal comm
 ripclaw_wrangler	0	cast	exercised
 ripscale_predator	0	cast	exercised
 riptide_turtle	0	cast	exercised
+rise_again	0	cast	exercised
 risen_sanctuary	0	cast	exercised
 risky_research	0	cast	exercised
 risky_shortcut	0	cast	exercised
