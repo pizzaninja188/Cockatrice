@@ -1,0 +1,15 @@
+// Oracle 2c006a63-0550-4a87-a5fe-f4247857271c; source/rulings checked 2026-11-13.
+// CR 303.4 (Auras), 508.1 (attack restrictions) and 509.1 (block restrictions).
+(
+  id: "luminous_bonds",
+  name: "Luminous Bonds",
+  face_id: "luminous_bonds",
+  mana_cost: "{2}{W}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: AttachedModifier(restriction: (cant_attack: true, cant_block: true)),
+  )],
+)

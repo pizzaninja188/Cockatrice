@@ -1,0 +1,10 @@
+// Oracle c551ba63-2a74-439d-8996-d566e2efbd5f; source/rulings checked 2026-11-13.
+// CR 701.13 (exile) and 608.2b (illegal or departed target).
+(
+  id: "unmake",
+  name: "Unmake",
+  face_id: "unmake",
+  mana_cost: "{W/B}{W/B}{W/B}",
+  types: ["Instant"],
+  spell_effect: [Exile(linked_exile_id: None)],
+)

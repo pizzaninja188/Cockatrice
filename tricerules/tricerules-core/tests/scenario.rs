@@ -1560,3 +1560,30 @@ mod draw_three_discard_batch;
 
 #[path = "scenario/pinger_batch.rs"]
 mod pinger_batch;
+
+#[path = "scenario/exile_target_creature_batch.rs"]
+mod exile_target_creature_batch;
+
+#[path = "scenario/etb_damage_any_target_batch.rs"]
+mod etb_damage_any_target_batch;
+
+#[path = "scenario/combat_damage_draw_batch.rs"]
+mod combat_damage_draw_batch;
+
+#[path = "scenario/dies_shrink_opponent_batch.rs"]
+mod dies_shrink_opponent_batch;
+
+#[path = "scenario/aura_cant_attack_block_batch.rs"]
+mod aura_cant_attack_block_batch;
+
+#[path = "scenario/put_creature_on_top_batch.rs"]
+mod put_creature_on_top_batch;
+
+#[path = "scenario/etb_loot_batch.rs"]
+mod etb_loot_batch;
+
+#[path = "scenario/flying_etb_loot_batch.rs"]
+mod flying_etb_loot_batch;
+
+#[path = "scenario/mana_any_color_batch.rs"]
+mod mana_any_color_batch;

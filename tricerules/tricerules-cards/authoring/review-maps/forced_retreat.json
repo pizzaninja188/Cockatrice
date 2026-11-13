@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "ccf1336c-2ea5-4582-84a5-0b29b3cca6c2",
+  "spans": [
+    {
+      "face_id": "forced_retreat",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_program",
+        "/faces/0/spell_program/body/steps/0/kind/Perform/PutInOwnersLibrary",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PutInOwnersLibrary",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/PutInOwnersLibrary"
+    },
+    {
+      "symbol": "LibraryPlacement::Top",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/PutInOwnersLibrary/placement"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario put_creature_on_top_batch::put_creature_on_top_batch_cards_put_the_target_on_top_of_its_owners_library",
+      "covers": "actual forced_retreat clause coverage"
+    },
+    {
+      "test": "scenario put_creature_on_top_batch::put_creature_on_top_batch_cards_do_not_target_a_land",
+      "covers": "actual forced_retreat clause coverage"
+    },
+    {
+      "test": "scenario put_creature_on_top_batch::put_creature_on_top_batch_cards_fizzle_when_the_target_leaves",
+      "covers": "actual forced_retreat clause coverage"
+    },
+    {
+      "test": "mechanic_registry::put_creature_on_top_batch::put_creature_on_top_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of forced_retreat"
+    },
+    {
+      "test": "mechanic_registry::put_creature_on_top_batch::put_creature_on_top_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for forced_retreat"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

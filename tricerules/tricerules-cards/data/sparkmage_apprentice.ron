@@ -1,0 +1,18 @@
+// Oracle 69003cbc-8e5a-41dc-ac53-18f6e776217b; source/rulings checked 2026-11-13.
+// CR 603.6a (entry trigger), 115 (targets) and 120 (damage).
+(
+  id: "sparkmage_apprentice",
+  name: "Sparkmage Apprentice",
+  face_id: "sparkmage_apprentice",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Human", "Wizard"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [DamageTarget(amount: 1, target: ())],
+    targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+  )],
+)

@@ -1,0 +1,21 @@
+// Oracle a7cf5b74-123c-4def-a4aa-771ecd3be260; source/rulings checked 2026-11-13.
+// CR 603.6c and 700.4 (dies trigger), 611.2c and 613.4c (shrinking).
+(
+  id: "splatter_goblin",
+  name: "Splatter Goblin",
+  face_id: "splatter_goblin",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Phyrexian", "Goblin"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfDies,
+    effect: [PumpTarget(
+      power: -1,
+      toughness: -1,
+      subject: Chosen((kind: Creature, controller: Opponent)),
+    )],
+  )],
+)

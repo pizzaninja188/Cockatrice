@@ -441,3 +441,30 @@ mod draw_three_discard_batch;
 
 #[path = "../pinger_batch.rs"]
 mod pinger_batch;
+
+#[path = "../exile_target_creature_batch.rs"]
+mod exile_target_creature_batch;
+
+#[path = "../etb_damage_any_target_batch.rs"]
+mod etb_damage_any_target_batch;
+
+#[path = "../combat_damage_draw_batch.rs"]
+mod combat_damage_draw_batch;
+
+#[path = "../dies_shrink_opponent_batch.rs"]
+mod dies_shrink_opponent_batch;
+
+#[path = "../aura_cant_attack_block_batch.rs"]
+mod aura_cant_attack_block_batch;
+
+#[path = "../put_creature_on_top_batch.rs"]
+mod put_creature_on_top_batch;
+
+#[path = "../etb_loot_batch.rs"]
+mod etb_loot_batch;
+
+#[path = "../flying_etb_loot_batch.rs"]
+mod flying_etb_loot_batch;
+
+#[path = "../mana_any_color_batch.rs"]
+mod mana_any_color_batch;

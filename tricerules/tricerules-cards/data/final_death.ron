@@ -1,0 +1,10 @@
+// Oracle 1be3eea4-eaff-469c-9689-abadac1e848c; source/rulings checked 2026-11-13.
+// CR 701.13 (exile) and 608.2b (illegal or departed target).
+(
+  id: "final_death",
+  name: "Final Death",
+  face_id: "final_death",
+  mana_cost: "{4}{B}",
+  types: ["Instant"],
+  spell_effect: [Exile(linked_exile_id: None)],
+)

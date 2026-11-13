@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "c90ea9d5-82f7-4b92-8cb1-10d0a7378e8c",
+  "spans": [
+    {
+      "face_id": "sky_eel_school",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "sky_eel_school",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/Discard"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flying_etb_loot_batch::flying_etb_loot_batch_cards_have_flying_and_loot_on_entry",
+      "covers": "actual sky-eel_school clause coverage"
+    },
+    {
+      "test": "scenario flying_etb_loot_batch::flying_etb_loot_batch_cards_make_the_discard_mandatory",
+      "covers": "actual sky-eel_school clause coverage"
+    },
+    {
+      "test": "scenario flying_etb_loot_batch::flying_etb_loot_batch_cards_draw_the_top_card_then_discard",
+      "covers": "actual sky-eel_school clause coverage"
+    },
+    {
+      "test": "mechanic_registry::flying_etb_loot_batch::flying_etb_loot_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of sky-eel_school"
+    },
+    {
+      "test": "mechanic_registry::flying_etb_loot_batch::flying_etb_loot_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for sky-eel_school"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

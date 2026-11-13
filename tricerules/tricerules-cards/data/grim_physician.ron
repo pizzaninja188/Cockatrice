@@ -1,0 +1,21 @@
+// Oracle 381539ce-fc05-4855-80da-b0807a7c07c2; source/rulings checked 2026-11-13.
+// CR 603.6c and 700.4 (dies trigger), 611.2c and 613.4c (shrinking).
+(
+  id: "grim_physician",
+  name: "Grim Physician",
+  face_id: "grim_physician",
+  mana_cost: "{B}",
+  types: ["Creature", "Zombie"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfDies,
+    effect: [PumpTarget(
+      power: -1,
+      toughness: -1,
+      subject: Chosen((kind: Creature, controller: Opponent)),
+    )],
+  )],
+)

@@ -1,0 +1,17 @@
+// Oracle 51f4eb1f-abf2-425a-b78e-cafac177da89; source/rulings checked 2026-11-13.
+// CR 510.1-510.2 (combat damage assignment and dealing) and 603.2 (trigger).
+(
+  id: "nine-tail_white_fox",
+  name: "Nine-Tail White Fox",
+  face_id: "nine_tail_white_fox",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Fox", "Spirit"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverSelfDealsCombatDamageToPlayer,
+    effect: [Draw(count: 1)],
+  )],
+)

@@ -1,0 +1,15 @@
+// Oracle b8cee34a-710d-4c09-b475-0e4754eccd66; source/rulings checked 2026-11-13.
+// CR 303.4 (Auras), 508.1 (attack restrictions) and 509.1 (block restrictions).
+(
+  id: "bound_in_silence",
+  name: "Bound in Silence",
+  face_id: "bound_in_silence",
+  mana_cost: "{2}{W}",
+  types: ["Kindred", "Enchantment", "Rebel", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: AttachedModifier(restriction: (cant_attack: true, cant_block: true)),
+  )],
+)

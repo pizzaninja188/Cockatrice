@@ -1,0 +1,27 @@
+// Oracle da2ac9fa-52c2-4896-a596-89f287406641; source/rulings checked 2026-11-13.
+// CR 702.9a-b (flying), 603.6a (entry trigger), 121 (draw) and 701.9 (discard).
+(
+  id: "screeching_drake",
+  name: "Screeching Drake",
+  face_id: "screeching_drake",
+  mana_cost: "{3}{U}",
+  types: ["Creature", "Drake"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    program: Some(
+      (
+        body: (
+          steps: [
+            (id: "draw_cards", kind: Perform(Draw(count: 1))),
+            (id: "discard_cards", kind: Perform(Discard(quantity: Exact(1)))),
+          ],
+        ),
+      ),
+    ),
+  )],
+)

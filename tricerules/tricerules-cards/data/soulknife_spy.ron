@@ -1,0 +1,17 @@
+// Oracle 813c0654-7e3b-435b-b7a5-148f0c36a4be; source/rulings checked 2026-11-13.
+// CR 510.1-510.2 (combat damage assignment and dealing) and 603.2 (trigger).
+(
+  id: "soulknife_spy",
+  name: "Soulknife Spy",
+  face_id: "soulknife_spy",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Elf", "Rogue"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverSelfDealsCombatDamageToPlayer,
+    effect: [Draw(count: 1)],
+  )],
+)

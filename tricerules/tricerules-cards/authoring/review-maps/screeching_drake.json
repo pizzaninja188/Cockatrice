@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "da2ac9fa-52c2-4896-a596-89f287406641",
+  "spans": [
+    {
+      "face_id": "screeching_drake",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "screeching_drake",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/Discard"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flying_etb_loot_batch::flying_etb_loot_batch_cards_have_flying_and_loot_on_entry",
+      "covers": "actual screeching_drake clause coverage"
+    },
+    {
+      "test": "scenario flying_etb_loot_batch::flying_etb_loot_batch_cards_make_the_discard_mandatory",
+      "covers": "actual screeching_drake clause coverage"
+    },
+    {
+      "test": "scenario flying_etb_loot_batch::flying_etb_loot_batch_cards_draw_the_top_card_then_discard",
+      "covers": "actual screeching_drake clause coverage"
+    },
+    {
+      "test": "mechanic_registry::flying_etb_loot_batch::flying_etb_loot_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of screeching_drake"
+    },
+    {
+      "test": "mechanic_registry::flying_etb_loot_batch::flying_etb_loot_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for screeching_drake"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

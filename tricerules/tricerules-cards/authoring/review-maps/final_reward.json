@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "e654242f-c7c5-4713-bbd0-26d41de8e2e7",
+  "spans": [
+    {
+      "face_id": "final_reward",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario exile_target_creature_batch::exile_target_creature_batch_cards_exile_the_target_creature",
+      "covers": "actual final_reward clause coverage"
+    },
+    {
+      "test": "scenario exile_target_creature_batch::exile_target_creature_batch_cards_do_not_exile_a_land",
+      "covers": "actual final_reward clause coverage"
+    },
+    {
+      "test": "scenario exile_target_creature_batch::exile_target_creature_batch_cards_fizzle_when_the_target_leaves",
+      "covers": "actual final_reward clause coverage"
+    },
+    {
+      "test": "mechanic_registry::exile_target_creature_batch::exile_target_creature_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of final_reward"
+    },
+    {
+      "test": "mechanic_registry::exile_target_creature_batch::exile_target_creature_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for final_reward"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
