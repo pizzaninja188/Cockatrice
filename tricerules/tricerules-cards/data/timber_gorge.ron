@@ -1,0 +1,23 @@
+// Oracle 00b34fab-5a80-4a4d-b6cf-72479197677a; source/rulings checked 2026-11-12.
+// CR 614.1d/614.12 (enters-tapped replacement) and 605.1a/605.3b (mana abilities).
+(
+  id: "timber_gorge",
+  name: "Timber Gorge",
+  face_id: "timber_gorge",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(r: 1), (g: 1)])],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: EntersTapped(affected: Self_),
+    ),
+  ],
+)

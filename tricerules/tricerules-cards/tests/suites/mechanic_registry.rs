@@ -342,3 +342,6 @@ mod mindstatic_batch;
 
 #[path = "../colorless_two_mana_batch.rs"]
 mod colorless_two_mana_batch;
+
+#[path = "../timber_gorge_batch.rs"]
+mod timber_gorge_batch;
