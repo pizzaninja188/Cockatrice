@@ -1042,21 +1042,27 @@ fn issue_453_vanilla_bears_keep_only_printed_keywords() {
 }
 
 #[test]
-fn issue_453_unreviewed_damage_amounts_stay_unregistered() {
+fn issue_453_reviewed_damage_amounts_are_registered() {
     let registry = tricerules_cards::registry::global();
-    for excluded in ["breath_of_fire", "fiery_finish"] {
-        assert!(
-            registry.get(excluded).is_none(),
-            "{excluded} is an unreviewed damage-amount singleton and must stay unregistered"
+    for (id, name, amount) in [
+        ("breath_of_fire", "Breath of Fire", 2),
+        ("fiery_finish", "Fiery Finish", 7),
+    ] {
+        let definition = registry
+            .get(id)
+            .unwrap_or_else(|| panic!("{id} is a reviewed damage-amount card"));
+        assert_eq!(
+            registry.id_for_name(name),
+            Some(id),
+            "{id} resolves by name"
         );
         assert!(
-            registry
-                .id_for_name(match excluded {
-                    "breath_of_fire" => "Breath of Fire",
-                    _ => "Fiery Finish",
-                })
-                .is_none(),
-            "{excluded} must not resolve by name"
+            matches!(
+                definition.primary_face().spell_effect.as_slice(),
+                [SpellEffectKind::DamageTarget { amount: a, target }]
+                    if *a == Amount::Fixed(amount) && target.kind == TargetKind::Creature
+            ),
+            "{id}: reviewed creature-only fixed damage"
         );
     }
 }
