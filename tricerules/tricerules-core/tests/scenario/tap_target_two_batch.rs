@@ -10,7 +10,6 @@ use tricerules_core::Zone;
 
 struct Case {
     id: &'static str,
-    cast: ManaGift,
     body: Option<(u32, u32)>,
 }
 
@@ -18,26 +17,14 @@ fn cases() -> [Case; 3] {
     [
         Case {
             id: "fan_bearer",
-            cast: ManaGift {
-                w: 1,
-                ..Default::default()
-            },
             body: Some((1, 2)),
         },
         Case {
             id: "gavony_trapper",
-            cast: ManaGift {
-                w: 1,
-                ..Default::default()
-            },
             body: Some((0, 2)),
         },
         Case {
             id: "trip_noose",
-            cast: ManaGift {
-                c: 2,
-                ..Default::default()
-            },
             body: None,
         },
     ]
