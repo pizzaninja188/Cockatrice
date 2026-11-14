@@ -540,3 +540,12 @@ mod damage_target_creature_batch;
 
 #[path = "../pump_first_strike_batch.rs"]
 mod pump_first_strike_batch;
+
+#[path = "../tap_target_two_batch.rs"]
+mod tap_target_two_batch;
+
+#[path = "../landfall_pump_remnant_batch.rs"]
+mod landfall_pump_remnant_batch;
+
+#[path = "../battle_land_cycle_batch.rs"]
+mod battle_land_cycle_batch;

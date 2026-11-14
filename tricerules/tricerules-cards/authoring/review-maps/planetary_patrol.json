@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "fba54c2d-a664-4e4c-b9d4-e24cf2523ab9",
+  "spans": [
+    {
+      "face_id": "planetary_patrol",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario landfall_pump_remnant_batch::landfall_pump_remnant_batch_cards_apply_the_printed_effect",
+      "covers": "actual planetary_patrol clause coverage"
+    },
+    {
+      "test": "scenario landfall_pump_remnant_batch::landfall_pump_remnant_batch_cards_scope_the_trigger_to_the_controller",
+      "covers": "actual planetary_patrol clause coverage"
+    },
+    {
+      "test": "scenario landfall_pump_remnant_batch::landfall_pump_remnant_batch_cards_trigger_each_landfall_permanent_and_expire",
+      "covers": "actual planetary_patrol clause coverage"
+    },
+    {
+      "test": "mechanic_registry::landfall_pump_remnant_batch::landfall_pump_remnant_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of planetary_patrol"
+    },
+    {
+      "test": "mechanic_registry::landfall_pump_remnant_batch::landfall_pump_remnant_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for planetary_patrol"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

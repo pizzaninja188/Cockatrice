@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "ab539b16-d2a0-404d-8ad3-7ff33f2f1abe",
+  "spans": [
+    {
+      "face_id": "scythe_leopard",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario landfall_pump_remnant_batch::landfall_pump_remnant_batch_cards_apply_the_printed_effect",
+      "covers": "actual scythe_leopard clause coverage"
+    },
+    {
+      "test": "scenario landfall_pump_remnant_batch::landfall_pump_remnant_batch_cards_scope_the_trigger_to_the_controller",
+      "covers": "actual scythe_leopard clause coverage"
+    },
+    {
+      "test": "scenario landfall_pump_remnant_batch::landfall_pump_remnant_batch_cards_trigger_each_landfall_permanent_and_expire",
+      "covers": "actual scythe_leopard clause coverage"
+    },
+    {
+      "test": "mechanic_registry::landfall_pump_remnant_batch::landfall_pump_remnant_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of scythe_leopard"
+    },
+    {
+      "test": "mechanic_registry::landfall_pump_remnant_batch::landfall_pump_remnant_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for scythe_leopard"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

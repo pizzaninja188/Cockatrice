@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "d4da20c7-ae4a-44c6-8f03-9e719ccee8c9",
+  "spans": [
+    {
+      "face_id": "gavony_trapper",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario tap_target_two_batch::tap_target_two_batch_cards_apply_the_printed_effect",
+      "covers": "actual gavony_trapper clause coverage"
+    },
+    {
+      "test": "scenario tap_target_two_batch::tap_target_two_batch_cards_reject_illegal_targets",
+      "covers": "actual gavony_trapper clause coverage"
+    },
+    {
+      "test": "scenario tap_target_two_batch::tap_target_two_batch_cards_require_the_printed_cost",
+      "covers": "actual gavony_trapper clause coverage"
+    },
+    {
+      "test": "scenario tap_target_two_batch::tap_target_two_batch_cards_fizzle_when_the_target_left",
+      "covers": "actual gavony_trapper clause coverage"
+    },
+    {
+      "test": "mechanic_registry::tap_target_two_batch::tap_target_two_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of gavony_trapper"
+    },
+    {
+      "test": "mechanic_registry::tap_target_two_batch::tap_target_two_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for gavony_trapper"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
