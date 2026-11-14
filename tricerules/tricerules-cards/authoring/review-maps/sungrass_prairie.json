@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "0a28dff0-2bd6-4105-b73a-b6c4735833fd",
+  "spans": [
+    {
+      "face_id": "sungrass_prairie",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario filter_land_cycle_batch::filter_land_cycle_batch_cards_add_each_printed_color_pair",
+      "covers": "actual sungrass_prairie clause coverage"
+    },
+    {
+      "test": "scenario filter_land_cycle_batch::filter_land_cycle_batch_cards_require_the_generic_mana_and_tap_cost",
+      "covers": "actual sungrass_prairie clause coverage"
+    },
+    {
+      "test": "scenario filter_land_cycle_batch::filter_land_cycle_batch_cards_do_not_add_mana_when_activation_is_rejected",
+      "covers": "actual sungrass_prairie clause coverage"
+    },
+    {
+      "test": "mechanic_registry::filter_land_cycle_batch::filter_land_cycle_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of sungrass_prairie"
+    },
+    {
+      "test": "mechanic_registry::filter_land_cycle_batch::filter_land_cycle_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for sungrass_prairie"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

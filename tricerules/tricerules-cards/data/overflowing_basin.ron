@@ -1,0 +1,19 @@
+// Oracle 5ac8e01c-b0a7-4855-a122-1cd26b07c4a5; source/rulings checked 2026-11-13.
+// CR 305.6 (land types), 605.1a/605.3a-b (mana ability) and 118.3 (tap cost).
+(
+  id: "overflowing_basin",
+  name: "Overflowing Basin",
+  face_id: "overflowing_basin",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{1}"), Tap],
+      effect: [ProduceMana(options: [
+        (g: 1, u: 1),
+      ])],
+    ),
+  ],
+)

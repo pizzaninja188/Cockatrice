@@ -1,0 +1,11 @@
+// Oracle da952213-9a3c-4e13-bc5a-55d1e5dbaa5b; source/rulings checked 2026-11-13.
+// CR 120.2b (the resolving spell is the damage source), 115.1a (creature target),
+// 608.2b (target revalidation) and 704.5g (lethal damage).
+(
+  id: "electrify",
+  name: "Electrify",
+  face_id: "electrify",
+  mana_cost: "{3}{R}",
+  types: ["Instant"],
+  spell_effect: [DamageTarget(amount: 4, target: (kind: Creature))],
+)

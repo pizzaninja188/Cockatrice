@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "7f3095fb-ffc0-48ed-8792-4157897a9ce7",
+  "spans": [
+    {
+      "face_id": "rise_to_the_challenge",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "Keyword::FirstStrike",
+      "typed_path": "/faces/0/spell_effect/1/GrantKeywords/keywords"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario pump_first_strike_batch::pump_first_strike_batch_cards_cast_with_exact_printed_effects",
+      "covers": "actual rise_to_the_challenge clause coverage"
+    },
+    {
+      "test": "scenario pump_first_strike_batch::pump_first_strike_batch_cards_expire_at_cleanup",
+      "covers": "actual rise_to_the_challenge clause coverage"
+    },
+    {
+      "test": "scenario pump_first_strike_batch::pump_first_strike_batch_cards_reject_a_noncreature_target",
+      "covers": "actual rise_to_the_challenge clause coverage"
+    },
+    {
+      "test": "scenario pump_first_strike_batch::pump_first_strike_batch_cards_fizzle_when_the_target_left",
+      "covers": "actual rise_to_the_challenge clause coverage"
+    },
+    {
+      "test": "scenario pump_first_strike_batch::pump_first_strike_batch_cards_reject_a_cast_without_the_printed_mana",
+      "covers": "actual rise_to_the_challenge rejects a cast without its printed mana"
+    },
+    {
+      "test": "mechanic_registry::pump_first_strike_batch::pump_first_strike_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of rise_to_the_challenge"
+    },
+    {
+      "test": "mechanic_registry::pump_first_strike_batch::pump_first_strike_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for rise_to_the_challenge"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

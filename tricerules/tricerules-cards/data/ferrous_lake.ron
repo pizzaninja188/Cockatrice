@@ -1,0 +1,19 @@
+// Oracle 62c15af0-40e1-407d-b056-7a3d909e3fdb; source/rulings checked 2026-11-13.
+// CR 305.6 (land types), 605.1a/605.3a-b (mana ability) and 118.3 (tap cost).
+(
+  id: "ferrous_lake",
+  name: "Ferrous Lake",
+  face_id: "ferrous_lake",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{1}"), Tap],
+      effect: [ProduceMana(options: [
+        (u: 1, r: 1),
+      ])],
+    ),
+  ],
+)

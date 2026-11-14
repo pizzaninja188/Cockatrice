@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "afa3eb61-624c-4abe-bf1e-58fa3b4c14a6",
+  "spans": [
+    {
+      "face_id": "fiery_finish",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetKind::Creature",
+      "typed_path": "/faces/0/spell_effect/0/DamageTarget/target/kind"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario damage_target_creature_batch::damage_target_creature_batch_cards_deal_exact_damage_from_the_resolving_spell",
+      "covers": "actual fiery_finish clause coverage"
+    },
+    {
+      "test": "scenario damage_target_creature_batch::damage_target_creature_batch_cards_reject_players_and_noncreatures_as_targets",
+      "covers": "actual fiery_finish clause coverage"
+    },
+    {
+      "test": "scenario damage_target_creature_batch::damage_target_creature_batch_cards_fizzle_after_the_target_leaves",
+      "covers": "actual fiery_finish clause coverage"
+    },
+    {
+      "test": "scenario damage_target_creature_batch::damage_target_creature_batch_cards_reject_a_cast_without_the_printed_mana",
+      "covers": "actual fiery_finish rejects a cast without its printed mana"
+    },
+    {
+      "test": "mechanic_registry::damage_target_creature_batch::damage_target_creature_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of fiery_finish"
+    },
+    {
+      "test": "mechanic_registry::damage_target_creature_batch::damage_target_creature_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for fiery_finish"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

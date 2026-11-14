@@ -1,0 +1,19 @@
+// Oracle 4869a530-757f-4364-8d8e-4dc8001f433c; source/rulings checked 2026-11-13.
+// CR 305.6 (land types), 605.1a/605.3a-b (mana ability) and 118.3 (tap cost).
+(
+  id: "darkwater_catacombs",
+  name: "Darkwater Catacombs",
+  face_id: "darkwater_catacombs",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{1}"), Tap],
+      effect: [ProduceMana(options: [
+        (u: 1, b: 1),
+      ])],
+    ),
+  ],
+)

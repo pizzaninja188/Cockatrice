@@ -1650,3 +1650,12 @@ mod protection_red_flying_batch;
 
 #[path = "scenario/signet_cycle_batch.rs"]
 mod signet_cycle_batch;
+
+#[path = "scenario/filter_land_cycle_batch.rs"]
+mod filter_land_cycle_batch;
+
+#[path = "scenario/damage_target_creature_batch.rs"]
+mod damage_target_creature_batch;
+
+#[path = "scenario/pump_first_strike_batch.rs"]
+mod pump_first_strike_batch;

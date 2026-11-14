@@ -1,0 +1,14 @@
+// Oracle bc730e60-b9c2-4c49-b97b-2878be105b04; source/rulings checked 2026-11-13.
+// CR 115.1/608.2b (target), 611.2a (duration), 613.4c (layer 7c) and 613.1f
+// (layer 6 first strike grant); CR 514.2 ends both at cleanup.
+(
+  id: "skillful_lunge",
+  name: "Skillful Lunge",
+  face_id: "skillful_lunge",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 2, toughness: 0),
+    GrantKeywords(keywords: [FirstStrike]),
+  ],
+)

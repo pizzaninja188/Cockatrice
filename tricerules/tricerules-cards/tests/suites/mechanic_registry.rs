@@ -531,3 +531,12 @@ mod protection_red_flying_batch;
 
 #[path = "../signet_cycle_batch.rs"]
 mod signet_cycle_batch;
+
+#[path = "../filter_land_cycle_batch.rs"]
+mod filter_land_cycle_batch;
+
+#[path = "../damage_target_creature_batch.rs"]
+mod damage_target_creature_batch;
+
+#[path = "../pump_first_strike_batch.rs"]
+mod pump_first_strike_batch;

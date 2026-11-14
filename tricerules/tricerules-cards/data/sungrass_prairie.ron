@@ -1,0 +1,19 @@
+// Oracle 0a28dff0-2bd6-4105-b73a-b6c4735833fd; source/rulings checked 2026-11-13.
+// CR 305.6 (land types), 605.1a/605.3a-b (mana ability) and 118.3 (tap cost).
+(
+  id: "sungrass_prairie",
+  name: "Sungrass Prairie",
+  face_id: "sungrass_prairie",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{1}"), Tap],
+      effect: [ProduceMana(options: [
+        (g: 1, w: 1),
+      ])],
+    ),
+  ],
+)
