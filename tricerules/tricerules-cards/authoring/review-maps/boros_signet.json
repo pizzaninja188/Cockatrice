@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "41c84665-1f99-40ab-aaca-1188649eb263",
+  "spans": [
+    {
+      "face_id": "boros_signet",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario signet_cycle_batch::signet_cycle_batch_cards_add_each_printed_color_pair",
+      "covers": "actual boros_signet clause coverage"
+    },
+    {
+      "test": "scenario signet_cycle_batch::signet_cycle_batch_cards_require_the_generic_mana_and_tap_cost",
+      "covers": "actual boros_signet clause coverage"
+    },
+    {
+      "test": "scenario signet_cycle_batch::signet_cycle_batch_cards_do_not_add_mana_when_activation_is_rejected",
+      "covers": "actual boros_signet clause coverage"
+    },
+    {
+      "test": "mechanic_registry::signet_cycle_batch::signet_cycle_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of boros_signet"
+    },
+    {
+      "test": "mechanic_registry::signet_cycle_batch::signet_cycle_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for boros_signet"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

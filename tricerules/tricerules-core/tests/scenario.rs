@@ -1641,3 +1641,12 @@ mod attack_pump_values_batch;
 
 #[path = "scenario/self_pump_once_batch.rs"]
 mod self_pump_once_batch;
+
+#[path = "scenario/swampwalk_batch.rs"]
+mod swampwalk_batch;
+
+#[path = "scenario/protection_red_flying_batch.rs"]
+mod protection_red_flying_batch;
+
+#[path = "scenario/signet_cycle_batch.rs"]
+mod signet_cycle_batch;

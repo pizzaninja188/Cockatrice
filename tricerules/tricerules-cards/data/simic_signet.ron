@@ -1,0 +1,19 @@
+// Oracle 44503105-3e13-408d-a44f-37d503c61d72; source/rulings checked 2026-11-13.
+// CR 605.1a/605.3a-b (mana ability and immediate resolution) and 118.3 (tap cost).
+(
+  id: "simic_signet",
+  name: "Simic Signet",
+  face_id: "simic_signet",
+  mana_cost: "{2}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{1}"), Tap],
+      effect: [ProduceMana(options: [
+        (g: 1, u: 1),
+      ])],
+    ),
+  ],
+)

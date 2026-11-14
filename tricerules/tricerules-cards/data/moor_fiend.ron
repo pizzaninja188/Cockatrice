@@ -1,0 +1,12 @@
+// Oracle ff1fd718-ee97-425c-b8bf-97fea192c631; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "moor_fiend",
+  name: "Moor Fiend",
+  face_id: "moor_fiend",
+  mana_cost: "{3}{B}",
+  types: ["Creature", "Horror"],
+  power: 3,
+  toughness: 3,
+  evasions: [Landwalk(land_subtype: "Swamp")],
+)

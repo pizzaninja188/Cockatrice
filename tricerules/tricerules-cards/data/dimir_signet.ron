@@ -1,0 +1,19 @@
+// Oracle 7d881c57-0bd9-4c57-aa4a-b10808b86143; source/rulings checked 2026-11-13.
+// CR 605.1a/605.3a-b (mana ability and immediate resolution) and 118.3 (tap cost).
+(
+  id: "dimir_signet",
+  name: "Dimir Signet",
+  face_id: "dimir_signet",
+  mana_cost: "{2}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{1}"), Tap],
+      effect: [ProduceMana(options: [
+        (u: 1, b: 1),
+      ])],
+    ),
+  ],
+)

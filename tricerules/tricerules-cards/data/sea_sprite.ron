@@ -1,0 +1,14 @@
+// Oracle b318d94e-314f-4df8-a178-b5ddd756e1c4; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying) and 702.16b-f (protection from a color: no targeting, damage,
+// attachment, or blocking by red sources).
+(
+  id: "sea_sprite",
+  name: "Sea Sprite",
+  face_id: "sea_sprite",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Faerie"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+  protections: [Color(Red)],
+)

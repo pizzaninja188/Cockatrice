@@ -1,0 +1,12 @@
+// Oracle 5c4cb33d-2a79-4934-839f-d34e9ca284f8; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "raiding_nightstalker",
+  name: "Raiding Nightstalker",
+  face_id: "raiding_nightstalker",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Nightstalker"],
+  power: 2,
+  toughness: 2,
+  evasions: [Landwalk(land_subtype: "Swamp")],
+)

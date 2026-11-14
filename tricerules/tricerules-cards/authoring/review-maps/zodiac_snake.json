@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "b97c4d9a-8ea0-40d0-839a-afcd785e807e",
+  "spans": [
+    {
+      "face_id": "zodiac_snake",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/evasions/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Evasion::Landwalk",
+      "typed_path": "/faces/0/evasions/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario swampwalk_batch::swampwalk_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual zodiac_snake clause coverage"
+    },
+    {
+      "test": "scenario swampwalk_batch::swampwalk_batch_cards_cannot_be_blocked_while_defender_controls_a_swamp",
+      "covers": "actual zodiac_snake clause coverage"
+    },
+    {
+      "test": "scenario swampwalk_batch::swampwalk_batch_cards_can_be_blocked_without_a_swamp",
+      "covers": "actual zodiac_snake clause coverage"
+    },
+    {
+      "test": "mechanic_registry::swampwalk_batch::swampwalk_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of zodiac_snake"
+    },
+    {
+      "test": "mechanic_registry::swampwalk_batch::swampwalk_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for zodiac_snake"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

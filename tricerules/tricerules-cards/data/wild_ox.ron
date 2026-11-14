@@ -1,0 +1,12 @@
+// Oracle a6aa245c-b620-486c-864b-0ea4e9bc4048; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "wild_ox",
+  name: "Wild Ox",
+  face_id: "wild_ox",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Ox"],
+  power: 3,
+  toughness: 3,
+  evasions: [Landwalk(land_subtype: "Swamp")],
+)

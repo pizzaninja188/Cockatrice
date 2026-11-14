@@ -1,0 +1,14 @@
+// Oracle c208b959-d0e4-4a9a-8255-2c7cc7596767; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying) and 702.16b-f (protection from a color: no targeting, damage,
+// attachment, or blocking by red sources).
+(
+  id: "abbey_gargoyles",
+  name: "Abbey Gargoyles",
+  face_id: "abbey_gargoyles",
+  mana_cost: "{2}{W}{W}{W}",
+  types: ["Creature", "Gargoyle"],
+  power: 3,
+  toughness: 4,
+  keywords: [Flying],
+  protections: [Color(Red)],
+)

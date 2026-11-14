@@ -522,3 +522,12 @@ mod attack_pump_values_batch;
 
 #[path = "../self_pump_once_batch.rs"]
 mod self_pump_once_batch;
+
+#[path = "../swampwalk_batch.rs"]
+mod swampwalk_batch;
+
+#[path = "../protection_red_flying_batch.rs"]
+mod protection_red_flying_batch;
+
+#[path = "../signet_cycle_batch.rs"]
+mod signet_cycle_batch;

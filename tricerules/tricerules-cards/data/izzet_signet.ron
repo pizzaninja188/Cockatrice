@@ -1,0 +1,19 @@
+// Oracle 2fda4fe7-8b0c-489c-a000-6d358e614e34; source/rulings checked 2026-11-13.
+// CR 605.1a/605.3a-b (mana ability and immediate resolution) and 118.3 (tap cost).
+(
+  id: "izzet_signet",
+  name: "Izzet Signet",
+  face_id: "izzet_signet",
+  mana_cost: "{2}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{1}"), Tap],
+      effect: [ProduceMana(options: [
+        (u: 1, r: 1),
+      ])],
+    ),
+  ],
+)

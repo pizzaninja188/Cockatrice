@@ -1,0 +1,12 @@
+// Oracle 1c68e877-ee47-42bf-a867-3f7f479eae1c; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "lost_soul",
+  name: "Lost Soul",
+  face_id: "lost_soul",
+  mana_cost: "{1}{B}{B}",
+  types: ["Creature", "Spirit", "Minion"],
+  power: 2,
+  toughness: 1,
+  evasions: [Landwalk(land_subtype: "Swamp")],
+)
