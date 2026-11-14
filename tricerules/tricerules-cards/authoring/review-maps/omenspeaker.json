@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "43d7fcf3-acc2-4e9b-a466-c73b1b6c58af",
+  "spans": [
+    {
+      "face_id": "omenspeaker",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_scry_two_batch::etb_scry_two_batch_cards_scry_two_on_entry",
+      "covers": "actual omenspeaker clause coverage"
+    },
+    {
+      "test": "scenario etb_scry_two_batch::etb_scry_two_batch_cards_offer_only_the_printed_top_cards",
+      "covers": "actual omenspeaker clause coverage"
+    },
+    {
+      "test": "scenario etb_scry_two_batch::etb_scry_two_batch_cards_scope_the_choice_to_their_controller",
+      "covers": "actual omenspeaker clause coverage"
+    },
+    {
+      "test": "mechanic_registry::etb_scry_two_batch::etb_scry_two_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of omenspeaker"
+    },
+    {
+      "test": "mechanic_registry::etb_scry_two_batch::etb_scry_two_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for omenspeaker"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

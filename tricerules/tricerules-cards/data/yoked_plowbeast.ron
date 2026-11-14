@@ -1,0 +1,21 @@
+// Oracle 07237694-b5d5-4c92-a429-55e343b8dd1c; source/rulings checked 2026-11-13.
+// CR 702.29a-b: Cycling is a hand-zone activated ability paid with {2} and
+// discarding this card, then drawing one card.
+(
+  id: "yoked_plowbeast",
+  name: "Yoked Plowbeast",
+  face_id: "yoked_plowbeast",
+  mana_cost: "{5}{W}{W}",
+  types: ["Creature", "Beast"],
+  power: 5,
+  toughness: 5,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      source_zone: Hand,
+      costs: [Mana("{2}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

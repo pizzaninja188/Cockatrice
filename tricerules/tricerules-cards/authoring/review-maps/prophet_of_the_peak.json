@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "eaa1634e-6ba1-41c2-91c0-967b36d13e14",
+  "spans": [
+    {
+      "face_id": "prophet_of_the_peak",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_scry_two_batch::etb_scry_two_batch_cards_scry_two_on_entry",
+      "covers": "actual prophet_of_the_peak clause coverage"
+    },
+    {
+      "test": "scenario etb_scry_two_batch::etb_scry_two_batch_cards_offer_only_the_printed_top_cards",
+      "covers": "actual prophet_of_the_peak clause coverage"
+    },
+    {
+      "test": "scenario etb_scry_two_batch::etb_scry_two_batch_cards_scope_the_choice_to_their_controller",
+      "covers": "actual prophet_of_the_peak clause coverage"
+    },
+    {
+      "test": "mechanic_registry::etb_scry_two_batch::etb_scry_two_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of prophet_of_the_peak"
+    },
+    {
+      "test": "mechanic_registry::etb_scry_two_batch::etb_scry_two_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for prophet_of_the_peak"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

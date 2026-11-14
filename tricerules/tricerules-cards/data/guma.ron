@@ -1,0 +1,13 @@
+// Oracle a9cbf2ed-9896-41b5-b17f-e2fcb3cb82fa; source/rulings checked 2026-11-13.
+// CR 702.16b-f: protection's five effects (no targeting, no Aura/Equipment
+// attachment, no damage, no blocking, no Fortify).
+(
+  id: "guma",
+  name: "Guma",
+  face_id: "guma",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Cat"],
+  power: 2,
+  toughness: 2,
+  protections: [Color(Blue)],
+)

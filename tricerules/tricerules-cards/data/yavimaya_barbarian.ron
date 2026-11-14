@@ -1,0 +1,13 @@
+// Oracle 04576b4d-2977-4cdf-b4a5-b0b47995e962; source/rulings checked 2026-11-13.
+// CR 702.16b-f: protection's five effects (no targeting, no Aura/Equipment
+// attachment, no damage, no blocking, no Fortify).
+(
+  id: "yavimaya_barbarian",
+  name: "Yavimaya Barbarian",
+  face_id: "yavimaya_barbarian",
+  mana_cost: "{R}{G}",
+  types: ["Creature", "Elf", "Barbarian"],
+  power: 2,
+  toughness: 2,
+  protections: [Color(Blue)],
+)

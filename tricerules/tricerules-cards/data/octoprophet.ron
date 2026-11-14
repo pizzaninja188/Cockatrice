@@ -1,0 +1,19 @@
+// Oracle af6cfc23-b64b-4c8a-94b4-69d2b01cb3b9; source/rulings checked 2026-11-13.
+// CR 603.6a (enters trigger) and 701.22a-b (scry two).
+(
+  id: "octoprophet",
+  name: "Octoprophet",
+  face_id: "octoprophet",
+  mana_cost: "{3}{U}",
+  types: ["Creature", "Octopus"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Scry(count: 2)],
+    ),
+  ],
+)

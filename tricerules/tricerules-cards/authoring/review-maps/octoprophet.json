@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "af6cfc23-b64b-4c8a-94b4-69d2b01cb3b9",
+  "spans": [
+    {
+      "face_id": "octoprophet",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_scry_two_batch::etb_scry_two_batch_cards_scry_two_on_entry",
+      "covers": "actual octoprophet clause coverage"
+    },
+    {
+      "test": "scenario etb_scry_two_batch::etb_scry_two_batch_cards_offer_only_the_printed_top_cards",
+      "covers": "actual octoprophet clause coverage"
+    },
+    {
+      "test": "scenario etb_scry_two_batch::etb_scry_two_batch_cards_scope_the_choice_to_their_controller",
+      "covers": "actual octoprophet clause coverage"
+    },
+    {
+      "test": "mechanic_registry::etb_scry_two_batch::etb_scry_two_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of octoprophet"
+    },
+    {
+      "test": "mechanic_registry::etb_scry_two_batch::etb_scry_two_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for octoprophet"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

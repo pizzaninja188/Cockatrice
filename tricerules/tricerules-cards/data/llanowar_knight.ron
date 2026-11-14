@@ -1,0 +1,13 @@
+// Oracle 6b26951f-57be-4524-ae0e-a102e84e81ef; source/rulings checked 2026-11-13.
+// CR 702.16b-f: protection's five effects (no targeting, no Aura/Equipment
+// attachment, no damage, no blocking, no Fortify).
+(
+  id: "llanowar_knight",
+  name: "Llanowar Knight",
+  face_id: "llanowar_knight",
+  mana_cost: "{G}{W}",
+  types: ["Creature", "Elf", "Knight"],
+  power: 2,
+  toughness: 2,
+  protections: [Color(Black)],
+)

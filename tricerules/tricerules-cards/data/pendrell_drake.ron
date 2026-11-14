@@ -1,0 +1,21 @@
+// Oracle 8d8981df-4cdc-4fd4-acd8-095fa3281281; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying) and 702.29a-b (Cycling as a hand-zone activated ability).
+(
+  id: "pendrell_drake",
+  name: "Pendrell Drake",
+  face_id: "pendrell_drake",
+  mana_cost: "{3}{U}",
+  types: ["Creature", "Drake"],
+  power: 2,
+  toughness: 3,
+  keywords: [Flying],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      source_zone: Hand,
+      costs: [Mana("{2}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

@@ -1,0 +1,22 @@
+// Oracle 3c46f309-69ae-43b1-adf6-bdb26599c1f4; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying) and 509.1b (blocking restrictions); reach does not
+// make a creature a legal blocker for this restriction.
+(
+  id: "cloud_dragon",
+  name: "Cloud Dragon",
+  face_id: "cloud_dragon",
+  mana_cost: "{5}{U}",
+  types: ["Creature", "Illusion", "Dragon"],
+  power: 5,
+  toughness: 4,
+  keywords: [Flying],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: SelfCombatRestriction(restriction: (
+        cant_block_creatures_matching: [(kind: Creature, excluded_keywords: [Flying])],
+      )),
+    ),
+  ],
+)

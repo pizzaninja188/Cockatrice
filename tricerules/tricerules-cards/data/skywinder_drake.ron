@@ -1,0 +1,22 @@
+// Oracle e894ccf5-fc71-48bd-bca5-cfeb05315f42; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying) and 509.1b (blocking restrictions); reach does not
+// make a creature a legal blocker for this restriction.
+(
+  id: "skywinder_drake",
+  name: "Skywinder Drake",
+  face_id: "skywinder_drake",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Drake"],
+  power: 3,
+  toughness: 1,
+  keywords: [Flying],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: SelfCombatRestriction(restriction: (
+        cant_block_creatures_matching: [(kind: Creature, excluded_keywords: [Flying])],
+      )),
+    ),
+  ],
+)

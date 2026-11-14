@@ -1,0 +1,21 @@
+// Oracle 701912d5-9995-4ac7-9858-188f78b2b8a3; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying) and 702.29a-b (Cycling as a hand-zone activated ability).
+(
+  id: "angel_of_the_god-pharaoh",
+  name: "Angel of the God-Pharaoh",
+  face_id: "angel_of_the_god_pharaoh",
+  mana_cost: "{4}{W}{W}",
+  types: ["Creature", "Angel"],
+  power: 4,
+  toughness: 4,
+  keywords: [Flying],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      source_zone: Hand,
+      costs: [Mana("{2}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

@@ -1,0 +1,13 @@
+// Oracle 9a484eb3-ae4a-465b-9dbc-f7a42a036e07; source/rulings checked 2026-11-13.
+// CR 702.16b-f: protection's five effects (no targeting, no Aura/Equipment
+// attachment, no damage, no blocking, no Fortify).
+(
+  id: "galinas_knight",
+  name: "Galina's Knight",
+  face_id: "galinas_knight",
+  mana_cost: "{W}{U}",
+  types: ["Creature", "Merfolk", "Knight"],
+  power: 2,
+  toughness: 2,
+  protections: [Color(Red)],
+)

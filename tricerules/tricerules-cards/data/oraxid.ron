@@ -1,0 +1,13 @@
+// Oracle 7d086ae5-738c-4685-80ae-66bd9379d8f7; source/rulings checked 2026-11-13.
+// CR 702.16b-f: protection's five effects (no targeting, no Aura/Equipment
+// attachment, no damage, no blocking, no Fortify).
+(
+  id: "oraxid",
+  name: "Oraxid",
+  face_id: "oraxid",
+  mana_cost: "{3}{U}",
+  types: ["Creature", "Crab", "Beast"],
+  power: 2,
+  toughness: 3,
+  protections: [Color(Red)],
+)

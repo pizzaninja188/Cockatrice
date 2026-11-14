@@ -1,0 +1,13 @@
+// Oracle c04dc6fe-06fc-4e5b-87da-6b8b262a214f; source/rulings checked 2026-11-13.
+// CR 702.16b-f: protection's five effects (no targeting, no Aura/Equipment
+// attachment, no damage, no blocking, no Fortify).
+(
+  id: "scalebanes_elite",
+  name: "Scalebane's Elite",
+  face_id: "scalebanes_elite",
+  mana_cost: "{3}{G}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 4,
+  toughness: 4,
+  protections: [Color(Black)],
+)

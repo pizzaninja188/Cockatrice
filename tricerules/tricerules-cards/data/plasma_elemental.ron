@@ -1,0 +1,19 @@
+// Oracle 419c501f-c107-4166-b56d-631672f2a5cc; source/rulings checked 2026-11-13.
+// CR 509.1b (a declaration of blockers is illegal when a blocking restriction
+// is disobeyed); the restriction is source-only and unconditional.
+(
+  id: "plasma_elemental",
+  name: "Plasma Elemental",
+  face_id: "plasma_elemental",
+  mana_cost: "{5}{U}",
+  types: ["Creature", "Elemental"],
+  power: 4,
+  toughness: 1,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: SelfCombatRestriction(restriction: (cant_be_blocked: true)),
+    ),
+  ],
+)

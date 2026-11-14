@@ -1,0 +1,21 @@
+// Oracle 28a1e053-eb14-4fbf-afd1-bfb6117a839a; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying) and 702.29a-b (Cycling as a hand-zone activated ability).
+(
+  id: "primoc_escapee",
+  name: "Primoc Escapee",
+  face_id: "primoc_escapee",
+  mana_cost: "{6}{U}",
+  types: ["Creature", "Bird", "Beast"],
+  power: 4,
+  toughness: 4,
+  keywords: [Flying],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      source_zone: Hand,
+      costs: [Mana("{2}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

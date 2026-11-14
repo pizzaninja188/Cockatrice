@@ -1,0 +1,19 @@
+// Oracle eaa1634e-6ba1-41c2-91c0-967b36d13e14; source/rulings checked 2026-11-13.
+// CR 603.6a (enters trigger) and 701.22a-b (scry two).
+(
+  id: "prophet_of_the_peak",
+  name: "Prophet of the Peak",
+  face_id: "prophet_of_the_peak",
+  mana_cost: "{6}",
+  types: ["Artifact", "Creature", "Cat"],
+  power: 5,
+  toughness: 5,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Scry(count: 2)],
+    ),
+  ],
+)

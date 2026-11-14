@@ -1,0 +1,22 @@
+// Oracle 5ca8d756-a55a-4b36-b0a6-562a39484952; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying) and 509.1b (blocking restrictions); reach does not
+// make a creature a legal blocker for this restriction.
+(
+  id: "hoverguard_observer",
+  name: "Hoverguard Observer",
+  face_id: "hoverguard_observer",
+  mana_cost: "{2}{U}{U}",
+  types: ["Creature", "Drone"],
+  power: 3,
+  toughness: 3,
+  keywords: [Flying],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: SelfCombatRestriction(restriction: (
+        cant_block_creatures_matching: [(kind: Creature, excluded_keywords: [Flying])],
+      )),
+    ),
+  ],
+)

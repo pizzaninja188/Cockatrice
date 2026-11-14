@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "b8f3b5b5-8835-400f-a626-94ff0a007e56",
+  "spans": [
+    {
+      "face_id": "lost_legion",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_scry_two_batch::etb_scry_two_batch_cards_scry_two_on_entry",
+      "covers": "actual lost_legion clause coverage"
+    },
+    {
+      "test": "scenario etb_scry_two_batch::etb_scry_two_batch_cards_offer_only_the_printed_top_cards",
+      "covers": "actual lost_legion clause coverage"
+    },
+    {
+      "test": "scenario etb_scry_two_batch::etb_scry_two_batch_cards_scope_the_choice_to_their_controller",
+      "covers": "actual lost_legion clause coverage"
+    },
+    {
+      "test": "mechanic_registry::etb_scry_two_batch::etb_scry_two_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of lost_legion"
+    },
+    {
+      "test": "mechanic_registry::etb_scry_two_batch::etb_scry_two_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for lost_legion"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

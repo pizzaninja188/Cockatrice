@@ -1,0 +1,19 @@
+// Oracle 71a60247-17e5-44bd-9fed-f7d550b09ef3; source/rulings checked 2026-11-13.
+// CR 509.1b (a declaration of blockers is illegal when a blocking restriction
+// is disobeyed); the restriction is source-only and unconditional.
+(
+  id: "triton_shorestalker",
+  name: "Triton Shorestalker",
+  face_id: "triton_shorestalker",
+  mana_cost: "{U}",
+  types: ["Creature", "Merfolk", "Rogue"],
+  power: 1,
+  toughness: 1,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: SelfCombatRestriction(restriction: (cant_be_blocked: true)),
+    ),
+  ],
+)

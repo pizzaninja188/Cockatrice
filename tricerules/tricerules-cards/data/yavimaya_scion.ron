@@ -1,0 +1,13 @@
+// Oracle 6e06b5cc-444c-49c9-b08a-81ef8d97c9ab; source/rulings checked 2026-11-13.
+// CR 702.16b-f: protection's five effects (no targeting, no Aura/Equipment
+// attachment, no damage, no blocking, no Fortify).
+(
+  id: "yavimaya_scion",
+  name: "Yavimaya Scion",
+  face_id: "yavimaya_scion",
+  mana_cost: "{4}{G}",
+  types: ["Creature", "Treefolk"],
+  power: 4,
+  toughness: 4,
+  protections: [CardType(Artifact)],
+)

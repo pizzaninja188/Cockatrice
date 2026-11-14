@@ -1,0 +1,13 @@
+// Oracle 871549e6-24c0-4fbd-8b71-ba8639b0ee47; source/rulings checked 2026-11-13.
+// CR 702.16b-f: protection's five effects (no targeting, no Aura/Equipment
+// attachment, no damage, no blocking, no Fortify).
+(
+  id: "karoo_meerkat",
+  name: "Karoo Meerkat",
+  face_id: "karoo_meerkat",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Mongoose"],
+  power: 2,
+  toughness: 1,
+  protections: [Color(Blue)],
+)

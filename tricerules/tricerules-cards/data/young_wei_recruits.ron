@@ -1,0 +1,19 @@
+// Oracle cdada8f0-d001-485c-a245-5e1c1ab748ab; source/rulings checked 2026-11-13.
+// CR 509.1b (a declaration of blockers is illegal when a blocking restriction
+// is disobeyed); the restriction is source-only and unconditional.
+(
+  id: "young_wei_recruits",
+  name: "Young Wei Recruits",
+  face_id: "young_wei_recruits",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 2,
+  toughness: 2,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: SelfCombatRestriction(restriction: (cant_block: true)),
+    ),
+  ],
+)

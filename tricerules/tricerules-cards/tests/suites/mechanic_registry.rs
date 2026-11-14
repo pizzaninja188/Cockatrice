@@ -549,3 +549,30 @@ mod landfall_pump_remnant_batch;
 
 #[path = "../battle_land_cycle_batch.rs"]
 mod battle_land_cycle_batch;
+
+#[path = "../cant_block_batch.rs"]
+mod cant_block_batch;
+
+#[path = "../cant_be_blocked_batch.rs"]
+mod cant_be_blocked_batch;
+
+#[path = "../protection_cycle_batch.rs"]
+mod protection_cycle_batch;
+
+#[path = "../flying_blocks_only_flying_batch.rs"]
+mod flying_blocks_only_flying_batch;
+
+#[path = "../cycling_two_batch.rs"]
+mod cycling_two_batch;
+
+#[path = "../flying_cycling_two_batch.rs"]
+mod flying_cycling_two_batch;
+
+#[path = "../etb_scry_two_batch.rs"]
+mod etb_scry_two_batch;
+
+#[path = "../flying_dies_draw_batch.rs"]
+mod flying_dies_draw_batch;
+
+#[path = "../etb_destroy_artifact_batch.rs"]
+mod etb_destroy_artifact_batch;

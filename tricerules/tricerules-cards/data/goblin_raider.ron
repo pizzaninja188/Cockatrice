@@ -1,0 +1,19 @@
+// Oracle 7f11c830-fced-40db-8c02-b3c54f3e4372; source/rulings checked 2026-11-13.
+// CR 509.1b (a declaration of blockers is illegal when a blocking restriction
+// is disobeyed); the restriction is source-only and unconditional.
+(
+  id: "goblin_raider",
+  name: "Goblin Raider",
+  face_id: "goblin_raider",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Goblin", "Warrior"],
+  power: 2,
+  toughness: 2,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: SelfCombatRestriction(restriction: (cant_block: true)),
+    ),
+  ],
+)

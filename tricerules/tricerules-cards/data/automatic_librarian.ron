@@ -1,0 +1,19 @@
+// Oracle eb570331-35da-44b8-b711-ccf7444d8e39; source/rulings checked 2026-11-13.
+// CR 603.6a (enters trigger) and 701.22a-b (scry two).
+(
+  id: "automatic_librarian",
+  name: "Automatic Librarian",
+  face_id: "automatic_librarian",
+  mana_cost: "{3}",
+  types: ["Artifact", "Creature", "Construct"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Scry(count: 2)],
+    ),
+  ],
+)

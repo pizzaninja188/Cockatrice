@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "81b51bb1-89b9-46a0-ad7a-a43c0d214f11",
+  "spans": [
+    {
+      "face_id": "belbes_percher",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "belbes_percher",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "StaticAbilityDef::SelfCombatRestriction",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flying_blocks_only_flying_batch::flying_blocks_only_flying_batch_cards_have_flying_and_the_restriction",
+      "covers": "actual belbes_percher clause coverage"
+    },
+    {
+      "test": "scenario flying_blocks_only_flying_batch::flying_blocks_only_flying_batch_cards_block_flying_attackers",
+      "covers": "actual belbes_percher clause coverage"
+    },
+    {
+      "test": "scenario flying_blocks_only_flying_batch::flying_blocks_only_flying_batch_cards_reject_ground_and_reach_only_attackers",
+      "covers": "actual belbes_percher clause coverage"
+    },
+    {
+      "test": "mechanic_registry::flying_blocks_only_flying_batch::flying_blocks_only_flying_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of belbes_percher"
+    },
+    {
+      "test": "mechanic_registry::flying_blocks_only_flying_batch::flying_blocks_only_flying_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for belbes_percher"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

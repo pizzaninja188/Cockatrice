@@ -1,0 +1,22 @@
+// Oracle 81b51bb1-89b9-46a0-ad7a-a43c0d214f11; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying) and 509.1b (blocking restrictions); reach does not
+// make a creature a legal blocker for this restriction.
+(
+  id: "belbes_percher",
+  name: "Belbe's Percher",
+  face_id: "belbes_percher",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Bird"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: SelfCombatRestriction(restriction: (
+        cant_block_creatures_matching: [(kind: Creature, excluded_keywords: [Flying])],
+      )),
+    ),
+  ],
+)

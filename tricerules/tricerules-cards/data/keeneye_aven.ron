@@ -1,0 +1,21 @@
+// Oracle 86b7ff68-0bd9-4fc9-9803-fde2d4a2f59b; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying) and 702.29a-b (Cycling as a hand-zone activated ability).
+(
+  id: "keeneye_aven",
+  name: "Keeneye Aven",
+  face_id: "keeneye_aven",
+  mana_cost: "{3}{U}",
+  types: ["Creature", "Bird", "Soldier"],
+  power: 2,
+  toughness: 3,
+  keywords: [Flying],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      source_zone: Hand,
+      costs: [Mana("{2}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

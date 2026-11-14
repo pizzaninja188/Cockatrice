@@ -1,0 +1,22 @@
+// Oracle 754a72fd-e837-44f7-9bd7-5bf55ee8134c; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying) and 509.1b (blocking restrictions); reach does not
+// make a creature a legal blocker for this restriction.
+(
+  id: "tattered_haunter",
+  name: "Tattered Haunter",
+  face_id: "tattered_haunter",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Spirit"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flying],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: SelfCombatRestriction(restriction: (
+        cant_block_creatures_matching: [(kind: Creature, excluded_keywords: [Flying])],
+      )),
+    ),
+  ],
+)

@@ -1,0 +1,19 @@
+// Oracle 74255add-2894-4c31-81c1-d38873fa325f; source/rulings checked 2026-11-13.
+// CR 509.1b (a declaration of blockers is illegal when a blocking restriction
+// is disobeyed); the restriction is source-only and unconditional.
+(
+  id: "mist-cloaked_herald",
+  name: "Mist-Cloaked Herald",
+  face_id: "mist_cloaked_herald",
+  mana_cost: "{U}",
+  types: ["Creature", "Merfolk", "Warrior"],
+  power: 1,
+  toughness: 1,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: SelfCombatRestriction(restriction: (cant_be_blocked: true)),
+    ),
+  ],
+)

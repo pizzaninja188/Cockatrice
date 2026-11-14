@@ -101,6 +101,7 @@ ancient_grudge	0	cast	exercised
 ancient_spider	0	cast	exercised
 angel_of_mercy	0	cast	exercised
 angel_of_retribution	0	cast	exercised
+angel_of_the_god-pharaoh	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 angelic_edict	0	cast	exercised
 angelic_wall	0	cast	exercised
 angels_mercy	0	cast	exercised
@@ -235,6 +236,7 @@ barkchannel_pathway_tidechannel_pathway	1	ability:0	exercised
 barkchannel_pathway_tidechannel_pathway	1	land	exercised
 barkform_harvester	0	ability:0	exercised
 barkform_harvester	0	cast	exercised
+barkhide_mauler	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 baron,_airship_kingdom	0	ability:0	exercised
 baron,_airship_kingdom	0	land	exercised
 barony_vampire	0	cast	exercised
@@ -1759,6 +1761,7 @@ kavaron_skywarden	0	cast	exercised
 kavu_climber	0	cast	exercised
 kederekt_creeper	0	cast	exercised
 keen-eyed_archers	0	cast	exercised
+keeneye_aven	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 keening_apparition	0	ability:0	unsupported: target group 0 needs a richer fixture
 keening_apparition	0	cast	exercised
 keep_out	0	cast	unsupported: face not offered by generic hand fixture
@@ -2329,6 +2332,7 @@ peerless_ropemaster	0	cast	exercised
 pegasus_charger	0	cast	exercised
 pegasus_courser	0	cast	exercised
 pelakka_wurm	0	cast	exercised
+pendrell_drake	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 pensive_minotaur	0	cast	exercised
 peregrine_griffin	0	cast	exercised
 perigee_beckoner	0	cast	exercised
@@ -2403,6 +2407,7 @@ prideful_feastling	0	cast	exercised
 prideful_parent	0	cast	exercised
 pridemalkin	0	cast	exercised
 primal_huntbeast	0	cast	exercised
+primoc_escapee	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 primordial_pachyderm	0	cast	exercised
 primordial_wurm	0	cast	exercised
 prismari_charm	0	cast	exercised
@@ -2587,6 +2592,7 @@ rhox_brute	0	cast	exercised
 rhox_oracle	0	cast	exercised
 rhox_war_monk	0	cast	exercised
 rib_cage_spider	0	cast	exercised
+ridge_rannet	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 ridgetop_raptor	0	cast	exercised
 rig_for_war	0	cast	exercised
 riling_dawnbreaker_signaling_roar	0	cast	exercised
@@ -2718,6 +2724,8 @@ saltcrusted_steppe	0	land	exercised
 salvager_of_secrets	0	cast	exercised
 sami,_ships_engineer	0	cast	exercised
 samis_curiosity	0	cast	exercised
+sandbar_merfolk	0	ability:0	unsupported: ability not offered by generic battlefield fixture
+sandbar_serpent	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 sandskitter_outrider	0	cast	exercised
 sandsteppe_citadel	0	ability:0	exercised
 sandsteppe_citadel	0	land	exercised
@@ -2852,6 +2860,7 @@ sheltered_thicket	0	land	exercised
 shepherd_of_the_lost	0	cast	exercised
 shepherding_spirits	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 shepherding_spirits	0	cast	exercised
+shimmerscale_drake	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 shining_aerosaur	0	cast	exercised
 shinra_reinforcements	0	cast	exercised
 shipwreck_dowser	0	cast	exercised
@@ -3803,6 +3812,7 @@ yavimaya_coast	0	land	exercised
 yavimaya_wurm	0	cast	exercised
 yip_yip!	0	cast	exercised
 yoked_ox	0	cast	exercised
+yoked_plowbeast	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 yotian_medic	0	cast	exercised
 yotian_soldier	0	cast	exercised
 youre_not_alone	0	cast	exercised

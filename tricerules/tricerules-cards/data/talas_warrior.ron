@@ -1,0 +1,19 @@
+// Oracle 12beabf3-a84b-49c2-9462-8876a4ac74d4; source/rulings checked 2026-11-13.
+// CR 509.1b (a declaration of blockers is illegal when a blocking restriction
+// is disobeyed); the restriction is source-only and unconditional.
+(
+  id: "talas_warrior",
+  name: "Talas Warrior",
+  face_id: "talas_warrior",
+  mana_cost: "{1}{U}{U}",
+  types: ["Creature", "Human", "Pirate", "Warrior"],
+  power: 2,
+  toughness: 2,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: SelfCombatRestriction(restriction: (cant_be_blocked: true)),
+    ),
+  ],
+)

@@ -1,0 +1,21 @@
+// Oracle 84a18b1f-5f9f-4e2b-87cd-c437bdf4d278; source/rulings checked 2026-11-13.
+// CR 702.29a-b: Cycling is a hand-zone activated ability paid with {2} and
+// discarding this card, then drawing one card.
+(
+  id: "barkhide_mauler",
+  name: "Barkhide Mauler",
+  face_id: "barkhide_mauler",
+  mana_cost: "{4}{G}",
+  types: ["Creature", "Beast"],
+  power: 4,
+  toughness: 4,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      source_zone: Hand,
+      costs: [Mana("{2}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

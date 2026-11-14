@@ -1,0 +1,13 @@
+// Oracle 3cc99034-6eaf-4e45-9bff-57b74847343e; source/rulings checked 2026-11-13.
+// CR 702.16b-f: protection's five effects (no targeting, no Aura/Equipment
+// attachment, no damage, no blocking, no Fortify).
+(
+  id: "goblin_outlander",
+  name: "Goblin Outlander",
+  face_id: "goblin_outlander",
+  mana_cost: "{B}{R}",
+  types: ["Creature", "Goblin", "Scout"],
+  power: 2,
+  toughness: 2,
+  protections: [Color(White)],
+)

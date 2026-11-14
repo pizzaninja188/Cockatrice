@@ -1,0 +1,22 @@
+// Oracle 3c4661da-db2e-4834-9bba-d9a5592465d2; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying) and 509.1b (blocking restrictions); reach does not
+// make a creature a legal blocker for this restriction.
+(
+  id: "rishadan_airship",
+  name: "Rishadan Airship",
+  face_id: "rishadan_airship",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Human", "Pirate"],
+  power: 3,
+  toughness: 1,
+  keywords: [Flying],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: SelfCombatRestriction(restriction: (
+        cant_block_creatures_matching: [(kind: Creature, excluded_keywords: [Flying])],
+      )),
+    ),
+  ],
+)
