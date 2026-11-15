@@ -1830,3 +1830,12 @@ mod lifelink_pump_batch;
 
 #[path = "scenario/affinity_flying_batch.rs"]
 mod affinity_flying_batch;
+
+#[path = "scenario/wall_regenerate_batch.rs"]
+mod wall_regenerate_batch;
+
+#[path = "scenario/flier_regenerate_batch.rs"]
+mod flier_regenerate_batch;
+
+#[path = "scenario/wall_pump_batch.rs"]
+mod wall_pump_batch;

@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "828c1a94-36e1-484b-afc8-87f85956d60d",
+  "spans": [
+    {
+      "face_id": "yavimaya_gnats",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "yavimaya_gnats",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Regenerate",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flier_regenerate_batch::flier_regenerate_batch_cards_cast_with_exact_characteristics_and_flying",
+      "covers": "actual yavimaya_gnats is exercised by the shared flier_regenerate_batch actual-card scenario: printed mana, body, owner, controller and flying"
+    },
+    {
+      "test": "scenario flier_regenerate_batch::flier_regenerate_batch_cards_place_a_shield_with_the_exact_cost",
+      "covers": "actual yavimaya_gnats is exercised by the shared flier_regenerate_batch actual-card scenario: one regeneration shield from the printed mana cost"
+    },
+    {
+      "test": "scenario flier_regenerate_batch::flier_regenerate_batch_cards_survive_lethal_damage_by_consuming_the_shield",
+      "covers": "actual yavimaya_gnats is exercised by the shared flier_regenerate_batch actual-card scenario: lethal damage is replaced and the shield is consumed"
+    },
+    {
+      "test": "scenario flier_regenerate_batch::flier_regenerate_batch_cards_reject_activation_when_the_cost_cannot_be_paid",
+      "covers": "actual yavimaya_gnats is exercised by the shared flier_regenerate_batch actual-card scenario: an unpaid activation spends no mana and creates no shield"
+    },
+    {
+      "test": "scenario flier_regenerate_batch::flier_regenerate_batch_cards_leave_other_permanents_unchanged",
+      "covers": "actual yavimaya_gnats is exercised by the shared flier_regenerate_batch actual-card scenario: other creatures and life totals are untouched"
+    },
+    {
+      "test": "mechanic_registry::flier_regenerate_batch::flier_regenerate_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of yavimaya_gnats (flying + {M} regenerate)"
+    },
+    {
+      "test": "mechanic_registry::flier_regenerate_batch::flier_regenerate_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for yavimaya_gnats"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

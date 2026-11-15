@@ -1,0 +1,22 @@
+// Oracle 608cc65c-f99a-4ca3-be24-190d2556b411; source/rulings checked 2026-11-15 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.3a (defender), 602.1a/602.2 (activated ability and cost), and
+// 611.2a/514.2 (until-end-of-turn pump).
+(
+  id: "wall_of_water",
+  name: "Wall of Water",
+  face_id: "wall_of_water",
+  mana_cost: "{1}{U}{U}",
+  types: ["Creature", "Wall"],
+  power: 0,
+  toughness: 5,
+  keywords: [Defender],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{U}")],
+      effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
+    ),
+  ],
+)

@@ -1,0 +1,22 @@
+// Oracle 4844312c-3c9d-4ca1-986d-4ad35e68454e; source/rulings checked 2026-11-15 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.3a (defender), 701.19a/b (regenerate), and 602.1a/602.2
+// (activated ability and cost).
+(
+  id: "living_wall",
+  name: "Living Wall",
+  face_id: "living_wall",
+  mana_cost: "{4}",
+  types: ["Artifact", "Creature", "Wall"],
+  power: 0,
+  toughness: 6,
+  keywords: [Defender],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{1}")],
+      effect: [Regenerate(subject: Source)],
+    ),
+  ],
+)

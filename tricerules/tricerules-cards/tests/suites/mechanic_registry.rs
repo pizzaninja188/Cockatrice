@@ -702,3 +702,12 @@ mod etb_damage_creature_batch;
 
 #[path = "../team_pump_on_enter_batch.rs"]
 mod team_pump_on_enter_batch;
+
+#[path = "../wall_regenerate_batch.rs"]
+mod wall_regenerate_batch;
+
+#[path = "../flier_regenerate_batch.rs"]
+mod flier_regenerate_batch;
+
+#[path = "../wall_pump_batch.rs"]
+mod wall_pump_batch;
