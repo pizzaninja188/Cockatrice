@@ -1695,3 +1695,30 @@ mod flying_dies_draw_batch;
 
 #[path = "scenario/etb_destroy_artifact_batch.rs"]
 mod etb_destroy_artifact_batch;
+
+#[path = "scenario/tap_gain_life_batch.rs"]
+mod tap_gain_life_batch;
+
+#[path = "scenario/tap_untap_land_batch.rs"]
+mod tap_untap_land_batch;
+
+#[path = "scenario/destroy_attacking_batch.rs"]
+mod destroy_attacking_batch;
+
+#[path = "scenario/etb_destroy_land_batch.rs"]
+mod etb_destroy_land_batch;
+
+#[path = "scenario/wither_batch.rs"]
+mod wither_batch;
+
+#[path = "scenario/flying_protection_batch.rs"]
+mod flying_protection_batch;
+
+#[path = "scenario/vanilla_colorless_batch.rs"]
+mod vanilla_colorless_batch;
+
+#[path = "scenario/vanilla_green_batch.rs"]
+mod vanilla_green_batch;
+
+#[path = "scenario/vanilla_gold_batch.rs"]
+mod vanilla_gold_batch;
