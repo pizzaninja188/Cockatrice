@@ -1,0 +1,62 @@
+{
+  "format_version": 1,
+  "oracle_id": "c3401995-4fb4-4b43-b852-5ccad6dc3154",
+  "spans": [
+    {
+      "face_id": "mortals_ardor",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario lifelink_pump_batch::lifelink_pump_batch_cards_pump_and_grant_lifelink_to_the_chosen_creature",
+      "covers": "actual mortals_ardor is exercised by the shared 08-lifelink-pump actual-card scenario"
+    },
+    {
+      "test": "scenario lifelink_pump_batch::lifelink_pump_batch_cards_may_target_an_opponents_creature",
+      "covers": "actual mortals_ardor is exercised by the shared 08-lifelink-pump actual-card scenario"
+    },
+    {
+      "test": "scenario lifelink_pump_batch::lifelink_pump_batch_cards_gain_life_when_the_pumped_creature_deals_damage",
+      "covers": "actual mortals_ardor is exercised by the shared 08-lifelink-pump actual-card scenario"
+    },
+    {
+      "test": "scenario lifelink_pump_batch::lifelink_pump_batch_cards_fizzle_when_the_target_left_and_reject_a_noncreature",
+      "covers": "actual mortals_ardor is exercised by the shared 08-lifelink-pump actual-card scenario"
+    },
+    {
+      "test": "scenario lifelink_pump_batch::lifelink_pump_batch_cards_expire_the_pump_and_lifelink_at_cleanup",
+      "covers": "actual mortals_ardor is exercised by the shared 08-lifelink-pump actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::lifelink_pump_batch::lifelink_pump_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of mortals_ardor"
+    },
+    {
+      "test": "mechanic_registry::lifelink_pump_batch::lifelink_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for mortals_ardor"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

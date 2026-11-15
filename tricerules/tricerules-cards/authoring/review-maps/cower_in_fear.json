@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "f1519fe3-af13-4491-9020-4a8d8f474713",
+  "spans": [
+    {
+      "face_id": "cower_in_fear",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario mass_shrink_batch::mass_shrink_batch_cards_shrink_only_opponents_creatures_by_the_printed_amount",
+      "covers": "actual cower_in_fear is exercised by the shared 07-mass-shrink actual-card scenario"
+    },
+    {
+      "test": "scenario mass_shrink_batch::mass_shrink_batch_cards_kill_only_opposing_creatures_whose_toughness_reaches_zero",
+      "covers": "actual cower_in_fear is exercised by the shared 07-mass-shrink actual-card scenario"
+    },
+    {
+      "test": "scenario mass_shrink_batch::mass_shrink_batch_cards_do_not_affect_creatures_that_enter_after_resolution",
+      "covers": "actual cower_in_fear is exercised by the shared 07-mass-shrink actual-card scenario"
+    },
+    {
+      "test": "scenario mass_shrink_batch::mass_shrink_batch_cards_keep_affecting_a_creature_that_changes_controller",
+      "covers": "actual cower_in_fear is exercised by the shared 07-mass-shrink actual-card scenario"
+    },
+    {
+      "test": "scenario mass_shrink_batch::mass_shrink_batch_cards_do_not_affect_creatures_that_come_under_opponent_control_later",
+      "covers": "actual cower_in_fear is exercised by the shared 07-mass-shrink actual-card scenario"
+    },
+    {
+      "test": "scenario mass_shrink_batch::mass_shrink_batch_cards_expire_at_cleanup",
+      "covers": "actual cower_in_fear is exercised by the shared 07-mass-shrink actual-card scenario"
+    },
+    {
+      "test": "scenario mass_shrink_batch::mass_shrink_batch_cards_leave_hidden_zones_and_controllers_life_unchanged",
+      "covers": "actual cower_in_fear is exercised by the shared 07-mass-shrink actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::mass_shrink_batch::mass_shrink_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of cower_in_fear"
+    },
+    {
+      "test": "mechanic_registry::mass_shrink_batch::mass_shrink_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for cower_in_fear"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

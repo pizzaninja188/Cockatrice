@@ -3,6 +3,8 @@
 #[path = "../common/mod.rs"]
 mod common;
 
+#[path = "../affinity_flying_batch.rs"]
+mod affinity_flying_batch;
 #[path = "../aura_etb_draw_pump_batch.rs"]
 mod aura_etb_draw_pump_batch;
 #[path = "../aura_flying_pump_batch.rs"]
@@ -267,6 +269,10 @@ mod issue_89_battlefield_to_library;
 mod issue_94_player_auras;
 #[path = "../issue_removal_batch.rs"]
 mod issue_removal_batch;
+#[path = "../lifelink_pump_batch.rs"]
+mod lifelink_pump_batch;
+#[path = "../mass_shrink_batch.rs"]
+mod mass_shrink_batch;
 
 #[path = "../damage_any_target_batch.rs"]
 mod damage_any_target_batch;

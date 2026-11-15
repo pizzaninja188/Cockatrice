@@ -1,0 +1,16 @@
+// Oracle cec11318-4578-4c66-a9be-1704df0c296c; source/rulings checked 2026-11-15.
+// CR 702.41a (affinity for artifacts), 601.2f (cost reduction while
+// the spell is on the stack) and 702.9a-b (flying).
+(
+  id: "qumulox",
+  name: "Qumulox",
+  face_id: "qumulox",
+  mana_cost: "{6}{U}{U}",
+  types: ["Creature", "Beast"],
+  power: 5,
+  toughness: 4,
+  keywords: [Flying],
+  cost_modifiers: [
+    BattlefieldCountGenericReduction(amount_per_match: 1, filter: (controllers: Controller, card_type: Some(Artifact), name: None)),
+  ],
+)

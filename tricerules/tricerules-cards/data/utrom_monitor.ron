@@ -1,0 +1,16 @@
+// Oracle 976e1fe6-ac32-4ea9-9828-acd3c4791e01; source/rulings checked 2026-11-15.
+// CR 702.41a (affinity for artifacts), 601.2f (cost reduction while
+// the spell is on the stack) and 702.9a-b (flying).
+(
+  id: "utrom_monitor",
+  name: "Utrom Monitor",
+  face_id: "utrom_monitor",
+  mana_cost: "{4}{U}",
+  types: ["Artifact", "Creature", "Utrom", "Scientist"],
+  power: 3,
+  toughness: 3,
+  keywords: [Flying],
+  cost_modifiers: [
+    BattlefieldCountGenericReduction(amount_per_match: 1, filter: (controllers: Controller, card_type: Some(Artifact), name: None)),
+  ],
+)

@@ -1821,3 +1821,12 @@ mod flash_aura_shrink_batch;
 
 #[path = "scenario/damage_flashback_batch.rs"]
 mod damage_flashback_batch;
+
+#[path = "scenario/mass_shrink_batch.rs"]
+mod mass_shrink_batch;
+
+#[path = "scenario/lifelink_pump_batch.rs"]
+mod lifelink_pump_batch;
+
+#[path = "scenario/affinity_flying_batch.rs"]
+mod affinity_flying_batch;

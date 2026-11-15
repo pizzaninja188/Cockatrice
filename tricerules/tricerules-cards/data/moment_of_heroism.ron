@@ -1,0 +1,15 @@
+// Oracle a167d593-cded-43e1-b9bb-2287dbd0cbec; source/rulings checked 2026-11-15.
+// CR 115.1a/601.2c (target at cast), 611.2a/514.2 (until-end-of-turn
+// duration), 613.4c (pump) and 702.15a-b (lifelink).
+(
+  id: "moment_of_heroism",
+  name: "Moment of Heroism",
+  face_id: "moment_of_heroism",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 2, toughness: 2),
+    GrantKeywords(keywords: [Lifelink]),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0, 1])])),
+)
