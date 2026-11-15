@@ -3,8 +3,14 @@
 #[path = "../common/mod.rs"]
 mod common;
 
+#[path = "../aura_flying_pump_batch.rs"]
+mod aura_flying_pump_batch;
 #[path = "../authored_operation_reuse.rs"]
 mod authored_operation_reuse;
+#[path = "../flash_aura_pump_batch.rs"]
+mod flash_aura_pump_batch;
+#[path = "../flying_self_pump_batch.rs"]
+mod flying_self_pump_batch;
 #[path = "../issue_101_zone_abilities.rs"]
 mod issue_101_zone_abilities;
 #[path = "../issue_102_activation_limits.rs"]

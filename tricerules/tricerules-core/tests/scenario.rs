@@ -1803,3 +1803,13 @@ mod etb_damage_creature_batch;
 
 #[path = "scenario/team_pump_on_enter_batch.rs"]
 mod team_pump_on_enter_batch;
+
+#[path = "scenario/flying_self_pump_batch.rs"]
+mod flying_self_pump_batch;
+
+#[path = "scenario/aura_flying_pump_batch.rs"]
+mod aura_flying_pump_batch;
+
+#[path = "scenario/flash_aura_pump_batch.rs"]
+mod flash_aura_pump_batch;
+

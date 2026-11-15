@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "5b3c069b-5bed-4b70-b04c-b7143a4a6e96",
+  "spans": [
+    {
+      "face_id": "feral_invocation",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "feral_invocation",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "feral_invocation",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flash_aura_pump_batch::flash_aura_pump_batch_cards_attach_and_apply_the_printed_pump",
+      "covers": "actual feral_invocation is exercised by the shared 03-flash-aura-pump actual-card scenario"
+    },
+    {
+      "test": "scenario flash_aura_pump_batch::flash_aura_pump_batch_cards_use_flash_timing_on_an_opponent_turn",
+      "covers": "actual feral_invocation is exercised by the shared 03-flash-aura-pump actual-card scenario"
+    },
+    {
+      "test": "scenario flash_aura_pump_batch::flash_aura_pump_batch_cards_reject_a_noncreature_and_fizzle_a_stale_target",
+      "covers": "actual feral_invocation is exercised by the shared 03-flash-aura-pump actual-card scenario"
+    },
+    {
+      "test": "scenario flash_aura_pump_batch::flash_aura_pump_batch_cards_remove_the_pump_when_the_aura_leaves",
+      "covers": "actual feral_invocation is exercised by the shared 03-flash-aura-pump actual-card scenario"
+    },
+    {
+      "test": "scenario flash_aura_pump_batch::flash_aura_pump_batch_cards_keep_the_static_modifier_after_cleanup",
+      "covers": "actual feral_invocation is exercised by the shared 03-flash-aura-pump actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::flash_aura_pump_batch::flash_aura_pump_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of feral_invocation"
+    },
+    {
+      "test": "mechanic_registry::flash_aura_pump_batch::flash_aura_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for feral_invocation"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

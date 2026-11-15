@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "b38c0575-37f7-413c-9dad-c8d7e6a41b90",
+  "spans": [
+    {
+      "face_id": "tattered_apparition",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "tattered_apparition",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flying_self_pump_batch::flying_self_pump_batch_cards_cast_with_exact_characteristics_and_flying",
+      "covers": "actual tattered_apparition is exercised by the shared 01-flying-self-pump actual-card scenario"
+    },
+    {
+      "test": "scenario flying_self_pump_batch::flying_self_pump_batch_cards_activate_only_the_source_with_the_printed_pump",
+      "covers": "actual tattered_apparition is exercised by the shared 01-flying-self-pump actual-card scenario"
+    },
+    {
+      "test": "scenario flying_self_pump_batch::flying_self_pump_batch_cards_stack_repeated_activations_in_one_turn",
+      "covers": "actual tattered_apparition is exercised by the shared 01-flying-self-pump actual-card scenario"
+    },
+    {
+      "test": "scenario flying_self_pump_batch::flying_self_pump_batch_cards_reject_activation_without_the_exact_cost",
+      "covers": "actual tattered_apparition is exercised by the shared 01-flying-self-pump actual-card scenario"
+    },
+    {
+      "test": "scenario flying_self_pump_batch::flying_self_pump_batch_cards_expire_the_pump_at_cleanup",
+      "covers": "actual tattered_apparition is exercised by the shared 01-flying-self-pump actual-card scenario"
+    },
+    {
+      "test": "scenario flying_self_pump_batch::flying_self_pump_batch_cards_block_ground_creatures_only_when_they_have_flying",
+      "covers": "actual tattered_apparition is exercised by the shared 01-flying-self-pump actual-card scenario"
+    },
+    {
+      "test": "scenario flying_self_pump_batch::flying_self_pump_batch_cards_resolved_creature_stays_on_the_battlefield",
+      "covers": "actual tattered_apparition is exercised by the shared 01-flying-self-pump actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::flying_self_pump_batch::flying_self_pump_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of tattered_apparition"
+    },
+    {
+      "test": "mechanic_registry::flying_self_pump_batch::flying_self_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for tattered_apparition"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

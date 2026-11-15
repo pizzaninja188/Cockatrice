@@ -1,0 +1,18 @@
+// Oracle 9203bee0-718a-4ede-9556-5521417c4080; source/rulings checked 2026-11-15.
+// CR 303.4a (Aura target and attach), 613.4c (layer-7c attached P/T
+// modifier), 702.9a-b (flying) and 704.5m (unattached Aura cleanup).
+(
+  id: "one_with_the_wind",
+  name: "One With the Wind",
+  face_id: "one_with_the_wind",
+  mana_cost: "{1}{U}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(delta_power: 2, delta_toughness: 2, keywords: [Flying]),
+    ),
+  ],
+)

@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "0f35e73b-6a38-4185-a7d3-d237d67ba1cd",
+  "spans": [
+    {
+      "face_id": "nimbus_wings",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "nimbus_wings",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario aura_flying_pump_batch::aura_flying_pump_batch_cards_attach_and_apply_the_printed_pump_and_flying",
+      "covers": "actual nimbus_wings is exercised by the shared 02-aura-flying-pump actual-card scenario"
+    },
+    {
+      "test": "scenario aura_flying_pump_batch::aura_flying_pump_batch_cards_may_enchant_an_opponents_creature",
+      "covers": "actual nimbus_wings is exercised by the shared 02-aura-flying-pump actual-card scenario"
+    },
+    {
+      "test": "scenario aura_flying_pump_batch::aura_flying_pump_batch_cards_reject_a_noncreature_and_fizzle_a_stale_target",
+      "covers": "actual nimbus_wings is exercised by the shared 02-aura-flying-pump actual-card scenario"
+    },
+    {
+      "test": "scenario aura_flying_pump_batch::aura_flying_pump_batch_cards_remove_the_pump_and_flying_when_the_aura_leaves",
+      "covers": "actual nimbus_wings is exercised by the shared 02-aura-flying-pump actual-card scenario"
+    },
+    {
+      "test": "scenario aura_flying_pump_batch::aura_flying_pump_batch_cards_keep_the_static_modifier_after_cleanup",
+      "covers": "actual nimbus_wings is exercised by the shared 02-aura-flying-pump actual-card scenario"
+    },
+    {
+      "test": "scenario aura_flying_pump_batch::aura_flying_pump_batch_cards_follow_the_creature_to_the_graveyard",
+      "covers": "actual nimbus_wings is exercised by the shared 02-aura-flying-pump actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::aura_flying_pump_batch::aura_flying_pump_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of nimbus_wings"
+    },
+    {
+      "test": "mechanic_registry::aura_flying_pump_batch::aura_flying_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for nimbus_wings"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
