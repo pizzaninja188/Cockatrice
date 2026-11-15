@@ -1812,3 +1812,12 @@ mod aura_flying_pump_batch;
 
 #[path = "scenario/flash_aura_pump_batch.rs"]
 mod flash_aura_pump_batch;
+
+#[path = "scenario/aura_etb_draw_pump_batch.rs"]
+mod aura_etb_draw_pump_batch;
+
+#[path = "scenario/flash_aura_shrink_batch.rs"]
+mod flash_aura_shrink_batch;
+
+#[path = "scenario/damage_flashback_batch.rs"]
+mod damage_flashback_batch;

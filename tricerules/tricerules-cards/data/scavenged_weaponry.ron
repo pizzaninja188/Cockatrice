@@ -1,0 +1,26 @@
+// Oracle 2d3010d5-5c21-4342-ad79-a737b6731230; source/rulings checked 2026-11-15.
+// CR 303.4a (Aura target and attach), 603.6a (enters trigger), 121.1
+// (draw), 613.4c (layer-7c attached P/T modifier) and 704.5m.
+(
+  id: "scavenged_weaponry",
+  name: "Scavenged Weaponry",
+  face_id: "scavenged_weaponry",
+  mana_cost: "{2}{B}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Draw(count: 1)],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([3]),
+      definition: AttachedModifier(delta_power: 1, delta_toughness: 1),
+    ),
+  ],
+)

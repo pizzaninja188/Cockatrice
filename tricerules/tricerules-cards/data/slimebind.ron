@@ -1,0 +1,19 @@
+// Oracle 87aa2cbe-841c-40ff-9b1c-b259b4cc631e; source/rulings checked 2026-11-15.
+// CR 702.8a (Flash), 303.4a (Aura target and attach), 613.4c
+// (layer-7c attached P/T modifier) and 704.5m (unattached Aura cleanup).
+(
+  id: "slimebind",
+  name: "Slimebind",
+  face_id: "slimebind",
+  mana_cost: "{1}{U}",
+  types: ["Enchantment", "Aura"],
+  keywords: [Flash],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([3]),
+      definition: AttachedModifier(delta_power: -4, delta_toughness: 0),
+    ),
+  ],
+)

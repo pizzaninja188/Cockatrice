@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "205bcab6-8b6b-4d09-9890-0b7391d59788",
+  "spans": [
+    {
+      "face_id": "fires_of_undeath",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "fires_of_undeath",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardFace::flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario damage_flashback_batch::damage_flashback_batch_cards_deal_exact_damage_to_players_and_creatures",
+      "covers": "actual fires_of_undeath is exercised by the shared 06-damage-flashback actual-card scenario"
+    },
+    {
+      "test": "scenario damage_flashback_batch::damage_flashback_batch_cards_flash_back_from_the_graveyard_and_exile",
+      "covers": "actual fires_of_undeath is exercised by the shared 06-damage-flashback actual-card scenario"
+    },
+    {
+      "test": "scenario damage_flashback_batch::damage_flashback_batch_cards_respect_sorcery_timing_but_instants_use_flashback_any_time",
+      "covers": "actual fires_of_undeath is exercised by the shared 06-damage-flashback actual-card scenario"
+    },
+    {
+      "test": "scenario damage_flashback_batch::damage_flashback_batch_cards_fizzle_when_the_chosen_creature_left",
+      "covers": "actual fires_of_undeath is exercised by the shared 06-damage-flashback actual-card scenario"
+    },
+    {
+      "test": "scenario damage_flashback_batch::damage_flashback_batch_cards_reject_a_non_damageable_target_without_spending",
+      "covers": "actual fires_of_undeath is exercised by the shared 06-damage-flashback actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::damage_flashback_batch::damage_flashback_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of fires_of_undeath"
+    },
+    {
+      "test": "mechanic_registry::damage_flashback_batch::damage_flashback_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for fires_of_undeath"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

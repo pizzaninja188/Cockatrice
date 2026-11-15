@@ -1,0 +1,12 @@
+// Oracle 2f01c3d9-e0fc-4cdf-b4db-daeb8bb24bc3; source/rulings checked 2026-11-15.
+// CR 115.1a/601.2c (target at cast), 120.3 (damage), 702.34a-d
+// (flashback alternative cost and exile) and 608.2b (stale target).
+(
+  id: "geistflame",
+  name: "Geistflame",
+  face_id: "geistflame",
+  mana_cost: "{R}",
+  types: ["Instant"],
+  flashback_cost: Some("{3}{R}"),
+  spell_effect: [DamageTarget(amount: 1, target: (kind: AnyTarget))],
+)
