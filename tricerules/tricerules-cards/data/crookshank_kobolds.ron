@@ -1,0 +1,13 @@
+// Oracle 61023b48-0433-4993-9534-308c08cef07e; source/rulings checked 2026-11-15.
+// CR 109.3, 202.1, and 205.1-2: no rules text; the printed mana cost, type
+// line, power and toughness are the complete card.
+(
+  id: "crookshank_kobolds",
+  name: "Crookshank Kobolds",
+  face_id: "crookshank_kobolds",
+  mana_cost: "{0}",
+  color_indicator: Some([Red]),
+  types: ["Creature", "Kobold"],
+  power: 0,
+  toughness: 1,
+)

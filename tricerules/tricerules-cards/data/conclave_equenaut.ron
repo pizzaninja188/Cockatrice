@@ -1,0 +1,13 @@
+// Oracle 4127794b-84d1-4efb-b0e9-543a02b07fa8; source/rulings checked 2026-11-15.
+// CR 702.51a-c (Convoke taps creatures to pay generic or a matching color),
+// 601.2h (payment order), and the printed keyword's normal rules.
+(
+  id: "conclave_equenaut",
+  name: "Conclave Equenaut",
+  face_id: "conclave_equenaut",
+  mana_cost: "{4}{W}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 3,
+  toughness: 3,
+  keywords: [Convoke, Flying],
+)

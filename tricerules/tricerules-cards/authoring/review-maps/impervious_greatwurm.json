@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "65c0ab05-e740-4380-b39c-8bae9662f885",
+  "spans": [
+    {
+      "face_id": "impervious_greatwurm",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "impervious_greatwurm",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Convoke",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "Keyword::Indestructible",
+      "typed_path": "/faces/0/keywords/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario convoke_batch::convoke_batch_cards_cast_with_convoke_and_exact_printed_characteristics",
+      "covers": "actual impervious_greatwurm clause coverage"
+    },
+    {
+      "test": "scenario convoke_batch::convoke_batch_cards_require_colored_mana_and_keep_printed_keywords",
+      "covers": "actual impervious_greatwurm clause coverage"
+    },
+    {
+      "test": "mechanic_registry::convoke_batch::convoke_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of impervious_greatwurm"
+    },
+    {
+      "test": "mechanic_registry::convoke_batch::convoke_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for impervious_greatwurm"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

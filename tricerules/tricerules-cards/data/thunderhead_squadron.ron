@@ -1,0 +1,13 @@
+// Oracle d74d6f6a-aff0-4a36-9a99-8b2281f5e29d; source/rulings checked 2026-11-15.
+// CR 702.51a-c (Convoke taps creatures to pay generic or a matching color),
+// 601.2h (payment order), and the printed keyword's normal rules.
+(
+  id: "thunderhead_squadron",
+  name: "Thunderhead Squadron",
+  face_id: "thunderhead_squadron",
+  mana_cost: "{5}{U}",
+  types: ["Creature", "Human", "Knight"],
+  power: 3,
+  toughness: 4,
+  keywords: [Convoke, Flying],
+)

@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "d3edbb47-6892-4853-badc-cc01499d4e55",
+  "spans": [
+    {
+      "face_id": "rootbreaker_wurm",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario trample_batch::trample_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual rootbreaker_wurm clause coverage"
+    },
+    {
+      "test": "scenario trample_batch::trample_batch_cards_deal_unblocked_combat_damage_to_the_player",
+      "covers": "actual rootbreaker_wurm clause coverage"
+    },
+    {
+      "test": "scenario trample_batch::trample_batch_cards_assign_lethal_and_trample_the_excess",
+      "covers": "actual rootbreaker_wurm clause coverage"
+    },
+    {
+      "test": "mechanic_registry::trample_batch::trample_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of rootbreaker_wurm"
+    },
+    {
+      "test": "mechanic_registry::trample_batch::trample_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for rootbreaker_wurm"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

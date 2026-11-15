@@ -1,0 +1,14 @@
+// Oracle fb42bade-4bbc-4119-b6cc-71695fe43dd9; source/rulings checked 2026-11-15.
+// CR 702.7a-b (first strike assigns combat damage in the first combat damage
+// step) and 510.4 (a creature without first or double strike deals damage only
+// in the regular combat damage step).
+(
+  id: "head_of_security",
+  name: "Head of Security",
+  face_id: "head_of_security",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Andorian", "Soldier"],
+  power: 2,
+  toughness: 2,
+  keywords: [FirstStrike],
+)

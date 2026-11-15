@@ -630,3 +630,30 @@ mod blue_gain_flying_batch;
 
 #[path = "../white_gain_vigilance_batch.rs"]
 mod white_gain_vigilance_batch;
+
+#[path = "../vanilla_red_batch.rs"]
+mod vanilla_red_batch;
+
+#[path = "../first_strike_batch.rs"]
+mod first_strike_batch;
+
+#[path = "../trample_batch.rs"]
+mod trample_batch;
+
+#[path = "../self_pump_black_batch.rs"]
+mod self_pump_black_batch;
+
+#[path = "../self_pump_red_batch.rs"]
+mod self_pump_red_batch;
+
+#[path = "../self_pump_green_batch.rs"]
+mod self_pump_green_batch;
+
+#[path = "../convoke_batch.rs"]
+mod convoke_batch;
+
+#[path = "../prowess_batch.rs"]
+mod prowess_batch;
+
+#[path = "../protection_red_batch.rs"]
+mod protection_red_batch;

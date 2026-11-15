@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "b2a8fcf9-2ec2-40a9-9955-90f8605b11a3",
+  "spans": [
+    {
+      "face_id": "war_mammoth",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario trample_batch::trample_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual war_mammoth clause coverage"
+    },
+    {
+      "test": "scenario trample_batch::trample_batch_cards_deal_unblocked_combat_damage_to_the_player",
+      "covers": "actual war_mammoth clause coverage"
+    },
+    {
+      "test": "scenario trample_batch::trample_batch_cards_assign_lethal_and_trample_the_excess",
+      "covers": "actual war_mammoth clause coverage"
+    },
+    {
+      "test": "mechanic_registry::trample_batch::trample_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of war_mammoth"
+    },
+    {
+      "test": "mechanic_registry::trample_batch::trample_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for war_mammoth"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

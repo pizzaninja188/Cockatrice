@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "4a1b8db2-8814-45b3-ab8a-a1c8522d7fa1",
+  "spans": [
+    {
+      "face_id": "cavern_thoctar",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario self_pump_red_batch::self_pump_red_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual cavern_thoctar clause coverage"
+    },
+    {
+      "test": "scenario self_pump_red_batch::self_pump_red_batch_cards_apply_the_printed_pump_only_to_themselves",
+      "covers": "actual cavern_thoctar clause coverage"
+    },
+    {
+      "test": "scenario self_pump_red_batch::self_pump_red_batch_cards_allow_repeated_activations_in_one_turn",
+      "covers": "actual cavern_thoctar clause coverage"
+    },
+    {
+      "test": "scenario self_pump_red_batch::self_pump_red_batch_cards_pump_expires_at_cleanup",
+      "covers": "actual cavern_thoctar clause coverage"
+    },
+    {
+      "test": "scenario self_pump_red_batch::self_pump_red_batch_cards_reject_activation_when_the_cost_cannot_be_paid",
+      "covers": "actual cavern_thoctar clause coverage"
+    },
+    {
+      "test": "mechanic_registry::self_pump_red_batch::self_pump_red_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of cavern_thoctar"
+    },
+    {
+      "test": "mechanic_registry::self_pump_red_batch::self_pump_red_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for cavern_thoctar"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

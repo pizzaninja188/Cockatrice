@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "3ba3405d-8c9a-4a80-811d-529cd3cb657f",
+  "spans": [
+    {
+      "face_id": "perilous_shadow",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario self_pump_black_batch::self_pump_black_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual perilous_shadow clause coverage"
+    },
+    {
+      "test": "scenario self_pump_black_batch::self_pump_black_batch_cards_apply_the_printed_pump_only_to_themselves",
+      "covers": "actual perilous_shadow clause coverage"
+    },
+    {
+      "test": "scenario self_pump_black_batch::self_pump_black_batch_cards_allow_repeated_activations_in_one_turn",
+      "covers": "actual perilous_shadow clause coverage"
+    },
+    {
+      "test": "scenario self_pump_black_batch::self_pump_black_batch_cards_pump_expires_at_cleanup",
+      "covers": "actual perilous_shadow clause coverage"
+    },
+    {
+      "test": "scenario self_pump_black_batch::self_pump_black_batch_cards_reject_activation_when_the_cost_cannot_be_paid",
+      "covers": "actual perilous_shadow clause coverage"
+    },
+    {
+      "test": "mechanic_registry::self_pump_black_batch::self_pump_black_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of perilous_shadow"
+    },
+    {
+      "test": "mechanic_registry::self_pump_black_batch::self_pump_black_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for perilous_shadow"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

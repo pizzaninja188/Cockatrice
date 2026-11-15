@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "fb42bade-4bbc-4119-b6cc-71695fe43dd9",
+  "spans": [
+    {
+      "face_id": "head_of_security",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::FirstStrike",
+      "typed_path": "/faces/0/keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario first_strike_batch::first_strike_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual head_of_security clause coverage"
+    },
+    {
+      "test": "scenario first_strike_batch::first_strike_batch_cards_deal_damage_in_the_first_strike_step",
+      "covers": "actual head_of_security clause coverage"
+    },
+    {
+      "test": "scenario first_strike_batch::first_strike_batch_cards_kill_a_vanilla_blocker_before_return_damage",
+      "covers": "actual head_of_security clause coverage"
+    },
+    {
+      "test": "mechanic_registry::first_strike_batch::first_strike_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of head_of_security"
+    },
+    {
+      "test": "mechanic_registry::first_strike_batch::first_strike_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for head_of_security"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

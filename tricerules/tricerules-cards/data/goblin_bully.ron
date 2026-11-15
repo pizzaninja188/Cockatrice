@@ -1,0 +1,12 @@
+// Oracle 56c5afdc-6777-45c7-8e2c-3cadecb95c5a; source/rulings checked 2026-11-15.
+// CR 109.3, 202.1, and 205.1-2: no rules text; the printed mana cost, type
+// line, power and toughness are the complete card.
+(
+  id: "goblin_bully",
+  name: "Goblin Bully",
+  face_id: "goblin_bully",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Goblin"],
+  power: 2,
+  toughness: 1,
+)

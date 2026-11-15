@@ -1,0 +1,65 @@
+{
+  "format_version": 1,
+  "oracle_id": "aa7cd6e6-35a6-4c18-9d66-dc2a95206401",
+  "spans": [
+    {
+      "face_id": "silver_knight",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0",
+        "/faces/0/protections/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::FirstStrike",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "Protection::Color",
+      "typed_path": "/faces/0/protections/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario protection_red_batch::protection_red_batch_cards_cast_with_exact_printed_characteristics_and_protection_quality",
+      "covers": "actual silver_knight clause coverage"
+    },
+    {
+      "test": "scenario protection_red_batch::protection_red_batch_cards_reject_targeting_by_red",
+      "covers": "actual silver_knight clause coverage"
+    },
+    {
+      "test": "scenario protection_red_batch::protection_red_batch_cards_prevent_damage_from_red",
+      "covers": "actual silver_knight clause coverage"
+    },
+    {
+      "test": "scenario protection_red_batch::protection_red_batch_cards_cannot_be_blocked_by_red",
+      "covers": "actual silver_knight clause coverage"
+    },
+    {
+      "test": "scenario protection_red_batch::protection_red_batch_cards_with_flash_use_instant_timing",
+      "covers": "actual silver_knight clause coverage"
+    },
+    {
+      "test": "scenario protection_red_batch::protection_red_batch_cards_with_cycling_cycle_for_two",
+      "covers": "actual silver_knight clause coverage"
+    },
+    {
+      "test": "scenario protection_red_batch::protection_red_batch_cards_with_first_strike_deal_damage_first",
+      "covers": "actual silver_knight clause coverage"
+    },
+    {
+      "test": "mechanic_registry::protection_red_batch::protection_red_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of silver_knight"
+    },
+    {
+      "test": "mechanic_registry::protection_red_batch::protection_red_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for silver_knight"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

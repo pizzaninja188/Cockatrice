@@ -1,0 +1,13 @@
+// Oracle edcf36b4-dea4-4314-94da-e0ee5e30cd37; source/rulings checked 2026-11-15.
+// CR 702.51a-c (Convoke taps creatures to pay generic or a matching color),
+// 601.2h (payment order), and the printed keyword's normal rules.
+(
+  id: "ledev_guardian",
+  name: "Ledev Guardian",
+  face_id: "ledev_guardian",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Human", "Knight"],
+  power: 2,
+  toughness: 4,
+  keywords: [Convoke],
+)

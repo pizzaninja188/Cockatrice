@@ -1,0 +1,26 @@
+{
+  "format_version": 1,
+  "oracle_id": "badf0669-9f65-44e3-bf91-6c57ac2fecff",
+  "spans": [],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario vanilla_red_batch::vanilla_red_batch_cards_cast_with_printed_characteristics",
+      "covers": "actual kobolds_of_kher_keep clause coverage"
+    },
+    {
+      "test": "scenario vanilla_red_batch::vanilla_red_batch_cards_attack_and_block_with_printed_stats",
+      "covers": "actual kobolds_of_kher_keep clause coverage"
+    },
+    {
+      "test": "mechanic_registry::vanilla_red_batch::vanilla_red_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of kobolds_of_kher_keep"
+    },
+    {
+      "test": "mechanic_registry::vanilla_red_batch::vanilla_red_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for kobolds_of_kher_keep"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

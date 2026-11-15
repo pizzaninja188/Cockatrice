@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "25fb0396-7355-4ff1-8ad3-d5a82adf6cc1",
+  "spans": [
+    {
+      "face_id": "will_forged_golem",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Convoke",
+      "typed_path": "/faces/0/keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario convoke_batch::convoke_batch_cards_cast_with_convoke_and_exact_printed_characteristics",
+      "covers": "actual will-forged_golem clause coverage"
+    },
+    {
+      "test": "scenario convoke_batch::convoke_batch_cards_require_colored_mana_and_keep_printed_keywords",
+      "covers": "actual will-forged_golem clause coverage"
+    },
+    {
+      "test": "mechanic_registry::convoke_batch::convoke_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of will-forged_golem"
+    },
+    {
+      "test": "mechanic_registry::convoke_batch::convoke_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for will-forged_golem"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

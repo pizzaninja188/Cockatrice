@@ -1,0 +1,21 @@
+// Oracle 83f7e8e5-d485-4571-9fa6-47b5e962d221; source/rulings checked 2026-11-15.
+// CR 702.108a-b (Prowess triggers once per noncreature spell its controller
+// casts) and 514.2 (the pump ends at cleanup).
+(
+  id: "dragon_bell_monk",
+  name: "Dragon Bell Monk",
+  face_id: "dragon_bell_monk",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Human", "Monk"],
+  power: 2,
+  toughness: 2,
+  keywords: [Vigilance],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Noncreature))),
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    ),
+  ],
+)

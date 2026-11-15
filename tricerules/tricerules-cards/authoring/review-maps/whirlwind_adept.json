@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "0c7e261f-45d5-4c86-8cba-9b6edce8ef49",
+  "spans": [
+    {
+      "face_id": "whirlwind_adept",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "whirlwind_adept",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Hexproof",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPlayerCastsSpell",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario prowess_batch::prowess_batch_cards_pump_on_noncreature_casts_and_expire",
+      "covers": "actual whirlwind_adept clause coverage"
+    },
+    {
+      "test": "scenario prowess_batch::prowess_batch_cards_ignore_creature_and_opponent_casts",
+      "covers": "actual whirlwind_adept clause coverage"
+    },
+    {
+      "test": "mechanic_registry::prowess_batch::prowess_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of whirlwind_adept"
+    },
+    {
+      "test": "mechanic_registry::prowess_batch::prowess_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for whirlwind_adept"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

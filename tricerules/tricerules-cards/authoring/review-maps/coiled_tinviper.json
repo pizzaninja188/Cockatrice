@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "b0bdc033-29f0-4dcb-87ff-ccd56126f7e5",
+  "spans": [
+    {
+      "face_id": "coiled_tinviper",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::FirstStrike",
+      "typed_path": "/faces/0/keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario first_strike_batch::first_strike_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual coiled_tinviper clause coverage"
+    },
+    {
+      "test": "scenario first_strike_batch::first_strike_batch_cards_deal_damage_in_the_first_strike_step",
+      "covers": "actual coiled_tinviper clause coverage"
+    },
+    {
+      "test": "scenario first_strike_batch::first_strike_batch_cards_kill_a_vanilla_blocker_before_return_damage",
+      "covers": "actual coiled_tinviper clause coverage"
+    },
+    {
+      "test": "mechanic_registry::first_strike_batch::first_strike_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of coiled_tinviper"
+    },
+    {
+      "test": "mechanic_registry::first_strike_batch::first_strike_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for coiled_tinviper"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

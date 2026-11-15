@@ -1,0 +1,15 @@
+// Oracle 48b9c510-03ed-41cb-8c17-16110d447490; source/rulings checked 2026-11-15.
+// CR 702.7a-b (first strike assigns combat damage in the first combat damage
+// step) and 510.4 (a creature without first or double strike deals damage only
+// in the regular combat damage step).
+(
+  id: "ramirez_depietro",
+  name: "Ramirez DePietro",
+  face_id: "ramirez_depietro",
+  mana_cost: "{3}{U}{B}{B}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Human", "Pirate"],
+  power: 4,
+  toughness: 3,
+  keywords: [FirstStrike],
+)

@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "607f9177-fea0-464c-a15f-65842865546a",
+  "spans": [
+    {
+      "face_id": "quilled_wolf",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario self_pump_green_batch::self_pump_green_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual quilled_wolf clause coverage"
+    },
+    {
+      "test": "scenario self_pump_green_batch::self_pump_green_batch_cards_apply_the_printed_pump_only_to_themselves",
+      "covers": "actual quilled_wolf clause coverage"
+    },
+    {
+      "test": "scenario self_pump_green_batch::self_pump_green_batch_cards_allow_repeated_activations_in_one_turn",
+      "covers": "actual quilled_wolf clause coverage"
+    },
+    {
+      "test": "scenario self_pump_green_batch::self_pump_green_batch_cards_pump_expires_at_cleanup",
+      "covers": "actual quilled_wolf clause coverage"
+    },
+    {
+      "test": "scenario self_pump_green_batch::self_pump_green_batch_cards_reject_activation_when_the_cost_cannot_be_paid",
+      "covers": "actual quilled_wolf clause coverage"
+    },
+    {
+      "test": "mechanic_registry::self_pump_green_batch::self_pump_green_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of quilled_wolf"
+    },
+    {
+      "test": "mechanic_registry::self_pump_green_batch::self_pump_green_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for quilled_wolf"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

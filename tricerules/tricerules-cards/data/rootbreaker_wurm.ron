@@ -1,0 +1,13 @@
+// Oracle d3edbb47-6892-4853-badc-cc01499d4e55; source/rulings checked 2026-11-15.
+// CR 702.19a-c: trample assigns lethal damage to blockers and lets excess
+// combat damage be assigned to the player or planeswalker being attacked.
+(
+  id: "rootbreaker_wurm",
+  name: "Rootbreaker Wurm",
+  face_id: "rootbreaker_wurm",
+  mana_cost: "{5}{G}{G}",
+  types: ["Creature", "Wurm"],
+  power: 6,
+  toughness: 6,
+  keywords: [Trample],
+)

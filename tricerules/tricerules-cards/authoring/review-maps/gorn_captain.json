@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "60ff591d-170d-410a-9710-510e811f9827",
+  "spans": [
+    {
+      "face_id": "gorn_captain",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario trample_batch::trample_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual gorn_captain clause coverage"
+    },
+    {
+      "test": "scenario trample_batch::trample_batch_cards_deal_unblocked_combat_damage_to_the_player",
+      "covers": "actual gorn_captain clause coverage"
+    },
+    {
+      "test": "scenario trample_batch::trample_batch_cards_assign_lethal_and_trample_the_excess",
+      "covers": "actual gorn_captain clause coverage"
+    },
+    {
+      "test": "mechanic_registry::trample_batch::trample_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of gorn_captain"
+    },
+    {
+      "test": "mechanic_registry::trample_batch::trample_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for gorn_captain"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

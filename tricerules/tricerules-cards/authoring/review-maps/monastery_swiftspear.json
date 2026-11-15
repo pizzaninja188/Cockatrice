@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "dafd2713-d1bc-474b-b390-d2ff20b5375e",
+  "spans": [
+    {
+      "face_id": "monastery_swiftspear",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "monastery_swiftspear",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Haste",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPlayerCastsSpell",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario prowess_batch::prowess_batch_cards_pump_on_noncreature_casts_and_expire",
+      "covers": "actual monastery_swiftspear clause coverage"
+    },
+    {
+      "test": "scenario prowess_batch::prowess_batch_cards_ignore_creature_and_opponent_casts",
+      "covers": "actual monastery_swiftspear clause coverage"
+    },
+    {
+      "test": "mechanic_registry::prowess_batch::prowess_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of monastery_swiftspear"
+    },
+    {
+      "test": "mechanic_registry::prowess_batch::prowess_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for monastery_swiftspear"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

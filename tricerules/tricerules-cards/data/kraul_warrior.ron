@@ -1,0 +1,20 @@
+// Oracle b05d000d-39b4-4db5-bd32-9c77a7434127; source/rulings checked 2026-11-15.
+// CR 602.1/602.2 (activation and printed cost), 611.2a/613.4c
+// (until-end-of-turn pump), and 514.2 (cleanup expiry).
+(
+  id: "kraul_warrior",
+  name: "Kraul Warrior",
+  face_id: "kraul_warrior",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Insect", "Warrior"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{5}{G}")],
+      effect: [PumpTarget(power: 3, toughness: 3, subject: Source)],
+    ),
+  ],
+)

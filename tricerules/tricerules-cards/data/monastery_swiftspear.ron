@@ -1,0 +1,21 @@
+// Oracle dafd2713-d1bc-474b-b390-d2ff20b5375e; source/rulings checked 2026-11-15.
+// CR 702.108a-b (Prowess triggers once per noncreature spell its controller
+// casts) and 514.2 (the pump ends at cleanup).
+(
+  id: "monastery_swiftspear",
+  name: "Monastery Swiftspear",
+  face_id: "monastery_swiftspear",
+  mana_cost: "{R}",
+  types: ["Creature", "Human", "Monk"],
+  power: 1,
+  toughness: 2,
+  keywords: [Haste],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Noncreature))),
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    ),
+  ],
+)

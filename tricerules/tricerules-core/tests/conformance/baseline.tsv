@@ -841,6 +841,7 @@ diresight	0	cast	exercised
 dirgur_island_dragon_skimming_strike	0	cast	exercised
 dirgur_island_dragon_skimming_strike	1	cast	exercised
 discerning_peddler	0	cast	exercised
+disciple_of_law	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 disdainful_stroke	0	cast	unsupported: target group 0 needs a richer fixture
 disenchant	0	cast	exercised
 disentomb	0	cast	exercised

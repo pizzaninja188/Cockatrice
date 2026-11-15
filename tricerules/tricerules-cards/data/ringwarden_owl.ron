@@ -1,0 +1,21 @@
+// Oracle 4a8b3316-a01a-4206-bbed-d7aac6c834bd; source/rulings checked 2026-11-15.
+// CR 702.108a-b (Prowess triggers once per noncreature spell its controller
+// casts) and 514.2 (the pump ends at cleanup).
+(
+  id: "ringwarden_owl",
+  name: "Ringwarden Owl",
+  face_id: "ringwarden_owl",
+  mana_cost: "{3}{U}{U}",
+  types: ["Creature", "Bird"],
+  power: 3,
+  toughness: 3,
+  keywords: [Flying],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Noncreature))),
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    ),
+  ],
+)

@@ -1,0 +1,13 @@
+// Oracle 3d2b5201-c2bf-4753-89ad-543795740216; source/rulings checked 2026-11-15.
+// CR 702.19a-c: trample assigns lethal damage to blockers and lets excess
+// combat damage be assigned to the player or planeswalker being attacked.
+(
+  id: "ebony_rhino",
+  name: "Ebony Rhino",
+  face_id: "ebony_rhino",
+  mana_cost: "{7}",
+  types: ["Artifact", "Creature", "Rhino"],
+  power: 4,
+  toughness: 5,
+  keywords: [Trample],
+)

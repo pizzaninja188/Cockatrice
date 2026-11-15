@@ -1,0 +1,13 @@
+// Oracle b2a8fcf9-2ec2-40a9-9955-90f8605b11a3; source/rulings checked 2026-11-15.
+// CR 702.19a-c: trample assigns lethal damage to blockers and lets excess
+// combat damage be assigned to the player or planeswalker being attacked.
+(
+  id: "war_mammoth",
+  name: "War Mammoth",
+  face_id: "war_mammoth",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Elephant"],
+  power: 3,
+  toughness: 3,
+  keywords: [Trample],
+)

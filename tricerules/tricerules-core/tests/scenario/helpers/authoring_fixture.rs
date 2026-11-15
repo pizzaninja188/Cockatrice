@@ -146,6 +146,12 @@ pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize
             e.state.objects.get_mut(&dead).unwrap().zone = tricerules_core::Zone::Graveyard;
         }
         super::grant_pool(&mut e, player);
+        if card == "autochthon_wurm" && ability.is_none() && player == 0 {
+            // Generic payment uses colorless for generic costs. Nine is one short of this
+            // fifteen-mana Convoke creature's ten generic symbols; the shared fixture does
+            // not select Convoke contributions.
+            e.state.players[player].mana_pool.colorless = 10;
+        }
         if card == "metalwork_colossus" && ability.is_none() && player == 0 {
             // Generic payment uses colorless for generic costs. Nine is insufficient for
             // this eleven-mana creature's ten-mana cost with the one-MV Apparatus fixture.

@@ -1,0 +1,12 @@
+// Oracle 8f1a39bf-7597-4655-b7af-4b1332edf529; source/rulings checked 2026-11-15.
+// CR 109.3, 202.1, and 205.1-2: no rules text; the printed mana cost, type
+// line, power and toughness are the complete card.
+(
+  id: "defense_force_aggressor",
+  name: "Defense Force Aggressor",
+  face_id: "defense_force_aggressor",
+  mana_cost: "{R}",
+  types: ["Creature", "Klingon", "Warrior"],
+  power: 2,
+  toughness: 1,
+)
