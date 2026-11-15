@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "010c660a-a67b-48f0-a63a-15470eb89f69",
+  "spans": [
+    {
+      "face_id": "welkin_tern",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "welkin_tern",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "StaticAbilityDef::SelfCombatRestriction",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flier_blocker_batch::flier_blocker_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual welkin_tern casts with the exact printed cost, body and Flying"
+    },
+    {
+      "test": "scenario flier_blocker_batch::flier_blocker_batch_cards_block_flying_attackers",
+      "covers": "actual welkin_tern is offered as a legal blocker for a flying attacker"
+    },
+    {
+      "test": "scenario flier_blocker_batch::flier_blocker_batch_cards_reject_ground_and_reach_only_attackers",
+      "covers": "actual welkin_tern cannot block ground or reach-only attackers"
+    },
+    {
+      "test": "mechanic_registry::flier_blocker_batch::flier_blocker_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of welkin_tern"
+    },
+    {
+      "test": "mechanic_registry::flier_blocker_batch::flier_blocker_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for welkin_tern"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

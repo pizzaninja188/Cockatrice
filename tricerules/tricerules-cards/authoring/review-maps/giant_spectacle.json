@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "97e34c3a-070e-406a-8505-657f4d57def8",
+  "spans": [
+    {
+      "face_id": "giant_spectacle",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "giant_spectacle",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario aura_menace_batch::aura_menace_batch_cards_attach_and_apply_the_printed_pump_and_menace",
+      "covers": "actual giant_spectacle attaches and applies the printed P/T pump and menace"
+    },
+    {
+      "test": "scenario aura_menace_batch::aura_menace_batch_cards_require_two_blockers_because_of_menace",
+      "covers": "actual giant_spectacle requires two blockers while enchanted"
+    },
+    {
+      "test": "scenario aura_menace_batch::aura_menace_batch_cards_remove_the_pump_and_menace_when_the_aura_leaves",
+      "covers": "actual giant_spectacle removes the pump and menace when the Aura leaves"
+    },
+    {
+      "test": "scenario aura_menace_batch::aura_menace_batch_cards_reject_a_noncreature_target_and_fizzle_a_stale_target",
+      "covers": "actual giant_spectacle rejects a noncreature target and fizzles a stale creature target"
+    },
+    {
+      "test": "mechanic_registry::aura_menace_batch::aura_menace_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of giant_spectacle"
+    },
+    {
+      "test": "mechanic_registry::aura_menace_batch::aura_menace_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for giant_spectacle"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

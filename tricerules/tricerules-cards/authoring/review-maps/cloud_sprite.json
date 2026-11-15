@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "283433cb-9466-4b40-8af9-30934654d43b",
+  "spans": [
+    {
+      "face_id": "cloud_sprite",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "cloud_sprite",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "StaticAbilityDef::SelfCombatRestriction",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flier_blocker_batch::flier_blocker_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual cloud_sprite casts with the exact printed cost, body and Flying"
+    },
+    {
+      "test": "scenario flier_blocker_batch::flier_blocker_batch_cards_block_flying_attackers",
+      "covers": "actual cloud_sprite is offered as a legal blocker for a flying attacker"
+    },
+    {
+      "test": "scenario flier_blocker_batch::flier_blocker_batch_cards_reject_ground_and_reach_only_attackers",
+      "covers": "actual cloud_sprite cannot block ground or reach-only attackers"
+    },
+    {
+      "test": "mechanic_registry::flier_blocker_batch::flier_blocker_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of cloud_sprite"
+    },
+    {
+      "test": "mechanic_registry::flier_blocker_batch::flier_blocker_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for cloud_sprite"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

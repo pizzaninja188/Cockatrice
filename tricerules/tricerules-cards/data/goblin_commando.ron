@@ -1,0 +1,21 @@
+// Oracle 76c02534-35e3-4950-b4b3-90c679cdf6a7; source/rulings checked 2026-11-15.
+// CR 603.6a (enters trigger), 115.1a/601.2c (target at trigger), 120.3
+// (damage) and 608.2b (stale target fizzles). With no other creature the
+// trigger must target this creature itself.
+(
+  id: "goblin_commando",
+  name: "Goblin Commando",
+  face_id: "goblin_commando",
+  mana_cost: "{4}{R}",
+  types: ["Creature", "Goblin"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [DamageTarget(amount: 2, target: (kind: Creature))],
+    ),
+  ],
+)

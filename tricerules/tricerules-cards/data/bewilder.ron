@@ -1,0 +1,16 @@
+// Oracle 7cc945ed-d0aa-4b1a-a94d-656e03b6b5d3; source/rulings checked 2026-11-15.
+// CR 115.1a/601.2c (target at cast), 613.4c (-X/-Y until end of turn),
+// 121.1 (draw) and 608.2b (an illegal target makes the spell not resolve,
+// so no card is drawn).
+(
+  id: "bewilder",
+  name: "Bewilder",
+  face_id: "bewilder",
+  mana_cost: "{2}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: -3, toughness: 0),
+    Draw(count: 1),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+)

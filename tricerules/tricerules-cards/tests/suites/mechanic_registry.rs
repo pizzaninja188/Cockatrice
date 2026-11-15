@@ -657,3 +657,30 @@ mod prowess_batch;
 
 #[path = "../protection_red_batch.rs"]
 mod protection_red_batch;
+
+#[path = "../flier_blocker_batch.rs"]
+mod flier_blocker_batch;
+
+#[path = "../flash_hexproof_aura_batch.rs"]
+mod flash_hexproof_aura_batch;
+
+#[path = "../etb_scry_value_batch.rs"]
+mod etb_scry_value_batch;
+
+#[path = "../aura_menace_batch.rs"]
+mod aura_menace_batch;
+
+#[path = "../first_strike_scry_batch.rs"]
+mod first_strike_scry_batch;
+
+#[path = "../shrink_draw_batch.rs"]
+mod shrink_draw_batch;
+
+#[path = "../landfall_trample_batch.rs"]
+mod landfall_trample_batch;
+
+#[path = "../etb_damage_creature_batch.rs"]
+mod etb_damage_creature_batch;
+
+#[path = "../team_pump_on_enter_batch.rs"]
+mod team_pump_on_enter_batch;

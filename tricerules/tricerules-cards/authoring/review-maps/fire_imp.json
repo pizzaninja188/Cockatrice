@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "5bd806e7-3f9b-4bb4-9708-f87a578f531e",
+  "spans": [
+    {
+      "face_id": "fire_imp",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_damage_creature_batch::etb_damage_creature_batch_cards_deal_exactly_two_damage_to_a_chosen_creature",
+      "covers": "actual fire_imp deals exactly two damage to the chosen creature"
+    },
+    {
+      "test": "scenario etb_damage_creature_batch::etb_damage_creature_batch_cards_must_target_themselves_when_no_other_creature_exists",
+      "covers": "actual fire_imp targets itself when it is the only creature"
+    },
+    {
+      "test": "scenario etb_damage_creature_batch::etb_damage_creature_batch_cards_fizzle_when_the_chosen_creature_left",
+      "covers": "actual fire_imp does not deal damage when the chosen creature left"
+    },
+    {
+      "test": "scenario etb_damage_creature_batch::etb_damage_creature_batch_cards_offer_only_creature_targets",
+      "covers": "actual fire_imp publishes only creature permanents as legal targets"
+    },
+    {
+      "test": "mechanic_registry::etb_damage_creature_batch::etb_damage_creature_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of fire_imp"
+    },
+    {
+      "test": "mechanic_registry::etb_damage_creature_batch::etb_damage_creature_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for fire_imp"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,28 @@
+// Oracle e0717287-9bff-446b-838d-6fc0adccc768; source/rulings checked 2026-11-15.
+// CR 702.8a (Flash), 303.4a (Aura target and attach), 603.6a (entry
+// trigger), 611.2a (until-end-of-turn grant), 613.4c (attached P/T
+// modifier), 704.5m (unattached Aura cleanup) and 514.2 (cleanup).
+(
+  id: "cradle_of_safety",
+  name: "Cradle of Safety",
+  face_id: "cradle_of_safety",
+  mana_cost: "{1}{U}",
+  types: ["Enchantment", "Aura"],
+  keywords: [Flash],
+  spell_effect: [AuraAttach(target: (kind: Creature, controller: You))],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([3]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [GrantKeywords(subject: AttachedObject, keywords: [Hexproof])],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([4]),
+      definition: AttachedModifier(delta_power: 1, delta_toughness: 1),
+    ),
+  ],
+)

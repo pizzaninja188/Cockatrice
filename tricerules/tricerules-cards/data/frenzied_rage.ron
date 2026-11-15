@@ -1,0 +1,18 @@
+// Oracle 1a04c31c-f5e4-43ff-a5b5-207426b8dca6; source/rulings checked 2026-11-15.
+// CR 303.4a (Aura target and attach), 613.4c (layer-7c attached P/T modifier),
+// 702.111a (menace) and 704.5m (unattached Aura cleanup).
+(
+  id: "frenzied_rage",
+  name: "Frenzied Rage",
+  face_id: "frenzied_rage",
+  mana_cost: "{1}{R}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(delta_power: 2, delta_toughness: 1, keywords: [Menace]),
+    ),
+  ],
+)

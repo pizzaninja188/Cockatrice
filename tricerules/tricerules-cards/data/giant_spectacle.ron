@@ -1,0 +1,18 @@
+// Oracle 97e34c3a-070e-406a-8505-657f4d57def8; source/rulings checked 2026-11-15.
+// CR 303.4a (Aura target and attach), 613.4c (layer-7c attached P/T modifier),
+// 702.111a (menace) and 704.5m (unattached Aura cleanup).
+(
+  id: "giant_spectacle",
+  name: "Giant Spectacle",
+  face_id: "giant_spectacle",
+  mana_cost: "{1}{R}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(delta_power: 2, delta_toughness: 1, keywords: [Menace]),
+    ),
+  ],
+)

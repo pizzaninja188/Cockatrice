@@ -1,0 +1,22 @@
+// Oracle 010c660a-a67b-48f0-a63a-15470eb89f69; source/rulings checked 2026-11-15.
+// CR 702.9a-b (Flying) and 509.1b (blocking restrictions); reach does not
+// make a creature a legal blocker for this restriction.
+(
+  id: "welkin_tern",
+  name: "Welkin Tern",
+  face_id: "welkin_tern",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Bird"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flying],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: SelfCombatRestriction(restriction: (
+        cant_block_creatures_matching: [(kind: Creature, excluded_keywords: [Flying])],
+      )),
+    ),
+  ],
+)

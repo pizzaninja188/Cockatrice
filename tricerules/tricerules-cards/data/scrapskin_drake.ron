@@ -1,0 +1,22 @@
+// Oracle 910e8269-6001-479a-ab2e-5a935569c33c; source/rulings checked 2026-11-15.
+// CR 702.9a-b (Flying) and 509.1b (blocking restrictions); reach does not
+// make a creature a legal blocker for this restriction.
+(
+  id: "scrapskin_drake",
+  name: "Scrapskin Drake",
+  face_id: "scrapskin_drake",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Zombie", "Drake"],
+  power: 2,
+  toughness: 3,
+  keywords: [Flying],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: SelfCombatRestriction(restriction: (
+        cant_block_creatures_matching: [(kind: Creature, excluded_keywords: [Flying])],
+      )),
+    ),
+  ],
+)

@@ -1,0 +1,18 @@
+// Oracle 4a9dc9ef-a603-467a-aeed-32cc111394b0; source/rulings checked 2026-11-15.
+// CR 303.4a (Aura target and attach), 613.4c (layer-7c attached P/T modifier),
+// 702.111a (menace) and 704.5m (unattached Aura cleanup).
+(
+  id: "madcap_skills",
+  name: "Madcap Skills",
+  face_id: "madcap_skills",
+  mana_cost: "{1}{R}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(delta_power: 3, delta_toughness: 0, keywords: [Menace]),
+    ),
+  ],
+)

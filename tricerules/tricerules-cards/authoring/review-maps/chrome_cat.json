@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "0e2f8758-7457-4b54-ae61-a9c68cea4a23",
+  "spans": [
+    {
+      "face_id": "chrome_cat",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_scry_value_batch::etb_scry_value_batch_cards_cast_and_park_the_exact_scry_choice",
+      "covers": "actual chrome_cat scries exactly the printed count, offers only the printed top cards, rejects an over-count choice and bottoms the chosen cards"
+    },
+    {
+      "test": "scenario etb_scry_value_batch::etb_scry_value_batch_cards_scope_the_choice_to_their_controller",
+      "covers": "actual chrome_cat addresses the scry choice to the entering creature's controller"
+    },
+    {
+      "test": "scenario etb_scry_value_batch::etb_scry_value_batch_cards_leave_no_scry_choice_on_the_opponent_batch",
+      "covers": "actual chrome_cat leaves no scry choice on the opponent's priority batch"
+    },
+    {
+      "test": "mechanic_registry::etb_scry_value_batch::etb_scry_value_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of chrome_cat"
+    },
+    {
+      "test": "mechanic_registry::etb_scry_value_batch::etb_scry_value_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for chrome_cat"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,21 @@
+// Oracle 5bd806e7-3f9b-4bb4-9708-f87a578f531e; source/rulings checked 2026-11-15.
+// CR 603.6a (enters trigger), 115.1a/601.2c (target at trigger), 120.3
+// (damage) and 608.2b (stale target fizzles). With no other creature the
+// trigger must target this creature itself.
+(
+  id: "fire_imp",
+  name: "Fire Imp",
+  face_id: "fire_imp",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Imp"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [DamageTarget(amount: 2, target: (kind: Creature))],
+    ),
+  ],
+)

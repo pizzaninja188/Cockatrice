@@ -1,0 +1,18 @@
+// Oracle efefb339-bb7c-4b26-abed-8434f955122b; source/rulings checked 2026-11-15.
+// CR 303.4a (Aura target and attach), 613.4c (layer-7c attached P/T modifier),
+// 702.111a (menace) and 704.5m (unattached Aura cleanup).
+(
+  id: "furious_strength",
+  name: "Furious Strength",
+  face_id: "furious_strength",
+  mana_cost: "{2}{R}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(delta_power: 2, delta_toughness: 2, keywords: [Menace]),
+    ),
+  ],
+)
