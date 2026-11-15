@@ -1,0 +1,13 @@
+// Oracle 4a221518-c850-4e8a-a697-765c0a0e76e7; source/rulings checked 2026-11-14.
+// CR 202.1 and 205.4a: no rules text; the printed mana cost, legendary
+// supertype, type line, power and toughness are the complete card.
+(
+  id: "barktooth_warbeard",
+  name: "Barktooth Warbeard",
+  face_id: "barktooth_warbeard",
+  mana_cost: "{4}{B}{R}{R}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Human", "Warrior"],
+  power: 6,
+  toughness: 5,
+)

@@ -1,0 +1,26 @@
+{
+  "format_version": 1,
+  "oracle_id": "55dfe722-7487-4d25-b90c-e6ad2c82a671",
+  "spans": [],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario vanilla_gold_batch::vanilla_gold_batch_cards_cast_with_printed_characteristics",
+      "covers": "actual tobias_andrion clause coverage"
+    },
+    {
+      "test": "scenario vanilla_gold_batch::vanilla_gold_batch_cards_attack_and_block_with_printed_stats",
+      "covers": "actual tobias_andrion clause coverage"
+    },
+    {
+      "test": "mechanic_registry::vanilla_gold_batch::vanilla_gold_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of tobias_andrion"
+    },
+    {
+      "test": "mechanic_registry::vanilla_gold_batch::vanilla_gold_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for tobias_andrion"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

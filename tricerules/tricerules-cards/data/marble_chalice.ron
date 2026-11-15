@@ -1,0 +1,18 @@
+// Oracle 236f318e-9bd1-4eb0-8b19-af015b3a74ea; source/rulings checked 2026-11-14.
+// CR 107.5 and 118.3 (tap cost), 602.1b/602.2 (activated ability),
+// and 119.3 (life gain).
+(
+  id: "marble_chalice",
+  name: "Marble Chalice",
+  face_id: "marble_chalice",
+  mana_cost: "{2}{W}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [GainLife(amount: 1)],
+    ),
+  ],
+)

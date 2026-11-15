@@ -1,0 +1,12 @@
+// Oracle 79de2319-078d-46db-9044-0088c623b73f; source/rulings checked 2026-11-14.
+// CR 202.1: no rules text; the printed mana cost, type line, power and
+// toughness are the complete card.
+(
+  id: "southern_elephant",
+  name: "Southern Elephant",
+  face_id: "southern_elephant",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Elephant"],
+  power: 3,
+  toughness: 4,
+)

@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "d097b223-c558-4592-abb9-44dc8eb52a61",
+  "spans": [
+    {
+      "face_id": "sickle_ripper",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Wither",
+      "typed_path": "/faces/0/keywords"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario wither_batch::wither_batch_cards_have_wither",
+      "covers": "actual sickle_ripper clause coverage"
+    },
+    {
+      "test": "scenario wither_batch::wither_batch_cards_place_minus_counters_instead_of_damage",
+      "covers": "actual sickle_ripper clause coverage"
+    },
+    {
+      "test": "scenario wither_batch::wither_batch_cards_deal_normal_damage_to_players",
+      "covers": "actual sickle_ripper clause coverage"
+    },
+    {
+      "test": "mechanic_registry::wither_batch::wither_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of sickle_ripper"
+    },
+    {
+      "test": "mechanic_registry::wither_batch::wither_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for sickle_ripper"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

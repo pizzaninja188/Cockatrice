@@ -1,0 +1,13 @@
+// Oracle bcdd64d7-8414-488b-9b13-d5678d06625f; source/rulings checked 2026-11-14.
+// CR 702.80a: damage dealt to a creature by a source with wither is not
+// marked; its controller puts that many -1/-1 counters on the creature.
+(
+  id: "harvest_gwyllion",
+  name: "Harvest Gwyllion",
+  face_id: "harvest_gwyllion",
+  mana_cost: "{2}{W/B}{W/B}",
+  types: ["Creature", "Hag"],
+  power: 2,
+  toughness: 4,
+  keywords: [Wither],
+)

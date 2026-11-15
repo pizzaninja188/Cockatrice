@@ -1,0 +1,13 @@
+// Oracle fd20576d-4abe-4af8-ac53-ab9356593fe7; source/rulings checked 2026-11-14.
+// CR 202.1 and 205.4a: no rules text; the printed mana cost, legendary
+// supertype, type line, power and toughness are the complete card.
+(
+  id: "jerrard_of_the_closed_fist",
+  name: "Jerrard of the Closed Fist",
+  face_id: "jerrard_of_the_closed_fist",
+  mana_cost: "{3}{R}{G}{G}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Human", "Knight"],
+  power: 6,
+  toughness: 5,
+)

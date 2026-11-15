@@ -1,0 +1,26 @@
+{
+  "format_version": 1,
+  "oracle_id": "7663ac7c-1de3-4250-b96a-fae9dbd66a27",
+  "spans": [],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario vanilla_colorless_batch::vanilla_colorless_batch_cards_cast_with_printed_characteristics",
+      "covers": "actual memnite clause coverage"
+    },
+    {
+      "test": "scenario vanilla_colorless_batch::vanilla_colorless_batch_cards_attack_and_block_with_printed_stats",
+      "covers": "actual memnite clause coverage"
+    },
+    {
+      "test": "mechanic_registry::vanilla_colorless_batch::vanilla_colorless_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of memnite"
+    },
+    {
+      "test": "mechanic_registry::vanilla_colorless_batch::vanilla_colorless_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for memnite"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,13 @@
+// Oracle 55dfe722-7487-4d25-b90c-e6ad2c82a671; source/rulings checked 2026-11-14.
+// CR 202.1 and 205.4a: no rules text; the printed mana cost, legendary
+// supertype, type line, power and toughness are the complete card.
+(
+  id: "tobias_andrion",
+  name: "Tobias Andrion",
+  face_id: "tobias_andrion",
+  mana_cost: "{3}{W}{U}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Human", "Advisor"],
+  power: 4,
+  toughness: 4,
+)

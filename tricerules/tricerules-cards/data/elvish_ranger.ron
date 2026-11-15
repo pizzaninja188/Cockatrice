@@ -1,0 +1,12 @@
+// Oracle 092f2c34-1f75-4998-b219-2cf1ca73656d; source/rulings checked 2026-11-14.
+// CR 202.1: no rules text; the printed mana cost, type line, power and
+// toughness are the complete card.
+(
+  id: "elvish_ranger",
+  name: "Elvish Ranger",
+  face_id: "elvish_ranger",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Elf", "Ranger"],
+  power: 4,
+  toughness: 1,
+)

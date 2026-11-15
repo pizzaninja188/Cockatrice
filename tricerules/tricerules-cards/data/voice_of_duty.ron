@@ -1,0 +1,14 @@
+// Oracle b5d5b9c9-accc-4dbe-aaf4-c806f3e1c61c; source/rulings checked 2026-11-14.
+// CR 702.9a-b (Flying) and 702.16b-f (protection's five effects: no
+// targeting, Aura/Equipment attachment, damage, blocking, or Fortify).
+(
+  id: "voice_of_duty",
+  name: "Voice of Duty",
+  face_id: "voice_of_duty",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Angel"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+  protections: [Color(Green)],
+)

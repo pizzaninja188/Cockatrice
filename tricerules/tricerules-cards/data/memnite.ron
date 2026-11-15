@@ -1,0 +1,12 @@
+// Oracle 7663ac7c-1de3-4250-b96a-fae9dbd66a27; source/rulings checked 2026-11-14.
+// CR 202.1: no rules text; the printed mana cost, type line, power and
+// toughness are the complete card.
+(
+  id: "memnite",
+  name: "Memnite",
+  face_id: "memnite",
+  mana_cost: "{0}",
+  types: ["Artifact", "Creature", "Construct"],
+  power: 1,
+  toughness: 1,
+)

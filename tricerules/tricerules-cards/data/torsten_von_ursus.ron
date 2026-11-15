@@ -1,0 +1,13 @@
+// Oracle 633b8f22-0384-4f60-ba78-b52c2d82dfde; source/rulings checked 2026-11-14.
+// CR 202.1 and 205.4a: no rules text; the printed mana cost, legendary
+// supertype, type line, power and toughness are the complete card.
+(
+  id: "torsten_von_ursus",
+  name: "Torsten Von Ursus",
+  face_id: "torsten_von_ursus",
+  mana_cost: "{3}{G}{G}{W}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Human", "Soldier"],
+  power: 5,
+  toughness: 5,
+)

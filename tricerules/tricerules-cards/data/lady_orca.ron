@@ -1,0 +1,13 @@
+// Oracle fcae9e87-50af-46b4-ab48-42ed92985e10; source/rulings checked 2026-11-14.
+// CR 202.1 and 205.4a: no rules text; the printed mana cost, legendary
+// supertype, type line, power and toughness are the complete card.
+(
+  id: "lady_orca",
+  name: "Lady Orca",
+  face_id: "lady_orca",
+  mana_cost: "{5}{B}{R}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Demon"],
+  power: 7,
+  toughness: 4,
+)

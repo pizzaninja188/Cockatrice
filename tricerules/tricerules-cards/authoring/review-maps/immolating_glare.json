@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "046b6989-5b56-4b52-a655-109b1eb26a93",
+  "spans": [
+    {
+      "face_id": "immolating_glare",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario destroy_attacking_batch::destroy_attacking_batch_cards_destroy_only_an_attacking_creature",
+      "covers": "actual immolating_glare clause coverage"
+    },
+    {
+      "test": "scenario destroy_attacking_batch::destroy_attacking_batch_cards_reject_a_nonattacking_creature",
+      "covers": "actual immolating_glare clause coverage"
+    },
+    {
+      "test": "scenario destroy_attacking_batch::destroy_attacking_batch_cards_fizzle_a_stale_attacker",
+      "covers": "actual immolating_glare clause coverage"
+    },
+    {
+      "test": "scenario destroy_attacking_batch::destroy_attacking_batch_cards_destroy_an_opponents_attacker",
+      "covers": "actual immolating_glare clause coverage"
+    },
+    {
+      "test": "scenario destroy_attacking_batch::destroy_attacking_batch_cards_leave_a_creature_that_stopped_attacking",
+      "covers": "actual immolating_glare clause coverage"
+    },
+    {
+      "test": "mechanic_registry::destroy_attacking_batch::destroy_attacking_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of immolating_glare"
+    },
+    {
+      "test": "mechanic_registry::destroy_attacking_batch::destroy_attacking_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for immolating_glare"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

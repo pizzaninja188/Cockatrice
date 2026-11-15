@@ -1627,6 +1627,7 @@ illvoi_galeblade	0	cast	exercised
 illvoi_light_jammer	0	ability:0	exercised
 illvoi_light_jammer	0	cast	exercised
 illvoi_operative	0	cast	exercised
+immolating_glare	0	cast	unsupported: target group 0 needs a richer fixture
 impact_tremors	0	cast	exercised
 impale	0	cast	exercised
 imperial_outrider	0	cast	exercised
@@ -1775,6 +1776,7 @@ ketria_triome	0	ability:1	unsupported: ability not offered by generic battlefiel
 khalni_ambush_khalni_territory	0	cast	exercised
 khalni_ambush_khalni_territory	1	ability:0	exercised
 khalni_ambush_khalni_territory	1	land	exercised
+kill_shot	0	cast	unsupported: target group 0 needs a richer fixture
 killers_mask	0	ability:0	exercised
 killers_mask	0	cast	exercised
 kin-tree_nurturer	0	cast	exercised
@@ -2543,6 +2545,7 @@ rearing_embermare	0	cast	exercised
 rebellious_captives	0	ability:0	exercised
 rebellious_captives	0	cast	exercised
 rebellious_strike	0	cast	exercised
+rebuke	0	cast	unsupported: target group 0 needs a richer fixture
 reckless_air_strike	0	cast	exercised
 reckless_lackey	0	ability:0	exercised
 reckless_lackey	0	cast	exercised

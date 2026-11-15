@@ -1,0 +1,26 @@
+{
+  "format_version": 1,
+  "oracle_id": "523cca7d-7d21-45de-b82d-58e777bf7f72",
+  "spans": [],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario vanilla_gold_batch::vanilla_gold_batch_cards_cast_with_printed_characteristics",
+      "covers": "actual jedit_ojanen clause coverage"
+    },
+    {
+      "test": "scenario vanilla_gold_batch::vanilla_gold_batch_cards_attack_and_block_with_printed_stats",
+      "covers": "actual jedit_ojanen clause coverage"
+    },
+    {
+      "test": "mechanic_registry::vanilla_gold_batch::vanilla_gold_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of jedit_ojanen"
+    },
+    {
+      "test": "mechanic_registry::vanilla_gold_batch::vanilla_gold_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for jedit_ojanen"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

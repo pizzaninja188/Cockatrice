@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "c2f0b795-9f73-43db-aa8c-3b06963ba2b6",
+  "spans": [
+    {
+      "face_id": "wildslayer_elves",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Wither",
+      "typed_path": "/faces/0/keywords"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario wither_batch::wither_batch_cards_have_wither",
+      "covers": "actual wildslayer_elves clause coverage"
+    },
+    {
+      "test": "scenario wither_batch::wither_batch_cards_place_minus_counters_instead_of_damage",
+      "covers": "actual wildslayer_elves clause coverage"
+    },
+    {
+      "test": "scenario wither_batch::wither_batch_cards_deal_normal_damage_to_players",
+      "covers": "actual wildslayer_elves clause coverage"
+    },
+    {
+      "test": "mechanic_registry::wither_batch::wither_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of wildslayer_elves"
+    },
+    {
+      "test": "mechanic_registry::wither_batch::wither_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for wildslayer_elves"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

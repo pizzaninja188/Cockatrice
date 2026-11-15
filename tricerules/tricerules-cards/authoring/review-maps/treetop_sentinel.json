@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "786afd52-0eae-4453-b1bd-cffc21699849",
+  "spans": [
+    {
+      "face_id": "treetop_sentinel",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords",
+        "/faces/0/protections"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "Protection::Color",
+      "typed_path": "/faces/0/protections"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flying_protection_batch::flying_protection_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual treetop_sentinel clause coverage"
+    },
+    {
+      "test": "scenario flying_protection_batch::flying_protection_batch_cards_cannot_be_blocked_by_ground_creatures",
+      "covers": "actual treetop_sentinel clause coverage"
+    },
+    {
+      "test": "scenario flying_protection_batch::flying_protection_batch_cards_can_be_blocked_by_flying_or_reach",
+      "covers": "actual treetop_sentinel clause coverage"
+    },
+    {
+      "test": "scenario flying_protection_batch::flying_protection_batch_cards_prevent_damage_from_the_protected_color",
+      "covers": "actual treetop_sentinel clause coverage"
+    },
+    {
+      "test": "mechanic_registry::flying_protection_batch::flying_protection_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of treetop_sentinel"
+    },
+    {
+      "test": "mechanic_registry::flying_protection_batch::flying_protection_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for treetop_sentinel"
+    },
+    {
+      "test": "scenario flying_protection_batch::flying_protection_batch_cards_reject_blockers_of_the_protected_color",
+      "covers": "actual treetop_sentinel rejects a protected-color blocker"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

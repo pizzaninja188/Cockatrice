@@ -1,0 +1,12 @@
+// Oracle 4c9f5359-249e-488b-9a7e-db1a43c2b1f4; source/rulings checked 2026-11-14.
+// CR 202.1: no rules text; the printed mana cost, type line, power and
+// toughness are the complete card.
+(
+  id: "trained_armodon",
+  name: "Trained Armodon",
+  face_id: "trained_armodon",
+  mana_cost: "{1}{G}{G}",
+  types: ["Creature", "Elephant"],
+  power: 3,
+  toughness: 3,
+)

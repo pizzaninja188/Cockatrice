@@ -1,0 +1,13 @@
+// Oracle d097b223-c558-4592-abb9-44dc8eb52a61; source/rulings checked 2026-11-14.
+// CR 702.80a: damage dealt to a creature by a source with wither is not
+// marked; its controller puts that many -1/-1 counters on the creature.
+(
+  id: "sickle_ripper",
+  name: "Sickle Ripper",
+  face_id: "sickle_ripper",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Elemental", "Warrior"],
+  power: 2,
+  toughness: 1,
+  keywords: [Wither],
+)

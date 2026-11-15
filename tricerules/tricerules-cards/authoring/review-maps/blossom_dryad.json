@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "53929852-6359-4e7a-8f2c-a5954c76ffcc",
+  "spans": [
+    {
+      "face_id": "blossom_dryad",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Untap",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/activated_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario tap_untap_land_batch::tap_untap_land_batch_cards_untap_a_target_land",
+      "covers": "actual blossom_dryad clause coverage"
+    },
+    {
+      "test": "scenario tap_untap_land_batch::tap_untap_land_batch_cards_accept_any_players_land",
+      "covers": "actual blossom_dryad clause coverage"
+    },
+    {
+      "test": "scenario tap_untap_land_batch::tap_untap_land_batch_cards_reject_nonland_targets",
+      "covers": "actual blossom_dryad clause coverage"
+    },
+    {
+      "test": "scenario tap_untap_land_batch::tap_untap_land_batch_cards_fizzle_a_stale_land_target",
+      "covers": "actual blossom_dryad clause coverage"
+    },
+    {
+      "test": "scenario tap_untap_land_batch::tap_untap_land_batch_cards_require_an_untapped_source_and_controller",
+      "covers": "actual blossom_dryad clause coverage"
+    },
+    {
+      "test": "mechanic_registry::tap_untap_land_batch::tap_untap_land_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of blossom_dryad"
+    },
+    {
+      "test": "mechanic_registry::tap_untap_land_batch::tap_untap_land_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for blossom_dryad"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

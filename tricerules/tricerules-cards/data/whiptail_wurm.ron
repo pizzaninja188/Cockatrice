@@ -1,0 +1,12 @@
+// Oracle 50fa6a63-e031-47cb-8fd5-a6c235203722; source/rulings checked 2026-11-14.
+// CR 202.1: no rules text; the printed mana cost, type line, power and
+// toughness are the complete card.
+(
+  id: "whiptail_wurm",
+  name: "Whiptail Wurm",
+  face_id: "whiptail_wurm",
+  mana_cost: "{6}{G}",
+  types: ["Creature", "Wurm"],
+  power: 8,
+  toughness: 5,
+)

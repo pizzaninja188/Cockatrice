@@ -1,0 +1,26 @@
+{
+  "format_version": 1,
+  "oracle_id": "4a221518-c850-4e8a-a697-765c0a0e76e7",
+  "spans": [],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario vanilla_gold_batch::vanilla_gold_batch_cards_cast_with_printed_characteristics",
+      "covers": "actual barktooth_warbeard clause coverage"
+    },
+    {
+      "test": "scenario vanilla_gold_batch::vanilla_gold_batch_cards_attack_and_block_with_printed_stats",
+      "covers": "actual barktooth_warbeard clause coverage"
+    },
+    {
+      "test": "mechanic_registry::vanilla_gold_batch::vanilla_gold_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of barktooth_warbeard"
+    },
+    {
+      "test": "mechanic_registry::vanilla_gold_batch::vanilla_gold_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for barktooth_warbeard"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

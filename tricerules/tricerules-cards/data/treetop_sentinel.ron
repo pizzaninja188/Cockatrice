@@ -1,0 +1,14 @@
+// Oracle 786afd52-0eae-4453-b1bd-cffc21699849; source/rulings checked 2026-11-14.
+// CR 702.9a-b (Flying) and 702.16b-f (protection's five effects: no
+// targeting, Aura/Equipment attachment, damage, blocking, or Fortify).
+(
+  id: "treetop_sentinel",
+  name: "Treetop Sentinel",
+  face_id: "treetop_sentinel",
+  mana_cost: "{2}{U}{U}",
+  types: ["Creature", "Bird", "Soldier"],
+  power: 2,
+  toughness: 3,
+  keywords: [Flying],
+  protections: [Color(Green)],
+)

@@ -1,0 +1,14 @@
+// Oracle d87ab916-5d49-4840-8d5b-805af800a83c; source/rulings checked 2026-11-14.
+// CR 702.9a-b (Flying) and 702.16b-f (protection's five effects: no
+// targeting, Aura/Equipment attachment, damage, blocking, or Fortify).
+(
+  id: "duskrider_falcon",
+  name: "Duskrider Falcon",
+  face_id: "duskrider_falcon",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Bird"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+  protections: [Color(Black)],
+)

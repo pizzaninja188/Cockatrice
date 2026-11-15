@@ -1,0 +1,12 @@
+// Oracle 2dfafd63-83fb-4783-8e12-30018680a905; source/rulings checked 2026-11-14.
+// CR 202.1: no rules text; the printed mana cost, type line, power and
+// toughness are the complete card.
+(
+  id: "metallic_sliver",
+  name: "Metallic Sliver",
+  face_id: "metallic_sliver",
+  mana_cost: "{1}",
+  types: ["Artifact", "Creature", "Sliver"],
+  power: 1,
+  toughness: 1,
+)

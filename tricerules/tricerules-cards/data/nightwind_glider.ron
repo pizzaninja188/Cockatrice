@@ -1,0 +1,14 @@
+// Oracle 9a642db9-c337-481c-b260-11e01f64e68e; source/rulings checked 2026-11-14.
+// CR 702.9a-b (Flying) and 702.16b-f (protection's five effects: no
+// targeting, Aura/Equipment attachment, damage, blocking, or Fortify).
+(
+  id: "nightwind_glider",
+  name: "Nightwind Glider",
+  face_id: "nightwind_glider",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Human", "Rebel"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flying],
+  protections: [Color(Black)],
+)

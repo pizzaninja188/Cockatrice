@@ -1,0 +1,14 @@
+// Oracle 7a7f37a3-9e99-4d3d-b705-b074fb3e9b3e; source/rulings checked 2026-11-14.
+// CR 702.9a-b (Flying) and 702.16b-f (protection's five effects: no
+// targeting, Aura/Equipment attachment, damage, blocking, or Fortify).
+(
+  id: "cerulean_wyvern",
+  name: "Cerulean Wyvern",
+  face_id: "cerulean_wyvern",
+  mana_cost: "{4}{U}",
+  types: ["Creature", "Drake"],
+  power: 3,
+  toughness: 3,
+  keywords: [Flying],
+  protections: [Color(Green)],
+)

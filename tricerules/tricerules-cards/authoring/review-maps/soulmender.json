@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "41b1d850-2fda-490b-a4f6-0d9bfb37103c",
+  "spans": [
+    {
+      "face_id": "soulmender",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario tap_gain_life_batch::tap_gain_life_batch_cards_activate_to_gain_one_life",
+      "covers": "actual soulmender clause coverage"
+    },
+    {
+      "test": "scenario tap_gain_life_batch::tap_gain_life_batch_cards_scope_the_life_gain_to_their_controller",
+      "covers": "actual soulmender clause coverage"
+    },
+    {
+      "test": "scenario tap_gain_life_batch::tap_gain_life_batch_cards_require_an_untapped_source_and_controller",
+      "covers": "actual soulmender clause coverage"
+    },
+    {
+      "test": "mechanic_registry::tap_gain_life_batch::tap_gain_life_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of soulmender"
+    },
+    {
+      "test": "mechanic_registry::tap_gain_life_batch::tap_gain_life_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for soulmender"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,13 @@
+// Oracle 3ef03975-0f46-43aa-b461-bd3b6f5d4613; source/rulings checked 2026-11-14.
+// CR 202.1 and 205.4a: no rules text; the printed mana cost, legendary
+// supertype, type line, power and toughness are the complete card.
+(
+  id: "the_lady_of_the_mountain",
+  name: "The Lady of the Mountain",
+  face_id: "the_lady_of_the_mountain",
+  mana_cost: "{4}{R}{G}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Giant"],
+  power: 5,
+  toughness: 5,
+)

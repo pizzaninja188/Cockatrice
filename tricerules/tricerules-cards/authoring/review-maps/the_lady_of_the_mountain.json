@@ -1,0 +1,26 @@
+{
+  "format_version": 1,
+  "oracle_id": "3ef03975-0f46-43aa-b461-bd3b6f5d4613",
+  "spans": [],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario vanilla_gold_batch::vanilla_gold_batch_cards_cast_with_printed_characteristics",
+      "covers": "actual the_lady_of_the_mountain clause coverage"
+    },
+    {
+      "test": "scenario vanilla_gold_batch::vanilla_gold_batch_cards_attack_and_block_with_printed_stats",
+      "covers": "actual the_lady_of_the_mountain clause coverage"
+    },
+    {
+      "test": "mechanic_registry::vanilla_gold_batch::vanilla_gold_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of the_lady_of_the_mountain"
+    },
+    {
+      "test": "mechanic_registry::vanilla_gold_batch::vanilla_gold_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for the_lady_of_the_mountain"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

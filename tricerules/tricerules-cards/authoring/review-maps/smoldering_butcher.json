@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "b0f56eef-1abc-437e-8e2e-c079731fe783",
+  "spans": [
+    {
+      "face_id": "smoldering_butcher",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Wither",
+      "typed_path": "/faces/0/keywords"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario wither_batch::wither_batch_cards_have_wither",
+      "covers": "actual smoldering_butcher clause coverage"
+    },
+    {
+      "test": "scenario wither_batch::wither_batch_cards_place_minus_counters_instead_of_damage",
+      "covers": "actual smoldering_butcher clause coverage"
+    },
+    {
+      "test": "scenario wither_batch::wither_batch_cards_deal_normal_damage_to_players",
+      "covers": "actual smoldering_butcher clause coverage"
+    },
+    {
+      "test": "mechanic_registry::wither_batch::wither_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of smoldering_butcher"
+    },
+    {
+      "test": "mechanic_registry::wither_batch::wither_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for smoldering_butcher"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
