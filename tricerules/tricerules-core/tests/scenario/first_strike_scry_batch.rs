@@ -118,14 +118,14 @@ fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
         .expect("second pass resolves stack item")
 }
 
-fn cast_at_target(mut e: &mut GameEngine, case: &Case, target: u32) -> u32 {
-    give_mana(&mut e, 0, gift(&case.mana));
-    inject_card_into_hand(&mut e, 0, case.id);
-    let hand_slot = hand_index_for_card(&e, 0, case.id);
+fn cast_at_target(e: &mut GameEngine, case: &Case, target: u32) -> u32 {
+    give_mana(e, 0, gift(&case.mana));
+    inject_card_into_hand(e, 0, case.id);
+    let hand_slot = hand_index_for_card(e, 0, case.id);
     let cast_slot = e.state.players[0].hand[hand_slot];
     e.apply_scenario_command(0, &cast_spell(hand_slot, target_object(target)))
         .unwrap_or_else(|error| panic!("cast {}: {error:?}", case.id));
-    assert_eq!(pool(&e), (0, 0, 0, 0, 0, 0), "{}: exact cost", case.id);
+    assert_eq!(pool(e), (0, 0, 0, 0, 0, 0), "{}: exact cost", case.id);
     cast_slot
 }
 
