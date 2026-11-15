@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "48a01671-da1f-4875-bcd5-ca99566ff399",
+  "spans": [
+    {
+      "face_id": "bastion_mastodon",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "Keyword::Vigilance",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario white_gain_vigilance_batch::white_gain_vigilance_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual bastion_mastodon clause coverage"
+    },
+    {
+      "test": "scenario white_gain_vigilance_batch::white_gain_vigilance_batch_cards_gain_vigilance_only_after_activation",
+      "covers": "actual bastion_mastodon clause coverage"
+    },
+    {
+      "test": "scenario white_gain_vigilance_batch::white_gain_vigilance_batch_cards_stay_untapped_when_attacking_with_vigilance",
+      "covers": "actual bastion_mastodon clause coverage"
+    },
+    {
+      "test": "scenario white_gain_vigilance_batch::white_gain_vigilance_batch_cards_tap_when_attacking_without_activation",
+      "covers": "actual bastion_mastodon clause coverage"
+    },
+    {
+      "test": "scenario white_gain_vigilance_batch::white_gain_vigilance_batch_cards_stay_tapped_when_vigilance_is_granted_after_attack",
+      "covers": "actual bastion_mastodon clause coverage"
+    },
+    {
+      "test": "scenario white_gain_vigilance_batch::white_gain_vigilance_batch_cards_reject_activation_when_the_cost_cannot_be_paid",
+      "covers": "actual bastion_mastodon clause coverage"
+    },
+    {
+      "test": "mechanic_registry::white_gain_vigilance_batch::white_gain_vigilance_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of bastion_mastodon"
+    },
+    {
+      "test": "mechanic_registry::white_gain_vigilance_batch::white_gain_vigilance_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for bastion_mastodon"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

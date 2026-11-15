@@ -1,0 +1,20 @@
+// Oracle 2e6d3120-d41d-4e48-b33f-0f73c876fe69; source/rulings checked 2026-11-15.
+// CR 602.1/602.2 (activation and printed cost), 701.19a-b (regeneration
+// shield and lethal-damage replacement), and 514.2 (cleanup expiry).
+(
+  id: "skyshroud_troll",
+  name: "Skyshroud Troll",
+  face_id: "skyshroud_troll",
+  mana_cost: "{2}{G}{G}",
+  types: ["Creature", "Troll", "Giant"],
+  power: 3,
+  toughness: 3,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{1}{G}")],
+      effect: [Regenerate(subject: Source)],
+    ),
+  ],
+)

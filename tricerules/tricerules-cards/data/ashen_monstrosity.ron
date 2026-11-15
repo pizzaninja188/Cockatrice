@@ -1,0 +1,14 @@
+// Oracle 01906aae-fc53-40b0-a386-dae43e4f437f; source/rulings checked 2026-11-15.
+// CR 702.10b-c (haste ignores summoning sickness for attacks and tap abilities) and
+// 508.1d (an able must-attack creature must be declared as an attacker).
+(
+  id: "ashen_monstrosity",
+  name: "Ashen Monstrosity",
+  face_id: "ashen_monstrosity",
+  mana_cost: "{5}{R}{R}",
+  types: ["Creature", "Spirit"],
+  power: 7,
+  toughness: 4,
+  keywords: [Haste],
+  must_attack_if_able: true,
+)

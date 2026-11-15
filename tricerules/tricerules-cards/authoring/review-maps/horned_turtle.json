@@ -1,0 +1,26 @@
+{
+  "format_version": 1,
+  "oracle_id": "7a4ae76b-6241-4fa8-b239-5ec941a0e7df",
+  "spans": [],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario vanilla_remnants_batch::vanilla_remnants_batch_cards_cast_with_printed_characteristics",
+      "covers": "actual horned_turtle clause coverage"
+    },
+    {
+      "test": "scenario vanilla_remnants_batch::vanilla_remnants_batch_cards_attack_and_block_with_printed_stats",
+      "covers": "actual horned_turtle clause coverage"
+    },
+    {
+      "test": "mechanic_registry::vanilla_remnants_batch::vanilla_remnants_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of horned_turtle"
+    },
+    {
+      "test": "mechanic_registry::vanilla_remnants_batch::vanilla_remnants_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for horned_turtle"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

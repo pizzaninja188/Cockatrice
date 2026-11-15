@@ -1,0 +1,12 @@
+// Oracle 83b31215-ea9b-4ad9-a39e-3fe6cdb9b7de; source/rulings checked 2026-11-15.
+// CR 109.3, 202.1, and 205.1-2: no rules text; the printed mana cost, type
+// line, power and toughness are the complete card.
+(
+  id: "starfleet_crew",
+  name: "Starfleet Crew",
+  face_id: "starfleet_crew",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Officer"],
+  power: 2,
+  toughness: 3,
+)

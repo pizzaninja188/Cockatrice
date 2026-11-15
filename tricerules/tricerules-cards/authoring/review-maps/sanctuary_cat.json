@@ -1,0 +1,26 @@
+{
+  "format_version": 1,
+  "oracle_id": "c623bc4b-7fc1-4bc1-84e9-71c301dd402f",
+  "spans": [],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario vanilla_remnants_batch::vanilla_remnants_batch_cards_cast_with_printed_characteristics",
+      "covers": "actual sanctuary_cat clause coverage"
+    },
+    {
+      "test": "scenario vanilla_remnants_batch::vanilla_remnants_batch_cards_attack_and_block_with_printed_stats",
+      "covers": "actual sanctuary_cat clause coverage"
+    },
+    {
+      "test": "mechanic_registry::vanilla_remnants_batch::vanilla_remnants_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of sanctuary_cat"
+    },
+    {
+      "test": "mechanic_registry::vanilla_remnants_batch::vanilla_remnants_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for sanctuary_cat"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

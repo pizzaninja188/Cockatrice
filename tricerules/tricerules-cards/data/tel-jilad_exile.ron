@@ -1,0 +1,20 @@
+// Oracle 58987ca8-ee9b-412e-b08f-440588234e00; source/rulings checked 2026-11-15.
+// CR 602.1/602.2 (activation and printed cost), 701.19a-b (regeneration
+// shield and lethal-damage replacement), and 514.2 (cleanup expiry).
+(
+  id: "tel-jilad_exile",
+  name: "Tel-Jilad Exile",
+  face_id: "tel_jilad_exile",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Troll", "Warrior"],
+  power: 2,
+  toughness: 3,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{1}{G}")],
+      effect: [Regenerate(subject: Source)],
+    ),
+  ],
+)

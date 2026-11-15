@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "0d899095-cef7-43d2-aaf7-eb73b62f5ec8",
+  "spans": [
+    {
+      "face_id": "igneous_cur",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario red_pump_one_batch::red_pump_one_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual igneous_cur clause coverage"
+    },
+    {
+      "test": "scenario red_pump_one_batch::red_pump_one_batch_cards_apply_the_printed_pump_only_to_themselves",
+      "covers": "actual igneous_cur clause coverage"
+    },
+    {
+      "test": "scenario red_pump_one_batch::red_pump_one_batch_cards_allow_repeated_activations_in_one_turn",
+      "covers": "actual igneous_cur clause coverage"
+    },
+    {
+      "test": "scenario red_pump_one_batch::red_pump_one_batch_cards_pump_expires_at_cleanup",
+      "covers": "actual igneous_cur clause coverage"
+    },
+    {
+      "test": "scenario red_pump_one_batch::red_pump_one_batch_cards_reject_activation_when_the_cost_cannot_be_paid",
+      "covers": "actual igneous_cur clause coverage"
+    },
+    {
+      "test": "mechanic_registry::red_pump_one_batch::red_pump_one_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of igneous_cur"
+    },
+    {
+      "test": "mechanic_registry::red_pump_one_batch::red_pump_one_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for igneous_cur"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

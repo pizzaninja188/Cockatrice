@@ -1,0 +1,20 @@
+// Oracle d68adf9b-57b1-4c14-97b1-c5906dc5d29b; source/rulings checked 2026-11-15.
+// CR 602.1/602.2 (activation and printed cost), 702.20a-b (vigilance
+// removes the tap-on-attack requirement), 611.2a, and 514.2.
+(
+  id: "towering_thunderfist",
+  name: "Towering Thunderfist",
+  face_id: "towering_thunderfist",
+  mana_cost: "{4}{R}",
+  types: ["Creature", "Giant", "Soldier"],
+  power: 4,
+  toughness: 4,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{W}")],
+      effect: [GrantKeywords(subject: Source, keywords: [Vigilance])],
+    ),
+  ],
+)

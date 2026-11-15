@@ -1722,3 +1722,30 @@ mod vanilla_green_batch;
 
 #[path = "scenario/vanilla_gold_batch.rs"]
 mod vanilla_gold_batch;
+
+#[path = "scenario/attack_haste_batch.rs"]
+mod attack_haste_batch;
+
+#[path = "scenario/bounce_draw_batch.rs"]
+mod bounce_draw_batch;
+
+#[path = "scenario/tap_ping_self_batch.rs"]
+mod tap_ping_self_batch;
+
+#[path = "scenario/regenerate_green_batch.rs"]
+mod regenerate_green_batch;
+
+#[path = "scenario/red_pump_one_batch.rs"]
+mod red_pump_one_batch;
+
+#[path = "scenario/red_pump_two_batch.rs"]
+mod red_pump_two_batch;
+
+#[path = "scenario/vanilla_remnants_batch.rs"]
+mod vanilla_remnants_batch;
+
+#[path = "scenario/blue_gain_flying_batch.rs"]
+mod blue_gain_flying_batch;
+
+#[path = "scenario/white_gain_vigilance_batch.rs"]
+mod white_gain_vigilance_batch;

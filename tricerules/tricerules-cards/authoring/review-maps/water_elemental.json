@@ -1,0 +1,26 @@
+{
+  "format_version": 1,
+  "oracle_id": "c470fbe1-0538-46ec-8741-3143f5e78af8",
+  "spans": [],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario vanilla_remnants_batch::vanilla_remnants_batch_cards_cast_with_printed_characteristics",
+      "covers": "actual water_elemental clause coverage"
+    },
+    {
+      "test": "scenario vanilla_remnants_batch::vanilla_remnants_batch_cards_attack_and_block_with_printed_stats",
+      "covers": "actual water_elemental clause coverage"
+    },
+    {
+      "test": "mechanic_registry::vanilla_remnants_batch::vanilla_remnants_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of water_elemental"
+    },
+    {
+      "test": "mechanic_registry::vanilla_remnants_batch::vanilla_remnants_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for water_elemental"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

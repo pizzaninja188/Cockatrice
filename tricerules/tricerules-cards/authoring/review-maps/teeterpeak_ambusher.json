@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "fe769071-3f99-411b-878a-57a2200649a0",
+  "spans": [
+    {
+      "face_id": "teeterpeak_ambusher",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario red_pump_two_batch::red_pump_two_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual teeterpeak_ambusher clause coverage"
+    },
+    {
+      "test": "scenario red_pump_two_batch::red_pump_two_batch_cards_apply_the_printed_pump_only_to_themselves",
+      "covers": "actual teeterpeak_ambusher clause coverage"
+    },
+    {
+      "test": "scenario red_pump_two_batch::red_pump_two_batch_cards_allow_repeated_activations_in_one_turn",
+      "covers": "actual teeterpeak_ambusher clause coverage"
+    },
+    {
+      "test": "scenario red_pump_two_batch::red_pump_two_batch_cards_pump_expires_at_cleanup",
+      "covers": "actual teeterpeak_ambusher clause coverage"
+    },
+    {
+      "test": "scenario red_pump_two_batch::red_pump_two_batch_cards_reject_activation_when_the_cost_cannot_be_paid",
+      "covers": "actual teeterpeak_ambusher clause coverage"
+    },
+    {
+      "test": "mechanic_registry::red_pump_two_batch::red_pump_two_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of teeterpeak_ambusher"
+    },
+    {
+      "test": "mechanic_registry::red_pump_two_batch::red_pump_two_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for teeterpeak_ambusher"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

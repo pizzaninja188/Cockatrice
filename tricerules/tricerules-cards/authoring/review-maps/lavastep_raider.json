@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "3a96782b-e9c8-4bc5-845d-45f6bf7b8dc4",
+  "spans": [
+    {
+      "face_id": "lavastep_raider",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario red_pump_two_batch::red_pump_two_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual lavastep_raider clause coverage"
+    },
+    {
+      "test": "scenario red_pump_two_batch::red_pump_two_batch_cards_apply_the_printed_pump_only_to_themselves",
+      "covers": "actual lavastep_raider clause coverage"
+    },
+    {
+      "test": "scenario red_pump_two_batch::red_pump_two_batch_cards_allow_repeated_activations_in_one_turn",
+      "covers": "actual lavastep_raider clause coverage"
+    },
+    {
+      "test": "scenario red_pump_two_batch::red_pump_two_batch_cards_pump_expires_at_cleanup",
+      "covers": "actual lavastep_raider clause coverage"
+    },
+    {
+      "test": "scenario red_pump_two_batch::red_pump_two_batch_cards_reject_activation_when_the_cost_cannot_be_paid",
+      "covers": "actual lavastep_raider clause coverage"
+    },
+    {
+      "test": "mechanic_registry::red_pump_two_batch::red_pump_two_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of lavastep_raider"
+    },
+    {
+      "test": "mechanic_registry::red_pump_two_batch::red_pump_two_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for lavastep_raider"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

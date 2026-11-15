@@ -1,0 +1,21 @@
+// Oracle abc5ac3e-f196-49df-8a9d-16df3114ffad; source/rulings checked 2026-11-15.
+// CR 602.1/602.2 (activation and printed cost), 702.9a-b (flying as
+// evasion), 611.2a (until-end-of-turn grant), 509.1b (a later evasion
+// grant does not change an already-declared block), and 514.2 (cleanup).
+(
+  id: "dukhara_peafowl",
+  name: "Dukhara Peafowl",
+  face_id: "dukhara_peafowl",
+  mana_cost: "{4}",
+  types: ["Artifact", "Creature", "Bird"],
+  power: 2,
+  toughness: 4,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{U}")],
+      effect: [GrantKeywords(subject: Source, keywords: [Flying])],
+    ),
+  ],
+)

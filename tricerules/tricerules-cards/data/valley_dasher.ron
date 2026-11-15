@@ -1,0 +1,14 @@
+// Oracle aad16b50-a866-4871-843f-ec8813ad5dfd; source/rulings checked 2026-11-15.
+// CR 702.10b-c (haste ignores summoning sickness for attacks and tap abilities) and
+// 508.1d (an able must-attack creature must be declared as an attacker).
+(
+  id: "valley_dasher",
+  name: "Valley Dasher",
+  face_id: "valley_dasher",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Human", "Berserker"],
+  power: 2,
+  toughness: 2,
+  keywords: [Haste],
+  must_attack_if_able: true,
+)

@@ -603,3 +603,30 @@ mod vanilla_green_batch;
 
 #[path = "../vanilla_gold_batch.rs"]
 mod vanilla_gold_batch;
+
+#[path = "../attack_haste_batch.rs"]
+mod attack_haste_batch;
+
+#[path = "../bounce_draw_batch.rs"]
+mod bounce_draw_batch;
+
+#[path = "../tap_ping_self_batch.rs"]
+mod tap_ping_self_batch;
+
+#[path = "../regenerate_green_batch.rs"]
+mod regenerate_green_batch;
+
+#[path = "../red_pump_one_batch.rs"]
+mod red_pump_one_batch;
+
+#[path = "../red_pump_two_batch.rs"]
+mod red_pump_two_batch;
+
+#[path = "../vanilla_remnants_batch.rs"]
+mod vanilla_remnants_batch;
+
+#[path = "../blue_gain_flying_batch.rs"]
+mod blue_gain_flying_batch;
+
+#[path = "../white_gain_vigilance_batch.rs"]
+mod white_gain_vigilance_batch;

@@ -1,0 +1,12 @@
+// Oracle c623bc4b-7fc1-4bc1-84e9-71c301dd402f; source/rulings checked 2026-11-15.
+// CR 109.3, 202.1, and 205.1-2: no rules text; the printed mana cost, type
+// line, power and toughness are the complete card.
+(
+  id: "sanctuary_cat",
+  name: "Sanctuary Cat",
+  face_id: "sanctuary_cat",
+  mana_cost: "{W}",
+  types: ["Creature", "Cat"],
+  power: 1,
+  toughness: 2,
+)

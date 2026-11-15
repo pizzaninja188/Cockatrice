@@ -1,0 +1,12 @@
+// Oracle c470fbe1-0538-46ec-8741-3143f5e78af8; source/rulings checked 2026-11-15.
+// CR 109.3, 202.1, and 205.1-2: no rules text; the printed mana cost, type
+// line, power and toughness are the complete card.
+(
+  id: "water_elemental",
+  name: "Water Elemental",
+  face_id: "water_elemental",
+  mana_cost: "{3}{U}{U}",
+  types: ["Creature", "Elemental"],
+  power: 5,
+  toughness: 4,
+)

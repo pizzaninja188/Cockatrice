@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "01906aae-fc53-40b0-a386-dae43e4f437f",
+  "spans": [
+    {
+      "face_id": "ashen_monstrosity",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords",
+        "/faces/0/must_attack_if_able"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Haste",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "must_attack_if_able",
+      "typed_path": "/faces/0/must_attack_if_able"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario attack_haste_batch::attack_haste_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual ashen_monstrosity clause coverage"
+    },
+    {
+      "test": "scenario attack_haste_batch::attack_haste_batch_cards_attack_the_turn_they_enter",
+      "covers": "actual ashen_monstrosity clause coverage"
+    },
+    {
+      "test": "scenario attack_haste_batch::attack_haste_batch_cards_must_attack_when_able",
+      "covers": "actual ashen_monstrosity clause coverage"
+    },
+    {
+      "test": "scenario attack_haste_batch::attack_haste_batch_cards_may_be_omitted_when_unable",
+      "covers": "actual ashen_monstrosity clause coverage"
+    },
+    {
+      "test": "mechanic_registry::attack_haste_batch::attack_haste_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of ashen_monstrosity"
+    },
+    {
+      "test": "mechanic_registry::attack_haste_batch::attack_haste_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for ashen_monstrosity"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

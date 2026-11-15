@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "c000811e-bde7-4840-a3bb-9714d5c977eb",
+  "spans": [
+    {
+      "face_id": "orcish_artillery",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamagePlayer",
+      "typed_path": "/faces/0/activated_abilities/0/effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/activated_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario tap_ping_self_batch::tap_ping_self_batch_cards_deal_two_damage_to_any_target_and_three_to_their_controller",
+      "covers": "actual orcish_artillery clause coverage"
+    },
+    {
+      "test": "scenario tap_ping_self_batch::tap_ping_self_batch_cards_damage_their_controller_even_when_hitting_a_creature",
+      "covers": "actual orcish_artillery clause coverage"
+    },
+    {
+      "test": "scenario tap_ping_self_batch::tap_ping_self_batch_cards_fizzle_without_self_damage_when_the_target_is_gone",
+      "covers": "actual orcish_artillery clause coverage"
+    },
+    {
+      "test": "scenario tap_ping_self_batch::tap_ping_self_batch_cards_require_an_untapped_source_and_controller",
+      "covers": "actual orcish_artillery clause coverage"
+    },
+    {
+      "test": "mechanic_registry::tap_ping_self_batch::tap_ping_self_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of orcish_artillery"
+    },
+    {
+      "test": "mechanic_registry::tap_ping_self_batch::tap_ping_self_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for orcish_artillery"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,58 @@
+{
+  "format_version": 1,
+  "oracle_id": "c44f1a81-269b-4f05-8ff2-e7ce19a93937",
+  "spans": [
+    {
+      "face_id": "symbol_of_unsummoning",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario bounce_draw_batch::bounce_draw_batch_cards_return_the_target_and_draw",
+      "covers": "actual symbol_of_unsummoning clause coverage"
+    },
+    {
+      "test": "scenario bounce_draw_batch::bounce_draw_batch_cards_return_their_controllers_own_creature",
+      "covers": "actual symbol_of_unsummoning clause coverage"
+    },
+    {
+      "test": "scenario bounce_draw_batch::bounce_draw_batch_cards_require_a_creature_target",
+      "covers": "actual symbol_of_unsummoning clause coverage"
+    },
+    {
+      "test": "scenario bounce_draw_batch::bounce_draw_batch_cards_fizzle_stale_targets_without_drawing",
+      "covers": "actual symbol_of_unsummoning clause coverage"
+    },
+    {
+      "test": "mechanic_registry::bounce_draw_batch::bounce_draw_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of symbol_of_unsummoning"
+    },
+    {
+      "test": "mechanic_registry::bounce_draw_batch::bounce_draw_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for symbol_of_unsummoning"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

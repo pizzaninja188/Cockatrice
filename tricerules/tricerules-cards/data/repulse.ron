@@ -1,0 +1,19 @@
+// Oracle 6f7ef1d1-c441-41ba-b7d6-6b7727ffcf04; source/rulings checked 2026-11-15.
+// CR 115.1a/601.2c (target at cast), 608.2b (stale target), 400.3
+// (a card moves to its owner's hand), and 121.1 (draw).
+(
+  id: "repulse",
+  name: "Repulse",
+  face_id: "repulse",
+  mana_cost: "{2}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    ReturnToOwnersHand(subject: Chosen((kind: Creature))),
+    Draw(count: 1),
+  ],
+  targeting: Some((groups: [(
+    min: 1, max: 1,
+    prompt: "Choose target creature",
+    effect_indices: [0],
+  )])),
+)

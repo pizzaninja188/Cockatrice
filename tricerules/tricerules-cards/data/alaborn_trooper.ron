@@ -1,0 +1,12 @@
+// Oracle 17969b71-9612-45ff-b789-1c033f832154; source/rulings checked 2026-11-15.
+// CR 109.3, 202.1, and 205.1-2: no rules text; the printed mana cost, type
+// line, power and toughness are the complete card.
+(
+  id: "alaborn_trooper",
+  name: "Alaborn Trooper",
+  face_id: "alaborn_trooper",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 2,
+  toughness: 3,
+)
