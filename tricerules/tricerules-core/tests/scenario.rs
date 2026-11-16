@@ -1669,6 +1669,15 @@ mod landfall_pump_remnant_batch;
 #[path = "scenario/battle_land_cycle_batch.rs"]
 mod battle_land_cycle_batch;
 
+#[path = "scenario/tapped_dual_basic_batch.rs"]
+mod tapped_dual_basic_batch;
+
+#[path = "scenario/snow_tapped_dual_basic_batch.rs"]
+mod snow_tapped_dual_basic_batch;
+
+#[path = "scenario/all_creature_shrink_batch.rs"]
+mod all_creature_shrink_batch;
+
 #[path = "scenario/cant_block_batch.rs"]
 mod cant_block_batch;
 

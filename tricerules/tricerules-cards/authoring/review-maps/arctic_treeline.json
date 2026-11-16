@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "32fb0096-546c-4633-b6e3-ba3f2d9fa49c",
+  "spans": [
+    {
+      "face_id": "arctic_treeline",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "arctic_treeline",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario snow_tapped_dual_basic_batch::snow_tapped_dual_basic_batch_cards_enter_tapped_and_reject_immediate_tap",
+      "covers": "actual arctic_treeline is exercised by the shared snow_tapped_dual_basic_batch actual-card scenario"
+    },
+    {
+      "test": "scenario snow_tapped_dual_basic_batch::snow_tapped_dual_basic_batch_cards_tap_for_each_printed_option_in_order",
+      "covers": "actual arctic_treeline is exercised by the shared snow_tapped_dual_basic_batch actual-card scenario"
+    },
+    {
+      "test": "scenario snow_tapped_dual_basic_batch::snow_tapped_dual_basic_batch_cards_produce_ordinary_colored_mana",
+      "covers": "actual arctic_treeline is exercised by the shared snow_tapped_dual_basic_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::snow_tapped_dual_basic_batch::snow_tapped_dual_basic_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of arctic_treeline"
+    },
+    {
+      "test": "mechanic_registry::snow_tapped_dual_basic_batch::snow_tapped_dual_basic_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for arctic_treeline"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

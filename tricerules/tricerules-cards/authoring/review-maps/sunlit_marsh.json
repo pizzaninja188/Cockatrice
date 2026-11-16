@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "a5e5a259-5fa7-4b01-93cb-a2b4aaf80927",
+  "spans": [
+    {
+      "face_id": "sunlit_marsh",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "sunlit_marsh",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario tapped_dual_basic_batch::tapped_dual_basic_batch_cards_enter_tapped_and_reject_immediate_tap",
+      "covers": "actual sunlit_marsh is exercised by the shared tapped_dual_basic_batch actual-card scenario"
+    },
+    {
+      "test": "scenario tapped_dual_basic_batch::tapped_dual_basic_batch_cards_tap_for_each_printed_option_in_order",
+      "covers": "actual sunlit_marsh is exercised by the shared tapped_dual_basic_batch actual-card scenario"
+    },
+    {
+      "test": "scenario tapped_dual_basic_batch::tapped_dual_basic_batch_cards_credit_the_activating_player_only",
+      "covers": "actual sunlit_marsh is exercised by the shared tapped_dual_basic_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::tapped_dual_basic_batch::tapped_dual_basic_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of sunlit_marsh"
+    },
+    {
+      "test": "mechanic_registry::tapped_dual_basic_batch::tapped_dual_basic_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for sunlit_marsh"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
