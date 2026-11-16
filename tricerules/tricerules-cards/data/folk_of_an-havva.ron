@@ -1,0 +1,23 @@
+// Oracle 86002526-ed3d-47e5-9f2a-55c4fa220ce8; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 509.3a (whenever this creature blocks) and 509.3b (the typed per-edge occurrence, equivalent
+// for these single-block creatures), CR 611.2a and 514.2 (until-end-of-turn
+// duration) and CR 613.4c (layer 7c self pump). No card-specific rulings.
+
+(
+  id: "folk_of_an-havva",
+  name: "Folk of An-Havva",
+  face_id: "folk_of_an_havva",
+  mana_cost: "{G}",
+  types: ["Creature", "Human"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WheneverSelfBlocksCreature(attacker: ()),
+      effect: [PumpTarget(power: 2, toughness: 0, subject: Source)],
+    ),
+  ],
+)

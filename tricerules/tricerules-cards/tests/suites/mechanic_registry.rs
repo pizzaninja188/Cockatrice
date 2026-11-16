@@ -846,3 +846,12 @@ mod investigate_lands_batch;
 
 #[path = "../artifact_lands_bridge_batch.rs"]
 mod artifact_lands_bridge_batch;
+
+#[path = "../tri_mana_obelisks_batch.rs"]
+mod tri_mana_obelisks_batch;
+
+#[path = "../sac_creature_three_batch.rs"]
+mod sac_creature_three_batch;
+
+#[path = "../blocks_pump_batch.rs"]
+mod blocks_pump_batch;

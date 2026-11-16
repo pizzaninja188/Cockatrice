@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "8d7933c4-4c74-492f-a9cd-50b339a4b29e",
+  "spans": [
+    {
+      "face_id": "druid_of_the_anima",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario tri_mana_obelisks_batch::tri_mana_obelisks_batch_cards_tap_for_each_printed_option_in_order",
+      "covers": "actual druid_of_the_anima is exercised by the shared tri_mana_obelisks_batch actual-card scenario"
+    },
+    {
+      "test": "scenario tri_mana_obelisks_batch::tri_mana_obelisks_batch_cards_reject_activation_when_already_tapped",
+      "covers": "actual druid_of_the_anima is exercised by the shared tri_mana_obelisks_batch actual-card scenario"
+    },
+    {
+      "test": "scenario tri_mana_obelisks_batch::tri_mana_obelisks_batch_artifacts_ignore_summoning_sickness_but_creatures_do_not",
+      "covers": "actual druid_of_the_anima is exercised by the shared tri_mana_obelisks_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::tri_mana_obelisks_batch::tri_mana_obelisks_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of druid_of_the_anima"
+    },
+    {
+      "test": "mechanic_registry::tri_mana_obelisks_batch::tri_mana_obelisks_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for druid_of_the_anima"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

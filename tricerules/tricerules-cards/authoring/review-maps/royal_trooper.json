@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "e31510d5-b74e-4a8d-94e8-8bd098cac3c7",
+  "spans": [
+    {
+      "face_id": "royal_trooper",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfBlocksCreature",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario blocks_pump_batch::blocks_pump_batch_cards_pump_when_blocking_every_printed_card",
+      "covers": "actual royal_trooper is exercised by the shared blocks_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario blocks_pump_batch::blocks_pump_batch_cards_do_not_pump_when_attacking_and_blocked",
+      "covers": "actual royal_trooper is exercised by the shared blocks_pump_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::blocks_pump_batch::blocks_pump_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of royal_trooper"
+    },
+    {
+      "test": "mechanic_registry::blocks_pump_batch::blocks_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for royal_trooper"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

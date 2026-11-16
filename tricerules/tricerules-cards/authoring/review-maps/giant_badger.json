@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "a4109138-5d69-4510-a228-7c1f88c0c8c0",
+  "spans": [
+    {
+      "face_id": "giant_badger",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfBlocksCreature",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario blocks_pump_batch::blocks_pump_batch_cards_pump_when_blocking_every_printed_card",
+      "covers": "actual giant_badger is exercised by the shared blocks_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario blocks_pump_batch::blocks_pump_batch_cards_do_not_pump_when_attacking_and_blocked",
+      "covers": "actual giant_badger is exercised by the shared blocks_pump_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::blocks_pump_batch::blocks_pump_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of giant_badger"
+    },
+    {
+      "test": "mechanic_registry::blocks_pump_batch::blocks_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for giant_badger"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

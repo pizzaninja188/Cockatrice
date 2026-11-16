@@ -1,0 +1,20 @@
+// Oracle 02e81bb8-ba80-4483-9b9f-973dcae0fc9d; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 605.1a and 605.3a-b (targetless activated mana abilities resolve immediately), CR 106.1a-b (one mana of the chosen
+// printed color) and CR 202.1 (printed mana cost). No card-specific rulings.
+
+(
+  id: "obelisk_of_naya",
+  name: "Obelisk of Naya",
+  face_id: "obelisk_of_naya",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(r: 1), (g: 1), (w: 1)])],
+    ),
+  ],
+)

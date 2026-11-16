@@ -1,0 +1,23 @@
+// Oracle 0b6625cb-4177-45bd-ba99-2af43dfd6f46; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 509.3a (whenever this creature blocks) and 509.3b (the typed per-edge occurrence, equivalent
+// for these single-block creatures), CR 611.2a and 514.2 (until-end-of-turn
+// duration) and CR 613.4c (layer 7c self pump). No card-specific rulings.
+
+(
+  id: "shu_defender",
+  name: "Shu Defender",
+  face_id: "shu_defender",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WheneverSelfBlocksCreature(attacker: ()),
+      effect: [PumpTarget(power: 0, toughness: 2, subject: Source)],
+    ),
+  ],
+)

@@ -1974,3 +1974,12 @@ mod prevention_shield_batch;
 
 #[path = "scenario/etb_vanilla_tokens_batch.rs"]
 mod etb_vanilla_tokens_batch;
+
+#[path = "scenario/tri_mana_obelisks_batch.rs"]
+mod tri_mana_obelisks_batch;
+
+#[path = "scenario/sac_creature_three_batch.rs"]
+mod sac_creature_three_batch;
+
+#[path = "scenario/blocks_pump_batch.rs"]
+mod blocks_pump_batch;

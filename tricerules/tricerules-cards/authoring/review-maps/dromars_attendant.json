@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "91d36a9d-3a3f-4cb7-837d-b1e8f6730512",
+  "spans": [
+    {
+      "face_id": "dromars_attendant",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario sac_creature_three_batch::sac_creature_three_batch_cards_sacrifice_for_the_printed_mana",
+      "covers": "actual dromars_attendant is exercised by the shared sac_creature_three_batch actual-card scenario"
+    },
+    {
+      "test": "scenario sac_creature_three_batch::sac_creature_three_batch_cards_reject_the_activation_without_one_mana",
+      "covers": "actual dromars_attendant is exercised by the shared sac_creature_three_batch actual-card scenario"
+    },
+    {
+      "test": "scenario sac_creature_three_batch::sac_creature_three_batch_cards_cannot_reactivate_a_sacrificed_attendant",
+      "covers": "actual dromars_attendant is exercised by the shared sac_creature_three_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::sac_creature_three_batch::sac_creature_three_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of dromars_attendant"
+    },
+    {
+      "test": "mechanic_registry::sac_creature_three_batch::sac_creature_three_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for dromars_attendant"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
