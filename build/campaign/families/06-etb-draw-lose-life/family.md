@@ -57,5 +57,8 @@ registry checks.
 
 ## Review and gate
 
-Frozen in `build/campaign/review/queue-v22-batch-b-v2`. Independent read-only review and the
-batch-B full gate are recorded in the batch gate summary below.
+Frozen in `build/campaign/review/queue-v22-batch-b-v2`. Independent read-only review approved the
+family (with delta approval after the material findings were corrected). Batch queue-v22 batch B
+full gate `verify-a6c0f2d5-b70e-4603-9634-2f38427de0dc` passed exit 0, covering
+04-etb-edict..06-etb-draw-lose-life; commit `bd8b308c9bb0ad452a21688d6140662c422fa587`;
+remote `origin/card-campaign` verified at the same SHA.

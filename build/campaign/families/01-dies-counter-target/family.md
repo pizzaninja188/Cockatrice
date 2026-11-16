@@ -61,5 +61,8 @@ plus the registry checks. All five cards are executed by the all-card scenario.
 
 ## Review and gate
 
-Frozen in `build/campaign/review/queue-v22-batch-a-v3`. Independent read-only review and the
-batch-A full gate are recorded in the batch gate summary below.
+Frozen in `build/campaign/review/queue-v22-batch-a-v3`. Independent read-only review approved the
+family (with delta approval after the material findings were corrected). Batch queue-v22 batch A
+full gate `verify-9fa5b1cf-055b-4e8f-bd7a-5169dff96367` passed exit 0, covering
+01-dies-counter-target..03-sacrifice-draw; commit `b765b1ca2f2e2415fc8027ef8ff330829deb28ec`;
+remote `origin/card-campaign` verified at the same SHA.

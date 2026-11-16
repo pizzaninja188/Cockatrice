@@ -58,5 +58,8 @@ registry checks.
 
 ## Review and gate
 
-Frozen in `build/campaign/review/queue-v22-batch-c-v3`. Independent read-only review and the
-batch-C full gate are recorded in the batch gate summary below.
+Frozen in `build/campaign/review/queue-v22-batch-c-v3`. Independent read-only review approved the
+family (with delta approval after the material findings were corrected). Batch queue-v22 batch C
+full gate `verify-e9c4e926-ffde-4a0d-992d-f4faccf7780f` passed exit 0, covering
+07-etb-basic-search-tapped..09-aura-pump-haste; commit `f286fae8019d2f53f2404234a360fb5d6b57fa6e`;
+remote `origin/card-campaign` verified at the same SHA.
