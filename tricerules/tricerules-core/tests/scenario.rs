@@ -1687,6 +1687,15 @@ mod loot_activated_batch;
 #[path = "scenario/put_land_from_hand_batch.rs"]
 mod put_land_from_hand_batch;
 
+#[path = "scenario/pay_life_any_color_batch.rs"]
+mod pay_life_any_color_batch;
+
+#[path = "scenario/any_color_mana_activation_batch.rs"]
+mod any_color_mana_activation_batch;
+
+#[path = "scenario/self_pump_negative_batch.rs"]
+mod self_pump_negative_batch;
+
 #[path = "scenario/cant_block_batch.rs"]
 mod cant_block_batch;
 

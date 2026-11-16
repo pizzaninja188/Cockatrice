@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "9db7d8f0-0712-4e32-825c-1339e7a8d768",
+  "spans": [
+    {
+      "face_id": "viridian_acolyte",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario any_color_mana_activation_batch::any_color_mana_activation_batch_canary_cards_offer_all_five_colors",
+      "covers": "actual viridian_acolyte is exercised by the shared any_color_mana_activation_batch actual-card scenario"
+    },
+    {
+      "test": "scenario any_color_mana_activation_batch::any_color_mana_activation_batch_cards_offer_each_of_the_five_colors",
+      "covers": "actual viridian_acolyte is exercised by the shared any_color_mana_activation_batch actual-card scenario"
+    },
+    {
+      "test": "scenario any_color_mana_activation_batch::any_color_mana_activation_batch_cards_require_the_exact_printed_cost",
+      "covers": "actual viridian_acolyte is exercised by the shared any_color_mana_activation_batch actual-card scenario"
+    },
+    {
+      "test": "scenario any_color_mana_activation_batch::any_color_mana_activation_batch_cards_reject_missing_mana_and_tapped_sources",
+      "covers": "actual viridian_acolyte is exercised by the shared any_color_mana_activation_batch actual-card scenario"
+    },
+    {
+      "test": "scenario any_color_mana_activation_batch::any_color_mana_activation_batch_cards_credit_the_activating_player_only",
+      "covers": "actual viridian_acolyte is exercised by the shared any_color_mana_activation_batch actual-card scenario"
+    },
+    {
+      "test": "scenario any_color_mana_activation_batch::any_color_mana_activation_batch_viridian_acolyte_needs_to_lose_summoning_sickness",
+      "covers": "actual viridian_acolyte is exercised by the shared any_color_mana_activation_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::any_color_mana_activation_batch::any_color_mana_activation_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of viridian_acolyte"
+    },
+    {
+      "test": "mechanic_registry::any_color_mana_activation_batch::any_color_mana_activation_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for viridian_acolyte"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

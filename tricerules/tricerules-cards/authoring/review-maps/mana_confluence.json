@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "d0ee5bdc-2b69-4b73-9a20-ffcc18783b29",
+  "spans": [
+    {
+      "face_id": "mana_confluence",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::PayLife",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario pay_life_any_color_batch::pay_life_any_color_batch_cards_produce_each_of_the_five_colors",
+      "covers": "actual mana_confluence is exercised by the shared pay_life_any_color_batch actual-card scenario"
+    },
+    {
+      "test": "scenario pay_life_any_color_batch::pay_life_any_color_batch_cards_pay_exactly_one_life_and_the_tap",
+      "covers": "actual mana_confluence is exercised by the shared pay_life_any_color_batch actual-card scenario"
+    },
+    {
+      "test": "scenario pay_life_any_color_batch::pay_life_any_color_batch_cards_reject_activation_at_zero_life",
+      "covers": "actual mana_confluence is exercised by the shared pay_life_any_color_batch actual-card scenario"
+    },
+    {
+      "test": "scenario pay_life_any_color_batch::pay_life_any_color_batch_cards_credit_the_activating_player_only",
+      "covers": "actual mana_confluence is exercised by the shared pay_life_any_color_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::pay_life_any_color_batch::pay_life_any_color_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of mana_confluence"
+    },
+    {
+      "test": "mechanic_registry::pay_life_any_color_batch::pay_life_any_color_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for mana_confluence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
