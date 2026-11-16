@@ -837,3 +837,12 @@ mod prevention_shield_batch;
 
 #[path = "../etb_vanilla_tokens_batch.rs"]
 mod etb_vanilla_tokens_batch;
+
+#[path = "../sac_lands_cc_batch.rs"]
+mod sac_lands_cc_batch;
+
+#[path = "../investigate_lands_batch.rs"]
+mod investigate_lands_batch;
+
+#[path = "../artifact_lands_bridge_batch.rs"]
+mod artifact_lands_bridge_batch;

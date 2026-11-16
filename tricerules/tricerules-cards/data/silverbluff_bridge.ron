@@ -1,0 +1,30 @@
+// Oracle 081bfd50-a436-463b-9d2c-5bc8a32b387c; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 614.1d and 614.12 (the enters-tapped clause is a replacement effect), CR 300.2 (an object with more
+// than one card type combines each type's aspects; an artifact land is played as a land), CR 702.12b
+// (indestructible permanents are not destroyed by lethal damage or destroy effects) and CR 605.1a/605.3b
+// (the dual activated mana ability resolves immediately). No rulings.
+
+(
+  id: "silverbluff_bridge",
+  name: "Silverbluff Bridge",
+  face_id: "silverbluff_bridge",
+  mana_cost: "",
+  types: ["Artifact", "Land"],
+  keywords: [Indestructible],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: EntersTapped(affected: Self_),
+    ),
+  ],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([3]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(u: 1), (r: 1)])],
+    ),
+  ],
+)

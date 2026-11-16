@@ -1,0 +1,80 @@
+{
+  "format_version": 1,
+  "oracle_id": "4d4b9512-d29d-4b99-9249-d37e1199a1f5",
+  "spans": [
+    {
+      "face_id": "ebon_stronghold",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "ebon_stronghold",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "ebon_stronghold",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario sac_lands_cc_batch::sac_lands_cc_batch_cards_enter_tapped_and_reject_immediate_tap",
+      "covers": "actual ebon_stronghold is exercised by the shared sac_lands_cc_batch actual-card scenario"
+    },
+    {
+      "test": "scenario sac_lands_cc_batch::sac_lands_cc_batch_cards_tap_for_exactly_the_printed_single_color",
+      "covers": "actual ebon_stronghold is exercised by the shared sac_lands_cc_batch actual-card scenario"
+    },
+    {
+      "test": "scenario sac_lands_cc_batch::sac_lands_cc_batch_cards_sacrifice_for_exactly_the_printed_pair",
+      "covers": "actual ebon_stronghold is exercised by the shared sac_lands_cc_batch actual-card scenario"
+    },
+    {
+      "test": "scenario sac_lands_cc_batch::sac_lands_cc_batch_cards_do_not_sacrifice_when_the_tap_cost_is_unavailable",
+      "covers": "actual ebon_stronghold is exercised by the shared sac_lands_cc_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::sac_lands_cc_batch::sac_lands_cc_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of ebon_stronghold"
+    },
+    {
+      "test": "mechanic_registry::sac_lands_cc_batch::sac_lands_cc_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for ebon_stronghold"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

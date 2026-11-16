@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "2065cada-4078-41c4-9e06-2460d2a2e8ee",
+  "spans": [
+    {
+      "face_id": "darkmoss_bridge",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "darkmoss_bridge",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "darkmoss_bridge",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "Keyword::Indestructible",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario artifact_lands_bridge_batch::artifact_lands_bridge_batch_cards_enter_tapped_and_reject_immediate_tap",
+      "covers": "actual darkmoss_bridge is exercised by the shared artifact_lands_bridge_batch actual-card scenario"
+    },
+    {
+      "test": "scenario artifact_lands_bridge_batch::artifact_lands_bridge_batch_cards_tap_for_each_printed_option_in_order",
+      "covers": "actual darkmoss_bridge is exercised by the shared artifact_lands_bridge_batch actual-card scenario"
+    },
+    {
+      "test": "scenario artifact_lands_bridge_batch::artifact_lands_bridge_batch_cards_keep_artifact_land_identity_and_indestructible",
+      "covers": "actual darkmoss_bridge is exercised by the shared artifact_lands_bridge_batch actual-card scenario"
+    },
+    {
+      "test": "scenario artifact_lands_bridge_batch::artifact_lands_bridge_batch_cards_survive_a_destroy_effect",
+      "covers": "actual darkmoss_bridge is exercised by the shared artifact_lands_bridge_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::artifact_lands_bridge_batch::artifact_lands_bridge_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of darkmoss_bridge"
+    },
+    {
+      "test": "mechanic_registry::artifact_lands_bridge_batch::artifact_lands_bridge_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for darkmoss_bridge"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1921,6 +1921,15 @@ mod dies_drain_batch;
 #[path = "scenario/sacrifice_draw_batch.rs"]
 mod sacrifice_draw_batch;
 
+#[path = "scenario/sac_lands_cc_batch.rs"]
+mod sac_lands_cc_batch;
+
+#[path = "scenario/investigate_lands_batch.rs"]
+mod investigate_lands_batch;
+
+#[path = "scenario/artifact_lands_bridge_batch.rs"]
+mod artifact_lands_bridge_batch;
+
 #[path = "scenario/etb_edict_batch.rs"]
 mod etb_edict_batch;
 
