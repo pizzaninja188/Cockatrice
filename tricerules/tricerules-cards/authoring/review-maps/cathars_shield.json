@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "b270d091-ea4c-4dfd-9c50-48b45bbc396e",
+  "spans": [
+    {
+      "face_id": "cathars_shield",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "cathars_shield",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Equip",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario equipment_vigilance_batch::equipment_vigilance_batch_cards_cast_and_equip_with_exact_cost",
+      "covers": "actual cathars_shield is exercised by the shared equipment_vigilance_batch actual-card scenario: printed cast and equip costs"
+    },
+    {
+      "test": "scenario equipment_vigilance_batch::equipment_vigilance_batch_cards_grant_printed_pump_and_vigilance",
+      "covers": "actual cathars_shield is exercised by the shared equipment_vigilance_batch actual-card scenario: attached pump and vigilance"
+    },
+    {
+      "test": "scenario equipment_vigilance_batch::equipment_vigilance_batch_cards_unattached_equipment_grants_nothing",
+      "covers": "actual cathars_shield is exercised by the shared equipment_vigilance_batch actual-card scenario: no bonus while unattached"
+    },
+    {
+      "test": "scenario equipment_vigilance_batch::equipment_vigilance_batch_cards_equip_only_targets_creatures_you_control",
+      "covers": "actual cathars_shield is exercised by the shared equipment_vigilance_batch actual-card scenario: equip target scope"
+    },
+    {
+      "test": "scenario equipment_vigilance_batch::equipment_vigilance_batch_cards_remain_attached_when_the_creature_dies",
+      "covers": "actual cathars_shield is exercised by the shared equipment_vigilance_batch actual-card scenario: the Equipment stays and becomes unattached"
+    },
+    {
+      "test": "mechanic_registry::equipment_vigilance_batch::equipment_vigilance_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of cathars_shield (equipment pump with vigilance)"
+    },
+    {
+      "test": "mechanic_registry::equipment_vigilance_batch::equipment_vigilance_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for cathars_shield"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

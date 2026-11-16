@@ -1839,3 +1839,21 @@ mod flier_regenerate_batch;
 
 #[path = "scenario/wall_pump_batch.rs"]
 mod wall_pump_batch;
+
+#[path = "scenario/flash_etb_pump_batch.rs"]
+mod flash_etb_pump_batch;
+
+#[path = "scenario/equipment_vigilance_batch.rs"]
+mod equipment_vigilance_batch;
+
+#[path = "scenario/vanilla_vehicles_batch.rs"]
+mod vanilla_vehicles_batch;
+
+#[path = "scenario/soft_counter_cycling_batch.rs"]
+mod soft_counter_cycling_batch;
+
+#[path = "scenario/fog_cycling_batch.rs"]
+mod fog_cycling_batch;
+
+#[path = "scenario/artifact_sac_ping_batch.rs"]
+mod artifact_sac_ping_batch;

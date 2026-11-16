@@ -1,0 +1,20 @@
+// Oracle bb8c2c0f-fc63-40c6-98c6-691e42b3b8c9; source/rulings checked 2026-11-15 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1a/602.2 (activated ability and cost), 701.21a (sacrifice as a
+// cost), 115.1 (target), and 608.2b (stale target fizzles).
+(
+  id: "disruptor_pistol",
+  name: "Disruptor Pistol",
+  face_id: "disruptor_pistol",
+  mana_cost: "{2}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{4}"), Tap, SacrificeSelf],
+      effect: [DamageTarget(amount: 5, target: (kind: Creature))],
+      targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+    ),
+  ],
+)

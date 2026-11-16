@@ -1,0 +1,21 @@
+// Oracle fe7bad80-f853-4af9-82e2-5ccf8038d93b; source/rulings checked 2026-11-15 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 614.1a/615.1a (prevention), 611.2a/514.2 (duration) and
+// 702.29a (cycling).
+(
+  id: "angelsong",
+  name: "Angelsong",
+  face_id: "angelsong",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  spell_effect: [PreventAllCombatDamageTurn],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      source_zone: Hand,
+      costs: [Mana("{2}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

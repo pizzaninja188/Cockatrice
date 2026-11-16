@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "bc822c9a-633f-4830-9cb3-9af6a80622e4",
+  "spans": [
+    {
+      "face_id": "consulate_dreadnought",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::TapPermanents",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::AddTypes",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario vanilla_vehicles_batch::vanilla_vehicles_batch_cards_cast_as_noncreature_artifacts",
+      "covers": "actual consulate_dreadnought is exercised by the shared vanilla_vehicles_batch actual-card scenario: printed cost, types, body and noncreature status"
+    },
+    {
+      "test": "scenario vanilla_vehicles_batch::vanilla_vehicles_batch_cards_crew_makes_a_printed_artifact_creature",
+      "covers": "actual consulate_dreadnought is exercised by the shared vanilla_vehicles_batch actual-card scenario: crew turns the Vehicle into an artifact creature with its printed body"
+    },
+    {
+      "test": "scenario vanilla_vehicles_batch::vanilla_vehicles_batch_cards_crew_taps_only_creatures_you_control",
+      "covers": "actual consulate_dreadnought is exercised by the shared vanilla_vehicles_batch actual-card scenario: crew payment scope and total power"
+    },
+    {
+      "test": "scenario vanilla_vehicles_batch::vanilla_vehicles_batch_cards_reject_crew_with_insufficient_power",
+      "covers": "actual consulate_dreadnought is exercised by the shared vanilla_vehicles_batch actual-card scenario: insufficient total power spends nothing"
+    },
+    {
+      "test": "scenario vanilla_vehicles_batch::vanilla_vehicles_batch_cards_crew_ends_at_end_of_turn",
+      "covers": "actual consulate_dreadnought is exercised by the shared vanilla_vehicles_batch actual-card scenario: the creature type ends during cleanup"
+    },
+    {
+      "test": "mechanic_registry::vanilla_vehicles_batch::vanilla_vehicles_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of consulate_dreadnought (vanilla Vehicle with crew only)"
+    },
+    {
+      "test": "mechanic_registry::vanilla_vehicles_batch::vanilla_vehicles_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for consulate_dreadnought"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

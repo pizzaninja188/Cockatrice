@@ -1,0 +1,22 @@
+// Oracle 5604c475-6e01-4e9d-b4e6-8e8d72874581; source/rulings checked 2026-11-15 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.8a (flash), 603.6a (entry trigger), 115.1 (target), and
+// 611.2c/514.2 (until-end-of-turn pump).
+(
+  id: "briarpack_alpha",
+  name: "Briarpack Alpha",
+  face_id: "briarpack_alpha",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Wolf"],
+  power: 3,
+  toughness: 3,
+  keywords: [Flash],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [PumpTarget(power: 2, toughness: 2, subject: Chosen((kind: Creature)))],
+    ),
+  ],
+)

@@ -105,6 +105,7 @@ angel_of_the_god-pharaoh	0	ability:0	unsupported: ability not offered by generic
 angelic_edict	0	cast	exercised
 angelic_wall	0	cast	exercised
 angels_mercy	0	cast	exercised
+angelsong	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 ankle_biter	0	cast	exercised
 annul	0	cast	exercised
 ant-mans_army	0	cast	exercised
@@ -524,6 +525,8 @@ cavern_stomper	0	cast	exercised
 celestial_enforcer	0	ability:0	unsupported: nonmana costs need additional fixture resources
 celestial_enforcer	0	cast	exercised
 cenote_scout	0	cast	exercised
+censor	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
+censor	0	cast	unsupported: target group 0 needs a richer fixture
 centaur_courser	0	cast	exercised
 centaur_healer	0	cast	exercised
 cephalid_inkmage	0	cast	exercised
@@ -644,6 +647,7 @@ confiscate	0	cast	exercised
 confusticate_and_bebother	0	cast	exercised
 conifer_strider	0	cast	exercised
 consecrated_sphinx	0	cast	exercised
+consulate_dreadnought	0	ability:0	unsupported: nonmana costs need additional fixture resources
 consulate_skygate	0	cast	exercised
 convolute	0	cast	unsupported: target group 0 needs a richer fixture
 coordinated_maneuver	0	cast	exercised
@@ -1238,6 +1242,7 @@ fungal_colossus	0	cast	exercised
 fusion_elemental	0	cast	exercised
 futurist_forge	0	ability:0	exercised
 futurist_forge	0	cast	exercised
+futurist_sentinel	0	ability:0	unsupported: nonmana costs need additional fixture resources
 fyndhorn_elves	0	ability:0	exercised
 fyndhorn_elves	0	cast	exercised
 gaeas_anthem	0	cast	exercised
@@ -1489,6 +1494,7 @@ hawkeater_moth	0	cast	exercised
 hawkeye,_clint_barton	0	cast	exercised
 haywire_mite	0	ability:0	exercised
 haywire_mite	0	cast	exercised
+haze_of_pollen	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 hazels_nocturne	0	cast	exercised
 head_of_the_homestead	0	cast	exercised
 headless_horseman	0	cast	exercised
@@ -1688,6 +1694,7 @@ iron_tusk_elephant	0	cast	exercised
 ironclad_krovod	0	cast	exercised
 ironpaw_aspirant	0	cast	exercised
 ironroot_treefolk	0	cast	exercised
+irontread_crusher	0	ability:0	unsupported: nonmana costs need additional fixture resources
 irrigated_farmland	0	ability:0	exercised
 irrigated_farmland	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 irrigated_farmland	0	land	exercised
@@ -1936,6 +1943,7 @@ loxodon_convert	0	cast	exercised
 loxodon_line_breaker	0	cast	exercised
 loxodon_wayfarer	0	cast	exercised
 lucent_liminid	0	cast	exercised
+lull	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 lumbering_worldwagon	0	ability:0	unsupported: nonmana costs need additional fixture resources
 lumbering_worldwagon	0	cast	exercised
 lumen-class_frigate	0	ability:0	exercised
@@ -2086,6 +2094,8 @@ minotaur_abomination	0	cast	exercised
 minotaur_aggressor	0	cast	exercised
 minotaur_warrior	0	cast	exercised
 mintstrosity	0	cast	exercised
+miscalculation	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
+miscalculation	0	cast	unsupported: target group 0 needs a richer fixture
 mischievous_pup	0	cast	exercised
 mischievous_sneakling	0	cast	exercised
 misleading_motes	0	cast	exercised
@@ -2965,6 +2975,7 @@ slavering_branchsnapper	0	ability:0	unsupported: ability not offered by generic 
 slavering_branchsnapper	0	cast	exercised
 sledge-class_seedship	0	ability:0	exercised
 sledge-class_seedship	0	cast	exercised
+sleek_schooner	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
 sleight_of_hand	0	cast	exercised
 slice_from_the_shadows	0	cast	exercised
 slick_sequence	0	cast	exercised
@@ -3030,6 +3041,8 @@ spectral_snatcher	0	ability:0	unsupported: ability not offered by generic battle
 spectral_snatcher	0	cast	exercised
 spell_pierce	0	cast	unsupported: target group 0 needs a richer fixture
 spell_snare	0	cast	unsupported: target group 0 needs a richer fixture
+spell_snip	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
+spell_snip	0	cast	unsupported: target group 0 needs a richer fixture
 spellbook	0	cast	exercised
 spellgorger_weird	0	cast	exercised
 spellgyre	0	cast	exercised

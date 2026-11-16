@@ -711,3 +711,21 @@ mod flier_regenerate_batch;
 
 #[path = "../wall_pump_batch.rs"]
 mod wall_pump_batch;
+
+#[path = "../flash_etb_pump_batch.rs"]
+mod flash_etb_pump_batch;
+
+#[path = "../equipment_vigilance_batch.rs"]
+mod equipment_vigilance_batch;
+
+#[path = "../vanilla_vehicles_batch.rs"]
+mod vanilla_vehicles_batch;
+
+#[path = "../soft_counter_cycling_batch.rs"]
+mod soft_counter_cycling_batch;
+
+#[path = "../fog_cycling_batch.rs"]
+mod fog_cycling_batch;
+
+#[path = "../artifact_sac_ping_batch.rs"]
+mod artifact_sac_ping_batch;

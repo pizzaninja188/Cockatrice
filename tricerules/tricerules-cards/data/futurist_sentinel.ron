@@ -1,0 +1,24 @@
+// Oracle 78d9faff-2ad9-4cf9-a239-27c50435d007; source/rulings checked 2026-11-15 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 301.7 (Vehicle) and 702.122a-e (crew).
+(
+  id: "futurist_sentinel",
+  name: "Futurist Sentinel",
+  face_id: "futurist_sentinel",
+  mana_cost: "{3}{U}",
+  types: ["Artifact", "Vehicle"],
+  power: 6,
+  toughness: 6,
+  activated_abilities: [
+    (
+      ability_id: "crew",
+      presentation: OracleLines([1]),
+      costs: [TapPermanents(
+        constraint: AggregateMinimum(minimum: 3, contribution: CurrentPower),
+        filter: (kind: Creature, controller: You),
+        exclude_source: true,
+      )],
+      effect: [AddTypes(subject: Source, addition: (card_types: [Creature]))],
+    ),
+  ],
+)

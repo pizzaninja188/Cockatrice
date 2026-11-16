@@ -1,0 +1,21 @@
+// Oracle cfdae813-7241-4f6c-99f0-c772af34af91; source/rulings checked 2026-11-15 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.6 (counter), 118.12/118.12a (optional payment on resolution),
+// 608.2b (stale target fizzles) and 702.29a (cycling).
+(
+  id: "spell_snip",
+  name: "Spell Snip",
+  face_id: "spell_snip",
+  mana_cost: "{2}{U}",
+  types: ["Instant"],
+  spell_effect: [CounterTargetSpell(spell_filter: (), unless_controller_pays: Some(1))],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      source_zone: Hand,
+      costs: [Mana("{2}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

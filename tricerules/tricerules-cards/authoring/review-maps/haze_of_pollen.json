@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "f0140f00-5414-493b-962d-33312d49f6ea",
+  "spans": [
+    {
+      "face_id": "haze_of_pollen",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "haze_of_pollen",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PreventAllCombatDamageTurn",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "AbilitySourceZone::Hand",
+      "typed_path": "/faces/0/activated_abilities/0/source_zone"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario fog_cycling_batch::fog_cycling_batch_cards_prevent_all_combat_damage_this_turn",
+      "covers": "actual haze_of_pollen is exercised by the shared fog_cycling_batch actual-card scenario: all combat damage is prevented this turn"
+    },
+    {
+      "test": "scenario fog_cycling_batch::fog_cycling_batch_cards_do_not_prevent_noncombat_loss",
+      "covers": "actual haze_of_pollen is exercised by the shared fog_cycling_batch actual-card scenario: noncombat life loss is unaffected"
+    },
+    {
+      "test": "scenario fog_cycling_batch::fog_cycling_batch_cards_cycling_discards_self_and_draws_one",
+      "covers": "actual haze_of_pollen is exercised by the shared fog_cycling_batch actual-card scenario: cycling from hand pays its cost and draws one"
+    },
+    {
+      "test": "scenario fog_cycling_batch::fog_cycling_batch_cards_cycling_rejects_when_cost_unavailable",
+      "covers": "actual haze_of_pollen is exercised by the shared fog_cycling_batch actual-card scenario: an unpaid cycling activation changes nothing"
+    },
+    {
+      "test": "scenario fog_cycling_batch::fog_cycling_batch_cards_prevention_expires_at_end_of_turn",
+      "covers": "actual haze_of_pollen is exercised by the shared fog_cycling_batch actual-card scenario: the prevention effect ends during cleanup"
+    },
+    {
+      "test": "mechanic_registry::fog_cycling_batch::fog_cycling_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of haze_of_pollen (combat damage prevention + cycling)"
+    },
+    {
+      "test": "mechanic_registry::fog_cycling_batch::fog_cycling_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for haze_of_pollen"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

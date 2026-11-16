@@ -1,0 +1,22 @@
+// Oracle abbbfc22-18cc-4799-b02c-190173936872; source/rulings checked 2026-11-15 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.8a (flash), 603.6a (entry trigger), 115.1 (target), and
+// 611.2c/514.2 (until-end-of-turn pump).
+(
+  id: "bogardan_rager",
+  name: "Bogardan Rager",
+  face_id: "bogardan_rager",
+  mana_cost: "{5}{R}",
+  types: ["Creature", "Elemental"],
+  power: 3,
+  toughness: 4,
+  keywords: [Flash],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [PumpTarget(power: 4, toughness: 0, subject: Chosen((kind: Creature)))],
+    ),
+  ],
+)
