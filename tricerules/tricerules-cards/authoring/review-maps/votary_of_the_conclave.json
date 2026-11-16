@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "83837ceb-7aae-4257-8545-a6cf34656e3b",
+  "spans": [
+    {
+      "face_id": "votary_of_the_conclave",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Regenerate",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario regenerate_activated_batch::regenerate_activated_batch_cards_cast_with_exact_characteristics",
+      "covers": "actual votary_of_the_conclave is exercised by the shared regenerate_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario regenerate_activated_batch::regenerate_activated_batch_cards_place_a_shield_with_the_exact_cost",
+      "covers": "actual votary_of_the_conclave is exercised by the shared regenerate_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario regenerate_activated_batch::regenerate_activated_batch_cards_survive_lethal_damage_by_consuming_the_shield",
+      "covers": "actual votary_of_the_conclave is exercised by the shared regenerate_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario regenerate_activated_batch::regenerate_activated_batch_cards_reject_activation_when_the_cost_cannot_be_paid",
+      "covers": "actual votary_of_the_conclave is exercised by the shared regenerate_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario regenerate_activated_batch::regenerate_activated_batch_cards_expire_an_unused_shield_at_cleanup",
+      "covers": "actual votary_of_the_conclave is exercised by the shared regenerate_activated_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::regenerate_activated_batch::regenerate_activated_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of votary_of_the_conclave"
+    },
+    {
+      "test": "mechanic_registry::regenerate_activated_batch::regenerate_activated_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for votary_of_the_conclave"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

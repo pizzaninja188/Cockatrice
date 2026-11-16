@@ -1,0 +1,20 @@
+// Oracle 338f0ab6-f744-4e5a-a358-05e71b93758d; source/rulings checked 2026-11-15 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.73a (changeling as a characteristic-defining ability) and
+// 205.3m (the creature-type list).
+(
+  id: "woodland_changeling",
+  name: "Woodland Changeling",
+  face_id: "woodland_changeling",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Shapeshifter"],
+  power: 2,
+  toughness: 2,
+  characteristic_defining_abilities: [
+    (
+      ability_id: "characteristic_01",
+      presentation: OracleLines([1]),
+      definition: Changeling,
+    ),
+  ],
+)

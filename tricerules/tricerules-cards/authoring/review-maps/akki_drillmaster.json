@@ -1,0 +1,65 @@
+{
+  "format_version": 1,
+  "oracle_id": "aa228a01-7de3-4539-9ebb-b3c546f72b41",
+  "spans": [
+    {
+      "face_id": "akki_drillmaster",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/activated_abilities/0/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "Keyword::Haste",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario tap_grant_haste_batch::tap_grant_haste_batch_cards_grant_haste_after_the_tap_cost",
+      "covers": "actual akki_drillmaster is exercised by the shared tap_grant_haste_batch actual-card scenario"
+    },
+    {
+      "test": "scenario tap_grant_haste_batch::tap_grant_haste_batch_cards_reject_illegal_targets",
+      "covers": "actual akki_drillmaster is exercised by the shared tap_grant_haste_batch actual-card scenario"
+    },
+    {
+      "test": "scenario tap_grant_haste_batch::tap_grant_haste_batch_cards_let_a_summoning_sick_target_attack",
+      "covers": "actual akki_drillmaster is exercised by the shared tap_grant_haste_batch actual-card scenario"
+    },
+    {
+      "test": "scenario tap_grant_haste_batch::tap_grant_haste_batch_cards_expire_haste_at_cleanup",
+      "covers": "actual akki_drillmaster is exercised by the shared tap_grant_haste_batch actual-card scenario"
+    },
+    {
+      "test": "scenario tap_grant_haste_batch::tap_grant_haste_batch_cards_reject_activation_when_the_source_cannot_tap",
+      "covers": "actual akki_drillmaster is exercised by the shared tap_grant_haste_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::tap_grant_haste_batch::tap_grant_haste_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of akki_drillmaster"
+    },
+    {
+      "test": "mechanic_registry::tap_grant_haste_batch::tap_grant_haste_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for akki_drillmaster"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "a2b8185a-9ff2-4d65-9bdd-b060b7ce69bb",
+  "spans": [
+    {
+      "face_id": "impostor_of_the_sixth_pride",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/characteristic_defining_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CharacteristicDefiningAbility::Changeling",
+      "typed_path": "/faces/0/characteristic_defining_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario changeling_keyword_batch::changeling_keyword_batch_cards_have_every_creature_type_in_every_zone",
+      "covers": "actual impostor_of_the_sixth_pride has changeling's every-creature-type characteristic in hand, library and graveyard"
+    },
+    {
+      "test": "scenario changeling_keyword_batch::changeling_keyword_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual impostor_of_the_sixth_pride is exercised by the shared changeling_keyword_batch actual-card scenario"
+    },
+    {
+      "test": "scenario changeling_keyword_batch::changeling_keyword_batch_cards_have_every_creature_type",
+      "covers": "actual impostor_of_the_sixth_pride is exercised by the shared changeling_keyword_batch actual-card scenario"
+    },
+    {
+      "test": "scenario changeling_keyword_batch::changeling_keyword_batch_cards_satisfy_a_live_goblin_lord",
+      "covers": "actual impostor_of_the_sixth_pride is exercised by the shared changeling_keyword_batch actual-card scenario"
+    },
+    {
+      "test": "scenario changeling_keyword_batch::changeling_keyword_batch_cards_are_artifacts_only_when_printed",
+      "covers": "actual impostor_of_the_sixth_pride is exercised by the shared changeling_keyword_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::changeling_keyword_batch::changeling_keyword_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of impostor_of_the_sixth_pride"
+    },
+    {
+      "test": "mechanic_registry::changeling_keyword_batch::changeling_keyword_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for impostor_of_the_sixth_pride"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

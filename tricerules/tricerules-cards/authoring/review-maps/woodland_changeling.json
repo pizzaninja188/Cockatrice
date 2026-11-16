@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "338f0ab6-f744-4e5a-a358-05e71b93758d",
+  "spans": [
+    {
+      "face_id": "woodland_changeling",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/characteristic_defining_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CharacteristicDefiningAbility::Changeling",
+      "typed_path": "/faces/0/characteristic_defining_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario changeling_keyword_batch::changeling_keyword_batch_cards_have_every_creature_type_in_every_zone",
+      "covers": "actual woodland_changeling has changeling's every-creature-type characteristic in hand, library and graveyard"
+    },
+    {
+      "test": "scenario changeling_keyword_batch::changeling_keyword_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual woodland_changeling is exercised by the shared changeling_keyword_batch actual-card scenario"
+    },
+    {
+      "test": "scenario changeling_keyword_batch::changeling_keyword_batch_cards_have_every_creature_type",
+      "covers": "actual woodland_changeling is exercised by the shared changeling_keyword_batch actual-card scenario"
+    },
+    {
+      "test": "scenario changeling_keyword_batch::changeling_keyword_batch_cards_satisfy_a_live_goblin_lord",
+      "covers": "actual woodland_changeling is exercised by the shared changeling_keyword_batch actual-card scenario"
+    },
+    {
+      "test": "scenario changeling_keyword_batch::changeling_keyword_batch_cards_are_artifacts_only_when_printed",
+      "covers": "actual woodland_changeling is exercised by the shared changeling_keyword_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::changeling_keyword_batch::changeling_keyword_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of woodland_changeling"
+    },
+    {
+      "test": "mechanic_registry::changeling_keyword_batch::changeling_keyword_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for woodland_changeling"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

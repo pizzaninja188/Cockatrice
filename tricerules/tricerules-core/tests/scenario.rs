@@ -1857,3 +1857,30 @@ mod fog_cycling_batch;
 
 #[path = "scenario/artifact_sac_ping_batch.rs"]
 mod artifact_sac_ping_batch;
+
+#[path = "scenario/regenerate_activated_batch.rs"]
+mod regenerate_activated_batch;
+
+#[path = "scenario/self_pump_activated_batch.rs"]
+mod self_pump_activated_batch;
+
+#[path = "scenario/tap_target_mana_batch.rs"]
+mod tap_target_mana_batch;
+
+#[path = "scenario/grant_flying_activated_batch.rs"]
+mod grant_flying_activated_batch;
+
+#[path = "scenario/gain_life_draw_batch.rs"]
+mod gain_life_draw_batch;
+
+#[path = "scenario/vigilance_crew_batch.rs"]
+mod vigilance_crew_batch;
+
+#[path = "scenario/cycling_keyword_batch.rs"]
+mod cycling_keyword_batch;
+
+#[path = "scenario/tap_grant_haste_batch.rs"]
+mod tap_grant_haste_batch;
+
+#[path = "scenario/changeling_keyword_batch.rs"]
+mod changeling_keyword_batch;

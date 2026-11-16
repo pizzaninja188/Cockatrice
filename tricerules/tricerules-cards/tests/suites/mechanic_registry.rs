@@ -729,3 +729,30 @@ mod fog_cycling_batch;
 
 #[path = "../artifact_sac_ping_batch.rs"]
 mod artifact_sac_ping_batch;
+
+#[path = "../regenerate_activated_batch.rs"]
+mod regenerate_activated_batch;
+
+#[path = "../self_pump_activated_batch.rs"]
+mod self_pump_activated_batch;
+
+#[path = "../tap_target_mana_batch.rs"]
+mod tap_target_mana_batch;
+
+#[path = "../grant_flying_activated_batch.rs"]
+mod grant_flying_activated_batch;
+
+#[path = "../gain_life_draw_batch.rs"]
+mod gain_life_draw_batch;
+
+#[path = "../vigilance_crew_batch.rs"]
+mod vigilance_crew_batch;
+
+#[path = "../cycling_keyword_batch.rs"]
+mod cycling_keyword_batch;
+
+#[path = "../tap_grant_haste_batch.rs"]
+mod tap_grant_haste_batch;
+
+#[path = "../changeling_keyword_batch.rs"]
+mod changeling_keyword_batch;

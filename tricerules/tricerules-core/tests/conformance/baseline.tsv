@@ -434,6 +434,7 @@ bronze_sable	0	cast	exercised
 broodhunter_wurm	0	cast	exercised
 brushstrider	0	cast	exercised
 brute_force	0	cast	exercised
+brute_suit	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
 bull_cerodon	0	cast	exercised
 bull_rush	0	cast	exercised
 bulwark_giant	0	cast	exercised
@@ -816,6 +817,7 @@ depressurize	0	cast	exercised
 deranged_whelp	0	cast	exercised
 derelict_attic_widows_walk	0	cast	exercised
 derelict_attic_widows_walk	1	cast	exercised
+desert_cerodon	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 desert_drake	0	cast	exercised
 deserters_disciple	0	ability:0	exercised
 deserters_disciple	0	cast	exercised
@@ -917,6 +919,7 @@ duel_tactics	0	cast	exercised
 dune_beetle	0	cast	exercised
 durkwood_boars	0	cast	exercised
 dusk_imp	0	cast	exercised
+dusk_legion_dreadnought	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
 dusk_rose_reliquary	0	cast	unsupported: required cast-cost group needs a specialized fixture
 duskdale_wurm	0	cast	exercised
 dusyut_earthcarver	0	cast	exercised
@@ -1238,6 +1241,7 @@ frostbridge_guard	0	cast	exercised
 fuel_the_flames	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 fuel_the_flames	0	cast	exercised
 fugitive_wizard	0	cast	exercised
+funeral_longboat	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
 fungal_colossus	0	cast	exercised
 fusion_elemental	0	cast	exercised
 futurist_forge	0	ability:0	exercised
@@ -1602,6 +1606,7 @@ hulldrifter	0	cast	exercised
 humble_budoka	0	cast	exercised
 humbling_elder	0	cast	exercised
 humongulus	0	cast	exercised
+hundroog	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 hungry_ghoul	0	ability:0	exercised
 hungry_ghoul	0	cast	exercised
 hungry_graffalon	0	cast	exercised
@@ -1951,6 +1956,7 @@ lumen-class_frigate	0	cast	exercised
 lumengrid_gargoyle	0	cast	exercised
 lumengrid_warden	0	cast	exercised
 luminous_rebuke	0	cast	exercised
+lurching_rotbeast	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 lurking_lizards	0	cast	exercised
 lush_oasis	0	ability:0	exercised
 lush_oasis	0	land	exercised

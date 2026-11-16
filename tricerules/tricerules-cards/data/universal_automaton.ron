@@ -1,0 +1,20 @@
+// Oracle d50b1d2e-1825-432a-ab73-068fdc356f50; source/rulings checked 2026-11-15 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.73a (changeling as a characteristic-defining ability) and
+// 205.3m (the creature-type list).
+(
+  id: "universal_automaton",
+  name: "Universal Automaton",
+  face_id: "universal_automaton",
+  mana_cost: "{1}",
+  types: ["Artifact", "Creature", "Shapeshifter"],
+  power: 1,
+  toughness: 1,
+  characteristic_defining_abilities: [
+    (
+      ability_id: "characteristic_01",
+      presentation: OracleLines([1]),
+      definition: Changeling,
+    ),
+  ],
+)

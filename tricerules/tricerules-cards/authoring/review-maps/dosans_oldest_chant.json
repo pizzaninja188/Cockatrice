@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "59aeeb18-d263-426f-aebc-0f687b09801b",
+  "spans": [
+    {
+      "face_id": "dosans_oldest_chant",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "dosans_oldest_chant",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario gain_life_draw_batch::gain_life_draw_batch_cards_resolve_for_exact_life_and_one_card",
+      "covers": "actual dosans_oldest_chant is exercised by the shared gain_life_draw_batch actual-card scenario"
+    },
+    {
+      "test": "scenario gain_life_draw_batch::gain_life_draw_batch_cards_reject_cast_without_exact_mana",
+      "covers": "actual dosans_oldest_chant is exercised by the shared gain_life_draw_batch actual-card scenario"
+    },
+    {
+      "test": "scenario gain_life_draw_batch::gain_life_draw_batch_sorcery_is_rejected_outside_the_controllers_main_phase",
+      "covers": "actual dosans_oldest_chant is exercised by the shared gain_life_draw_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::gain_life_draw_batch::gain_life_draw_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of dosans_oldest_chant"
+    },
+    {
+      "test": "mechanic_registry::gain_life_draw_batch::gain_life_draw_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for dosans_oldest_chant"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

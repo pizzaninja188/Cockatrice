@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "ad470afc-d1a5-4e64-8192-fb6308ed9bfe",
+  "spans": [
+    {
+      "face_id": "reviving_dose",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "reviving_dose",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario gain_life_draw_batch::gain_life_draw_batch_cards_resolve_for_exact_life_and_one_card",
+      "covers": "actual reviving_dose is exercised by the shared gain_life_draw_batch actual-card scenario"
+    },
+    {
+      "test": "scenario gain_life_draw_batch::gain_life_draw_batch_cards_reject_cast_without_exact_mana",
+      "covers": "actual reviving_dose is exercised by the shared gain_life_draw_batch actual-card scenario"
+    },
+    {
+      "test": "scenario gain_life_draw_batch::gain_life_draw_batch_instants_resolve_on_the_opponents_turn",
+      "covers": "actual reviving_dose is exercised by the shared gain_life_draw_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::gain_life_draw_batch::gain_life_draw_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of reviving_dose"
+    },
+    {
+      "test": "mechanic_registry::gain_life_draw_batch::gain_life_draw_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for reviving_dose"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

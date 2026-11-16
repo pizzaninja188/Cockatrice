@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "c66342bb-bbc1-4aaf-8d99-0af68292081e",
+  "spans": [
+    {
+      "face_id": "kranioceros",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario self_pump_activated_batch::self_pump_activated_batch_cards_cast_with_exact_characteristics",
+      "covers": "actual kranioceros is exercised by the shared self_pump_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario self_pump_activated_batch::self_pump_activated_batch_cards_activate_for_the_exact_printed_pump",
+      "covers": "actual kranioceros is exercised by the shared self_pump_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario self_pump_activated_batch::self_pump_activated_batch_cards_stack_two_activations",
+      "covers": "actual kranioceros is exercised by the shared self_pump_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario self_pump_activated_batch::self_pump_activated_batch_cards_reject_activation_when_the_cost_cannot_be_paid",
+      "covers": "actual kranioceros is exercised by the shared self_pump_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario self_pump_activated_batch::self_pump_activated_batch_cards_expire_the_pump_at_cleanup",
+      "covers": "actual kranioceros is exercised by the shared self_pump_activated_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::self_pump_activated_batch::self_pump_activated_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of kranioceros"
+    },
+    {
+      "test": "mechanic_registry::self_pump_activated_batch::self_pump_activated_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for kranioceros"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

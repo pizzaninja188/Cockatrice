@@ -1,0 +1,19 @@
+// Oracle d9cb3d86-cb3a-4e2e-a24e-ed3cfe5233d0; source/rulings checked 2026-11-15 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 (activation and costs), 118.3 (mana payment),
+// 701.26 (tap) and 608.2b (resolution revalidation).
+(
+  id: "tyrants_machine",
+  name: "Tyrant's Machine",
+  face_id: "tyrants_machine",
+  mana_cost: "{2}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{4}"), Tap],
+      effect: [Tap(subject: Chosen((kind: Creature)))],
+    ),
+  ],
+)

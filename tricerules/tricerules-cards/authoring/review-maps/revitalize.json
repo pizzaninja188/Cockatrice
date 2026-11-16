@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "b1385b03-cb4b-4812-857f-7421f1df39af",
+  "spans": [
+    {
+      "face_id": "revitalize",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "revitalize",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario gain_life_draw_batch::gain_life_draw_batch_cards_resolve_for_exact_life_and_one_card",
+      "covers": "actual revitalize is exercised by the shared gain_life_draw_batch actual-card scenario"
+    },
+    {
+      "test": "scenario gain_life_draw_batch::gain_life_draw_batch_cards_reject_cast_without_exact_mana",
+      "covers": "actual revitalize is exercised by the shared gain_life_draw_batch actual-card scenario"
+    },
+    {
+      "test": "scenario gain_life_draw_batch::gain_life_draw_batch_instants_resolve_on_the_opponents_turn",
+      "covers": "actual revitalize is exercised by the shared gain_life_draw_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::gain_life_draw_batch::gain_life_draw_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of revitalize"
+    },
+    {
+      "test": "mechanic_registry::gain_life_draw_batch::gain_life_draw_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for revitalize"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

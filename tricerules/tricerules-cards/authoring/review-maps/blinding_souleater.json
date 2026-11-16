@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "f5f330a5-14a0-4bfe-ba46-4616692b7bd3",
+  "spans": [
+    {
+      "face_id": "blinding_souleater",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario tap_target_mana_batch::tap_target_mana_batch_cards_apply_the_printed_effect",
+      "covers": "actual blinding_souleater is exercised by the shared tap_target_mana_batch actual-card scenario"
+    },
+    {
+      "test": "scenario tap_target_mana_batch::tap_target_mana_batch_cards_reject_illegal_targets",
+      "covers": "actual blinding_souleater is exercised by the shared tap_target_mana_batch actual-card scenario"
+    },
+    {
+      "test": "scenario tap_target_mana_batch::tap_target_mana_batch_cards_handle_stale_or_expired_state",
+      "covers": "actual blinding_souleater is exercised by the shared tap_target_mana_batch actual-card scenario"
+    },
+    {
+      "test": "scenario tap_target_mana_batch::tap_target_mana_batch_cards_reject_insufficient_mana",
+      "covers": "actual blinding_souleater is exercised by the shared tap_target_mana_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::tap_target_mana_batch::tap_target_mana_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of blinding_souleater"
+    },
+    {
+      "test": "mechanic_registry::tap_target_mana_batch::tap_target_mana_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for blinding_souleater"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

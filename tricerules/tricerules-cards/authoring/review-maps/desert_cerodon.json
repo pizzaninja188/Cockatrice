@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "6ad18589-ece4-4809-80f6-6764d2822372",
+  "spans": [
+    {
+      "face_id": "desert_cerodon",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilitySourceZone::Hand",
+      "typed_path": "/faces/0/activated_abilities/0/source_zone"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario cycling_keyword_batch::cycling_keyword_batch_cards_cycle_for_the_printed_cost_and_draw_one",
+      "covers": "actual desert_cerodon is exercised by the shared cycling_keyword_batch actual-card scenario"
+    },
+    {
+      "test": "scenario cycling_keyword_batch::cycling_keyword_batch_cards_reject_cycling_without_the_printed_cost",
+      "covers": "actual desert_cerodon is exercised by the shared cycling_keyword_batch actual-card scenario"
+    },
+    {
+      "test": "scenario cycling_keyword_batch::cycling_keyword_batch_cards_reject_cycling_outside_the_hand",
+      "covers": "actual desert_cerodon is exercised by the shared cycling_keyword_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::cycling_keyword_batch::cycling_keyword_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of desert_cerodon"
+    },
+    {
+      "test": "mechanic_registry::cycling_keyword_batch::cycling_keyword_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for desert_cerodon"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
