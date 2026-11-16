@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "8239c63d-097a-449a-953a-cd480e594aa8",
+  "spans": [
+    {
+      "face_id": "watchful_giant",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "human_w_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_cards_create_only_their_printed_token",
+      "covers": "actual watchful_giant is exercised by the shared etb_vanilla_tokens_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_cards_cast_with_exact_cost_and_body",
+      "covers": "actual watchful_giant is exercised by the shared etb_vanilla_tokens_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_cards_create_tokens_once_per_entry",
+      "covers": "actual watchful_giant is exercised by the shared etb_vanilla_tokens_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_cards_source_effect_is_controller_scoped",
+      "covers": "actual watchful_giant is exercised by the shared etb_vanilla_tokens_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of watchful_giant"
+    },
+    {
+      "test": "mechanic_registry::etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for watchful_giant"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

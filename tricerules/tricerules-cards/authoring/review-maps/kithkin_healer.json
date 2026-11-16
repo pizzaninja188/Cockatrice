@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "e3bd74f3-1f38-4162-a0be-c76ad63e2d9b",
+  "spans": [
+    {
+      "face_id": "kithkin_healer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PreventNextDamage",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario prevention_shield_batch::prevention_shield_batch_cards_shield_a_creature",
+      "covers": "actual kithkin_healer is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario prevention_shield_batch::prevention_shield_batch_cards_absorb_exact_damage_on_a_player",
+      "covers": "actual kithkin_healer is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario prevention_shield_batch::prevention_shield_batch_cards_reject_a_second_activation_while_tapped",
+      "covers": "actual kithkin_healer is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario prevention_shield_batch::prevention_shield_batch_cards_require_a_target",
+      "covers": "actual kithkin_healer is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario prevention_shield_batch::prevention_shield_batch_cards_expire_at_cleanup",
+      "covers": "actual kithkin_healer is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario prevention_shield_batch::prevention_shield_batch_cards_apply_summoning_sickness_to_the_tap_cost",
+      "covers": "actual kithkin_healer is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::prevention_shield_batch::prevention_shield_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of kithkin_healer"
+    },
+    {
+      "test": "mechanic_registry::prevention_shield_batch::prevention_shield_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for kithkin_healer"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

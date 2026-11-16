@@ -828,3 +828,12 @@ mod trample_self_pump_batch;
 
 #[path = "../naturalize_lifegain_batch.rs"]
 mod naturalize_lifegain_batch;
+
+#[path = "../damage_creature_lifegain_batch.rs"]
+mod damage_creature_lifegain_batch;
+
+#[path = "../prevention_shield_batch.rs"]
+mod prevention_shield_batch;
+
+#[path = "../etb_vanilla_tokens_batch.rs"]
+mod etb_vanilla_tokens_batch;

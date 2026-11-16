@@ -1,0 +1,15 @@
+// Oracle ff27ff37-96c0-41af-8881-a078e884e67b; source/rulings checked 2026-11-16 against pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1 (target), 120.3 (damage), 119.3 (life gain) and 608.2b (an illegal target fizzles).
+// Copy of the reviewed Winter's Intervention damage-to-creature plus life shape.
+(
+  id: "sorins_thirst",
+  name: "Sorin's Thirst",
+  face_id: "sorin_s_thirst",
+  mana_cost: "{B}{B}",
+  types: ["Instant"],
+  spell_effect: [
+    DamageTarget(amount: 2, target: (kind: Creature)),
+    GainLife(amount: 2),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+)

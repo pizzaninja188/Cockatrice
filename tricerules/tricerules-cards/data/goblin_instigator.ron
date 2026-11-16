@@ -1,0 +1,20 @@
+// Oracle 8b022754-6d16-470e-b754-4df6e4f4709e; source/rulings checked 2026-11-16 against pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (entry trigger), 111.1 (tokens) and 608.2c (the controller follows the instruction).
+// Copy of the reviewed Elder Auntie entry-token shape with the printed token and count.
+(
+  id: "goblin_instigator",
+  name: "Goblin Instigator",
+  face_id: "goblin_instigator",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Goblin", "Rogue"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [CreateTokens(token: "goblin_r_1_1", count: 1)],
+    ),
+  ],
+)

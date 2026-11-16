@@ -1,0 +1,20 @@
+// Oracle 7695b61a-8d44-44b1-9783-ea3114111c3e; source/rulings checked 2026-11-16 against pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 614.1a/615 (prevention shields), 115.1 (any target), 602.2 and 302.6 (tap ability).
+// Copy of the reviewed Healing Salve prevention shield as a {T} activated ability.
+(
+  id: "master_healer",
+  name: "Master Healer",
+  face_id: "master_healer",
+  mana_cost: "{4}{W}",
+  types: ["Creature", "Human", "Cleric"],
+  power: 1,
+  toughness: 4,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [PreventNextDamage(amount: 4, target: (kind: AnyTarget))],
+    ),
+  ],
+)

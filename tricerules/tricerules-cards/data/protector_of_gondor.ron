@@ -1,0 +1,20 @@
+// Oracle cf6bb391-4fde-43c4-a0c5-990630d0ddcf; source/rulings checked 2026-11-16 against pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (entry trigger), 111.1 (tokens) and 608.2c (the controller follows the instruction).
+// Copy of the reviewed Elder Auntie entry-token shape with the printed token and count.
+(
+  id: "protector_of_gondor",
+  name: "Protector of Gondor",
+  face_id: "protector_of_gondor",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [CreateTokens(token: "human_soldier_w_1_1", count: 1)],
+    ),
+  ],
+)

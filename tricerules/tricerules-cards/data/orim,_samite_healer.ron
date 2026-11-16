@@ -1,0 +1,21 @@
+// Oracle 9d405e5b-0cee-4c8f-b3ef-65765853b8a4; source/rulings checked 2026-11-16 against pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 614.1a/615 (prevention shields), 115.1 (any target), 602.2 and 302.6 (tap ability).
+// Copy of the reviewed Healing Salve prevention shield as a {T} activated ability.
+(
+  id: "orim,_samite_healer",
+  name: "Orim, Samite Healer",
+  face_id: "orim_samite_healer",
+  mana_cost: "{1}{W}{W}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Human", "Cleric"],
+  power: 1,
+  toughness: 3,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [PreventNextDamage(amount: 3, target: (kind: AnyTarget))],
+    ),
+  ],
+)
