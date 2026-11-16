@@ -1,0 +1,24 @@
+// Oracle f71bbaf2-02ea-4fc0-9a39-49d6689b36cd; source/rulings checked 2026-11-16 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.9 (flying), 700.4 (dies), 603.6c (leaves-the-battlefield trigger), 119.3 and 608.2c.
+(
+  id: "nocturnal_feeder",
+  name: "Nocturnal Feeder",
+  face_id: "nocturnal_feeder",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Vampire", "Rogue"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flying],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfDies,
+      effect: [
+        LoseLife(amount: Fixed(2), who: EachOpponent),
+        GainLife(amount: 2),
+      ],
+    ),
+  ],
+)

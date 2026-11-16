@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "f71bbaf2-02ea-4fc0-9a39-49d6689b36cd",
+  "spans": [
+    {
+      "face_id": "nocturnal_feeder",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "nocturnal_feeder",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario dies_drain_batch::dies_drain_batch_canary_cards_drain_each_opponent_and_credit_their_controller",
+      "covers": "actual nocturnal_feeder is exercised by the shared dies_drain_batch canary scenario"
+    },
+    {
+      "test": "scenario dies_drain_batch::dies_drain_batch_cards_use_their_printed_amounts",
+      "covers": "actual nocturnal_feeder is exercised by the shared dies_drain_batch actual-card scenario"
+    },
+    {
+      "test": "scenario dies_drain_batch::dies_drain_batch_cards_hit_every_opponent_in_a_three_player_game",
+      "covers": "actual nocturnal_feeder is exercised by the shared dies_drain_batch actual-card scenario"
+    },
+    {
+      "test": "scenario dies_drain_batch::dies_drain_batch_cards_do_not_trigger_when_exiled",
+      "covers": "actual nocturnal_feeder is exercised by the shared dies_drain_batch actual-card scenario"
+    },
+    {
+      "test": "scenario dies_drain_batch::dies_drain_batch_cards_can_kill_an_opponent_at_low_life",
+      "covers": "actual nocturnal_feeder is exercised by the shared dies_drain_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::dies_drain_batch::dies_drain_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of nocturnal_feeder"
+    },
+    {
+      "test": "mechanic_registry::dies_drain_batch::dies_drain_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for nocturnal_feeder"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

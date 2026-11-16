@@ -1911,3 +1911,12 @@ mod tap_grant_haste_batch;
 
 #[path = "scenario/changeling_keyword_batch.rs"]
 mod changeling_keyword_batch;
+
+#[path = "scenario/dies_counter_target_batch.rs"]
+mod dies_counter_target_batch;
+
+#[path = "scenario/dies_drain_batch.rs"]
+mod dies_drain_batch;
+
+#[path = "scenario/sacrifice_draw_batch.rs"]
+mod sacrifice_draw_batch;

@@ -783,3 +783,12 @@ mod tap_grant_haste_batch;
 
 #[path = "../changeling_keyword_batch.rs"]
 mod changeling_keyword_batch;
+
+#[path = "../dies_counter_target_batch.rs"]
+mod dies_counter_target_batch;
+
+#[path = "../dies_drain_batch.rs"]
+mod dies_drain_batch;
+
+#[path = "../sacrifice_draw_batch.rs"]
+mod sacrifice_draw_batch;

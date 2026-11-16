@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "d464b54c-3b02-4c4e-99ef-1ad75f336c65",
+  "spans": [
+    {
+      "face_id": "goblin_assault_team",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "goblin_assault_team",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Haste",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario dies_counter_target_batch::dies_counter_target_batch_canary_cards_place_one_counter_on_a_chosen_creature",
+      "covers": "actual goblin_assault_team is exercised by the shared dies_counter_target_batch canary scenario"
+    },
+    {
+      "test": "scenario dies_counter_target_batch::dies_counter_target_batch_cards_place_exactly_one_counter",
+      "covers": "actual goblin_assault_team is exercised by the shared dies_counter_target_batch actual-card scenario"
+    },
+    {
+      "test": "scenario dies_counter_target_batch::dies_counter_target_batch_cards_do_not_trigger_when_exiled",
+      "covers": "actual goblin_assault_team is exercised by the shared dies_counter_target_batch actual-card scenario"
+    },
+    {
+      "test": "scenario dies_counter_target_batch::dies_counter_target_batch_cards_without_a_legal_target_do_not_prompt",
+      "covers": "actual goblin_assault_team is exercised by the shared dies_counter_target_batch actual-card scenario"
+    },
+    {
+      "test": "scenario dies_counter_target_batch::dies_counter_target_batch_cards_do_not_counter_a_departed_target",
+      "covers": "actual goblin_assault_team is exercised by the shared dies_counter_target_batch actual-card scenario"
+    },
+    {
+      "test": "scenario dies_counter_target_batch::dies_counter_target_batch_cards_scope_the_target_to_their_controller",
+      "covers": "actual goblin_assault_team is exercised by the shared dies_counter_target_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::dies_counter_target_batch::dies_counter_target_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of goblin_assault_team"
+    },
+    {
+      "test": "mechanic_registry::dies_counter_target_batch::dies_counter_target_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for goblin_assault_team"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
