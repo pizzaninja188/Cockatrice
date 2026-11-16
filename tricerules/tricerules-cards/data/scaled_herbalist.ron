@@ -1,0 +1,21 @@
+// Oracle 6fd9ece7-366f-45c7-a8ea-edb4ca637a06; source/rulings checked 2026-11-15 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 (activation and tap cost), 305.1 (playing a land versus putting it onto the
+// battlefield), 701.26 (tap) and 608.2 (resolution).
+(
+  id: "scaled_herbalist",
+  name: "Scaled Herbalist",
+  face_id: "scaled_herbalist",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Lizard", "Druid"],
+  power: 1,
+  toughness: 3,
+  activated_abilities: [
+    (
+      ability_id: "put_land_from_hand",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [PutPermanentFromHand(filter: Some((card_type: Some(Land))))],
+    ),
+  ],
+)

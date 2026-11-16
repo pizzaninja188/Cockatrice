@@ -1,0 +1,62 @@
+{
+  "format_version": 1,
+  "oracle_id": "1941f993-41d7-49e3-8891-41b3cecd5a9d",
+  "spans": [
+    {
+      "face_id": "captain_of_umbar",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/program/body/steps/0",
+        "/faces/0/activated_abilities/0/program/body/steps/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/1/kind/Perform/Discard"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario loot_activated_batch::loot_activated_batch_cards_draw_then_discard_for_every_card",
+      "covers": "actual captain_of_umbar is exercised by the shared loot_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario loot_activated_batch::loot_activated_batch_cards_apply_the_printed_body_and_mana_cost",
+      "covers": "actual captain_of_umbar is exercised by the shared loot_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario loot_activated_batch::loot_activated_batch_cards_make_the_discard_mandatory_and_private",
+      "covers": "actual captain_of_umbar is exercised by the shared loot_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario loot_activated_batch::loot_activated_batch_cards_reject_activation_when_tapped_or_unfunded",
+      "covers": "actual captain_of_umbar is exercised by the shared loot_activated_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::loot_activated_batch::loot_activated_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of captain_of_umbar"
+    },
+    {
+      "test": "mechanic_registry::loot_activated_batch::loot_activated_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for captain_of_umbar"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

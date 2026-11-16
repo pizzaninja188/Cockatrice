@@ -1,0 +1,22 @@
+// Oracle 32d9fd98-142b-41d2-b8f0-40ae1d4cb991; source/rulings checked 2026-11-15 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 (activation and cost), 121.1 (draw), 701.9 (discard) and 608.2c (instructions in printed order).
+(
+  id: "jalum_tome",
+  name: "Jalum Tome",
+  face_id: "jalum_tome",
+  mana_cost: "{3}",
+  types: ["Artifact", "Book"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{2}"), Tap],
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "draw_one", kind: Perform(Draw(count: 1))),
+        (id: "discard_one", kind: Perform(Discard(quantity: Exact(1)))),
+      ]))),
+    ),
+  ],
+)

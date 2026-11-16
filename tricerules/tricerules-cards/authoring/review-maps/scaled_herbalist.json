@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "6fd9ece7-366f-45c7-a8ea-edb4ca637a06",
+  "spans": [
+    {
+      "face_id": "scaled_herbalist",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PutPermanentFromHand",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario put_land_from_hand_batch::put_land_from_hand_batch_cards_offer_no_nonland_and_reject_a_forced_nonland",
+      "covers": "actual scaled_herbalist is exercised by the shared put_land_from_hand_batch actual-card scenario"
+    },
+    {
+      "test": "scenario put_land_from_hand_batch::put_land_from_hand_batch_cards_allow_declining_and_bound_a_no_land_choice",
+      "covers": "actual scaled_herbalist is exercised by the shared put_land_from_hand_batch actual-card scenario"
+    },
+    {
+      "test": "scenario put_land_from_hand_batch::put_land_from_hand_batch_cards_keep_the_choice_private_and_reject_a_tapped_source",
+      "covers": "actual scaled_herbalist is exercised by the shared put_land_from_hand_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::put_land_from_hand_batch::put_land_from_hand_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of scaled_herbalist"
+    },
+    {
+      "test": "mechanic_registry::put_land_from_hand_batch::put_land_from_hand_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for scaled_herbalist"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

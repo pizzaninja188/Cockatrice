@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "9a2bc266-4076-4923-b201-5898b18cbad9",
+  "spans": [
+    {
+      "face_id": "passwall_adept",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ApplyCombatRestriction",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/activated_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario targeted_evasion_batch::targeted_evasion_batch_cards_grant_unblockable_with_the_exact_cost",
+      "covers": "actual passwall_adept is exercised by the shared targeted_evasion_batch actual-card scenario"
+    },
+    {
+      "test": "scenario targeted_evasion_batch::targeted_evasion_batch_cards_make_the_target_unblockable_in_combat",
+      "covers": "actual passwall_adept is exercised by the shared targeted_evasion_batch actual-card scenario"
+    },
+    {
+      "test": "scenario targeted_evasion_batch::targeted_evasion_batch_cards_expire_at_cleanup",
+      "covers": "actual passwall_adept is exercised by the shared targeted_evasion_batch actual-card scenario"
+    },
+    {
+      "test": "scenario targeted_evasion_batch::targeted_evasion_batch_cards_reject_illegal_targets_and_missing_mana",
+      "covers": "actual passwall_adept is exercised by the shared targeted_evasion_batch actual-card scenario"
+    },
+    {
+      "test": "scenario targeted_evasion_batch::targeted_evasion_batch_cards_drop_a_stale_target_without_returning_it",
+      "covers": "actual passwall_adept is exercised by the shared targeted_evasion_batch actual-card scenario"
+    },
+    {
+      "test": "scenario targeted_evasion_batch::targeted_evasion_batch_cards_may_target_an_opponents_creature",
+      "covers": "actual passwall_adept is exercised by the shared targeted_evasion_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::targeted_evasion_batch::targeted_evasion_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of passwall_adept"
+    },
+    {
+      "test": "mechanic_registry::targeted_evasion_batch::targeted_evasion_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for passwall_adept"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1678,6 +1678,15 @@ mod snow_tapped_dual_basic_batch;
 #[path = "scenario/all_creature_shrink_batch.rs"]
 mod all_creature_shrink_batch;
 
+#[path = "scenario/targeted_evasion_batch.rs"]
+mod targeted_evasion_batch;
+
+#[path = "scenario/loot_activated_batch.rs"]
+mod loot_activated_batch;
+
+#[path = "scenario/put_land_from_hand_batch.rs"]
+mod put_land_from_hand_batch;
+
 #[path = "scenario/cant_block_batch.rs"]
 mod cant_block_batch;
 
