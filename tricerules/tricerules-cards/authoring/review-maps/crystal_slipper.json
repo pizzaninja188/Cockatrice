@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "8c2d2888-38be-41f9-aaf2-8337e87d2aed",
+  "spans": [
+    {
+      "face_id": "crystal_slipper",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "crystal_slipper",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Equip",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario equipment_haste_batch::equipment_haste_batch_cards_grant_printed_pump_and_haste",
+      "covers": "actual crystal_slipper is exercised by the shared equipment_haste_batch actual-card scenario"
+    },
+    {
+      "test": "scenario equipment_haste_batch::equipment_haste_batch_cards_cast_and_equip_with_exact_cost",
+      "covers": "actual crystal_slipper is exercised by the shared equipment_haste_batch actual-card scenario"
+    },
+    {
+      "test": "scenario equipment_haste_batch::equipment_haste_batch_cards_unattached_equipment_grants_nothing",
+      "covers": "actual crystal_slipper is exercised by the shared equipment_haste_batch actual-card scenario"
+    },
+    {
+      "test": "scenario equipment_haste_batch::equipment_haste_batch_cards_equip_only_creatures_you_control",
+      "covers": "actual crystal_slipper is exercised by the shared equipment_haste_batch actual-card scenario"
+    },
+    {
+      "test": "scenario equipment_haste_batch::equipment_haste_batch_cards_remain_and_unattach_when_the_creature_leaves",
+      "covers": "actual crystal_slipper is exercised by the shared equipment_haste_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::equipment_haste_batch::equipment_haste_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of crystal_slipper"
+    },
+    {
+      "test": "mechanic_registry::equipment_haste_batch::equipment_haste_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for crystal_slipper"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

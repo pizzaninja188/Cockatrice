@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "143d7a32-c15d-4a1f-ad81-cf1e6aa92bf3",
+  "spans": [
+    {
+      "face_id": "lotus_guardian",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "lotus_guardian",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flying_any_mana_batch::flying_any_mana_batch_canary_cards_cast_and_offer_every_color",
+      "covers": "actual lotus_guardian is exercised by the shared flying_any_mana_batch actual-card scenario"
+    },
+    {
+      "test": "scenario flying_any_mana_batch::flying_any_mana_batch_cards_offer_all_five_colors",
+      "covers": "actual lotus_guardian is exercised by the shared flying_any_mana_batch actual-card scenario"
+    },
+    {
+      "test": "scenario flying_any_mana_batch::flying_any_mana_batch_cards_cast_with_exact_cost_and_body",
+      "covers": "actual lotus_guardian is exercised by the shared flying_any_mana_batch actual-card scenario"
+    },
+    {
+      "test": "scenario flying_any_mana_batch::flying_any_mana_batch_cards_apply_summoning_sickness_to_the_tap_cost",
+      "covers": "actual lotus_guardian is exercised by the shared flying_any_mana_batch actual-card scenario"
+    },
+    {
+      "test": "scenario flying_any_mana_batch::flying_any_mana_batch_cards_are_fliers_that_ground_creatures_cannot_block",
+      "covers": "actual lotus_guardian is exercised by the shared flying_any_mana_batch actual-card scenario"
+    },
+    {
+      "test": "scenario flying_any_mana_batch::flying_any_mana_batch_cards_remain_on_the_battlefield_after_resolution",
+      "covers": "actual lotus_guardian is exercised by the shared flying_any_mana_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::flying_any_mana_batch::flying_any_mana_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of lotus_guardian"
+    },
+    {
+      "test": "mechanic_registry::flying_any_mana_batch::flying_any_mana_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for lotus_guardian"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1938,3 +1938,12 @@ mod flying_neg_pump_batch;
 
 #[path = "scenario/aura_pump_haste_batch.rs"]
 mod aura_pump_haste_batch;
+
+#[path = "scenario/flying_any_mana_batch.rs"]
+mod flying_any_mana_batch;
+
+#[path = "scenario/equipment_haste_batch.rs"]
+mod equipment_haste_batch;
+
+#[path = "scenario/mana_target_pump_batch.rs"]
+mod mana_target_pump_batch;

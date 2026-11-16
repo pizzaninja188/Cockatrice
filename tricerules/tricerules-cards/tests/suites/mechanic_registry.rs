@@ -810,3 +810,12 @@ mod flying_neg_pump_batch;
 
 #[path = "../aura_pump_haste_batch.rs"]
 mod aura_pump_haste_batch;
+
+#[path = "../flying_any_mana_batch.rs"]
+mod flying_any_mana_batch;
+
+#[path = "../equipment_haste_batch.rs"]
+mod equipment_haste_batch;
+
+#[path = "../mana_target_pump_batch.rs"]
+mod mana_target_pump_batch;

@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "fada1102-bbb7-4c90-a72e-6c595c08a55d",
+  "spans": [
+    {
+      "face_id": "captive_flame",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario mana_target_pump_batch::mana_target_pump_batch_cards_activate_through_the_stack",
+      "covers": "actual captive_flame is exercised by the shared mana_target_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario mana_target_pump_batch::mana_target_pump_batch_cards_fizzle_a_target_that_left_before_resolution",
+      "covers": "actual captive_flame is exercised by the shared mana_target_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario mana_target_pump_batch::mana_target_pump_batch_cards_target_any_creature_and_leave_others_unchanged",
+      "covers": "actual captive_flame is exercised by the shared mana_target_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario mana_target_pump_batch::mana_target_pump_batch_cards_stack_repeated_activations",
+      "covers": "actual captive_flame is exercised by the shared mana_target_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario mana_target_pump_batch::mana_target_pump_batch_cards_reject_illegal_targets_without_paying",
+      "covers": "actual captive_flame is exercised by the shared mana_target_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario mana_target_pump_batch::mana_target_pump_batch_cards_expire_the_pump_at_cleanup",
+      "covers": "actual captive_flame is exercised by the shared mana_target_pump_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::mana_target_pump_batch::mana_target_pump_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of captive_flame"
+    },
+    {
+      "test": "mechanic_registry::mana_target_pump_batch::mana_target_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for captive_flame"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

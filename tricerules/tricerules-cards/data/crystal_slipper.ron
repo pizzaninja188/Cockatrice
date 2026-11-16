@@ -1,0 +1,26 @@
+// Oracle 8c2d2888-38be-41f9-aaf2-8337e87d2aed; source/rulings checked 2026-11-16 against pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 301.5/702.6 (Equipment and equip), 613.4c (attached pump) and 702.10 (haste).
+// The 2019 ruling confirms that a creature must still have haste at declare attackers.
+(
+  id: "crystal_slipper",
+  name: "Crystal Slipper",
+  face_id: "crystal_slipper",
+  mana_cost: "{1}{R}",
+  types: ["Artifact", "Equipment"],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: AttachedModifier(delta_power: 1, delta_toughness: 0, keywords: [Haste]),
+    ),
+  ],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{1}")],
+      effect: [Equip(target: (kind: Creature, controller: You))],
+    ),
+  ],
+)
