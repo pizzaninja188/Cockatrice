@@ -1,0 +1,21 @@
+// Oracle 475aaf7c-b0f8-40f3-ad91-3e7d414de933; source/rulings checked 2026-11-16 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (entry trigger), 121.1 (draw), 119.3 (life loss) and 608.2c
+// (effects resolve in written order).
+(
+  id: "tithebearer_giant",
+  name: "Tithebearer Giant",
+  face_id: "tithebearer_giant",
+  mana_cost: "{5}{B}",
+  types: ["Creature", "Giant", "Warrior"],
+  power: 4,
+  toughness: 5,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Draw(count: 1), LoseLife(amount: Fixed(1))],
+    ),
+  ],
+)

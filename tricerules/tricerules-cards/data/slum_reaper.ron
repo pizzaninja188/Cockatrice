@@ -1,0 +1,21 @@
+// Oracle 0cf742c1-feb5-4108-9976-37fa58528212; source/rulings checked 2026-11-16 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (entry trigger), 101.4/101.4b (each player chooses) and 701.21a
+// (simultaneous sacrifice). The controller is included, so the source may be chosen.
+(
+  id: "slum_reaper",
+  name: "Slum Reaper",
+  face_id: "slum_reaper",
+  mana_cost: "{3}{B}",
+  types: ["Creature", "Horror"],
+  power: 4,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [ChooseAndSacrifice(players: EachPlayer, count: 1, filter: (kind: Creature))],
+    ),
+  ],
+)

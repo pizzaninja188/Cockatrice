@@ -1,0 +1,21 @@
+// Oracle ea2dce18-195e-4681-a687-f9819edaf9fc; source/rulings checked 2026-11-16 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (entry trigger), 121.1 (draw), 119.3 (life loss) and 608.2c
+// (effects resolve in written order).
+(
+  id: "dusk_legion_zealot",
+  name: "Dusk Legion Zealot",
+  face_id: "dusk_legion_zealot",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Vampire", "Soldier"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Draw(count: 1), LoseLife(amount: Fixed(1))],
+    ),
+  ],
+)

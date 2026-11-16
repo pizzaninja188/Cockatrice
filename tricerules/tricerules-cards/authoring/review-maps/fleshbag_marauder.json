@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "4b1bf05e-753e-4350-a913-894cf3cecc0c",
+  "spans": [
+    {
+      "face_id": "fleshbag_marauder",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseAndSacrifice",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_edict_batch::etb_edict_batch_canary_each_player_sacrifices_their_own_chosen_creature",
+      "covers": "actual fleshbag_marauder is exercised by the shared etb_edict_batch canary scenario"
+    },
+    {
+      "test": "scenario etb_edict_batch::etb_edict_batch_cards_make_each_player_choose_independently",
+      "covers": "actual fleshbag_marauder is exercised by the shared etb_edict_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_edict_batch::etb_edict_batch_controller_sacrifices_the_source_when_it_is_the_only_creature",
+      "covers": "actual fleshbag_marauder is exercised by the shared etb_edict_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_edict_batch::etb_edict_batch_cards_include_every_player_in_a_three_player_game",
+      "covers": "actual fleshbag_marauder is exercised by the shared etb_edict_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::etb_edict_batch::etb_edict_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of fleshbag_marauder"
+    },
+    {
+      "test": "mechanic_registry::etb_edict_batch::etb_edict_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for fleshbag_marauder"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

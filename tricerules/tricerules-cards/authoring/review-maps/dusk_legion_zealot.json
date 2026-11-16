@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "ea2dce18-195e-4681-a687-f9819edaf9fc",
+  "spans": [
+    {
+      "face_id": "dusk_legion_zealot",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_draw_lose_life_batch::etb_draw_lose_life_batch_canary_cards_draw_one_and_lose_one",
+      "covers": "actual dusk_legion_zealot is exercised by the shared etb_draw_lose_life_batch canary scenario"
+    },
+    {
+      "test": "scenario etb_draw_lose_life_batch::etb_draw_lose_life_batch_cards_scope_the_draw_and_loss_to_their_controller",
+      "covers": "actual dusk_legion_zealot is exercised by the shared etb_draw_lose_life_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_draw_lose_life_batch::etb_draw_lose_life_batch_cards_draw_exactly_one",
+      "covers": "actual dusk_legion_zealot is exercised by the shared etb_draw_lose_life_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_draw_lose_life_batch::etb_draw_lose_life_batch_cards_enter_the_battlefield",
+      "covers": "actual dusk_legion_zealot is exercised by the shared etb_draw_lose_life_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_draw_lose_life_batch::etb_draw_lose_life_batch_cards_lose_the_game_at_one_life",
+      "covers": "actual dusk_legion_zealot is exercised by the shared etb_draw_lose_life_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::etb_draw_lose_life_batch::etb_draw_lose_life_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of dusk_legion_zealot"
+    },
+    {
+      "test": "mechanic_registry::etb_draw_lose_life_batch::etb_draw_lose_life_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for dusk_legion_zealot"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

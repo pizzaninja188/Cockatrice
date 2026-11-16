@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "29863706-fa4e-49ed-9f40-69ae503abba3",
+  "spans": [
+    {
+      "face_id": "goblin_shortcutter",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ApplyCombatRestriction",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_cant_block_batch::etb_cant_block_batch_canary_cards_publish_the_restriction",
+      "covers": "actual goblin_shortcutter is exercised by the shared etb_cant_block_batch canary scenario"
+    },
+    {
+      "test": "scenario etb_cant_block_batch::etb_cant_block_batch_cards_reject_the_target_as_a_blocker",
+      "covers": "actual goblin_shortcutter is exercised by the shared etb_cant_block_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_cant_block_batch::etb_cant_block_batch_cards_may_target_their_own_creature",
+      "covers": "actual goblin_shortcutter is exercised by the shared etb_cant_block_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_cant_block_batch::etb_cant_block_batch_cards_expire_at_cleanup",
+      "covers": "actual goblin_shortcutter is exercised by the shared etb_cant_block_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_cant_block_batch::etb_cant_block_batch_cards_fizzle_when_the_target_leaves",
+      "covers": "actual goblin_shortcutter is exercised by the shared etb_cant_block_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::etb_cant_block_batch::etb_cant_block_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of goblin_shortcutter"
+    },
+    {
+      "test": "mechanic_registry::etb_cant_block_batch::etb_cant_block_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for goblin_shortcutter"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

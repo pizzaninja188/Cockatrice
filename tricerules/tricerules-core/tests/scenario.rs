@@ -1920,3 +1920,12 @@ mod dies_drain_batch;
 
 #[path = "scenario/sacrifice_draw_batch.rs"]
 mod sacrifice_draw_batch;
+
+#[path = "scenario/etb_edict_batch.rs"]
+mod etb_edict_batch;
+
+#[path = "scenario/etb_cant_block_batch.rs"]
+mod etb_cant_block_batch;
+
+#[path = "scenario/etb_draw_lose_life_batch.rs"]
+mod etb_draw_lose_life_batch;
