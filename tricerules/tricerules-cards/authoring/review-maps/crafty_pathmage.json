@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "c4020178-71d9-4363-a0bd-b9a7eecd5d02",
+  "spans": [
+    {
+      "face_id": "crafty_pathmage",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ApplyCombatRestriction",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario unblockable_power_two_batch::unblockable_power_two_batch_cards_reject_a_target_above_power_two",
+      "covers": "actual crafty_pathmage is exercised by the shared unblockable_power_two_batch actual-card scenario"
+    },
+    {
+      "test": "scenario unblockable_power_two_batch::unblockable_power_two_batch_cards_keep_the_restriction_after_a_later_pump",
+      "covers": "actual crafty_pathmage is exercised by the shared unblockable_power_two_batch actual-card scenario"
+    },
+    {
+      "test": "scenario unblockable_power_two_batch::unblockable_power_two_batch_cards_do_not_undo_an_existing_block",
+      "covers": "actual crafty_pathmage is exercised by the shared unblockable_power_two_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::unblockable_power_two_batch::unblockable_power_two_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of crafty_pathmage"
+    },
+    {
+      "test": "mechanic_registry::unblockable_power_two_batch::unblockable_power_two_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for crafty_pathmage"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

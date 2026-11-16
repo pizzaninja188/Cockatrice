@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "c2f2fd39-4a21-489b-893e-4258f8d2aa63",
+  "spans": [
+    {
+      "face_id": "roofstalker_wight",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flying_grant_activated_batch::flying_grant_activated_batch_cards_gain_flying_for_the_exact_activation_cost",
+      "covers": "actual roofstalker_wight is exercised by the shared flying_grant_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario flying_grant_activated_batch::flying_grant_activated_batch_cards_allow_a_ground_blocker_only_before_activation",
+      "covers": "actual roofstalker_wight is exercised by the shared flying_grant_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario flying_grant_activated_batch::flying_grant_activated_batch_cards_reject_activation_without_the_exact_cost",
+      "covers": "actual roofstalker_wight is exercised by the shared flying_grant_activated_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::flying_grant_activated_batch::flying_grant_activated_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of roofstalker_wight"
+    },
+    {
+      "test": "mechanic_registry::flying_grant_activated_batch::flying_grant_activated_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for roofstalker_wight"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

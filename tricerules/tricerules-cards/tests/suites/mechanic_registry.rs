@@ -855,3 +855,12 @@ mod sac_creature_three_batch;
 
 #[path = "../blocks_pump_batch.rs"]
 mod blocks_pump_batch;
+
+#[path = "../becomes_target_sacrifice_batch.rs"]
+mod becomes_target_sacrifice_batch;
+
+#[path = "../flying_grant_activated_batch.rs"]
+mod flying_grant_activated_batch;
+
+#[path = "../unblockable_power_two_batch.rs"]
+mod unblockable_power_two_batch;

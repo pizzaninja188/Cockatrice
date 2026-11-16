@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "1b5c2ba0-3df7-4394-a3f1-8e8330d7ac81",
+  "spans": [
+    {
+      "face_id": "leaping_master",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flying_grant_activated_batch::flying_grant_activated_batch_cards_gain_flying_for_the_exact_activation_cost",
+      "covers": "actual leaping_master is exercised by the shared flying_grant_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario flying_grant_activated_batch::flying_grant_activated_batch_cards_allow_a_ground_blocker_only_before_activation",
+      "covers": "actual leaping_master is exercised by the shared flying_grant_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario flying_grant_activated_batch::flying_grant_activated_batch_cards_reject_activation_without_the_exact_cost",
+      "covers": "actual leaping_master is exercised by the shared flying_grant_activated_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::flying_grant_activated_batch::flying_grant_activated_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of leaping_master"
+    },
+    {
+      "test": "mechanic_registry::flying_grant_activated_batch::flying_grant_activated_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for leaping_master"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
