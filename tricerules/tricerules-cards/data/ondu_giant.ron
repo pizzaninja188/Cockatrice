@@ -1,0 +1,42 @@
+// Oracle ed8b2887-15fa-4e62-83ac-55973ac6f76c; source/rulings checked 2026-11-16 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (entry trigger), 701.23 (optional basic-land search; a filtered search may
+// fail to find) and 701.24 (shuffle). Copy of the reviewed Larval Scoutlander program.
+(
+  id: "ondu_giant",
+  name: "Ondu Giant",
+  face_id: "ondu_giant",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Giant", "Druid"],
+  power: 2,
+  toughness: 4,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      program: Some((
+        body: (steps: [
+          (id: "search_choice", kind: Choose(
+            choice: "search",
+            chooser: Controller,
+            optional: true,
+            branches: [(
+              branch_id: "search_for_a_basic_land",
+              presentation: Fallback,
+              cost: None,
+              body: (steps: [
+                (id: "search", kind: Perform(SearchLibrary(
+                  filter: Some((card_type: Some(BasicLand))),
+                  destination: Battlefield(tapped: true),
+                  selection_bounds: Some((min: 0, max: 1)),
+                )))
+              ]),
+            )],
+            otherwise: (),
+          )),
+        ]),
+      )),
+    ),
+  ],
+)

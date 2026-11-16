@@ -1,0 +1,21 @@
+// Oracle 13459bf3-fcdc-4838-9669-918f97113054; source/rulings checked 2026-11-16 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.9 (flying), 602.1/602.2, 611.2a/613.4c (until-end-of-turn P/T) and 514.2.
+(
+  id: "flowstone_wyvern",
+  name: "Flowstone Wyvern",
+  face_id: "flowstone_wyvern",
+  mana_cost: "{3}{R}{R}",
+  types: ["Creature", "Drake"],
+  power: 3,
+  toughness: 3,
+  keywords: [Flying],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{R}")],
+      effect: [PumpTarget(power: 2, toughness: -2, subject: Source)],
+    ),
+  ],
+)

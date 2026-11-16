@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "3d95e8b1-0ddb-4bd3-b4cc-de55b6f8c403",
+  "spans": [
+    {
+      "face_id": "primal_visitation",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "primal_visitation",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition/AttachedModifier"
+    },
+    {
+      "symbol": "Keyword::Haste",
+      "typed_path": "/faces/0/static_abilities/0/definition/AttachedModifier/keywords"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario aura_pump_haste_batch::aura_pump_haste_batch_canary_cards_attach_and_grant_the_printed_bonus",
+      "covers": "actual primal_visitation is exercised by the shared aura_pump_haste_batch canary scenario"
+    },
+    {
+      "test": "scenario aura_pump_haste_batch::aura_pump_haste_batch_cards_apply_every_printed_bonus",
+      "covers": "actual primal_visitation is exercised by the shared aura_pump_haste_batch actual-card scenario"
+    },
+    {
+      "test": "scenario aura_pump_haste_batch::aura_pump_haste_batch_cards_grant_haste_immediately",
+      "covers": "actual primal_visitation is exercised by the shared aura_pump_haste_batch actual-card scenario"
+    },
+    {
+      "test": "scenario aura_pump_haste_batch::aura_pump_haste_batch_cards_reject_a_noncreature_target",
+      "covers": "actual primal_visitation is exercised by the shared aura_pump_haste_batch actual-card scenario"
+    },
+    {
+      "test": "scenario aura_pump_haste_batch::aura_pump_haste_batch_cards_go_to_the_graveyard_with_their_creature",
+      "covers": "actual primal_visitation is exercised by the shared aura_pump_haste_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::aura_pump_haste_batch::aura_pump_haste_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of primal_visitation"
+    },
+    {
+      "test": "mechanic_registry::aura_pump_haste_batch::aura_pump_haste_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for primal_visitation"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

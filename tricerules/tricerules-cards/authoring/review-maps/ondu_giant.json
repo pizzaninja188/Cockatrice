@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "ed8b2887-15fa-4e62-83ac-55973ac6f76c",
+  "spans": [
+    {
+      "face_id": "ondu_giant",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/SearchLibrary"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_basic_search_tapped_batch::etb_basic_search_tapped_batch_canary_cards_find_a_basic_land_tapped",
+      "covers": "actual ondu_giant is exercised by the shared etb_basic_search_tapped_batch canary scenario"
+    },
+    {
+      "test": "scenario etb_basic_search_tapped_batch::etb_basic_search_tapped_batch_cards_search_every_printed_card",
+      "covers": "actual ondu_giant is exercised by the shared etb_basic_search_tapped_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_basic_search_tapped_batch::etb_basic_search_tapped_batch_cards_may_decline",
+      "covers": "actual ondu_giant is exercised by the shared etb_basic_search_tapped_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_basic_search_tapped_batch::etb_basic_search_tapped_batch_cards_shuffle_after_searching",
+      "covers": "actual ondu_giant is exercised by the shared etb_basic_search_tapped_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::etb_basic_search_tapped_batch::etb_basic_search_tapped_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of ondu_giant"
+    },
+    {
+      "test": "mechanic_registry::etb_basic_search_tapped_batch::etb_basic_search_tapped_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for ondu_giant"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

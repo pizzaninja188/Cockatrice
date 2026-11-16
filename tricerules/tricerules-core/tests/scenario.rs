@@ -1929,3 +1929,12 @@ mod etb_cant_block_batch;
 
 #[path = "scenario/etb_draw_lose_life_batch.rs"]
 mod etb_draw_lose_life_batch;
+
+#[path = "scenario/etb_basic_search_tapped_batch.rs"]
+mod etb_basic_search_tapped_batch;
+
+#[path = "scenario/flying_neg_pump_batch.rs"]
+mod flying_neg_pump_batch;
+
+#[path = "scenario/aura_pump_haste_batch.rs"]
+mod aura_pump_haste_batch;

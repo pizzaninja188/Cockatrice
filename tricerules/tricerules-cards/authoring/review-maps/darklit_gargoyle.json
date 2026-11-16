@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "e48d9efa-c169-4587-86fc-0021f265d69b",
+  "spans": [
+    {
+      "face_id": "darklit_gargoyle",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "darklit_gargoyle",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flying_neg_pump_batch::flying_neg_pump_batch_cards_apply_the_exact_pump_to_every_card",
+      "covers": "actual darklit_gargoyle is exercised by the shared flying_neg_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario flying_neg_pump_batch::flying_neg_pump_batch_cards_die_at_zero_toughness",
+      "covers": "actual darklit_gargoyle is exercised by the shared flying_neg_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario flying_neg_pump_batch::flying_neg_pump_batch_cards_expire_at_cleanup",
+      "covers": "actual darklit_gargoyle is exercised by the shared flying_neg_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario flying_neg_pump_batch::flying_neg_pump_batch_cards_keep_flying_evasion",
+      "covers": "actual darklit_gargoyle is exercised by the shared flying_neg_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario flying_neg_pump_batch::flying_neg_pump_batch_cards_reject_activation_without_mana",
+      "covers": "actual darklit_gargoyle is exercised by the shared flying_neg_pump_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::flying_neg_pump_batch::flying_neg_pump_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of darklit_gargoyle"
+    },
+    {
+      "test": "mechanic_registry::flying_neg_pump_batch::flying_neg_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for darklit_gargoyle"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

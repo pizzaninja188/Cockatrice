@@ -801,3 +801,12 @@ mod etb_cant_block_batch;
 
 #[path = "../etb_draw_lose_life_batch.rs"]
 mod etb_draw_lose_life_batch;
+
+#[path = "../etb_basic_search_tapped_batch.rs"]
+mod etb_basic_search_tapped_batch;
+
+#[path = "../flying_neg_pump_batch.rs"]
+mod flying_neg_pump_batch;
+
+#[path = "../aura_pump_haste_batch.rs"]
+mod aura_pump_haste_batch;

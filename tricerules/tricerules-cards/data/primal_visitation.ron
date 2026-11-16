@@ -1,0 +1,19 @@
+// Oracle 3d95e8b1-0ddb-4bd3-b4cc-de55b6f8c403; source/rulings checked 2026-11-16 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 303.4 (Aura attached), 611.2c/613.4c (continuous modifier) and 702.10 (haste).
+// Copy of the reviewed Super Speed attached-modifier shape with equal P/T.
+(
+  id: "primal_visitation",
+  name: "Primal Visitation",
+  face_id: "primal_visitation",
+  mana_cost: "{3}{R}{G}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(delta_power: 3, delta_toughness: 3, keywords: [Haste]),
+    ),
+  ],
+)
