@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "50bc464e-1c8d-455c-a870-ddbbc4618343",
+  "spans": [
+    {
+      "face_id": "pyre_charger",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "pyre_charger",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Haste",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario haste_self_pump_batch::haste_self_pump_batch_canary_cards_cast_and_apply_the_printed_keyword",
+      "covers": "actual pyre_charger is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario haste_self_pump_batch::haste_self_pump_batch_cards_cast_with_exact_characteristics",
+      "covers": "actual pyre_charger is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario haste_self_pump_batch::haste_self_pump_batch_cards_activate_only_the_source_with_the_printed_pump",
+      "covers": "actual pyre_charger is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario haste_self_pump_batch::haste_self_pump_batch_cards_stack_repeated_activations",
+      "covers": "actual pyre_charger is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario haste_self_pump_batch::haste_self_pump_batch_cards_reject_activation_without_the_exact_cost",
+      "covers": "actual pyre_charger is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario haste_self_pump_batch::haste_self_pump_batch_cards_expire_the_pump_at_cleanup",
+      "covers": "actual pyre_charger is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario haste_self_pump_batch::haste_self_pump_batch_cards_attack_immediately_after_being_cast",
+      "covers": "actual pyre_charger is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::haste_self_pump_batch::haste_self_pump_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of pyre_charger"
+    },
+    {
+      "test": "mechanic_registry::haste_self_pump_batch::haste_self_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for pyre_charger"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

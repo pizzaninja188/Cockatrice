@@ -1,0 +1,66 @@
+{
+  "format_version": 1,
+  "oracle_id": "f041b37e-25af-4aff-b7e3-f07a4d5c6f9a",
+  "spans": [
+    {
+      "face_id": "appetite_for_the_unnatural",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario naturalize_lifegain_batch::naturalize_lifegain_batch_canary_cards_destroy_an_artifact_and_gain_the_printed_life",
+      "covers": "actual appetite_for_the_unnatural is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario naturalize_lifegain_batch::naturalize_lifegain_batch_cards_destroy_an_enchantment_and_gain_exact_life",
+      "covers": "actual appetite_for_the_unnatural is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario naturalize_lifegain_batch::naturalize_lifegain_batch_cards_gain_life_when_an_indestructible_target_survives",
+      "covers": "actual appetite_for_the_unnatural is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario naturalize_lifegain_batch::naturalize_lifegain_batch_cards_fizzle_a_stale_target_without_gaining_life",
+      "covers": "actual appetite_for_the_unnatural is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario naturalize_lifegain_batch::naturalize_lifegain_batch_cards_reject_a_creature_target_without_paying",
+      "covers": "actual appetite_for_the_unnatural is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario naturalize_lifegain_batch::naturalize_lifegain_batch_cards_respect_instant_and_sorcery_timing",
+      "covers": "actual appetite_for_the_unnatural is exercised by the shared naturalize_lifegain_batch actual-card timing scenario"
+    },
+    {
+      "test": "mechanic_registry::naturalize_lifegain_batch::naturalize_lifegain_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of appetite_for_the_unnatural"
+    },
+    {
+      "test": "mechanic_registry::naturalize_lifegain_batch::naturalize_lifegain_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for appetite_for_the_unnatural"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

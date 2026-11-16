@@ -819,3 +819,12 @@ mod equipment_haste_batch;
 
 #[path = "../mana_target_pump_batch.rs"]
 mod mana_target_pump_batch;
+
+#[path = "../haste_self_pump_batch.rs"]
+mod haste_self_pump_batch;
+
+#[path = "../trample_self_pump_batch.rs"]
+mod trample_self_pump_batch;
+
+#[path = "../naturalize_lifegain_batch.rs"]
+mod naturalize_lifegain_batch;

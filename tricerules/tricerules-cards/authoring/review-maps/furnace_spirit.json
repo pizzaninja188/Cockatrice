@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "86b33d25-6123-439c-9026-a4e835b48562",
+  "spans": [
+    {
+      "face_id": "furnace_spirit",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "furnace_spirit",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Haste",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario haste_self_pump_batch::haste_self_pump_batch_cards_cast_with_exact_characteristics",
+      "covers": "actual furnace_spirit is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario haste_self_pump_batch::haste_self_pump_batch_cards_activate_only_the_source_with_the_printed_pump",
+      "covers": "actual furnace_spirit is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario haste_self_pump_batch::haste_self_pump_batch_cards_stack_repeated_activations",
+      "covers": "actual furnace_spirit is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario haste_self_pump_batch::haste_self_pump_batch_cards_reject_activation_without_the_exact_cost",
+      "covers": "actual furnace_spirit is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario haste_self_pump_batch::haste_self_pump_batch_cards_expire_the_pump_at_cleanup",
+      "covers": "actual furnace_spirit is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario haste_self_pump_batch::haste_self_pump_batch_cards_attack_immediately_after_being_cast",
+      "covers": "actual furnace_spirit is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::haste_self_pump_batch::haste_self_pump_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of furnace_spirit"
+    },
+    {
+      "test": "mechanic_registry::haste_self_pump_batch::haste_self_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for furnace_spirit"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
