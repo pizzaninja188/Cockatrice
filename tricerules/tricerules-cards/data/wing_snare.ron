@@ -1,0 +1,15 @@
+// Oracle 61ce6ec1-79d8-4dc9-ab2d-1623ed1459c1; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 115.1/601.2c (target), 608.2b (stale target) and 702.9a/105/202 (the printed characteristic filter).
+
+(
+  id: "wing_snare",
+  name: "Wing Snare",
+  face_id: "wing_snare",
+  mana_cost: "{2}{G}",
+  types: ["Sorcery"],
+  spell_effect: [Destroy(subject: Chosen((kind: Creature, required_keywords: [Flying])))],
+  targeting: Some((groups: [
+    (min: 1, max: 1, prompt: "Choose target creature with flying", effect_indices: [0]),
+  ])),
+)

@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "67a3541c-8408-40c8-b44f-90035b860f57",
+  "spans": [
+    {
+      "face_id": "man_o_war",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q30_etb_bounce_batch::q30_etb_bounce_cards_cast_with_exact_cost_and_body",
+      "covers": "actual man-o-war is exercised by the shared 08-etb-bounce evidence"
+    },
+    {
+      "test": "scenario q30_etb_bounce_batch::q30_etb_bounce_cards_return_target_creature_to_hand",
+      "covers": "actual man-o-war is exercised by the shared 08-etb-bounce evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_etb_bounce_batch::q30_etb_bounce_batch_maps_definitions",
+      "covers": "actual man-o-war is exercised by the shared 08-etb-bounce evidence"
+    },
+    {
+      "test": "scenario q30_etb_bounce_batch::q30_etb_bounce_self_target_and_only_creature",
+      "covers": "actual man-o-war self-target clause"
+    },
+    {
+      "test": "scenario q30_etb_bounce_batch::q30_etb_bounce_cards_fizzle_on_stale_target",
+      "covers": "actual man-o-war stale target"
+    },
+    {
+      "test": "mechanic_registry::q30_etb_bounce_batch::q30_etb_bounce_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual man-o-war is exercised by the shared 08-etb-bounce evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

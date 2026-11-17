@@ -1,0 +1,15 @@
+// Oracle 8eb328e6-332e-435c-9733-4c5336f17824; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 115.1/601.2c (target), 608.2b (stale target) and 702.9a/105/202 (the printed characteristic filter).
+
+(
+  id: "reave_soul",
+  name: "Reave Soul",
+  face_id: "reave_soul",
+  mana_cost: "{1}{B}",
+  types: ["Sorcery"],
+  spell_effect: [Destroy(subject: Chosen((kind: Creature, power: Some(AtMost(3)))))],
+  targeting: Some((groups: [
+    (min: 1, max: 1, prompt: "Choose target creature with power 3 or less", effect_indices: [0]),
+  ])),
+)

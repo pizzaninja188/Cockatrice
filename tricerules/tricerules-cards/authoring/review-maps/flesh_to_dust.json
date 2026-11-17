@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "2f05f3ed-e3b7-4225-b3f2-c12eda335237",
+  "spans": [
+    {
+      "face_id": "flesh_to_dust",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DestroyPreventingRegeneration",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetKind::Creature",
+      "typed_path": "/faces/0/targeting/groups/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q30_destroy_creature_filtered_batch::q30_destroy_creature_filtered_cards_cast_with_exact_cost_and_body",
+      "covers": "actual flesh_to_dust is exercised by the shared 02-destroy-creature-filtered evidence"
+    },
+    {
+      "test": "scenario q30_destroy_creature_filtered_batch::q30_destroy_creature_filtered_cards_destroy_only_matching_creatures",
+      "covers": "actual flesh_to_dust is exercised by the shared 02-destroy-creature-filtered evidence"
+    },
+    {
+      "test": "scenario q30_destroy_creature_filtered_batch::q30_destroy_creature_filtered_cards_reject_illegal_targets_without_spending_mana",
+      "covers": "actual flesh_to_dust is exercised by the shared 02-destroy-creature-filtered evidence"
+    },
+    {
+      "test": "scenario q30_destroy_creature_filtered_batch::q30_destroy_creature_filtered_cards_fizzle_on_stale_target",
+      "covers": "actual flesh_to_dust is exercised by the shared 02-destroy-creature-filtered evidence"
+    },
+    {
+      "test": "scenario q30_destroy_creature_filtered_batch::q30_destroy_creature_filtered_cards_prevent_regeneration_where_printed",
+      "covers": "actual flesh_to_dust is exercised by the shared 02-destroy-creature-filtered evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_destroy_creature_filtered_batch::q30_destroy_creature_filtered_batch_maps_definitions",
+      "covers": "actual flesh_to_dust is exercised by the shared 02-destroy-creature-filtered evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_destroy_creature_filtered_batch::q30_destroy_creature_filtered_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual flesh_to_dust is exercised by the shared 02-destroy-creature-filtered evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

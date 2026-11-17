@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "aa17782b-d8e7-423b-9f03-01ccb600f69a",
+  "spans": [
+    {
+      "face_id": "windreaper_falcon",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0",
+        "/faces/0/protections/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Protection::Color",
+      "typed_path": "/faces/0/protections/0"
+    },
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q30_protection_remnants_batch::q30_protection_remnants_cards_cast_with_exact_characteristics",
+      "covers": "actual windreaper_falcon is exercised by the shared 05-protection-remnants evidence"
+    },
+    {
+      "test": "scenario q30_protection_remnants_batch::q30_protection_remnants_cards_reject_matching_color_targets",
+      "covers": "actual windreaper_falcon is exercised by the shared 05-protection-remnants evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_protection_remnants_batch::q30_protection_remnants_batch_maps_definitions",
+      "covers": "actual windreaper_falcon is exercised by the shared 05-protection-remnants evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_protection_remnants_batch::q30_protection_remnants_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual windreaper_falcon is exercised by the shared 05-protection-remnants evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

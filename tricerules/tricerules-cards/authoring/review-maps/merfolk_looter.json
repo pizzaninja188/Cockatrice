@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "67362406-b1ca-49e2-800d-9050bfe8742a",
+  "spans": [
+    {
+      "face_id": "merfolk_looter",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q30_tap_looters_batch::q30_tap_looters_cards_cast_with_exact_cost_and_body",
+      "covers": "actual merfolk_looter is exercised by the shared 04-tap-looters evidence"
+    },
+    {
+      "test": "scenario q30_tap_looters_batch::q30_tap_looters_cards_draw_then_discard",
+      "covers": "actual merfolk_looter is exercised by the shared 04-tap-looters evidence"
+    },
+    {
+      "test": "scenario q30_tap_looters_batch::q30_tap_looters_cards_reject_a_tapped_source",
+      "covers": "actual merfolk_looter is exercised by the shared 04-tap-looters evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_tap_looters_batch::q30_tap_looters_batch_maps_definitions",
+      "covers": "actual merfolk_looter is exercised by the shared 04-tap-looters evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_tap_looters_batch::q30_tap_looters_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual merfolk_looter is exercised by the shared 04-tap-looters evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

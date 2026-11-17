@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "0385be55-8e8e-4e7d-b6b7-51adc6eb98fa",
+  "spans": [
+    {
+      "face_id": "reaver_ambush",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetKind::Creature",
+      "typed_path": "/faces/0/targeting/groups/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q30_exile_creature_filtered_batch::q30_exile_creature_filtered_cards_cast_with_exact_cost_and_body",
+      "covers": "actual reaver_ambush is exercised by the shared 09-exile-creature-filtered evidence"
+    },
+    {
+      "test": "scenario q30_exile_creature_filtered_batch::q30_exile_creature_filtered_cards_exile_only_matching_creatures",
+      "covers": "actual reaver_ambush is exercised by the shared 09-exile-creature-filtered evidence"
+    },
+    {
+      "test": "scenario q30_exile_creature_filtered_batch::q30_exile_creature_filtered_cards_recheck_filters_on_resolution",
+      "covers": "actual reaver_ambush resolution filter recheck"
+    },
+    {
+      "test": "scenario q30_exile_creature_filtered_batch::q30_exile_creature_filtered_cards_reject_illegal_targets_without_spending_mana",
+      "covers": "actual reaver_ambush is exercised by the shared 09-exile-creature-filtered evidence"
+    },
+    {
+      "test": "scenario q30_exile_creature_filtered_batch::q30_exile_creature_filtered_cards_fizzle_on_stale_target",
+      "covers": "actual reaver_ambush is exercised by the shared 09-exile-creature-filtered evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_exile_creature_filtered_batch::q30_exile_creature_filtered_batch_maps_definitions",
+      "covers": "actual reaver_ambush is exercised by the shared 09-exile-creature-filtered evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_exile_creature_filtered_batch::q30_exile_creature_filtered_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual reaver_ambush is exercised by the shared 09-exile-creature-filtered evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

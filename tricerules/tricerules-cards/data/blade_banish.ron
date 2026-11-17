@@ -1,0 +1,15 @@
+// Oracle d8838e16-96ca-4f73-ad61-7e98a76c4baf; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.13 (exile), 115.1/601.2c (target), 608.2b (stale target) and 608.2c (resolution). The printed power or tapped filter is rechecked on resolution.
+
+(
+  id: "blade_banish",
+  name: "Blade Banish",
+  face_id: "blade_banish",
+  mana_cost: "{3}{W}",
+  types: ["Instant"],
+  spell_effect: [Exile(subject: Chosen((kind: Creature, power: Some(AtLeast(4)))))],
+  targeting: Some((groups: [
+    (min: 1, max: 1, prompt: "Choose target creature with power 4 or greater", effect_indices: [0]),
+  ])),
+)

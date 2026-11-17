@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "d0c05cad-6e14-4726-b7fc-8f2fc7df7267",
+  "spans": [
+    {
+      "face_id": "wall_of_light",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "wall_of_light",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/protections/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Protection::Color",
+      "typed_path": "/faces/0/protections/0"
+    },
+    {
+      "symbol": "Keyword::Defender",
+      "typed_path": "/faces/0/keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q30_protection_remnants_batch::q30_protection_remnants_cards_cast_with_exact_characteristics",
+      "covers": "actual wall_of_light is exercised by the shared 05-protection-remnants evidence"
+    },
+    {
+      "test": "scenario q30_protection_remnants_batch::q30_protection_remnants_cards_reject_matching_color_targets",
+      "covers": "actual wall_of_light is exercised by the shared 05-protection-remnants evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_protection_remnants_batch::q30_protection_remnants_batch_maps_definitions",
+      "covers": "actual wall_of_light is exercised by the shared 05-protection-remnants evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_protection_remnants_batch::q30_protection_remnants_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual wall_of_light is exercised by the shared 05-protection-remnants evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "e08d264d-5731-4e2a-ae6d-5a74ef648575",
+  "spans": [
+    {
+      "face_id": "magus_of_the_bazaar",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q30_tap_looters_batch::q30_tap_looters_cards_cast_with_exact_cost_and_body",
+      "covers": "actual magus_of_the_bazaar is exercised by the shared 04-tap-looters evidence"
+    },
+    {
+      "test": "scenario q30_tap_looters_batch::q30_tap_looters_cards_draw_then_discard",
+      "covers": "actual magus_of_the_bazaar is exercised by the shared 04-tap-looters evidence"
+    },
+    {
+      "test": "scenario q30_tap_looters_batch::q30_tap_looters_cards_reject_a_tapped_source",
+      "covers": "actual magus_of_the_bazaar is exercised by the shared 04-tap-looters evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_tap_looters_batch::q30_tap_looters_batch_maps_definitions",
+      "covers": "actual magus_of_the_bazaar is exercised by the shared 04-tap-looters evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_tap_looters_batch::q30_tap_looters_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual magus_of_the_bazaar is exercised by the shared 04-tap-looters evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

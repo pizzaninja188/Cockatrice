@@ -1,0 +1,15 @@
+// Oracle 372e2d6e-427c-4152-b936-27dcf536ca84; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.16b-f (protection's five effects), 702.9a-b (flying), 702.3 (defender) and 702.29a (cycling).
+
+(
+  id: "voice_of_reason",
+  name: "Voice of Reason",
+  face_id: "voice_of_reason",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Angel"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+  protections: [Color(Blue)],
+)

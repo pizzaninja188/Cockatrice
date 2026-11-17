@@ -1,0 +1,16 @@
+// Oracle 5c828a5e-10ae-4f63-86fd-2f160af43cc3; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.6 (counter), 115.1a/601.2c (spell target), 121 (draw), 608.2b (stale target) and 608.2c (printed order).
+// The counter and draw are one resolving spell; an illegal sole target removes the spell.
+
+(
+  id: "dismiss",
+  name: "Dismiss",
+  face_id: "dismiss",
+  mana_cost: "{2}{U}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    CounterTargetSpell(spell_filter: ()),
+    Draw(count: 1),
+  ],
+)

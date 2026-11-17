@@ -2127,3 +2127,30 @@ mod q29_destroy_islands_batch;
 
 #[path = "scenario/q29_search_top_lose_two_batch.rs"]
 mod q29_search_top_lose_two_batch;
+
+#[path = "scenario/q30_counter_draw_batch.rs"]
+mod q30_counter_draw_batch;
+
+#[path = "scenario/q30_destroy_creature_filtered_batch.rs"]
+mod q30_destroy_creature_filtered_batch;
+
+#[path = "scenario/q30_free_sac_outlets_batch.rs"]
+mod q30_free_sac_outlets_batch;
+
+#[path = "scenario/q30_tap_looters_batch.rs"]
+mod q30_tap_looters_batch;
+
+#[path = "scenario/q30_protection_remnants_batch.rs"]
+mod q30_protection_remnants_batch;
+
+#[path = "scenario/q30_no_flying_block_batch.rs"]
+mod q30_no_flying_block_batch;
+
+#[path = "scenario/q30_etb_naturalize_batch.rs"]
+mod q30_etb_naturalize_batch;
+
+#[path = "scenario/q30_etb_bounce_batch.rs"]
+mod q30_etb_bounce_batch;
+
+#[path = "scenario/q30_exile_creature_filtered_batch.rs"]
+mod q30_exile_creature_filtered_batch;

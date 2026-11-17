@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "a8c9f91a-b1e7-451d-b6db-ae865e2b853c",
+  "spans": [
+    {
+      "face_id": "exclude",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "exclude",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "CardTypeFilter::Creature",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q30_counter_draw_batch::q30_counter_draw_cards_cast_with_exact_cost_and_body",
+      "covers": "actual exclude is exercised by the shared 01-counter-draw evidence"
+    },
+    {
+      "test": "scenario q30_counter_draw_batch::q30_counter_draw_cards_counter_and_draw",
+      "covers": "actual exclude is exercised by the shared 01-counter-draw evidence"
+    },
+    {
+      "test": "scenario q30_counter_draw_batch::q30_counter_draw_cards_reject_wrong_spell_type",
+      "covers": "actual exclude is exercised by the shared 01-counter-draw evidence"
+    },
+    {
+      "test": "scenario q30_counter_draw_batch::q30_counter_draw_cards_fizzle_without_drawing",
+      "covers": "actual exclude is exercised by the shared 01-counter-draw evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_counter_draw_batch::q30_counter_draw_batch_maps_definitions",
+      "covers": "actual exclude is exercised by the shared 01-counter-draw evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_counter_draw_batch::q30_counter_draw_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual exclude is exercised by the shared 01-counter-draw evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

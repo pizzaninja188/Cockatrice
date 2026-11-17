@@ -1,0 +1,17 @@
+// Oracle a1d02a70-2543-45c6-a9a1-c1941f2f68f3; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 509.1b (blocking restrictions), 611.2a/514.2 (until end of turn) and 702.9a-b (flying). The restriction is untargeted and applies to every current nonflier.
+
+(
+  id: "seismic_stomp",
+  name: "Seismic Stomp",
+  face_id: "seismic_stomp",
+  mana_cost: "{1}{R}",
+  types: ["Sorcery"],
+  spell_effect: [
+    ApplyCombatRestriction(
+      scope: Matching((kind: Creature, excluded_keywords: [Flying])),
+      restriction: (cant_block: true),
+    ),
+  ],
+)

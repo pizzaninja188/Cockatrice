@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "857524d5-9b5c-42ac-a6cf-2d9bfebd7015",
+  "spans": [
+    {
+      "face_id": "zombie_outlander",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/protections/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Protection::Color",
+      "typed_path": "/faces/0/protections/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q30_protection_remnants_batch::q30_protection_remnants_cards_cast_with_exact_characteristics",
+      "covers": "actual zombie_outlander is exercised by the shared 05-protection-remnants evidence"
+    },
+    {
+      "test": "scenario q30_protection_remnants_batch::q30_protection_remnants_cards_reject_matching_color_targets",
+      "covers": "actual zombie_outlander is exercised by the shared 05-protection-remnants evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_protection_remnants_batch::q30_protection_remnants_batch_maps_definitions",
+      "covers": "actual zombie_outlander is exercised by the shared 05-protection-remnants evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_protection_remnants_batch::q30_protection_remnants_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual zombie_outlander is exercised by the shared 05-protection-remnants evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

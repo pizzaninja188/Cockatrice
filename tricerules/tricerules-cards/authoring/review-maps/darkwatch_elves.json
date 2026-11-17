@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "55ad9924-f217-4844-8a82-48746186bc53",
+  "spans": [
+    {
+      "face_id": "darkwatch_elves",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/protections/0"
+      ]
+    },
+    {
+      "face_id": "darkwatch_elves",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Protection::Color",
+      "typed_path": "/faces/0/protections/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q30_protection_remnants_batch::q30_protection_remnants_cards_cast_with_exact_characteristics",
+      "covers": "actual darkwatch_elves is exercised by the shared 05-protection-remnants evidence"
+    },
+    {
+      "test": "scenario q30_protection_remnants_batch::q30_protection_remnants_cards_reject_matching_color_targets",
+      "covers": "actual darkwatch_elves is exercised by the shared 05-protection-remnants evidence"
+    },
+    {
+      "test": "scenario q30_protection_remnants_batch::q30_protection_remnants_cards_cycle_from_hand_where_printed",
+      "covers": "actual darkwatch_elves is exercised by the shared 05-protection-remnants evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_protection_remnants_batch::q30_protection_remnants_batch_maps_definitions",
+      "covers": "actual darkwatch_elves is exercised by the shared 05-protection-remnants evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_protection_remnants_batch::q30_protection_remnants_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual darkwatch_elves is exercised by the shared 05-protection-remnants evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

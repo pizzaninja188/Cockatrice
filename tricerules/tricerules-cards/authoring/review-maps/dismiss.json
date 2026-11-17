@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "5c828a5e-10ae-4f63-86fd-2f160af43cc3",
+  "spans": [
+    {
+      "face_id": "dismiss",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "dismiss",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q30_counter_draw_batch::q30_counter_draw_cards_cast_with_exact_cost_and_body",
+      "covers": "actual dismiss is exercised by the shared 01-counter-draw evidence"
+    },
+    {
+      "test": "scenario q30_counter_draw_batch::q30_counter_draw_cards_counter_and_draw",
+      "covers": "actual dismiss is exercised by the shared 01-counter-draw evidence"
+    },
+    {
+      "test": "scenario q30_counter_draw_batch::q30_counter_draw_cards_counter_a_creature_spell_too",
+      "covers": "actual dismiss unrestricted spell target"
+    },
+    {
+      "test": "scenario q30_counter_draw_batch::q30_counter_draw_cards_fizzle_without_drawing",
+      "covers": "actual dismiss is exercised by the shared 01-counter-draw evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_counter_draw_batch::q30_counter_draw_batch_maps_definitions",
+      "covers": "actual dismiss is exercised by the shared 01-counter-draw evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_counter_draw_batch::q30_counter_draw_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual dismiss is exercised by the shared 01-counter-draw evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

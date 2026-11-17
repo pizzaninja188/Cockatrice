@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "e05c6c80-a91a-45e0-b991-0014fd5a6472",
+  "spans": [
+    {
+      "face_id": "blood_pet",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q30_free_sac_outlets_batch::q30_free_sac_outlets_cards_cast_with_exact_cost_and_body",
+      "covers": "actual blood_pet is exercised by the shared 03-free-sac-outlets evidence"
+    },
+    {
+      "test": "scenario q30_free_sac_outlets_batch::q30_free_sac_outlets_cards_sacrifice_as_cost_and_resolve",
+      "covers": "actual blood_pet is exercised by the shared 03-free-sac-outlets evidence"
+    },
+    {
+      "test": "scenario q30_free_sac_outlets_batch::q30_free_sac_outlets_cards_reject_activation_without_the_creature",
+      "covers": "actual blood_pet is exercised by the shared 03-free-sac-outlets evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_free_sac_outlets_batch::q30_free_sac_outlets_batch_maps_definitions",
+      "covers": "actual blood_pet is exercised by the shared 03-free-sac-outlets evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_free_sac_outlets_batch::q30_free_sac_outlets_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual blood_pet is exercised by the shared 03-free-sac-outlets evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

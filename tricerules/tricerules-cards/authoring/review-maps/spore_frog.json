@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "97db6c39-e690-49b6-93a6-e51b8dfad10b",
+  "spans": [
+    {
+      "face_id": "spore_frog",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PreventAllCombatDamageTurn",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q30_free_sac_outlets_batch::q30_free_sac_outlets_cards_cast_with_exact_cost_and_body",
+      "covers": "actual spore_frog is exercised by the shared 03-free-sac-outlets evidence"
+    },
+    {
+      "test": "scenario q30_free_sac_outlets_batch::q30_free_sac_outlets_cards_sacrifice_as_cost_and_resolve",
+      "covers": "actual spore_frog is exercised by the shared 03-free-sac-outlets evidence"
+    },
+    {
+      "test": "scenario q30_free_sac_outlets_batch::q30_free_sac_outlets_cards_reject_activation_without_the_creature",
+      "covers": "actual spore_frog is exercised by the shared 03-free-sac-outlets evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_free_sac_outlets_batch::q30_free_sac_outlets_batch_maps_definitions",
+      "covers": "actual spore_frog is exercised by the shared 03-free-sac-outlets evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_free_sac_outlets_batch::q30_free_sac_outlets_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual spore_frog is exercised by the shared 03-free-sac-outlets evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

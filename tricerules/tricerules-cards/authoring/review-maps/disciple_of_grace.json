@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "7f4ceca9-0f55-4fa6-8e64-befbc4303d4e",
+  "spans": [
+    {
+      "face_id": "disciple_of_grace",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/protections/0"
+      ]
+    },
+    {
+      "face_id": "disciple_of_grace",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Protection::Color",
+      "typed_path": "/faces/0/protections/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q30_protection_remnants_batch::q30_protection_remnants_cards_cast_with_exact_characteristics",
+      "covers": "actual disciple_of_grace is exercised by the shared 05-protection-remnants evidence"
+    },
+    {
+      "test": "scenario q30_protection_remnants_batch::q30_protection_remnants_cards_reject_matching_color_targets",
+      "covers": "actual disciple_of_grace is exercised by the shared 05-protection-remnants evidence"
+    },
+    {
+      "test": "scenario q30_protection_remnants_batch::q30_protection_remnants_cards_cycle_from_hand_where_printed",
+      "covers": "actual disciple_of_grace is exercised by the shared 05-protection-remnants evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_protection_remnants_batch::q30_protection_remnants_batch_maps_definitions",
+      "covers": "actual disciple_of_grace is exercised by the shared 05-protection-remnants evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_protection_remnants_batch::q30_protection_remnants_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual disciple_of_grace is exercised by the shared 05-protection-remnants evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

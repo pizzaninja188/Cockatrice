@@ -1,0 +1,15 @@
+// Oracle 6257c2fd-005f-41e3-8a72-af76df1eb134; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 115.1/601.2c (target), 608.2b (stale target) and 701.8c/702.19 (regeneration cannot replace this destruction).
+
+(
+  id: "terminate",
+  name: "Terminate",
+  face_id: "terminate",
+  mana_cost: "{B}{R}",
+  types: ["Instant"],
+  spell_effect: [DestroyPreventingRegeneration(subject: Chosen((kind: Creature)))],
+  targeting: Some((groups: [
+    (min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0]),
+  ])),
+)
