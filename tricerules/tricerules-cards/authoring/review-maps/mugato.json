@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "eb9a3b52-62ad-467f-b62a-0273ceee48e5",
+  "spans": [
+    {
+      "face_id": "mugato",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Reach",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "Keyword::Vigilance",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "Keyword::Deathtouch",
+      "typed_path": "/faces/0/keywords"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario keyword_only_batch::keyword_only_batch_cards_enter_with_printed_bodies_and_keywords",
+      "covers": "actual mugato is exercised by the shared 01-keyword-only evidence"
+    },
+    {
+      "test": "mechanic_registry::keyword_only_batch::keyword_only_batch_maps_definitions",
+      "covers": "actual mugato is exercised by the shared 01-keyword-only evidence"
+    },
+    {
+      "test": "mechanic_registry::keyword_only_batch::keyword_only_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual mugato is exercised by the shared 01-keyword-only evidence"
+    },
+    {
+      "test": "scenario keyword_only_batch::keyword_only_batch_flying_cards_cannot_be_blocked_by_ground_creatures",
+      "covers": "actual mugato is exercised by the shared 01-keyword-only evidence"
+    },
+    {
+      "test": "scenario keyword_only_batch::keyword_only_batch_defender_cannot_attack_and_haste_can_attack_immediately",
+      "covers": "actual mugato is exercised by the shared 01-keyword-only evidence"
+    },
+    {
+      "test": "scenario keyword_only_batch::keyword_only_batch_vigilance_creatures_do_not_tap_to_attack",
+      "covers": "actual mugato is exercised by the shared 01-keyword-only evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -945,3 +945,30 @@ mod graveyard_to_top_batch;
 
 #[path = "../look_three_batch.rs"]
 mod look_three_batch;
+
+#[path = "../team_counters_batch.rs"]
+mod team_counters_batch;
+
+#[path = "../keyword_only_batch.rs"]
+mod keyword_only_batch;
+
+#[path = "../multi_mana_producers_batch.rs"]
+mod multi_mana_producers_batch;
+
+#[path = "../double_strike_grants_batch.rs"]
+mod double_strike_grants_batch;
+
+#[path = "../x_pumps_batch.rs"]
+mod x_pumps_batch;
+
+#[path = "../draw_two_lose_two_batch.rs"]
+mod draw_two_lose_two_batch;
+
+#[path = "../attack_tap_batch.rs"]
+mod attack_tap_batch;
+
+#[path = "../untap_self_batch.rs"]
+mod untap_self_batch;
+
+#[path = "../sac_artifact_pump_batch.rs"]
+mod sac_artifact_pump_batch;

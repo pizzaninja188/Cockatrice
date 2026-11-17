@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "d86f3d5e-838c-4787-9417-85a6997c3bde",
+  "spans": [
+    {
+      "face_id": "double_cleave",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "Keyword::DoubleStrike",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetKind::Creature",
+      "typed_path": "/faces/0/targeting/groups/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario double_strike_grants_batch::double_strike_grants_batch_cards_grant_double_strike_to_the_chosen_creature",
+      "covers": "actual double_cleave is exercised by the shared 04-double-strike-grants evidence"
+    },
+    {
+      "test": "scenario double_strike_grants_batch::double_strike_grants_batch_cards_reject_a_noncreature_target",
+      "covers": "actual double_cleave is exercised by the shared 04-double-strike-grants evidence"
+    },
+    {
+      "test": "mechanic_registry::double_strike_grants_batch::double_strike_grants_batch_maps_definitions",
+      "covers": "actual double_cleave is exercised by the shared 04-double-strike-grants evidence"
+    },
+    {
+      "test": "mechanic_registry::double_strike_grants_batch::double_strike_grants_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual double_cleave is exercised by the shared 04-double-strike-grants evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

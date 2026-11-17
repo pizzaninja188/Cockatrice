@@ -1,0 +1,14 @@
+// Oracle 4cfd04b3-57bd-4860-8b47-57a0fd0a23fa; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.10a-b (haste). No card-specific ruling.
+
+(
+  id: "raging_minotaur",
+  name: "Raging Minotaur",
+  face_id: "raging_minotaur",
+  mana_cost: "{2}{R}{R}",
+  types: ["Creature", "Minotaur", "Berserker"],
+  power: 3,
+  toughness: 3,
+  keywords: [Haste],
+)

@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "3095f2cf-05c3-4381-929f-c526b6fc30a7",
+  "spans": [
+    {
+      "face_id": "atog",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "TargetKind::AnyPermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "TargetController::You",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Artifact",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario sac_artifact_pump_batch::sac_artifact_pump_batch_cards_sacrifice_the_artifact_and_pump_the_source",
+      "covers": "actual atog is exercised by the shared 09-sac-artifact-pump evidence"
+    },
+    {
+      "test": "scenario sac_artifact_pump_batch::sac_artifact_pump_batch_cards_require_an_artifact_they_control",
+      "covers": "actual atog is exercised by the shared 09-sac-artifact-pump evidence"
+    },
+    {
+      "test": "mechanic_registry::sac_artifact_pump_batch::sac_artifact_pump_batch_maps_definitions",
+      "covers": "actual atog is exercised by the shared 09-sac-artifact-pump evidence"
+    },
+    {
+      "test": "mechanic_registry::sac_artifact_pump_batch::sac_artifact_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual atog is exercised by the shared 09-sac-artifact-pump evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

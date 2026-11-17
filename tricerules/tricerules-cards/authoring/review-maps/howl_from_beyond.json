@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "403cf6ae-48a9-4ea9-894e-7135cfca4e1b",
+  "spans": [
+    {
+      "face_id": "howl_from_beyond",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "Amount::X",
+      "typed_path": "/faces/0/spell_effect/0/PumpTarget/scale/basis"
+    },
+    {
+      "symbol": "TargetKind::Creature",
+      "typed_path": "/faces/0/targeting/groups/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario x_pumps_batch::x_pumps_batch_cards_add_x_power_and_no_toughness",
+      "covers": "actual howl_from_beyond is exercised by the shared 05-x-pumps evidence"
+    },
+    {
+      "test": "scenario x_pumps_batch::x_pumps_batch_cards_accept_x_zero_and_reject_an_unpaid_x",
+      "covers": "actual howl_from_beyond is exercised by the shared 05-x-pumps evidence"
+    },
+    {
+      "test": "mechanic_registry::x_pumps_batch::x_pumps_batch_maps_definitions",
+      "covers": "actual howl_from_beyond is exercised by the shared 05-x-pumps evidence"
+    },
+    {
+      "test": "mechanic_registry::x_pumps_batch::x_pumps_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual howl_from_beyond is exercised by the shared 05-x-pumps evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

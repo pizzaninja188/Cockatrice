@@ -1,0 +1,19 @@
+// Oracle 403cf6ae-48a9-4ea9-894e-7135cfca4e1b; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 107.3 (X is chosen on casting), 115.1 (target), 611.2a/613.4c (a power pump in layer 7c
+// lasts until end of turn) and 514.2 (cleanup ends the pump). No card-specific ruling.
+
+(
+  id: "howl_from_beyond",
+  name: "Howl from Beyond",
+  face_id: "howl_from_beyond",
+  mana_cost: "{X}{B}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(
+    power: 0,
+    toughness: 0,
+    subject: Chosen((kind: Creature)),
+    scale: (basis: Amount("X"), power_per_unit: 1, toughness_per_unit: 0),
+  )],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+)

@@ -2073,3 +2073,30 @@ mod graveyard_to_top_batch;
 
 #[path = "scenario/look_three_batch.rs"]
 mod look_three_batch;
+
+#[path = "scenario/team_counters_batch.rs"]
+mod team_counters_batch;
+
+#[path = "scenario/keyword_only_batch.rs"]
+mod keyword_only_batch;
+
+#[path = "scenario/multi_mana_producers_batch.rs"]
+mod multi_mana_producers_batch;
+
+#[path = "scenario/double_strike_grants_batch.rs"]
+mod double_strike_grants_batch;
+
+#[path = "scenario/x_pumps_batch.rs"]
+mod x_pumps_batch;
+
+#[path = "scenario/draw_two_lose_two_batch.rs"]
+mod draw_two_lose_two_batch;
+
+#[path = "scenario/attack_tap_batch.rs"]
+mod attack_tap_batch;
+
+#[path = "scenario/untap_self_batch.rs"]
+mod untap_self_batch;
+
+#[path = "scenario/sac_artifact_pump_batch.rs"]
+mod sac_artifact_pump_batch;

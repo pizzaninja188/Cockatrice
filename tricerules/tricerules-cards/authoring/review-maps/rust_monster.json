@@ -1,0 +1,65 @@
+{
+  "format_version": 1,
+  "oracle_id": "3da90ae6-a8cc-4633-bf49-7413ce91b697",
+  "spans": [
+    {
+      "face_id": "rust_monster",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords",
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::FirstStrike",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "TargetKind::AnyPermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "TargetController::You",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Artifact",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario sac_artifact_pump_batch::sac_artifact_pump_batch_cards_sacrifice_the_artifact_and_pump_the_source",
+      "covers": "actual rust_monster is exercised by the shared 09-sac-artifact-pump evidence"
+    },
+    {
+      "test": "scenario sac_artifact_pump_batch::sac_artifact_pump_batch_cards_require_an_artifact_they_control",
+      "covers": "actual rust_monster is exercised by the shared 09-sac-artifact-pump evidence"
+    },
+    {
+      "test": "mechanic_registry::sac_artifact_pump_batch::sac_artifact_pump_batch_maps_definitions",
+      "covers": "actual rust_monster is exercised by the shared 09-sac-artifact-pump evidence"
+    },
+    {
+      "test": "mechanic_registry::sac_artifact_pump_batch::sac_artifact_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual rust_monster is exercised by the shared 09-sac-artifact-pump evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

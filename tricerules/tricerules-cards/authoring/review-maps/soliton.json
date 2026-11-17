@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "c04b4323-db6a-4ab1-99b7-eef3acad3c4f",
+  "spans": [
+    {
+      "face_id": "soliton",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Untap",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario untap_self_batch::untap_self_batch_cards_spend_one_blue_mana_and_untap_the_source",
+      "covers": "actual soliton is exercised by the shared 08-untap-self evidence"
+    },
+    {
+      "test": "scenario untap_self_batch::untap_self_batch_cards_are_legal_on_an_untapped_source_and_reject_no_mana",
+      "covers": "actual soliton is exercised by the shared 08-untap-self evidence"
+    },
+    {
+      "test": "mechanic_registry::untap_self_batch::untap_self_batch_maps_definitions",
+      "covers": "actual soliton is exercised by the shared 08-untap-self evidence"
+    },
+    {
+      "test": "mechanic_registry::untap_self_batch::untap_self_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual soliton is exercised by the shared 08-untap-self evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

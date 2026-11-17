@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "6efad3d6-4886-4b62-a4ff-bc0622f9672a",
+  "spans": [
+    {
+      "face_id": "thunder_spirit",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "Keyword::FirstStrike",
+      "typed_path": "/faces/0/keywords"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario keyword_only_batch::keyword_only_batch_cards_enter_with_printed_bodies_and_keywords",
+      "covers": "actual thunder_spirit is exercised by the shared 01-keyword-only evidence"
+    },
+    {
+      "test": "mechanic_registry::keyword_only_batch::keyword_only_batch_maps_definitions",
+      "covers": "actual thunder_spirit is exercised by the shared 01-keyword-only evidence"
+    },
+    {
+      "test": "mechanic_registry::keyword_only_batch::keyword_only_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual thunder_spirit is exercised by the shared 01-keyword-only evidence"
+    },
+    {
+      "test": "scenario keyword_only_batch::keyword_only_batch_flying_cards_cannot_be_blocked_by_ground_creatures",
+      "covers": "actual thunder_spirit is exercised by the shared 01-keyword-only evidence"
+    },
+    {
+      "test": "scenario keyword_only_batch::keyword_only_batch_defender_cannot_attack_and_haste_can_attack_immediately",
+      "covers": "actual thunder_spirit is exercised by the shared 01-keyword-only evidence"
+    },
+    {
+      "test": "scenario keyword_only_batch::keyword_only_batch_vigilance_creatures_do_not_tap_to_attack",
+      "covers": "actual thunder_spirit is exercised by the shared 01-keyword-only evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

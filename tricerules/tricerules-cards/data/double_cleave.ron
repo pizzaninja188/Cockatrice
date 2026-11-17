@@ -1,0 +1,17 @@
+// Oracle d86f3d5e-838c-4787-9417-85a6997c3bde; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1 (target), 611.2a (the effect lasts until end of turn), 613.1f and 702.4
+// (double strike is granted in layer 6) and 514.2 (cleanup ends the grant). No card-specific ruling.
+
+(
+  id: "double_cleave",
+  name: "Double Cleave",
+  face_id: "double_cleave",
+  mana_cost: "{1}{R/W}",
+  types: ["Instant"],
+  spell_effect: [GrantKeywords(
+    subject: Chosen((kind: Creature)),
+    keywords: [DoubleStrike],
+  )],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+)

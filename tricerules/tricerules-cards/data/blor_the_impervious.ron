@@ -1,0 +1,15 @@
+// Oracle f5f2fa96-8e87-44bc-8c82-e217706d3cab; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.19a-b (trample), 702.18a-b (hexproof) and 702.12a-b (indestructible). No card-specific ruling.
+
+(
+  id: "blor_the_impervious",
+  name: "Blor the Impervious",
+  face_id: "blor_the_impervious",
+  mana_cost: "{3}{G}{G}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Frog", "Warrior"],
+  power: 3,
+  toughness: 3,
+  keywords: [Trample, Hexproof, Indestructible],
+)

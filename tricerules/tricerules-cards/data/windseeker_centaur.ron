@@ -1,0 +1,14 @@
+// Oracle b3d40cf7-a529-4bd0-8df7-231630a49bb8; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.20a-b (vigilance). No card-specific ruling.
+
+(
+  id: "windseeker_centaur",
+  name: "Windseeker Centaur",
+  face_id: "windseeker_centaur",
+  mana_cost: "{1}{R}{R}",
+  types: ["Creature", "Centaur"],
+  power: 2,
+  toughness: 2,
+  keywords: [Vigilance],
+)

@@ -1,0 +1,50 @@
+{
+  "format_version": 1,
+  "oracle_id": "c6207f6a-a624-4754-88f5-dbe700c841ff",
+  "spans": [
+    {
+      "face_id": "sign_in_blood",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::TargetPlayerDraws",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::TargetPlayerLosesLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetKind::AnyPlayer",
+      "typed_path": "/faces/0/targeting/groups/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario draw_two_lose_two_batch::draw_two_lose_two_batch_cards_apply_to_the_targeted_opponent",
+      "covers": "actual sign_in_blood is exercised by the shared 06-draw-two-lose-two evidence"
+    },
+    {
+      "test": "scenario draw_two_lose_two_batch::draw_two_lose_two_batch_cards_can_target_their_controller",
+      "covers": "actual sign_in_blood is exercised by the shared 06-draw-two-lose-two evidence"
+    },
+    {
+      "test": "mechanic_registry::draw_two_lose_two_batch::draw_two_lose_two_batch_maps_definitions",
+      "covers": "actual sign_in_blood is exercised by the shared 06-draw-two-lose-two evidence"
+    },
+    {
+      "test": "mechanic_registry::draw_two_lose_two_batch::draw_two_lose_two_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual sign_in_blood is exercised by the shared 06-draw-two-lose-two evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

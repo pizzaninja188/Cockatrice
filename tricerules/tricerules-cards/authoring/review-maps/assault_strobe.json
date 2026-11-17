@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "9bf4ee0f-6e28-4793-b251-f81ee444a119",
+  "spans": [
+    {
+      "face_id": "assault_strobe",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "Keyword::DoubleStrike",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetKind::Creature",
+      "typed_path": "/faces/0/targeting/groups/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario double_strike_grants_batch::double_strike_grants_batch_cards_grant_double_strike_to_the_chosen_creature",
+      "covers": "actual assault_strobe is exercised by the shared 04-double-strike-grants evidence"
+    },
+    {
+      "test": "scenario double_strike_grants_batch::double_strike_grants_batch_cards_reject_a_noncreature_target",
+      "covers": "actual assault_strobe is exercised by the shared 04-double-strike-grants evidence"
+    },
+    {
+      "test": "mechanic_registry::double_strike_grants_batch::double_strike_grants_batch_maps_definitions",
+      "covers": "actual assault_strobe is exercised by the shared 04-double-strike-grants evidence"
+    },
+    {
+      "test": "mechanic_registry::double_strike_grants_batch::double_strike_grants_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual assault_strobe is exercised by the shared 04-double-strike-grants evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

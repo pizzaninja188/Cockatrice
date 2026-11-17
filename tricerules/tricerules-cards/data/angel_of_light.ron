@@ -1,0 +1,14 @@
+// Oracle d12cf640-ff60-4935-a2c7-28ab788de42c; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.9a-b (flying) and 702.20a-b (vigilance). No card-specific ruling.
+
+(
+  id: "angel_of_light",
+  name: "Angel of Light",
+  face_id: "angel_of_light",
+  mana_cost: "{4}{W}",
+  types: ["Creature", "Angel"],
+  power: 3,
+  toughness: 3,
+  keywords: [Flying, Vigilance],
+)

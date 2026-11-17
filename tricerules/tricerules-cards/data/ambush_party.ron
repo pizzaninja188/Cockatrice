@@ -1,0 +1,14 @@
+// Oracle 454ed336-362d-46d9-96d5-8fcaa8a1c543; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.7a-b (first strike) and 702.10a-b (haste). No card-specific ruling.
+
+(
+  id: "ambush_party",
+  name: "Ambush Party",
+  face_id: "ambush_party",
+  mana_cost: "{4}{R}",
+  types: ["Creature", "Human", "Rogue"],
+  power: 3,
+  toughness: 1,
+  keywords: [FirstStrike, Haste],
+)
