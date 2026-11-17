@@ -918,3 +918,30 @@ mod etb_pump_flying_batch;
 
 #[path = "../mill_two_batch.rs"]
 mod mill_two_batch;
+
+#[path = "../blocked_by_power_two_batch.rs"]
+mod blocked_by_power_two_batch;
+
+#[path = "../max_one_blocker_batch.rs"]
+mod max_one_blocker_batch;
+
+#[path = "../counter_typed_spells_batch.rs"]
+mod counter_typed_spells_batch;
+
+#[path = "../graveyard_type_recursion_batch.rs"]
+mod graveyard_type_recursion_batch;
+
+#[path = "../bounce_spells_batch.rs"]
+mod bounce_spells_batch;
+
+#[path = "../etb_freeze_batch.rs"]
+mod etb_freeze_batch;
+
+#[path = "../dies_destroy_land_batch.rs"]
+mod dies_destroy_land_batch;
+
+#[path = "../graveyard_to_top_batch.rs"]
+mod graveyard_to_top_batch;
+
+#[path = "../look_three_batch.rs"]
+mod look_three_batch;

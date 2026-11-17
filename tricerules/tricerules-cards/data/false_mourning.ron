@@ -1,0 +1,16 @@
+// Oracle 31a331a0-3065-4ecb-9e6a-ab11e241833b; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1 and 601.2c (one graveyard-card target), 400.7 (a zone change makes a new
+// object), 401.4 (top of library) and 608.2b (an illegal sole target fizzles).
+
+(
+  id: "false_mourning",
+  name: "False Mourning",
+  face_id: "false_mourning",
+  mana_cost: "{G}",
+  types: ["Sorcery"],
+  spell_effect: [MoveGraveyardCards(
+    filter: (),
+    destination: LibraryTop,
+  )],
+)

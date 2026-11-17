@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "666af637-9282-4121-962a-048e528f9221",
+  "spans": [
+    {
+      "face_id": "steel_leaf_champion",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::SelfCombatRestriction",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "CombatRestriction::cant_be_blocked_by",
+      "typed_path": "/faces/0/static_abilities/0/definition/SelfCombatRestriction/restriction"
+    },
+    {
+      "symbol": "PowerComparison::AtMost",
+      "typed_path": "/faces/0/static_abilities/0/definition/SelfCombatRestriction/restriction/cant_be_blocked_by/0/power"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario blocked_by_power_two_batch::blocked_by_power_two_batch_cards_reject_weak_blockers_and_allow_power_three",
+      "covers": "actual steel_leaf_champion is exercised by the shared blocked_by_power_two_batch actual-card scenario"
+    },
+    {
+      "test": "scenario blocked_by_power_two_batch::blocked_by_power_two_batch_cards_do_not_undo_a_legal_block_after_a_power_change",
+      "covers": "actual steel_leaf_champion is exercised by the shared blocked_by_power_two_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::blocked_by_power_two_batch::blocked_by_power_two_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of steel_leaf_champion"
+    },
+    {
+      "test": "mechanic_registry::blocked_by_power_two_batch::blocked_by_power_two_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for steel_leaf_champion"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

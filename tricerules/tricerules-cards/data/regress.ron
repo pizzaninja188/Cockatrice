@@ -1,0 +1,13 @@
+// Oracle 2fa763ad-4d94-4c3a-a099-13ac22c09ce4; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1 (one permanent target), 400.3 (the card moves to its owner's hand), 110.2
+// (controller) and 608.2b (an illegal sole target fizzles).
+
+(
+  id: "regress",
+  name: "Regress",
+  face_id: "regress",
+  mana_cost: "{2}{U}",
+  types: ["Instant"],
+  spell_effect: [ReturnToOwnersHand(subject: Chosen((kind: AnyPermanent)))],
+)

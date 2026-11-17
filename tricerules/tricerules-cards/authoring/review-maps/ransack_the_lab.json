@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "9b97a7fe-c5d9-4698-a49c-183b3f1ce4db",
+  "spans": [
+    {
+      "face_id": "ransack_the_lab",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::LookChooseOneToHandRestToGraveyard",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario look_three_batch::look_three_batch_cards_partition_exactly_the_top_three",
+      "covers": "actual ransack_the_lab is exercised by the shared look_three_batch actual-card scenario"
+    },
+    {
+      "test": "scenario look_three_batch::look_three_batch_cards_keep_the_look_private_to_the_resolving_controller",
+      "covers": "actual ransack_the_lab is exercised by the shared look_three_batch actual-card scenario"
+    },
+    {
+      "test": "scenario look_three_batch::look_three_batch_cards_handle_a_library_with_fewer_than_three_cards",
+      "covers": "actual ransack_the_lab is exercised by the shared look_three_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::look_three_batch::look_three_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of ransack_the_lab"
+    },
+    {
+      "test": "mechanic_registry::look_three_batch::look_three_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for ransack_the_lab"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

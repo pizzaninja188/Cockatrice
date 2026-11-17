@@ -2046,3 +2046,30 @@ mod etb_pump_flying_batch;
 
 #[path = "scenario/mill_two_batch.rs"]
 mod mill_two_batch;
+
+#[path = "scenario/blocked_by_power_two_batch.rs"]
+mod blocked_by_power_two_batch;
+
+#[path = "scenario/max_one_blocker_batch.rs"]
+mod max_one_blocker_batch;
+
+#[path = "scenario/counter_typed_spells_batch.rs"]
+mod counter_typed_spells_batch;
+
+#[path = "scenario/graveyard_type_recursion_batch.rs"]
+mod graveyard_type_recursion_batch;
+
+#[path = "scenario/bounce_spells_batch.rs"]
+mod bounce_spells_batch;
+
+#[path = "scenario/etb_freeze_batch.rs"]
+mod etb_freeze_batch;
+
+#[path = "scenario/dies_destroy_land_batch.rs"]
+mod dies_destroy_land_batch;
+
+#[path = "scenario/graveyard_to_top_batch.rs"]
+mod graveyard_to_top_batch;
+
+#[path = "scenario/look_three_batch.rs"]
+mod look_three_batch;

@@ -1,0 +1,29 @@
+// Oracle 9400e348-b0c6-4aa3-b92c-1fbc8bc3baf9; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters-the-battlefield trigger), 603.3d/608.2c (stack and resolution order),
+// 115.1/608.2b (target), 611.3 and 502.3 (the creature skips its controller's next untap
+// step). The pinned rulings confirm that an already-tapped target still skips that step.
+
+(
+  id: "frost_lynx",
+  name: "Frost Lynx",
+  face_id: "frost_lynx",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Elemental", "Cat"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      Tap(subject: Chosen((kind: Creature, controller: Opponent))),
+      SkipNextUntap(target: (kind: Creature, controller: Opponent)),
+    ],
+    targeting: Some((groups: [(
+      min: 1, max: 1,
+      prompt: "Choose target creature an opponent controls",
+      effect_indices: [0, 1],
+    )])),
+  )],
+)

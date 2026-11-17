@@ -1,0 +1,252 @@
+//! Registry conformance for the queue-v27 typed-spell counter cohort.
+//!
+//! Each card is a normal-layout printed card whose complete typed shape is asserted
+//! against the pinned Oracle text. Fingerprints are SHA-256 of the exact normalized
+//! Oracle lines.
+
+use tricerules_cards::primitives::{CardTypeFilter, SpellEffectKind};
+use tricerules_cards::Layout;
+
+struct Card {
+    id: &'static str,
+    name: &'static str,
+    mana: &'static str,
+    supertypes: &'static [&'static str],
+    types: &'static [&'static str],
+    power: Option<u32>,
+    toughness: Option<u32>,
+    keywords: &'static [&'static str],
+    fingerprint: &'static str,
+}
+
+const CARDS: &[Card] = &[
+    Card {
+        id: "dispel",
+        name: "Dispel",
+        mana: "{U}",
+        supertypes: &[],
+        types: &["Instant"],
+        power: None,
+        toughness: None,
+        keywords: &[],
+        fingerprint: "6e95249408b40058d5d470cd6e9edc2694825d3bac6e58ae0110b26551f020c1",
+    },
+    Card {
+        id: "flash_counter",
+        name: "Flash Counter",
+        mana: "{1}{U}",
+        supertypes: &[],
+        types: &["Instant"],
+        power: None,
+        toughness: None,
+        keywords: &[],
+        fingerprint: "6e95249408b40058d5d470cd6e9edc2694825d3bac6e58ae0110b26551f020c1",
+    },
+    Card {
+        id: "envelop",
+        name: "Envelop",
+        mana: "{U}",
+        supertypes: &[],
+        types: &["Instant"],
+        power: None,
+        toughness: None,
+        keywords: &[],
+        fingerprint: "e38618d5da37ef7e1c3bc78a3b09846b3edfbce9e97814ae99d04b0cb811cef9",
+    },
+    Card {
+        id: "extinguish",
+        name: "Extinguish",
+        mana: "{1}{U}",
+        supertypes: &[],
+        types: &["Instant"],
+        power: None,
+        toughness: None,
+        keywords: &[],
+        fingerprint: "e38618d5da37ef7e1c3bc78a3b09846b3edfbce9e97814ae99d04b0cb811cef9",
+    },
+];
+
+fn face<'a>(
+    registry: &'a tricerules_cards::CardRegistry,
+    id: &str,
+) -> &'a tricerules_cards::CardFace {
+    registry
+        .get(id)
+        .unwrap_or_else(|| panic!("missing {id}"))
+        .primary_face()
+}
+
+#[test]
+fn counter_typed_spells_batch_maps_definitions() {
+    let registry = tricerules_cards::registry::global();
+    for card in CARDS {
+        let definition = registry
+            .get(card.id)
+            .unwrap_or_else(|| panic!("missing {}", card.id));
+        assert_eq!(
+            registry.id_for_name(card.name),
+            Some(card.id),
+            "{}",
+            card.id
+        );
+        let f = face(registry, card.id);
+        assert_eq!(f.face_id.as_str(), card.id, "{} face id", card.id);
+        assert_eq!(f.name, card.name, "{} name", card.id);
+        assert_eq!(f.mana_cost.to_string(), card.mana, "{} mana", card.id);
+        assert_eq!(f.supertypes, card.supertypes, "{} supertypes", card.id);
+        assert_eq!(f.types, card.types, "{} types", card.id);
+        assert_eq!(f.power, card.power, "{} power", card.id);
+        assert_eq!(f.toughness, card.toughness, "{} toughness", card.id);
+        assert_eq!(
+            f.keywords.len(),
+            card.keywords.len(),
+            "{} keywords",
+            card.id
+        );
+        for keyword in card.keywords {
+            assert!(
+                f.keywords
+                    .iter()
+                    .any(|value| format!("{value:?}") == *keyword),
+                "{} keyword {keyword}",
+                card.id
+            );
+        }
+        match card.id {
+            "dispel" => {
+                assert_eq!(definition.layout, Layout::Normal, "{}", card.id);
+                assert!(f.activated_abilities.is_empty(), "{}", card.id);
+                assert!(f.triggered_abilities.is_empty(), "{}", card.id);
+                assert!(f.static_abilities.is_empty(), "{}", card.id);
+                assert!(f.targeting.is_none(), "{}", card.id);
+                let [SpellEffectKind::CounterTargetSpell {
+                    spell_filter,
+                    unless_controller_pays,
+                    unless_controller_pays_by_cast_cost,
+                }] = f.spell_effect.as_slice()
+                else {
+                    panic!("{}: counter target spell", card.id);
+                };
+                assert_eq!(
+                    spell_filter.card_type,
+                    Some(CardTypeFilter::Instant),
+                    "{}",
+                    card.id
+                );
+                assert!(spell_filter.is_color.is_none());
+                assert_eq!(spell_filter.min_mana_value, None);
+                assert_eq!(spell_filter.max_mana_value, None);
+                assert!(
+                    unless_controller_pays.is_none()
+                        && unless_controller_pays_by_cast_cost.is_none()
+                );
+            }
+            "flash_counter" => {
+                assert_eq!(definition.layout, Layout::Normal, "{}", card.id);
+                assert!(f.activated_abilities.is_empty(), "{}", card.id);
+                assert!(f.triggered_abilities.is_empty(), "{}", card.id);
+                assert!(f.static_abilities.is_empty(), "{}", card.id);
+                assert!(f.targeting.is_none(), "{}", card.id);
+                let [SpellEffectKind::CounterTargetSpell {
+                    spell_filter,
+                    unless_controller_pays,
+                    unless_controller_pays_by_cast_cost,
+                }] = f.spell_effect.as_slice()
+                else {
+                    panic!("{}: counter target spell", card.id);
+                };
+                assert_eq!(
+                    spell_filter.card_type,
+                    Some(CardTypeFilter::Instant),
+                    "{}",
+                    card.id
+                );
+                assert!(spell_filter.is_color.is_none());
+                assert_eq!(spell_filter.min_mana_value, None);
+                assert_eq!(spell_filter.max_mana_value, None);
+                assert!(
+                    unless_controller_pays.is_none()
+                        && unless_controller_pays_by_cast_cost.is_none()
+                );
+            }
+            "envelop" => {
+                assert_eq!(definition.layout, Layout::Normal, "{}", card.id);
+                assert!(f.activated_abilities.is_empty(), "{}", card.id);
+                assert!(f.triggered_abilities.is_empty(), "{}", card.id);
+                assert!(f.static_abilities.is_empty(), "{}", card.id);
+                assert!(f.targeting.is_none(), "{}", card.id);
+                let [SpellEffectKind::CounterTargetSpell {
+                    spell_filter,
+                    unless_controller_pays,
+                    unless_controller_pays_by_cast_cost,
+                }] = f.spell_effect.as_slice()
+                else {
+                    panic!("{}: counter target spell", card.id);
+                };
+                assert_eq!(
+                    spell_filter.card_type,
+                    Some(CardTypeFilter::Sorcery),
+                    "{}",
+                    card.id
+                );
+                assert!(spell_filter.is_color.is_none());
+                assert_eq!(spell_filter.min_mana_value, None);
+                assert_eq!(spell_filter.max_mana_value, None);
+                assert!(
+                    unless_controller_pays.is_none()
+                        && unless_controller_pays_by_cast_cost.is_none()
+                );
+            }
+            "extinguish" => {
+                assert_eq!(definition.layout, Layout::Normal, "{}", card.id);
+                assert!(f.activated_abilities.is_empty(), "{}", card.id);
+                assert!(f.triggered_abilities.is_empty(), "{}", card.id);
+                assert!(f.static_abilities.is_empty(), "{}", card.id);
+                assert!(f.targeting.is_none(), "{}", card.id);
+                let [SpellEffectKind::CounterTargetSpell {
+                    spell_filter,
+                    unless_controller_pays,
+                    unless_controller_pays_by_cast_cost,
+                }] = f.spell_effect.as_slice()
+                else {
+                    panic!("{}: counter target spell", card.id);
+                };
+                assert_eq!(
+                    spell_filter.card_type,
+                    Some(CardTypeFilter::Sorcery),
+                    "{}",
+                    card.id
+                );
+                assert!(spell_filter.is_color.is_none());
+                assert_eq!(spell_filter.min_mana_value, None);
+                assert_eq!(spell_filter.max_mana_value, None);
+                assert!(
+                    unless_controller_pays.is_none()
+                        && unless_controller_pays_by_cast_cost.is_none()
+                );
+            }
+            _ => unreachable!("known card"),
+        }
+    }
+}
+
+#[test]
+fn counter_typed_spells_batch_fingerprints_match_the_pinned_oracle_text() {
+    let fingerprints = include_str!("../presentation/oracle_fingerprints.tsv");
+    for card in CARDS {
+        let row = fingerprints
+            .lines()
+            .find(|line| line.starts_with(&format!("{}\t", card.id)))
+            .unwrap_or_else(|| panic!("missing fingerprint row for {}", card.id));
+        let fields: Vec<&str> = row.split('\t').collect();
+        assert_eq!(fields.len(), 5, "fingerprint row shape: {row}");
+        assert_eq!(fields[0], card.id);
+        assert_eq!(fields[1], card.name);
+        assert_eq!(fields[2], card.id);
+        assert_eq!(
+            fields[4], card.fingerprint,
+            "fingerprint drift for {}",
+            card.id
+        );
+    }
+}

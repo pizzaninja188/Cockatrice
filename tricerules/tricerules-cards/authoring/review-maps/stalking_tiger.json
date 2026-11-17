@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "e6af1429-276f-41a8-88d0-062661dc0cd4",
+  "spans": [
+    {
+      "face_id": "stalking_tiger",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::SelfCombatRestriction",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "CombatRestriction::maximum_blockers",
+      "typed_path": "/faces/0/static_abilities/0/definition/SelfCombatRestriction/restriction"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario max_one_blocker_batch::max_one_blocker_batch_cards_reject_two_blockers_and_accept_one",
+      "covers": "actual stalking_tiger is exercised by the shared max_one_blocker_batch actual-card scenario"
+    },
+    {
+      "test": "scenario max_one_blocker_batch::max_one_blocker_batch_cards_are_engine_authoritative_in_public_annotations",
+      "covers": "actual stalking_tiger is exercised by the shared max_one_blocker_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::max_one_blocker_batch::max_one_blocker_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of stalking_tiger"
+    },
+    {
+      "test": "mechanic_registry::max_one_blocker_batch::max_one_blocker_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for stalking_tiger"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

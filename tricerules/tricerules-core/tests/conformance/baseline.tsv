@@ -471,6 +471,7 @@ calciform_pools	0	ability:1	exercised
 calciform_pools	0	ability:2	exercised
 calciform_pools	0	land	exercised
 call_the_cavalry	0	cast	exercised
+call_to_mind	0	cast	unsupported: target group 0 needs a richer fixture
 callous_inspector	0	cast	exercised
 campus_guide	0	cast	exercised
 canal_monitor	0	cast	exercised
@@ -858,6 +859,7 @@ disenchant	0	cast	exercised
 disentomb	0	cast	exercised
 dismal_backwater	0	ability:0	exercised
 dismal_backwater	0	land	exercised
+dispel	0	cast	unsupported: target group 0 needs a richer fixture
 dispelling_exhale	0	cast	unsupported: target group 0 needs a richer fixture
 disruptive_stormbrood_petty_revenge	0	cast	exercised
 disruptive_stormbrood_petty_revenge	1	cast	exercised
@@ -992,6 +994,7 @@ engulfing_eruption	0	cast	exercised
 enormous_baloth	0	cast	exercised
 enter_the_enigma	0	cast	exercised
 enterprising_scallywag	0	cast	exercised
+envelop	0	cast	unsupported: target group 0 needs a richer fixture
 environmental_scientist	0	cast	exercised
 envoy_of_okinec_ahau	0	ability:0	exercised
 envoy_of_okinec_ahau	0	cast	exercised
@@ -1034,6 +1037,7 @@ exploration	0	cast	exercised
 explosive_apparatus	0	ability:0	exercised
 explosive_apparatus	0	cast	exercised
 explosive_derailment	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
+extinguish	0	cast	unsupported: target group 0 needs a richer fixture
 extinguisher_battleship	0	ability:0	exercised
 extinguisher_battleship	0	cast	exercised
 exultant_skymarcher	0	cast	exercised
@@ -1152,6 +1156,7 @@ flamecache_gecko	0	cast	exercised
 flamekin_gildweaver	0	cast	exercised
 flametongue_kavu	0	cast	exercised
 flaring_cinder	0	cast	exercised
+flash_counter	0	cast	unsupported: target group 0 needs a richer fixture
 flashfreeze	0	cast	exercised
 fleetfoot_dancer	0	cast	exercised
 fleeting_distraction	0	cast	exercised
@@ -2575,6 +2580,7 @@ reckless_ransacking	0	cast	exercised
 reckless_waif_merciless_predator	0	cast	exercised
 reckless_waif_merciless_predator	1	cast	intentional: face unavailable from hand
 reclamation_sage	0	cast	exercised
+reconstruction	0	cast	unsupported: target group 0 needs a richer fixture
 red_guardian,_super-soldier	0	cast	exercised
 red_tiger_mechan	0	cast	exercised
 redcap_thief	0	cast	exercised
@@ -2585,6 +2591,7 @@ refute	0	cast	unsupported: target group 0 needs a richer fixture
 regal_unicorn	0	cast	exercised
 regathan_firecat	0	cast	exercised
 reigning_victor	0	cast	exercised
+relearn	0	cast	unsupported: target group 0 needs a richer fixture
 release_the_dogs	0	cast	exercised
 relic_sloth	0	cast	exercised
 reliquary_tower	0	ability:0	exercised
@@ -2638,6 +2645,7 @@ rise_again	0	cast	exercised
 risen_sanctuary	0	cast	exercised
 risky_research	0	cast	exercised
 risky_shortcut	0	cast	exercised
+ritual_of_restoration	0	cast	unsupported: target group 0 needs a richer fixture
 river_boa	0	ability:0	exercised
 river_boa	0	cast	exercised
 river_herald_guide	0	cast	exercised
@@ -2732,6 +2740,7 @@ safewright_cavalry	0	cast	exercised
 sage_of_days	0	cast	exercised
 sage_of_fables	0	ability:0	unsupported: nonmana costs need additional fixture resources
 sage_of_fables	0	cast	exercised
+sages_knowledge	0	cast	unsupported: target group 0 needs a richer fixture
 sagu_pummeler	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 sagu_pummeler	0	cast	exercised
 sagu_wildling_roost_seek	0	cast	exercised

@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "7cfd0320-0b1c-4ef4-8e17-600cbcbddd6f",
+  "spans": [
+    {
+      "face_id": "ritual_of_restoration",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "GraveyardDestination::Hand",
+      "typed_path": "/faces/0/spell_effect/0/MoveGraveyardCards/destination"
+    },
+    {
+      "symbol": "CardTypeFilter",
+      "typed_path": "/faces/0/spell_effect/0/MoveGraveyardCards/filter/card/card_type"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario graveyard_type_recursion_batch::graveyard_type_recursion_batch_cards_return_only_the_chosen_legal_card",
+      "covers": "actual ritual_of_restoration is exercised by the shared graveyard_type_recursion_batch actual-card scenario"
+    },
+    {
+      "test": "scenario graveyard_type_recursion_batch::graveyard_type_recursion_batch_cards_fizzle_when_the_target_leaves_the_graveyard",
+      "covers": "actual ritual_of_restoration is exercised by the shared graveyard_type_recursion_batch actual-card scenario"
+    },
+    {
+      "test": "scenario graveyard_type_recursion_batch::graveyard_type_recursion_batch_cards_reject_the_wrong_type_opponents_graveyard_and_missing_target",
+      "covers": "actual ritual_of_restoration is exercised by the shared graveyard_type_recursion_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::graveyard_type_recursion_batch::graveyard_type_recursion_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of ritual_of_restoration"
+    },
+    {
+      "test": "mechanic_registry::graveyard_type_recursion_batch::graveyard_type_recursion_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for ritual_of_restoration"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

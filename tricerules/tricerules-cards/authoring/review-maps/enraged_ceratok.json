@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "e1f3f377-c7b1-474c-aed6-78b061d138c1",
+  "spans": [
+    {
+      "face_id": "enraged_ceratok",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::SelfCombatRestriction",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "CombatRestriction::cant_be_blocked_by",
+      "typed_path": "/faces/0/static_abilities/0/definition/SelfCombatRestriction/restriction"
+    },
+    {
+      "symbol": "PowerComparison::AtMost",
+      "typed_path": "/faces/0/static_abilities/0/definition/SelfCombatRestriction/restriction/cant_be_blocked_by/0/power"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario blocked_by_power_two_batch::blocked_by_power_two_batch_cards_reject_weak_blockers_and_allow_power_three",
+      "covers": "actual enraged_ceratok is exercised by the shared blocked_by_power_two_batch actual-card scenario"
+    },
+    {
+      "test": "scenario blocked_by_power_two_batch::blocked_by_power_two_batch_cards_do_not_undo_a_legal_block_after_a_power_change",
+      "covers": "actual enraged_ceratok is exercised by the shared blocked_by_power_two_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::blocked_by_power_two_batch::blocked_by_power_two_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of enraged_ceratok"
+    },
+    {
+      "test": "mechanic_registry::blocked_by_power_two_batch::blocked_by_power_two_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for enraged_ceratok"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

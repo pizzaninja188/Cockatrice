@@ -1,0 +1,13 @@
+// Oracle 06e2ce8e-7341-4448-8625-cb1574eb179d; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1 (one permanent target), 400.3 (the card moves to its owner's hand), 110.2
+// (controller) and 608.2b (an illegal sole target fizzles).
+
+(
+  id: "void_snare",
+  name: "Void Snare",
+  face_id: "void_snare",
+  mana_cost: "{U}",
+  types: ["Sorcery"],
+  spell_effect: [ReturnToOwnersHand(subject: Chosen((kind: AnyPermanent, excluded_permanent_types: [Land])))],
+)

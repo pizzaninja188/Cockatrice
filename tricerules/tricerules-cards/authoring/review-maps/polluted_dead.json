@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "5ffca600-5286-4086-9efe-c398babeb6ae",
+  "spans": [
+    {
+      "face_id": "polluted_dead",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Land",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/Destroy/subject/Chosen/permanent_types/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario dies_destroy_land_batch::dies_destroy_land_batch_cards_destroy_the_chosen_land_of_either_player",
+      "covers": "actual polluted_dead is exercised by the shared dies_destroy_land_batch actual-card scenario"
+    },
+    {
+      "test": "scenario dies_destroy_land_batch::dies_destroy_land_batch_cards_must_choose_your_own_land_when_the_opponent_has_none",
+      "covers": "actual polluted_dead is exercised by the shared dies_destroy_land_batch actual-card scenario"
+    },
+    {
+      "test": "scenario dies_destroy_land_batch::dies_destroy_land_batch_cards_do_not_trigger_when_exiled",
+      "covers": "actual polluted_dead is exercised by the shared dies_destroy_land_batch actual-card scenario"
+    },
+    {
+      "test": "scenario dies_destroy_land_batch::dies_destroy_land_batch_cards_fizzle_when_the_chosen_land_leaves",
+      "covers": "actual polluted_dead is exercised by the shared dies_destroy_land_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::dies_destroy_land_batch::dies_destroy_land_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of polluted_dead"
+    },
+    {
+      "test": "mechanic_registry::dies_destroy_land_batch::dies_destroy_land_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for polluted_dead"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

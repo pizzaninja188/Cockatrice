@@ -1,0 +1,22 @@
+// Oracle 2be3969b-a427-47be-a49c-47b98e3d6b5f; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 509.1b (a declared blocker must satisfy the attacker's restrictions) and 613.1g/613.4
+// (the power comparison uses current characteristics). The pinned rulings confirm that a
+// power change after a legal block does not undo that block.
+
+(
+  id: "giltgrove_stalker",
+  name: "Giltgrove Stalker",
+  face_id: "giltgrove_stalker",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Merfolk", "Warrior"],
+  power: 2,
+  toughness: 1,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: SelfCombatRestriction(restriction: (
+      cant_be_blocked_by: [(kind: Creature, power: Some(AtMost(2)))],
+    )),
+  )],
+)

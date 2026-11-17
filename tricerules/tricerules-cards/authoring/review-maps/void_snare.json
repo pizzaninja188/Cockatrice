@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "06e2ce8e-7341-4448-8625-cb1574eb179d",
+  "spans": [
+    {
+      "face_id": "void_snare",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/spell_effect/0/ReturnToOwnersHand/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario bounce_spells_batch::bounce_spells_batch_cards_return_an_opponents_creature_to_its_owners_hand",
+      "covers": "actual void_snare is exercised by the shared bounce_spells_batch actual-card scenario"
+    },
+    {
+      "test": "scenario bounce_spells_batch::bounce_spells_batch_cards_return_their_controllers_own_permanent",
+      "covers": "actual void_snare is exercised by the shared bounce_spells_batch actual-card scenario"
+    },
+    {
+      "test": "scenario bounce_spells_batch::bounce_spells_batch_cards_apply_the_printed_land_restriction",
+      "covers": "actual void_snare is exercised by the shared bounce_spells_batch actual-card scenario"
+    },
+    {
+      "test": "scenario bounce_spells_batch::bounce_spells_batch_cards_reject_a_missing_target_and_fizzle_a_stale_one",
+      "covers": "actual void_snare is exercised by the shared bounce_spells_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::bounce_spells_batch::bounce_spells_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of void_snare"
+    },
+    {
+      "test": "mechanic_registry::bounce_spells_batch::bounce_spells_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for void_snare"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

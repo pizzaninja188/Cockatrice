@@ -1,0 +1,19 @@
+// Oracle 1816b87c-73ba-4bfc-a51e-c982381c067d; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 509.1b (only one creature may be declared as a blocker). Bristling Boar's pinned
+// ruling notes that menace and this restriction together forbid blocking entirely.
+
+(
+  id: "norwood_riders",
+  name: "Norwood Riders",
+  face_id: "norwood_riders",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Elf"],
+  power: 3,
+  toughness: 3,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: SelfCombatRestriction(restriction: (maximum_blockers: Some(1))),
+  )],
+)

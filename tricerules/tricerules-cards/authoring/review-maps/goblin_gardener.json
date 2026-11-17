@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "29781b19-0917-4d8f-abe3-df0b7e96d8a6",
+  "spans": [
+    {
+      "face_id": "goblin_gardener",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Land",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/Destroy/subject/Chosen/permanent_types/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario dies_destroy_land_batch::dies_destroy_land_batch_cards_destroy_the_chosen_land_of_either_player",
+      "covers": "actual goblin_gardener is exercised by the shared dies_destroy_land_batch actual-card scenario"
+    },
+    {
+      "test": "scenario dies_destroy_land_batch::dies_destroy_land_batch_cards_must_choose_your_own_land_when_the_opponent_has_none",
+      "covers": "actual goblin_gardener is exercised by the shared dies_destroy_land_batch actual-card scenario"
+    },
+    {
+      "test": "scenario dies_destroy_land_batch::dies_destroy_land_batch_cards_do_not_trigger_when_exiled",
+      "covers": "actual goblin_gardener is exercised by the shared dies_destroy_land_batch actual-card scenario"
+    },
+    {
+      "test": "scenario dies_destroy_land_batch::dies_destroy_land_batch_cards_fizzle_when_the_chosen_land_leaves",
+      "covers": "actual goblin_gardener is exercised by the shared dies_destroy_land_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::dies_destroy_land_batch::dies_destroy_land_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of goblin_gardener"
+    },
+    {
+      "test": "mechanic_registry::dies_destroy_land_batch::dies_destroy_land_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for goblin_gardener"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
