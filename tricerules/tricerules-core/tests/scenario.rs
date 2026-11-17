@@ -2154,3 +2154,12 @@ mod q30_etb_bounce_batch;
 
 #[path = "scenario/q30_exile_creature_filtered_batch.rs"]
 mod q30_exile_creature_filtered_batch;
+
+#[path = "scenario/q31_checklands_batch.rs"]
+mod q31_checklands_batch;
+
+#[path = "scenario/q31_bounce_lands_batch.rs"]
+mod q31_bounce_lands_batch;
+
+#[path = "scenario/q31_turbulent_lands_batch.rs"]
+mod q31_turbulent_lands_batch;

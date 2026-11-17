@@ -1,0 +1,38 @@
+// Oracle db444f9d-4dde-4308-b0f2-7acfe6de871a; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 305.6/305.8 (basic land subtypes and intrinsic mana) and 614.1d/614.12 (the entry replacement checks the live opponent total before the land enters).
+// The pinned rulings restate the two basic land types/nonbasic status and simultaneous entry; the eight-or-more boundary is printed Oracle text.
+
+(
+  id: "turbulent_steppe",
+  name: "Turbulent Steppe",
+  face_id: "turbulent_steppe",
+  mana_cost: "",
+  types: ["Land", "Mountain", "Plains"],
+  activated_abilities: [
+    (
+      ability_id: "mana",
+      presentation: OracleLines([1]),
+      intrinsic_land_mana: true,
+      costs: [Tap],
+      effect: [ProduceMana(options: [
+        (r: 1),
+        (w: 1),
+      ])],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "enters_tapped",
+      presentation: OracleLines([2]),
+      definition: EntersTapped(
+        affected: Self_,
+        condition: Some(BattlefieldAggregate(
+          filter: (controllers: Opponents, card_type: Some(Land)),
+          aggregate: Count,
+          max: Some(7),
+        )),
+      ),
+    ),
+  ],
+)
