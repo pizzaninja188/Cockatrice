@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "1b1214e9-1581-4008-b3d4-8b7af6b092fd",
+  "spans": [
+    {
+      "face_id": "veteran_armorer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemPt",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario other_anthems_batch::other_anthems_batch_cards_pump_only_other_creatures_you_control",
+      "covers": "actual veteran_armorer is exercised by the shared other_anthems_batch actual-card scenario"
+    },
+    {
+      "test": "scenario other_anthems_batch::other_anthems_batch_cards_apply_to_later_entries_and_stop_when_the_source_leaves",
+      "covers": "actual veteran_armorer is exercised by the shared other_anthems_batch actual-card scenario"
+    },
+    {
+      "test": "scenario other_anthems_batch::other_anthems_batch_cards_stack_with_a_second_copy",
+      "covers": "actual veteran_armorer is exercised by the shared other_anthems_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::other_anthems_batch::other_anthems_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of veteran_armorer"
+    },
+    {
+      "test": "mechanic_registry::other_anthems_batch::other_anthems_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for veteran_armorer"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "fd3bcc9b-7d84-478e-aef5-2e44610107c7",
+  "spans": [
+    {
+      "face_id": "fire_drake",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "fire_drake",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PumpTarget/subject"
+    },
+    {
+      "symbol": "ActivationLimit::PerTurn",
+      "typed_path": "/faces/0/activated_abilities/0/activation_limit"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flying_once_pump_batch::flying_once_pump_batch_cards_cast_with_exact_characteristics_and_flying",
+      "covers": "actual fire_drake is exercised by the shared flying_once_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario flying_once_pump_batch::flying_once_pump_batch_cards_activate_once_each_turn_and_reset_on_the_next_turn",
+      "covers": "actual fire_drake is exercised by the shared flying_once_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario flying_once_pump_batch::flying_once_pump_batch_cards_require_the_printed_activation_cost",
+      "covers": "actual fire_drake is exercised by the shared flying_once_pump_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::flying_once_pump_batch::flying_once_pump_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of fire_drake"
+    },
+    {
+      "test": "mechanic_registry::flying_once_pump_batch::flying_once_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for fire_drake"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

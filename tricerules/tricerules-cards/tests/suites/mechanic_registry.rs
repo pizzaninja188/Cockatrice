@@ -891,3 +891,30 @@ mod cameo_artifacts_batch;
 
 #[path = "../sliver_anthem_controlled_batch.rs"]
 mod sliver_anthem_controlled_batch;
+
+#[path = "../pain_taplands_batch.rs"]
+mod pain_taplands_batch;
+
+#[path = "../cluestones_batch.rs"]
+mod cluestones_batch;
+
+#[path = "../lockets_batch.rs"]
+mod lockets_batch;
+
+#[path = "../banners_batch.rs"]
+mod banners_batch;
+
+#[path = "../other_anthems_batch.rs"]
+mod other_anthems_batch;
+
+#[path = "../flying_once_pump_batch.rs"]
+mod flying_once_pump_batch;
+
+#[path = "../etb_lose_life_flyers_batch.rs"]
+mod etb_lose_life_flyers_batch;
+
+#[path = "../etb_pump_flying_batch.rs"]
+mod etb_pump_flying_batch;
+
+#[path = "../mill_two_batch.rs"]
+mod mill_two_batch;

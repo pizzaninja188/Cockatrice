@@ -1,0 +1,28 @@
+// Oracle 0ce31ff1-6cfe-4b34-bd02-7d727934e754; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.9a-b (flying), 603.6a (enters-the-battlefield trigger), 115.1/608.2b (target),
+// 611.2a (until-end-of-turn duration), 613.1f (layer 6 keyword grant) and 613.4c
+// (layer 7c pump). Battleflight Eagle's pinned ruling confirms the ability is mandatory
+// and may target the source itself.
+
+(
+  id: "welkin_guide",
+  name: "Welkin Guide",
+  face_id: "welkin_guide",
+  mana_cost: "{4}{W}",
+  types: ["Creature", "Bird", "Cleric"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [
+        PumpTarget(power: 2, toughness: 2),
+        GrantKeywords(keywords: [Flying]),
+      ],
+    ),
+  ],
+)

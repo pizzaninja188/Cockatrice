@@ -1,0 +1,80 @@
+{
+  "format_version": 1,
+  "oracle_id": "f36e316d-c0ad-414d-8cf0-b1c9ea779e03",
+  "spans": [
+    {
+      "face_id": "battleflight_eagle",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "battleflight_eagle",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    },
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1/GrantKeywords/keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_pump_flying_batch::etb_pump_flying_batch_cards_pump_and_grant_flying_to_the_chosen_creature",
+      "covers": "actual battleflight_eagle is exercised by the shared etb_pump_flying_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_pump_flying_batch::etb_pump_flying_batch_cards_can_target_the_source_or_an_opponents_creature",
+      "covers": "actual battleflight_eagle is exercised by the shared etb_pump_flying_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_pump_flying_batch::etb_pump_flying_batch_cards_reject_a_declined_mandatory_target",
+      "covers": "actual battleflight_eagle is exercised by the shared etb_pump_flying_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_pump_flying_batch::etb_pump_flying_batch_cards_end_the_pump_and_flying_at_cleanup",
+      "covers": "actual battleflight_eagle is exercised by the shared etb_pump_flying_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_pump_flying_batch::etb_pump_flying_batch_cards_apply_the_pump_only_when_the_trigger_resolves",
+      "covers": "actual battleflight_eagle is exercised by the shared etb_pump_flying_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_pump_flying_batch::etb_pump_flying_batch_cards_fizzle_when_the_only_target_leaves",
+      "covers": "actual battleflight_eagle is exercised by the shared etb_pump_flying_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::etb_pump_flying_batch::etb_pump_flying_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of battleflight_eagle"
+    },
+    {
+      "test": "mechanic_registry::etb_pump_flying_batch::etb_pump_flying_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for battleflight_eagle"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

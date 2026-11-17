@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "b044b4fd-d504-4a11-80bf-eb8fb0b6e21e",
+  "spans": [
+    {
+      "face_id": "boros_locket",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "boros_locket",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/1/costs/2"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario lockets_batch::lockets_batch_cards_produce_each_printed_color_and_tap",
+      "covers": "actual boros_locket is exercised by the shared lockets_batch actual-card scenario"
+    },
+    {
+      "test": "scenario lockets_batch::lockets_batch_cards_pay_four_hybrid_symbols_and_draw_two",
+      "covers": "actual boros_locket is exercised by the shared lockets_batch actual-card scenario"
+    },
+    {
+      "test": "scenario lockets_batch::lockets_batch_cards_reject_the_draw_with_too_little_mana",
+      "covers": "actual boros_locket is exercised by the shared lockets_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::lockets_batch::lockets_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of boros_locket"
+    },
+    {
+      "test": "mechanic_registry::lockets_batch::lockets_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for boros_locket"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

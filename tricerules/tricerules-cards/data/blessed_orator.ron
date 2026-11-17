@@ -1,0 +1,27 @@
+// Oracle c0856fea-cbdc-427b-ae00-bfd9311f284f; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 604.2/611.3b (the continuous effect is active while the source remains on the
+// battlefield), 613.4c (layer 7c) and 109.5 ("you" is the source's controller); the
+// printed "other" excludes the source. Benalish Marshal's pinned ruling confirms that
+// marked damage can become lethal when the anthem leaves.
+
+(
+  id: "blessed_orator",
+  name: "Blessed Orator",
+  face_id: "blessed_orator",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Human", "Cleric"],
+  power: 1,
+  toughness: 4,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: AnthemPt(
+        filter: (controller: YouControl, exclude_self: true),
+        delta_power: 0,
+        delta_toughness: 1,
+      ),
+    ),
+  ],
+)

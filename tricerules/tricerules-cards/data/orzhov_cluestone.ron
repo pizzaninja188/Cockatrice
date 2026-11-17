@@ -1,0 +1,27 @@
+// Oracle 09650a76-05c4-40a0-b861-d146b3ba87d6; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 605.1a/605.3a-b (artifact mana ability, immediate resolution), 118.3 and 701.21a
+// (tap and sacrifice costs), 107.4 and 202.1 (colored mana in an artifact's cost) and
+// 121.1 (draw). This cycle has no pinned ruling.
+
+(
+  id: "orzhov_cluestone",
+  name: "Orzhov Cluestone",
+  face_id: "orzhov_cluestone",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(w: 1), (b: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Mana("{W}{B}"), Tap, SacrificeSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

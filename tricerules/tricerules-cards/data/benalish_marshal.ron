@@ -1,0 +1,27 @@
+// Oracle 2cc439e8-d112-44e6-bc5a-6e99333c519a; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 604.2/611.3b (the continuous effect is active while the source remains on the
+// battlefield), 613.4c (layer 7c) and 109.5 ("you" is the source's controller); the
+// printed "other" excludes the source. Benalish Marshal's pinned ruling confirms that
+// marked damage can become lethal when the anthem leaves.
+
+(
+  id: "benalish_marshal",
+  name: "Benalish Marshal",
+  face_id: "benalish_marshal",
+  mana_cost: "{W}{W}{W}",
+  types: ["Creature", "Human", "Knight"],
+  power: 3,
+  toughness: 3,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: AnthemPt(
+        filter: (controller: YouControl, exclude_self: true),
+        delta_power: 1,
+        delta_toughness: 1,
+      ),
+    ),
+  ],
+)

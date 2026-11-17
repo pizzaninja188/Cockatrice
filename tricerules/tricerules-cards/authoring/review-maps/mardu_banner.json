@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "9805b7b3-086a-4c91-810f-52c8f8f95f6a",
+  "spans": [
+    {
+      "face_id": "mardu_banner",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "mardu_banner",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/1/costs/2"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario banners_batch::banners_batch_cards_produce_each_printed_color_and_tap",
+      "covers": "actual mardu_banner is exercised by the shared banners_batch actual-card scenario"
+    },
+    {
+      "test": "scenario banners_batch::banners_batch_cards_sacrifice_for_exactly_one_card",
+      "covers": "actual mardu_banner is exercised by the shared banners_batch actual-card scenario"
+    },
+    {
+      "test": "scenario banners_batch::banners_batch_cards_reject_the_draw_without_all_three_colors",
+      "covers": "actual mardu_banner is exercised by the shared banners_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::banners_batch::banners_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of mardu_banner"
+    },
+    {
+      "test": "mechanic_registry::banners_batch::banners_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for mardu_banner"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
