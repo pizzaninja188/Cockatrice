@@ -1,0 +1,22 @@
+// Oracle 5f0d3be8-e63e-4ade-ae58-6b0c14f2ce6d; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 205.4g (Snow is a supertype with no rules meaning of its own), 305.6/305.8 (basic
+// land subtypes grant the intrinsic mana ability), 605.1a/605.3b (a targetless mana
+// ability resolves immediately) and 106.1a (the produced colored mana). These cards print
+// no {S} symbol and add no snow-mana payment contract.
+
+(
+  id: "snow-covered_forest",
+  name: "Snow-Covered Forest",
+  face_id: "snow_covered_forest",
+  mana_cost: "",
+  types: ["Land", "Forest"],
+  supertypes: ["Basic", "Snow"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    intrinsic_land_mana: true,
+    costs: [Tap],
+    effect: [ProduceMana(options: [(g: 1)])],
+  )],
+)

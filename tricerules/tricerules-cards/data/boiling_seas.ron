@@ -1,0 +1,16 @@
+// Oracle 7421b711-81a4-4042-b024-f55bf9ff203f; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 305.6 (Island is a basic land subtype), 608.2 (resolution) and
+// 701.8c (destruction, not sacrifice; regeneration can replace it). DestroyAll is
+// untargeted, so hexproof and shroud do not matter.
+
+(
+  id: "boiling_seas",
+  name: "Boiling Seas",
+  face_id: "boiling_seas",
+  mana_cost: "{3}{R}",
+  types: ["Sorcery"],
+  spell_effect: [DestroyAll(
+    kind: (kind: AnyPermanent, permanent_types: [Land], required_subtypes: ["Island"]),
+  )],
+)

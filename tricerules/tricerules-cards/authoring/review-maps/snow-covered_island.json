@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "5b2460a5-6ae5-4cad-ba94-1a9e98e6e4c0",
+  "spans": [
+    {
+      "face_id": "snow_covered_island",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q29_snow_basics_batch::q29_snow_basics_cards_produce_exactly_one_colored_mana_and_no_snow_mana",
+      "covers": "actual snow-covered_island is exercised by the shared 05-snow-basics evidence"
+    },
+    {
+      "test": "mechanic_registry::q29_snow_basics_batch::q29_snow_basics_batch_maps_definitions",
+      "covers": "actual snow-covered_island is exercised by the shared 05-snow-basics evidence"
+    },
+    {
+      "test": "mechanic_registry::q29_snow_basics_batch::q29_snow_basics_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual snow-covered_island is exercised by the shared 05-snow-basics evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

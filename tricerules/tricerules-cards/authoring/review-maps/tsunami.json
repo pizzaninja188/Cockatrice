@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "ef2b1565-7b02-4cab-9031-beb1701ee929",
+  "spans": [
+    {
+      "face_id": "tsunami",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DestroyAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetKind::AnyPermanent",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Land",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q29_destroy_islands_batch::q29_destroy_islands_cards_destroy_every_island_including_snow_islands",
+      "covers": "actual tsunami is exercised by the shared 08-destroy-islands evidence"
+    },
+    {
+      "test": "scenario q29_destroy_islands_batch::q29_destroy_islands_boil_is_an_instant_and_the_sorceries_are_not",
+      "covers": "actual tsunami is exercised by the shared 08-destroy-islands evidence"
+    },
+    {
+      "test": "mechanic_registry::q29_destroy_islands_batch::q29_destroy_islands_batch_maps_definitions",
+      "covers": "actual tsunami is exercised by the shared 08-destroy-islands evidence"
+    },
+    {
+      "test": "mechanic_registry::q29_destroy_islands_batch::q29_destroy_islands_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual tsunami is exercised by the shared 08-destroy-islands evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

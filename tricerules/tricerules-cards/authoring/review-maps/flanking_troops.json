@@ -1,0 +1,65 @@
+{
+  "format_version": 1,
+  "oracle_id": "47bbb630-2bf7-47a2-93bb-266e491803c3",
+  "spans": [
+    {
+      "face_id": "flanking_troops",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetKind::Creature",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting/groups/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q29_attack_may_tap_batch::q29_attack_may_tap_cards_cast_with_exact_cost_and_body",
+      "covers": "actual flanking_troops is exercised by the shared 03-attack-may-tap evidence"
+    },
+    {
+      "test": "scenario q29_attack_may_tap_batch::q29_attack_may_tap_cards_may_decline_the_optional_trigger",
+      "covers": "actual flanking_troops is exercised by the shared 03-attack-may-tap evidence"
+    },
+    {
+      "test": "scenario q29_attack_may_tap_batch::q29_attack_may_tap_cards_can_target_their_own_creature",
+      "covers": "actual flanking_troops is exercised by the shared 03-attack-may-tap evidence"
+    },
+    {
+      "test": "scenario q29_attack_may_tap_batch::q29_attack_may_tap_cards_accept_a_tapped_target",
+      "covers": "actual flanking_troops is exercised by the shared 03-attack-may-tap evidence"
+    },
+    {
+      "test": "scenario q29_attack_may_tap_batch::q29_attack_may_tap_cards_target_any_creature_in_a_three_player_game",
+      "covers": "actual flanking_troops is exercised by the shared 03-attack-may-tap evidence"
+    },
+    {
+      "test": "mechanic_registry::q29_attack_may_tap_batch::q29_attack_may_tap_batch_maps_definitions",
+      "covers": "actual flanking_troops is exercised by the shared 03-attack-may-tap evidence"
+    },
+    {
+      "test": "mechanic_registry::q29_attack_may_tap_batch::q29_attack_may_tap_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual flanking_troops is exercised by the shared 03-attack-may-tap evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

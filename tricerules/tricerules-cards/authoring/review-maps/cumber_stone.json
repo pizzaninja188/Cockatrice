@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "49199997-65cd-4cb9-bdd6-74c93c1f6b5a",
+  "spans": [
+    {
+      "face_id": "cumber_stone",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemPt",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "CreatureScopeController::Opponents",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q29_opponent_shrink_batch::q29_opponent_shrink_cards_cast_with_exact_cost_and_apply_after_entry",
+      "covers": "actual cumber_stone is exercised by the shared 07-opponent-shrink evidence"
+    },
+    {
+      "test": "scenario q29_opponent_shrink_batch::q29_opponent_shrink_cards_apply_to_every_opponent_in_a_three_player_game",
+      "covers": "actual cumber_stone is exercised by the shared 07-opponent-shrink evidence"
+    },
+    {
+      "test": "scenario q29_opponent_shrink_batch::q29_opponent_shrink_cards_stack_with_each_other",
+      "covers": "actual cumber_stone is exercised by the shared 07-opponent-shrink evidence"
+    },
+    {
+      "test": "mechanic_registry::q29_opponent_shrink_batch::q29_opponent_shrink_batch_maps_definitions",
+      "covers": "actual cumber_stone is exercised by the shared 07-opponent-shrink evidence"
+    },
+    {
+      "test": "mechanic_registry::q29_opponent_shrink_batch::q29_opponent_shrink_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual cumber_stone is exercised by the shared 07-opponent-shrink evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

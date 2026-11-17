@@ -1,0 +1,23 @@
+// Oracle f4925e05-1332-4466-b2ea-9f6f4ccf7db4; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.2 (the trigger fires on becoming a target), 603.3/608.1 (the trigger is put on
+// the stack above the targeting object and resolves first), 701.21a (sacrifice) and
+// 608.2b (a spell or ability whose only target has left is removed on resolution). The
+// pinned rulings confirm the sacrifice resolves even if the targeting spell is countered.
+
+(
+  id: "phantasmal_abomination",
+  name: "Phantasmal Abomination",
+  face_id: "phantasmal_abomination",
+  mana_cost: "{1}{U}{U}",
+  types: ["Creature", "Illusion"],
+  power: 5,
+  toughness: 5,
+  keywords: [Defender],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: AnyPlayer),
+    effect: [Sacrifice(subject: Source)],
+  )],
+)

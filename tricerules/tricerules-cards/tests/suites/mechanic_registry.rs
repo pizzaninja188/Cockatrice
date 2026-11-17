@@ -972,3 +972,30 @@ mod untap_self_batch;
 
 #[path = "../sac_artifact_pump_batch.rs"]
 mod sac_artifact_pump_batch;
+
+#[path = "../q29_sac_artifact_ping_batch.rs"]
+mod q29_sac_artifact_ping_batch;
+
+#[path = "../q29_dies_another_counter_batch.rs"]
+mod q29_dies_another_counter_batch;
+
+#[path = "../q29_attack_may_tap_batch.rs"]
+mod q29_attack_may_tap_batch;
+
+#[path = "../q29_target_sacrifice_batch.rs"]
+mod q29_target_sacrifice_batch;
+
+#[path = "../q29_snow_basics_batch.rs"]
+mod q29_snow_basics_batch;
+
+#[path = "../q29_ally_counter_batch.rs"]
+mod q29_ally_counter_batch;
+
+#[path = "../q29_opponent_shrink_batch.rs"]
+mod q29_opponent_shrink_batch;
+
+#[path = "../q29_destroy_islands_batch.rs"]
+mod q29_destroy_islands_batch;
+
+#[path = "../q29_search_top_lose_two_batch.rs"]
+mod q29_search_top_lose_two_batch;

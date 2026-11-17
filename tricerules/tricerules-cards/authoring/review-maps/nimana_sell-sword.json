@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "5093df46-92cb-4f79-a5cf-4351c1fcf36d",
+  "spans": [
+    {
+      "face_id": "nimana_sell_sword",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Creature",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "CounterKind::PlusOnePlusOne",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q29_ally_counter_batch::q29_ally_counter_cards_cast_with_exact_cost_and_decline",
+      "covers": "actual nimana_sell-sword is exercised by the shared 06-ally-counter evidence"
+    },
+    {
+      "test": "scenario q29_ally_counter_batch::q29_ally_counter_cards_trigger_for_another_ally_you_control",
+      "covers": "actual nimana_sell-sword is exercised by the shared 06-ally-counter evidence"
+    },
+    {
+      "test": "scenario q29_ally_counter_batch::q29_ally_counter_cards_ignore_non_allies_and_opposing_allies",
+      "covers": "actual nimana_sell-sword is exercised by the shared 06-ally-counter evidence"
+    },
+    {
+      "test": "mechanic_registry::q29_ally_counter_batch::q29_ally_counter_batch_maps_definitions",
+      "covers": "actual nimana_sell-sword is exercised by the shared 06-ally-counter evidence"
+    },
+    {
+      "test": "mechanic_registry::q29_ally_counter_batch::q29_ally_counter_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual nimana_sell-sword is exercised by the shared 06-ally-counter evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

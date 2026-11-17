@@ -1,0 +1,69 @@
+{
+  "format_version": 1,
+  "oracle_id": "5ed23ed2-be2f-4958-affe-429f58e9dca5",
+  "spans": [
+    {
+      "face_id": "gossamer_phantasm",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords",
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfBecomesTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "TargetingSourceFilter::SpellOrAbility",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "CastTriggerPlayer::AnyPlayer",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Sacrifice",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q29_target_sacrifice_batch::q29_target_sacrifice_cards_cast_with_exact_cost_body_and_keyword",
+      "covers": "actual gossamer_phantasm is exercised by the shared 04-target-sacrifice evidence"
+    },
+    {
+      "test": "scenario q29_target_sacrifice_batch::q29_target_sacrifice_cards_trigger_for_an_ability_target",
+      "covers": "actual gossamer_phantasm is exercised by the shared 04-target-sacrifice evidence"
+    },
+    {
+      "test": "scenario q29_target_sacrifice_batch::q29_target_sacrifice_cards_trigger_for_their_own_controller",
+      "covers": "actual gossamer_phantasm is exercised by the shared 04-target-sacrifice evidence"
+    },
+    {
+      "test": "scenario q29_target_sacrifice_batch::q29_target_sacrifice_cards_ignore_non_targeting_spells",
+      "covers": "actual gossamer_phantasm is exercised by the shared 04-target-sacrifice evidence"
+    },
+    {
+      "test": "scenario q29_target_sacrifice_batch::q29_target_sacrifice_cards_still_sacrifice_when_the_targeting_spell_is_countered",
+      "covers": "actual gossamer_phantasm is exercised by the shared 04-target-sacrifice evidence"
+    },
+    {
+      "test": "mechanic_registry::q29_target_sacrifice_batch::q29_target_sacrifice_batch_maps_definitions",
+      "covers": "actual gossamer_phantasm is exercised by the shared 04-target-sacrifice evidence"
+    },
+    {
+      "test": "mechanic_registry::q29_target_sacrifice_batch::q29_target_sacrifice_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual gossamer_phantasm is exercised by the shared 04-target-sacrifice evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
