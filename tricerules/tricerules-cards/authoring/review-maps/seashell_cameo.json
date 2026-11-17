@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "383f6020-c26d-43e8-bb07-566886626d74",
+  "spans": [
+    {
+      "face_id": "seashell_cameo",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario cameo_artifacts_batch::cameo_artifacts_batch_cards_produce_each_printed_color_and_tap",
+      "covers": "actual seashell_cameo is exercised by the shared cameo_artifacts_batch actual-card scenario"
+    },
+    {
+      "test": "scenario cameo_artifacts_batch::cameo_artifacts_batch_cards_reject_a_second_activation_while_tapped",
+      "covers": "actual seashell_cameo is exercised by the shared cameo_artifacts_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::cameo_artifacts_batch::cameo_artifacts_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of seashell_cameo"
+    },
+    {
+      "test": "mechanic_registry::cameo_artifacts_batch::cameo_artifacts_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for seashell_cameo"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

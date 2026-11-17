@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "c14739b0-5c19-4873-b027-314225a10f7b",
+  "spans": [
+    {
+      "face_id": "vampire_aristocrat",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario sac_creature_self_pump_batch::sac_creature_self_pump_batch_cards_sacrifice_another_creature_and_pump",
+      "covers": "actual vampire_aristocrat is exercised by the shared sac_creature_self_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario sac_creature_self_pump_batch::sac_creature_self_pump_batch_cards_can_sacrifice_themselves_without_a_bonus",
+      "covers": "actual vampire_aristocrat is exercised by the shared sac_creature_self_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario sac_creature_self_pump_batch::sac_creature_self_pump_batch_cards_need_no_tap_and_ignore_summoning_sickness",
+      "covers": "actual vampire_aristocrat is exercised by the shared sac_creature_self_pump_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::sac_creature_self_pump_batch::sac_creature_self_pump_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of vampire_aristocrat"
+    },
+    {
+      "test": "mechanic_registry::sac_creature_self_pump_batch::sac_creature_self_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for vampire_aristocrat"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

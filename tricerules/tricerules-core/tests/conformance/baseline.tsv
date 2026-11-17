@@ -819,6 +819,11 @@ derelict_attic_widows_walk	0	cast	exercised
 derelict_attic_widows_walk	1	cast	exercised
 desert_cerodon	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 desert_drake	0	cast	exercised
+desert_of_the_fervent	0	ability:1	unsupported: ability not offered by generic battlefield fixture
+desert_of_the_glorified	0	ability:1	unsupported: ability not offered by generic battlefield fixture
+desert_of_the_indomitable	0	ability:1	unsupported: ability not offered by generic battlefield fixture
+desert_of_the_mindful	0	ability:1	unsupported: ability not offered by generic battlefield fixture
+desert_of_the_true	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 deserters_disciple	0	ability:0	exercised
 deserters_disciple	0	cast	exercised
 deserts_due	0	cast	exercised

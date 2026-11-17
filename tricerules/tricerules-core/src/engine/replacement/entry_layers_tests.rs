@@ -8785,3 +8785,96 @@ fn compleated_grouped_numeric_history_test3_cases() {
         &duplicate_seasons,
     );
 }
+
+fn finish_simultaneous_entry_order(engine: &mut GameEngine, events: &mut [rv1::RuledEvent]) {
+    engine
+        .publish_resolution_prompt_ids(events)
+        .expect("publish the simultaneous entry order prompt");
+    if let Some(pending) = engine.state.pending_resolution.as_ref() {
+        let order = pending.presentation.candidates.clone();
+        engine
+            .apply_scenario_command(
+                0,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                        rv1::SubmitResolutionChoice {
+                            chosen_object_ids: order,
+                            ..Default::default()
+                        },
+                    )),
+                },
+            )
+            .expect("order the simultaneous entrants");
+    }
+}
+
+#[test]
+fn conditional_slow_land_ignores_lands_entering_in_the_same_batch() {
+    let mut engine = engine();
+    let beach = object(&mut engine, "deserted_beach", Zone::Graveyard, 0);
+    let forest_a = object(&mut engine, "forest", Zone::Graveyard, 0);
+    let forest_b = object(&mut engine, "forest", Zone::Graveyard, 0);
+    let mut events = Vec::new();
+
+    engine
+        .begin_zone_entry_batch(
+            ParkedStackResolution::dedicated(engine.observer_return_item(beach, 0)),
+            vec![
+                event(&engine, forest_a),
+                event(&engine, forest_b),
+                event(&engine, beach),
+            ],
+            Zone::Graveyard,
+            "simultaneous land return",
+            None,
+            &mut events,
+        )
+        .expect("the simultaneous land entry batch is valid");
+    finish_simultaneous_entry_order(&mut engine, &mut events);
+
+    assert_eq!(engine.state.objects[&beach].zone, Zone::Battlefield);
+    assert_eq!(engine.state.objects[&forest_a].zone, Zone::Battlefield);
+    assert_eq!(engine.state.objects[&forest_b].zone, Zone::Battlefield);
+    assert!(
+        engine.state.objects[&beach].tapped,
+        "two lands entering in the same batch are not other lands already on the battlefield"
+    );
+}
+
+#[test]
+fn conditional_fast_land_ignores_lands_entering_in_the_same_batch() {
+    let mut engine = engine();
+    let cliffs = object(&mut engine, "blackcleave_cliffs", Zone::Graveyard, 0);
+    let forests = [
+        object(&mut engine, "forest", Zone::Graveyard, 0),
+        object(&mut engine, "forest", Zone::Graveyard, 0),
+        object(&mut engine, "forest", Zone::Graveyard, 0),
+    ];
+    let mut events = Vec::new();
+
+    engine
+        .begin_zone_entry_batch(
+            ParkedStackResolution::dedicated(engine.observer_return_item(cliffs, 0)),
+            vec![
+                event(&engine, forests[0]),
+                event(&engine, forests[1]),
+                event(&engine, forests[2]),
+                event(&engine, cliffs),
+            ],
+            Zone::Graveyard,
+            "simultaneous land return",
+            None,
+            &mut events,
+        )
+        .expect("the simultaneous land entry batch is valid");
+    finish_simultaneous_entry_order(&mut engine, &mut events);
+
+    assert_eq!(engine.state.objects[&cliffs].zone, Zone::Battlefield);
+    for forest in forests {
+        assert_eq!(engine.state.objects[&forest].zone, Zone::Battlefield);
+    }
+    assert!(
+        !engine.state.objects[&cliffs].tapped,
+        "three lands entering in the same batch are not three other lands already on the battlefield"
+    );
+}

@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "1ce6ae30-33c3-4f05-9286-69b0871b1c2d",
+  "spans": [
+    {
+      "face_id": "bloodstone_cameo",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario cameo_artifacts_batch::cameo_artifacts_batch_cards_produce_each_printed_color_and_tap",
+      "covers": "actual bloodstone_cameo is exercised by the shared cameo_artifacts_batch actual-card scenario"
+    },
+    {
+      "test": "scenario cameo_artifacts_batch::cameo_artifacts_batch_cards_reject_a_second_activation_while_tapped",
+      "covers": "actual bloodstone_cameo is exercised by the shared cameo_artifacts_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::cameo_artifacts_batch::cameo_artifacts_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of bloodstone_cameo"
+    },
+    {
+      "test": "mechanic_registry::cameo_artifacts_batch::cameo_artifacts_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for bloodstone_cameo"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,26 @@
+// Oracle 52e8ec03-23ed-43a0-bce2-ad0cd5c4d737; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 604.1/611.3a (continuous static ability), 613.4c (layer 7c) and 109.2 (subtype
+// description plus controller scope). The pinned rulings confirm cumulativity and that
+// a creature that stops being a Sliver stops being affected.
+
+(
+  id: "megantic_sliver",
+  name: "Megantic Sliver",
+  face_id: "megantic_sliver",
+  mana_cost: "{5}{G}",
+  types: ["Creature", "Sliver"],
+  power: 3,
+  toughness: 3,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: AnthemPt(
+        filter: (controller: YouControl, subtype: "Sliver"),
+        delta_power: 3,
+        delta_toughness: 3,
+      ),
+    ),
+  ],
+)

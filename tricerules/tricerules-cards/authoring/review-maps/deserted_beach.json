@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "f0ec8681-da50-466b-8cdd-1dc710deccd9",
+  "spans": [
+    {
+      "face_id": "deserted_beach",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "deserted_beach",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "GameCondition::BattlefieldAggregate",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario slow_lands_batch::slow_lands_batch_cards_enter_tapped_with_zero_or_one_other_land",
+      "covers": "actual deserted_beach is exercised by the shared slow_lands_batch actual-card scenario"
+    },
+    {
+      "test": "scenario slow_lands_batch::slow_lands_batch_cards_enter_untapped_with_two_other_lands",
+      "covers": "actual deserted_beach is exercised by the shared slow_lands_batch actual-card scenario"
+    },
+    {
+      "test": "scenario slow_lands_batch::slow_lands_batch_cards_produce_each_printed_color",
+      "covers": "actual deserted_beach is exercised by the shared slow_lands_batch actual-card scenario"
+    },
+    {
+      "test": "scenario slow_lands_batch::slow_lands_batch_cards_ignore_lands_controlled_by_opponents",
+      "covers": "actual deserted_beach is exercised by the shared slow_lands_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::slow_lands_batch::slow_lands_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of deserted_beach"
+    },
+    {
+      "test": "mechanic_registry::slow_lands_batch::slow_lands_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for deserted_beach"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

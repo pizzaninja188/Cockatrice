@@ -864,3 +864,30 @@ mod flying_grant_activated_batch;
 
 #[path = "../unblockable_power_two_batch.rs"]
 mod unblockable_power_two_batch;
+
+#[path = "../horizon_canopy_cycle_batch.rs"]
+mod horizon_canopy_cycle_batch;
+
+#[path = "../slow_lands_batch.rs"]
+mod slow_lands_batch;
+
+#[path = "../fast_lands_batch.rs"]
+mod fast_lands_batch;
+
+#[path = "../abandoned_outpost_batch.rs"]
+mod abandoned_outpost_batch;
+
+#[path = "../desert_cycling_batch.rs"]
+mod desert_cycling_batch;
+
+#[path = "../botanical_plaza_batch.rs"]
+mod botanical_plaza_batch;
+
+#[path = "../sac_creature_self_pump_batch.rs"]
+mod sac_creature_self_pump_batch;
+
+#[path = "../cameo_artifacts_batch.rs"]
+mod cameo_artifacts_batch;
+
+#[path = "../sliver_anthem_controlled_batch.rs"]
+mod sliver_anthem_controlled_batch;
