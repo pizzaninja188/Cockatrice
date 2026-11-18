@@ -1,0 +1,22 @@
+// Oracle 7c4408eb-b3e2-407f-9018-197787edeae7; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 (activation and printed cost), 611.2a/514.2 (until end of turn), 613 layer 6 and 702.19 (trample).
+// The card has no pinned ruling.
+
+(
+  id: "igneous_golem",
+  name: "Igneous Golem",
+  face_id: "igneous_golem",
+  mana_cost: "{5}",
+  types: ["Artifact", "Creature", "Golem"],
+  power: 3,
+  toughness: 4,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{2}")],
+      effect: [GrantKeywords(subject: Source, keywords: [Trample])],
+    ),
+  ],
+)

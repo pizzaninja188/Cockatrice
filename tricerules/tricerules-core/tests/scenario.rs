@@ -2262,3 +2262,12 @@ mod q34_during_turn_pump_batch;
 
 #[path = "scenario/q34_self_first_strike_batch.rs"]
 mod q34_self_first_strike_batch;
+
+#[path = "scenario/q35_prevent_creature_batch.rs"]
+mod q35_prevent_creature_batch;
+
+#[path = "scenario/q35_trample_pump_batch.rs"]
+mod q35_trample_pump_batch;
+
+#[path = "scenario/q35_self_first_strike_batch.rs"]
+mod q35_self_first_strike_batch;
