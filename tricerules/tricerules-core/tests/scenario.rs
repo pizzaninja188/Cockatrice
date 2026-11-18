@@ -2271,3 +2271,12 @@ mod q35_trample_pump_batch;
 
 #[path = "scenario/q35_self_first_strike_batch.rs"]
 mod q35_self_first_strike_batch;
+
+#[path = "scenario/q35_target_first_strike_batch.rs"]
+mod q35_target_first_strike_batch;
+
+#[path = "scenario/q35_cant_block_batch.rs"]
+mod q35_cant_block_batch;
+
+#[path = "scenario/q35_campus_lands_batch.rs"]
+mod q35_campus_lands_batch;

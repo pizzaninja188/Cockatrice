@@ -1,0 +1,26 @@
+// Oracle 84c7d60a-7a7a-4344-8db5-d658792e3ac4; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 (activation and printed cost), 509.1b (a block already declared is unaffected) and 611.2a/514.2 (until end of turn).
+// The pinned ruling states that the ability must be activated before blockers are declared to have any effect.
+
+(
+  id: "lambholt_harrier",
+  name: "Lambholt Harrier",
+  face_id: "lambholt_harrier",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Wolf"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{3}{R}")],
+      effect: [ApplyCombatRestriction(
+        scope: Chosen((kind: Creature)),
+        restriction: (cant_block: true),
+      )],
+      targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+    ),
+  ],
+)

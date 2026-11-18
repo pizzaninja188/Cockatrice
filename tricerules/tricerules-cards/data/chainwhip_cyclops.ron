@@ -1,0 +1,26 @@
+// Oracle a0324f33-3f25-4374-affa-c7b5b54bc8d7; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 (activation and printed cost), 509.1b (a block already declared is unaffected) and 611.2a/514.2 (until end of turn).
+// The pinned ruling states that activating the ability after a creature has blocked does not remove that blocker from combat.
+
+(
+  id: "chainwhip_cyclops",
+  name: "Chainwhip Cyclops",
+  face_id: "chainwhip_cyclops",
+  mana_cost: "{4}{R}",
+  types: ["Creature", "Cyclops", "Warrior"],
+  power: 4,
+  toughness: 4,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{3}{R}")],
+      effect: [ApplyCombatRestriction(
+        scope: Chosen((kind: Creature)),
+        restriction: (cant_block: true),
+      )],
+      targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+    ),
+  ],
+)

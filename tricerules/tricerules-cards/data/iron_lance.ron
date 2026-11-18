@@ -1,0 +1,21 @@
+// Oracle 09e588c2-0fb8-4c30-aff3-433db7a07b6e; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 and 118.3 (mana and tap costs), 115.1 (target creature), 611.2a/514.2 (until end of turn) and 702.7 (first strike).
+// The card has no pinned ruling.
+
+(
+  id: "iron_lance",
+  name: "Iron Lance",
+  face_id: "iron_lance",
+  mana_cost: "{2}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{3}"), Tap],
+      effect: [GrantKeywords(subject: Chosen((kind: Creature)), keywords: [FirstStrike])],
+      targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+    ),
+  ],
+)
