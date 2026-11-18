@@ -1044,3 +1044,12 @@ mod q31_metalcraft_batch;
 
 #[path = "../q31_heroic_counters_batch.rs"]
 mod q31_heroic_counters_batch;
+
+#[path = "../q31_battle_cry_batch.rs"]
+mod q31_battle_cry_batch;
+
+#[path = "../q31_treasure_loot_batch.rs"]
+mod q31_treasure_loot_batch;
+
+#[path = "../q31_graveyard_top_draw_batch.rs"]
+mod q31_graveyard_top_draw_batch;

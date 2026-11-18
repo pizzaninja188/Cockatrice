@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "9d2bfbb2-84df-4d7c-9989-7f5577f90d97",
+  "spans": [
+    {
+      "face_id": "loxodon_partisan",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "CreatureScopeFilter",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q31_battle_cry_batch::q31_battle_cry_cards_pump_each_other_attacking_creature",
+      "covers": "actual loxodon_partisan is exercised by the shared 07-battle-cry evidence"
+    },
+    {
+      "test": "scenario q31_battle_cry_batch::q31_battle_cry_cards_stack_from_multiple_sources",
+      "covers": "actual loxodon_partisan is exercised by the shared 07-battle-cry evidence"
+    },
+    {
+      "test": "scenario q31_battle_cry_batch::q31_battle_cry_does_not_trigger_when_the_source_does_not_attack",
+      "covers": "actual loxodon_partisan is exercised by the shared 07-battle-cry evidence"
+    },
+    {
+      "test": "scenario q31_battle_cry_batch::q31_battle_cry_pumps_nothing_when_attacking_alone",
+      "covers": "actual loxodon_partisan is exercised by the shared 07-battle-cry evidence"
+    },
+    {
+      "test": "scenario q31_battle_cry_batch::q31_battle_cry_pump_expires_at_cleanup",
+      "covers": "actual loxodon_partisan is exercised by the shared 07-battle-cry evidence"
+    },
+    {
+      "test": "mechanic_registry::q31_battle_cry_batch::q31_battle_cry_batch_maps_definitions",
+      "covers": "actual loxodon_partisan is exercised by the shared 07-battle-cry evidence"
+    },
+    {
+      "test": "mechanic_registry::q31_battle_cry_batch::q31_battle_cry_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual loxodon_partisan is exercised by the shared 07-battle-cry evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

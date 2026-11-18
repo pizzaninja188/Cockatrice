@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "6891c8b7-7112-40dc-8b94-b84ad1885e5e",
+  "spans": [
+    {
+      "face_id": "accorder_paladin",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "CreatureScopeFilter",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q31_battle_cry_batch::q31_battle_cry_cards_pump_each_other_attacking_creature",
+      "covers": "actual accorder_paladin is exercised by the shared 07-battle-cry evidence"
+    },
+    {
+      "test": "scenario q31_battle_cry_batch::q31_battle_cry_cards_stack_from_multiple_sources",
+      "covers": "actual accorder_paladin is exercised by the shared 07-battle-cry evidence"
+    },
+    {
+      "test": "scenario q31_battle_cry_batch::q31_battle_cry_does_not_trigger_when_the_source_does_not_attack",
+      "covers": "actual accorder_paladin is exercised by the shared 07-battle-cry evidence"
+    },
+    {
+      "test": "scenario q31_battle_cry_batch::q31_battle_cry_pumps_nothing_when_attacking_alone",
+      "covers": "actual accorder_paladin is exercised by the shared 07-battle-cry evidence"
+    },
+    {
+      "test": "scenario q31_battle_cry_batch::q31_battle_cry_pump_expires_at_cleanup",
+      "covers": "actual accorder_paladin is exercised by the shared 07-battle-cry evidence"
+    },
+    {
+      "test": "mechanic_registry::q31_battle_cry_batch::q31_battle_cry_batch_maps_definitions",
+      "covers": "actual accorder_paladin is exercised by the shared 07-battle-cry evidence"
+    },
+    {
+      "test": "mechanic_registry::q31_battle_cry_batch::q31_battle_cry_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual accorder_paladin is exercised by the shared 07-battle-cry evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
