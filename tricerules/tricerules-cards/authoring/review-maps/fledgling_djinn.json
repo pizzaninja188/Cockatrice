@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "2c73ef77-ae58-401f-8747-538c4cd075d0",
+  "spans": [
+    {
+      "face_id": "fledgling_djinn",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "fledgling_djinn",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfUpkeep",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::DamagePlayer",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q33_upkeep_damage_batch::q33_upkeep_damage_cards_damage_only_their_controller_once_per_upkeep",
+      "covers": "actual card is exercised by the shared 01-upkeep-damage all-card scenario"
+    },
+    {
+      "test": "mechanic_registry::q33_upkeep_damage_batch::q33_upkeep_damage_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q33_upkeep_damage_batch::q33_upkeep_damage_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

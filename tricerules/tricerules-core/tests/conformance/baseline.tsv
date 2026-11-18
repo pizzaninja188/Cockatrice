@@ -582,6 +582,7 @@ clamorous_ironclad	0	ability:0	unsupported: nonmana costs need additional fixtur
 clamorous_ironclad	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 clamorous_ironclad	0	cast	exercised
 claustrophobia	0	cast	exercised
+clay_revenant	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 clearwater_pathway_murkwater_pathway	0	ability:0	exercised
 clearwater_pathway_murkwater_pathway	0	land	exercised
 clearwater_pathway_murkwater_pathway	1	ability:0	exercised
@@ -933,6 +934,7 @@ dub	0	cast	exercised
 due_diligence	0	cast	exercised
 duel_tactics	0	cast	exercised
 dune_beetle	0	cast	exercised
+durable_coilbug	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 durkwood_boars	0	cast	exercised
 dusk_imp	0	cast	exercised
 dusk_legion_dreadnought	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
@@ -1767,6 +1769,7 @@ joust_through	0	cast	unsupported: target group 0 needs a richer fixture
 juggernaut	0	cast	exercised
 jumbo_cactuar	0	cast	exercised
 jungle_barrier	0	cast	exercised
+jungle_creeper	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 jungle_hollow	0	ability:0	exercised
 jungle_hollow	0	land	exercised
 jwari_scuttler	0	cast	exercised
@@ -2782,6 +2785,7 @@ sandsteppe_citadel	0	ability:0	exercised
 sandsteppe_citadel	0	land	exercised
 sanguinary_mage	0	cast	exercised
 sanguine_syphoner	0	cast	exercised
+sanitarium_skeleton	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 sanitation_automaton	0	cast	exercised
 sapling_nursery	0	ability:0	exercised
 sapling_nursery	0	cast	exercised

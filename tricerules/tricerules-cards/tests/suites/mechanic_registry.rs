@@ -1080,3 +1080,30 @@ mod q32_flying_untap_batch;
 
 #[path = "../q32_untap_pump_batch.rs"]
 mod q32_untap_pump_batch;
+
+#[path = "../q33_upkeep_damage_batch.rs"]
+mod q33_upkeep_damage_batch;
+
+#[path = "../q33_lifegain_counter_batch.rs"]
+mod q33_lifegain_counter_batch;
+
+#[path = "../q33_soul_warden_batch.rs"]
+mod q33_soul_warden_batch;
+
+#[path = "../q33_etb_team_counter_batch.rs"]
+mod q33_etb_team_counter_batch;
+
+#[path = "../q33_graveyard_self_return_batch.rs"]
+mod q33_graveyard_self_return_batch;
+
+#[path = "../q33_cost_reduction_batch.rs"]
+mod q33_cost_reduction_batch;
+
+#[path = "../q33_creature_mana_abilities_batch.rs"]
+mod q33_creature_mana_abilities_batch;
+
+#[path = "../q33_tapland_remnants_batch.rs"]
+mod q33_tapland_remnants_batch;
+
+#[path = "../q33_keyword_only_remnants_batch.rs"]
+mod q33_keyword_only_remnants_batch;

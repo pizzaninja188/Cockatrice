@@ -1,0 +1,22 @@
+// Oracle 4eef2f24-6a5c-4bc7-b316-dd818dc2741a; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.2 (triggered ability), 603.6a (enters-the-battlefield event), 122.1 (+1/+1 counters) and the word "other" excludes the source.
+// The card has no pinned ruling.
+
+(
+  id: "ridgescale_tusker",
+  name: "Ridgescale Tusker",
+  face_id: "ridgescale_tusker",
+  mana_cost: "{3}{G}{G}",
+  types: ["Creature", "Pangolin", "Beast"],
+  power: 5,
+  toughness: 5,
+  triggered_abilities: [
+    (
+      ability_id: "enter_team_counter",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [PutCountersAll(counter: PlusOnePlusOne, count: 1, filter: (controller: Some(YouControl), name: None, exclude_self: true))],
+    ),
+  ],
+)

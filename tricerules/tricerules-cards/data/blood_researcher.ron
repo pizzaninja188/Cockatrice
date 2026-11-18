@@ -1,0 +1,23 @@
+// Oracle a465ba74-615a-4261-b4a0-fcb0819f10b3; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 119.3 (life gain), 603.2 (triggered ability) and 122.1/122.1a (+1/+1 counter on the source).
+// The card has no pinned ruling.
+
+(
+  id: "blood_researcher",
+  name: "Blood Researcher",
+  face_id: "blood_researcher",
+  mana_cost: "{1}{B}{G}",
+  types: ["Creature", "Vampire", "Druid"],
+  power: 2,
+  toughness: 2,
+  keywords: [Menace],
+  triggered_abilities: [
+    (
+      ability_id: "gain_life_counter",
+      presentation: OracleLines([2]),
+      trigger: WheneverPlayerGainsLife(),
+      effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+    ),
+  ],
+)

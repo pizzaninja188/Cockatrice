@@ -1,0 +1,23 @@
+// Oracle d683024d-8fe7-4509-851b-7655fadc1de7; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 601.2f (cost reduction) and 105.2 (a spell's colors).
+// Pinned rulings: only the generic component is reduced, mana cost/mana value are unchanged, X is chosen first, and alternative costs can be reduced.
+
+(
+  id: "emerald_medallion",
+  name: "Emerald Medallion",
+  face_id: "emerald_medallion",
+  mana_cost: "{2}",
+  types: ["Artifact"],
+  static_abilities: [
+    (
+      ability_id: "cost_reduction",
+      presentation: OracleLines([1]),
+      definition: SpellGenericReduction(
+        casters: Controller,
+        spell_filter: Some((is_color: Some(Green))),
+        amount: 1,
+      ),
+    ),
+  ],
+)

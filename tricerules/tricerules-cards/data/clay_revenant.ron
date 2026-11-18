@@ -1,0 +1,30 @@
+// Oracle c183186b-d92c-45a2-92d1-42e0df2b441f; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 (activation), 118.3 (mana cost), 400.7 (a new object after a zone change) and 608.2b (stale source).
+// The card has no pinned ruling.
+
+(
+  id: "clay_revenant",
+  name: "Clay Revenant",
+  face_id: "clay_revenant",
+  mana_cost: "{1}",
+  types: ["Artifact", "Creature", "Golem"],
+  power: 1,
+  toughness: 2,
+  static_abilities: [
+    (
+      ability_id: "enters_tapped",
+      presentation: OracleLines([1]),
+      definition: EntersTapped(affected: Self_),
+    ),
+  ],
+  activated_abilities: [
+    (
+      ability_id: "return_from_graveyard",
+      presentation: OracleLines([2]),
+      source_zone: Graveyard,
+      costs: [Mana("{2}{B}")],
+      effect: [ReturnToOwnersHand(subject: Source)],
+    ),
+  ],
+)

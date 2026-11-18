@@ -1,0 +1,15 @@
+// Oracle 7063eb2b-81a4-4599-b1db-edf861e39bfb; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 205.1/208.1 (type line and printed P/T) and the printed keyword's own CR rule.
+// The card has no pinned ruling.
+
+(
+  id: "mekleth_berserker",
+  name: "Mek'leth Berserker",
+  face_id: "mekleth_berserker",
+  mana_cost: "{3}{R}",
+  types: ["Creature", "Klingon", "Berserker"],
+  power: 4,
+  toughness: 3,
+  keywords: [Menace],
+)

@@ -1,0 +1,25 @@
+// Oracle 96b87445-6362-4a17-91b2-cbf203fd03fd; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 601.2f (cost reduction) and 301.1 (artifact spells).
+// Pinned rulings: only the generic component is reduced, mana cost/mana value are unchanged, X is chosen first, and alternative costs can be reduced.
+
+(
+  id: "etherium_sculptor",
+  name: "Etherium Sculptor",
+  face_id: "etherium_sculptor",
+  mana_cost: "{1}{U}",
+  types: ["Artifact", "Creature", "Vedalken", "Artificer"],
+  power: 1,
+  toughness: 2,
+  static_abilities: [
+    (
+      ability_id: "cost_reduction",
+      presentation: OracleLines([1]),
+      definition: SpellGenericReduction(
+        casters: Controller,
+        spell_filter: Some((card_type: Some(Artifact))),
+        amount: 1,
+      ),
+    ),
+  ],
+)

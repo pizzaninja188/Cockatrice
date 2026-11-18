@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "a2057118-9fd1-431d-9441-fef198d67ff2",
+  "spans": [
+    {
+      "face_id": "bloodbond_vampire",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPlayerGainsLife",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q33_lifegain_counter_batch::q33_lifegain_counter_cards_count_only_their_controllers_life_gain",
+      "covers": "actual card is exercised by the shared 02-lifegain-counter all-card scenario"
+    },
+    {
+      "test": "scenario q33_lifegain_counter_batch::q33_lifegain_counter_cards_keep_printed_keywords_and_bodies",
+      "covers": "actual card is exercised by the shared 02-lifegain-counter all-card scenario"
+    },
+    {
+      "test": "mechanic_registry::q33_lifegain_counter_batch::q33_lifegain_counter_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q33_lifegain_counter_batch::q33_lifegain_counter_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
