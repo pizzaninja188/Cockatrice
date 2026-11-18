@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "910488bf-66ab-415e-973b-1262b2ab7454",
+  "spans": [
+    {
+      "face_id": "marble_diamond",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "marble_diamond",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q32_diamond_artifacts_batch::q32_diamond_artifacts_canary_simplest",
+      "covers": "actual marble_diamond is exercised by the shared 01-diamond-artifacts actual-card scenario"
+    },
+    {
+      "test": "scenario q32_diamond_artifacts_batch::q32_diamond_artifacts_canary_hardest",
+      "covers": "actual marble_diamond is exercised by the shared 01-diamond-artifacts actual-card scenario"
+    },
+    {
+      "test": "scenario q32_diamond_artifacts_batch::q32_diamond_artifacts_cards_enter_tapped_and_produce_the_printed_color",
+      "covers": "actual marble_diamond is exercised by the shared 01-diamond-artifacts actual-card scenario"
+    },
+    {
+      "test": "scenario q32_diamond_artifacts_batch::q32_diamond_artifacts_cards_reject_a_second_activation_and_a_foreign_controller",
+      "covers": "actual marble_diamond is exercised by the shared 01-diamond-artifacts actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::q32_diamond_artifacts_batch::q32_diamond_artifacts_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and pinned Oracle fingerprint of marble_diamond"
+    },
+    {
+      "test": "mechanic_registry::q32_diamond_artifacts_batch::q32_diamond_artifacts_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "reviewed identity, typed shape and pinned Oracle fingerprint of marble_diamond"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

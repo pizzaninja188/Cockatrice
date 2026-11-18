@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "3b9bcf88-7304-48c5-bd46-3e37a93967a5",
+  "spans": [
+    {
+      "face_id": "horn_of_ramos",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "horn_of_ramos",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q32_ramos_artifacts_batch::q32_ramos_artifacts_canary_simplest",
+      "covers": "actual horn_of_ramos is exercised by the shared 02-ramos-artifacts actual-card scenario"
+    },
+    {
+      "test": "scenario q32_ramos_artifacts_batch::q32_ramos_artifacts_canary_hardest",
+      "covers": "actual horn_of_ramos is exercised by the shared 02-ramos-artifacts actual-card scenario"
+    },
+    {
+      "test": "scenario q32_ramos_artifacts_batch::q32_ramos_artifacts_cards_produce_twice_and_sacrifice_while_tapped",
+      "covers": "actual horn_of_ramos is exercised by the shared 02-ramos-artifacts actual-card scenario"
+    },
+    {
+      "test": "scenario q32_ramos_artifacts_batch::q32_ramos_artifacts_cards_sacrifice_without_tapping_first",
+      "covers": "actual horn_of_ramos is exercised by the shared 02-ramos-artifacts actual-card scenario"
+    },
+    {
+      "test": "scenario q32_ramos_artifacts_batch::q32_ramos_artifacts_cards_reject_a_foreign_controller",
+      "covers": "actual horn_of_ramos is exercised by the shared 02-ramos-artifacts actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::q32_ramos_artifacts_batch::q32_ramos_artifacts_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and pinned Oracle fingerprint of horn_of_ramos"
+    },
+    {
+      "test": "mechanic_registry::q32_ramos_artifacts_batch::q32_ramos_artifacts_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "reviewed identity, typed shape and pinned Oracle fingerprint of horn_of_ramos"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

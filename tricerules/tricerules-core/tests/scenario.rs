@@ -2181,3 +2181,12 @@ mod q31_treasure_loot_batch;
 
 #[path = "scenario/q31_graveyard_top_draw_batch.rs"]
 mod q31_graveyard_top_draw_batch;
+
+#[path = "scenario/q32_diamond_artifacts_batch.rs"]
+mod q32_diamond_artifacts_batch;
+
+#[path = "scenario/q32_ramos_artifacts_batch.rs"]
+mod q32_ramos_artifacts_batch;
+
+#[path = "scenario/q32_elder_lands_batch.rs"]
+mod q32_elder_lands_batch;
