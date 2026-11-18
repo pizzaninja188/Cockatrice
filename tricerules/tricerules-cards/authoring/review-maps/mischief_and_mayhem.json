@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "831273d4-ced3-4659-b1f6-d5a0aeed3421",
+  "spans": [
+    {
+      "face_id": "mischief_and_mayhem",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q35_two_target_pump_batch::q35_two_target_pump_canary_hardest",
+      "covers": "hardest canary for this actual card"
+    },
+    {
+      "test": "scenario q35_two_target_pump_batch::q35_two_target_pump_cards_pump_each_chosen_creature_once",
+      "covers": "actual card is exercised by the shared 08-two-target-pump scenario"
+    },
+    {
+      "test": "scenario q35_two_target_pump_batch::q35_two_target_pump_cards_accept_zero_one_or_two_targets",
+      "covers": "actual card is exercised by the shared 08-two-target-pump scenario"
+    },
+    {
+      "test": "mechanic_registry::q35_two_target_pump_batch::q35_two_target_pump_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q35_two_target_pump_batch::q35_two_target_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,17 @@
+// Oracle 58511cb8-348d-409e-8fd6-772be20e57cd; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 611.2a/514.2 (both effects last until end of turn), 613.4c (pump) and 702.17 (reach enables blocking a flier).
+// The pinned Silk Net rulings confirm both bonuses end with the turn and that reach is the keyword enabling the block.
+
+(
+  id: "silk_net",
+  name: "Silk Net",
+  face_id: "silk_net",
+  mana_cost: "{G}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 1, toughness: 1, subject: Chosen((kind: Creature))),
+    GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Reach]),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0, 1])])),
+)

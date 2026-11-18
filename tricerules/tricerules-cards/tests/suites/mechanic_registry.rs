@@ -1152,3 +1152,12 @@ mod q35_cant_block_batch;
 
 #[path = "../q35_campus_lands_batch.rs"]
 mod q35_campus_lands_batch;
+
+#[path = "../q35_reach_pump_batch.rs"]
+mod q35_reach_pump_batch;
+
+#[path = "../q35_two_target_pump_batch.rs"]
+mod q35_two_target_pump_batch;
+
+#[path = "../q35_double_pump_shrink_batch.rs"]
+mod q35_double_pump_shrink_batch;

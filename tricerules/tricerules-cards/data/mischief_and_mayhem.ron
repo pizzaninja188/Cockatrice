@@ -1,0 +1,15 @@
+// Oracle 831273d4-ced3-4659-b1f6-d5a0aeed3421; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1/115.3 (up to two target creatures, each chosen once), 611.2a/514.2 (until end of turn) and 613.4c (pump).
+
+(
+  id: "mischief_and_mayhem",
+  name: "Mischief and Mayhem",
+  face_id: "mischief_and_mayhem",
+  mana_cost: "{4}{G}",
+  types: ["Sorcery"],
+  spell_effect: [
+    PumpTarget(power: 4, toughness: 4, subject: Chosen((kind: Creature))),
+  ],
+  targeting: Some((groups: [(min: 0, max: 2, effect_indices: [0])])),
+)

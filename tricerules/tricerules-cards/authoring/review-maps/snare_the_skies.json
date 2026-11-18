@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "7d011e22-335b-465f-9111-e95a72ebffe9",
+  "spans": [
+    {
+      "face_id": "snare_the_skies",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q35_reach_pump_batch::q35_reach_pump_cards_apply_the_printed_pump_and_reach",
+      "covers": "actual card is exercised by the shared 07-reach-pump scenario"
+    },
+    {
+      "test": "scenario q35_reach_pump_batch::q35_reach_pump_cards_reject_noncreature_targets",
+      "covers": "actual card is exercised by the shared 07-reach-pump scenario"
+    },
+    {
+      "test": "mechanic_registry::q35_reach_pump_batch::q35_reach_pump_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q35_reach_pump_batch::q35_reach_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
