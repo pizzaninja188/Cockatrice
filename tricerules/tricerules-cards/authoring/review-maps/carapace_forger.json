@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "9e623e0a-3c2d-4536-b12f-9437ef820499",
+  "spans": [
+    {
+      "face_id": "carapace_forger",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::ConditionalSelfModifier",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "GameCondition::BattlefieldAggregate",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "CardTypeFilter::Artifact",
+      "typed_path": "/faces/0/static_abilities/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q31_metalcraft_batch::q31_metalcraft_cards_keep_their_printed_body_below_three_artifacts",
+      "covers": "actual carapace_forger is exercised by the shared 05-metalcraft evidence"
+    },
+    {
+      "test": "scenario q31_metalcraft_batch::q31_metalcraft_cards_gain_two_two_at_three_artifacts",
+      "covers": "actual carapace_forger is exercised by the shared 05-metalcraft evidence"
+    },
+    {
+      "test": "scenario q31_metalcraft_batch::q31_metalcraft_cards_count_themselves_when_they_are_artifacts",
+      "covers": "actual carapace_forger is exercised by the shared 05-metalcraft evidence"
+    },
+    {
+      "test": "scenario q31_metalcraft_batch::q31_metalcraft_cards_reevaluate_after_an_artifact_leaves",
+      "covers": "actual carapace_forger is exercised by the shared 05-metalcraft evidence"
+    },
+    {
+      "test": "scenario q31_metalcraft_batch::q31_metalcraft_cards_cast_with_exact_cost",
+      "covers": "actual carapace_forger is exercised by the shared 05-metalcraft evidence"
+    },
+    {
+      "test": "mechanic_registry::q31_metalcraft_batch::q31_metalcraft_batch_maps_definitions",
+      "covers": "actual carapace_forger is exercised by the shared 05-metalcraft evidence"
+    },
+    {
+      "test": "mechanic_registry::q31_metalcraft_batch::q31_metalcraft_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual carapace_forger is exercised by the shared 05-metalcraft evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

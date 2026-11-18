@@ -1,0 +1,21 @@
+// Oracle 09cc0faa-71d7-428b-9fc4-5ba09e244e89; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.2/115.9b (heroic triggers on a cast spell with this creature as a target),
+// 603.2c (one trigger per spell) and 122.1 (the printed +1/+1 counters).
+(
+  id: "lagonna-band_trailblazer",
+  name: "Lagonna-Band Trailblazer",
+  face_id: "lagonna_band_trailblazer",
+  mana_cost: "{W}",
+  types: ["Creature", "Centaur", "Scout"],
+  power: 0,
+  toughness: 4,
+  triggered_abilities: [
+    (
+      ability_id: "heroic",
+      presentation: OracleLines([1]),
+      trigger: WheneverSelfBecomesTarget(source: SpellCast, source_controller: Controller),
+      effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+    ),
+  ],
+)

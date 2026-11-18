@@ -1,0 +1,88 @@
+{
+  "format_version": 1,
+  "oracle_id": "8618f8e8-fd86-47e3-905d-e6624b599b9b",
+  "spans": [
+    {
+      "face_id": "the_fair_basilica",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "the_fair_basilica",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "the_fair_basilica",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/1/costs/2"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q31_sphere_lands_batch::q31_sphere_lands_enter_tapped_and_tap_for_the_printed_color",
+      "covers": "actual the_fair_basilica is exercised by the shared 04-sphere-lands evidence"
+    },
+    {
+      "test": "scenario q31_sphere_lands_batch::q31_sphere_lands_sacrifice_for_a_card_with_exact_cost",
+      "covers": "actual the_fair_basilica is exercised by the shared 04-sphere-lands evidence"
+    },
+    {
+      "test": "scenario q31_sphere_lands_batch::q31_sphere_lands_credit_the_activating_player",
+      "covers": "actual the_fair_basilica is exercised by the shared 04-sphere-lands evidence"
+    },
+    {
+      "test": "scenario q31_sphere_lands_batch::q31_sphere_lands_draw_goes_to_the_activating_player",
+      "covers": "actual the_fair_basilica is exercised by the shared 04-sphere-lands evidence"
+    },
+    {
+      "test": "scenario q31_sphere_lands_batch::q31_sphere_lands_reject_the_sacrifice_ability_while_tapped",
+      "covers": "actual the_fair_basilica is exercised by the shared 04-sphere-lands evidence"
+    },
+    {
+      "test": "scenario q31_sphere_lands_batch::q31_sphere_lands_reject_the_sacrifice_ability_without_mana",
+      "covers": "actual the_fair_basilica is exercised by the shared 04-sphere-lands evidence"
+    },
+    {
+      "test": "mechanic_registry::q31_sphere_lands_batch::q31_sphere_lands_batch_maps_definitions",
+      "covers": "actual the_fair_basilica is exercised by the shared 04-sphere-lands evidence"
+    },
+    {
+      "test": "mechanic_registry::q31_sphere_lands_batch::q31_sphere_lands_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual the_fair_basilica is exercised by the shared 04-sphere-lands evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

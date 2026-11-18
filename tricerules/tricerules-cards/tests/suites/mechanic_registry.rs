@@ -1035,3 +1035,12 @@ mod q31_bounce_lands_batch;
 
 #[path = "../q31_turbulent_lands_batch.rs"]
 mod q31_turbulent_lands_batch;
+
+#[path = "../q31_sphere_lands_batch.rs"]
+mod q31_sphere_lands_batch;
+
+#[path = "../q31_metalcraft_batch.rs"]
+mod q31_metalcraft_batch;
+
+#[path = "../q31_heroic_counters_batch.rs"]
+mod q31_heroic_counters_batch;

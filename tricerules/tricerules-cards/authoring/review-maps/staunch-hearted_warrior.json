@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "aa6244fb-e1f1-4b53-b530-a8c9d0712a5b",
+  "spans": [
+    {
+      "face_id": "staunch_hearted_warrior",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfBecomesTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "TargetingSourceFilter::SpellCast",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "CounterKind::PlusOnePlusOne",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q31_heroic_counters_batch::q31_heroic_cards_place_their_printed_counter_count",
+      "covers": "actual staunch-hearted_warrior is exercised by the shared 06-heroic-counters evidence"
+    },
+    {
+      "test": "scenario q31_heroic_counters_batch::q31_heroic_cards_keep_their_printed_flying_and_body",
+      "covers": "actual staunch-hearted_warrior is exercised by the shared 06-heroic-counters evidence"
+    },
+    {
+      "test": "scenario q31_heroic_counters_batch::q31_heroic_does_not_trigger_for_a_spell_that_does_not_target_it",
+      "covers": "actual staunch-hearted_warrior is exercised by the shared 06-heroic-counters evidence"
+    },
+    {
+      "test": "scenario q31_heroic_counters_batch::q31_heroic_does_not_trigger_for_an_opponents_targeting_spell",
+      "covers": "actual staunch-hearted_warrior is exercised by the shared 06-heroic-counters evidence"
+    },
+    {
+      "test": "scenario q31_heroic_counters_batch::q31_heroic_cards_enter_through_their_exact_mana_cost",
+      "covers": "actual staunch-hearted_warrior is exercised by the shared 06-heroic-counters evidence"
+    },
+    {
+      "test": "mechanic_registry::q31_heroic_counters_batch::q31_heroic_counters_batch_maps_definitions",
+      "covers": "actual staunch-hearted_warrior is exercised by the shared 06-heroic-counters evidence"
+    },
+    {
+      "test": "mechanic_registry::q31_heroic_counters_batch::q31_heroic_counters_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual staunch-hearted_warrior is exercised by the shared 06-heroic-counters evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

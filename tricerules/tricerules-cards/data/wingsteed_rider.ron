@@ -1,0 +1,22 @@
+// Oracle 9c46adaa-ab39-4c0a-99bd-935b6c4f732f; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.2/115.9b (heroic triggers on a cast spell with this creature as a target),
+// 603.2c (one trigger per spell) and 122.1 (the printed +1/+1 counters).
+(
+  id: "wingsteed_rider",
+  name: "Wingsteed Rider",
+  face_id: "wingsteed_rider",
+  mana_cost: "{1}{W}{W}",
+  types: ["Creature", "Human", "Knight"],
+  keywords: [Flying],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "heroic",
+      presentation: OracleLines([2]),
+      trigger: WheneverSelfBecomesTarget(source: SpellCast, source_controller: Controller),
+      effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+    ),
+  ],
+)
