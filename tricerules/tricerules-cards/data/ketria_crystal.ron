@@ -1,0 +1,27 @@
+// Oracle 3ee5d7b6-0263-4239-a5fb-de1e1a220c55; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 605.1a/605.3b (mana ability), 702.29a-b (cycling as a hand-zone activated ability), 118.3 (cycling cost) and 121.1 (draw).
+// The cycle has no pinned ruling.
+
+(
+  id: "ketria_crystal",
+  name: "Ketria Crystal",
+  face_id: "ketria_crystal",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "mana",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(g: 1), (u: 1), (r: 1)])],
+    ),
+    (
+      ability_id: "cycling",
+      presentation: OracleLines([2]),
+      source_zone: Hand,
+      costs: [Mana("{2}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "20d30d4d-cf38-41fe-a2ce-8327f7c87c01",
+  "spans": [
+    {
+      "face_id": "boon_of_emrakul",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "boon_of_emrakul",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q32_plus_minus_auras_batch::q32_plus_minus_auras_canary_simplest",
+      "covers": "actual boon_of_emrakul is exercised by the shared 05-plus-minus-auras actual-card scenario"
+    },
+    {
+      "test": "scenario q32_plus_minus_auras_batch::q32_plus_minus_auras_canary_hardest",
+      "covers": "actual boon_of_emrakul is exercised by the shared 05-plus-minus-auras actual-card scenario"
+    },
+    {
+      "test": "scenario q32_plus_minus_auras_batch::q32_plus_minus_auras_cards_apply_their_printed_modifier",
+      "covers": "actual boon_of_emrakul is exercised by the shared 05-plus-minus-auras actual-card scenario"
+    },
+    {
+      "test": "scenario q32_plus_minus_auras_batch::q32_plus_minus_auras_cards_remove_the_modifier_when_the_aura_leaves",
+      "covers": "actual boon_of_emrakul is exercised by the shared 05-plus-minus-auras actual-card scenario"
+    },
+    {
+      "test": "scenario q32_plus_minus_auras_batch::q32_plus_minus_auras_cards_reject_a_noncreature_and_fizzle_a_stale_target",
+      "covers": "actual boon_of_emrakul is exercised by the shared 05-plus-minus-auras actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::q32_plus_minus_auras_batch::q32_plus_minus_auras_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and pinned Oracle fingerprint of boon_of_emrakul"
+    },
+    {
+      "test": "mechanic_registry::q32_plus_minus_auras_batch::q32_plus_minus_auras_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "reviewed identity, typed shape and pinned Oracle fingerprint of boon_of_emrakul"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -2190,3 +2190,12 @@ mod q32_ramos_artifacts_batch;
 
 #[path = "scenario/q32_elder_lands_batch.rs"]
 mod q32_elder_lands_batch;
+
+#[path = "scenario/q32_crystal_cycle_batch.rs"]
+mod q32_crystal_cycle_batch;
+
+#[path = "scenario/q32_plus_minus_auras_batch.rs"]
+mod q32_plus_minus_auras_batch;
+
+#[path = "scenario/q32_self_sac_ping_batch.rs"]
+mod q32_self_sac_ping_batch;

@@ -1,0 +1,20 @@
+// Oracle 03220765-8a9d-4d4a-88d5-98df975ce13c; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 107.4e (hybrid mana may be paid with either half), 303.4a (Aura target and attach), 613.4c (layer-7c modifier) and 704.5m (unattached Aura cleanup).
+// The card has no pinned ruling.
+
+(
+  id: "sangrite_backlash",
+  name: "Sangrite Backlash",
+  face_id: "sangrite_backlash",
+  mana_cost: "{B/G}{R}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "attached_modifier",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(delta_power: 3, delta_toughness: -3),
+    ),
+  ],
+)

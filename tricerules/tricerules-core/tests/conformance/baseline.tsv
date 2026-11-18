@@ -1671,6 +1671,7 @@ impossible_inferno	0	cast	exercised
 impractical_joke	0	cast	exercised
 incinerating_blast	0	cast	exercised
 incurable_ogre	0	cast	exercised
+indatha_crystal	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 indatha_triome	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 independent_troops	0	cast	exercised
 indestructibility	0	cast	exercised
@@ -1807,6 +1808,7 @@ kelinore_bat	0	cast	exercised
 kellans_lightblades	0	cast	unsupported: target group 0 needs a richer fixture
 kembas_skyguard	0	cast	exercised
 kessig_recluse	0	cast	exercised
+ketria_crystal	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 ketria_triome	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 khalni_ambush_khalni_territory	0	cast	exercised
 khalni_ambush_khalni_territory	1	ability:0	exercised
@@ -2563,6 +2565,7 @@ rattleback_apothecary	0	cast	exercised
 raucous_carnival	0	ability:0	exercised
 raucous_carnival	0	land	exercised
 raucous_theater	0	land	exercised
+raugrin_crystal	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 raugrin_triome	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 raven_of_fell_omens	0	cast	exercised
 ravenhill_flock	0	cast	exercised
@@ -2789,6 +2792,7 @@ savage_land_dinosaur	0	cast	exercised
 savage_mansion	0	ability:0	exercised
 savage_mansion	0	ability:1	exercised
 savage_mansion	0	land	exercised
+savai_crystal	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 savai_sabertooth	0	cast	exercised
 savai_triome	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 savannah	0	ability:0	exercised
@@ -3873,6 +3877,7 @@ youre_not_alone	0	cast	exercised
 youthful_knight	0	cast	exercised
 youthful_valkyrie	0	cast	exercised
 yuyan_archers	0	cast	exercised
+zagoth_crystal	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 zagoth_triome	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 zealous_display	0	cast	exercised
 zealous_guardian	0	cast	exercised

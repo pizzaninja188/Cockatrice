@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "cd0c1165-673d-4936-8254-deedd0ebbe97",
+  "spans": [
+    {
+      "face_id": "savai_crystal",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "savai_crystal",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q32_crystal_cycle_batch::q32_crystal_cycle_canary_simplest",
+      "covers": "actual savai_crystal is exercised by the shared 04-crystal-cycle actual-card scenario"
+    },
+    {
+      "test": "scenario q32_crystal_cycle_batch::q32_crystal_cycle_canary_hardest",
+      "covers": "actual savai_crystal is exercised by the shared 04-crystal-cycle actual-card scenario"
+    },
+    {
+      "test": "scenario q32_crystal_cycle_batch::q32_crystal_cycle_cards_offer_three_colors_and_cycle_for_two",
+      "covers": "actual savai_crystal is exercised by the shared 04-crystal-cycle actual-card scenario"
+    },
+    {
+      "test": "scenario q32_crystal_cycle_batch::q32_crystal_cycle_cards_reject_online_cycling_without_the_exact_cost",
+      "covers": "actual savai_crystal is exercised by the shared 04-crystal-cycle actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::q32_crystal_cycle_batch::q32_crystal_cycle_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and pinned Oracle fingerprint of savai_crystal"
+    },
+    {
+      "test": "mechanic_registry::q32_crystal_cycle_batch::q32_crystal_cycle_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "reviewed identity, typed shape and pinned Oracle fingerprint of savai_crystal"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
