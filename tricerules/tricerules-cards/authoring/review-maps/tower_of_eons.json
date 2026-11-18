@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "74a71bbd-c307-481c-b0cf-70e24b0c8ad4",
+  "spans": [
+    {
+      "face_id": "tower_of_eons",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q32_activated_lifegain_batch::q32_activated_lifegain_canary_simplest",
+      "covers": "actual tower_of_eons is exercised by the shared 07-activated-lifegain actual-card scenario"
+    },
+    {
+      "test": "scenario q32_activated_lifegain_batch::q32_activated_lifegain_canary_hardest",
+      "covers": "actual tower_of_eons is exercised by the shared 07-activated-lifegain actual-card scenario"
+    },
+    {
+      "test": "scenario q32_activated_lifegain_batch::q32_activated_lifegain_cards_gain_only_the_controllers_printed_life",
+      "covers": "actual tower_of_eons is exercised by the shared 07-activated-lifegain actual-card scenario"
+    },
+    {
+      "test": "scenario q32_activated_lifegain_batch::q32_activated_lifegain_cards_require_the_exact_costs_and_reject_a_foreign_controller",
+      "covers": "actual tower_of_eons is exercised by the shared 07-activated-lifegain actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::q32_activated_lifegain_batch::q32_activated_lifegain_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and pinned Oracle fingerprint of tower_of_eons"
+    },
+    {
+      "test": "mechanic_registry::q32_activated_lifegain_batch::q32_activated_lifegain_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "reviewed identity, typed shape and pinned Oracle fingerprint of tower_of_eons"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

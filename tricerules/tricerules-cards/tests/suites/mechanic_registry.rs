@@ -1071,3 +1071,12 @@ mod q32_plus_minus_auras_batch;
 
 #[path = "../q32_self_sac_ping_batch.rs"]
 mod q32_self_sac_ping_batch;
+
+#[path = "../q32_activated_lifegain_batch.rs"]
+mod q32_activated_lifegain_batch;
+
+#[path = "../q32_flying_untap_batch.rs"]
+mod q32_flying_untap_batch;
+
+#[path = "../q32_untap_pump_batch.rs"]
+mod q32_untap_pump_batch;

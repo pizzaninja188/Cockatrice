@@ -1,0 +1,17 @@
+// Oracle de8ebe4b-d86d-478b-946e-f83e1409b63f; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1b (target creature), 701.26 (untap), 611.2a/613.4c (until-end-of-turn pump) and 608.2b (stale target).
+// Pinned ruling: it may target an already-untapped creature.
+
+(
+  id: "gerrards_command",
+  name: "Gerrard's Command",
+  face_id: "gerrards_command",
+  mana_cost: "{G}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    Untap(subject: Chosen((kind: Creature))),
+    PumpTarget(power: 3, toughness: 3, subject: Chosen((kind: Creature))),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0, 1])])),
+)

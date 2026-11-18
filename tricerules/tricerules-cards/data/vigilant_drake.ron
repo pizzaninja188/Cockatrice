@@ -1,0 +1,23 @@
+// Oracle 4f5eaf5a-dd52-4d48-91b5-d48763d13159; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.9a-b (flying), 602.1/602.2 (activation), 118.3 (mana cost) and 701.26 (untap).
+// The card has no pinned ruling.
+
+(
+  id: "vigilant_drake",
+  name: "Vigilant Drake",
+  face_id: "vigilant_drake",
+  mana_cost: "{4}{U}",
+  types: ["Creature", "Drake"],
+  keywords: [Flying],
+  power: 3,
+  toughness: 3,
+  activated_abilities: [
+    (
+      ability_id: "untap_self",
+      presentation: OracleLines([2]),
+      costs: [Mana("{2}{U}")],
+      effect: [Untap(subject: Source)],
+    ),
+  ],
+)

@@ -1,0 +1,22 @@
+// Oracle e4d6ed72-f40f-4e4a-bec0-19b1d4f99ebe; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 (activation), 118.3 (tap and mana costs) and 119.3 (life gain).
+// The card has no pinned ruling.
+
+(
+  id: "stone_haven_medic",
+  name: "Stone Haven Medic",
+  face_id: "stone_haven_medic",
+  mana_cost: "{1}{W}",
+  power: 1,
+  toughness: 3,
+  types: ["Creature", "Kor", "Cleric"],
+  activated_abilities: [
+    (
+      ability_id: "gain_life",
+      presentation: OracleLines([1]),
+      costs: [Mana("{W}"), Tap],
+      effect: [GainLife(amount: 1)],
+    ),
+  ],
+)
