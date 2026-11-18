@@ -294,6 +294,7 @@ betrayers_bargain	0	cast	unsupported: required cast-cost group needs a specializ
 bewildering_blizzard	0	cast	exercised
 beza,_the_bounding_spring	0	cast	exercised
 bifur,_melodic_rider	0	cast	exercised
+big_score	0	cast	unsupported: required cast-cost group needs a specialized fixture
 bigfin_bouncer	0	cast	exercised
 bilbos_deadly_slice	0	cast	exercised
 bile-vial_boggart	0	cast	exercised
@@ -2400,6 +2401,7 @@ pinnacle_kill-ship	0	ability:0	exercised
 pinnacle_kill-ship	0	cast	exercised
 piranha_fly	0	cast	exercised
 pirate_peddlers	0	cast	exercised
+pirates_pillage	0	cast	unsupported: required cast-cost group needs a specialized fixture
 pitchburn_devils	0	cast	exercised
 pitiless_fists	0	cast	exercised
 pitiless_gorgon	0	cast	exercised
@@ -3563,6 +3565,7 @@ undergrowth_leopard	0	ability:0	exercised
 undergrowth_leopard	0	cast	exercised
 unending_whisper	0	cast	exercised
 unexpected_assistance	0	cast	exercised
+unexpected_windfall	0	cast	unsupported: required cast-cost group needs a specialized fixture
 unflinching_courage	0	cast	exercised
 unforgiving_aim	0	cast	exercised
 unfortunate_accident	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
