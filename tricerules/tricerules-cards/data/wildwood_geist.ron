@@ -1,0 +1,25 @@
+// Oracle 9fb4aa2d-6414-4176-9070-e5230e100c6a; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 611.3/613.1f (the active-player condition is reevaluated continuously) and 613.4c (layer 7c P/T).
+// The card has no pinned ruling.
+
+(
+  id: "wildwood_geist",
+  name: "Wildwood Geist",
+  face_id: "wildwood_geist",
+  mana_cost: "{4}{G}",
+  types: ["Creature", "Spirit"],
+  power: 3,
+  toughness: 3,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: ConditionalSelfModifier(
+        condition: ActivePlayer(players: Controller),
+        delta_power: 2,
+        delta_toughness: 2,
+      ),
+    ),
+  ],
+)

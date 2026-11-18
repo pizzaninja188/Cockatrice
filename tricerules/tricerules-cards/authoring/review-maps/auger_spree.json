@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "c0c96c7a-02d8-40cb-a08b-4a2a3b631eef",
+  "spans": [
+    {
+      "face_id": "auger_spree",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q34_shrink_spells_batch::q34_shrink_spells_canary_simplest",
+      "covers": "actual card is exercised by the shared 01-shrink-spells scenario"
+    },
+    {
+      "test": "scenario q34_shrink_spells_batch::q34_shrink_spells_canary_hardest",
+      "covers": "actual card is exercised by the shared 01-shrink-spells scenario"
+    },
+    {
+      "test": "scenario q34_shrink_spells_batch::q34_shrink_spells_cards_apply_the_printed_pump_to_exactly_one_creature",
+      "covers": "actual card is exercised by the shared 01-shrink-spells scenario"
+    },
+    {
+      "test": "scenario q34_shrink_spells_batch::q34_shrink_spells_cards_reject_noncreatures_and_fizzle_stale_targets",
+      "covers": "actual card is exercised by the shared 01-shrink-spells scenario"
+    },
+    {
+      "test": "mechanic_registry::q34_shrink_spells_batch::q34_shrink_spells_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q34_shrink_spells_batch::q34_shrink_spells_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

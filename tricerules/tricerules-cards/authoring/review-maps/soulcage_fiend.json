@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "ecbb660a-4013-410a-b683-82c3ef1690cd",
+  "spans": [
+    {
+      "face_id": "soulcage_fiend",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q34_death_life_loss_batch::q34_death_life_loss_canary_simplest",
+      "covers": "actual card is exercised by the shared 05-death-life-loss scenario"
+    },
+    {
+      "test": "scenario q34_death_life_loss_batch::q34_death_life_loss_canary_hardest",
+      "covers": "actual card is exercised by the shared 05-death-life-loss scenario"
+    },
+    {
+      "test": "scenario q34_death_life_loss_batch::q34_death_life_loss_cards_hit_both_players_for_the_printed_amount",
+      "covers": "actual card is exercised by the shared 05-death-life-loss scenario"
+    },
+    {
+      "test": "scenario q34_death_life_loss_batch::q34_death_life_loss_cards_do_not_trigger_on_other_zone_changes",
+      "covers": "actual card is exercised by the shared 05-death-life-loss scenario"
+    },
+    {
+      "test": "mechanic_registry::q34_death_life_loss_batch::q34_death_life_loss_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q34_death_life_loss_batch::q34_death_life_loss_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

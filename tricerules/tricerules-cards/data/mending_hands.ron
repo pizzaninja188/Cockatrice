@@ -1,0 +1,15 @@
+// Oracle a612f30d-cd55-438b-a7de-8c80509183aa; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 614.1a/615.1 (prevention shield), 611.2a/514.2 (until end of turn) and 115.1 (any target).
+// The card has no pinned ruling.
+
+(
+  id: "mending_hands",
+  name: "Mending Hands",
+  face_id: "mending_hands",
+  mana_cost: "{W}",
+  types: ["Instant"],
+  spell_effect: [
+    PreventNextDamage(amount: 4, target: (kind: AnyTarget)),
+  ],
+)

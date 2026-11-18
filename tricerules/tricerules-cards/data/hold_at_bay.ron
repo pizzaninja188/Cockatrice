@@ -1,0 +1,15 @@
+// Oracle a57b84e4-951c-4475-bb34-b68815858f87; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 614.1a/615.1 (prevention shield), 611.2a/514.2 (until end of turn) and 115.1 (any target).
+// The card has no pinned ruling.
+
+(
+  id: "hold_at_bay",
+  name: "Hold at Bay",
+  face_id: "hold_at_bay",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    PreventNextDamage(amount: 7, target: (kind: AnyTarget)),
+  ],
+)

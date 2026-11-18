@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "beab66e0-2b6c-478f-ba42-8c0c216a527e",
+  "spans": [
+    {
+      "face_id": "heroes_reunion",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::TargetPlayerGainsLife",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q34_targeted_lifegain_batch::q34_targeted_lifegain_canary_simplest",
+      "covers": "actual card is exercised by the shared 03-targeted-lifegain scenario"
+    },
+    {
+      "test": "scenario q34_targeted_lifegain_batch::q34_targeted_lifegain_canary_hardest",
+      "covers": "actual card is exercised by the shared 03-targeted-lifegain scenario"
+    },
+    {
+      "test": "scenario q34_targeted_lifegain_batch::q34_targeted_lifegain_cards_give_exactly_the_printed_life_to_the_chosen_player",
+      "covers": "actual card is exercised by the shared 03-targeted-lifegain scenario"
+    },
+    {
+      "test": "scenario q34_targeted_lifegain_batch::q34_targeted_lifegain_cards_reject_nonplayer_targets",
+      "covers": "actual card is exercised by the shared 03-targeted-lifegain scenario"
+    },
+    {
+      "test": "mechanic_registry::q34_targeted_lifegain_batch::q34_targeted_lifegain_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q34_targeted_lifegain_batch::q34_targeted_lifegain_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

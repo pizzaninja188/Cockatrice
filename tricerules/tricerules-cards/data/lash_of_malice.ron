@@ -1,0 +1,13 @@
+// Oracle fc3d2a9c-08a5-4aea-9fb8-42466b9152a2; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 613.4c (layer 7c negative toughness), 611.2a/514.2 (until end of turn) and 115.1 (target).
+// The card has no pinned ruling.
+
+(
+  id: "lash_of_malice",
+  name: "Lash of Malice",
+  face_id: "lash_of_malice",
+  mana_cost: "{B}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: 2, toughness: -2)],
+)

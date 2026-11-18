@@ -1,0 +1,15 @@
+// Oracle 1f493e26-a556-4ca0-bb44-5408800ccf82; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 119.3 (life gain), 115.1 (target player) and 608.2b (stale target).
+// The card has no pinned ruling.
+
+(
+  id: "soothing_balm",
+  name: "Soothing Balm",
+  face_id: "soothing_balm",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    TargetPlayerGainsLife(amount: 5, target: (kind: AnyPlayer)),
+  ],
+)

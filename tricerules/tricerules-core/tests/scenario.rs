@@ -2235,3 +2235,30 @@ mod q33_tapland_remnants_batch;
 
 #[path = "scenario/q33_keyword_only_remnants_batch.rs"]
 mod q33_keyword_only_remnants_batch;
+
+#[path = "scenario/q34_shrink_spells_batch.rs"]
+mod q34_shrink_spells_batch;
+
+#[path = "scenario/q34_prevention_shields_batch.rs"]
+mod q34_prevention_shields_batch;
+
+#[path = "scenario/q34_targeted_lifegain_batch.rs"]
+mod q34_targeted_lifegain_batch;
+
+#[path = "scenario/q34_death_shrink_batch.rs"]
+mod q34_death_shrink_batch;
+
+#[path = "scenario/q34_death_life_loss_batch.rs"]
+mod q34_death_life_loss_batch;
+
+#[path = "scenario/q34_blocked_pump_batch.rs"]
+mod q34_blocked_pump_batch;
+
+#[path = "scenario/q34_power_evasion_batch.rs"]
+mod q34_power_evasion_batch;
+
+#[path = "scenario/q34_during_turn_pump_batch.rs"]
+mod q34_during_turn_pump_batch;
+
+#[path = "scenario/q34_self_first_strike_batch.rs"]
+mod q34_self_first_strike_batch;

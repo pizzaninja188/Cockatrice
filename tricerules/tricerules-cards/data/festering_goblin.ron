@@ -1,0 +1,22 @@
+// Oracle 66fb4764-d309-4c30-a2a4-474f9030dc87; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 700.4/603.6c (dies trigger), 115.1 (target), 611.2a/514.2 and 613.4c (until-end-of-turn -N/-N).
+// The card has no pinned ruling.
+
+(
+  id: "festering_goblin",
+  name: "Festering Goblin",
+  face_id: "festering_goblin",
+  mana_cost: "{B}",
+  types: ["Creature", "Zombie", "Goblin"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfDies,
+      effect: [PumpTarget(power: -1, toughness: -1, subject: Chosen((kind: Creature)))],
+    ),
+  ],
+)

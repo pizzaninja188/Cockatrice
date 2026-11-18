@@ -1,0 +1,23 @@
+// Oracle a6a26261-1915-4699-a2e9-cca43b39a3eb; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 509.1b (declared blockers must satisfy the attacker's restrictions) and 613.1g/613.4 (current power).
+// The card has no pinned ruling.
+
+(
+  id: "fleet-footed_monk",
+  name: "Fleet-Footed Monk",
+  face_id: "fleet_footed_monk",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Human", "Monk"],
+  power: 1,
+  toughness: 1,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: SelfCombatRestriction(restriction: (
+        cant_be_blocked_by: [(kind: Creature, power: Some(AtLeast(2)))],
+      )),
+    ),
+  ],
+)

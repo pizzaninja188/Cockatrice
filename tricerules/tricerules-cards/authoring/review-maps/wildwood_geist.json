@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "9fb4aa2d-6414-4176-9070-e5230e100c6a",
+  "spans": [
+    {
+      "face_id": "wildwood_geist",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::ConditionalSelfModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q34_during_turn_pump_batch::q34_during_turn_pump_canary_simplest",
+      "covers": "actual card is exercised by the shared 09-during-turn-pump scenario"
+    },
+    {
+      "test": "scenario q34_during_turn_pump_batch::q34_during_turn_pump_canary_hardest",
+      "covers": "actual card is exercised by the shared 09-during-turn-pump scenario"
+    },
+    {
+      "test": "scenario q34_during_turn_pump_batch::q34_during_turn_pump_cards_apply_only_while_their_controller_is_active",
+      "covers": "actual card is exercised by the shared 09-during-turn-pump scenario"
+    },
+    {
+      "test": "mechanic_registry::q34_during_turn_pump_batch::q34_during_turn_pump_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q34_during_turn_pump_batch::q34_during_turn_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
