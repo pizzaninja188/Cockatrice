@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "31123cb5-2dd5-4f2b-a2fd-8f87095972c6",
+  "spans": [
+    {
+      "face_id": "epic_confrontation",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Fight",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q36_pump_fight_batch::q36_pump_fight_cards_apply_the_printed_pump_then_fight",
+      "covers": "actual card is exercised by the shared 07-pump-fight scenario"
+    },
+    {
+      "test": "scenario q36_pump_fight_batch::q36_pump_fight_cards_require_one_creature_on_each_side",
+      "covers": "actual card is exercised by the shared 07-pump-fight scenario"
+    },
+    {
+      "test": "scenario q36_pump_fight_batch::q36_pump_fight_cards_keep_the_pump_when_the_opposing_target_leaves",
+      "covers": "actual card is exercised by the shared 07-pump-fight scenario"
+    },
+    {
+      "test": "mechanic_registry::q36_pump_fight_batch::q36_pump_fight_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q36_pump_fight_batch::q36_pump_fight_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

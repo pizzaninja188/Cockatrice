@@ -1179,3 +1179,12 @@ mod q36_team_haste_batch;
 
 #[path = "../q36_self_deathtouch_batch.rs"]
 mod q36_self_deathtouch_batch;
+
+#[path = "../q36_pump_fight_batch.rs"]
+mod q36_pump_fight_batch;
+
+#[path = "../q36_untap_reach_pump_batch.rs"]
+mod q36_untap_reach_pump_batch;
+
+#[path = "../q36_self_unblockable_batch.rs"]
+mod q36_self_unblockable_batch;

@@ -1,0 +1,18 @@
+// Oracle e5fe1fc3-d9fe-4b1b-85d3-7d8ecb84a829; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a (target creature), 701.26 (untap), 611.2a/514.2 (until end of turn), 613.1f layer 6 (reach) and 613.4c layer 7c (pump).
+// Pinned ruling: Steady Aim can target an already-untapped creature, which still gets +1/+4 and reach.
+
+(
+  id: "steady_aim",
+  name: "Steady Aim",
+  face_id: "steady_aim",
+  mana_cost: "{1}{G}",
+  types: ["Instant"],
+  spell_effect: [
+    Untap(subject: Chosen((kind: Creature))),
+    PumpTarget(power: 1, toughness: 4, subject: Chosen((kind: Creature))),
+    GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Reach]),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0, 1, 2])])),
+)

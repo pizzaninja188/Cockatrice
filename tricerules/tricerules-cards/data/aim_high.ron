@@ -1,0 +1,18 @@
+// Oracle c169929a-850b-4d46-9f14-a922f4465d85; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a (target creature), 701.26 (untap), 611.2a/514.2 (until end of turn), 613.1f layer 6 (reach) and 613.4c layer 7c (pump).
+// Pinned rulings: Aim High can target an already-untapped creature, which still gets +2/+2 and reach; untapping an attacking creature does not remove it from combat.
+
+(
+  id: "aim_high",
+  name: "Aim High",
+  face_id: "aim_high",
+  mana_cost: "{1}{G}",
+  types: ["Instant"],
+  spell_effect: [
+    Untap(subject: Chosen((kind: Creature))),
+    PumpTarget(power: 2, toughness: 2, subject: Chosen((kind: Creature))),
+    GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Reach]),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0, 1, 2])])),
+)
