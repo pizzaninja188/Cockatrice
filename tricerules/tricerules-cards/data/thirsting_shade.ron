@@ -1,0 +1,21 @@
+// Oracle cba60174-a4de-41e1-a4d9-8f7bb1387e0e; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.2 (activate), 118.3 (costs are paid on activation), 611.2c/613.4c (until-end-of-
+// turn pump) and the printed keyword or protection static.
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "thirsting_shade",
+  name: "Thirsting Shade",
+  face_id: "thirsting_shade",
+  mana_cost: "{B}",
+  types: ["Creature", "Shade"],
+  power: 1,
+  toughness: 1,
+  keywords: [Lifelink],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Mana("{2}{B}")],
+    effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+  )],
+)

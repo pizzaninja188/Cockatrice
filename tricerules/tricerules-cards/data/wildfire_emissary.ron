@@ -1,0 +1,21 @@
+// Oracle 8fb44b03-017f-4cf3-a79b-8f6cc33570ca; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.2 (activate), 118.3 (costs are paid on activation), 611.2c/613.4c (until-end-of-
+// turn pump) and the printed keyword or protection static.
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "wildfire_emissary",
+  name: "Wildfire Emissary",
+  face_id: "wildfire_emissary",
+  mana_cost: "{3}{R}",
+  types: ["Creature", "Efreet"],
+  power: 2,
+  toughness: 4,
+  protections: [Color(White)],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Mana("{1}{R}")],
+    effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
+  )],
+)

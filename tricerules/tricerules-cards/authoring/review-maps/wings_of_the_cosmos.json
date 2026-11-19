@@ -1,0 +1,58 @@
+{
+  "format_version": 1,
+  "oracle_id": "afa9cf24-cd02-41f5-9141-f6ff6f27d528",
+  "spans": [
+    {
+      "face_id": "wings_of_the_cosmos",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/spell_effect/0/PumpTarget/subject"
+    },
+    {
+      "symbol": "TargetFilter.kind",
+      "typed_path": "/faces/0/spell_effect/0/PumpTarget/subject/Chosen"
+    },
+    {
+      "symbol": "SpellEffectKind::Untap",
+      "typed_path": "/faces/0/spell_effect/2"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q42_pump_keyword_batch::q42_pump_keyword_cards_apply_their_printed_values",
+      "covers": "actual card applies its printed pump and keyword to its single creature target"
+    },
+    {
+      "test": "scenario q42_pump_keyword_batch::q42_pump_keyword_cards_fizzle_when_the_target_leaves",
+      "covers": "a stale sole target fizzles the spell"
+    },
+    {
+      "test": "mechanic_registry::q42_cohorts_batch::q42_pump_keyword_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of wings_of_the_cosmos"
+    },
+    {
+      "test": "mechanic_registry::q42_cohorts_batch::q42_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for wings_of_the_cosmos"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

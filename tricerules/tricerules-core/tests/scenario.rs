@@ -2421,3 +2421,30 @@ mod q41_etb_spell_batch;
 
 #[path = "scenario/q41_activated_batch.rs"]
 mod q41_activated_batch;
+
+#[path = "scenario/q42_cycling_keyword_batch.rs"]
+mod q42_cycling_keyword_batch;
+
+#[path = "scenario/q42_regenerate_self_batch.rs"]
+mod q42_regenerate_self_batch;
+
+#[path = "scenario/q42_landfall_pump_batch.rs"]
+mod q42_landfall_pump_batch;
+
+#[path = "scenario/q42_cast_trigger_pump_batch.rs"]
+mod q42_cast_trigger_pump_batch;
+
+#[path = "scenario/q42_explore_etb_batch.rs"]
+mod q42_explore_etb_batch;
+
+#[path = "scenario/q42_combat_damage_counter_batch.rs"]
+mod q42_combat_damage_counter_batch;
+
+#[path = "scenario/q42_activated_self_pump_batch.rs"]
+mod q42_activated_self_pump_batch;
+
+#[path = "scenario/q42_attacking_pump_batch.rs"]
+mod q42_attacking_pump_batch;
+
+#[path = "scenario/q42_pump_keyword_batch.rs"]
+mod q42_pump_keyword_batch;

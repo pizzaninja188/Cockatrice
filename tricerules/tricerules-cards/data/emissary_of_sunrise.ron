@@ -1,0 +1,21 @@
+// Oracle e2155e61-f389-4b1d-9598-9a79cbccaaa2; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (entry trigger), 701.44a-c (explore, including the land-to-hand and
+// counter-plus-graveyard-or-top branches) and the printed keyword static.
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "emissary_of_sunrise",
+  name: "Emissary of Sunrise",
+  face_id: "emissary_of_sunrise",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Human", "Cleric"],
+  power: 2,
+  toughness: 1,
+  keywords: [FirstStrike],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Explore(subject: Source)],
+  )],
+)

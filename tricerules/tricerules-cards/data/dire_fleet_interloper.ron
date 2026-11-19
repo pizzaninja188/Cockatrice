@@ -1,0 +1,21 @@
+// Oracle 7ae7cfde-8f2a-4e66-abe2-c15477e9fac3; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (entry trigger), 701.44a-c (explore, including the land-to-hand and
+// counter-plus-graveyard-or-top branches) and the printed keyword static.
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "dire_fleet_interloper",
+  name: "Dire Fleet Interloper",
+  face_id: "dire_fleet_interloper",
+  mana_cost: "{3}{B}",
+  types: ["Creature", "Human", "Pirate"],
+  power: 2,
+  toughness: 2,
+  keywords: [Menace],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Explore(subject: Source)],
+  )],
+)

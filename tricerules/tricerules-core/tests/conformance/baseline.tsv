@@ -331,6 +331,7 @@ blightstep_pathway_searstep_pathway	1	land	exercised
 blind_phantasm	0	cast	exercised
 blistering_barrier	0	cast	exercised
 blitzball_shot	0	cast	exercised
+bloated_toad	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 blood_artist	0	cast	exercised
 blood_crypt	0	ability:0	exercised
 blood_crypt	0	land	exercised
@@ -870,6 +871,7 @@ dirgur_island_dragon_skimming_strike	1	cast	exercised
 discerning_peddler	0	cast	exercised
 disciple_of_grace	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 disciple_of_law	0	ability:0	unsupported: ability not offered by generic battlefield fixture
+disciple_of_malice	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 disdainful_stroke	0	cast	unsupported: target group 0 needs a richer fixture
 disenchant	0	cast	exercised
 disentomb	0	cast	exercised
@@ -1458,6 +1460,7 @@ grab_the_prize	0	cast	exercised
 graduation_day	0	cast	exercised
 gran_pulse_ochu	0	ability:0	exercised
 gran_pulse_ochu	0	cast	exercised
+granitic_titan	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 grapple_with_death	0	cast	exercised
 grappler_spider	0	cast	exercised
 grasping_longneck	0	cast	exercised
@@ -1684,6 +1687,7 @@ impale	0	cast	exercised
 imperial_outrider	0	cast	exercised
 imperious_inkmage	0	cast	exercised
 impolite_entrance	0	cast	exercised
+imposing_vantasaur	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 impossible_inferno	0	cast	exercised
 impractical_joke	0	cast	exercised
 incinerating_blast	0	cast	exercised
@@ -1903,6 +1907,7 @@ lasyd_prowler	0	cast	exercised
 lathnu_sailback	0	cast	exercised
 laughing_mad	0	cast	unsupported: required cast-cost group needs a specialized fixture
 lava_coil	0	cast	exercised
+lava_serpent	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 lavakin_brawler	0	cast	exercised
 lazotep_behemoth	0	cast	exercised
 lead_pipe	0	ability:0	exercised
@@ -2161,6 +2166,7 @@ misty_palms_oasis	0	land	exercised
 mithril_coat	0	ability:0	exercised
 mithril_coat	0	cast	exercised
 moaning_spirit	0	cast	exercised
+moaning_wall	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 moat_piranhas	0	cast	exercised
 mocking_sprite	0	cast	exercised
 moldering_karok	0	cast	exercised
@@ -2574,6 +2580,7 @@ ral,_crackling_wit	0	cast	exercised
 rambunctious_mutt	0	cast	exercised
 rampaging_ceratops	0	cast	exercised
 rampaging_ferocidon	0	cast	exercised
+rampaging_hippo	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 rampaging_soulrager	0	cast	exercised
 rampaging_spiketail	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 rampaging_spiketail	0	cast	exercised
@@ -3797,6 +3804,7 @@ wary_thespian	0	cast	exercised
 wary_watchdog	0	cast	exercised
 wasp_lancer	0	cast	exercised
 waste_not	0	cast	exercised
+wasteland_scorpion	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 wastes	0	ability:0	exercised
 wastes	0	land	exercised
 watcher_of_the_wayside	0	cast	exercised

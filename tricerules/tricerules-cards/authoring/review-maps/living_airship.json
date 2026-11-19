@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "3bcead90-f7be-4fba-84e7-3d7c788a8b64",
+  "spans": [
+    {
+      "face_id": "living_airship",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "living_airship",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Regenerate",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/Regenerate/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q42_regenerate_self_batch::q42_regenerate_self_cards_pay_their_printed_cost_and_consume_the_shield",
+      "covers": "actual card pays its exact regeneration cost, places a shield, survives lethal damage and consumes it"
+    },
+    {
+      "test": "scenario q42_regenerate_self_batch::q42_regenerate_self_cards_reject_activation_without_the_printed_mana",
+      "covers": "an unpayable regeneration activation is rejected without spending mana or creating a shield"
+    },
+    {
+      "test": "mechanic_registry::q42_cohorts_batch::q42_regenerate_self_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of living_airship"
+    },
+    {
+      "test": "mechanic_registry::q42_cohorts_batch::q42_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for living_airship"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

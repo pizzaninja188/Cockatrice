@@ -1,0 +1,22 @@
+// Oracle 4d94d807-97d9-4cdf-a63c-d8b82c2acc6e; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.29a-b (Cycling is a hand-zone activated ability paid with the printed mana and
+// discarding this card, then drawing one card); keyword statics per CR 702.
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "lava_serpent",
+  name: "Lava Serpent",
+  face_id: "lava_serpent",
+  mana_cost: "{5}{R}",
+  types: ["Creature", "Elemental", "Serpent"],
+  power: 5,
+  toughness: 5,
+  keywords: [Haste],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    source_zone: Hand,
+    costs: [Mana("{2}"), DiscardSelf],
+    effect: [Draw(count: 1)],
+  )],
+)

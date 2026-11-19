@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "4145c75d-d052-40d2-8ef4-0a08071582b8",
+  "spans": [
+    {
+      "face_id": "rally_the_forces",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CreatureScopeFilter.attacking",
+      "typed_path": "/faces/0/spell_effect/0/PumpAll/filter/attacking"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywordsAll",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q42_attacking_pump_batch::q42_attacking_pump_cards_apply_their_printed_pump_and_keyword",
+      "covers": "actual card pumps and, where printed, grants the keyword only to creatures attacking as it resolves"
+    },
+    {
+      "test": "scenario q42_attacking_pump_batch::q42_attacking_pump_cards_do_nothing_when_no_creature_is_attacking",
+      "covers": "the spell has no effect outside combat"
+    },
+    {
+      "test": "mechanic_registry::q42_cohorts_batch::q42_attacking_pump_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of rally_the_forces"
+    },
+    {
+      "test": "mechanic_registry::q42_cohorts_batch::q42_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for rally_the_forces"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

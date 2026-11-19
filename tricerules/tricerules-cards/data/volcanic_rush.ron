@@ -1,0 +1,16 @@
+// Oracle 6944261c-9f35-4a51-9b1a-c29e24f292e1; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 508.1k / 611.2c (the affected set is the creatures attacking as the spell resolves)
+// and 613.4c (layer-7c pump); a keyword grant applies in layer 6 (CR 613.1f).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "volcanic_rush",
+  name: "Volcanic Rush",
+  face_id: "volcanic_rush",
+  mana_cost: "{4}{R}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpAll(filter: (attacking: true), power: 2, toughness: 0),
+    GrantKeywordsAll(filter: (attacking: true), keywords: [Trample]),
+  ],
+)

@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "6a207599-188f-49fc-8932-1974fc716f0b",
+  "spans": [
+    {
+      "face_id": "erdwal_ripper",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "erdwal_ripper",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfDealsCombatDamageToPlayer",
+      "typed_path": "/faces/0/triggered_abilities/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "CounterKind::PlusOnePlusOne",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/PutCounters/counter"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/PutCounters/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q42_combat_damage_counter_batch::q42_combat_damage_counter_cards_add_one_counter_and_publish_their_keyword",
+      "covers": "actual card adds exactly one +1/+1 counter on unblocked combat damage to a player"
+    },
+    {
+      "test": "scenario q42_combat_damage_counter_batch::q42_combat_damage_counter_cards_use_the_combat_damage_trigger",
+      "covers": "the trigger is the typed combat-damage-to-player event"
+    },
+    {
+      "test": "mechanic_registry::q42_cohorts_batch::q42_combat_damage_counter_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of erdwal_ripper"
+    },
+    {
+      "test": "mechanic_registry::q42_cohorts_batch::q42_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for erdwal_ripper"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

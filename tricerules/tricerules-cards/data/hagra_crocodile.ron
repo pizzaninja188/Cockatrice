@@ -1,0 +1,28 @@
+// Oracle 8bca3213-d8e1-4915-bd9a-9a291cdec1cd; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (landfall entry trigger), 611.2c/613.4c (until-end-of-turn pump) and the
+// printed keyword or combat restriction static.
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "hagra_crocodile",
+  name: "Hagra Crocodile",
+  face_id: "hagra_crocodile",
+  mana_cost: "{3}{B}",
+  types: ["Creature", "Crocodile"],
+  power: 3,
+  toughness: 1,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: SelfCombatRestriction(restriction: (cant_block: true)),
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Land)),
+    ),
+    effect: [PumpTarget(power: 2, toughness: 2, subject: Source)],
+  )],
+)

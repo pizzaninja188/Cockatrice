@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "c8afa4b5-01be-400a-836f-aa27e1ae1346",
+  "spans": [
+    {
+      "face_id": "brazen_buccaneers",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "brazen_buccaneers",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Explore",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/Explore/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q42_explore_etb_batch::q42_explore_etb_cards_take_a_land_and_publish_their_keyword",
+      "covers": "actual card explores on entry, takes a revealed land and publishes its printed keyword"
+    },
+    {
+      "test": "scenario q42_explore_etb_batch::q42_explore_etb_cards_add_one_counter_and_offer_graveyard_or_top",
+      "covers": "a revealed nonland adds +1/+1 and offers graveyard or top"
+    },
+    {
+      "test": "mechanic_registry::q42_cohorts_batch::q42_explore_etb_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of brazen_buccaneers"
+    },
+    {
+      "test": "mechanic_registry::q42_cohorts_batch::q42_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for brazen_buccaneers"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

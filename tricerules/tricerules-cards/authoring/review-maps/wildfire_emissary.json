@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "8fb44b03-017f-4cf3-a79b-8f6cc33570ca",
+  "spans": [
+    {
+      "face_id": "wildfire_emissary",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/protections"
+      ]
+    },
+    {
+      "face_id": "wildfire_emissary",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PumpTarget/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q42_activated_self_pump_batch::q42_activated_self_pump_cards_apply_their_printed_pump",
+      "covers": "actual card pays its exact activation cost and applies its printed pump"
+    },
+    {
+      "test": "scenario q42_activated_self_pump_batch::q42_activated_self_pump_cards_reject_activation_without_the_printed_mana",
+      "covers": "an unpayable activation is rejected without spending mana"
+    },
+    {
+      "test": "mechanic_registry::q42_cohorts_batch::q42_activated_self_pump_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of wildfire_emissary"
+    },
+    {
+      "test": "mechanic_registry::q42_cohorts_batch::q42_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for wildfire_emissary"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
