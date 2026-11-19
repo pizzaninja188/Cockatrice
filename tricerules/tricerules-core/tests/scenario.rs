@@ -2397,3 +2397,15 @@ mod q39_tap_ping_batch;
 
 #[path = "scenario/q39_targeted_utility_lands_batch.rs"]
 mod q39_targeted_utility_lands_batch;
+
+#[path = "scenario/q40_look_choose_hand_batch.rs"]
+mod q40_look_choose_hand_batch;
+
+#[path = "scenario/q40_etb_look_choose_batch.rs"]
+mod q40_etb_look_choose_batch;
+
+#[path = "scenario/q40_etb_surveil_batch.rs"]
+mod q40_etb_surveil_batch;
+
+#[path = "scenario/q40_remaining_cohorts_batch.rs"]
+mod q40_remaining_cohorts_batch;

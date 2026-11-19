@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "be5d6779-ecc9-44b9-8c4d-97a243059d55",
+  "spans": [
+    {
+      "face_id": "augur_of_bolas",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::LookChooseToHand",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q40_etb_look_choose_batch::q40_etb_look_choose_canary_simplest",
+      "covers": "simplest canary for this actual card"
+    },
+    {
+      "test": "scenario q40_etb_look_choose_batch::q40_etb_look_choose_short_library_looks_at_the_remaining_cards",
+      "covers": "short library looks at the remaining cards"
+    },
+    {
+      "test": "scenario q40_etb_look_choose_batch::q40_etb_look_choose_no_matching_card_keeps_every_card",
+      "covers": "no eligible card leaves the hand unchanged and bottoms the look"
+    },
+    {
+      "test": "scenario q40_etb_look_choose_batch::q40_etb_look_choose_cards_apply_their_printed_filter_and_order_policy",
+      "covers": "actual card applies its printed filter and bottom-order policy"
+    },
+    {
+      "test": "scenario q40_etb_look_choose_batch::q40_etb_look_choose_cards_choose_nothing_and_keep_all_cards",
+      "covers": "declining the optional reveal keeps every looked card"
+    },
+    {
+      "test": "mechanic_registry::q40_cohorts_batch::q40_etb_look_choose_maps_definitions",
+      "covers": "reviewed identity, typed values and printed characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

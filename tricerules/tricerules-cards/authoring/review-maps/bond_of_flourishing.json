@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "e9c9e730-3b73-48e3-845b-1b7f2d16050c",
+  "spans": [
+    {
+      "face_id": "bond_of_flourishing",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::LookChooseToHand",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q40_look_choose_hand_batch::q40_look_choose_no_matching_card_still_gains_life",
+      "covers": "no eligible permanent still gains the printed life after the bottom order"
+    },
+    {
+      "test": "scenario q40_look_choose_hand_batch::q40_look_choose_cards_apply_their_printed_filter_and_order_policy",
+      "covers": "actual card applies its printed filter and bottom-order policy"
+    },
+    {
+      "test": "mechanic_registry::q40_cohorts_batch::q40_look_choose_hand_maps_definitions",
+      "covers": "reviewed identity, typed values and printed characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

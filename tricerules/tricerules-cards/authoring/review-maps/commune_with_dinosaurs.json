@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "27ca27f0-95a5-4292-b30b-1db3e9d639f8",
+  "spans": [
+    {
+      "face_id": "commune_with_dinosaurs",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::LookChooseToHand",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q40_look_choose_hand_batch::q40_look_choose_requires_the_printed_mana",
+      "covers": "the actual card rejects a cast without its printed mana"
+    },
+    {
+      "test": "scenario q40_look_choose_hand_batch::q40_look_choose_cards_apply_their_printed_filter_and_order_policy",
+      "covers": "actual card applies its printed filter and bottom-order policy"
+    },
+    {
+      "test": "mechanic_registry::q40_cohorts_batch::q40_look_choose_hand_maps_definitions",
+      "covers": "reviewed identity, typed values and printed characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

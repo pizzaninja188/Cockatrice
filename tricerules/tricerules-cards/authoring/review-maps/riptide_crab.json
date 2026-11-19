@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "8ae8a583-9843-474a-bd46-8090df883621",
+  "spans": [
+    {
+      "face_id": "riptide_crab",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "riptide_crab",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Vigilance",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q40_remaining_cohorts_batch::q40_dies_draw_cards_draw_one_and_leave_the_opponent_alone",
+      "covers": "actual card draws one card and does not affect the opponent"
+    },
+    {
+      "test": "mechanic_registry::q40_cohorts_batch::q40_dies_draw_maps_definitions",
+      "covers": "reviewed identity, trigger and printed draw count"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

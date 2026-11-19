@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "49c7b7c6-c8dc-4871-9103-b057d2034c3e",
+  "spans": [
+    {
+      "face_id": "vampire_sovereign",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "vampire_sovereign",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::DrainTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q40_remaining_cohorts_batch::q40_etb_drain_cards_apply_printed_life_changes",
+      "covers": "actual card applies its printed life loss and life gain"
+    },
+    {
+      "test": "mechanic_registry::q40_cohorts_batch::q40_etb_drain_maps_definitions",
+      "covers": "reviewed identity, target and printed amount"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

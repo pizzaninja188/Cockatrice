@@ -1,0 +1,21 @@
+// Oracle 49ca8516-624b-4aa8-8e13-d145590cdfda; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 700.4/603.6c (dies trigger), 400.7 (zone-change identity) and 608.2b (stale source;
+// the return happens only if the card is still in the graveyard on resolution).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "shivan_phoenix",
+  name: "Shivan Phoenix",
+  face_id: "shivan_phoenix",
+  mana_cost: "{4}{R}{R}",
+  types: ["Creature", "Phoenix"],
+  power: 3,
+  toughness: 4,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfDies,
+    effect: [ReturnTriggeredCard(from: [Graveyard], reference: AbilitySource, destination: Hand)],
+  )],
+)

@@ -1269,3 +1269,6 @@ mod q39_tap_ping_batch;
 
 #[path = "../q39_targeted_utility_lands_batch.rs"]
 mod q39_targeted_utility_lands_batch;
+
+#[path = "../q40_cohorts_batch.rs"]
+mod q40_cohorts_batch;

@@ -1,0 +1,21 @@
+// Oracle 49c7b7c6-c8dc-4871-9103-b057d2034c3e; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters-the-battlefield trigger), 115.1 (target), 119.3 (life loss/gain) and
+// 608.2c (printed order).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "vampire_sovereign",
+  name: "Vampire Sovereign",
+  face_id: "vampire_sovereign",
+  mana_cost: "{3}{B}{B}",
+  types: ["Creature", "Vampire", "Noble"],
+  power: 3,
+  toughness: 4,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [DrainTarget(amount: 3, target: (kind: OpponentPlayer))],
+  )],
+)

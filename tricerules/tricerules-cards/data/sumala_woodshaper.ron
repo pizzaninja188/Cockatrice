@@ -1,0 +1,20 @@
+// Oracle 5a44062b-f1db-4122-8570-1241a16cb895; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters-the-battlefield trigger), 121.5 (not a draw), 401.4 (private look)
+// and 609.3 (selection clamps to available matches).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "sumala_woodshaper",
+  name: "Sumala Woodshaper",
+  face_id: "sumala_woodshaper",
+  mana_cost: "{2}{G}{W}",
+  types: ["Creature", "Elf", "Druid"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [LookChooseToHand(count: 4, filter: Some((any_of: Some([(card_type: Some(Creature)), (card_type: Some(Enchantment))]))), bottom_order: Random)],
+  )],
+)
