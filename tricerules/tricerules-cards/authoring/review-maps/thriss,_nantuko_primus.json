@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "19ed8616-5d27-4f21-88a9-2af7cf5034ca",
+  "spans": [
+    {
+      "face_id": "thriss_nantuko_primus",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q41_activated_batch::q41_activated_pump_cards_apply_their_printed_values",
+      "covers": "actual card applies its printed pump and pays its exact cost"
+    },
+    {
+      "test": "scenario q41_activated_batch::q41_activated_pump_cards_expire_at_cleanup",
+      "covers": "the pump expires at cleanup"
+    },
+    {
+      "test": "scenario q41_activated_batch::q41_activated_pump_cards_require_a_creature_target_and_one_activation",
+      "covers": "noncreature and missing targets are rejected and the tapped source cannot reactivate"
+    },
+    {
+      "test": "scenario q41_activated_batch::q41_activated_pump_cards_fizzle_a_target_that_left",
+      "covers": "a target that left before resolution installs no effect"
+    },
+    {
+      "test": "mechanic_registry::q41_cohorts_batch::q41_activated_pump_maps_definitions",
+      "covers": "reviewed identity, costs and printed pump"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

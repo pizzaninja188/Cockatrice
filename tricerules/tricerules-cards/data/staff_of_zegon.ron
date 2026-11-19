@@ -1,0 +1,18 @@
+// Oracle 52c53132-146a-4912-8e0f-1d4d9937fff3; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.2 (activate), 115.1 (target), 701.21a (sacrifice cost) and 611.2c/613.4c
+// (until-end-of-turn -N/-N).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "staff_of_zegon",
+  name: "Staff of Zegon",
+  face_id: "staff_of_zegon",
+  mana_cost: "{4}",
+  types: ["Artifact"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{3}"), Tap],
+    effect: [PumpTarget(power: -2, toughness: 0, subject: Chosen((kind: Creature)))],
+  )],
+)

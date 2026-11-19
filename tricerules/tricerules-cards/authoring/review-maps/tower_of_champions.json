@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "f7880784-e1dc-4250-812e-eda41fe91e36",
+  "spans": [
+    {
+      "face_id": "tower_of_champions",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q41_activated_batch::q41_activated_pump_cards_apply_their_printed_values",
+      "covers": "actual card applies its printed pump and pays its exact cost"
+    },
+    {
+      "test": "scenario q41_activated_batch::q41_activated_pump_cards_expire_at_cleanup",
+      "covers": "the pump expires at cleanup"
+    },
+    {
+      "test": "scenario q41_activated_batch::q41_activated_pump_cards_require_a_creature_target_and_one_activation",
+      "covers": "noncreature and missing targets are rejected and the tapped source cannot reactivate"
+    },
+    {
+      "test": "scenario q41_activated_batch::q41_activated_pump_cards_fizzle_a_target_that_left",
+      "covers": "a target that left before resolution installs no effect"
+    },
+    {
+      "test": "mechanic_registry::q41_cohorts_batch::q41_activated_pump_maps_definitions",
+      "covers": "reviewed identity, costs and printed pump"
+    },
+    {
+      "test": "scenario q41_activated_batch::q41_activated_pump_canary_hardest_pays_eight_and_pumps_six",
+      "covers": "hardest canary: eight generic mana and +6/+6"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

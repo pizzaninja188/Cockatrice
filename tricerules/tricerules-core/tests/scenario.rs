@@ -2409,3 +2409,15 @@ mod q40_etb_surveil_batch;
 
 #[path = "scenario/q40_remaining_cohorts_batch.rs"]
 mod q40_remaining_cohorts_batch;
+
+#[path = "scenario/q41_tutor_batch.rs"]
+mod q41_tutor_batch;
+
+#[path = "scenario/q41_static_keyword_batch.rs"]
+mod q41_static_keyword_batch;
+
+#[path = "scenario/q41_etb_spell_batch.rs"]
+mod q41_etb_spell_batch;
+
+#[path = "scenario/q41_activated_batch.rs"]
+mod q41_activated_batch;

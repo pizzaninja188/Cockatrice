@@ -929,6 +929,7 @@ drown_in_shapelessness	0	cast	exercised
 drowsing_tyrannodon	0	cast	exercised
 drudge_skeletons	0	ability:0	exercised
 drudge_skeletons	0	cast	exercised
+druid_lyrist	0	ability:0	unsupported: target group 0 needs a richer fixture
 druid_of_the_cowl	0	ability:0	exercised
 druid_of_the_cowl	0	cast	exercised
 druid_of_the_spade	0	cast	exercised
@@ -995,7 +996,9 @@ elven_passage	0	land	exercised
 elvenkings_harper	0	ability:0	exercised
 elvenkings_harper	0	cast	exercised
 elvish_archers	0	cast	exercised
+elvish_hexhunter	0	ability:0	unsupported: target group 0 needs a richer fixture
 elvish_lookout	0	cast	exercised
+elvish_lyrist	0	ability:0	unsupported: target group 0 needs a richer fixture
 elvish_mystic	0	ability:0	exercised
 elvish_mystic	0	cast	exercised
 elvish_regrower	0	cast	exercised
@@ -1501,6 +1504,7 @@ guardian_lions	0	cast	exercised
 guardian_of_the_great_door	0	cast	unsupported: required cast-cost group needs a specialized fixture
 guardians_of_meletis	0	cast	exercised
 guidelight_synergist	0	cast	exercised
+guiding_bolt	0	cast	unsupported: target group 0 needs a richer fixture
 gundabad_opportunist	0	cast	exercised
 gurmag_nightwatch	0	cast	exercised
 gurmag_swiftwing	0	cast	exercised
@@ -3031,6 +3035,7 @@ skystinger	0	cast	exercised
 skystreak_engineer	0	ability:0	exercised
 skystreak_engineer	0	cast	exercised
 skyswirl_harrier	0	cast	exercised
+skywhalers_shot	0	cast	unsupported: target group 0 needs a richer fixture
 slagdrill_scrapper	0	ability:0	exercised
 slagdrill_scrapper	0	cast	exercised
 slagstorm	0	cast	exercised
@@ -3646,6 +3651,7 @@ vampire_soulcaller	0	cast	exercised
 vampire_spawn	0	cast	exercised
 vampiric_rites	0	ability:0	exercised
 vampiric_rites	0	cast	exercised
+vanquish_the_foul	0	cast	unsupported: target group 0 needs a richer fixture
 vanquish_the_horde	0	cast	exercised
 vassal_soul	0	cast	exercised
 vastwood_gorger	0	cast	exercised

@@ -1,0 +1,21 @@
+// Oracle 98f9619e-585f-486f-b143-fb42085eb583; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.9a-b (Flying), 603.6a (enters-the-battlefield trigger), 119.3 (life loss) and
+// 608.2c (each player follows the printed instruction).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "blood-toll_harpy",
+  name: "Blood-Toll Harpy",
+  face_id: "blood_toll_harpy",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Harpy"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [LoseLife(amount: Fixed(1), who: EachPlayer)],
+  )],
+)

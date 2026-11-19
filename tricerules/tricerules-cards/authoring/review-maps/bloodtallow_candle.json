@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "da9b3edc-bc2d-4ff5-b614-3626f504c4e9",
+  "spans": [
+    {
+      "face_id": "bloodtallow_candle",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/2"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q41_activated_batch::q41_activated_shrink_cards_apply_their_printed_values",
+      "covers": "actual card applies its printed penalty and printed cost"
+    },
+    {
+      "test": "scenario q41_activated_batch::q41_activated_shrink_cards_expire_at_cleanup",
+      "covers": "the penalty expires at cleanup"
+    },
+    {
+      "test": "mechanic_registry::q41_cohorts_batch::q41_activated_shrink_maps_definitions",
+      "covers": "reviewed identity, costs and printed penalty"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

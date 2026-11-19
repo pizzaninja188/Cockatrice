@@ -1,0 +1,20 @@
+// Oracle bed87e57-d410-478f-ae9d-2d7d00831e5e; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.2 (activate), 115.1 (target), 701.21a (sacrifice cost) and 611.2c/613.4c
+// (until-end-of-turn -N/-N).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "phyrexian_defiler",
+  name: "Phyrexian Defiler",
+  face_id: "phyrexian_defiler",
+  mana_cost: "{2}{B}{B}",
+  types: ["Creature", "Phyrexian", "Carrier"],
+  power: 3,
+  toughness: 3,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Tap, SacrificeSelf],
+    effect: [PumpTarget(power: -3, toughness: -3, subject: Chosen((kind: Creature)))],
+  )],
+)

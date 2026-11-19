@@ -1272,3 +1272,6 @@ mod q39_targeted_utility_lands_batch;
 
 #[path = "../q40_cohorts_batch.rs"]
 mod q40_cohorts_batch;
+
+#[path = "../q41_cohorts_batch.rs"]
+mod q41_cohorts_batch;
