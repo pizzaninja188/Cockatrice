@@ -2298,3 +2298,12 @@ mod q36_shrink_scry_batch;
 
 #[path = "scenario/q36_damage_scry_batch.rs"]
 mod q36_damage_scry_batch;
+
+#[path = "scenario/q36_etb_mill_batch.rs"]
+mod q36_etb_mill_batch;
+
+#[path = "scenario/q36_team_haste_batch.rs"]
+mod q36_team_haste_batch;
+
+#[path = "scenario/q36_self_deathtouch_batch.rs"]
+mod q36_self_deathtouch_batch;

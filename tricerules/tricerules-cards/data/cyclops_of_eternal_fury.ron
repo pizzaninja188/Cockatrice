@@ -1,0 +1,21 @@
+// Oracle f7875f87-d774-4811-a4a7-349ec01bf95b; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 604.1/611.3a (continuous static ability), 613.1f layer 6 and 702.10a-b (haste); the source's controller owns the affected creatures (CR 109.5).
+// Pinned ruling: Cyclops of Eternal Fury's ability gives itself haste.
+
+(
+  id: "cyclops_of_eternal_fury",
+  name: "Cyclops of Eternal Fury",
+  face_id: "cyclops_of_eternal_fury",
+  mana_cost: "{4}{R}{R}",
+  types: ["Enchantment", "Creature", "Cyclops"],
+  power: 5,
+  toughness: 3,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: AnthemKeyword(filter: (controller: YouControl), keyword: Haste),
+    ),
+  ],
+)

@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "2f72f111-450a-4da2-81fd-cbc4f9c1ef9d",
+  "spans": [
+    {
+      "face_id": "necromancers_assistant",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Mill",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q36_etb_mill_batch::q36_etb_mill_cards_mill_their_printed_count_on_entry",
+      "covers": "actual card is exercised by the shared 04-etb-mill scenario"
+    },
+    {
+      "test": "scenario q36_etb_mill_batch::q36_etb_mill_cards_mill_every_available_card_from_a_short_library",
+      "covers": "actual card is exercised by the shared 04-etb-mill scenario"
+    },
+    {
+      "test": "mechanic_registry::q36_etb_mill_batch::q36_etb_mill_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q36_etb_mill_batch::q36_etb_mill_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,22 @@
+// Oracle 74d85903-6404-41d9-bc00-81c6b2f61bb0; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters-the-battlefield trigger) and 701.17a-b (mill the controller's library; a short library mills as many as possible).
+// Pinned ruling: if you have fewer than four cards in your library when Armored Skaab enters, you put all of them into your graveyard.
+
+(
+  id: "armored_skaab",
+  name: "Armored Skaab",
+  face_id: "armored_skaab",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Zombie", "Warrior"],
+  power: 1,
+  toughness: 4,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Mill(count: 4)],
+    ),
+  ],
+)
