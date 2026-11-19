@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "965139fb-2e58-4ef2-b639-3ceaa2995c00",
+  "spans": [
+    {
+      "face_id": "catalog",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_program"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q39_draw_discard_batch::q39_draw_discard_canary_simplest",
+      "covers": "simplest canary for this actual card"
+    },
+    {
+      "test": "scenario q39_draw_discard_batch::q39_draw_discard_cards_draw_then_discard_their_printed_counts",
+      "covers": "actual card draws and discards its exact printed counts"
+    },
+    {
+      "test": "scenario q39_draw_discard_batch::q39_draw_discard_cards_require_their_printed_mana",
+      "covers": "actual card rejects a cast without its printed mana"
+    },
+    {
+      "test": "mechanic_registry::q39_draw_discard_batch::q39_draw_discard_maps_definitions",
+      "covers": "reviewed identity and exact typed program"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

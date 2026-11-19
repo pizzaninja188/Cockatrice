@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "5ad33099-0392-4f68-a4c5-7fa3ef2d473e",
+  "spans": [
+    {
+      "face_id": "fall_of_the_gavel",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q39_counter_rider_batch::q39_counter_rider_cards_counter_the_target_and_apply_their_printed_rider",
+      "covers": "actual card counters the target and applies its printed rider"
+    },
+    {
+      "test": "scenario q39_counter_rider_batch::q39_counter_rider_cards_reject_a_non_spell_target",
+      "covers": "actual card rejects a non-spell target"
+    },
+    {
+      "test": "scenario q39_counter_rider_batch::q39_counter_rider_cards_fizzle_when_the_target_spell_leaves_the_stack",
+      "covers": "actual card fizzles on a stale spell target without a rider"
+    },
+    {
+      "test": "mechanic_registry::q39_counter_rider_batch::q39_counter_rider_maps_definitions",
+      "covers": "reviewed identity and exact rider"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

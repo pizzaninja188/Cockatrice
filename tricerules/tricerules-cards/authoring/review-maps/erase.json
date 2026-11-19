@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "c2ceb15c-5d02-4cf4-a7c9-c1a40b7ca667",
+  "spans": [
+    {
+      "face_id": "erase",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q39_exile_simple_batch::q39_exile_simple_canary_simplest",
+      "covers": "simplest canary for this actual card"
+    },
+    {
+      "test": "scenario q39_exile_simple_batch::q39_exile_simple_cards_exile_the_chosen_permanent_to_its_owners_exile",
+      "covers": "actual card exiles its chosen permanent to its owner's exile"
+    },
+    {
+      "test": "scenario q39_exile_simple_batch::q39_exile_simple_cards_reject_an_illegal_target",
+      "covers": "actual card rejects an illegal target"
+    },
+    {
+      "test": "scenario q39_exile_simple_batch::q39_exile_simple_cards_fizzle_when_the_target_left",
+      "covers": "actual card fizzles on a stale target"
+    },
+    {
+      "test": "mechanic_registry::q39_exile_simple_batch::q39_exile_simple_maps_definitions",
+      "covers": "reviewed identity and target filter"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

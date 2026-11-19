@@ -1,0 +1,21 @@
+// Oracle bc416c17-e1f0-4344-8c21-6184cac10205; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/118.3 (activated ability and cost), 701.26 (tap), 120.2/120.3 (damage),
+// 115.1a (any target) and 302.6 (summoning sickness; haste overrides).
+(
+  id: "anaba_shaman",
+  name: "Anaba Shaman",
+  face_id: "anaba_shaman",
+  mana_cost: "{3}{R}",
+  types: ["Creature", "Minotaur", "Shaman"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{R}"), Tap],
+      effect: [DamageTarget(amount: 1, target: (kind: AnyTarget))],
+    ),
+  ],
+)

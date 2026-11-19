@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "00573e77-8ff6-4acb-8683-8827d965288f",
+  "spans": [
+    {
+      "face_id": "behemoth_sledge",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "behemoth_sledge",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Equip",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q39_equipment_static_keyword_batch::q39_equipment_static_keyword_canary_hardest",
+      "covers": "hardest canary for this actual card"
+    },
+    {
+      "test": "scenario q39_equipment_static_keyword_batch::q39_equipment_static_keyword_cards_grant_exact_printed_bonus_and_follow_reattachment",
+      "covers": "actual card is exercised by the shared Equipment cohort scenario"
+    },
+    {
+      "test": "scenario q39_equipment_static_keyword_batch::q39_equipment_static_keyword_cards_reject_opponent_creature_targets",
+      "covers": "actual card rejects an opponent creature equip target"
+    },
+    {
+      "test": "scenario q39_equipment_static_keyword_batch::q39_equipment_static_keyword_cards_equip_only_at_sorcery_speed",
+      "covers": "actual card enforces equip timing"
+    },
+    {
+      "test": "scenario q39_equipment_static_keyword_batch::q39_equipment_static_keyword_cards_fizzle_when_equip_target_leaves",
+      "covers": "actual card leaves the Equipment unattached when its equip target leaves"
+    },
+    {
+      "test": "mechanic_registry::q39_equipment_static_keyword_batch::q39_equipment_static_keyword_maps_definitions",
+      "covers": "reviewed identity, typed values and printed characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

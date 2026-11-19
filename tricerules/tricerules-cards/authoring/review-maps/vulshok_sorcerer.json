@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "6f858405-dfe4-4ca2-b2e3-80ce8cda5522",
+  "spans": [
+    {
+      "face_id": "vulshok_sorcerer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "vulshok_sorcerer",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q39_tap_ping_batch::q39_tap_ping_cards_deal_exactly_one_damage_and_tap_the_source",
+      "covers": "actual card deals exactly one damage and taps the source"
+    },
+    {
+      "test": "scenario q39_tap_ping_batch::q39_tap_ping_cards_can_target_a_player",
+      "covers": "actual card can target a player"
+    },
+    {
+      "test": "scenario q39_tap_ping_batch::q39_tap_ping_cards_require_their_printed_ping_mana",
+      "covers": "actual card requires its printed ping mana"
+    },
+    {
+      "test": "scenario q39_tap_ping_batch::q39_tap_ping_cards_respect_summoning_sickness_without_haste",
+      "covers": "actual card respects summoning sickness unless it has haste"
+    },
+    {
+      "test": "scenario q39_tap_ping_batch::q39_tap_ping_cards_fizzle_when_the_target_left",
+      "covers": "actual card fizzles on a stale target"
+    },
+    {
+      "test": "mechanic_registry::q39_tap_ping_batch::q39_tap_ping_maps_definitions",
+      "covers": "reviewed identity, keyword and activated ability"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

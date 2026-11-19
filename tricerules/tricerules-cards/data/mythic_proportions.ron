@@ -1,0 +1,19 @@
+// Oracle e03322a0-e477-4223-969e-27f6772e3d6d; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 303.4a (Aura attach), 613.4c (layer-7c attached modifier), 613.1f (layer 6 keywords),
+// 611.2a (continuous effect) and 704.5m (unattached Aura cleanup).
+(
+  id: "mythic_proportions",
+  name: "Mythic Proportions",
+  face_id: "mythic_proportions",
+  mana_cost: "{4}{G}{G}{G}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(delta_power: 8, delta_toughness: 8, keywords: [Trample]),
+    ),
+  ],
+)

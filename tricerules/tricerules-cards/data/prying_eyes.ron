@@ -1,0 +1,14 @@
+// Oracle 06b60766-a1fb-4ed0-93f6-8423008f75b4; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 121 (draw), 608.2c (printed order), 701.9 (discard) and 601.2 (cast and payment).
+(
+  id: "prying_eyes",
+  name: "Prying Eyes",
+  face_id: "prying_eyes",
+  mana_cost: "{4}{U}{U}",
+  types: ["Instant"],
+  spell_program: Some((body: (steps: [
+    (id: "draw_cards", kind: Perform(Draw(count: 4))),
+    (id: "discard_cards", kind: Perform(Discard(quantity: Exact(2)))),
+  ]))),
+)

@@ -2370,3 +2370,30 @@ mod q38_mountain_damage_batch;
 
 #[path = "scenario/q38_aura_pump_batch.rs"]
 mod q38_aura_pump_batch;
+
+#[path = "scenario/q39_aura_static_keyword_batch.rs"]
+mod q39_aura_static_keyword_batch;
+
+#[path = "scenario/q39_equipment_static_keyword_batch.rs"]
+mod q39_equipment_static_keyword_batch;
+
+#[path = "scenario/q39_land_etb_target_batch.rs"]
+mod q39_land_etb_target_batch;
+
+#[path = "scenario/q39_draw_discard_batch.rs"]
+mod q39_draw_discard_batch;
+
+#[path = "scenario/q39_destroy_gain_life_batch.rs"]
+mod q39_destroy_gain_life_batch;
+
+#[path = "scenario/q39_exile_simple_batch.rs"]
+mod q39_exile_simple_batch;
+
+#[path = "scenario/q39_counter_rider_batch.rs"]
+mod q39_counter_rider_batch;
+
+#[path = "scenario/q39_tap_ping_batch.rs"]
+mod q39_tap_ping_batch;
+
+#[path = "scenario/q39_targeted_utility_lands_batch.rs"]
+mod q39_targeted_utility_lands_batch;

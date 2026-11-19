@@ -1,0 +1,20 @@
+// Oracle 6d920c99-8a85-4b20-97c2-7aa0c79ae70a; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 119.3 (life gain), 608.2b (stale target) and 115.1a (target).
+(
+  id: "poison_arrow",
+  name: "Poison Arrow",
+  face_id: "poison_arrow",
+  mana_cost: "{4}{B}{B}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Destroy(subject: Chosen((kind: Creature, not_color: Some(Black)))),
+    GainLife(amount: 3),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target nonblack creature",
+    effect_indices: [0],
+  )])),
+)

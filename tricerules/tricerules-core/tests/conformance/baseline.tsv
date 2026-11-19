@@ -13,6 +13,7 @@ abnormal_endurance	0	cast	exercised
 abrade	0	cast	exercised
 abraded_bluffs	0	ability:0	exercised
 abraded_bluffs	0	land	exercised
+absorb	0	cast	unsupported: target group 0 needs a richer fixture
 abzan_devotee	0	ability:0	exercised
 abzan_devotee	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 abzan_devotee	0	cast	exercised
@@ -35,6 +36,7 @@ adventuring_gear	0	cast	exercised
 aegis_of_the_heavens	0	cast	exercised
 aegis_turtle	0	cast	exercised
 aerial_assault	0	cast	unsupported: target group 0 needs a richer fixture
+aerial_predation	0	cast	unsupported: target group 0 needs a richer fixture
 aerial_responder	0	cast	exercised
 aetherize	0	cast	exercised
 affa_protector	0	cast	exercised
@@ -731,6 +733,7 @@ cunning_maneuver	0	cast	exercised
 curio_vendor	0	cast	exercised
 curse_of_disturbance	0	cast	exercised
 curse_of_opulence	0	cast	exercised
+cursebreak	0	cast	unsupported: target group 0 needs a richer fixture
 cursed_minotaur	0	cast	exercised
 cursed_windbreaker	0	ability:0	exercised
 cursed_windbreaker	0	cast	exercised
@@ -769,6 +772,7 @@ darksteel_myr	0	cast	exercised
 darksteel_plate	0	ability:0	exercised
 darksteel_plate	0	cast	exercised
 darkwatch_elves	0	ability:0	unsupported: ability not offered by generic battlefield fixture
+daru_encampment	0	ability:1	unsupported: target group 0 needs a richer fixture
 dauntless_veteran	0	cast	exercised
 dawn_gryff	0	cast	exercised
 dawnhand_eulogist	0	cast	exercised
@@ -1015,6 +1019,7 @@ envoy_of_okinec_ahau	0	cast	exercised
 epf_point_squad	0	cast	exercised
 epic_downfall	0	cast	unsupported: target group 0 needs a richer fixture
 epic_fight	0	cast	exercised
+erase	0	cast	unsupported: target group 0 needs a richer fixture
 eriettes_lullaby	0	cast	unsupported: target group 0 needs a richer fixture
 eroded_canyon	0	ability:0	exercised
 eroded_canyon	0	land	exercised
@@ -1073,6 +1078,7 @@ failed_fording	0	cast	exercised
 faithbearer_paladin	0	cast	exercised
 faithless_looting	0	cast	exercised
 falkenrath_reaver	0	cast	exercised
+fall_of_the_gavel	0	cast	unsupported: target group 0 needs a richer fixture
 false_defeat	0	cast	exercised
 false_summoning	0	cast	unsupported: target group 0 needs a richer fixture
 family_reunion	0	cast	exercised
@@ -1397,6 +1403,7 @@ goblin_bird-grabber	0	ability:0	unsupported: nonmana costs need additional fixtu
 goblin_bird-grabber	0	cast	exercised
 goblin_boarders	0	cast	exercised
 goblin_brigand	0	cast	exercised
+goblin_burrows	0	ability:1	unsupported: target group 0 needs a richer fixture
 goblin_chariot	0	cast	exercised
 goblin_chieftain	0	cast	exercised
 goblin_deathraiders	0	cast	exercised
@@ -2075,6 +2082,7 @@ melded_moxite	0	cast	exercised
 meltstriders_gear	0	ability:0	exercised
 meltstriders_gear	0	cast	exercised
 meltstriders_resolve	0	cast	exercised
+memory_drain	0	cast	unsupported: target group 0 needs a richer fixture
 memory_guardian	0	cast	exercised
 mental_modulation	0	cast	exercised
 mentor_of_the_meek	0	cast	exercised
@@ -2298,6 +2306,7 @@ ogre_warrior	0	cast	exercised
 ohran_frostfang	0	cast	exercised
 oin_the_brave	0	ability:0	exercised
 oin_the_brave	0	cast	exercised
+okina,_temple_to_the_grandfathers	0	ability:1	unsupported: target group 0 needs a richer fixture
 okos_accomplices	0	cast	exercised
 old_ghastbark	0	cast	exercised
 oltec_archaeologists	0	cast	exercised
@@ -2586,6 +2595,7 @@ ravine_raider	0	cast	exercised
 ray_fillet,_man_ray	0	ability:0	unsupported: nonmana costs need additional fixture resources
 ray_fillet,_man_ray	0	cast	exercised
 ray_of_command	0	cast	exercised
+ray_of_dissolution	0	cast	unsupported: target group 0 needs a richer fixture
 razorfield_thresher	0	cast	exercised
 razorfoot_griffin	0	cast	exercised
 razortrap_gorge	0	ability:0	exercised
@@ -2928,6 +2938,7 @@ shepherding_spirits	0	ability:0	unsupported: ability not offered by generic batt
 shepherding_spirits	0	cast	exercised
 shimmerscale_drake	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 shining_aerosaur	0	cast	exercised
+shinka,_the_bloodsoaked_keep	0	ability:1	unsupported: target group 0 needs a richer fixture
 shinra_reinforcements	0	cast	exercised
 shipwreck_dowser	0	cast	exercised
 shipwreck_sentry	0	cast	exercised

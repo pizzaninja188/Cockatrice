@@ -1,0 +1,15 @@
+// Oracle 132ca99a-a3c7-4ed6-b4d0-0edcd7140ca2; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.6 (counter), 608.2b (stale target), 608.2c (printed order),
+// 119.3 (life gain) or 701.18 (scry) as printed.
+(
+  id: "absorb",
+  name: "Absorb",
+  face_id: "absorb",
+  mana_cost: "{W}{U}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    CounterTargetSpell(spell_filter: ()),
+    GainLife(amount: 3),
+  ],
+)

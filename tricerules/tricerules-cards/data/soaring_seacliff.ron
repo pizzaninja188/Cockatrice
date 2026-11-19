@@ -1,0 +1,39 @@
+// Oracle a37544b6-0048-4213-8e40-76ba8a0b6d1b; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (entry trigger), 611.2a (until-end-of-turn effect), 613.4c (P/T),
+// 613.1f (keyword), 701.26 (tap) and 106.1 (mana ability).
+(
+  id: "soaring_seacliff",
+  name: "Soaring Seacliff",
+  face_id: "soaring_seacliff",
+  types: ["Land"],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: EntersTapped(affected: Self_),
+    ),
+  ],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Flying])],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target creature",
+        effect_indices: [0],
+      )])),
+    ),
+  ],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([3]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(u: 1)])],
+    ),
+  ],
+)
