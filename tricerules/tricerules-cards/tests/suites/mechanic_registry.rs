@@ -1161,3 +1161,12 @@ mod q35_two_target_pump_batch;
 
 #[path = "../q35_double_pump_shrink_batch.rs"]
 mod q35_double_pump_shrink_batch;
+
+#[path = "../q36_pump_scry_batch.rs"]
+mod q36_pump_scry_batch;
+
+#[path = "../q36_shrink_scry_batch.rs"]
+mod q36_shrink_scry_batch;
+
+#[path = "../q36_damage_scry_batch.rs"]
+mod q36_damage_scry_batch;
