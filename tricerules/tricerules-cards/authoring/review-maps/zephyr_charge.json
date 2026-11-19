@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "576128ba-28aa-4ef9-9e72-8ca13f42c9b4",
+  "spans": [
+    {
+      "face_id": "zephyr_charge",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q37_target_keyword_activated_batch::q37_target_keyword_activated_cards_grant_only_the_chosen_target",
+      "covers": "actual card is exercised by the shared 05-target-keyword-activated scenario"
+    },
+    {
+      "test": "scenario q37_target_keyword_activated_batch::q37_target_keyword_activated_cards_require_a_target_and_exact_mana",
+      "covers": "actual card is exercised by the shared 05-target-keyword-activated scenario"
+    },
+    {
+      "test": "mechanic_registry::q37_target_keyword_activated_batch::q37_target_keyword_activated_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q37_target_keyword_activated_batch::q37_target_keyword_activated_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

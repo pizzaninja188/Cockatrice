@@ -1188,3 +1188,30 @@ mod q36_untap_reach_pump_batch;
 
 #[path = "../q36_self_unblockable_batch.rs"]
 mod q36_self_unblockable_batch;
+
+#[path = "../q37_panorama_lands_batch.rs"]
+mod q37_panorama_lands_batch;
+
+#[path = "../q37_cycling_fetch_lands_batch.rs"]
+mod q37_cycling_fetch_lands_batch;
+
+#[path = "../q37_prevention_activated_batch.rs"]
+mod q37_prevention_activated_batch;
+
+#[path = "../q37_self_keyword_activated_batch.rs"]
+mod q37_self_keyword_activated_batch;
+
+#[path = "../q37_target_keyword_activated_batch.rs"]
+mod q37_target_keyword_activated_batch;
+
+#[path = "../q37_pump_keyword_batch.rs"]
+mod q37_pump_keyword_batch;
+
+#[path = "../q37_grant_keyword_batch.rs"]
+mod q37_grant_keyword_batch;
+
+#[path = "../q37_landfall_keyword_batch.rs"]
+mod q37_landfall_keyword_batch;
+
+#[path = "../q37_tap_keyword_activated_batch.rs"]
+mod q37_tap_keyword_activated_batch;

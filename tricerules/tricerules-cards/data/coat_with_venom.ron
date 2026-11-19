@@ -1,0 +1,17 @@
+// Oracle cbc808dd-8d50-4f42-b0f1-d4e45d0462a2; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a (target creature), 601.2a/601.2h (cast and payment), 611.2a/514.2
+// (pump and keyword end at cleanup), 613.4c (layer 7c pump) and the granted keyword's rule.
+// Copy of the reviewed Adamant Will / Tethermage's Advantage pump-and-keyword shape.
+(
+  id: "coat_with_venom",
+  name: "Coat with Venom",
+  face_id: "coat_with_venom",
+  mana_cost: "{B}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 1, toughness: 2, subject: Chosen((kind: Creature))),
+    GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Deathtouch]),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0, 1])])),
+)

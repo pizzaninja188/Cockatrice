@@ -393,6 +393,7 @@ bottle_gnomes	0	cast	exercised
 boulderborn_dragon	0	cast	exercised
 bounce_off	0	cast	exercised
 bounding_wolf	0	cast	exercised
+bountiful_landscape	0	ability:2	unsupported: ability not offered by generic battlefield fixture
 brainstorm	0	cast	exercised
 brambleback_brute	0	ability:0	unsupported: nonmana costs need additional fixture resources
 brambleback_brute	0	cast	exercised
@@ -657,6 +658,7 @@ conifer_strider	0	cast	exercised
 consecrated_sphinx	0	cast	exercised
 consulate_dreadnought	0	ability:0	unsupported: nonmana costs need additional fixture resources
 consulate_skygate	0	cast	exercised
+contaminated_landscape	0	ability:2	unsupported: ability not offered by generic battlefield fixture
 contradict	0	cast	unsupported: target group 0 needs a richer fixture
 convolute	0	cast	unsupported: target group 0 needs a richer fixture
 coordinated_maneuver	0	cast	exercised
@@ -802,6 +804,7 @@ debris_field_crusher	0	ability:1	exercised
 debris_field_crusher	0	cast	exercised
 decanter_of_endless_water	0	ability:0	exercised
 decanter_of_endless_water	0	cast	exercised
+deceptive_landscape	0	ability:2	unsupported: ability not offered by generic battlefield fixture
 decode_transmissions	0	cast	exercised
 decoy_ploy	0	cast	unsupported: face not offered by generic hand fixture
 deduce	0	cast	exercised
@@ -1204,6 +1207,7 @@ foot_ninjas	0	cast	exercised
 foot_soldiers	0	cast	exercised
 force_of_savagery	0	cast	exercised
 force_spike	0	cast	unsupported: target group 0 needs a richer fixture
+foreboding_landscape	0	ability:2	unsupported: ability not offered by generic battlefield fixture
 forecasting_fortune_teller	0	cast	exercised
 forensic_researcher	0	ability:0	exercised
 forensic_researcher	0	ability:1	unsupported: nonmana costs need additional fixture resources
@@ -2382,6 +2386,7 @@ pendrell_drake	0	ability:0	unsupported: ability not offered by generic battlefie
 pensive_minotaur	0	cast	exercised
 peregrine_griffin	0	cast	exercised
 perigee_beckoner	0	cast	exercised
+perilous_landscape	0	ability:2	unsupported: ability not offered by generic battlefield fixture
 perish	0	cast	exercised
 pest_mascot	0	cast	exercised
 petrify	0	cast	exercised
@@ -2864,6 +2869,7 @@ sedge_scorpion	0	cast	exercised
 seeker_of_skybreak	0	ability:0	exercised
 seeker_of_skybreak	0	cast	exercised
 seekers_folly	0	cast	exercised
+seething_landscape	0	ability:2	unsupported: ability not offered by generic battlefield fixture
 segovian_angel	0	cast	exercised
 seismic_monstrosaur	0	ability:0	exercised
 seismic_monstrosaur	0	ability:1	unsupported: ability not offered by generic battlefield fixture
@@ -2902,6 +2908,7 @@ sharlayan,_nation_of_scholars	0	land	exercised
 shatter	0	cast	exercised
 shattered_acolyte	0	ability:0	exercised
 shattered_acolyte	0	cast	exercised
+shattered_landscape	0	ability:2	unsupported: ability not offered by generic battlefield fixture
 shattered_sanctum	0	ability:0	exercised
 shattered_sanctum	0	land	exercised
 shattered_wings	0	cast	exercised
@@ -2913,6 +2920,7 @@ shefet_archfiend	0	cast	exercised
 sheltered_thicket	0	ability:0	exercised
 sheltered_thicket	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 sheltered_thicket	0	land	exercised
+sheltering_landscape	0	ability:2	unsupported: ability not offered by generic battlefield fixture
 shepherd_of_the_lost	0	cast	exercised
 shepherding_spirits	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 shepherding_spirits	0	cast	exercised
@@ -3490,6 +3498,7 @@ tranquil_cove	0	ability:0	exercised
 tranquil_cove	0	land	exercised
 tranquil_expanse	0	ability:0	exercised
 tranquil_expanse	0	land	exercised
+tranquil_landscape	0	ability:2	unsupported: ability not offered by generic battlefield fixture
 tranquil_thicket	0	ability:0	exercised
 tranquil_thicket	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 tranquil_thicket	0	land	exercised
@@ -3539,6 +3548,7 @@ twinblade_blessing	0	cast	exercised
 twincast	0	cast	unsupported: target group 0 needs a richer fixture
 twinscroll_shaman	0	cast	exercised
 twist_reality	0	cast	exercised
+twisted_landscape	0	ability:2	unsupported: ability not offered by generic battlefield fixture
 two-headed_cerberus	0	cast	exercised
 two-headed_hunter_twice_the_rage	0	cast	exercised
 two-headed_hunter_twice_the_rage	1	cast	exercised

@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "cbc808dd-8d50-4f42-b0f1-d4e45d0462a2",
+  "spans": [
+    {
+      "face_id": "coat_with_venom",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q37_pump_keyword_batch::q37_pump_keyword_cards_apply_the_printed_pump_and_keywords_only_to_the_target",
+      "covers": "actual card is exercised by the shared 06-pump-keyword scenario"
+    },
+    {
+      "test": "scenario q37_pump_keyword_batch::q37_pump_keyword_cards_require_a_creature_target",
+      "covers": "actual card is exercised by the shared 06-pump-keyword scenario"
+    },
+    {
+      "test": "scenario q37_pump_keyword_batch::q37_pump_keyword_cards_fizzle_when_the_target_is_gone",
+      "covers": "actual card is exercised by the shared 06-pump-keyword scenario"
+    },
+    {
+      "test": "mechanic_registry::q37_pump_keyword_batch::q37_pump_keyword_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q37_pump_keyword_batch::q37_pump_keyword_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

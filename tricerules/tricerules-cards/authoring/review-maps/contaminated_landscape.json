@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "28196fd9-00c9-4cd0-b603-0eec8511ec79",
+  "spans": [
+    {
+      "face_id": "contaminated_landscape",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "contaminated_landscape",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    },
+    {
+      "face_id": "contaminated_landscape",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q37_cycling_fetch_lands_batch::q37_cycling_fetch_lands_cards_tap_for_colorless_and_fetch_only_printed_types",
+      "covers": "actual card is exercised by the shared 02-cycling-fetch-lands scenario"
+    },
+    {
+      "test": "scenario q37_cycling_fetch_lands_batch::q37_cycling_fetch_lands_cards_cycle_for_the_printed_cost_and_draw_one",
+      "covers": "actual card is exercised by the shared 02-cycling-fetch-lands scenario"
+    },
+    {
+      "test": "scenario q37_cycling_fetch_lands_batch::q37_cycling_fetch_lands_cards_reject_short_mana_and_tapped_fetch",
+      "covers": "actual card is exercised by the shared 02-cycling-fetch-lands scenario"
+    },
+    {
+      "test": "mechanic_registry::q37_cycling_fetch_lands_batch::q37_cycling_fetch_lands_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q37_cycling_fetch_lands_batch::q37_cycling_fetch_lands_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

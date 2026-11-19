@@ -1,0 +1,22 @@
+// Oracle a5ef15b5-83d2-4b23-9403-a9a52be46154; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 and 118.3 (mana and tap costs), 614.1a/615.1 (prevention shield),
+// 115.1 (any target) and 514.2 (the shield lasts until end of turn).
+// Copy of the reviewed Samite Healer / Clergy en-Vec prevention shape.
+(
+  id: "treefolk_healer",
+  name: "Treefolk Healer",
+  face_id: "treefolk_healer",
+  mana_cost: "{4}{G}",
+  types: ["Creature", "Treefolk", "Cleric"],
+  power: 2,
+  toughness: 3,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{2}{W}"), Tap],
+      effect: [PreventNextDamage(amount: 2, target: (kind: AnyTarget))],
+    ),
+  ],
+)

@@ -1,0 +1,17 @@
+// Oracle fe971240-268a-47d4-a14e-3d6352656091; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a (target creature), 601.2a/601.2h (cast and payment), 611.2a/514.2
+// (pump and keyword end at cleanup), 613.4c (layer 7c pump) and the granted keyword's rule.
+// Copy of the reviewed Adamant Will / Tethermage's Advantage pump-and-keyword shape.
+(
+  id: "gift_of_strength",
+  name: "Gift of Strength",
+  face_id: "gift_of_strength",
+  mana_cost: "{1}{G}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 3, toughness: 3, subject: Chosen((kind: Creature))),
+    GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Reach]),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0, 1])])),
+)

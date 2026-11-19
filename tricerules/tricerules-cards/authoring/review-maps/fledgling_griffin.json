@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "314748a6-4e7f-4afb-b77e-5ef366e02b90",
+  "spans": [
+    {
+      "face_id": "fledgling_griffin",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q37_landfall_keyword_batch::q37_landfall_keyword_canary_simplest",
+      "covers": "simplest canary for this actual card"
+    },
+    {
+      "test": "scenario q37_landfall_keyword_batch::q37_landfall_keyword_cards_trigger_only_on_their_controllers_land",
+      "covers": "actual card is exercised by the shared 08-landfall-keyword scenario"
+    },
+    {
+      "test": "scenario q37_landfall_keyword_batch::q37_landfall_keyword_cards_trigger_on_each_land_entry",
+      "covers": "actual card is exercised by the shared 08-landfall-keyword scenario"
+    },
+    {
+      "test": "scenario q37_landfall_keyword_batch::q37_landfall_keyword_cards_do_not_trigger_on_nonland_entries",
+      "covers": "actual card is exercised by the shared 08-landfall-keyword scenario"
+    },
+    {
+      "test": "mechanic_registry::q37_landfall_keyword_batch::q37_landfall_keyword_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q37_landfall_keyword_batch::q37_landfall_keyword_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
