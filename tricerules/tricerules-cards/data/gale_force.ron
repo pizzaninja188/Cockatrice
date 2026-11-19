@@ -1,0 +1,15 @@
+// Oracle 337b0807-94cb-48d0-b752-61fbd05560e4; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 120.3 (damage), 702.9 (the printed flying filter), 704.5g (lethal damage)
+// and 514.2 (damage lasts until cleanup). Copy of Seismic Rupture's DamageAll keyword filter.
+(
+  id: "gale_force",
+  name: "Gale Force",
+  face_id: "gale_force",
+  mana_cost: "{4}{G}",
+  types: ["Sorcery"],
+  spell_effect: [DamageAll(
+    amount: 5,
+    kind: (kind: Creature, required_keywords: [Flying]),
+  )],
+)

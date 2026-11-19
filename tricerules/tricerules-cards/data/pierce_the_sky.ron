@@ -1,0 +1,18 @@
+// Oracle 7e4504c1-4349-408d-8fdf-0c44efdd3f56; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1/601.2c (target), 120.3 (damage), 608.2b (stale target) and 702.9
+// (the printed flying filter). Copy of Plummet's flying target filter with DamageTarget.
+(
+  id: "pierce_the_sky",
+  name: "Pierce the Sky",
+  face_id: "pierce_the_sky",
+  mana_cost: "{1}{G}",
+  types: ["Instant"],
+  spell_effect: [DamageTarget(
+    amount: 7,
+    target: (kind: Creature, required_keywords: [Flying]),
+  )],
+  targeting: Some((groups: [
+    (min: 1, max: 1, prompt: "Choose target creature with flying", effect_indices: [0]),
+  ])),
+)

@@ -1,0 +1,19 @@
+// Oracle 2bf65e7d-6d31-4ad6-93cd-623612d3175d; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1 (target player), 119.3/120.3 (damage), 402.1 (hand size) and
+// 608.2h (the count is read on resolution). Copy of Boros Charm's targeted-player
+// DamageTarget and Iron Maiden's live CardsInHand count.
+(
+  id: "sudden_impact",
+  name: "Sudden Impact",
+  face_id: "sudden_impact",
+  mana_cost: "{3}{R}",
+  types: ["Instant"],
+  spell_effect: [DamageTarget(
+    amount: Count(CardsInHand(players: ChosenTarget(group_index: 0, target_index: 0))),
+    target: (kind: AnyPlayer),
+  )],
+  targeting: Some((groups: [(
+    min: 1, max: 1, prompt: "Choose target player", effect_indices: [0],
+  )])),
+)

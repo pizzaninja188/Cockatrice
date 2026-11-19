@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "1a852283-42d4-4197-91b9-5c952c7325ca",
+  "spans": [
+    {
+      "face_id": "kor_line_slinger",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q38_tap_power_batch::q38_tap_power_cards_accept_power_at_the_limit_and_reject_power_above_it",
+      "covers": "actual card is exercised by the shared 07-tap-power scenario"
+    },
+    {
+      "test": "scenario q38_tap_power_batch::q38_tap_power_cards_recheck_power_on_resolution",
+      "covers": "actual card is exercised by the shared 07-tap-power scenario"
+    },
+    {
+      "test": "scenario q38_tap_power_batch::q38_tap_power_cards_require_an_untapped_source_and_a_creature_target",
+      "covers": "actual card is exercised by the shared 07-tap-power scenario"
+    },
+    {
+      "test": "mechanic_registry::q38_tap_power_batch::q38_tap_power_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q38_tap_power_batch::q38_tap_power_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

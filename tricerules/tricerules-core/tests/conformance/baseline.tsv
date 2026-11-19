@@ -1899,6 +1899,7 @@ lead_pipe	0	ability:1	exercised
 lead_pipe	0	cast	exercised
 leaden_myr	0	ability:0	exercised
 leaden_myr	0	cast	exercised
+leaf_arrow	0	cast	unsupported: target group 0 needs a richer fixture
 leaf_gilder	0	ability:0	exercised
 leaf_gilder	0	cast	exercised
 leafkin_druid	0	ability:0	exercised
@@ -2397,6 +2398,7 @@ pheres-band_centaurs	0	cast	exercised
 phyrexian_arena	0	cast	exercised
 phyrexian_walker	0	cast	exercised
 phytoburst	0	cast	exercised
+pierce_the_sky	0	cast	unsupported: target group 0 needs a richer fixture
 piggy_bank	0	cast	exercised
 pigment_wrangler_striking_palette	0	cast	exercised
 pigment_wrangler_striking_palette	1	cast	intentional: face unavailable from hand
@@ -2947,6 +2949,7 @@ show_of_valor	0	cast	exercised
 shredder,_unrelenting	0	cast	exercised
 shredders_revenge	0	cast	exercised
 shredders_technique	0	cast	exercised
+shredding_winds	0	cast	unsupported: target group 0 needs a richer fixture
 shrike_force	0	cast	exercised
 shroudstomper	0	cast	exercised
 shu_elite_infantry	0	cast	exercised
@@ -3103,6 +3106,9 @@ spider-rex,_daring_dino	0	cast	exercised
 spider_food	0	cast	exercised
 spike_jester	0	cast	exercised
 spiked_baloth	0	cast	exercised
+spiketail_drake	0	ability:0	unsupported: target group 0 needs a richer fixture
+spiketail_drakeling	0	ability:0	unsupported: target group 0 needs a richer fixture
+spiketail_hatchling	0	ability:0	unsupported: target group 0 needs a richer fixture
 spin_out	0	cast	exercised
 spined_karok	0	cast	exercised
 spined_megalodon	0	cast	exercised

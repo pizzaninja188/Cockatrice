@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "91a69925-1e9b-433a-ad58-88bfd3c4bc46",
+  "spans": [
+    {
+      "face_id": "gaze_of_adamaro",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q38_hand_damage_batch::q38_hand_damage_canary_simplest",
+      "covers": "simplest canary for this actual card"
+    },
+    {
+      "test": "scenario q38_hand_damage_batch::q38_hand_damage_cards_use_only_the_targeted_players_hand_count",
+      "covers": "actual card is exercised by the shared 02-hand-damage scenario"
+    },
+    {
+      "test": "scenario q38_hand_damage_batch::q38_hand_damage_cards_may_target_their_controller_and_reject_no_target",
+      "covers": "actual card is exercised by the shared 02-hand-damage scenario"
+    },
+    {
+      "test": "mechanic_registry::q38_hand_damage_batch::q38_hand_damage_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q38_hand_damage_batch::q38_hand_damage_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

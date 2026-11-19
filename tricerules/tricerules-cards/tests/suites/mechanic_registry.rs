@@ -1215,3 +1215,30 @@ mod q37_landfall_keyword_batch;
 
 #[path = "../q37_tap_keyword_activated_batch.rs"]
 mod q37_tap_keyword_activated_batch;
+
+#[path = "../q38_creature_player_sweep_batch.rs"]
+mod q38_creature_player_sweep_batch;
+
+#[path = "../q38_hand_damage_batch.rs"]
+mod q38_hand_damage_batch;
+
+#[path = "../q38_flyer_damage_batch.rs"]
+mod q38_flyer_damage_batch;
+
+#[path = "../q38_flyer_sweep_batch.rs"]
+mod q38_flyer_sweep_batch;
+
+#[path = "../q38_attacking_sweep_batch.rs"]
+mod q38_attacking_sweep_batch;
+
+#[path = "../q38_spiketail_counters_batch.rs"]
+mod q38_spiketail_counters_batch;
+
+#[path = "../q38_tap_power_batch.rs"]
+mod q38_tap_power_batch;
+
+#[path = "../q38_mountain_damage_batch.rs"]
+mod q38_mountain_damage_batch;
+
+#[path = "../q38_aura_pump_batch.rs"]
+mod q38_aura_pump_batch;

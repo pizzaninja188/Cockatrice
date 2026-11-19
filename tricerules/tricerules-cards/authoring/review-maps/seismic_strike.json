@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "3513d862-ef0d-4949-b33a-3fa9437cc444",
+  "spans": [
+    {
+      "face_id": "seismic_strike",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q38_mountain_damage_batch::q38_mountain_damage_cards_count_only_their_controllers_mountains",
+      "covers": "actual card is exercised by the shared 08-mountain-damage scenario"
+    },
+    {
+      "test": "scenario q38_mountain_damage_batch::q38_mountain_damage_cards_deal_zero_without_mountains_and_fizzle_on_stale_targets",
+      "covers": "actual card is exercised by the shared 08-mountain-damage scenario"
+    },
+    {
+      "test": "mechanic_registry::q38_mountain_damage_batch::q38_mountain_damage_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q38_mountain_damage_batch::q38_mountain_damage_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

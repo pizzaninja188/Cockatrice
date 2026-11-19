@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "be2ae8dc-afae-4bcf-8a97-08a2764d1148",
+  "spans": [
+    {
+      "face_id": "marrow_shards",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/mana_cost"
+      ]
+    },
+    {
+      "face_id": "marrow_shards",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q38_attacking_sweep_batch::q38_attacking_sweep_canary_hardest",
+      "covers": "hardest canary for this actual card"
+    },
+    {
+      "test": "scenario q38_attacking_sweep_batch::q38_attacking_sweep_cards_damage_each_attacking_creature_only",
+      "covers": "actual card is exercised by the shared 05-attacking-sweep scenario"
+    },
+    {
+      "test": "mechanic_registry::q38_attacking_sweep_batch::q38_attacking_sweep_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q38_attacking_sweep_batch::q38_attacking_sweep_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "1f513d1e-03ca-4e0f-af48-6490d71d5c41",
+  "spans": [
+    {
+      "face_id": "needle_storm",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q38_flyer_sweep_batch::q38_flyer_sweep_cards_damage_every_flying_creature_only",
+      "covers": "actual card is exercised by the shared 04-flyer-sweep scenario"
+    },
+    {
+      "test": "scenario q38_flyer_sweep_batch::q38_flyer_sweep_cards_clear_marked_damage_at_cleanup",
+      "covers": "actual card is exercised by the shared 04-flyer-sweep scenario"
+    },
+    {
+      "test": "mechanic_registry::q38_flyer_sweep_batch::q38_flyer_sweep_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q38_flyer_sweep_batch::q38_flyer_sweep_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

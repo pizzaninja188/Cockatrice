@@ -1,0 +1,16 @@
+// Oracle a6cc516d-5a4b-455a-ab16-367d64215527; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 120.2/120.3 (damage to creatures and players), 119.3 (each player loses life),
+// 608.2c (instructions in order), 702.9/704.5g (lethal damage) and 514.2 (damage marked
+// until cleanup). Copy of the reviewed Slagstorm DamageAll/DamagePlayer halves.
+(
+  id: "dakmor_plague",
+  name: "Dakmor Plague",
+  face_id: "dakmor_plague",
+  mana_cost: "{3}{B}{B}",
+  types: ["Sorcery"],
+  spell_effect: [
+    DamageAll(amount: 3, kind: (kind: Creature)),
+    DamagePlayer(amount: 3, who: EachPlayer),
+  ],
+)
