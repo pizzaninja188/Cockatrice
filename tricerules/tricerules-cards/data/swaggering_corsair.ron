@@ -1,0 +1,22 @@
+// Oracle 48fa47c0-544e-4374-a0a6-ef8f65cdf0dd; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.4 (raid intervening-if), 508.1 (attacked this turn) and the printed effect.
+// Pinned rulings: raid cares only that a creature attacked during the turn, and the
+// attacked player/permanent need not remain. CR 614.1c/614.12 (enters with a counter) and 122.1a (+1/+1 counter).
+(
+  id: "swaggering_corsair",
+  name: "Swaggering Corsair",
+  face_id: "swaggering_corsair",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Human", "Pirate"],
+  power: 2,
+  toughness: 2,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: EntersWithCounters(
+      counter: PlusOnePlusOne,
+      amount: Conditional(condition: AttackedThisTurn(players: Controller), when_true: 1, otherwise: 0),
+    ),
+  )],
+)

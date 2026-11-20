@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "48fa47c0-544e-4374-a0a6-ef8f65cdf0dd",
+  "spans": [
+    {
+      "face_id": "swaggering_corsair",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersWithCounters",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "CounterKind::PlusOnePlusOne",
+      "typed_path": "/faces/0/static_abilities/0/definition/EntersWithCounters/counter"
+    },
+    {
+      "symbol": "GameCondition::AttackedThisTurn",
+      "typed_path": "/faces/0/static_abilities/0/definition/EntersWithCounters/amount/Conditional/condition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q49_batch_c::q49_raid_canary_simplest_swaggering_corsair_enters_with_a_counter_after_attacking",
+      "covers": "canary simplest enters with a +1/+1 counter after an attack"
+    },
+    {
+      "test": "scenario q49_batch_c::q49_raid_without_an_attack_does_not_add_the_counter",
+      "covers": "the counter is conditional on an attack this turn"
+    },
+    {
+      "test": "scenario q49_batch_c::q49_raid_cards_apply_their_printed_effect",
+      "covers": "every actual card applies its printed raid effect"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_c::q49_raid_maps_definitions",
+      "covers": "reviewed identity, raid intervening-if and printed effect"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_c::q49_batch_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Swaggering Corsair"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

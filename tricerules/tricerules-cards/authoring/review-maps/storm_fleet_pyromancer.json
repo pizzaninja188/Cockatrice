@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "866586f4-ad97-44fa-a110-6a7a3cb3591b",
+  "spans": [
+    {
+      "face_id": "storm_fleet_pyromancer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "GameCondition::AttackedThisTurn",
+      "typed_path": "/faces/0/triggered_abilities/0/intervening_if"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q49_batch_c::q49_raid_damage_targets_a_creature_and_rejects_a_land",
+      "covers": "the damage trigger targets a creature and rejects a land"
+    },
+    {
+      "test": "scenario q49_batch_c::q49_raid_triggers_require_an_attack",
+      "covers": "no raid trigger stages without an attack this turn"
+    },
+    {
+      "test": "scenario q49_batch_c::q49_raid_cards_apply_their_printed_effect",
+      "covers": "every actual card applies its printed raid effect"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_c::q49_raid_maps_definitions",
+      "covers": "reviewed identity, raid intervening-if and printed effect"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_c::q49_batch_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Storm Fleet Pyromancer"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

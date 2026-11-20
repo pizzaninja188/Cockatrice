@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "ab735456-f831-4988-84c6-50ca14351990",
+  "spans": [
+    {
+      "face_id": "deadeye_tormentor",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "GameCondition::AttackedThisTurn",
+      "typed_path": "/faces/0/triggered_abilities/0/intervening_if"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseHandCards",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q49_batch_c::q49_raid_triggers_require_an_attack",
+      "covers": "no raid trigger stages without an attack this turn"
+    },
+    {
+      "test": "scenario q49_batch_c::q49_raid_canary_hardest_deadeye_tormentor_forces_a_discard",
+      "covers": "canary hardest forces the chosen opponent to discard"
+    },
+    {
+      "test": "scenario q49_batch_c::q49_raid_deadeye_tormentor_requires_an_opponent_and_discards",
+      "covers": "the opponent target is required and the discarded card reaches the graveyard"
+    },
+    {
+      "test": "scenario q49_batch_c::q49_raid_cards_apply_their_printed_effect",
+      "covers": "every actual card applies its printed raid effect"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_c::q49_raid_maps_definitions",
+      "covers": "reviewed identity, raid intervening-if and printed effect"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_c::q49_batch_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Deadeye Tormentor"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
