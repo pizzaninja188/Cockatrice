@@ -1,0 +1,24 @@
+// Oracle 72ddbc9b-f584-433f-9d2d-6e4c374129c4; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (entry trigger), 115.1 (target), 122.1 (placing a +1/+1 counter)
+// 205.3 (creature subtypes) and 400.7 ("another" is a different object). No pinned ruling.
+(
+  id: "jade_bearer",
+  name: "Jade Bearer",
+  face_id: "jade_bearer",
+  mana_cost: "{G}",
+  types: ["Creature", "Merfolk", "Shaman"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [PutCounters(
+      counter: PlusOnePlusOne,
+      count: 1,
+      subject: Chosen((kind: Creature, controller: You, required_subtypes: ["Merfolk"], excluded_objects: [Source])),
+    )],
+    targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose another target Merfolk you control", effect_indices: [0])])),
+  )],
+)
