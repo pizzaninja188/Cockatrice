@@ -1,0 +1,16 @@
+// Oracle eaded717-e0e2-4def-be7e-6bfb137628c2; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a (target creature), 611.2a/514.2 (until end of turn), 613.4c (layer 7c)
+// and 702.10 (haste). The card has no pinned ruling.
+(
+  id: "screaming_fury",
+  name: "Screaming Fury",
+  face_id: "screaming_fury",
+  mana_cost: "{2}{R}",
+  types: ["Sorcery"],
+  spell_effect: [
+    PumpTarget(power: 5, toughness: 0, subject: Chosen((kind: Creature))),
+    GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Haste]),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0, 1])])),
+)
