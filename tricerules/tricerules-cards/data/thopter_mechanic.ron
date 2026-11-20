@@ -1,0 +1,27 @@
+// Oracle a7e7be75-646d-4c99-8388-15bb422c8e25; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 121.2 (each drawn card is a distinct event), 603.2 (draw trigger), 122.1a (+1/+1
+// counter), 603.6c/700.4 (dies trigger) and 111.1 (Thopter token). No pinned ruling.
+(
+  id: "thopter_mechanic",
+  name: "Thopter Mechanic",
+  face_id: "thopter_mechanic",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Human", "Artificer"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WheneverPlayerDrawsNthCard(ordinal: 2),
+      effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfDies,
+      effect: [CreateTokens(token: "thopter_c_1_1_flying", count: 1)],
+    ),
+  ],
+)

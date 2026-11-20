@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "b872f147-00eb-4cf8-af8c-4144356b2089",
+  "spans": [
+    {
+      "face_id": "faerie_vandal",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "faerie_vandal",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPlayerDrawsNthCard",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q47_cohorts_batch::q47_second_draw_counter_canary_simplest_triggers_once",
+      "covers": "canary simplest actual card triggers once for the second draw"
+    },
+    {
+      "test": "scenario q47_cohorts_batch::q47_second_draw_counter_canary_hardest_creates_a_thopter_on_death",
+      "covers": "canary hardest also creates the printed Thopter on death"
+    },
+    {
+      "test": "scenario q47_cohorts_batch::q47_second_draw_counter_cards_share_the_printed_shape",
+      "covers": "every actual card puts one +1/+1 counter on the second draw"
+    },
+    {
+      "test": "mechanic_registry::q47_cohorts_batch::q47_second_draw_counter_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q47_cohorts_batch::q47_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
