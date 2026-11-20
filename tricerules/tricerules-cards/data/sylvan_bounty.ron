@@ -1,0 +1,21 @@
+// Oracle c20635d2-20e9-48f7-88f0-6de0f953bb08; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.29a-b (basic landcycling), 601.2h (cost payment), 701.23a-b (search), 701.24
+// (shuffle), 119.3 (life gain) and 115.1 (target player). Pinned rulings match the shared
+// basic-landcycling cohort.
+(
+  id: "sylvan_bounty",
+  name: "Sylvan Bounty",
+  face_id: "sylvan_bounty",
+  mana_cost: "{5}{G}",
+  types: ["Instant"],
+  spell_effect: [TargetPlayerGainsLife(amount: 8, target: (kind: AnyPlayer))],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    source_zone: Hand,
+    costs: [Mana("{1}{G}"), DiscardSelf],
+    effect: [SearchLibrary(filter: Some((card_type: Some(BasicLand))), reveal: true)],
+  )],
+)

@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "94e71162-7c9d-46f4-90e8-413a1b08a198",
+  "spans": [
+    {
+      "face_id": "mental_journey",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "mental_journey",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q47_cohorts_batch::q47_basic_landcycling_canary_simplest_gains_eight_life",
+      "covers": "canary simplest actual card applies its printed life gain"
+    },
+    {
+      "test": "scenario q47_cohorts_batch::q47_basic_landcycling_canary_hardest_rechecks_a_stale_damage_target",
+      "covers": "canary hardest rechecks the damage target on resolution"
+    },
+    {
+      "test": "scenario q47_cohorts_batch::q47_basic_landcycling_spells_apply_their_printed_effects",
+      "covers": "every actual card applies its printed spell effect"
+    },
+    {
+      "test": "scenario q47_cohorts_batch::q47_basic_landcycling_cards_search_a_basic_land_from_hand",
+      "covers": "every actual card activates basic landcycling from hand and searches a basic land"
+    },
+    {
+      "test": "mechanic_registry::q47_cohorts_batch::q47_basic_landcycling_spells_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q47_cohorts_batch::q47_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
