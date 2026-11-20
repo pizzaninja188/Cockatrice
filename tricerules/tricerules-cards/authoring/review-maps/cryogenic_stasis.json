@@ -1,0 +1,70 @@
+{
+  "format_version": 1,
+  "oracle_id": "846ba66c-a4eb-4d00-a0f1-d9f9524b9695",
+  "spans": [
+    {
+      "face_id": "cryogenic_stasis",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting/groups/0"
+      ]
+    },
+    {
+      "face_id": "cryogenic_stasis",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting/groups/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/2"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q50_cohorts_batch::q50_tap_stun_canary_simplest_cryogenic_stasis_taps_and_draws",
+      "covers": "canary simplest taps, stuns and draws"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_tap_stun_cards_tap_and_place_their_printed_counters",
+      "covers": "actual card taps and places its printed stun counters"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_tap_stun_cards_still_place_counters_on_an_already_tapped_creature",
+      "covers": "actual card still places counters on an already-tapped target"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_tap_stun_cards_replace_untaps_with_counter_removal",
+      "covers": "actual card's stun counter replaces an untap"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_tap_stun_maps_definitions",
+      "covers": "reviewed tap/stun spell identity and effect shape"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Cryogenic Stasis"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
