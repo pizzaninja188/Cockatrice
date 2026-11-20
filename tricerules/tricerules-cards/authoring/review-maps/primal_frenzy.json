@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "705b4da3-d463-4808-b79c-dc0c1830945a",
+  "spans": [
+    {
+      "face_id": "primal_frenzy",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "primal_frenzy",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/static_abilities/0/definition/AttachedModifier/keywords"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q49_cohorts_batch::q49_aura_spell_shape_rejects_noncreature_targets_and_fizzles_on_stale_target",
+      "covers": "the Aura rejects a noncreature target and fizzles when its target leaves"
+    },
+    {
+      "test": "scenario q49_cohorts_batch::q49_aura_keyword_cards_grant_their_printed_keyword_and_stop_on_leaving",
+      "covers": "every actual card grants trample only to the enchanted creature and stops when the Aura leaves"
+    },
+    {
+      "test": "mechanic_registry::q49_cohorts_batch::q49_aura_keyword_maps_definitions",
+      "covers": "reviewed Aura identity and the printed trample grant"
+    },
+    {
+      "test": "mechanic_registry::q49_cohorts_batch::q49_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Primal Frenzy"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
