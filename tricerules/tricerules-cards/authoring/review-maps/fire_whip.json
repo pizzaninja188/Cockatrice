@@ -1,0 +1,86 @@
+{
+  "format_version": 1,
+  "oracle_id": "9d4372f0-eedf-4897-9f03-f96fb14ac4a6",
+  "spans": [
+    {
+      "face_id": "fire_whip",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "fire_whip",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0",
+        "/faces/0/static_abilities/0/definition/AttachedModifier/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "fire_whip",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/static_abilities/0/definition/AttachedModifier/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/static_abilities/0/definition/AttachedModifier/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q47_cohorts_batch::q47_pinger_aura_canary_simplest_grants_a_tap_ping",
+      "covers": "canary simplest actual Aura grants the tap ping"
+    },
+    {
+      "test": "scenario q47_cohorts_batch::q47_pinger_aura_canary_hardest_restricts_the_host_and_sacrifices_itself",
+      "covers": "canary hardest enforces the controller restriction and sacrifice ping"
+    },
+    {
+      "test": "scenario q47_cohorts_batch::q47_pinger_aura_cards_share_the_printed_shape",
+      "covers": "every actual Aura grants the printed tap ping"
+    },
+    {
+      "test": "mechanic_registry::q47_cohorts_batch::q47_pinger_aura_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q47_cohorts_batch::q47_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
