@@ -1,0 +1,12 @@
+// Oracle 4281a153-665b-44cf-bcff-9cf88c14c2b5; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 120.3a (damage), 702.9a (flying is excluded) and 616.1 (simultaneous events). The card
+// has no pinned ruling.
+(
+  id: "tremor",
+  name: "Tremor",
+  face_id: "tremor",
+  mana_cost: "{R}",
+  types: ["Sorcery"],
+  spell_effect: [DamageAll(amount: 1, kind: (kind: Creature, excluded_keywords: [Flying]))],
+)
