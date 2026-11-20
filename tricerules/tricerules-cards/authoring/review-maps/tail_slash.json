@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "69c51904-f758-4853-a86c-317c04462ea2",
+  "spans": [
+    {
+      "face_id": "tail_slash",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreatureDealsDamageEqualToPower",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q47_cohorts_batch::q47_bite_uses_the_sources_current_power",
+      "covers": "damage equals the source's current power"
+    },
+    {
+      "test": "scenario q47_cohorts_batch::q47_bite_creature_only_cards_reject_a_planeswalker",
+      "covers": "the creature-only target rejects a planeswalker"
+    },
+    {
+      "test": "scenario q47_cohorts_batch::q47_bite_canary_simplest_uses_the_sources_power",
+      "covers": "canary simplest actual card deals damage equal to the source's power"
+    },
+    {
+      "test": "scenario q47_cohorts_batch::q47_bite_canary_hardest_fizzles_when_either_target_left",
+      "covers": "canary hardest fizzles when either target left"
+    },
+    {
+      "test": "scenario q47_cohorts_batch::q47_bite_cards_share_the_printed_shape",
+      "covers": "every actual card uses two independent target roles"
+    },
+    {
+      "test": "mechanic_registry::q47_cohorts_batch::q47_bite_spells_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q47_cohorts_batch::q47_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

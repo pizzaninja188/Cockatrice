@@ -1,0 +1,32 @@
+// Oracle e68ff836-6e51-4c3a-91e5-f0d649297245; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 120.2b (damage source), 120.3a (damage to a creature or planeswalker), 115.1 (two
+// independent targets) and 608.2b (either illegal target makes the instruction do nothing).
+// The card has no pinned ruling.
+(
+  id: "masters_rebuke",
+  name: "Master's Rebuke",
+  face_id: "masters_rebuke",
+  mana_cost: "{1}{G}",
+  types: ["Instant"],
+  spell_effect: [CreatureDealsDamageEqualToPower(
+    source: (kind: Creature, controller: You),
+    target: (kind: AnyPermanent, controller: NotYou, permanent_types: [Creature, Planeswalker]),
+  )],
+  targeting: Some((groups: [
+    (
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature you control",
+      effect_indices: [0],
+      distinct_from: [1],
+    ),
+    (
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature or planeswalker you don't control",
+      effect_indices: [0],
+      distinct_from: [0],
+    ),
+  ])),
+)
