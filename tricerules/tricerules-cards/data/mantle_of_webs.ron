@@ -1,0 +1,17 @@
+// Oracle 7549206e-22a9-4d56-b3bc-f6f2f5e87e8a; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 303.4/303.4b (Aura attach), 613.4c (layer-7c pump), 613.1f (layer-6 keyword
+// grant), 611.3a-b (continuous effect) and 704.5m (cleanup). CR 702.17 (reach). No pinned ruling.
+(
+  id: "mantle_of_webs",
+  name: "Mantle of Webs",
+  face_id: "mantle_of_webs",
+  mana_cost: "{1}{G}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: AttachedModifier(delta_power: 1, delta_toughness: 3, keywords: [Reach]),
+  )],
+)
