@@ -157,6 +157,7 @@ arnim_zola,_bio-fanatic	0	ability:0	unsupported: nonmana costs need additional f
 arnim_zola,_bio-fanatic	0	cast	exercised
 arrogant_vampire	0	cast	exercised
 arrogant_wurm	0	cast	exercised
+artifact_blast	0	cast	unsupported: target group 0 needs a richer fixture
 ascendant_dustspeaker	0	cast	exercised
 ascended_lawmage	0	cast	exercised
 asgardian_citadel	0	ability:0	exercised
@@ -416,6 +417,7 @@ brave_brawler	0	ability:0	exercised
 brave_brawler	0	cast	exercised
 brazen_freebooter	0	cast	exercised
 brazen_scourge	0	cast	exercised
+break_asunder	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 break_down_the_door	0	cast	exercised
 breakneck_berserker	0	cast	exercised
 breath_of_life	0	cast	exercised
@@ -888,6 +890,7 @@ disruptive_stormbrood_petty_revenge	0	cast	exercised
 disruptive_stormbrood_petty_revenge	1	cast	exercised
 disruptor_of_currents	0	cast	exercised
 disruptor_wanderglyph	0	cast	exercised
+dissenters_deliverance	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 dive_down	0	cast	exercised
 divert_disaster	0	cast	unsupported: target group 0 needs a richer fixture
 divination	0	cast	exercised
@@ -1296,6 +1299,7 @@ fyndhorn_elves	0	ability:0	exercised
 fyndhorn_elves	0	cast	exercised
 gaeas_anthem	0	cast	exercised
 gaeas_skyfolk	0	cast	exercised
+gainsay	0	cast	unsupported: target group 0 needs a richer fixture
 galactic_wayfarer	0	cast	exercised
 gale_swooper	0	cast	exercised
 galewind_moose	0	cast	exercised
@@ -1520,6 +1524,7 @@ gurmag_swiftwing	0	cast	exercised
 gutless_plunderer	0	cast	exercised
 gutter_skulk	0	cast	exercised
 guttersnipe	0	cast	exercised
+guttural_response	0	cast	unsupported: target group 0 needs a richer fixture
 halberdier	0	cast	exercised
 hallowed_fountain	0	ability:0	exercised
 hallowed_fountain	0	land	exercised
@@ -1629,6 +1634,7 @@ hopeful_vigil	0	cast	exercised
 horizon_scholar	0	cast	exercised
 hornet_cobra	0	cast	exercised
 horrid_vigor	0	cast	exercised
+horta	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 hostile_minotaur	0	cast	exercised
 hot_dog_cart	0	ability:0	exercised
 hot_dog_cart	0	cast	exercised
@@ -1654,6 +1660,7 @@ hulldrifter	0	cast	exercised
 humble_budoka	0	cast	exercised
 humbling_elder	0	cast	exercised
 humongulus	0	cast	exercised
+humpback_whales	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 hundroog	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 hungry_ghoul	0	ability:0	exercised
 hungry_ghoul	0	cast	exercised
@@ -2239,6 +2246,7 @@ myr_retriever	0	cast	exercised
 mysterios_phantasm	0	cast	exercised
 mystic_archaeologist	0	ability:0	exercised
 mystic_archaeologist	0	cast	exercised
+mystic_denial	0	cast	unsupported: target group 0 needs a richer fixture
 mystic_monastery	0	ability:0	exercised
 mystic_monastery	0	land	exercised
 mystical_tutor	0	cast	exercised
@@ -2936,6 +2944,7 @@ shaman_of_spring	0	cast	exercised
 shambling_ghoul	0	cast	exercised
 shanodin_dryads	0	cast	exercised
 sharae_of_numbing_depths	0	cast	exercised
+shardless_outlander	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 shared_roots	0	cast	exercised
 sharlayan,_nation_of_scholars	0	ability:0	exercised
 sharlayan,_nation_of_scholars	0	land	exercised
@@ -3878,6 +3887,7 @@ wildwood_patrol	0	cast	exercised
 willow-wind	0	cast	exercised
 willow_elf	0	cast	exercised
 willow_faerie	0	cast	exercised
+wilt	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 wilt-leaf_cavaliers	0	cast	exercised
 wily_goblin	0	cast	exercised
 wind-scarred_crag	0	ability:0	exercised
