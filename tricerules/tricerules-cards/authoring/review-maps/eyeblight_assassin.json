@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "09cacd93-5c20-4993-9ee2-a756204796f7",
+  "spans": [
+    {
+      "face_id": "eyeblight_assassin",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q50_cohorts_batch::q50_etb_shrink_canary_simplest_eyeblight_assassin_shrinks",
+      "covers": "canary simplest shrinks a creature"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_etb_shrink_cards_target_only_opposing_creatures_and_expire",
+      "covers": "actual card shrinks only an opposing creature and expires at cleanup"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_etb_triggered_cards_fizzle_stale_targets",
+      "covers": "actual card fizzles when its chosen target left"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_etb_shrink_maps_definitions",
+      "covers": "reviewed shrink creature identity and trigger"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Eyeblight Assassin"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

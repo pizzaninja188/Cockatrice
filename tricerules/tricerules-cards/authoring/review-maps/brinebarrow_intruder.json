@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "eba73313-5ec5-4004-8040-658861b71a8f",
+  "spans": [
+    {
+      "face_id": "brinebarrow_intruder",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "brinebarrow_intruder",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q50_cohorts_batch::q50_etb_shrink_cards_target_only_opposing_creatures_and_expire",
+      "covers": "actual card shrinks only an opposing creature and expires at cleanup"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_etb_triggered_cards_fizzle_stale_targets",
+      "covers": "actual card fizzles when its chosen target left"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_etb_shrink_maps_definitions",
+      "covers": "reviewed shrink creature identity and trigger"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Brinebarrow Intruder"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
