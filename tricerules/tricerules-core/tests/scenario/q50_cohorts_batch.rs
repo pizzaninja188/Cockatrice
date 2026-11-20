@@ -713,7 +713,7 @@ fn q50_tap_stun_canary_hardest_freeze_in_place_scries_two() {
     let case = &stun_cases()[3];
     let mut e = stun_engine(50_031_001, case.id);
     let target = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
-    let top = vec![
+    let top = [
         inject_library_card(&mut e, 0, "storm_crow"),
         inject_library_card(&mut e, 0, "grizzly_bears"),
         inject_library_card(&mut e, 0, "forest"),
@@ -844,7 +844,7 @@ fn q50_tap_stun_freeze_in_place_fizzles_without_scrying_when_the_target_leaves()
     let case = &stun_cases()[3];
     let mut e = stun_engine(50_036_001, case.id);
     let target = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
-    let top = vec![inject_library_card(&mut e, 0, "storm_crow")];
+    let top = [inject_library_card(&mut e, 0, "storm_crow")];
     e.state.players[0].library.retain(|oid| !top.contains(oid));
     e.state.players[0].library.push_front(top[0]);
     cast_at(&mut e, case.id, &case.mana, target).expect("cast Freeze in Place");
