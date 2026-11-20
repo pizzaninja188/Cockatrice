@@ -2448,3 +2448,30 @@ mod q42_attacking_pump_batch;
 
 #[path = "scenario/q42_pump_keyword_batch.rs"]
 mod q42_pump_keyword_batch;
+
+#[path = "scenario/q43_aura_pump_batch.rs"]
+mod q43_aura_pump_batch;
+
+#[path = "scenario/q43_goblin_tokens_batch.rs"]
+mod q43_goblin_tokens_batch;
+
+#[path = "scenario/q43_activated_target_pump_batch.rs"]
+mod q43_activated_target_pump_batch;
+
+#[path = "scenario/q43_convoke_pump_batch.rs"]
+mod q43_convoke_pump_batch;
+
+#[path = "scenario/q43_power_unblockable_batch.rs"]
+mod q43_power_unblockable_batch;
+
+#[path = "scenario/q43_activated_self_pump_batch.rs"]
+mod q43_activated_self_pump_batch;
+
+#[path = "scenario/q43_discard_spells_batch.rs"]
+mod q43_discard_spells_batch;
+
+#[path = "scenario/q43_etb_counter_target_batch.rs"]
+mod q43_etb_counter_target_batch;
+
+#[path = "scenario/q43_order_pump_batch.rs"]
+mod q43_order_pump_batch;

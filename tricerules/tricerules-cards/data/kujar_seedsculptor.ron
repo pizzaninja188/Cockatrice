@@ -1,0 +1,25 @@
+// Oracle 93f817c7-2a3d-4346-94c1-3ba8bafb485d; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (entry trigger), 115.1 (one target creature you control) and 122.1
+// (placing the printed counter).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "kujar_seedsculptor",
+  name: "Kujar Seedsculptor",
+  face_id: "kujar_seedsculptor",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Elf", "Druid"],
+  power: 1,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature, controller: You)))],
+    targeting: Some((groups: [(
+      min: 1, max: 1,
+      prompt: "Choose target creature you control",
+      effect_indices: [0],
+    )])),
+  )],
+)

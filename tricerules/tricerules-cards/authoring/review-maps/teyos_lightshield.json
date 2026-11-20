@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "f1305d49-e543-49e9-9b36-e56f93f63bc3",
+  "spans": [
+    {
+      "face_id": "teyos_lightshield",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/PutCounters/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q43_etb_counter_target_batch::q43_etb_counter_target_canary_places_the_printed_counter",
+      "covers": "actual card places its printed counter on a controlled creature"
+    },
+    {
+      "test": "scenario q43_etb_counter_target_batch::q43_etb_counter_target_cards_apply_their_printed_counter_to_a_controlled_creature",
+      "covers": "every actual card applies its printed counter kind and amount"
+    },
+    {
+      "test": "scenario q43_etb_counter_target_batch::q43_etb_counter_target_cards_reject_a_creature_you_do_not_control",
+      "covers": "an opponent's creature is not a legal target for 'you control'"
+    },
+    {
+      "test": "scenario q43_etb_counter_target_batch::q43_etb_counter_target_cards_may_target_themselves",
+      "covers": "the source may target itself, matching the pinned rulings"
+    },
+    {
+      "test": "mechanic_registry::q43_cohorts_batch::q43_etb_counter_target_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of teyos_lightshield"
+    },
+    {
+      "test": "mechanic_registry::q43_cohorts_batch::q43_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for teyos_lightshield"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

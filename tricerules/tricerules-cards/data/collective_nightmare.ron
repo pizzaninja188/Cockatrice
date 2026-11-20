@@ -1,0 +1,19 @@
+// Oracle fa7b7db2-c830-405c-a5e6-e5431d573ed3; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.51a-c (Convoke taps creatures to pay generic or a matching color), 601.2h
+// (payment order), 115.1 (one target creature) and 611.2a/613.4c (until-end-of-turn pump).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "collective_nightmare",
+  name: "Collective Nightmare",
+  face_id: "collective_nightmare",
+  mana_cost: "{2}{B}",
+  types: ["Instant"],
+  keywords: [Convoke],
+  spell_effect: [PumpTarget(power: -3, toughness: -3, subject: Chosen((kind: Creature)))],
+  targeting: Some((groups: [(
+    min: 1, max: 1,
+    prompt: "Choose target creature",
+    effect_indices: [0],
+  )])),
+)
