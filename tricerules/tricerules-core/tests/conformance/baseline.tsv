@@ -1736,6 +1736,7 @@ invasion_of_ulgrotha_grandmother_ravi_sengir	1	cast	intentional: face unavailabl
 invasion_reinforcements	0	cast	exercised
 invasive_maneuvers	0	cast	exercised
 involuntary_employment	0	cast	exercised
+ior_ruin_expedition	0	ability:0	unsupported: nonmana costs need additional fixture resources
 iroass_champion	0	cast	exercised
 irohs_demonstration	0	cast	exercised
 iron-shield_elf	0	ability:0	exercised
@@ -1839,6 +1840,7 @@ ketria_triome	0	ability:1	unsupported: ability not offered by generic battlefiel
 khalni_ambush_khalni_territory	0	cast	exercised
 khalni_ambush_khalni_territory	1	ability:0	exercised
 khalni_ambush_khalni_territory	1	land	exercised
+khalni_heart_expedition	0	ability:0	unsupported: nonmana costs need additional fixture resources
 kill_shot	0	cast	unsupported: target group 0 needs a richer fixture
 killers_mask	0	ability:0	exercised
 killers_mask	0	cast	exercised
@@ -3099,6 +3101,7 @@ soul-guide_lantern	0	cast	exercised
 soul-shackled_zombie	0	cast	exercised
 soul_of_the_rapids	0	cast	exercised
 soul_salvage	0	cast	exercised
+soul_stair_expedition	0	ability:0	unsupported: nonmana costs need additional fixture resources
 soul_warden	0	cast	exercised
 soulbound_guardians	0	cast	exercised
 soulstone_sanctuary	0	ability:0	exercised
@@ -3292,6 +3295,7 @@ sunken_hollow	0	land	exercised
 sunset_saboteur	0	cast	exercised
 sunshower_druid	0	cast	exercised
 sunspire_griffin	0	cast	exercised
+sunspring_expedition	0	ability:0	unsupported: nonmana costs need additional fixture resources
 sunstar_expansionist	0	cast	exercised
 suntail_hawk	0	cast	exercised
 super_speed	0	cast	exercised
