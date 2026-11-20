@@ -1,0 +1,23 @@
+// Oracle c030ca14-33cb-40b3-a1f5-b6d0cb0efd49; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 604.1/611.3a (static continuous ability), 613.1f/613.4c (layer 7c) and 105.2
+// (green creatures). Pinned ruling: Jacques gives himself +0/+2 because he is green.
+(
+  id: "jacques_le_vert",
+  name: "Jacques le Vert",
+  face_id: "jacques_le_vert",
+  mana_cost: "{1}{R}{G}{W}",
+  types: ["Creature", "Human", "Warrior"],
+  supertypes: ["Legendary"],
+  power: 3,
+  toughness: 2,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: AnthemPt(
+      filter: (controller: YouControl, color: Green),
+      delta_power: 0,
+      delta_toughness: 2,
+    ),
+  )],
+)

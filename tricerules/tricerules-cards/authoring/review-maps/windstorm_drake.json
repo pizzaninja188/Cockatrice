@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "16977ebd-6384-4c28-b9c3-448563a07807",
+  "spans": [
+    {
+      "face_id": "windstorm_drake",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "windstorm_drake",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "StaticAbilityDef::AnthemPt",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q48_cohorts_batch::q48_team_anthem_canary_simplest_scopes_white_creatures",
+      "covers": "canary simplest actual card scopes white creatures only"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_team_anthem_canary_hardest_scopes_other_flyers_only",
+      "covers": "canary hardest scopes other flyers and ends with the source"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_team_anthem_cards_apply_their_printed_scope",
+      "covers": "every actual card applies its printed color or keyword scope"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_team_anthem_maps_definitions",
+      "covers": "reviewed identity and typed anthem definition"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Windstorm Drake"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

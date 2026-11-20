@@ -1,0 +1,24 @@
+// Oracle bf10ce45-c6d6-461e-ab46-06b4205d31fb; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 604.1/611.3a (static continuous ability), 613.1f/613.4c (layer 7c) and 613.1f/702.9
+// (other creatures with flying). Pinned ruling: damage marked on a creature may become lethal
+// if this Spirit leaves and the toughness bonus ends during the same turn.
+(
+  id: "spirit_of_the_spires",
+  name: "Spirit of the Spires",
+  face_id: "spirit_of_the_spires",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Spirit"],
+  power: 2,
+  toughness: 4,
+  keywords: [Flying],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: AnthemPt(
+      filter: (controller: YouControl, required_keyword: Flying, exclude_self: true),
+      delta_power: 0,
+      delta_toughness: 1,
+    ),
+  )],
+)
