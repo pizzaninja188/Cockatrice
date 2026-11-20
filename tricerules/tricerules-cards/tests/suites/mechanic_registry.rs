@@ -1294,3 +1294,6 @@ mod q47_cohorts_batch;
 
 #[path = "../q48_cohorts_batch.rs"]
 mod q48_cohorts_batch;
+
+#[path = "../q49_cohorts_batch.rs"]
+mod q49_cohorts_batch;
