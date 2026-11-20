@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "c6e92911-a100-43eb-ab4b-3778b0db1918",
+  "spans": [
+    {
+      "face_id": "dawnhart_rejuvenator",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "dawnhart_rejuvenator",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q48_cohorts_batch::q48_any_color_mana_canary_simplest_produces_the_chosen_color",
+      "covers": "canary simplest produces the chosen color"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_any_color_mana_canary_hardest_gains_life_then_taps_for_a_color",
+      "covers": "canary hardest gains life then taps for a color"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_any_color_mana_cards_offer_all_five_colors",
+      "covers": "every actual card offers all five colors at its printed cost"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_any_color_mana_maps_definitions",
+      "covers": "reviewed identity, mana ability, and any printed enters rider"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Dawnhart Rejuvenator"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

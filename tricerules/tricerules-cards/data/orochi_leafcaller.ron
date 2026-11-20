@@ -1,0 +1,19 @@
+// Oracle 081db161-1ad0-4ee7-9d34-c415984080f0; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 605.1a/605.3b (mana ability, which does not use the stack), 106.1a (five colors) and
+// 118.3 (costs). The card has no pinned ruling.
+(
+  id: "orochi_leafcaller",
+  name: "Orochi Leafcaller",
+  face_id: "orochi_leafcaller",
+  mana_cost: "{G}",
+  types: ["Creature", "Snake", "Shaman"],
+  power: 1,
+  toughness: 1,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{G}")],
+    effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+  )],
+)
