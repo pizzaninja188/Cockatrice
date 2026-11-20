@@ -1,0 +1,69 @@
+{
+  "format_version": 1,
+  "oracle_id": "1b73639b-2b07-4e82-b990-ca7721074e43",
+  "spans": [
+    {
+      "face_id": "dissenters_deliverance",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "dissenters_deliverance",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q48_cohorts_batch::q48_destroy_cycling_canary_simplest_destroys_an_artifact",
+      "covers": "canary simplest destroys an artifact and cycles"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_destroy_cycling_canary_hardest_hits_an_enchantment_and_cycles",
+      "covers": "canary hardest destroys an enchantment and cycles"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_destroy_cycling_cards_apply_their_printed_target_and_cycle",
+      "covers": "every actual card applies its printed target filter and cycles"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_destroy_cycling_maps_definitions",
+      "covers": "reviewed identity, target, and cycling ability"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Dissenter's Deliverance"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
