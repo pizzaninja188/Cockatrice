@@ -1,0 +1,21 @@
+// Oracle 8c8a3962-42a5-4070-8719-00d7483c7dbe; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 115.1/601.2c (target legality), 301.7 (Vehicle is an artifact subtype)
+// and 608.2b (recheck on resolution). The card has no pinned ruling.
+(
+  id: "daring_demolition",
+  name: "Daring Demolition",
+  face_id: "daring_demolition",
+  mana_cost: "{2}{B}{B}",
+  types: ["Sorcery"],
+  spell_effect: [Destroy(subject: Chosen((any_of: Some([
+    (kind: Creature),
+    (kind: AnyPermanent, required_subtypes: ["Vehicle"]),
+  ]))))],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature or Vehicle",
+    effect_indices: [0],
+  )])),
+)
