@@ -1,0 +1,19 @@
+// Oracle e5456b35-d7a9-4717-90df-c6c46f1ec437; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters trigger), 115.1d (one graveyard-card target),
+// 400.7 (new object after the move) and 608.2b (stale target). The target is one permanent card. No pinned ruling.
+(
+  id: "golgari_findbroker",
+  name: "Golgari Findbroker",
+  face_id: "golgari_findbroker",
+  mana_cost: "{B}{B}{G}{G}",
+  types: ["Creature", "Elf", "Shaman"],
+  power: 3,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [MoveGraveyardCards(filter: (card: Some((any_of: Some([(card_type: Some(Land)), (card_type: Some(NonlandPermanent))])))), destination: Hand)],
+  )],
+)

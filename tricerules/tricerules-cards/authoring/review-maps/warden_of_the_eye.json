@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "5342ce88-4afc-431c-814a-054e5fca4b9e",
+  "spans": [
+    {
+      "face_id": "warden_of_the_eye",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "GraveyardDestination::Hand",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/MoveGraveyardCards/destination"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q49_batch_c::q49_graveyard_hand_canary_hardest_warden_of_the_eye_excludes_creature_and_land",
+      "covers": "canary hardest rejects creature and land cards"
+    },
+    {
+      "test": "scenario q49_batch_c::q49_graveyard_hand_cards_return_their_printed_graveyard_card",
+      "covers": "every actual card returns its printed noncreature, nonland card and rejects an illegal card"
+    },
+    {
+      "test": "scenario q49_batch_c::q49_graveyard_hand_stale_target_is_not_returned",
+      "covers": "a targeted card exiled before resolution is not returned"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_c::q49_graveyard_hand_maps_definitions",
+      "covers": "reviewed identity, enters trigger, graveyard filter and hand destination"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_c::q49_batch_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Warden of the Eye"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

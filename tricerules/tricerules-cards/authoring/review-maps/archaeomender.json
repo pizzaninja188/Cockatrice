@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "5a4553fc-f945-4094-b231-2d378ed6609e",
+  "spans": [
+    {
+      "face_id": "archaeomender",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "GraveyardDestination::Hand",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/MoveGraveyardCards/destination"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q49_batch_c::q49_graveyard_hand_canary_simplest_archaeomender_returns_an_artifact",
+      "covers": "canary simplest returns an artifact card"
+    },
+    {
+      "test": "scenario q49_batch_c::q49_graveyard_hand_cards_return_their_printed_graveyard_card",
+      "covers": "every actual card returns its printed artifact card and rejects an illegal card"
+    },
+    {
+      "test": "scenario q49_batch_c::q49_graveyard_hand_stale_target_is_not_returned",
+      "covers": "a targeted card exiled before resolution is not returned"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_c::q49_graveyard_hand_maps_definitions",
+      "covers": "reviewed identity, enters trigger, graveyard filter and hand destination"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_c::q49_batch_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Archaeomender"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

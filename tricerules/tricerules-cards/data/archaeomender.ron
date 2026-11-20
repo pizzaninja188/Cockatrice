@@ -1,0 +1,19 @@
+// Oracle 5a4553fc-f945-4094-b231-2d378ed6609e; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters trigger), 115.1d (one graveyard-card target),
+// 400.7 (new object after the move) and 608.2b (stale target). The target is one artifact card. No pinned ruling.
+(
+  id: "archaeomender",
+  name: "Archaeomender",
+  face_id: "archaeomender",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Human", "Wizard"],
+  power: 2,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [MoveGraveyardCards(filter: (card: Some((card_type: Some(Artifact)))), destination: Hand)],
+  )],
+)
