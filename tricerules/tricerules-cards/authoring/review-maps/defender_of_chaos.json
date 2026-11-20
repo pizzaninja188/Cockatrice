@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "e5f04e8a-e9ae-4f00-8ada-f63b3454ed30",
+  "spans": [
+    {
+      "face_id": "defender_of_chaos",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "defender_of_chaos",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/protections/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "Protection::Color",
+      "typed_path": "/faces/0/protections/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q49_cohorts_batch::q49_protection_white_canary_hardest_defender_of_chaos_flashes",
+      "covers": "canary hardest uses flash timing during the opponent's main phase"
+    },
+    {
+      "test": "scenario q49_cohorts_batch::q49_protection_white_cards_expose_their_printed_keywords_and_protection",
+      "covers": "actual card exposes flash and protection from white"
+    },
+    {
+      "test": "scenario q49_cohorts_batch::q49_protection_white_cards_reject_white_aura_targeting",
+      "covers": "protection rejects a white Aura target on every card"
+    },
+    {
+      "test": "scenario q49_cohorts_batch::q49_protection_white_cards_prevent_white_source_damage",
+      "covers": "protection prevents damage from a white source"
+    },
+    {
+      "test": "scenario q49_cohorts_batch::q49_protection_white_cards_cannot_be_blocked_by_white",
+      "covers": "protection prevents a white creature from blocking"
+    },
+    {
+      "test": "mechanic_registry::q49_cohorts_batch::q49_protection_white_maps_definitions",
+      "covers": "reviewed identity, flash, and protection quality"
+    },
+    {
+      "test": "mechanic_registry::q49_cohorts_batch::q49_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Defender of Chaos"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

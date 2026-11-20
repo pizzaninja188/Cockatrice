@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "33435856-ea24-4d10-84d5-6872b35b63a3",
+  "spans": [
+    {
+      "face_id": "voice_of_truth",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0",
+        "/faces/0/protections/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "Protection::Color",
+      "typed_path": "/faces/0/protections/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q49_cohorts_batch::q49_protection_white_cards_expose_their_printed_keywords_and_protection",
+      "covers": "every actual card exposes its printed flying and protection from white"
+    },
+    {
+      "test": "scenario q49_cohorts_batch::q49_protection_white_cards_reject_white_aura_targeting",
+      "covers": "protection rejects a white Aura target on every card"
+    },
+    {
+      "test": "scenario q49_cohorts_batch::q49_protection_white_cards_prevent_white_source_damage",
+      "covers": "protection prevents damage from a white source"
+    },
+    {
+      "test": "scenario q49_cohorts_batch::q49_protection_white_cards_cannot_be_blocked_by_white",
+      "covers": "protection prevents a white creature from blocking"
+    },
+    {
+      "test": "mechanic_registry::q49_cohorts_batch::q49_protection_white_maps_definitions",
+      "covers": "reviewed identity, flying, and protection quality"
+    },
+    {
+      "test": "mechanic_registry::q49_cohorts_batch::q49_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Voice of Truth"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
