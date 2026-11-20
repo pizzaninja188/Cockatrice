@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "8ee2371c-e2c3-412e-b9e9-1ec511c9d537",
+  "spans": [
+    {
+      "face_id": "moonfolk_puzzlemaker",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "moonfolk_puzzlemaker",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfBecomesTapped",
+      "typed_path": "/faces/0/triggered_abilities/0"
+    },
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q49_batch_b::q49_becomes_tapped_cards_apply_their_printed_effect",
+      "covers": "every actual card applies its printed becomes-tapped effect to the printed scope"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_b::q49_becomes_tapped_maps_definitions",
+      "covers": "reviewed identity, becomes-tapped trigger and printed effect"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_b::q49_batch_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Moonfolk Puzzlemaker"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

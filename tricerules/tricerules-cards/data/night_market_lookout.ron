@@ -1,0 +1,23 @@
+// Oracle 5f5c5f59-1cc0-4a72-863c-c26db411f114; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.2 (becomes-tapped trigger), 119.3 (life gain and loss).
+// Pinned rulings: it is a triggered ability, requires an actual untapped-to-tapped
+// change, and in Two-Headed Giant the opposing team loses 2 life total.
+(
+  id: "night_market_lookout",
+  name: "Night Market Lookout",
+  face_id: "night_market_lookout",
+  mana_cost: "{B}",
+  types: ["Creature", "Human", "Rogue"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverSelfBecomesTapped,
+    effect: [
+      LoseLife(amount: Fixed(1), who: EachOpponent),
+      GainLife(amount: 1),
+    ],
+  )],
+)
