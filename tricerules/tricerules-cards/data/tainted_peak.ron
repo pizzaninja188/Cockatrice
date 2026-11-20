@@ -1,0 +1,35 @@
+// Oracle b2bae7fc-0668-4b34-9cd6-0d80aea52275; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 305.6/305.8 (the Swamp subtype), 602.1 (activation), 605.1a/605.3b
+// (mana abilities) and 106.1 (the produced colors). The restriction is checked when
+// activation begins; the land does not need to be tapped for the first ability.
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "tainted_peak",
+  name: "Tainted Peak",
+  face_id: "tainted_peak",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [
+        (b: 1),
+        (r: 1),
+      ])],
+      conditions: [BattlefieldAggregate(
+        filter: (controllers: Controller, required_subtypes: ["Swamp"]),
+        aggregate: Count,
+        min: Some(1),
+      )],
+    ),
+  ],
+)

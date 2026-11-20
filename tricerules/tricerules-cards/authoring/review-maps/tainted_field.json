@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "439de49b-1091-4688-9ffb-80a025df31c2",
+  "spans": [
+    {
+      "face_id": "tainted_field",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "tainted_field",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "GameCondition::BattlefieldAggregate",
+      "typed_path": "/faces/0/activated_abilities/1/conditions/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q44_cohorts_batch::q44_tainted_canary_adds_colorless_and_a_chosen_color_with_a_swamp",
+      "covers": "actual card adds colorless mana and one of its two colors with a Swamp"
+    },
+    {
+      "test": "scenario q44_cohorts_batch::q44_tainted_cards_require_a_swamp",
+      "covers": "every actual card rejects the colored ability without a Swamp and honors both color options"
+    },
+    {
+      "test": "scenario q44_cohorts_batch::q44_tainted_cards_keep_the_colorless_ability",
+      "covers": "every actual card keeps the unconditional colorless ability"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_tainted_lands_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of tainted_field"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for tainted_field"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

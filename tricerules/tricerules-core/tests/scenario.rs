@@ -2475,3 +2475,6 @@ mod q43_etb_counter_target_batch;
 
 #[path = "scenario/q43_order_pump_batch.rs"]
 mod q43_order_pump_batch;
+
+#[path = "scenario/q44_cohorts_batch.rs"]
+mod q44_cohorts_batch;

@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "fbbc3acb-c917-44ff-ac6f-9dd6ebe3f4ad",
+  "spans": [
+    {
+      "face_id": "kird_ape",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::ConditionalSelfModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "GameCondition::BattlefieldAggregate",
+      "typed_path": "/faces/0/static_abilities/0/definition/ConditionalSelfModifier/condition"
+    },
+    {
+      "symbol": "TargetFilter.required_subtypes",
+      "typed_path": "/faces/0/static_abilities/0/definition/ConditionalSelfModifier/condition/BattlefieldAggregate/filter"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q44_cohorts_batch::q44_basic_land_pump_canary_counts_a_forest",
+      "covers": "actual card gains its printed bonus from one Forest"
+    },
+    {
+      "test": "scenario q44_cohorts_batch::q44_basic_land_pump_cards_apply_printed_bonus_once",
+      "covers": "every actual card applies its printed binary bonus and loses it when the land leaves"
+    },
+    {
+      "test": "scenario q44_cohorts_batch::q44_basic_land_pump_requires_the_printed_subtype",
+      "covers": "an unrelated basic land does not enable the bonus"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_basic_land_pump_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of kird_ape"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for kird_ape"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

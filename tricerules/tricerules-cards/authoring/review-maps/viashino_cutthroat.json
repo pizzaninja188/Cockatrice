@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "6dc1305a-d6ca-4280-ba5d-5ed91f78ced0",
+  "spans": [
+    {
+      "face_id": "viashino_cutthroat",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "viashino_cutthroat",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Haste",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfEndStep",
+      "typed_path": "/faces/0/triggered_abilities/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ReturnToOwnersHand/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q44_cohorts_batch::q44_haste_return_cards_repeat_their_printed_body_and_return",
+      "covers": "every actual card has its printed body, haste and end-step return"
+    },
+    {
+      "test": "scenario q44_cohorts_batch::q44_haste_return_cards_do_not_return_from_the_graveyard",
+      "covers": "a card that left the battlefield is not returned from the graveyard"
+    },
+    {
+      "test": "scenario q44_cohorts_batch::q44_haste_return_triggers_in_an_opponents_end_step",
+      "covers": "the return triggers in an opponent's end step"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_haste_return_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of viashino_cutthroat"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for viashino_cutthroat"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

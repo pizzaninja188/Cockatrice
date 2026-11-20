@@ -1,0 +1,27 @@
+// Oracle fbbc3acb-c917-44ff-ac6f-9dd6ebe3f4ad; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 613.4c (the layer-7c self modifier) and 109.2/305.6 (a permanent with the
+// printed basic land subtype). The bonus is binary, not per land.
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "kird_ape",
+  name: "Kird Ape",
+  face_id: "kird_ape",
+  mana_cost: "{R}",
+  types: ["Creature", "Ape"],
+  power: 1,
+  toughness: 1,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: ConditionalSelfModifier(
+      condition: BattlefieldAggregate(
+        filter: (controllers: Controller, required_subtypes: ["Forest"]),
+        aggregate: Count,
+        min: Some(1),
+      ),
+      delta_power: 1,
+      delta_toughness: 2,
+    ),
+  )],
+)

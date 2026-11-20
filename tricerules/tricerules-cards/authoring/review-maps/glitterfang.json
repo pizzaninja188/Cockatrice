@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "226dca3d-9da3-4c3f-89d0-67264fd19c51",
+  "spans": [
+    {
+      "face_id": "glitterfang",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "glitterfang",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Haste",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfEndStep",
+      "typed_path": "/faces/0/triggered_abilities/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ReturnToOwnersHand/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q44_cohorts_batch::q44_haste_return_canary_returns_the_creature_at_the_end_step",
+      "covers": "actual card has haste and returns itself at the end step"
+    },
+    {
+      "test": "scenario q44_cohorts_batch::q44_haste_return_cards_repeat_their_printed_body_and_return",
+      "covers": "every actual card has its printed body, haste and end-step return"
+    },
+    {
+      "test": "scenario q44_cohorts_batch::q44_haste_return_cards_do_not_return_from_the_graveyard",
+      "covers": "a card that left the battlefield is not returned from the graveyard"
+    },
+    {
+      "test": "scenario q44_cohorts_batch::q44_haste_return_triggers_in_an_opponents_end_step",
+      "covers": "the return triggers in an opponent's end step"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_haste_return_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of glitterfang"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for glitterfang"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

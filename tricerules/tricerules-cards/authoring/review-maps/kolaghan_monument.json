@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "d8b79fed-9817-4b91-ac2e-e9fa955dd43c",
+  "spans": [
+    {
+      "face_id": "kolaghan_monument",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "kolaghan_monument",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::AnimateSelf",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "CreatureTypeChange::Replace",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/AnimateSelf/creature_types"
+    },
+    {
+      "symbol": "ResolvingEffectDuration::UntilEndOfTurn",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/AnimateSelf/duration"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q44_cohorts_batch::q44_monument_cards_animate_with_printed_colors_and_costs",
+      "covers": "every actual card uses its printed colors and animation cost"
+    },
+    {
+      "test": "scenario q44_cohorts_batch::q44_monument_animation_requires_the_printed_mana",
+      "covers": "missing animation mana is rejected without changing the artifact"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_monuments_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of kolaghan_monument"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for kolaghan_monument"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

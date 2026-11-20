@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "07ae1fe5-5c3e-4d94-b809-8defd2ef44e3",
+  "spans": [
+    {
+      "face_id": "lifeforce",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StackSpellFilter.is_color(Black)",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/CounterTargetSpell/spell_filter"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q44_cohorts_batch::q44_color_hate_cards_counter_only_their_printed_color",
+      "covers": "every actual card counters only its printed color and rejects another color"
+    },
+    {
+      "test": "scenario q44_cohorts_batch::q44_color_hate_cards_fizzle_when_the_spell_leaves_the_stack",
+      "covers": "a stale spell target leaves the counter fizzling without moving the enchantment"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_color_hate_counters_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of lifeforce"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for lifeforce"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

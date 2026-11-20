@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "dc87b0a5-3d9d-44eb-b415-b022acd63cf1",
+  "spans": [
+    {
+      "face_id": "reflexes",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "reflexes",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "Keyword::FirstStrike",
+      "typed_path": "/faces/0/static_abilities/0/definition/AttachedModifier/keywords"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q44_cohorts_batch::q44_keyword_auras_canary_grants_first_strike",
+      "covers": "actual card grants its printed keyword only to the enchanted creature"
+    },
+    {
+      "test": "scenario q44_cohorts_batch::q44_keyword_auras_grant_their_printed_keywords",
+      "covers": "every actual card grants its printed keyword set and identity"
+    },
+    {
+      "test": "scenario q44_cohorts_batch::q44_keyword_auras_stop_granting_when_the_aura_leaves",
+      "covers": "the grant ends when the Aura leaves the battlefield"
+    },
+    {
+      "test": "scenario q44_cohorts_batch::q44_keyword_auras_shroud_blocks_targeting",
+      "covers": "shroud prevents targeting the enchanted creature"
+    },
+    {
+      "test": "scenario q44_cohorts_batch::q44_keyword_auras_require_a_creature_target",
+      "covers": "an Aura cannot enchant a player"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_keyword_auras_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of reflexes"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for reflexes"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

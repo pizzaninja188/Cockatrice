@@ -1,0 +1,21 @@
+// Oracle f8d5a65c-382b-4277-9c08-5dec9e395b02; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.10 (haste), 513.1a/513.2 (the beginning-of-end-step trigger) and
+// 400.7/608.2 (returning the exact source permanent to its owner's hand).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "viashino_sandscout",
+  name: "Viashino Sandscout",
+  face_id: "viashino_sandscout",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Lizard", "Scout"],
+  power: 2,
+  toughness: 1,
+  keywords: [Haste],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: AtBeginningOfEndStep(player: AnyPlayer),
+    effect: [ReturnToOwnersHand(subject: Source)],
+  )],
+)

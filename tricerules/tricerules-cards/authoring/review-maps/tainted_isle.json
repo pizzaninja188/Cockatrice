@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "0222414f-98b5-458a-a0fd-831a66cd8b07",
+  "spans": [
+    {
+      "face_id": "tainted_isle",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "tainted_isle",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "GameCondition::BattlefieldAggregate",
+      "typed_path": "/faces/0/activated_abilities/1/conditions/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q44_cohorts_batch::q44_tainted_cards_require_a_swamp",
+      "covers": "every actual card rejects the colored ability without a Swamp and honors both color options"
+    },
+    {
+      "test": "scenario q44_cohorts_batch::q44_tainted_cards_keep_the_colorless_ability",
+      "covers": "every actual card keeps the unconditional colorless ability"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_tainted_lands_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of tainted_isle"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for tainted_isle"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
