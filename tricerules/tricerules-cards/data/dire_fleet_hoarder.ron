@@ -1,0 +1,19 @@
+// Oracle 7d48ad95-d428-4e2d-b697-56907c3ce579; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a/603.6c/603.10a (entry and battlefield-to-graveyard triggers)
+// and 111.1 (Treasure token creation). No pinned ruling.
+(
+  id: "dire_fleet_hoarder",
+  name: "Dire Fleet Hoarder",
+  face_id: "dire_fleet_hoarder",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Human", "Pirate"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfDies,
+    effect: [CreateTokens(token: "treasure", count: 1)],
+  )],
+)

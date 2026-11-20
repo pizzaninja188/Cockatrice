@@ -1,0 +1,20 @@
+// Oracle 47f8df80-abc9-4d46-8078-8fbc23430259; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a/603.6c/603.10a (entry and battlefield-to-graveyard triggers)
+// and 111.1 (Treasure token creation). The one printed ability observes both the entry event and the
+// battlefield-to-graveyard event.
+(
+  id: "patron_of_the_arts",
+  name: "Patron of the Arts",
+  face_id: "patron_of_the_arts",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Dragon", "Noble"],
+  power: 3,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersOrIsPutIntoGraveyardFromBattlefield,
+    effect: [CreateTokens(token: "treasure", count: 1)],
+  )],
+)

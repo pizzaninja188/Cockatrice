@@ -1,0 +1,20 @@
+// Oracle bbfee53c-30a6-4ed0-beef-5c254be75fc5; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a/603.6c/603.10a (entry and battlefield-to-graveyard triggers)
+// and 111.1 (Treasure token creation). CR 702.2 (deathtouch). No pinned ruling.
+(
+  id: "jewel-eyed_cobra",
+  name: "Jewel-Eyed Cobra",
+  face_id: "jewel_eyed_cobra",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Snake"],
+  power: 3,
+  toughness: 1,
+  keywords: [Deathtouch],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfDies,
+    effect: [CreateTokens(token: "treasure", count: 1)],
+  )],
+)

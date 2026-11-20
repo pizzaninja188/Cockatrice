@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "7d48ad95-d428-4e2d-b697-56907c3ce579",
+  "spans": [
+    {
+      "face_id": "dire_fleet_hoarder",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q50_cohorts_batch::q50_treasure_canary_simplest_dire_fleet_hoarder_makes_a_treasure_on_death",
+      "covers": "canary simplest creates a Treasure on death"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_treasure_cards_credit_the_creatures_controller_and_do_not_trigger_on_exile",
+      "covers": "actual card credits its controller and does not trigger on exile"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_treasure_maps_definitions",
+      "covers": "reviewed Treasure creature identity and trigger"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Dire Fleet Hoarder"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

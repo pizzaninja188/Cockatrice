@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "47f8df80-abc9-4d46-8078-8fbc23430259",
+  "spans": [
+    {
+      "face_id": "patron_of_the_arts",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersOrIsPutIntoGraveyardFromBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q50_cohorts_batch::q50_treasure_canary_hardest_patron_of_the_arts_makes_one_on_entry_and_one_on_death",
+      "covers": "canary hardest creates one on entry and one on death"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_treasure_cards_credit_the_creatures_controller_and_do_not_trigger_on_exile",
+      "covers": "actual card credits its controller and does not trigger on exile"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_treasure_maps_definitions",
+      "covers": "reviewed Treasure creature identity and trigger"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Patron of the Arts"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
