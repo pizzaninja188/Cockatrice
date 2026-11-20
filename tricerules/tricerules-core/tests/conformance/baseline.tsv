@@ -14,6 +14,7 @@ abrade	0	cast	exercised
 abraded_bluffs	0	ability:0	exercised
 abraded_bluffs	0	land	exercised
 absorb	0	cast	unsupported: target group 0 needs a richer fixture
+absorb_vis	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 abzan_devotee	0	ability:0	exercised
 abzan_devotee	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 abzan_devotee	0	cast	exercised
@@ -1140,6 +1141,7 @@ fields_of_strife	0	ability:0	exercised
 fields_of_strife	0	ability:1	exercised
 fields_of_strife	0	land	exercised
 fierce_empath	0	cast	exercised
+fiery_fall	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 fiery_hellhound	0	ability:0	exercised
 fiery_hellhound	0	cast	exercised
 fiery_temper	0	cast	exercised
@@ -2100,6 +2102,7 @@ meltstriders_gear	0	cast	exercised
 meltstriders_resolve	0	cast	exercised
 memory_drain	0	cast	unsupported: target group 0 needs a richer fixture
 memory_guardian	0	cast	exercised
+mental_journey	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 mental_modulation	0	cast	exercised
 mentor_of_the_meek	0	cast	exercised
 merchant_of_many_hats	0	ability:0	unsupported: ability not offered by generic battlefield fixture
@@ -2243,6 +2246,7 @@ naga_eternal	0	cast	exercised
 narsets_rebuke	0	cast	exercised
 natures_lore	0	cast	exercised
 nebula_dragon	0	cast	exercised
+neck_snap	0	cast	unsupported: target group 0 needs a richer fixture
 needlepeak_spider	0	cast	exercised
 needleshot_gourna	0	cast	exercised
 needlethorn_drake	0	cast	exercised
@@ -3073,6 +3077,7 @@ smaug,_the_great_calamity_spew_flame	1	cast	exercised
 smaug_the_magnificent	0	cast	exercised
 smaugs_fury	0	cast	exercised
 smelt	0	cast	exercised
+smite_the_monstrous	0	cast	unsupported: target group 0 needs a richer fixture
 smoldering_crater	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 smugglers_buggy	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
 snakeskin_veil	0	cast	exercised
@@ -3324,6 +3329,7 @@ swamp	0	land	exercised
 swan_song	0	cast	unsupported: target group 0 needs a richer fixture
 sweettooth_witch	0	ability:0	unsupported: nonmana costs need additional fixture resources
 sweettooth_witch	0	cast	exercised
+sweltering_suns	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 swift_response	0	cast	unsupported: target group 0 needs a richer fixture
 swift_spinner	0	cast	exercised
 swiftblade_vindicator	0	cast	exercised
@@ -3338,6 +3344,7 @@ swords_to_plowshares	0	cast	exercised
 swordwise_centaur	0	cast	exercised
 sworn_guardian	0	cast	exercised
 syggs_command	0	cast	exercised
+sylvan_bounty	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 sylvan_brushstrider	0	cast	exercised
 sylvan_ranger	0	cast	exercised
 synapse_necromage	0	cast	exercised
