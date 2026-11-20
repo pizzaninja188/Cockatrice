@@ -1,0 +1,12 @@
+// Oracle c281f436-8c77-48f7-b31c-d40cd7f9ed6a; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 305.6 (Plains is a basic land subtype; any permanent with that
+// subtype is destroyed) and 701.8c. The card has no pinned ruling.
+(
+  id: "flashfires",
+  name: "Flashfires",
+  face_id: "flashfires",
+  mana_cost: "{3}{R}",
+  types: ["Sorcery"],
+  spell_effect: [DestroyAll(kind: (kind: AnyPermanent, permanent_types: [Land], required_subtypes: ["Plains"]))],
+)

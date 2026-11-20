@@ -1,0 +1,12 @@
+// Oracle 6ae3c3a2-bd17-4fea-ae27-9d2d1eaf8cc0; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 305.6 (Forest is a basic land subtype; any permanent with that
+// subtype is destroyed) and 701.8c (regeneration can replace destruction). No pinned ruling.
+(
+  id: "acid_rain",
+  name: "Acid Rain",
+  face_id: "acid_rain",
+  mana_cost: "{3}{U}",
+  types: ["Sorcery"],
+  spell_effect: [DestroyAll(kind: (kind: AnyPermanent, permanent_types: [Land], required_subtypes: ["Forest"]))],
+)

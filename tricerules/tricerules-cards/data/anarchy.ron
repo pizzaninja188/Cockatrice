@@ -1,0 +1,12 @@
+// Oracle b91ed762-9232-4b77-abf4-97f66637f49c; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 105.2 (white permanents, including multicolored ones) and
+// 701.8c (regeneration can replace destruction). The card has no pinned ruling.
+(
+  id: "anarchy",
+  name: "Anarchy",
+  face_id: "anarchy",
+  mana_cost: "{2}{R}{R}",
+  types: ["Sorcery"],
+  spell_effect: [DestroyAll(kind: (kind: AnyPermanent, is_color: White))],
+)
