@@ -1,0 +1,390 @@
+{
+  "format_version": 1,
+  "bundle": "batch-b",
+  "families": [
+    "04-etb-shrink",
+    "05-etb-pump-target",
+    "06-etb-counter-another"
+  ],
+  "base_head": "37a72a0a5935dd26ba45024aac0f16f896c0a5a5",
+  "review_type": "frozen implementation review",
+  "test_evidence": {
+    "scenario_green": "build/verification-logs/20261120-162811-506-q50-scenario-green-v3.log",
+    "registry_green": "build/verification-logs/20261120-162811-485-q50-registry-green-v3.log",
+    "intended_red": [
+      "build/verification-logs/20261120-153341-803-q50-intended-red-A.log",
+      "build/verification-logs/20261120-153502-811-q50-intended-red-01-put-on-top.log",
+      "build/verification-logs/20261120-153554-839-q50-intended-red-02-graveyard-to-hand.log",
+      "build/verification-logs/20261120-153650-369-q50-intended-red-03-tap-stun-spells.log",
+      "build/verification-logs/20261120-153744-040-q50-intended-red-04-etb-shrink.log",
+      "build/verification-logs/20261120-153833-994-q50-intended-red-05-etb-pump-target.log",
+      "build/verification-logs/20261120-153923-702-q50-intended-red-06-etb-counter-another.log",
+      "build/verification-logs/20261120-154021-275-q50-intended-red-07-basic-land-to-hand.log",
+      "build/verification-logs/20261120-154108-444-q50-intended-red-08-treasure-on-death.log",
+      "build/verification-logs/20261120-154159-436-q50-intended-red-09-destroy-artifact-enchant.log"
+    ],
+    "evidence_preparation": "build/verification-logs/card-evidence-aa61c5e1-0a86-422d-b0d1-9b6a8de4dc32",
+    "metadata_refresh": "build/verification-logs/card-data-1cede215-79bc-4497-8218-87a48af05507"
+  },
+  "files": [
+    {
+      "path": "build/campaign/blocked.tsv",
+      "sha256": "b2ea276996f7fab1f8ff542445f776b6c31655af6c26c6bb742e6214c694f5ad",
+      "bytes": 24495
+    },
+    {
+      "path": "build/campaign/queue-v50/build_queue.py",
+      "sha256": "6a88d276af899ebdd3e65b263cf19515f360b2dbad83ff6bfa6f0b95ab96834e",
+      "bytes": 7864
+    },
+    {
+      "path": "build/campaign/queue-v50/cards.tsv",
+      "sha256": "e94f6e160c099812031636729d1266365fccadd53d76907a6e8a1dd0f7e51a79",
+      "bytes": 2472
+    },
+    {
+      "path": "build/campaign/queue-v50/families/04-etb-shrink/family.md",
+      "sha256": "dcb48318e0ee90927eee176be9fd9a40d1fc3daf514549dfc56fa0e6cca9f320",
+      "bytes": 2771
+    },
+    {
+      "path": "build/campaign/queue-v50/families/04-etb-shrink/rulings/09cacd93-5c20-4993-9ee2-a756204796f7.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v50/families/04-etb-shrink/rulings/ad804712-18ba-49d7-9af2-4361edaa6cf8.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v50/families/04-etb-shrink/rulings/ccbf7141-69c9-407d-b68e-c1c63ddef213.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v50/families/04-etb-shrink/rulings/eba73313-5ec5-4004-8040-658861b71a8f.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v50/families/04-etb-shrink/source/09cacd93-5c20-4993-9ee2-a756204796f7.json",
+      "sha256": "fbb44f411935f270414b2d5157370ff281c461fc74576d794abfcfc942d7d2dd",
+      "bytes": 5497
+    },
+    {
+      "path": "build/campaign/queue-v50/families/04-etb-shrink/source/ad804712-18ba-49d7-9af2-4361edaa6cf8.json",
+      "sha256": "2a55f5fe39c457fea01b2d1901377b5482e4589fa66da379a7ac57f2718e1c33",
+      "bytes": 5738
+    },
+    {
+      "path": "build/campaign/queue-v50/families/04-etb-shrink/source/ccbf7141-69c9-407d-b68e-c1c63ddef213.json",
+      "sha256": "14459338be3afcf2a2a19feebedc8fcb409f8fac59d9d76830cf24bb85c6aa87",
+      "bytes": 5523
+    },
+    {
+      "path": "build/campaign/queue-v50/families/04-etb-shrink/source/eba73313-5ec5-4004-8040-658861b71a8f.json",
+      "sha256": "2297db161064d58d7ea118e5478caba910fcb1f7c818dbf462b404619a99f4b6",
+      "bytes": 5709
+    },
+    {
+      "path": "build/campaign/queue-v50/families/05-etb-pump-target/family.md",
+      "sha256": "c78dc51db7aff3d5e1e5421571bffcdd4e2103f8dbb8334d0404a611cf29b7f7",
+      "bytes": 2609
+    },
+    {
+      "path": "build/campaign/queue-v50/families/05-etb-pump-target/rulings/35023c04-ae62-47bf-80a0-faa2d7a67788.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v50/families/05-etb-pump-target/rulings/658d54d4-e967-490c-b958-3743b3b1ef45.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v50/families/05-etb-pump-target/rulings/6bb7d985-b033-46a2-9bbb-6f7ee62aaaff.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v50/families/05-etb-pump-target/source/35023c04-ae62-47bf-80a0-faa2d7a67788.json",
+      "sha256": "67c945c46c6d2ba0dfc8a65ad837c7822c4769d2279385371683c12998d2ef45",
+      "bytes": 5552
+    },
+    {
+      "path": "build/campaign/queue-v50/families/05-etb-pump-target/source/658d54d4-e967-490c-b958-3743b3b1ef45.json",
+      "sha256": "70cda90a13608305faa497f35c7fc7d84b0884850afd5531dbbc6f0327abac67",
+      "bytes": 5588
+    },
+    {
+      "path": "build/campaign/queue-v50/families/05-etb-pump-target/source/6bb7d985-b033-46a2-9bbb-6f7ee62aaaff.json",
+      "sha256": "a514b2f845e8991dc8065415fa24bba4e7a39af2a18d2621ae5ffc349e586cc4",
+      "bytes": 5522
+    },
+    {
+      "path": "build/campaign/queue-v50/families/06-etb-counter-another/family.md",
+      "sha256": "120cc3cf31ef7aa7d02d82ec47b9eb8167ac7a33cc61ccc7cfbb3a0600c25f8f",
+      "bytes": 2548
+    },
+    {
+      "path": "build/campaign/queue-v50/families/06-etb-counter-another/rulings/17cbeec4-b180-48e9-9156-42271f918a9d.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v50/families/06-etb-counter-another/rulings/391f1331-7577-4bf4-a9ed-2f55ded4cbd8.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v50/families/06-etb-counter-another/rulings/72ddbc9b-f584-433f-9d2d-6e4c374129c4.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v50/families/06-etb-counter-another/source/17cbeec4-b180-48e9-9156-42271f918a9d.json",
+      "sha256": "6a2777630972371ac75ec1777ba36002857ba0a7568b534b3af976e6230c44f6",
+      "bytes": 5546
+    },
+    {
+      "path": "build/campaign/queue-v50/families/06-etb-counter-another/source/391f1331-7577-4bf4-a9ed-2f55ded4cbd8.json",
+      "sha256": "b3ce09be0aeea50f5df3b8ebf7d017bbbcf20823de394b8573fb0c0cd759705f",
+      "bytes": 5593
+    },
+    {
+      "path": "build/campaign/queue-v50/families/06-etb-counter-another/source/72ddbc9b-f584-433f-9d2d-6e4c374129c4.json",
+      "sha256": "0fb4b7523afa46bbaf51dff132aff431bd934915ec17ba6eab346a69bb21d563",
+      "bytes": 5522
+    },
+    {
+      "path": "build/campaign/queue-v50/gen_family_records.py",
+      "sha256": "f028a956607ad3acfbba4c2c64b1c98ccb132203bb9e209b15d18a552b5e585f",
+      "bytes": 9571
+    },
+    {
+      "path": "build/campaign/queue-v50/gen_maps.py",
+      "sha256": "7394152fb07a9586f73d72cc29f4929dd00e6310d9a0a1568b11c5d0d6b8c24c",
+      "bytes": 15281
+    },
+    {
+      "path": "build/campaign/queue-v50/gen_ron_batch_a.py",
+      "sha256": "f24d2e5e4174764f4297716d793e9b61119d28bbb518a378f50cf44154725834",
+      "bytes": 10801
+    },
+    {
+      "path": "build/campaign/queue-v50/gen_ron_batch_b.py",
+      "sha256": "4af2adb5ed570fc02e35bf555e105194085e1778b4078263fd5dd56214f7bccf",
+      "bytes": 9217
+    },
+    {
+      "path": "build/campaign/queue-v50/gen_ron_batch_c.py",
+      "sha256": "ead74faf19b898d10e74993087bbe97f6b271b6104c301661bb950c06e6f9d70",
+      "bytes": 7532
+    },
+    {
+      "path": "build/campaign/queue-v50/revalidation.tsv",
+      "sha256": "0664da112bcb84e8d3afbb0256d471609011ad28f0d261ac11b4c991c655a005",
+      "bytes": 7514
+    },
+    {
+      "path": "build/campaign/queue-v50/selection.md",
+      "sha256": "5d9992677118a8c70bba06c2eeab0fc4cea6f8993c7c0c7840a0e6e4b52c82dc",
+      "bytes": 2853
+    },
+    {
+      "path": "tricerules/CARDS.md",
+      "sha256": "be234361137ec684425a0dc8c9c0c42581f842f6dc913a936681b07eaa0628ea",
+      "bytes": 848044
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/black_dragon.json",
+      "sha256": "d053b9945222eef1eab130a247ec0e969f5e39d43f7e93f1d55fe56e18a8fbd4",
+      "bytes": 1803
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/brinebarrow_intruder.json",
+      "sha256": "d41b13e7918cca35dcc0a741123288ce68d8236099f1fad95458614efcbe9a18",
+      "bytes": 1640
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/eyeblight_assassin.json",
+      "sha256": "a10eee81c66ac78d1b87615018b0bf6e3c733833fd5d0f856b8851ac31049f11",
+      "bytes": 1557
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/faerie_duelist.json",
+      "sha256": "8358d3ca68f20e7cb8e4b8ad80c554644182c2be72244316da9f6d3da68f18fd",
+      "bytes": 1865
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/haazda_officer.json",
+      "sha256": "3c5c939ad36048e1cb6774f043081c272819c7bc730fbe65e8dd33e20d2f875c",
+      "bytes": 1529
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/herald_of_the_fair.json",
+      "sha256": "99c80a738b817f843a34b9ff3270c9c81621cd3777e8d8042b933d633dbc2aae",
+      "bytes": 1378
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/jade_bearer.json",
+      "sha256": "51767b7f618272e68e756546cce6c1c0c2733f23d49d2f8410caccd60473cc33",
+      "bytes": 1549
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/rage-scarred_berserker.json",
+      "sha256": "904446889933353df62ef676be7aa60c86d4a6f087cbe8ea2d9d521ddb9e4b35",
+      "bytes": 1697
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/sanguine_glorifier.json",
+      "sha256": "1ab795f861778ecc7d8d756e86cf82b4a535010c5a5142d795cb0ee759799b9b",
+      "bytes": 1397
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/stromkirk_mentor.json",
+      "sha256": "e8f192c90913d44db602d7e65beef790f9eaaa7af6b3d7d9534b72addbe74073",
+      "bytes": 1568
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/black_dragon.ron",
+      "sha256": "2256b927452a5a3e71c835b68ebc509d2b6e4f92da7661b28babfd603bbe6f0d",
+      "bytes": 908
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/brinebarrow_intruder.ron",
+      "sha256": "7258d53796b8d3a2ef03379e0fbc4ab7319911067f3d3a828d4ec09105f5abeb",
+      "bytes": 931
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/eyeblight_assassin.ron",
+      "sha256": "fcbe78bb82ae49a17742de789dedb08a0c4740e76a159bc34f7de3f7eb8686b0",
+      "bytes": 891
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/faerie_duelist.ron",
+      "sha256": "5580110f411e4f57757faab34cef9e6bc0a71322d93b115e8c40a4d8aef5d065",
+      "bytes": 944
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/haazda_officer.ron",
+      "sha256": "ca56c5caf5727b75b412de25d47d69ad49e4710fc08927c50f74cd967951ca43",
+      "bytes": 856
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/herald_of_the_fair.ron",
+      "sha256": "24947fe36adb70da44f26754d59c3225f9ac2e32e114115ee9444cb8a0e750b7",
+      "bytes": 857
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/jade_bearer.ron",
+      "sha256": "01b63a5406f3aace531087eefb973529567c02c009ca766cc47aec46d30a1c82",
+      "bytes": 992
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/rage-scarred_berserker.ron",
+      "sha256": "fda6e616b879cace011b3fc999f909f7d9a2df097ae67b6f9871f875d7da7366",
+      "bytes": 1030
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/sanguine_glorifier.ron",
+      "sha256": "8b250b52e225cf174519cea95613a44a37a3a8f69dd92750b4513c1efaec7249",
+      "bytes": 1016
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/stromkirk_mentor.ron",
+      "sha256": "c0d25009b043a5127df47978eee7532a022f1726251c08c3505e6fc0dbcf24df",
+      "bytes": 1011
+    },
+    {
+      "path": "tricerules/tricerules-cards/presentation/oracle_fingerprints.tsv",
+      "sha256": "2a655e333f9cf8c5a37eac1d87606809db18302c9927a355da3915f9fa060d77",
+      "bytes": 644191
+    },
+    {
+      "path": "tricerules/tricerules-cards/tests/q50_cohorts_batch.rs",
+      "sha256": "d8d40e92b370dc270399b6ba0f899c7b549c422d0d792fa41145b1583bcdffa0",
+      "bytes": 23431
+    },
+    {
+      "path": "tricerules/tricerules-cards/tests/suites/mechanic_registry.rs",
+      "sha256": "205b2fe862e390c4c406db24657d2a94b11946e7d2a3673fbfc789d9ebcaeaf0",
+      "bytes": 34859
+    },
+    {
+      "path": "tricerules/tricerules-core/tests/scenario.rs",
+      "sha256": "ffa94329c299c60a1cb9883ecd35cad64382307d81c6b9a75ca4a59843c52c86",
+      "bytes": 79670
+    },
+    {
+      "path": "tricerules/tricerules-core/tests/scenario/q50_cohorts_batch.rs",
+      "sha256": "24dee30218dd45817e2c5e45aaa62b7f838e7ec1557d285ed7363aa65e06308e",
+      "bytes": 51877
+    }
+  ],
+  "dependencies": {
+    "build/campaign/blocked.tsv": "b2ea276996f7fab1f8ff542445f776b6c31655af6c26c6bb742e6214c694f5ad",
+    "build/campaign/queue-v50/build_queue.py": "6a88d276af899ebdd3e65b263cf19515f360b2dbad83ff6bfa6f0b95ab96834e",
+    "build/campaign/queue-v50/cards.tsv": "e94f6e160c099812031636729d1266365fccadd53d76907a6e8a1dd0f7e51a79",
+    "build/campaign/queue-v50/families/04-etb-shrink/family.md": "dcb48318e0ee90927eee176be9fd9a40d1fc3daf514549dfc56fa0e6cca9f320",
+    "build/campaign/queue-v50/families/04-etb-shrink/rulings/09cacd93-5c20-4993-9ee2-a756204796f7.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v50/families/04-etb-shrink/rulings/ad804712-18ba-49d7-9af2-4361edaa6cf8.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v50/families/04-etb-shrink/rulings/ccbf7141-69c9-407d-b68e-c1c63ddef213.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v50/families/04-etb-shrink/rulings/eba73313-5ec5-4004-8040-658861b71a8f.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v50/families/04-etb-shrink/source/09cacd93-5c20-4993-9ee2-a756204796f7.json": "fbb44f411935f270414b2d5157370ff281c461fc74576d794abfcfc942d7d2dd",
+    "build/campaign/queue-v50/families/04-etb-shrink/source/ad804712-18ba-49d7-9af2-4361edaa6cf8.json": "2a55f5fe39c457fea01b2d1901377b5482e4589fa66da379a7ac57f2718e1c33",
+    "build/campaign/queue-v50/families/04-etb-shrink/source/ccbf7141-69c9-407d-b68e-c1c63ddef213.json": "14459338be3afcf2a2a19feebedc8fcb409f8fac59d9d76830cf24bb85c6aa87",
+    "build/campaign/queue-v50/families/04-etb-shrink/source/eba73313-5ec5-4004-8040-658861b71a8f.json": "2297db161064d58d7ea118e5478caba910fcb1f7c818dbf462b404619a99f4b6",
+    "build/campaign/queue-v50/families/05-etb-pump-target/family.md": "c78dc51db7aff3d5e1e5421571bffcdd4e2103f8dbb8334d0404a611cf29b7f7",
+    "build/campaign/queue-v50/families/05-etb-pump-target/rulings/35023c04-ae62-47bf-80a0-faa2d7a67788.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v50/families/05-etb-pump-target/rulings/658d54d4-e967-490c-b958-3743b3b1ef45.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v50/families/05-etb-pump-target/rulings/6bb7d985-b033-46a2-9bbb-6f7ee62aaaff.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v50/families/05-etb-pump-target/source/35023c04-ae62-47bf-80a0-faa2d7a67788.json": "67c945c46c6d2ba0dfc8a65ad837c7822c4769d2279385371683c12998d2ef45",
+    "build/campaign/queue-v50/families/05-etb-pump-target/source/658d54d4-e967-490c-b958-3743b3b1ef45.json": "70cda90a13608305faa497f35c7fc7d84b0884850afd5531dbbc6f0327abac67",
+    "build/campaign/queue-v50/families/05-etb-pump-target/source/6bb7d985-b033-46a2-9bbb-6f7ee62aaaff.json": "a514b2f845e8991dc8065415fa24bba4e7a39af2a18d2621ae5ffc349e586cc4",
+    "build/campaign/queue-v50/families/06-etb-counter-another/family.md": "120cc3cf31ef7aa7d02d82ec47b9eb8167ac7a33cc61ccc7cfbb3a0600c25f8f",
+    "build/campaign/queue-v50/families/06-etb-counter-another/rulings/17cbeec4-b180-48e9-9156-42271f918a9d.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v50/families/06-etb-counter-another/rulings/391f1331-7577-4bf4-a9ed-2f55ded4cbd8.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v50/families/06-etb-counter-another/rulings/72ddbc9b-f584-433f-9d2d-6e4c374129c4.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v50/families/06-etb-counter-another/source/17cbeec4-b180-48e9-9156-42271f918a9d.json": "6a2777630972371ac75ec1777ba36002857ba0a7568b534b3af976e6230c44f6",
+    "build/campaign/queue-v50/families/06-etb-counter-another/source/391f1331-7577-4bf4-a9ed-2f55ded4cbd8.json": "b3ce09be0aeea50f5df3b8ebf7d017bbbcf20823de394b8573fb0c0cd759705f",
+    "build/campaign/queue-v50/families/06-etb-counter-another/source/72ddbc9b-f584-433f-9d2d-6e4c374129c4.json": "0fb4b7523afa46bbaf51dff132aff431bd934915ec17ba6eab346a69bb21d563",
+    "build/campaign/queue-v50/gen_family_records.py": "f028a956607ad3acfbba4c2c64b1c98ccb132203bb9e209b15d18a552b5e585f",
+    "build/campaign/queue-v50/gen_maps.py": "7394152fb07a9586f73d72cc29f4929dd00e6310d9a0a1568b11c5d0d6b8c24c",
+    "build/campaign/queue-v50/gen_ron_batch_a.py": "f24d2e5e4174764f4297716d793e9b61119d28bbb518a378f50cf44154725834",
+    "build/campaign/queue-v50/gen_ron_batch_b.py": "4af2adb5ed570fc02e35bf555e105194085e1778b4078263fd5dd56214f7bccf",
+    "build/campaign/queue-v50/gen_ron_batch_c.py": "ead74faf19b898d10e74993087bbe97f6b271b6104c301661bb950c06e6f9d70",
+    "build/campaign/queue-v50/revalidation.tsv": "0664da112bcb84e8d3afbb0256d471609011ad28f0d261ac11b4c991c655a005",
+    "build/campaign/queue-v50/selection.md": "5d9992677118a8c70bba06c2eeab0fc4cea6f8993c7c0c7840a0e6e4b52c82dc",
+    "tricerules/CARDS.md": "be234361137ec684425a0dc8c9c0c42581f842f6dc913a936681b07eaa0628ea",
+    "tricerules/tricerules-cards/authoring/review-maps/black_dragon.json": "d053b9945222eef1eab130a247ec0e969f5e39d43f7e93f1d55fe56e18a8fbd4",
+    "tricerules/tricerules-cards/authoring/review-maps/brinebarrow_intruder.json": "d41b13e7918cca35dcc0a741123288ce68d8236099f1fad95458614efcbe9a18",
+    "tricerules/tricerules-cards/authoring/review-maps/eyeblight_assassin.json": "a10eee81c66ac78d1b87615018b0bf6e3c733833fd5d0f856b8851ac31049f11",
+    "tricerules/tricerules-cards/authoring/review-maps/faerie_duelist.json": "8358d3ca68f20e7cb8e4b8ad80c554644182c2be72244316da9f6d3da68f18fd",
+    "tricerules/tricerules-cards/authoring/review-maps/haazda_officer.json": "3c5c939ad36048e1cb6774f043081c272819c7bc730fbe65e8dd33e20d2f875c",
+    "tricerules/tricerules-cards/authoring/review-maps/herald_of_the_fair.json": "99c80a738b817f843a34b9ff3270c9c81621cd3777e8d8042b933d633dbc2aae",
+    "tricerules/tricerules-cards/authoring/review-maps/jade_bearer.json": "51767b7f618272e68e756546cce6c1c0c2733f23d49d2f8410caccd60473cc33",
+    "tricerules/tricerules-cards/authoring/review-maps/rage-scarred_berserker.json": "904446889933353df62ef676be7aa60c86d4a6f087cbe8ea2d9d521ddb9e4b35",
+    "tricerules/tricerules-cards/authoring/review-maps/sanguine_glorifier.json": "1ab795f861778ecc7d8d756e86cf82b4a535010c5a5142d795cb0ee759799b9b",
+    "tricerules/tricerules-cards/authoring/review-maps/stromkirk_mentor.json": "e8f192c90913d44db602d7e65beef790f9eaaa7af6b3d7d9534b72addbe74073",
+    "tricerules/tricerules-cards/data/black_dragon.ron": "2256b927452a5a3e71c835b68ebc509d2b6e4f92da7661b28babfd603bbe6f0d",
+    "tricerules/tricerules-cards/data/brinebarrow_intruder.ron": "7258d53796b8d3a2ef03379e0fbc4ab7319911067f3d3a828d4ec09105f5abeb",
+    "tricerules/tricerules-cards/data/eyeblight_assassin.ron": "fcbe78bb82ae49a17742de789dedb08a0c4740e76a159bc34f7de3f7eb8686b0",
+    "tricerules/tricerules-cards/data/faerie_duelist.ron": "5580110f411e4f57757faab34cef9e6bc0a71322d93b115e8c40a4d8aef5d065",
+    "tricerules/tricerules-cards/data/haazda_officer.ron": "ca56c5caf5727b75b412de25d47d69ad49e4710fc08927c50f74cd967951ca43",
+    "tricerules/tricerules-cards/data/herald_of_the_fair.ron": "24947fe36adb70da44f26754d59c3225f9ac2e32e114115ee9444cb8a0e750b7",
+    "tricerules/tricerules-cards/data/jade_bearer.ron": "01b63a5406f3aace531087eefb973529567c02c009ca766cc47aec46d30a1c82",
+    "tricerules/tricerules-cards/data/rage-scarred_berserker.ron": "fda6e616b879cace011b3fc999f909f7d9a2df097ae67b6f9871f875d7da7366",
+    "tricerules/tricerules-cards/data/sanguine_glorifier.ron": "8b250b52e225cf174519cea95613a44a37a3a8f69dd92750b4513c1efaec7249",
+    "tricerules/tricerules-cards/data/stromkirk_mentor.ron": "c0d25009b043a5127df47978eee7532a022f1726251c08c3505e6fc0dbcf24df",
+    "tricerules/tricerules-cards/presentation/oracle_fingerprints.tsv": "2a655e333f9cf8c5a37eac1d87606809db18302c9927a355da3915f9fa060d77",
+    "tricerules/tricerules-cards/tests/q50_cohorts_batch.rs": "d8d40e92b370dc270399b6ba0f899c7b549c422d0d792fa41145b1583bcdffa0",
+    "tricerules/tricerules-cards/tests/suites/mechanic_registry.rs": "205b2fe862e390c4c406db24657d2a94b11946e7d2a3673fbfc789d9ebcaeaf0",
+    "tricerules/tricerules-core/tests/scenario.rs": "ffa94329c299c60a1cb9883ecd35cad64382307d81c6b9a75ca4a59843c52c86",
+    "tricerules/tricerules-core/tests/scenario/q50_cohorts_batch.rs": "24dee30218dd45817e2c5e45aaa62b7f838e7ec1557d285ed7363aa65e06308e"
+  },
+  "artifacts": {
+    "batch-b.patch.diff": "28143759edcc9f4fa80a2d8fc2dd5bc5e9ddc715bdc6d0ac5902c3c95ef9bfe8"
+  }
+}

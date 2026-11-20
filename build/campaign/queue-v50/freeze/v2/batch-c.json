@@ -1,0 +1,390 @@
+{
+  "format_version": 1,
+  "bundle": "batch-c",
+  "families": [
+    "07-basic-land-to-hand",
+    "08-treasure-on-death",
+    "09-destroy-artifact-enchant"
+  ],
+  "base_head": "37a72a0a5935dd26ba45024aac0f16f896c0a5a5",
+  "review_type": "frozen implementation review",
+  "test_evidence": {
+    "scenario_green": "build/verification-logs/20261120-161228-190-q50-scenario-green-v2.log",
+    "registry_green": "build/verification-logs/20261120-161228-213-q50-registry-green-v2.log",
+    "intended_red": [
+      "build/verification-logs/20261120-153341-803-q50-intended-red-A.log",
+      "build/verification-logs/20261120-153502-811-q50-intended-red-01-put-on-top.log",
+      "build/verification-logs/20261120-153554-839-q50-intended-red-02-graveyard-to-hand.log",
+      "build/verification-logs/20261120-153650-369-q50-intended-red-03-tap-stun-spells.log",
+      "build/verification-logs/20261120-153744-040-q50-intended-red-04-etb-shrink.log",
+      "build/verification-logs/20261120-153833-994-q50-intended-red-05-etb-pump-target.log",
+      "build/verification-logs/20261120-153923-702-q50-intended-red-06-etb-counter-another.log",
+      "build/verification-logs/20261120-154021-275-q50-intended-red-07-basic-land-to-hand.log",
+      "build/verification-logs/20261120-154108-444-q50-intended-red-08-treasure-on-death.log",
+      "build/verification-logs/20261120-154159-436-q50-intended-red-09-destroy-artifact-enchant.log"
+    ],
+    "evidence_preparation": "build/verification-logs/card-evidence-67d8917d-4e14-4c36-bff1-7982556e7eb4",
+    "metadata_refresh": "build/verification-logs/card-data-1cede215-79bc-4497-8218-87a48af05507"
+  },
+  "files": [
+    {
+      "path": "build/campaign/blocked.tsv",
+      "sha256": "b2ea276996f7fab1f8ff542445f776b6c31655af6c26c6bb742e6214c694f5ad",
+      "bytes": 24495
+    },
+    {
+      "path": "build/campaign/queue-v50/build_queue.py",
+      "sha256": "6a88d276af899ebdd3e65b263cf19515f360b2dbad83ff6bfa6f0b95ab96834e",
+      "bytes": 7864
+    },
+    {
+      "path": "build/campaign/queue-v50/cards.tsv",
+      "sha256": "e94f6e160c099812031636729d1266365fccadd53d76907a6e8a1dd0f7e51a79",
+      "bytes": 2472
+    },
+    {
+      "path": "build/campaign/queue-v50/families/07-basic-land-to-hand/family.md",
+      "sha256": "cc77a0a3382f097ae0d256afc406bcc67a60cd338fa50c3a84c4796cef51d12f",
+      "bytes": 2891
+    },
+    {
+      "path": "build/campaign/queue-v50/families/07-basic-land-to-hand/rulings/0f539127-535f-4e0d-abaa-e884521098d2.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v50/families/07-basic-land-to-hand/rulings/1eb4c001-1115-4b99-bbbf-703eb551a381.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v50/families/07-basic-land-to-hand/rulings/66155010-cc2c-449a-85d5-92c95aade514.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v50/families/07-basic-land-to-hand/rulings/7d306de8-a93b-429b-9436-0501be97dc8d.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v50/families/07-basic-land-to-hand/source/0f539127-535f-4e0d-abaa-e884521098d2.json",
+      "sha256": "8e4a7c9538719909587390ef13c462840bfbb416b3b8075083c439524e0068cd",
+      "bytes": 5546
+    },
+    {
+      "path": "build/campaign/queue-v50/families/07-basic-land-to-hand/source/1eb4c001-1115-4b99-bbbf-703eb551a381.json",
+      "sha256": "d69b35f0fe36464e58d24db77150f03359983e909b07185b6007bc4441de6a54",
+      "bytes": 5545
+    },
+    {
+      "path": "build/campaign/queue-v50/families/07-basic-land-to-hand/source/66155010-cc2c-449a-85d5-92c95aade514.json",
+      "sha256": "c94385ac7a9c890cc3b416e4f761859a8adbf42902a99047b8f141317b7ac9f8",
+      "bytes": 5591
+    },
+    {
+      "path": "build/campaign/queue-v50/families/07-basic-land-to-hand/source/7d306de8-a93b-429b-9436-0501be97dc8d.json",
+      "sha256": "fea0a6747c6f315417b00a2b3b56e49a2e426dc325b08917490b71fdbca157b5",
+      "bytes": 5644
+    },
+    {
+      "path": "build/campaign/queue-v50/families/08-treasure-on-death/family.md",
+      "sha256": "79b9b8c3a8f9f1c4a314f30bb2627dc98fac34cf00e37def716dd7b526924cd6",
+      "bytes": 2747
+    },
+    {
+      "path": "build/campaign/queue-v50/families/08-treasure-on-death/rulings/47f8df80-abc9-4d46-8078-8fbc23430259.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v50/families/08-treasure-on-death/rulings/7d48ad95-d428-4e2d-b697-56907c3ce579.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v50/families/08-treasure-on-death/rulings/bbfee53c-30a6-4ed0-beef-5c254be75fc5.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v50/families/08-treasure-on-death/source/47f8df80-abc9-4d46-8078-8fbc23430259.json",
+      "sha256": "02fa93f8f4187bd25d43316bf632ccfcb031fe7bc0db0c252c0d3ffb999cc8c7",
+      "bytes": 6179
+    },
+    {
+      "path": "build/campaign/queue-v50/families/08-treasure-on-death/source/7d48ad95-d428-4e2d-b697-56907c3ce579.json",
+      "sha256": "bb2eed477883e8ad7fe803758eb0a2b7a3f3b1d9cf6153c2070888eb8052fa0b",
+      "bytes": 6211
+    },
+    {
+      "path": "build/campaign/queue-v50/families/08-treasure-on-death/source/bbfee53c-30a6-4ed0-beef-5c254be75fc5.json",
+      "sha256": "73b19e94eb20f7ef451f9dc6e9b1ffca213dd2d1b0f6d1edc4c8dd343059f515",
+      "bytes": 6195
+    },
+    {
+      "path": "build/campaign/queue-v50/families/09-destroy-artifact-enchant/family.md",
+      "sha256": "bc99c1ea4c49d111f8c0dc05b375f2431d90fe27dcec174a797cd7dc219e3343",
+      "bytes": 2384
+    },
+    {
+      "path": "build/campaign/queue-v50/families/09-destroy-artifact-enchant/rulings/46e4ace2-e8bf-4b72-81de-286215886a10.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v50/families/09-destroy-artifact-enchant/rulings/722f2965-a1ec-4b97-a4bd-b99364f58b1e.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v50/families/09-destroy-artifact-enchant/rulings/bdb3ca68-ec1f-4e16-81cc-d23f8f52c728.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v50/families/09-destroy-artifact-enchant/source/46e4ace2-e8bf-4b72-81de-286215886a10.json",
+      "sha256": "0fa2a6d54a0a0249caed54a57b599c8e9fba8ce0c8bdb3f0c16a0552fff39a3e",
+      "bytes": 5494
+    },
+    {
+      "path": "build/campaign/queue-v50/families/09-destroy-artifact-enchant/source/722f2965-a1ec-4b97-a4bd-b99364f58b1e.json",
+      "sha256": "37136990219df52d170f188f07b7fde48312ab2c84d9ad5d82860cd5c30592c5",
+      "bytes": 5549
+    },
+    {
+      "path": "build/campaign/queue-v50/families/09-destroy-artifact-enchant/source/bdb3ca68-ec1f-4e16-81cc-d23f8f52c728.json",
+      "sha256": "b8640120b7fd88716fea4f9b60486d496d4ca2a8793121a303551f61eba3ebc1",
+      "bytes": 6195
+    },
+    {
+      "path": "build/campaign/queue-v50/gen_family_records.py",
+      "sha256": "3cbe8aa9fc66f0b0d6dafdbc68fa50073e17597e8f4d4b7527be67b1e25e355e",
+      "bytes": 9565
+    },
+    {
+      "path": "build/campaign/queue-v50/gen_maps.py",
+      "sha256": "7394152fb07a9586f73d72cc29f4929dd00e6310d9a0a1568b11c5d0d6b8c24c",
+      "bytes": 15281
+    },
+    {
+      "path": "build/campaign/queue-v50/gen_ron_batch_a.py",
+      "sha256": "dcdde21770c79476fbb3b9a6d5cecea079257039f815d417ada4da30e24f9e57",
+      "bytes": 10952
+    },
+    {
+      "path": "build/campaign/queue-v50/gen_ron_batch_b.py",
+      "sha256": "4af2adb5ed570fc02e35bf555e105194085e1778b4078263fd5dd56214f7bccf",
+      "bytes": 9217
+    },
+    {
+      "path": "build/campaign/queue-v50/gen_ron_batch_c.py",
+      "sha256": "b4cd1ae342b03d75f8377d9d4d0cd5a01bb6a3bbf3dd83cebabd8fd836b2301a",
+      "bytes": 7552
+    },
+    {
+      "path": "build/campaign/queue-v50/revalidation.tsv",
+      "sha256": "0664da112bcb84e8d3afbb0256d471609011ad28f0d261ac11b4c991c655a005",
+      "bytes": 7514
+    },
+    {
+      "path": "build/campaign/queue-v50/selection.md",
+      "sha256": "5d9992677118a8c70bba06c2eeab0fc4cea6f8993c7c0c7840a0e6e4b52c82dc",
+      "bytes": 2853
+    },
+    {
+      "path": "tricerules/CARDS.md",
+      "sha256": "be234361137ec684425a0dc8c9c0c42581f842f6dc913a936681b07eaa0628ea",
+      "bytes": 848044
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/dire_fleet_hoarder.json",
+      "sha256": "777f65be797e70b65d944c356c96066e3bac4627ab58d6da8adf569a207c4f30",
+      "bytes": 1432
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/district_guide.json",
+      "sha256": "24a8c8123f78be5869d27ada2afa4f88c7276a0e4dd1b43acf9ffc3cef1e3f39",
+      "bytes": 2006
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/farfinder.json",
+      "sha256": "5fe244045a20677200ca09daeb53ce8f595d20db4cf55581c12abb52fbe61bcc",
+      "bytes": 2244
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/gatecreeper_vine.json",
+      "sha256": "d06a30a800c342cf9314013b2a6d0b7d2f76980dae2433d4ab057ef6facc768d",
+      "bytes": 2083
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/jewel-eyed_cobra.json",
+      "sha256": "40251ccfa8bf761cde8c45f481169d7adf97cfabbb125d5d1c8892f2fe64fa7d",
+      "bytes": 1483
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/naturalize.json",
+      "sha256": "fd539b752d85c76f9bad4a9a69e5a76ebb37183f12dddb0c3377473790df3013",
+      "bytes": 1368
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/natures_chant.json",
+      "sha256": "db0a4c20aa87bdc8425a7a437829796b82868cb81a954455ac7f1a19d79702ec",
+      "bytes": 1202
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/patron_of_the_arts.json",
+      "sha256": "b27c88b784cfc78df2e6983b69873f22db4c108936416052585e8086bc434210",
+      "bytes": 1487
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/pilgrims_eye.json",
+      "sha256": "8b345614a851c786e5b7d079fd37653311e6e65a465deece25617efcced543f4",
+      "bytes": 2070
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/return_to_the_earth.json",
+      "sha256": "c5edc512729805ff6a6b7858f9960228ae7f0d1712821e379075fe22c214e90c",
+      "bytes": 1405
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/dire_fleet_hoarder.ron",
+      "sha256": "60017e853c1a71f25d354029649b45744fef7c89d1a9eb1d54475c235400def0",
+      "bytes": 696
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/district_guide.ron",
+      "sha256": "054fde658ba4451686d79d164dd3f499284cef3857ee305bf3ae9a6958b56e17",
+      "bytes": 1311
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/farfinder.ron",
+      "sha256": "af8627971d2b49a6d0ffcfd5ef51e46c966957b5f4dc6b1f8e0617092c700042",
+      "bytes": 1283
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/gatecreeper_vine.ron",
+      "sha256": "542452c12b47bf020a0fbaba6760cacaa4308b0a87f5bb1a7fac5982fb66d6c7",
+      "bytes": 1355
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/jewel-eyed_cobra.ron",
+      "sha256": "a8eba6b6a9dda2117e446c0bcd2c709179d924686cc7c1050c2917de39fe1671",
+      "bytes": 729
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/naturalize.ron",
+      "sha256": "902b13294a5b7c3cd3708cc77241a256f20a718feafcd5d2d3ef8c99322ab143",
+      "bytes": 588
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/natures_chant.ron",
+      "sha256": "ee9ab46c5e15b2c270d22f030ff6ef1b50f74bf84b7f5ff84b3eb2f95812085c",
+      "bytes": 600
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/patron_of_the_arts.ron",
+      "sha256": "1825339606cab0e693e9ab41746cdc82a72b48917e30324ec72eea5fa265c635",
+      "bytes": 812
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/pilgrims_eye.ron",
+      "sha256": "8d4b269d53dac4c69e7d49a338c8fc9f3aa7ac2b16f1f3c1b72617820b21663c",
+      "bytes": 1302
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/return_to_the_earth.ron",
+      "sha256": "d8c06bdf984d314d531aa47f747b54ed61c9d7fd474ded521cc6e28b965ef667",
+      "bytes": 650
+    },
+    {
+      "path": "tricerules/tricerules-cards/presentation/oracle_fingerprints.tsv",
+      "sha256": "2a655e333f9cf8c5a37eac1d87606809db18302c9927a355da3915f9fa060d77",
+      "bytes": 644191
+    },
+    {
+      "path": "tricerules/tricerules-cards/tests/q50_cohorts_batch.rs",
+      "sha256": "d8d40e92b370dc270399b6ba0f899c7b549c422d0d792fa41145b1583bcdffa0",
+      "bytes": 23431
+    },
+    {
+      "path": "tricerules/tricerules-cards/tests/suites/mechanic_registry.rs",
+      "sha256": "205b2fe862e390c4c406db24657d2a94b11946e7d2a3673fbfc789d9ebcaeaf0",
+      "bytes": 34859
+    },
+    {
+      "path": "tricerules/tricerules-core/tests/scenario.rs",
+      "sha256": "ffa94329c299c60a1cb9883ecd35cad64382307d81c6b9a75ca4a59843c52c86",
+      "bytes": 79670
+    },
+    {
+      "path": "tricerules/tricerules-core/tests/scenario/q50_cohorts_batch.rs",
+      "sha256": "8a126505a503f5e8460ae1b4615a07cd4f35ed7e31ee33ae9fccc53aaa6bf0e4",
+      "bytes": 51617
+    }
+  ],
+  "dependencies": {
+    "build/campaign/blocked.tsv": "b2ea276996f7fab1f8ff542445f776b6c31655af6c26c6bb742e6214c694f5ad",
+    "build/campaign/queue-v50/build_queue.py": "6a88d276af899ebdd3e65b263cf19515f360b2dbad83ff6bfa6f0b95ab96834e",
+    "build/campaign/queue-v50/cards.tsv": "e94f6e160c099812031636729d1266365fccadd53d76907a6e8a1dd0f7e51a79",
+    "build/campaign/queue-v50/families/07-basic-land-to-hand/family.md": "cc77a0a3382f097ae0d256afc406bcc67a60cd338fa50c3a84c4796cef51d12f",
+    "build/campaign/queue-v50/families/07-basic-land-to-hand/rulings/0f539127-535f-4e0d-abaa-e884521098d2.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v50/families/07-basic-land-to-hand/rulings/1eb4c001-1115-4b99-bbbf-703eb551a381.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v50/families/07-basic-land-to-hand/rulings/66155010-cc2c-449a-85d5-92c95aade514.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v50/families/07-basic-land-to-hand/rulings/7d306de8-a93b-429b-9436-0501be97dc8d.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v50/families/07-basic-land-to-hand/source/0f539127-535f-4e0d-abaa-e884521098d2.json": "8e4a7c9538719909587390ef13c462840bfbb416b3b8075083c439524e0068cd",
+    "build/campaign/queue-v50/families/07-basic-land-to-hand/source/1eb4c001-1115-4b99-bbbf-703eb551a381.json": "d69b35f0fe36464e58d24db77150f03359983e909b07185b6007bc4441de6a54",
+    "build/campaign/queue-v50/families/07-basic-land-to-hand/source/66155010-cc2c-449a-85d5-92c95aade514.json": "c94385ac7a9c890cc3b416e4f761859a8adbf42902a99047b8f141317b7ac9f8",
+    "build/campaign/queue-v50/families/07-basic-land-to-hand/source/7d306de8-a93b-429b-9436-0501be97dc8d.json": "fea0a6747c6f315417b00a2b3b56e49a2e426dc325b08917490b71fdbca157b5",
+    "build/campaign/queue-v50/families/08-treasure-on-death/family.md": "79b9b8c3a8f9f1c4a314f30bb2627dc98fac34cf00e37def716dd7b526924cd6",
+    "build/campaign/queue-v50/families/08-treasure-on-death/rulings/47f8df80-abc9-4d46-8078-8fbc23430259.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v50/families/08-treasure-on-death/rulings/7d48ad95-d428-4e2d-b697-56907c3ce579.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v50/families/08-treasure-on-death/rulings/bbfee53c-30a6-4ed0-beef-5c254be75fc5.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v50/families/08-treasure-on-death/source/47f8df80-abc9-4d46-8078-8fbc23430259.json": "02fa93f8f4187bd25d43316bf632ccfcb031fe7bc0db0c252c0d3ffb999cc8c7",
+    "build/campaign/queue-v50/families/08-treasure-on-death/source/7d48ad95-d428-4e2d-b697-56907c3ce579.json": "bb2eed477883e8ad7fe803758eb0a2b7a3f3b1d9cf6153c2070888eb8052fa0b",
+    "build/campaign/queue-v50/families/08-treasure-on-death/source/bbfee53c-30a6-4ed0-beef-5c254be75fc5.json": "73b19e94eb20f7ef451f9dc6e9b1ffca213dd2d1b0f6d1edc4c8dd343059f515",
+    "build/campaign/queue-v50/families/09-destroy-artifact-enchant/family.md": "bc99c1ea4c49d111f8c0dc05b375f2431d90fe27dcec174a797cd7dc219e3343",
+    "build/campaign/queue-v50/families/09-destroy-artifact-enchant/rulings/46e4ace2-e8bf-4b72-81de-286215886a10.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v50/families/09-destroy-artifact-enchant/rulings/722f2965-a1ec-4b97-a4bd-b99364f58b1e.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v50/families/09-destroy-artifact-enchant/rulings/bdb3ca68-ec1f-4e16-81cc-d23f8f52c728.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v50/families/09-destroy-artifact-enchant/source/46e4ace2-e8bf-4b72-81de-286215886a10.json": "0fa2a6d54a0a0249caed54a57b599c8e9fba8ce0c8bdb3f0c16a0552fff39a3e",
+    "build/campaign/queue-v50/families/09-destroy-artifact-enchant/source/722f2965-a1ec-4b97-a4bd-b99364f58b1e.json": "37136990219df52d170f188f07b7fde48312ab2c84d9ad5d82860cd5c30592c5",
+    "build/campaign/queue-v50/families/09-destroy-artifact-enchant/source/bdb3ca68-ec1f-4e16-81cc-d23f8f52c728.json": "b8640120b7fd88716fea4f9b60486d496d4ca2a8793121a303551f61eba3ebc1",
+    "build/campaign/queue-v50/gen_family_records.py": "3cbe8aa9fc66f0b0d6dafdbc68fa50073e17597e8f4d4b7527be67b1e25e355e",
+    "build/campaign/queue-v50/gen_maps.py": "7394152fb07a9586f73d72cc29f4929dd00e6310d9a0a1568b11c5d0d6b8c24c",
+    "build/campaign/queue-v50/gen_ron_batch_a.py": "dcdde21770c79476fbb3b9a6d5cecea079257039f815d417ada4da30e24f9e57",
+    "build/campaign/queue-v50/gen_ron_batch_b.py": "4af2adb5ed570fc02e35bf555e105194085e1778b4078263fd5dd56214f7bccf",
+    "build/campaign/queue-v50/gen_ron_batch_c.py": "b4cd1ae342b03d75f8377d9d4d0cd5a01bb6a3bbf3dd83cebabd8fd836b2301a",
+    "build/campaign/queue-v50/revalidation.tsv": "0664da112bcb84e8d3afbb0256d471609011ad28f0d261ac11b4c991c655a005",
+    "build/campaign/queue-v50/selection.md": "5d9992677118a8c70bba06c2eeab0fc4cea6f8993c7c0c7840a0e6e4b52c82dc",
+    "tricerules/CARDS.md": "be234361137ec684425a0dc8c9c0c42581f842f6dc913a936681b07eaa0628ea",
+    "tricerules/tricerules-cards/authoring/review-maps/dire_fleet_hoarder.json": "777f65be797e70b65d944c356c96066e3bac4627ab58d6da8adf569a207c4f30",
+    "tricerules/tricerules-cards/authoring/review-maps/district_guide.json": "24a8c8123f78be5869d27ada2afa4f88c7276a0e4dd1b43acf9ffc3cef1e3f39",
+    "tricerules/tricerules-cards/authoring/review-maps/farfinder.json": "5fe244045a20677200ca09daeb53ce8f595d20db4cf55581c12abb52fbe61bcc",
+    "tricerules/tricerules-cards/authoring/review-maps/gatecreeper_vine.json": "d06a30a800c342cf9314013b2a6d0b7d2f76980dae2433d4ab057ef6facc768d",
+    "tricerules/tricerules-cards/authoring/review-maps/jewel-eyed_cobra.json": "40251ccfa8bf761cde8c45f481169d7adf97cfabbb125d5d1c8892f2fe64fa7d",
+    "tricerules/tricerules-cards/authoring/review-maps/naturalize.json": "fd539b752d85c76f9bad4a9a69e5a76ebb37183f12dddb0c3377473790df3013",
+    "tricerules/tricerules-cards/authoring/review-maps/natures_chant.json": "db0a4c20aa87bdc8425a7a437829796b82868cb81a954455ac7f1a19d79702ec",
+    "tricerules/tricerules-cards/authoring/review-maps/patron_of_the_arts.json": "b27c88b784cfc78df2e6983b69873f22db4c108936416052585e8086bc434210",
+    "tricerules/tricerules-cards/authoring/review-maps/pilgrims_eye.json": "8b345614a851c786e5b7d079fd37653311e6e65a465deece25617efcced543f4",
+    "tricerules/tricerules-cards/authoring/review-maps/return_to_the_earth.json": "c5edc512729805ff6a6b7858f9960228ae7f0d1712821e379075fe22c214e90c",
+    "tricerules/tricerules-cards/data/dire_fleet_hoarder.ron": "60017e853c1a71f25d354029649b45744fef7c89d1a9eb1d54475c235400def0",
+    "tricerules/tricerules-cards/data/district_guide.ron": "054fde658ba4451686d79d164dd3f499284cef3857ee305bf3ae9a6958b56e17",
+    "tricerules/tricerules-cards/data/farfinder.ron": "af8627971d2b49a6d0ffcfd5ef51e46c966957b5f4dc6b1f8e0617092c700042",
+    "tricerules/tricerules-cards/data/gatecreeper_vine.ron": "542452c12b47bf020a0fbaba6760cacaa4308b0a87f5bb1a7fac5982fb66d6c7",
+    "tricerules/tricerules-cards/data/jewel-eyed_cobra.ron": "a8eba6b6a9dda2117e446c0bcd2c709179d924686cc7c1050c2917de39fe1671",
+    "tricerules/tricerules-cards/data/naturalize.ron": "902b13294a5b7c3cd3708cc77241a256f20a718feafcd5d2d3ef8c99322ab143",
+    "tricerules/tricerules-cards/data/natures_chant.ron": "ee9ab46c5e15b2c270d22f030ff6ef1b50f74bf84b7f5ff84b3eb2f95812085c",
+    "tricerules/tricerules-cards/data/patron_of_the_arts.ron": "1825339606cab0e693e9ab41746cdc82a72b48917e30324ec72eea5fa265c635",
+    "tricerules/tricerules-cards/data/pilgrims_eye.ron": "8d4b269d53dac4c69e7d49a338c8fc9f3aa7ac2b16f1f3c1b72617820b21663c",
+    "tricerules/tricerules-cards/data/return_to_the_earth.ron": "d8c06bdf984d314d531aa47f747b54ed61c9d7fd474ded521cc6e28b965ef667",
+    "tricerules/tricerules-cards/presentation/oracle_fingerprints.tsv": "2a655e333f9cf8c5a37eac1d87606809db18302c9927a355da3915f9fa060d77",
+    "tricerules/tricerules-cards/tests/q50_cohorts_batch.rs": "d8d40e92b370dc270399b6ba0f899c7b549c422d0d792fa41145b1583bcdffa0",
+    "tricerules/tricerules-cards/tests/suites/mechanic_registry.rs": "205b2fe862e390c4c406db24657d2a94b11946e7d2a3673fbfc789d9ebcaeaf0",
+    "tricerules/tricerules-core/tests/scenario.rs": "ffa94329c299c60a1cb9883ecd35cad64382307d81c6b9a75ca4a59843c52c86",
+    "tricerules/tricerules-core/tests/scenario/q50_cohorts_batch.rs": "8a126505a503f5e8460ae1b4615a07cd4f35ed7e31ee33ae9fccc53aaa6bf0e4"
+  },
+  "artifacts": {
+    "batch-c.patch.diff": "c1918fd80c0650e71d567f41da08ab22229c6b90e4a6d2215d0973298e3abb6e"
+  }
+}

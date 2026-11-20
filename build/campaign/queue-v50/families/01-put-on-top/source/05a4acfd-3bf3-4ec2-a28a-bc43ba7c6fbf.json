@@ -1,0 +1,129 @@
+{
+ "object": "card",
+ "id": "44b02b12-415c-49f4-9f60-fa53beb4216f",
+ "oracle_id": "05a4acfd-3bf3-4ec2-a28a-bc43ba7c6fbf",
+ "multiverse_ids": [
+  16454
+ ],
+ "tcgplayer_id": 2551,
+ "cardmarket_id": 11070,
+ "name": "Fallow Earth",
+ "lang": "en",
+ "released_at": "1999-04-21",
+ "uri": "https://api.scryfall.com/cards/44b02b12-415c-49f4-9f60-fa53beb4216f",
+ "scryfall_uri": "https://scryfall.com/card/6ed/227/fallow-earth?utm_source=api",
+ "layout": "normal",
+ "highres_image": true,
+ "image_status": "highres_scan",
+ "image_updated_at": "2026-07-13T12:36:01Z",
+ "image_uris": {
+  "small": "https://cards.scryfall.io/small/front/4/4/44b02b12-415c-49f4-9f60-fa53beb4216f.jpg?1783946161",
+  "normal": "https://cards.scryfall.io/normal/front/4/4/44b02b12-415c-49f4-9f60-fa53beb4216f.jpg?1783946161",
+  "large": "https://cards.scryfall.io/large/front/4/4/44b02b12-415c-49f4-9f60-fa53beb4216f.jpg?1783946161",
+  "png": "https://cards.scryfall.io/png/front/4/4/44b02b12-415c-49f4-9f60-fa53beb4216f.png?1783946161",
+  "art_crop": "https://cards.scryfall.io/art_crop/front/4/4/44b02b12-415c-49f4-9f60-fa53beb4216f.jpg?1783946161",
+  "border_crop": "https://cards.scryfall.io/border_crop/front/4/4/44b02b12-415c-49f4-9f60-fa53beb4216f.jpg?1783946161",
+  "thumb": "https://cards.scryfall.io/thumb/front/4/4/44b02b12-415c-49f4-9f60-fa53beb4216f.webp?1783946161",
+  "grid": "https://cards.scryfall.io/grid/front/4/4/44b02b12-415c-49f4-9f60-fa53beb4216f.webp?1783946161",
+  "display": "https://cards.scryfall.io/display/front/4/4/44b02b12-415c-49f4-9f60-fa53beb4216f.webp?1783946161",
+  "art": "https://cards.scryfall.io/art/front/4/4/44b02b12-415c-49f4-9f60-fa53beb4216f.webp?1783946161",
+  "crop": "https://cards.scryfall.io/crop/front/4/4/44b02b12-415c-49f4-9f60-fa53beb4216f.webp?1783946161",
+  "jpeg": "https://cards.scryfall.io/normal/front/4/4/44b02b12-415c-49f4-9f60-fa53beb4216f.jpg?1783946161"
+ },
+ "mana_cost": "{2}{G}",
+ "cmc": 3.0,
+ "type_line": "Sorcery",
+ "oracle_text": "Put target land on top of its owner's library.",
+ "colors": [
+  "G"
+ ],
+ "color_identity": [
+  "G"
+ ],
+ "keywords": [],
+ "legalities": {
+  "standard": "not_legal",
+  "future": "not_legal",
+  "historic": "not_legal",
+  "timeless": "not_legal",
+  "gladiator": "not_legal",
+  "pioneer": "not_legal",
+  "modern": "not_legal",
+  "legacy": "legal",
+  "pauper": "not_legal",
+  "vintage": "legal",
+  "penny": "not_legal",
+  "commander": "legal",
+  "oathbreaker": "legal",
+  "standardbrawl": "not_legal",
+  "brawl": "not_legal",
+  "competitivebrawl": "not_legal",
+  "alchemy": "not_legal",
+  "paupercommander": "not_legal",
+  "duel": "legal",
+  "oldschool": "not_legal",
+  "premodern": "legal",
+  "predh": "legal",
+  "tlr": "legal"
+ },
+ "games": [
+  "paper"
+ ],
+ "reserved": false,
+ "game_changer": false,
+ "foil": false,
+ "nonfoil": true,
+ "finishes": [
+  "nonfoil"
+ ],
+ "oversized": false,
+ "promo": false,
+ "reprint": true,
+ "variation": false,
+ "set_id": "78ee1957-d5d4-4551-acae-b1b418e8a50b",
+ "set": "6ed",
+ "set_name": "Classic Sixth Edition",
+ "set_type": "core",
+ "set_uri": "https://api.scryfall.com/sets/78ee1957-d5d4-4551-acae-b1b418e8a50b",
+ "set_search_uri": "https://api.scryfall.com/cards/search?order=set&q=e%3A6ed&unique=prints",
+ "scryfall_set_uri": "https://scryfall.com/sets/6ed?utm_source=api",
+ "rulings_uri": "https://api.scryfall.com/cards/44b02b12-415c-49f4-9f60-fa53beb4216f/rulings",
+ "prints_search_uri": "https://api.scryfall.com/cards/search?order=released&q=oracleid%3A05a4acfd-3bf3-4ec2-a28a-bc43ba7c6fbf&unique=prints",
+ "collector_number": "227",
+ "digital": false,
+ "rarity": "uncommon",
+ "flavor_text": "\". . . and when the farmer awoke the next morning, all the seeds from his field were once again in their sacks.\"\n—Afari, *Tales*",
+ "card_back_id": "0aeebaf5-8c7d-4636-9e82-8c27447861f7",
+ "artist": "Janine Johnston",
+ "artist_ids": [
+  "51648844-a0be-41e3-ba7b-66e8da88bd57"
+ ],
+ "illustration_id": "caf598e6-5b08-4cbc-882f-81cf5c32e1f5",
+ "border_color": "white",
+ "frame": "1997",
+ "full_art": false,
+ "textless": false,
+ "booster": true,
+ "story_spotlight": false,
+ "edhrec_rank": 31319,
+ "penny_rank": 2800,
+ "prices": {
+  "usd": "0.14",
+  "usd_foil": null,
+  "usd_etched": null,
+  "eur": "0.14",
+  "eur_foil": null,
+  "tix": null
+ },
+ "related_uris": {
+  "gatherer": "https://gatherer.wizards.com/Pages/Card/Details.aspx?multiverseid=16454&printed=false",
+  "tcgplayer_infinite_articles": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&trafcat=tcgplayer.com%2Fsearch%2Farticles&u=https%3A%2F%2Fwww.tcgplayer.com%2Fsearch%2Farticles%3FproductLineName%3Dmagic%26q%3DFallow%2BEarth",
+  "tcgplayer_infinite_decks": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&trafcat=tcgplayer.com%2Fsearch%2Fdecks&u=https%3A%2F%2Fwww.tcgplayer.com%2Fsearch%2Fdecks%3FproductLineName%3Dmagic%26q%3DFallow%2BEarth",
+  "edhrec": "https://edhrec.com/route/?cc=Fallow+Earth"
+ },
+ "purchase_uris": {
+  "tcgplayer": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&u=https%3A%2F%2Fwww.tcgplayer.com%2Fproduct%2F2551%3Fpage%3D1",
+  "cardmarket": "https://www.cardmarket.com/en/Magic/Products?idProduct=11070&referrer=scryfall&utm_campaign=card_prices&utm_medium=text&utm_source=scryfall",
+  "cardhoarder": "https://www.cardhoarder.com/cards?affiliate_id=scryfall&data%5Bsearch%5D=Fallow+Earth&ref=card-profile&utm_campaign=affiliate&utm_medium=card&utm_source=scryfall"
+ }
+}
