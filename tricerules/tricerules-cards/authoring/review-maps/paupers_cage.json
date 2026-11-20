@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "38ec5b13-b143-4818-9243-b1715dab3bef",
+  "spans": [
+    {
+      "face_id": "paupers_cage",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::AtBeginningOfUpkeep",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "GameCondition::CardsInHand",
+      "typed_path": "/faces/0/triggered_abilities/0/intervening_if"
+    },
+    {
+      "symbol": "SpellEffectKind::DamagePlayer",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "PlayerRecipient::AffectedPlayer",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/DamagePlayer/who"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q45_cohorts_batch::q45_upkeep_hand_damage_cards_hit_each_opponent_upkeep",
+      "covers": "every card deals its printed damage at the opponent's upkeep"
+    },
+    {
+      "test": "scenario q45_cohorts_batch::q45_upkeep_hand_damage_rechecks_hand_size_on_resolution",
+      "covers": "the intervening if is rechecked before resolution"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_upkeep_hand_damage_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of paupers_cage"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for paupers_cage"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

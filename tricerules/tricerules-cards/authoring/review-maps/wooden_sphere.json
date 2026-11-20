@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "0bd8917c-bec4-4603-bc3f-8e0c2afae56a",
+  "spans": [
+    {
+      "face_id": "wooden_sphere",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPlayerCastsSpell",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellCastFilter.is_color",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger/WheneverPlayerCastsSpell/filter"
+    },
+    {
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
+    },
+    {
+      "symbol": "ResolutionCost::Mana",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/cost"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/GainLife"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q45_cohorts_batch::q45_spell_life_pay_canary_simplest_pays_and_gains",
+      "covers": "canary pays the printed {1} and gains exactly one life"
+    },
+    {
+      "test": "scenario q45_cohorts_batch::q45_spell_life_pay_cards_trigger_for_every_color_and_any_caster",
+      "covers": "every printed color triggers for any player's cast"
+    },
+    {
+      "test": "scenario q45_cohorts_batch::q45_spell_life_pay_cards_may_decline_without_life_or_payment",
+      "covers": "declining pays no mana and gains no life"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_spell_life_pay_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of wooden_sphere"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for wooden_sphere"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

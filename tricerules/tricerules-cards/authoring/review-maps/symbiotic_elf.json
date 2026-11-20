@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "cfaa0d5d-d9f1-4586-a7b1-6576a58c0f1e",
+  "spans": [
+    {
+      "face_id": "symbiotic_elf",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "insect_g_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q45_cohorts_batch::q45_dies_insect_tokens_cards_create_their_printed_counts",
+      "covers": "every card creates its printed Insect count"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_dies_insect_tokens_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of symbiotic_elf"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for symbiotic_elf"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

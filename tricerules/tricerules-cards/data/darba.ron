@@ -1,0 +1,34 @@
+// Oracle c64c0cb5-5a8c-4a2f-a0fc-8b080aaf90bb; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853. No card-specific rulings.
+// CR 503.1 (upkeep), 603.1/603.2 (the trigger), 118.12 (the optional mana payment) and 701.21a
+// (sacrificing the source when the payment is declined).
+(
+  id: "darba",
+  name: "Darba",
+  face_id: "darba",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Bird", "Beast"],
+  power: 5,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: AtBeginningOfUpkeep(),
+    program: Some((body: (steps: [
+      (id: "pay_or_sacrifice", kind: Choose(
+        choice: "pay_or_sacrifice",
+        chooser: Controller,
+        optional: true,
+        branches: [(
+          branch_id: "pay_gg",
+          presentation: OracleLines([1]),
+          cost: Mana("{G}{G}"),
+          body: (),
+        )],
+        otherwise: (steps: [
+          (id: "sacrifice_source", kind: Perform(Sacrifice(subject: Source))),
+        ]),
+      )),
+    ]))),
+  )],
+)

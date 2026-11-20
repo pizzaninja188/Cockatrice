@@ -1,0 +1,32 @@
+// Oracle bd8d707d-1201-42c6-bce6-fbda12ce5ea8; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// Rulings: the ability triggers for any player's red spell and resolves before that spell.
+// CR 601.2a, 603.1/603.2 and 105.2; the life gain is optional.
+(
+  id: "dragons_claw",
+  name: "Dragon's Claw",
+  face_id: "dragons_claw",
+  mana_cost: "{2}",
+  types: ["Artifact"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPlayerCastsSpell(caster: AnyPlayer, filter: (is_color: Some(Red))),
+    program: Some((body: (steps: [
+      (id: "may_gain", kind: Choose(
+        choice: "may_gain",
+        chooser: Controller,
+        optional: true,
+        branches: [(
+          branch_id: "gain_one",
+          presentation: OracleLines([1]),
+          cost: None,
+          body: (steps: [
+            (id: "gain_one_life", kind: Perform(GainLife(amount: 1))),
+          ]),
+        )],
+        otherwise: (),
+      )),
+    ]))),
+  )],
+)

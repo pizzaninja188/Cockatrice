@@ -1,0 +1,34 @@
+// Oracle c8dcb8d8-ae27-43ac-88e7-e59f2656e0ce; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853. No card-specific rulings.
+// CR 503.1, 603.1/603.2, 118.12 and 701.21a: pay {2} or sacrifice the source.
+(
+  id: "molting_harpy",
+  name: "Molting Harpy",
+  face_id: "molting_harpy",
+  mana_cost: "{B}",
+  types: ["Creature", "Harpy", "Mercenary"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: AtBeginningOfUpkeep(),
+    program: Some((body: (steps: [
+      (id: "pay_or_sacrifice", kind: Choose(
+        choice: "pay_or_sacrifice",
+        chooser: Controller,
+        optional: true,
+        branches: [(
+          branch_id: "pay_two",
+          presentation: OracleLines([2]),
+          cost: Mana("{2}"),
+          body: (),
+        )],
+        otherwise: (steps: [
+          (id: "sacrifice_source", kind: Perform(Sacrifice(subject: Source))),
+        ]),
+      )),
+    ]))),
+  )],
+)

@@ -1,0 +1,19 @@
+// Oracle 98e7bfd4-fcb6-47b1-ad0b-c54b85dc2a79; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853. No card-specific rulings.
+// CR 602.1/602.2 (activated ability), 701.21a (sacrifice as a cost), 611.2a and 514.2
+// (until-end-of-turn pump) and 613.4c (layer 7c).
+(
+  id: "shield_mate",
+  name: "Shield Mate",
+  face_id: "shield_mate",
+  mana_cost: "{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 1,
+  toughness: 1,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [SacrificeSelf],
+    effect: [PumpTarget(power: 0, toughness: 4, subject: Chosen((kind: Creature)))],
+  )],
+)

@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "b6821131-9ae1-4a3c-8235-90deae33c05f",
+  "spans": [
+    {
+      "face_id": "dread_drone",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "eldrazi_spawn_c_0_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q45_cohorts_batch::q45_etb_eldrazi_spawn_cards_create_their_printed_counts_and_mana_tokens",
+      "covers": "every card creates its printed Spawn count and the token's mana ability works"
+    },
+    {
+      "test": "scenario q45_cohorts_batch::q45_etb_eldrazi_spawn_canary_hardest_creates_two",
+      "covers": "the hardest canary creates two Spawn"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_etb_eldrazi_spawn_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of dread_drone"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for dread_drone"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

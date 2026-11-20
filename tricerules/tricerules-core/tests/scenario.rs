@@ -2478,3 +2478,6 @@ mod q43_order_pump_batch;
 
 #[path = "scenario/q44_cohorts_batch.rs"]
 mod q44_cohorts_batch;
+
+#[path = "scenario/q45_cohorts_batch.rs"]
+mod q45_cohorts_batch;

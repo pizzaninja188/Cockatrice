@@ -1,0 +1,12 @@
+// Oracle 77636154-962f-4ca8-85e7-c0c9c0c3cd2d; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853. No card-specific rulings.
+// CR 115.1a/115.3, 400.7 and 608.2b: up to two target creatures return to their owners' hands.
+(
+  id: "waterwhirl",
+  name: "Waterwhirl",
+  face_id: "waterwhirl",
+  mana_cost: "{4}{U}{U}",
+  types: ["Instant"],
+  spell_effect: [ReturnToOwnersHand(subject: Chosen((kind: Creature)))],
+  targeting: Some((groups: [(min: 0, max: 2, effect_indices: [0])])),
+)

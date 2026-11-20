@@ -1,0 +1,19 @@
+// Oracle 70ecc25b-2004-4a3c-80c3-6d97bf0711eb; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853. No card-specific rulings.
+// CR 700.4 (dies), 603.6c (leaves-the-battlefield trigger), 111.1/111.10 (token creation) and
+// 603.10a (last known information for the dying source).
+(
+  id: "symbiotic_beast",
+  name: "Symbiotic Beast",
+  face_id: "symbiotic_beast",
+  mana_cost: "{4}{G}{G}",
+  types: ["Creature", "Insect", "Beast"],
+  power: 4,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfDies,
+    effect: [CreateTokens(token: "insect_g_1_1", count: 4)],
+  )],
+)

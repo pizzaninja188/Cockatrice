@@ -1,0 +1,12 @@
+// Oracle 64212311-9d66-4c25-8cf0-88ae4cac132f; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853. No card-specific rulings.
+// CR 115.1a/115.3 (up to three targets chosen at cast), 701.26 and 608.2b.
+(
+  id: "terashis_cry",
+  name: "Terashi's Cry",
+  face_id: "terashis_cry",
+  mana_cost: "{3}{W}",
+  types: ["Sorcery", "Arcane"],
+  spell_effect: [Tap(subject: Chosen((kind: Creature)))],
+  targeting: Some((groups: [(min: 0, max: 3, effect_indices: [0])])),
+)

@@ -1,0 +1,19 @@
+// Oracle 1ee811fb-c25d-4cf5-b396-539c36e8f90f; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853. No card-specific rulings.
+// CR 603.6a (enters-the-battlefield trigger), 111.1/111.10 (token creation) and 605.1a/605.3b
+// (the Sacrifice-for-{C} ability printed on the Spawn token, already defined by the token).
+(
+  id: "emrakuls_hatcher",
+  name: "Emrakul's Hatcher",
+  face_id: "emrakuls_hatcher",
+  mana_cost: "{4}{R}",
+  types: ["Creature", "Eldrazi", "Drone"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "eldrazi_spawn_c_0_1", count: 3)],
+  )],
+)
