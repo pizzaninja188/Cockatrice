@@ -1,0 +1,20 @@
+// Oracle 35023c04-ae62-47bf-80a0-faa2d7a67788; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (entry trigger), 115.1 (target), 611.2c/613.4c (until-end-of-turn
+// pump) and 514.2 (cleanup). No pinned ruling.
+(
+  id: "haazda_officer",
+  name: "Haazda Officer",
+  face_id: "haazda_officer",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [PumpTarget(power: 1, toughness: 1, subject: Chosen((kind: Creature, controller: You)))],
+    targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature you control", effect_indices: [0])])),
+  )],
+)

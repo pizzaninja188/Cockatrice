@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "35023c04-ae62-47bf-80a0-faa2d7a67788",
+  "spans": [
+    {
+      "face_id": "haazda_officer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q50_cohorts_batch::q50_etb_pump_canary_simplest_haazda_officer_pumps",
+      "covers": "canary simplest pumps a creature"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_etb_pump_cards_target_only_your_creatures_and_expire",
+      "covers": "actual card pumps only a creature you control and expires at cleanup"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_etb_triggered_cards_fizzle_stale_targets",
+      "covers": "actual card fizzles when its chosen target left"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_etb_pump_maps_definitions",
+      "covers": "reviewed pump creature identity and trigger"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Haazda Officer"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
