@@ -142,6 +142,7 @@ archweaver	0	cast	exercised
 arctic_flats	0	ability:0	exercised
 arctic_flats	0	land	exercised
 ardent_militia	0	cast	exercised
+argivian_find	0	cast	unsupported: target group 0 needs a richer fixture
 argothian_enchantress	0	cast	exercised
 argothian_sprite	0	ability:0	exercised
 argothian_sprite	0	cast	exercised
@@ -355,6 +356,7 @@ blossoming_sands	0	ability:0	exercised
 blossoming_sands	0	land	exercised
 boar-q-pine	0	cast	exercised
 bog_imp	0	cast	exercised
+boggart_birth_rite	0	cast	unsupported: target group 0 needs a richer fixture
 boggart_brute	0	cast	exercised
 boggart_cursecrafter	0	cast	exercised
 boggart_prankster	0	cast	exercised
@@ -826,6 +828,7 @@ defiant_khenra	0	cast	exercised
 defibrillating_current	0	cast	exercised
 deft_duelist	0	cast	exercised
 deglamer	0	cast	exercised
+deja_vu	0	cast	unsupported: target group 0 needs a richer fixture
 delta_bloodflies	0	cast	exercised
 demand_answers	0	cast	unsupported: required cast-cost group needs a specialized fixture
 demolition_field	0	ability:0	exercised
