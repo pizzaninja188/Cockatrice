@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "2d4aedc5-31c5-4281-98e1-b0c2233c3c8a",
+  "spans": [
+    {
+      "face_id": "artifact_blast",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q48_cohorts_batch::q48_typed_counters_canary_simplest_counters_an_artifact_spell",
+      "covers": "canary simplest counters an artifact spell"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_typed_counters_canary_hardest_requires_blue_instant_for_hybrid",
+      "covers": "canary hardest pays the hybrid cost and rejects a sorcery"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_typed_counters_cards_counter_their_printed_filter",
+      "covers": "every actual card counters its printed filter and rejects others"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_typed_counters_maps_definitions",
+      "covers": "reviewed identity and stack spell filter"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Artifact Blast"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
