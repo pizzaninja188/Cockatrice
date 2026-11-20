@@ -1,0 +1,15 @@
+// Oracle 7408b9c5-7266-4627-be4e-b691cf5c622c; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1 (one graveyard-card target), 400.7 (the returned card is a new object),
+// 404.1 (graveyard ownership) and 608.2b (a stale sole target fizzles). No pinned ruling.
+(
+  id: "deja_vu",
+  name: "Déjà Vu",
+  face_id: "deja_vu",
+  mana_cost: "{2}{U}",
+  types: ["Sorcery"],
+  spell_effect: [MoveGraveyardCards(
+    filter: (card: Some((card_type: Some(Sorcery)))),
+    destination: Hand,
+  )],
+)

@@ -1,0 +1,18 @@
+// Oracle 0b6c74a7-d7d3-4c05-84b1-bcb580bb476f; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1 (one graveyard-card target), 400.7 (the returned card is a new object),
+// 404.1 (graveyard ownership) and 608.2b (a stale sole target fizzles). No pinned ruling.
+(
+  id: "argivian_find",
+  name: "Argivian Find",
+  face_id: "argivian_find",
+  mana_cost: "{W}",
+  types: ["Instant"],
+  spell_effect: [MoveGraveyardCards(
+    filter: (card: Some((any_of: Some([
+      (card_type: Some(Artifact)),
+      (card_type: Some(Enchantment)),
+    ])))),
+    destination: Hand,
+  )],
+)
