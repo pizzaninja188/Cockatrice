@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "ad8edfdf-6915-4fc2-9226-3aae95951935",
+  "spans": [
+    {
+      "face_id": "epic_proportions",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "epic_proportions",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "epic_proportions",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/static_abilities/0/definition/AttachedModifier/keywords"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q49_batch_b::q49_flash_aura_cards_apply_their_printed_pump_and_keyword",
+      "covers": "every actual card applies its printed pump and trample grant to the enchanted creature only"
+    },
+    {
+      "test": "scenario q49_batch_b::q49_flash_aura_spell_shape_rejects_noncreature_targets_and_fizzles_on_stale_target",
+      "covers": "the Aura rejects a noncreature target and fizzles when its target leaves"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_b::q49_flash_aura_maps_definitions",
+      "covers": "reviewed Aura identity, flash, pump values and trample grant"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_b::q49_batch_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Epic Proportions"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
