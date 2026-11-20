@@ -1,0 +1,15 @@
+// Oracle 9ae1fded-2e77-498a-98e7-4a4908447175; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.22a-b (scry), 121.2 (draw) and 205.3 (Lesson is a spell subtype with no special
+// rules). Pinned rulings: Lesson cards are main-deck cards and the subtype has no effect.
+(
+  id: "introduction_to_prophecy",
+  name: "Introduction to Prophecy",
+  face_id: "introduction_to_prophecy",
+  mana_cost: "{3}",
+  types: ["Sorcery", "Lesson"],
+  spell_program: Some((body: (steps: [
+    (id: "scry", kind: Perform(Scry(count: 2))),
+    (id: "draw", kind: Perform(Draw(count: 1))),
+  ]))),
+)
