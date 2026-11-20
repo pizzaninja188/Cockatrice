@@ -1,0 +1,21 @@
+// Oracle 6e072b3a-7a83-4d77-bae3-72de0e646b81; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 400.3 (owner's zone) and 608.2b (departed target fizzles).
+// No pinned ruling.
+(
+  id: "repel",
+  name: "Repel",
+  face_id: "repel",
+  mana_cost: "{3}{U}",
+  types: ["Instant"],
+  spell_program: Some((
+    body: (steps: [
+      (id: "put_in_owners_library",
+        kind: Perform(PutInOwnersLibrary(
+          subject: Chosen((kind: Creature)), placement: Top,
+        ))),
+    ]),
+    target_bindings: [(instruction_id: "put_in_owners_library", role: Subject, target_group_index: 0)],
+  )),
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [])])),
+)

@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "6e072b3a-7a83-4d77-bae3-72de0e646b81",
+  "spans": [
+    {
+      "face_id": "repel",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_program",
+        "/faces/0/targeting/groups/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PutInOwnersLibrary",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/PutInOwnersLibrary"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting/groups/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q50_cohorts_batch::q50_put_top_canary_simplest_repel_puts_the_target_on_top",
+      "covers": "canary simplest puts a creature on top"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_put_top_cards_put_only_their_matching_permanents_on_top",
+      "covers": "actual card accepts only its printed target types and moves the permanent to the top"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_put_top_cards_fizzle_when_the_target_leaves",
+      "covers": "actual card fizzles when its target left before resolution"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_put_top_maps_definitions",
+      "covers": "reviewed placement spell identity and target filter"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Repel"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

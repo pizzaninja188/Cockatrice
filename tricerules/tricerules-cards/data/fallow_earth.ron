@@ -1,0 +1,22 @@
+// Oracle 05a4acfd-3bf3-4ec2-a28a-bc43ba7c6fbf; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 400.3 (owner's zone) and 608.2b (departed target fizzles).
+// No pinned ruling.
+(
+  id: "fallow_earth",
+  name: "Fallow Earth",
+  face_id: "fallow_earth",
+  mana_cost: "{2}{G}",
+  types: ["Sorcery"],
+  spell_program: Some((
+    body: (steps: [
+      (id: "put_in_owners_library",
+        kind: Perform(PutInOwnersLibrary(
+          subject: Chosen((kind: AnyPermanent, permanent_types: [Land])),
+          placement: Top,
+        ))),
+    ]),
+    target_bindings: [(instruction_id: "put_in_owners_library", role: Subject, target_group_index: 0)],
+  )),
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [])])),
+)

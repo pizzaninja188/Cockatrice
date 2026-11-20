@@ -1,0 +1,23 @@
+// Oracle 0d96e4bc-ff4e-4f37-89b6-8a4e3c1069a0; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 400.3 (owner's zone), 608.2b (departed target fizzles) and 702.34a-d
+// (flashback alternative cost and exile). Pinned rulings: flashback still follows timing permissions and a spell cast
+// with flashback is exiled instead of going anywhere else when it leaves the stack.
+(
+  id: "grasp_of_phantoms",
+  name: "Grasp of Phantoms",
+  face_id: "grasp_of_phantoms",
+  mana_cost: "{3}{U}",
+  flashback_cost: Some("{7}{U}"),
+  types: ["Sorcery"],
+  spell_program: Some((
+    body: (steps: [
+      (id: "put_in_owners_library",
+        kind: Perform(PutInOwnersLibrary(
+          subject: Chosen((kind: Creature)), placement: Top,
+        ))),
+    ]),
+    target_bindings: [(instruction_id: "put_in_owners_library", role: Subject, target_group_index: 0)],
+  )),
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [])])),
+)
