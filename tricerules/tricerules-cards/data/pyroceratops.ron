@@ -1,0 +1,22 @@
+// Oracle b5306bf4-0cba-48dd-8af8-7c7821db7e02; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 601.2a (casting), 603.2 (cast trigger), 122.1a (+1/+1 counter), 613.4c (counter P/T)
+// and 702.19 (trample). Pinned ruling: the trigger resolves even if the spell is countered.
+(
+  id: "pyroceratops",
+  name: "Pyroceratops",
+  face_id: "pyroceratops",
+  mana_cost: "{3}{R}",
+  types: ["Creature", "Elemental", "Dinosaur"],
+  power: 2,
+  toughness: 3,
+  keywords: [Trample],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPlayerCastsSpell(
+      filter: (card_type: Some(Noncreature)),
+    ),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+  )],
+)

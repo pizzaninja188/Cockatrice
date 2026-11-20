@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "a9d8ab76-70a4-475e-b87e-4737c090553a",
+  "spans": [
+    {
+      "face_id": "sprite_dragon",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "sprite_dragon",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "Keyword::Haste",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPlayerCastsSpell",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q47_cohorts_batch::q47_noncreature_counter_canary_simplest_triggers_before_the_spell",
+      "covers": "canary simplest actual card triggers before the noncreature spell"
+    },
+    {
+      "test": "scenario q47_cohorts_batch::q47_noncreature_counter_canary_hardest_ignores_creature_spells",
+      "covers": "canary hardest ignores creature spells and keeps its keywords"
+    },
+    {
+      "test": "scenario q47_cohorts_batch::q47_noncreature_counter_cards_share_the_printed_shape",
+      "covers": "every actual card puts one +1/+1 counter on a noncreature cast"
+    },
+    {
+      "test": "mechanic_registry::q47_cohorts_batch::q47_noncreature_counter_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q47_cohorts_batch::q47_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
