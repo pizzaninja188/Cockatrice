@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "78cd6d20-033f-471f-a86e-59ec8307ae1f",
+  "spans": [
+    {
+      "face_id": "tunneling_geopede",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamagePlayer",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q49_batch_b::q49_landfall_cards_apply_their_printed_effect",
+      "covers": "every actual card applies its printed landfall effect to the printed scope"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_b::q49_landfall_maps_definitions",
+      "covers": "reviewed identity, landfall trigger and printed effect"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_b::q49_batch_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Tunneling Geopede"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "faaf9975-74df-4e9d-be0c-19a446cd507c",
+  "spans": [
+    {
+      "face_id": "baloth_woodcrasher",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q49_batch_b::q49_landfall_canary_hardest_baloth_woodcrasher_pumps_and_tramples",
+      "covers": "canary hardest pumps itself and grants trample until end of turn"
+    },
+    {
+      "test": "scenario q49_batch_b::q49_landfall_cards_apply_their_printed_effect",
+      "covers": "every actual card applies its printed landfall effect to the printed scope"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_b::q49_landfall_maps_definitions",
+      "covers": "reviewed identity, landfall trigger and printed effect"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_b::q49_batch_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Baloth Woodcrasher"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
