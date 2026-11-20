@@ -1,0 +1,35 @@
+// Oracle be6155de-c5b2-415c-ad83-142f9926462a; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853. Pinned rulings: recorded in the family packet
+// CR 603.2/603.4 (landfall trigger and may), 122.6 (quest counters), 118.12 and 701.21a
+// (remove three counters and sacrifice as costs), 701.23/701.24 (search and shuffle), 614.1c.
+(
+  id: "khalni_heart_expedition",
+  name: "Khalni Heart Expedition",
+  face_id: "khalni_heart_expedition",
+  mana_cost: "{1}{G}",
+  types: ["Enchantment"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Land)),
+    ),
+    may: true,
+    effect: [PutCounters(counter: Quest, count: 1, subject: Source)],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [RemoveCounters(counter: Some(Quest), count: 3), SacrificeSelf],
+    effect: [],
+    program: Some((body: (steps: [
+      (id: "search_lands", kind: Perform(SearchLibrary(
+        count: 2,
+        filter: Some((card_type: Some(BasicLand))),
+        destination: Battlefield(tapped: true),
+        selection_bounds: Some((min: 0, max: 2)),
+      ))),
+    ]))),
+  )],
+)

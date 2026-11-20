@@ -1,0 +1,17 @@
+// Oracle f6bd2902-7f8b-419e-bbc7-bcab0c1b7e01; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853. Pinned rulings: recorded in the family packet
+// CR 121.5 (not a draw), 401.4 (private look), 608.2c (selection) and 609.3
+// (the selected cards are put into hand).
+(
+  id: "impulse",
+  name: "Impulse",
+  face_id: "impulse",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  spell_program: Some((body: (steps: [
+    (id: "look", kind: Perform(LookChooseToHand(
+      count: 4, min: 1, max: 1,
+      reveal: false, bottom_order: Chosen,
+    ))),
+  ]))),
+)

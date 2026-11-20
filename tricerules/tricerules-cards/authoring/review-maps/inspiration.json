@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "8f32ceb2-92c2-4dde-bf73-40bb79c3fcef",
+  "spans": [
+    {
+      "face_id": "inspiration",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::TargetPlayerDraws",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q46_cohorts_batch::q46_target_player_draw_canary_simplest_fixed_two",
+      "covers": "canary simplest actual-card behavior"
+    },
+    {
+      "test": "scenario q46_cohorts_batch::q46_target_player_draw_canary_hardest_x_draws_the_announced_amount",
+      "covers": "canary hardest actual-card behavior"
+    },
+    {
+      "test": "mechanic_registry::q46_cohorts_batch::q46_target_player_draw_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q46_cohorts_batch::q46_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

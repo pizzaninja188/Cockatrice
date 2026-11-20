@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "a7865331-4c53-46db-b2d7-7e5cb21b6b9d",
+  "spans": [
+    {
+      "face_id": "frantic_inventory",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "CountExpression::GraveyardCards",
+      "typed_path": "/faces/0/spell_effect/1/Draw/count/Count/GraveyardCards"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q46_cohorts_batch::q46_graveyard_name_draw_canary_simplest_zero_in_graveyard",
+      "covers": "canary simplest actual-card behavior"
+    },
+    {
+      "test": "scenario q46_cohorts_batch::q46_graveyard_name_draw_canary_hardest_counts_all_graveyards",
+      "covers": "canary hardest actual-card behavior"
+    },
+    {
+      "test": "mechanic_registry::q46_cohorts_batch::q46_graveyard_name_draw_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q46_cohorts_batch::q46_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

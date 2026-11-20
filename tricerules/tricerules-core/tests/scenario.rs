@@ -2481,3 +2481,6 @@ mod q44_cohorts_batch;
 
 #[path = "scenario/q45_cohorts_batch.rs"]
 mod q45_cohorts_batch;
+
+#[path = "scenario/q46_cohorts_batch.rs"]
+mod q46_cohorts_batch;

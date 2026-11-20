@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "f6bd2902-7f8b-419e-bbc7-bcab0c1b7e01",
+  "spans": [
+    {
+      "face_id": "impulse",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0/kind/Perform/LookChooseToHand"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "InstructionKind::Perform",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind"
+    },
+    {
+      "symbol": "SpellEffectKind::LookChooseToHand",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q46_cohorts_batch::q46_impulse_look_canary_simplest_anticipate",
+      "covers": "canary simplest actual-card behavior"
+    },
+    {
+      "test": "scenario q46_cohorts_batch::q46_impulse_look_canary_hardest_stock_up_puts_two",
+      "covers": "canary hardest actual-card behavior"
+    },
+    {
+      "test": "mechanic_registry::q46_cohorts_batch::q46_impulse_look_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q46_cohorts_batch::q46_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

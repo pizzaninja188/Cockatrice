@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "be6155de-c5b2-415c-ad83-142f9926462a",
+  "spans": [
+    {
+      "face_id": "khalni_heart_expedition",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "khalni_heart_expedition",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::RemoveCounters",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "InstructionKind::Perform",
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/0/kind"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/0/kind/Perform"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q46_cohorts_batch::q46_quest_cycle_cards_use_their_printed_payoffs",
+      "covers": "printed payoff for each quest expedition, including the up-to-two basic search"
+    },
+    {
+      "test": "scenario q46_cohorts_batch::q46_quest_cycle_landfall_puts_a_quest_counter",
+      "covers": "landfall may put a quest counter"
+    },
+    {
+      "test": "mechanic_registry::q46_cohorts_batch::q46_quest_cycle_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q46_cohorts_batch::q46_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,33 @@
+// Oracle 4c502f1b-7361-48c0-8def-0d3b3e9ff628; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853. Pinned rulings: recorded in the family packet
+// CR 603.6a (ETB trigger), 603.3d/608.2c (stack and resolution order), 115.1/608.2b
+// (target), 611.3 and 502.3 (skips the next untap step), and 614.1d/614.12 (enters tapped).
+(
+  id: "stitched_mangler",
+  name: "Stitched Mangler",
+  face_id: "stitched_mangler",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Zombie", "Horror"],
+  power: 2,
+  toughness: 3,
+  static_abilities: [(
+    ability_id: "enters_tapped",
+    presentation: OracleLines([1]),
+    definition: EntersTapped(affected: Self_),
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      Tap(subject: Chosen((kind: Creature, controller: Opponent))),
+      SkipNextUntap(target: (kind: Creature, controller: Opponent)),
+    ],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature an opponent controls",
+      effect_indices: [0, 1],
+    )])),
+  )],
+)

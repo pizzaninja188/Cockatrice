@@ -1,0 +1,17 @@
+// Oracle 2251e34e-4ce8-4452-9dc6-d8cce8583996; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853. Pinned rulings: recorded in the family packet
+// CR 121.5 (not a draw), 401.4 (private look), 608.2c (selection) and 609.3
+// (the selected cards are put into hand).
+(
+  id: "stock_up",
+  name: "Stock Up",
+  face_id: "stock_up",
+  mana_cost: "{2}{U}",
+  types: ["Sorcery"],
+  spell_program: Some((body: (steps: [
+    (id: "look", kind: Perform(LookChooseToHand(
+      count: 5, min: 2, max: 2,
+      reveal: false, bottom_order: Chosen,
+    ))),
+  ]))),
+)
