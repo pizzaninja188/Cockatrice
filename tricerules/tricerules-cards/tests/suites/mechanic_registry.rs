@@ -1300,3 +1300,6 @@ mod q49_cohorts_batch;
 
 #[path = "../q49_batch_b.rs"]
 mod q49_batch_b;
+
+#[path = "../q49_batch_c.rs"]
+mod q49_batch_c;
