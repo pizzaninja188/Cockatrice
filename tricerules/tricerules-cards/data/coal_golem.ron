@@ -1,0 +1,19 @@
+// Oracle 64b63847-27dd-469b-aad3-58e061f92817; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 605.1a/605.3a-b (mana ability), 118.3/701.21a (mana and sacrifice
+// costs) and 106.1a-b (three red mana). No pinned ruling.
+(
+  id: "coal_golem",
+  name: "Coal Golem",
+  face_id: "coal_golem",
+  mana_cost: "{5}",
+  types: ["Artifact", "Creature", "Golem"],
+  power: 3,
+  toughness: 3,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{3}"), SacrificeSelf],
+    effect: [ProduceMana(options: [(r: 3)])],
+  )],
+)

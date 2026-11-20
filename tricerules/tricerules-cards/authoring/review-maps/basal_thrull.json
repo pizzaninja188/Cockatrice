@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "9da50130-3f83-4968-983c-7dcba257cf1b",
+  "spans": [
+    {
+      "face_id": "basal_thrull",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q49_batch_c::q49_sacrifice_mana_cards_produce_their_printed_mana",
+      "covers": "every actual card pays its printed costs, is sacrificed and produces its printed mana"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_c::q49_sacrifice_mana_maps_definitions",
+      "covers": "reviewed identity, ability costs and mana output"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_c::q49_batch_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Basal Thrull"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

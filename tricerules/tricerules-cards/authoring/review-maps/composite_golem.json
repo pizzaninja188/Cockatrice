@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "784970de-ef8c-4672-b5d0-24a4b0a978a3",
+  "spans": [
+    {
+      "face_id": "composite_golem",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q49_batch_c::q49_sacrifice_mana_cards_produce_their_printed_mana",
+      "covers": "every actual card pays its printed costs, is sacrificed and produces its printed mana"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_c::q49_sacrifice_mana_maps_definitions",
+      "covers": "reviewed identity, ability costs and mana output"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_c::q49_batch_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Composite Golem"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
