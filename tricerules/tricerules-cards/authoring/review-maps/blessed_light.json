@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "918b3860-e96c-45b5-b0e6-e82cad9f304d",
+  "spans": [
+    {
+      "face_id": "blessed_light",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_b::q54_canary_simplest_blessed_light_exiles_a_creature",
+      "covers": "actual Blessed Light pays {4}{W} and exiles a chosen creature"
+    },
+    {
+      "test": "scenario q54_batch_b::q54_white_exile_cards_reach_their_printed_targets",
+      "covers": "actual Blessed Light exiles a chosen creature or enchantment as printed"
+    },
+    {
+      "test": "scenario q54_batch_b::q54_blessed_light_rejects_an_artifact_target",
+      "covers": "actual Blessed Light rejects an artifact target and keeps the card and mana"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_b::q54_white_exile_spells_map_definitions",
+      "covers": "shared registry identity for the four white exile definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_b::q54_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Blessed Light"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

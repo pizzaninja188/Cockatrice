@@ -1,0 +1,23 @@
+// Oracle cb5de977-d420-41cc-85f0-6ffee8bbeff1; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (entry trigger), 701.8 (destroy) and 608.2b (stale target). The trigger
+// is optional, so a player may decline even when an artifact or enchantment exists.
+(
+  id: "conclave_naturalists",
+  name: "Conclave Naturalists",
+  face_id: "conclave_naturalists",
+  mana_cost: "{4}{G}",
+  types: ["Creature", "Dryad"],
+  power: 4,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact, Enchantment])))],
+    targeting: Some((
+      groups: [(min: 1, max: 1, prompt: "Choose target artifact or enchantment", effect_indices: [0])],
+    )),
+    may: true,
+  )],
+)

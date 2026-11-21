@@ -1,0 +1,19 @@
+// Oracle c756d786-9aff-4d2e-9c06-6ae01d5fca2e; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 (activation and printed hybrid cost), 611.2a (the grant ends at
+// cleanup), 514.2 and 702.2 (deathtouch).
+(
+  id: "riveteers_initiate",
+  name: "Riveteers Initiate",
+  face_id: "riveteers_initiate",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Lizard", "Citizen"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{1}{B/G}")],
+    effect: [GrantKeywords(subject: Source, keywords: [Deathtouch])],
+  )],
+)

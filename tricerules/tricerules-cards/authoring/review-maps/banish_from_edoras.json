@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "e4508afd-7cc3-4176-8291-cfc2c155ac11",
+  "spans": [
+    {
+      "face_id": "banish_from_edoras",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/cost_modifiers/0",
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellCostModifier::TargetMatchGenericReduction",
+      "typed_path": "/faces/0/cost_modifiers/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_b::q54_canary_hardest_banish_from_edoras_discounts_a_tapped_target",
+      "covers": "actual Banish from Edoras applies the {2} reduction only to a tapped target"
+    },
+    {
+      "test": "scenario q54_batch_b::q54_white_exile_cards_require_the_full_cost_for_an_untapped_target",
+      "covers": "actual Banish from Edoras rejects the discounted payment for an untapped target, then casts and exiles at full cost"
+    },
+    {
+      "test": "scenario q54_batch_b::q54_banish_from_edoras_fizzles_when_its_target_left",
+      "covers": "actual Banish from Edoras fizzles when its targeted creature left before resolution"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_b::q54_white_exile_spells_map_definitions",
+      "covers": "shared registry identity for the four white exile definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_b::q54_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Banish from Edoras"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

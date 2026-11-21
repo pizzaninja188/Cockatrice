@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "5d604aff-ba60-4064-b025-b1f3d1c0254e",
+  "spans": [
+    {
+      "face_id": "weldfast_monitor",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_b::q54_canary_simplest_weldfast_monitor_gains_menace_for_red",
+      "covers": "actual Weldfast Monitor pays {R}, gains menace, and loses the grant at cleanup"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_b::q54_keyword_grant_activated_cards_map_definitions",
+      "covers": "shared registry identity for the three keyword-grant definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_b::q54_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Weldfast Monitor"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

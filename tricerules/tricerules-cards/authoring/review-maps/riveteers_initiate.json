@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "c756d786-9aff-4d2e-9c06-6ae01d5fca2e",
+  "spans": [
+    {
+      "face_id": "riveteers_initiate",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_b::q54_canary_hardest_riveteers_initiate_pays_either_hybrid_half",
+      "covers": "actual Riveteers Initiate pays either the black or green half of its hybrid cost and gains deathtouch"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_b::q54_keyword_grant_activated_cards_map_definitions",
+      "covers": "shared registry identity for the three keyword-grant definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_b::q54_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Riveteers Initiate"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

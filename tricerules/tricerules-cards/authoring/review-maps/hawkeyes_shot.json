@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "6bbd1316-02d3-46ab-ba1a-0ecab51ec4c4",
+  "spans": [
+    {
+      "face_id": "hawkeyes_shot",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/cost_modifiers/0",
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellCostModifier::TargetMatchGenericReduction",
+      "typed_path": "/faces/0/cost_modifiers/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_b::q54_white_exile_cards_reach_their_printed_targets",
+      "covers": "actual Hawkeye's Shot applies its {2} tapped-target reduction and exiles the creature"
+    },
+    {
+      "test": "scenario q54_batch_b::q54_white_exile_cards_require_the_full_cost_for_an_untapped_target",
+      "covers": "actual Hawkeye's Shot rejects the discounted payment for an untapped target, then casts and exiles at full cost"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_b::q54_white_exile_spells_map_definitions",
+      "covers": "shared registry identity for the four white exile definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_b::q54_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Hawkeye's Shot"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,15 @@
+// Oracle 6bbd1316-02d3-46ab-ba1a-0ecab51ec4c4; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 601.2f (cost modifier checks the chosen target), 115.1/601.2c (one creature
+// target) and 406.2/701.13 (exile).
+(
+  id: "hawkeyes_shot",
+  name: "Hawkeye's Shot",
+  face_id: "hawkeyes_shot",
+  mana_cost: "{4}{W}",
+  types: ["Sorcery"],
+  cost_modifiers: [
+    TargetMatchGenericReduction(amount: 2, filter: Battlefield((kind: Creature, tapped: Some(true)))),
+  ],
+  spell_effect: [Exile(linked_exile_id: None)],
+)

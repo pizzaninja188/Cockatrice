@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "97818ed4-3590-4a3b-92ce-716f9cfdc78e",
+  "spans": [
+    {
+      "face_id": "sylvok_replica",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_b::q54_sylvok_replica_destroys_an_enchantment_for_green",
+      "covers": "actual Sylvok Replica pays {G} and sacrifices itself to destroy a chosen enchantment"
+    },
+    {
+      "test": "scenario q54_batch_b::q54_artifact_enchantment_effects_reject_a_creature_target",
+      "covers": "actual Sylvok Replica rejects a creature target and keeps its mana and body"
+    },
+    {
+      "test": "scenario q54_batch_b::q54_sylvok_replica_fizzles_when_its_target_left",
+      "covers": "actual Sylvok Replica fizzles when its chosen artifact creature left before resolution"
+    },
+    {
+      "test": "scenario q54_batch_b::q54_sylvok_replica_may_target_itself_and_then_fizzles",
+      "covers": "actual Sylvok Replica may target itself; the sacrifice cost leaves the target illegal and the ability fizzles"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_b::q54_artifact_enchantment_destruction_cards_map_definitions",
+      "covers": "shared registry identity for the three artifact/enchantment destruction definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_b::q54_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Sylvok Replica"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
