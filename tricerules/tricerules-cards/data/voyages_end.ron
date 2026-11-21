@@ -1,0 +1,21 @@
+// Oracle 1c2829b7-f73f-4023-95f3-9cd40b4125d7; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1/601.2c (one creature target), 400.3 (the card moves to its owner's hand),
+// 701.22 (scry) and 608.2b (the pinned ruling confirms an illegal target means no scry).
+(
+  id: "voyages_end",
+  name: "Voyage's End",
+  face_id: "voyages_end",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    ReturnToOwnersHand(subject: Chosen((kind: Creature))),
+    Scry(count: 1),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature",
+    effect_indices: [0],
+  )])),
+)

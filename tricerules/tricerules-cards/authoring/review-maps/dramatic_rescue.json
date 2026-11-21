@@ -1,0 +1,50 @@
+{
+  "format_version": 1,
+  "oracle_id": "a5386844-ea24-48ee-9337-ae10bcfddfb9",
+  "spans": [
+    {
+      "face_id": "dramatic_rescue",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_a::q55_a_bounce_riders_resolve_in_printed_order",
+      "covers": "actual Dramatic Rescue returns the target and gains its controller 2 life"
+    },
+    {
+      "test": "scenario q55_batch_a::q55_a_bounce_riders_fizzle_with_the_stale_target",
+      "covers": "actual Dramatic Rescue fizzles without gaining life when its only target left"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_bounce_riders_map_definitions",
+      "covers": "shared registry identity for the bounce-with-rider spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Dramatic Rescue"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,50 @@
+{
+  "format_version": 1,
+  "oracle_id": "c57907d1-c5a1-45c7-80a8-38fedf86dd19",
+  "spans": [
+    {
+      "face_id": "volt_charge",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Proliferate",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_a::q55_a_volt_charge_damages_then_proliferates_chosen_counters",
+      "covers": "actual Volt Charge deals 3 damage then proliferates the chosen creature and player counters"
+    },
+    {
+      "test": "scenario q55_batch_a::q55_a_volt_charge_and_dark_nourishment_fizzle_stale_targets_without_riders",
+      "covers": "actual Volt Charge fizzles without proliferating when its only target left"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_damage_any_target_riders_map_definitions",
+      "covers": "shared registry identity for the any-target damage-with-rider spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Volt Charge"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "1f300320-ad98-4812-b34b-54885a86aee9",
+  "spans": [
+    {
+      "face_id": "ember_shot",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_a::q55_a_damage_any_target_riders_apply_their_printed_effects",
+      "covers": "actual Ember Shot deals 3 damage to the chosen player and draws one card"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_damage_any_target_riders_map_definitions",
+      "covers": "shared registry identity for the any-target damage-with-rider spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Ember Shot"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

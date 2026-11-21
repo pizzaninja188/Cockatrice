@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "c37f1921-7ac3-4185-8579-1dfdfe647ea2",
+  "spans": [
+    {
+      "face_id": "spark_spray",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting",
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_a::q55_a_spark_spray_deals_one_and_cycles_for_red",
+      "covers": "actual Spark Spray deals 1 damage and cycles itself for {R} to draw one card"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_damage_any_target_riders_map_definitions",
+      "covers": "shared registry identity for the any-target damage-with-rider spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Spark Spray"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

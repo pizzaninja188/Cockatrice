@@ -1,0 +1,20 @@
+// Oracle 1f570526-7fb0-4fe5-8014-b5793eb65f87; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1/601.2c (one creature-or-planeswalker target), 120.3 (damage) and 608.2b (stale target). No pinned ruling.
+(
+  id: "strangle",
+  name: "Strangle",
+  face_id: "strangle",
+  mana_cost: "{R}",
+  types: ["Sorcery"],
+  spell_effect: [DamageTarget(amount: 3, target: (any_of: Some([
+    (kind: Creature),
+    (kind: AnyPermanent, permanent_types: [Planeswalker]),
+  ])))],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature or planeswalker",
+    effect_indices: [0],
+  )])),
+)

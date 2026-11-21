@@ -1,0 +1,50 @@
+{
+  "format_version": 1,
+  "oracle_id": "56115482-3fd4-45fb-b800-be68c5509cf2",
+  "spans": [
+    {
+      "face_id": "zap",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_a::q55_a_canary_simplest_zap_damages_a_player_and_draws",
+      "covers": "actual Zap deals exactly 1 damage to a player and draws its controller one card"
+    },
+    {
+      "test": "scenario q55_batch_a::q55_a_damage_any_target_riders_apply_their_printed_effects",
+      "covers": "actual Zap's damage and draw riders match the printed values"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_damage_any_target_riders_map_definitions",
+      "covers": "shared registry identity for the any-target damage-with-rider spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Zap"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
