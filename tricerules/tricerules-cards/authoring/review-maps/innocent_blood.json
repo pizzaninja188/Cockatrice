@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "6791ec3c-c397-4087-8c8c-84d3797df415",
+  "spans": [
+    {
+      "face_id": "innocent_blood",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ChooseAndSacrifice",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_c::q54_canary_simplest_innocent_blood_makes_each_player_sacrifice",
+      "covers": "actual Innocent Blood makes each player choose and sacrifice one creature simultaneously"
+    },
+    {
+      "test": "scenario q54_batch_c::q54_innocent_blood_with_no_creatures_resolves_without_choices",
+      "covers": "actual Innocent Blood resolves without a choice when no creatures exist"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_c::q54_each_player_sacrifices_cards_map_definitions",
+      "covers": "shared registry identity for the three edict definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_c::q54_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Innocent Blood"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "7346337e-ac12-4dd2-826d-77ec0013e74f",
+  "spans": [
+    {
+      "face_id": "spatial_contortion",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/mana_cost"
+      ]
+    },
+    {
+      "face_id": "spatial_contortion",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_c::q54_canary_simplest_spatial_contortion_three_minus_three_kills_a_bear",
+      "covers": "actual Spatial Contortion's +3/-3 kills a 2/2 through state-based actions"
+    },
+    {
+      "test": "scenario q54_batch_c::q54_spatial_contortion_rejects_a_player_target",
+      "covers": "actual Spatial Contortion rejects a player target and keeps its mana"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_c::q54_pump_spell_riders_map_definitions",
+      "covers": "shared registry identity for the three pump-with-rider definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_c::q54_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Spatial Contortion"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "d5a33091-a348-4b13-8dbd-79ab0ad99afe",
+  "spans": [
+    {
+      "face_id": "demons_disciple",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseAndSacrifice",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_c::q54_canary_hardest_demons_disciple_can_sacrifice_itself",
+      "covers": "actual Demon's Disciple's entry trigger may sacrifice the source itself"
+    },
+    {
+      "test": "scenario q54_batch_c::q54_demons_disciple_can_sacrifice_a_planeswalker",
+      "covers": "actual Demon's Disciple's entry trigger accepts a planeswalker as the opponent's sacrifice choice"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_c::q54_each_player_sacrifices_cards_map_definitions",
+      "covers": "shared registry identity for the three edict definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_c::q54_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Demon's Disciple"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

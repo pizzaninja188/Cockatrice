@@ -1,0 +1,12 @@
+// Oracle 6791ec3c-c397-4087-8c8c-84d3797df415; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 101.4/101.4b (each player chooses) and 701.21a (simultaneous sacrifice). The
+// effect is not targeted, and the caster chooses too.
+(
+  id: "innocent_blood",
+  name: "Innocent Blood",
+  face_id: "innocent_blood",
+  mana_cost: "{B}",
+  types: ["Sorcery"],
+  spell_effect: [ChooseAndSacrifice(players: EachPlayer, count: 1, filter: (kind: Creature))],
+)

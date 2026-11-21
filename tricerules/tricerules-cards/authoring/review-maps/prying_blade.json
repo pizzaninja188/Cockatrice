@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "5fe86083-1009-4de2-b186-f817ad1cc4e4",
+  "spans": [
+    {
+      "face_id": "prying_blade",
+      "start_line": 1,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/static_abilities/0",
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverAttachedObjectDealsCombatDamageToPlayer",
+      "typed_path": "/faces/0/triggered_abilities/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Equip",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_c::q54_canary_hardest_prying_blade_makes_a_treasure_on_combat_damage",
+      "covers": "actual Prying Blade gives +1/+0 and creates one Treasure under the Equipment controller after equipped combat damage"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_c::q54_equipment_pump_cards_map_definitions",
+      "covers": "shared registry identity for the three Equipment definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_c::q54_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Prying Blade"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

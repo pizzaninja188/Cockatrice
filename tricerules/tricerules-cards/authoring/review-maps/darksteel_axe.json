@@ -1,0 +1,58 @@
+{
+  "format_version": 1,
+  "oracle_id": "3b7ea3ac-ac0a-40aa-b743-d153e1c47d8c",
+  "spans": [
+    {
+      "face_id": "darksteel_axe",
+      "start_line": 1,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/keywords",
+        "/faces/0/static_abilities/0",
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Indestructible",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Equip",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_c::q54_canary_simplest_darksteel_axe_equips_for_two_and_pumps_two",
+      "covers": "actual Darksteel Axe pays {2}, gives the equipped creature +2/+0, and is the only indestructible object"
+    },
+    {
+      "test": "scenario q54_batch_c::q54_equipment_rejects_an_opponents_creature",
+      "covers": "actual Darksteel Axe rejects an opponent's creature and keeps its mana"
+    },
+    {
+      "test": "scenario q54_batch_c::q54_equipment_fizzles_when_the_equip_target_left",
+      "covers": "actual Darksteel Axe's equip fizzles when the target left and remains unattached"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_c::q54_equipment_pump_cards_map_definitions",
+      "covers": "shared registry identity for the three Equipment definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_c::q54_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Darksteel Axe"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

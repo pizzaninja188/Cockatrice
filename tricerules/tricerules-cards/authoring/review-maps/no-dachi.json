@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "417312f8-16ca-47a7-b991-906788691700",
+  "spans": [
+    {
+      "face_id": "no_dachi",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0",
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Equip",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_c::q54_no_dachi_grants_two_power_and_first_strike_for_three",
+      "covers": "actual No-Dachi pays {3} and gives the equipped creature +2/+0 and first strike"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_c::q54_equipment_pump_cards_map_definitions",
+      "covers": "shared registry identity for the three Equipment definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_c::q54_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for No-Dachi"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

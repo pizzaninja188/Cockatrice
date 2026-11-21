@@ -1,0 +1,15 @@
+// Oracle 19963c90-e7b2-4935-adcd-d41f0faf401a; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 611.2a/613.4c (layer-7c pump until cleanup, 514.2), 115.1/601.2c (one
+// creature target) and 111.10f (Clue token creation, not investigate).
+(
+  id: "sokkas_sword_training",
+  name: "Sokka's Sword Training",
+  face_id: "sokkas_sword_training",
+  mana_cost: "{1}{W}",
+  types: ["Instant", "Lesson"],
+  spell_effect: [
+    PumpTarget(power: 2, toughness: 2),
+    CreateTokens(token: "clue", count: 1),
+  ],
+)

@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "dc0decb9-32da-47aa-a51a-0d9c623c534a",
+  "spans": [
+    {
+      "face_id": "iron_will",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_c::q54_iron_will_pumps_zero_four_and_cycles_for_two",
+      "covers": "actual Iron Will gives +0/+4 and cycles for {2} to draw one card"
+    },
+    {
+      "test": "scenario q54_batch_c::q54_iron_will_pump_expires_at_cleanup",
+      "covers": "actual Iron Will's toughness pump expires during cleanup"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_c::q54_pump_spell_riders_map_definitions",
+      "covers": "shared registry identity for the three pump-with-rider definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_c::q54_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Iron Will"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

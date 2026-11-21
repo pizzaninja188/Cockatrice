@@ -1760,6 +1760,8 @@ iron_giant	0	cast	exercised
 iron_myr	0	ability:0	exercised
 iron_myr	0	cast	exercised
 iron_tusk_elephant	0	cast	exercised
+iron_will	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
+iron_will	0	cast	exercised
 ironclad_krovod	0	cast	exercised
 ironpaw_aspirant	0	cast	exercised
 ironroot_treefolk	0	cast	exercised

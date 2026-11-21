@@ -1,0 +1,23 @@
+// Oracle 3b7ea3ac-ac0a-40aa-b743-d153e1c47d8c; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 301.5/702.6 (Equipment and equip), 702.12 (indestructible on the Equipment
+// only), 613.4c (layer-7c attached modifier) and 702.6a (equip timing).
+(
+  id: "darksteel_axe",
+  name: "Darksteel Axe",
+  face_id: "darksteel_axe",
+  mana_cost: "{1}",
+  types: ["Artifact", "Equipment"],
+  keywords: [Indestructible],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: AttachedModifier(delta_power: 2),
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
+    costs: [Mana("{2}")],
+    effect: [Equip()],
+  )],
+)
