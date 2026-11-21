@@ -143,6 +143,7 @@ arctic_flats	0	ability:0	exercised
 arctic_flats	0	land	exercised
 ardent_militia	0	cast	exercised
 argivian_find	0	cast	unsupported: target group 0 needs a richer fixture
+argivian_restoration	0	cast	unsupported: target group 0 needs a richer fixture
 argothian_enchantress	0	cast	exercised
 argothian_sprite	0	ability:0	exercised
 argothian_sprite	0	cast	exercised
@@ -1415,6 +1416,7 @@ gnarlbark_elm	0	cast	exercised
 gnarled_mass	0	cast	exercised
 gnarlid_colony	0	cast	exercised
 gnottvold_recluse	0	cast	exercised
+go_for_blood	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 go_for_the_throat	0	cast	exercised
 go_nuts!	0	cast	exercised
 goblin-town_flunkies	0	cast	exercised
@@ -2667,6 +2669,7 @@ redcap_thief	0	cast	exercised
 redrock_sentinel	0	ability:0	exercised
 redrock_sentinel	0	cast	exercised
 redwood_treefolk	0	cast	exercised
+refurbish	0	cast	unsupported: target group 0 needs a richer fixture
 refute	0	cast	unsupported: target group 0 needs a richer fixture
 regal_unicorn	0	cast	exercised
 regathan_firecat	0	cast	exercised
