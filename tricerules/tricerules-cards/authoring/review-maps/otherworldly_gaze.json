@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "be668c2d-71ea-4346-8980-1fbf5e4cbed3",
+  "spans": [
+    {
+      "face_id": "otherworldly_gaze",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::LibraryPartition",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardFace::flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_b::q55_b_otherworldly_gaze_surveils_three_and_flashes_back",
+      "covers": "actual Otherworldly Gaze surveils three, then flashes back from the graveyard and is exiled"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_b::q55_b_surveil_spells_map_definitions",
+      "covers": "shared registry identity for the surveil spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_b::q55_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Otherworldly Gaze"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

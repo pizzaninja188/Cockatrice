@@ -1,0 +1,15 @@
+// Oracle be668c2d-71ea-4346-8980-1fbf5e4cbed3; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.25 (surveil) and 702.34a-d (flashback alternative cost, exile after leaving the stack).
+// Pinned rulings cover the surveil choice, flashback timing, and the exile replacement.
+(
+  id: "otherworldly_gaze",
+  name: "Otherworldly Gaze",
+  face_id: "otherworldly_gaze",
+  mana_cost: "{U}",
+  types: ["Instant"],
+  flashback_cost: Some("{1}{U}"),
+  spell_effect: [
+    LibraryPartition(count: 3, top_min: 0, top_max: None, kind: Surveil),
+  ],
+)

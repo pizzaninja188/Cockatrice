@@ -1,0 +1,13 @@
+// Oracle d9c57520-9827-4b8b-8f81-43cca4227c60; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.25 (surveil) and 608.2c. No pinned ruling.
+(
+  id: "taigams_scheming",
+  name: "Taigam's Scheming",
+  face_id: "taigams_scheming",
+  mana_cost: "{1}{U}",
+  types: ["Sorcery"],
+  spell_effect: [
+    LibraryPartition(count: 5, top_min: 0, top_max: None, kind: Surveil),
+  ],
+)

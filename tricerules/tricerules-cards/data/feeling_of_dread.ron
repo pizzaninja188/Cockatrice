@@ -1,0 +1,14 @@
+// Oracle 269208e1-353c-4334-941a-2177f6665fba; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a/115.3 (up to two targets), 701.26 (tap), 702.34a-d (flashback) and 608.2b.
+// Pinned ruling: if one of two targets is illegal, the other creature is still tapped.
+(
+  id: "feeling_of_dread",
+  name: "Feeling of Dread",
+  face_id: "feeling_of_dread",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  flashback_cost: Some("{1}{U}"),
+  spell_effect: [Tap(subject: Chosen((kind: Creature)))],
+  targeting: Some((groups: [(min: 0, max: 2, effect_indices: [0])])),
+)

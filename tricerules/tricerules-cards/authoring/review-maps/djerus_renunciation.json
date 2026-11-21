@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "11b21086-0779-4d16-8a56-252c6bee9bed",
+  "spans": [
+    {
+      "face_id": "djerus_renunciation",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting",
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_b::q55_b_tap_two_spells_tap_each_chosen_creature_and_apply_their_riders",
+      "covers": "actual Djeru's Renunciation taps two chosen creatures and cycles for {W} to draw"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_b::q55_b_tap_two_riders_map_definitions",
+      "covers": "shared registry identity for the tap-two-with-rider spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_b::q55_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Djeru's Renunciation"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
