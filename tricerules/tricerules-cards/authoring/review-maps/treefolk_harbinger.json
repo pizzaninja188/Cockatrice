@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "98c387bd-c9ba-464a-8380-839a5604a37f",
+  "spans": [
+    {
+      "face_id": "treefolk_harbinger",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q51_cohorts_batch::q51_harbingers_canary_simplest_flamekin_finds_an_elemental",
+      "covers": "actual Harbinger finds its printed subtype and puts it on top"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_harbingers_canary_hardest_treefolk_accepts_both_branches",
+      "covers": "actual Treefolk Harbinger accepts Treefolk or Forest"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_harbingers_put_only_their_subtype_on_top",
+      "covers": "actual Harbinger rejects nonmatching cards and puts the choice on top"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_harbingers_reveal_shuffle_and_may_decline",
+      "covers": "actual Harbinger reveals, shuffles, and may decline"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_elvish_harbinger_taps_for_any_color",
+      "covers": "actual Elvish Harbinger taps for a chosen color"
+    },
+    {
+      "test": "mechanic_registry::q51_cohorts_batch::q51_subtype_harbingers_map_top_of_library_searches",
+      "covers": "reviewed identity and typed shape"
+    },
+    {
+      "test": "mechanic_registry::q51_cohorts_batch::q51_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
