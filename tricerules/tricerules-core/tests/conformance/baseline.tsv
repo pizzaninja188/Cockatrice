@@ -901,6 +901,7 @@ divert_disaster	0	cast	unsupported: target group 0 needs a richer fixture
 divination	0	cast	exercised
 divine_verdict	0	cast	unsupported: target group 0 needs a richer fixture
 diving_griffin	0	cast	exercised
+djerus_renunciation	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 djinn_of_the_lamp	0	cast	exercised
 doc_ock,_sinister_scientist	0	cast	exercised
 dockworker_drone	0	cast	exercised
@@ -1618,6 +1619,7 @@ hill_giant	0	cast	exercised
 hill_giant_herdgorger	0	cast	exercised
 hill_gigas	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 hill_gigas	0	cast	exercised
+hindering_touch	0	cast	unsupported: target group 0 needs a richer fixture
 hinterland_harbor	0	ability:0	exercised
 hinterland_harbor	0	land	exercised
 hinterland_sanctifier	0	cast	exercised
@@ -2177,6 +2179,7 @@ minotaur_warrior	0	cast	exercised
 mintstrosity	0	cast	exercised
 miscalculation	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 miscalculation	0	cast	unsupported: target group 0 needs a richer fixture
+miscast	0	cast	unsupported: target group 0 needs a richer fixture
 mischievous_pup	0	cast	exercised
 mischievous_sneakling	0	cast	exercised
 misleading_motes	0	cast	exercised
@@ -2337,6 +2340,7 @@ obyras_attendants_desperate_parry	0	cast	exercised
 obyras_attendants_desperate_parry	1	cast	exercised
 octopus_form	0	cast	exercised
 offer_immortality	0	cast	exercised
+offering_to_asha	0	cast	unsupported: target group 0 needs a richer fixture
 ogre_berserker	0	cast	exercised
 ogre_resister	0	cast	exercised
 ogre_sentry	0	cast	exercised
@@ -2793,6 +2797,7 @@ runaway_boulder	0	cast	exercised
 rune-scarred_demon	0	cast	exercised
 rune-sealed_wall	0	ability:0	exercised
 rune-sealed_wall	0	cast	exercised
+runeboggle	0	cast	unsupported: target group 0 needs a richer fixture
 runeclaw_bear	0	cast	exercised
 russet_wolves	0	cast	exercised
 rusted_sentinel	0	cast	exercised
@@ -3281,6 +3286,7 @@ stuck_in_summoners_sanctum	0	cast	exercised
 stump_stomp_burnwillow_clearing	0	cast	exercised
 stump_stomp_burnwillow_clearing	1	ability:0	exercised
 stump_stomp_burnwillow_clearing	1	land	exercised
+stymied_hopes	0	cast	unsupported: target group 0 needs a richer fixture
 submerged_boneyard	0	ability:0	exercised
 submerged_boneyard	0	land	exercised
 subterranean_cavern	0	ability:0	exercised
