@@ -22,3 +22,11 @@ passed exit 0 (`Side Rust`, `-CardData`).
   and five checklist flips changed, no unrelated drift.
 - Final conformance check confirmed the `violent_impact` hand-zone cycling fixture classification
   before the passing gate.
+
+## Gate retries
+
+- First attempt stopped on the expected `violent_impact` hand-zone fixture classification.
+- Second attempt stopped on the 10 GiB environment headroom check; `cargo clean --profile dev` recovered space.
+- Third attempt exposed an unsorted baseline row; the row was moved to its sorted position and the
+  conformance test passed standalone (334.55 s) before the final full gate passed.
+
