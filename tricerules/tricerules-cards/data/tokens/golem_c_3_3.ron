@@ -1,0 +1,9 @@
+// 3/3 colorless Phyrexian Golem artifact creature token (Splicer cycle).
+(
+  id: "golem_c_3_3",
+  name: "Golem",
+  face_id: "golem",
+  types: ["Artifact", "Creature", "Phyrexian", "Golem"],
+  power: 3,
+  toughness: 3,
+)
