@@ -1,0 +1,19 @@
+// Oracle 8e3c2f44-c4ca-4555-80c6-316e62c338dd; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.80 (wither), 602.2 (activate) and 701.19a-b (regeneration shield).
+(
+  id: "cinderbones",
+  name: "Cinderbones",
+  face_id: "cinderbones",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Elemental", "Skeleton"],
+  power: 1,
+  toughness: 1,
+  keywords: [Wither],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Mana("{1}{B}")],
+    effect: [Regenerate(subject: Source)],
+  )],
+)

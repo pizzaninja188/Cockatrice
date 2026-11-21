@@ -1,0 +1,19 @@
+// Oracle 0585ea6a-ef78-4386-a22c-6b8d8fc6c03c; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.11 (hexproof), 602.2 (activate) and 701.19a-b (regeneration shield).
+(
+  id: "troll_ascetic",
+  name: "Troll Ascetic",
+  face_id: "troll_ascetic",
+  mana_cost: "{1}{G}{G}",
+  types: ["Creature", "Troll", "Shaman"],
+  power: 3,
+  toughness: 2,
+  keywords: [Hexproof],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Mana("{1}{G}")],
+    effect: [Regenerate(subject: Source)],
+  )],
+)

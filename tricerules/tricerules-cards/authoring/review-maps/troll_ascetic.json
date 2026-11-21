@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "0585ea6a-ef78-4386-a22c-6b8d8fc6c03c",
+  "spans": [
+    {
+      "face_id": "troll_ascetic",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords",
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Hexproof",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Regenerate",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q53_batch_c::q53_c_regenerate_cards_apply_their_printed_cost_and_shield",
+      "covers": "actual troll_ascetic printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_c::q53_regenerate_cards_map_definitions",
+      "covers": "actual troll_ascetic printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_c::q53_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

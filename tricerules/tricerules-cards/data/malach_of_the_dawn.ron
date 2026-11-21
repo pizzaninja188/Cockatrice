@@ -1,0 +1,19 @@
+// Oracle c351a325-42cb-43ad-8648-c204e2317b50; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.9 (flying), 602.2 (activate) and 701.19a-b (regeneration shield).
+(
+  id: "malach_of_the_dawn",
+  name: "Malach of the Dawn",
+  face_id: "malach_of_the_dawn",
+  mana_cost: "{2}{W}{W}",
+  types: ["Creature", "Angel"],
+  power: 2,
+  toughness: 4,
+  keywords: [Flying],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Mana("{W}{W}{W}")],
+    effect: [Regenerate(subject: Source)],
+  )],
+)

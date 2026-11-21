@@ -1316,3 +1316,5 @@ mod q52_cohorts_batch;
 mod q53_batch_a;
 #[path = "../q53_batch_b.rs"]
 mod q53_batch_b;
+#[path = "../q53_batch_c.rs"]
+mod q53_batch_c;

@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "0c7f9701-c39e-4f14-844a-15f2e3c41ca9",
+  "spans": [
+    {
+      "face_id": "deathbloom_gardener",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords",
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Deathtouch",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q53_batch_c::q53_c_any_color_mana_cards_produce_each_color",
+      "covers": "actual deathbloom_gardener printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_c::q53_any_color_mana_cards_map_definitions",
+      "covers": "actual deathbloom_gardener printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_c::q53_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    },
+    {
+      "test": "scenario q53_batch_c::q53_c_mana_ability_taps_and_rejects_second_or_sick_activation",
+      "covers": "actual mana ability taps and rejects a second or summoning-sick activation"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

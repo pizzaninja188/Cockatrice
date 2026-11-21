@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "c351a325-42cb-43ad-8648-c204e2317b50",
+  "spans": [
+    {
+      "face_id": "malach_of_the_dawn",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords",
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Regenerate",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q53_batch_c::q53_c_regenerate_cards_apply_their_printed_cost_and_shield",
+      "covers": "actual malach_of_the_dawn printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_c::q53_regenerate_cards_map_definitions",
+      "covers": "actual malach_of_the_dawn printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_c::q53_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
