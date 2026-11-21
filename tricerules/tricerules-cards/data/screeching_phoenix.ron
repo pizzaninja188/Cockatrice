@@ -1,0 +1,24 @@
+// Oracle 2b75759a-c3cc-432d-9609-4f8fa2456870; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 (activation and printed cost), 611.2c/613.4c (fixed affected set
+// and layer-7c pump), 514.2 (the pump ends at cleanup) and 702.9 (flying).
+(
+  id: "screeching_phoenix",
+  name: "Screeching Phoenix",
+  face_id: "screeching_phoenix",
+  mana_cost: "{4}{R}{R}",
+  types: ["Creature", "Phoenix"],
+  power: 4,
+  toughness: 4,
+  keywords: [Flying],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Mana("{2}{R}")],
+    effect: [PumpAll(
+      filter: (controller: Some(YouControl), name: None),
+      power: 1,
+      toughness: 0,
+    )],
+  )],
+)

@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "e4fbf952-de3b-4cbd-848a-37041f337e06",
+  "spans": [
+    {
+      "face_id": "failed_inspection",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/spell_effect/2"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_a::q54_canary_hardest_failed_inspection_counters_then_loots",
+      "covers": "actual Failed Inspection counters the spell, draws one card, then parks for the printed discard choice and discards exactly one"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_a::q54_counter_spell_riders_map_definitions",
+      "covers": "shared registry identity for the three counter-with-rider definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_a::q54_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Failed Inspection"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

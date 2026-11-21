@@ -1,0 +1,16 @@
+// Oracle e4fbf952-de3b-4cbd-848a-37041f337e06; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.6 (counter), 121.1 (draw), 701.9 (discard) and 608.2c (printed order).
+// The discard is a separate resolution instruction, not the drawn card's identity.
+(
+  id: "failed_inspection",
+  name: "Failed Inspection",
+  face_id: "failed_inspection",
+  mana_cost: "{2}{U}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    CounterTargetSpell(spell_filter: ()),
+    Draw(who: Controller, count: 1),
+    Discard(who: Controller, quantity: Exact(1)),
+  ],
+)

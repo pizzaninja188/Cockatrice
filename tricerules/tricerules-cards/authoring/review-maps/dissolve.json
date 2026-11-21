@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "2f0741f9-802b-4761-8094-7b1f3ea1a424",
+  "spans": [
+    {
+      "face_id": "dissolve",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_a::q54_dissolve_counters_then_scries_one",
+      "covers": "actual Dissolve counters the chosen spell, then publishes a scry-1 choice and bottoms the chosen card"
+    },
+    {
+      "test": "scenario q54_batch_a::q54_dissolve_rider_does_not_happen_when_the_counter_is_countered",
+      "covers": "actual Dissolve's scry does not happen when the Dissolve itself is countered"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_a::q54_counter_spell_riders_map_definitions",
+      "covers": "shared registry identity for the three counter-with-rider definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_a::q54_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Dissolve"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

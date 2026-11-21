@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "60674ef7-f8e2-41e8-bab3-0100cfc9fbe9",
+  "spans": [
+    {
+      "face_id": "cogwork_archivist",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords",
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Reach",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_a::q54_canary_hardest_cogwork_archivist_taps_and_moves_any_graveyard_card",
+      "covers": "actual Cogwork Archivist pays {2} and {T} to move a chosen card from another player's graveyard to its owner's library bottom"
+    },
+    {
+      "test": "scenario q54_batch_a::q54_second_archivist_fizzles_when_the_shared_graveyard_target_is_gone",
+      "covers": "actual Cogwork Archivist fizzles when its shared graveyard target already left before resolution"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_a::q54_gy_archivist_cards_map_definitions",
+      "covers": "shared registry identity for the three graveyard-to-bottom definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_a::q54_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Cogwork Archivist"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

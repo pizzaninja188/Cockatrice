@@ -1318,3 +1318,6 @@ mod q53_batch_a;
 mod q53_batch_b;
 #[path = "../q53_batch_c.rs"]
 mod q53_batch_c;
+
+#[path = "../q54_batch_a.rs"]
+mod q54_batch_a;

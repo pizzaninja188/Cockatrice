@@ -895,6 +895,7 @@ disruptive_stormbrood_petty_revenge	1	cast	exercised
 disruptor_of_currents	0	cast	exercised
 disruptor_wanderglyph	0	cast	exercised
 dissenters_deliverance	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
+dissolve	0	cast	unsupported: target group 0 needs a richer fixture
 dive_down	0	cast	exercised
 divert_disaster	0	cast	unsupported: target group 0 needs a richer fixture
 divination	0	cast	exercised
@@ -1092,6 +1093,7 @@ faerie_invaders	0	cast	exercised
 faerie_miscreant	0	cast	exercised
 faerie_seer	0	cast	exercised
 failed_fording	0	cast	exercised
+failed_inspection	0	cast	unsupported: target group 0 needs a richer fixture
 faithbearer_paladin	0	cast	exercised
 faithless_looting	0	cast	exercised
 falkenrath_reaver	0	cast	exercised
@@ -2114,6 +2116,7 @@ meltstriders_resolve	0	cast	exercised
 memory_drain	0	cast	unsupported: target group 0 needs a richer fixture
 memory_guardian	0	cast	exercised
 mental_journey	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
+mental_misstep	0	cast	unsupported: target group 0 needs a richer fixture
 mental_modulation	0	cast	exercised
 mentor_of_the_meek	0	cast	exercised
 merchant_of_many_hats	0	ability:0	unsupported: ability not offered by generic battlefield fixture

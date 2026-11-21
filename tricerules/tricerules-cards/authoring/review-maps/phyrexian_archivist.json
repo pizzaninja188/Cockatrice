@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "cdef800d-033e-4095-964d-9b6066f9fd36",
+  "spans": [
+    {
+      "face_id": "phyrexian_archivist",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords",
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Reach",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_a::q54_phyrexian_archivist_moves_any_graveyard_card_to_the_owners_bottom",
+      "covers": "actual Phyrexian Archivist pays {2} and {T} to move a card from another player's graveyard to its owner's library bottom"
+    },
+    {
+      "test": "scenario q54_batch_a::q54_second_archivist_fizzles_when_the_shared_graveyard_target_is_gone",
+      "covers": "actual Phyrexian Archivist also resolves the shared stale-target case after the first archivist moves the card"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_a::q54_gy_archivist_cards_map_definitions",
+      "covers": "shared registry identity for the three graveyard-to-bottom definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_a::q54_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Phyrexian Archivist"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
