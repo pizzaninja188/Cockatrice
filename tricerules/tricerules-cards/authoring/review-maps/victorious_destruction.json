@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "fa5d6c02-53b2-4144-87cb-e223b529ba7d",
+  "spans": [
+    {
+      "face_id": "victorious_destruction",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q52_cohorts_batch::q52_canary_simplest_demolish_destroys_an_artifact",
+      "covers": "actual Demolish destroys an artifact"
+    },
+    {
+      "test": "scenario q52_cohorts_batch::q52_canary_hardest_victorious_destruction_destroys_a_land_and_drains",
+      "covers": "actual Victorious Destruction destroys a land and drains its controller"
+    },
+    {
+      "test": "scenario q52_cohorts_batch::q52_cards_accept_each_branch_and_reject_other_types",
+      "covers": "actual card accepts artifact and land and rejects other types"
+    },
+    {
+      "test": "scenario q52_cohorts_batch::q52_cards_fizzle_a_departed_target",
+      "covers": "actual card fizzles a departed target"
+    },
+    {
+      "test": "scenario q52_cohorts_batch::q52_pillage_prevents_regeneration",
+      "covers": "actual Pillage ignores a regeneration shield"
+    },
+    {
+      "test": "scenario q52_cohorts_batch::q52_violent_impact_cycles_for_two_and_draws",
+      "covers": "actual Violent Impact cycles for two and draws one"
+    },
+    {
+      "test": "mechanic_registry::q52_cohorts_batch::q52_maps_definitions_and_target_unions",
+      "covers": "reviewed identity and typed shape"
+    },
+    {
+      "test": "mechanic_registry::q52_cohorts_batch::q52_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

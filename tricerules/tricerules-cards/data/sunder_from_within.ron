@@ -1,0 +1,17 @@
+// Oracle 09f75f28-09b9-4a6e-a1b0-671208d274d3; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 115.1/601.2c (one artifact-or-land target) and 205.3k (Arcane
+// spell subtype). No pinned ruling.
+(
+  id: "sunder_from_within",
+  name: "Sunder from Within",
+  face_id: "sunder_from_within",
+  mana_cost: "{2}{R}{R}",
+  types: ["Sorcery", "Arcane"],
+  spell_effect: [
+    Destroy(subject: Chosen((any_of: Some([
+            (kind: AnyPermanent, permanent_types: [Artifact]),
+            (kind: AnyPermanent, permanent_types: [Land]),
+          ])))),
+  ],
+)
