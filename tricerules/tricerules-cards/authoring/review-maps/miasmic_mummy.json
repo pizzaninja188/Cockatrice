@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "b5b049d4-242a-48ec-85d1-1ef66c8cfa4c",
+  "spans": [
+    {
+      "face_id": "miasmic_mummy",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q51_cohorts_batch::q51_discard_canary_simplest_miasmic_mummy_makes_each_player_discard",
+      "covers": "actual ETB collects both players' private discards"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_discard_canary_hardest_earsplitting_rats_regenerates_after_discarding",
+      "covers": "actual rats discard to regenerate"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_discard_cards_use_only_their_printed_cost",
+      "covers": "actual creature has the printed body"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_discard_choices_are_private_exact_one_and_owner_graveyarded",
+      "covers": "actual discard choices are private, exact-one and credited to the owner's graveyard"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_earsplitting_rats_shield_prevents_destruction",
+      "covers": "actual regeneration shield replaces destruction"
+    },
+    {
+      "test": "mechanic_registry::q51_cohorts_batch::q51_each_player_discard_maps_the_shared_discard",
+      "covers": "reviewed identity and typed shape"
+    },
+    {
+      "test": "mechanic_registry::q51_cohorts_batch::q51_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
