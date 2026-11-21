@@ -3974,3 +3974,4 @@ zog,_triceraton_castaway	0	cast	exercised
 zombie_goliath	0	cast	exercised
 zombify	0	cast	exercised
 zukos_exile	0	cast	exercised
+violent_impact	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
