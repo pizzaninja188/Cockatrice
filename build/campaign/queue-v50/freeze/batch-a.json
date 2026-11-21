@@ -6,7 +6,7 @@
     "02-graveyard-to-hand",
     "03-tap-stun-spells"
   ],
-  "base_head": "37a72a0a5935dd26ba45024aac0f16f896c0a5a5",
+  "base_head": "0c2a0ed5ea6fee54a2760f1fe3cfcd061586ed82",
   "review_type": "frozen implementation review",
   "test_evidence": {
     "scenario_green": "build/verification-logs/20261120-163633-114-q50-scenario-green-v4.log",
@@ -33,6 +33,11 @@
       "bytes": 24495
     },
     {
+      "path": "build/campaign/next/HANDOFF-queue-v50.md",
+      "sha256": "566a57824da05990d3dc6c21d84d78150cd1082e16a275df981696157c7a8869",
+      "bytes": 2004
+    },
+    {
       "path": "build/campaign/queue-v50/build_queue.py",
       "sha256": "6a88d276af899ebdd3e65b263cf19515f360b2dbad83ff6bfa6f0b95ab96834e",
       "bytes": 7864
@@ -44,8 +49,8 @@
     },
     {
       "path": "build/campaign/queue-v50/families/01-put-on-top/family.md",
-      "sha256": "45dd37315d7e9e5c78cd14c04766bdafd0617f08edc53e3a465dda4c0a053bcb",
-      "bytes": 3071
+      "sha256": "0f3a0d5cfd15d8581b8e236118a7c8dc939d1f6c483837416d8ba95373384d8d",
+      "bytes": 3437
     },
     {
       "path": "build/campaign/queue-v50/families/01-put-on-top/rulings/05a4acfd-3bf3-4ec2-a28a-bc43ba7c6fbf.jsonl",
@@ -109,8 +114,8 @@
     },
     {
       "path": "build/campaign/queue-v50/families/02-graveyard-to-hand/family.md",
-      "sha256": "ec484a1585cd00327fa33e4ba48710f298888c4be25b7992c467e5c5a4cb5e16",
-      "bytes": 2820
+      "sha256": "01cda66ebe9c2ca02912cc9dfd1b34994d2c1a2d606074a3c1c86c3d91bb76e3",
+      "bytes": 3186
     },
     {
       "path": "build/campaign/queue-v50/families/02-graveyard-to-hand/rulings/030e9e3e-ce78-4c3b-bd83-969c07c70459.jsonl",
@@ -154,8 +159,8 @@
     },
     {
       "path": "build/campaign/queue-v50/families/03-tap-stun-spells/family.md",
-      "sha256": "c9f0f66cdd367059c931551a88210a82ee93a13944ab97bcf4d335d45a955048",
-      "bytes": 3345
+      "sha256": "8e3aad0a8ccf151fa09e8aa1c2b52c6bf5b83246d71033646be91bf10fefdbf6",
+      "bytes": 3711
     },
     {
       "path": "build/campaign/queue-v50/families/03-tap-stun-spells/rulings/1133633a-b717-42cb-b477-4e18584d876f.jsonl",
@@ -204,8 +209,8 @@
     },
     {
       "path": "build/campaign/queue-v50/gen_maps.py",
-      "sha256": "dd9fc9985648a6eba5f00f9c0490eb919f4b655390d849cbc038716d2b2b67bf",
-      "bytes": 16913
+      "sha256": "375d0811eeeaf5f80dca92af8d769be2e90da1227f2a2b2b0932fcd91b474c0a",
+      "bytes": 17069
     },
     {
       "path": "build/campaign/queue-v50/gen_ron_batch_a.py",
@@ -223,6 +228,11 @@
       "bytes": 7532
     },
     {
+      "path": "build/campaign/queue-v50/report.md",
+      "sha256": "25fce13f1acada560175afbe568b31670f24fc23c5fe740943d9e1bf7c52efb9",
+      "bytes": 3166
+    },
+    {
       "path": "build/campaign/queue-v50/revalidation.tsv",
       "sha256": "0664da112bcb84e8d3afbb0256d471609011ad28f0d261ac11b4c991c655a005",
       "bytes": 7514
@@ -236,6 +246,11 @@
       "path": "tricerules/CARDS.md",
       "sha256": "be234361137ec684425a0dc8c9c0c42581f842f6dc913a936681b07eaa0628ea",
       "bytes": 848044
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/presentation-exceptions.tsv",
+      "sha256": "1cb39b6623994efca601e26b6e0729915dd738a9f824572fbd4c460e151e3393",
+      "bytes": 31455
     },
     {
       "path": "tricerules/tricerules-cards/authoring/review-maps/argivian_find.json",
@@ -259,8 +274,8 @@
     },
     {
       "path": "tricerules/tricerules-cards/authoring/review-maps/deja_vu.json",
-      "sha256": "e393b366a85e24b8f6ded2696a58bb20393dc5fecd3cd6c23fd6227dc1f09e7f",
-      "bytes": 1481
+      "sha256": "36e4ce97239ddac73fc51dbba17d9bb557b96c70b8af40e78e01273211ff40f6",
+      "bytes": 1483
     },
     {
       "path": "tricerules/tricerules-cards/authoring/review-maps/fallow_earth.json",
@@ -384,13 +399,18 @@
     },
     {
       "path": "tricerules/tricerules-cards/tests/q50_cohorts_batch.rs",
-      "sha256": "d8d40e92b370dc270399b6ba0f899c7b549c422d0d792fa41145b1583bcdffa0",
-      "bytes": 23431
+      "sha256": "107c3df4b70c13eafebb86fa9bc10d9122eca9cf805e5bdcf3848726ae46602e",
+      "bytes": 28879
     },
     {
       "path": "tricerules/tricerules-cards/tests/suites/mechanic_registry.rs",
       "sha256": "205b2fe862e390c4c406db24657d2a94b11946e7d2a3673fbfc789d9ebcaeaf0",
       "bytes": 34859
+    },
+    {
+      "path": "tricerules/tricerules-core/tests/conformance/baseline.tsv",
+      "sha256": "fa4b60b9bfbbc8a5ee31c1700ab748abf2bb168f3b4ea59482862aa3df133025",
+      "bytes": 159089
     },
     {
       "path": "tricerules/tricerules-core/tests/scenario.rs",
@@ -399,15 +419,16 @@
     },
     {
       "path": "tricerules/tricerules-core/tests/scenario/q50_cohorts_batch.rs",
-      "sha256": "81c337adb402e0fc6c3c0a0562ac5b9cf7e59294ece1c9b49129274d25980040",
-      "bytes": 52139
+      "sha256": "4e67ae9b8b126db3a1af216cfd1f38f93613e8ab05ba16c706ad059dbedce008",
+      "bytes": 57645
     }
   ],
   "dependencies": {
     "build/campaign/blocked.tsv": "b2ea276996f7fab1f8ff542445f776b6c31655af6c26c6bb742e6214c694f5ad",
+    "build/campaign/next/HANDOFF-queue-v50.md": "566a57824da05990d3dc6c21d84d78150cd1082e16a275df981696157c7a8869",
     "build/campaign/queue-v50/build_queue.py": "6a88d276af899ebdd3e65b263cf19515f360b2dbad83ff6bfa6f0b95ab96834e",
     "build/campaign/queue-v50/cards.tsv": "e94f6e160c099812031636729d1266365fccadd53d76907a6e8a1dd0f7e51a79",
-    "build/campaign/queue-v50/families/01-put-on-top/family.md": "45dd37315d7e9e5c78cd14c04766bdafd0617f08edc53e3a465dda4c0a053bcb",
+    "build/campaign/queue-v50/families/01-put-on-top/family.md": "0f3a0d5cfd15d8581b8e236118a7c8dc939d1f6c483837416d8ba95373384d8d",
     "build/campaign/queue-v50/families/01-put-on-top/rulings/05a4acfd-3bf3-4ec2-a28a-bc43ba7c6fbf.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "build/campaign/queue-v50/families/01-put-on-top/rulings/0d96e4bc-ff4e-4f37-89b6-8a4e3c1069a0.jsonl": "64e1e65b111e7a8afb012d8e28214cf0571525efd3daf6bfae513ab80f7df8f0",
     "build/campaign/queue-v50/families/01-put-on-top/rulings/3a35e772-2547-41a3-a2a2-125b48c23aa5.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -420,7 +441,7 @@
     "build/campaign/queue-v50/families/01-put-on-top/source/567b676b-54f3-44c7-8654-4d2b0262ea12.json": "fdf4a6f2caaf12d2284cdccd130dec375cb9e47bba5c91f8fd3eee007d48e470",
     "build/campaign/queue-v50/families/01-put-on-top/source/6e072b3a-7a83-4d77-bae3-72de0e646b81.json": "050c7b195d43a97c46a25c826b876adaf26c357d568f2cb446ad86167e7796fa",
     "build/campaign/queue-v50/families/01-put-on-top/source/6ef9bf18-6b09-4398-a502-6867d999ab0c.json": "19842a41e9823e3aa4c013ffa9a31462607e553af4a826d9adfa2424c625e115",
-    "build/campaign/queue-v50/families/02-graveyard-to-hand/family.md": "ec484a1585cd00327fa33e4ba48710f298888c4be25b7992c467e5c5a4cb5e16",
+    "build/campaign/queue-v50/families/02-graveyard-to-hand/family.md": "01cda66ebe9c2ca02912cc9dfd1b34994d2c1a2d606074a3c1c86c3d91bb76e3",
     "build/campaign/queue-v50/families/02-graveyard-to-hand/rulings/030e9e3e-ce78-4c3b-bd83-969c07c70459.jsonl": "ba1006d6ff0488aa5d6322ea1f63cfb735473e09d7299cb92e4dae7a82c4ef8f",
     "build/campaign/queue-v50/families/02-graveyard-to-hand/rulings/0b6c74a7-d7d3-4c05-84b1-bcb580bb476f.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "build/campaign/queue-v50/families/02-graveyard-to-hand/rulings/565922d6-8152-411f-8d4d-dc7c8523a49b.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -429,7 +450,7 @@
     "build/campaign/queue-v50/families/02-graveyard-to-hand/source/0b6c74a7-d7d3-4c05-84b1-bcb580bb476f.json": "bdf8bd17ddd46e43e3ae206df62453e3e20674f2e77973763cbc024ece2fed06",
     "build/campaign/queue-v50/families/02-graveyard-to-hand/source/565922d6-8152-411f-8d4d-dc7c8523a49b.json": "9cfff228b882a2ef7d37c2d4d4076107c54f5864925ee35f38604d06862e8569",
     "build/campaign/queue-v50/families/02-graveyard-to-hand/source/7408b9c5-7266-4627-be4e-b691cf5c622c.json": "0e5b750729d2adfedbddd5a6058f87a2e61ed16df673d2ec3d3108c05ca7ba46",
-    "build/campaign/queue-v50/families/03-tap-stun-spells/family.md": "c9f0f66cdd367059c931551a88210a82ee93a13944ab97bcf4d335d45a955048",
+    "build/campaign/queue-v50/families/03-tap-stun-spells/family.md": "8e3aad0a8ccf151fa09e8aa1c2b52c6bf5b83246d71033646be91bf10fefdbf6",
     "build/campaign/queue-v50/families/03-tap-stun-spells/rulings/1133633a-b717-42cb-b477-4e18584d876f.jsonl": "be67183f103ff98df2b6e599f42a0c635bb9ea9c059913fcd9e1c8d662f96658",
     "build/campaign/queue-v50/families/03-tap-stun-spells/rulings/846ba66c-a4eb-4d00-a0f1-d9f9524b9695.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "build/campaign/queue-v50/families/03-tap-stun-spells/rulings/8bf90bb0-f9c1-49c8-905e-32747e921e92.jsonl": "d4cb73f1ab512160e1bfd17b9efd588911f677c96ea345cd15eb535d018ff706",
@@ -439,18 +460,20 @@
     "build/campaign/queue-v50/families/03-tap-stun-spells/source/8bf90bb0-f9c1-49c8-905e-32747e921e92.json": "b1b96bbb6d3b87edef85ab49c63f67106f266d8764f0d4c0abe949eae587faa3",
     "build/campaign/queue-v50/families/03-tap-stun-spells/source/c0239ff1-6ae6-431a-806e-7321d8272a1d.json": "aff98351bbf1b7ee67cdb82bdd9e4015f51fcb4d6c250c80384282137d28a935",
     "build/campaign/queue-v50/gen_family_records.py": "b8c524c1a312f70c324f417f3f95a223150055f1a31f28d35720bc3bac3b7265",
-    "build/campaign/queue-v50/gen_maps.py": "dd9fc9985648a6eba5f00f9c0490eb919f4b655390d849cbc038716d2b2b67bf",
+    "build/campaign/queue-v50/gen_maps.py": "375d0811eeeaf5f80dca92af8d769be2e90da1227f2a2b2b0932fcd91b474c0a",
     "build/campaign/queue-v50/gen_ron_batch_a.py": "f24d2e5e4174764f4297716d793e9b61119d28bbb518a378f50cf44154725834",
     "build/campaign/queue-v50/gen_ron_batch_b.py": "4af2adb5ed570fc02e35bf555e105194085e1778b4078263fd5dd56214f7bccf",
     "build/campaign/queue-v50/gen_ron_batch_c.py": "ead74faf19b898d10e74993087bbe97f6b271b6104c301661bb950c06e6f9d70",
+    "build/campaign/queue-v50/report.md": "25fce13f1acada560175afbe568b31670f24fc23c5fe740943d9e1bf7c52efb9",
     "build/campaign/queue-v50/revalidation.tsv": "0664da112bcb84e8d3afbb0256d471609011ad28f0d261ac11b4c991c655a005",
     "build/campaign/queue-v50/selection.md": "5d9992677118a8c70bba06c2eeab0fc4cea6f8993c7c0c7840a0e6e4b52c82dc",
     "tricerules/CARDS.md": "be234361137ec684425a0dc8c9c0c42581f842f6dc913a936681b07eaa0628ea",
+    "tricerules/tricerules-cards/authoring/presentation-exceptions.tsv": "1cb39b6623994efca601e26b6e0729915dd738a9f824572fbd4c460e151e3393",
     "tricerules/tricerules-cards/authoring/review-maps/argivian_find.json": "2365cf94044826d222b7735cc3a8735ea7d60d3d769a4febd3d32b9c40bedbdf",
     "tricerules/tricerules-cards/authoring/review-maps/banishment_decree.json": "a08855855bb293b2a0fb277d0af10a810741cccfdbf4bd4e3589ec1b7fec2fa4",
     "tricerules/tricerules-cards/authoring/review-maps/boggart_birth_rite.json": "30a0f8ae45eb4e8119c898e1be0a1b36558262ae751a7da4b37aeb2d4b983323",
     "tricerules/tricerules-cards/authoring/review-maps/cryogenic_stasis.json": "31e96a56405b85fcd38f9166332f00ed942a10ec526227b3982945705469ac13",
-    "tricerules/tricerules-cards/authoring/review-maps/deja_vu.json": "e393b366a85e24b8f6ded2696a58bb20393dc5fecd3cd6c23fd6227dc1f09e7f",
+    "tricerules/tricerules-cards/authoring/review-maps/deja_vu.json": "36e4ce97239ddac73fc51dbba17d9bb557b96c70b8af40e78e01273211ff40f6",
     "tricerules/tricerules-cards/authoring/review-maps/fallow_earth.json": "ebb560fe47d7114237a5f1313b0b1b4bb504d381eb03c7117603e4192c09beec",
     "tricerules/tricerules-cards/authoring/review-maps/freeze_in_place.json": "944f0eaf4453f9f4faacadda0e21424c5edd0ed85d7e9b55bc0922ff20cc6921",
     "tricerules/tricerules-cards/authoring/review-maps/grasp_of_phantoms.json": "34aa86a2324073fb14a1a31bc2364ad2fffb9e9ee84238769db3b65673e0f208",
@@ -475,12 +498,13 @@
     "tricerules/tricerules-cards/data/temporal_eddy.ron": "403de2fe1ec0e957852fc47a3688538a8acb161054f08971c3fc193f08e3bcb2",
     "tricerules/tricerules-cards/data/tranquilize.ron": "2643afae3822d203925d5ed49b641e0c64961d47d3d475d93fe21b05fb227049",
     "tricerules/tricerules-cards/presentation/oracle_fingerprints.tsv": "2a655e333f9cf8c5a37eac1d87606809db18302c9927a355da3915f9fa060d77",
-    "tricerules/tricerules-cards/tests/q50_cohorts_batch.rs": "d8d40e92b370dc270399b6ba0f899c7b549c422d0d792fa41145b1583bcdffa0",
+    "tricerules/tricerules-cards/tests/q50_cohorts_batch.rs": "107c3df4b70c13eafebb86fa9bc10d9122eca9cf805e5bdcf3848726ae46602e",
     "tricerules/tricerules-cards/tests/suites/mechanic_registry.rs": "205b2fe862e390c4c406db24657d2a94b11946e7d2a3673fbfc789d9ebcaeaf0",
+    "tricerules/tricerules-core/tests/conformance/baseline.tsv": "fa4b60b9bfbbc8a5ee31c1700ab748abf2bb168f3b4ea59482862aa3df133025",
     "tricerules/tricerules-core/tests/scenario.rs": "ffa94329c299c60a1cb9883ecd35cad64382307d81c6b9a75ca4a59843c52c86",
-    "tricerules/tricerules-core/tests/scenario/q50_cohorts_batch.rs": "81c337adb402e0fc6c3c0a0562ac5b9cf7e59294ece1c9b49129274d25980040"
+    "tricerules/tricerules-core/tests/scenario/q50_cohorts_batch.rs": "4e67ae9b8b126db3a1af216cfd1f38f93613e8ab05ba16c706ad059dbedce008"
   },
   "artifacts": {
-    "batch-a.patch.diff": "e9e17e3e777b50e3972a0af67c0d527996ad275763ddead042fde3f4e41080c9"
+    "batch-a.patch.diff": "9e72698f28793e526c38eea6d45360e5b4b961c655e9690241376997206b4870"
   }
 }

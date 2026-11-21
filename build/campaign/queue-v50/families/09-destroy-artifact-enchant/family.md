@@ -36,6 +36,7 @@ Exact records and pinned rulings: `source/<oracle-id>.json` and `rulings/<oracle
 
 ## Delivery
 
-- Independent read-only review: pending.
-- Batch gate: pending.
+- Independent read-only review: approved in hash-verified `build/campaign/queue-v50/freeze/batch-c.json` (initial review plus delta reviews; no remaining blocking findings).
+- Batch gate: consolidated queue-v50 full gate `verify-03010474-87bb-4f4c-a841-cc732863c003` passed exit 0 (`Side Rust`, `-CardData`) covering `01-put-on-top`..`09-destroy-artifact-enchant`.
+- Family commit `882b764d6`; shared evidence commit `0c2a0ed5e`.
 - Acceptance: rules-data only; no GUI, networking, privacy or physical-identity surface.

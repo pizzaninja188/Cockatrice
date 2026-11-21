@@ -29,6 +29,8 @@ SHARED = [
     "tricerules/tricerules-cards/tests/q50_cohorts_batch.rs",
     "tricerules/tricerules-cards/tests/suites/mechanic_registry.rs",
     "tricerules/tricerules-cards/presentation/oracle_fingerprints.tsv",
+    "tricerules/tricerules-cards/authoring/presentation-exceptions.tsv",
+    "tricerules/tricerules-core/tests/conformance/baseline.tsv",
     "tricerules/CARDS.md",
     "build/campaign/blocked.tsv",
     "build/campaign/queue-v50/build_queue.py",
@@ -40,6 +42,8 @@ SHARED = [
     "build/campaign/queue-v50/cards.tsv",
     "build/campaign/queue-v50/revalidation.tsv",
     "build/campaign/queue-v50/selection.md",
+    "build/campaign/queue-v50/report.md",
+    "build/campaign/next/HANDOFF-queue-v50.md",
 ]
 
 
