@@ -3133,6 +3133,7 @@ soulstone_sanctuary	0	land	exercised
 soured_springs	0	ability:0	exercised
 soured_springs	0	land	exercised
 sparas_headquarters	0	ability:1	unsupported: ability not offered by generic battlefield fixture
+spark_spray	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 sparktongue_dragon	0	cast	exercised
 specimen_freighter	0	ability:0	exercised
 specimen_freighter	0	cast	exercised
