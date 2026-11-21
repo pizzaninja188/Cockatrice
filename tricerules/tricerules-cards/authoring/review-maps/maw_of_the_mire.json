@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "44e9030d-dd49-46b4-a0eb-75a49b6638a2",
+  "spans": [
+    {
+      "face_id": "maw_of_the_mire",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_a::q56_a_land_destruction_life_riders_apply_the_printed_values",
+      "covers": "actual maw_of_the_mire applies its printed effects to the chosen target"
+    },
+    {
+      "test": "scenario q56_batch_a::q56_a_land_destruction_cards_do_not_apply_the_rider_to_a_stale_target",
+      "covers": "actual maw_of_the_mire canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_a::q56_a_land_destruction_life_map_definitions",
+      "covers": "shared registry identity for maw_of_the_mire"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

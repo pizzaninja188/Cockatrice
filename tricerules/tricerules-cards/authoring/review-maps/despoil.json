@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "77fa18fa-5dba-4e4c-9b24-9bfa9b68779f",
+  "spans": [
+    {
+      "face_id": "despoil",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_a::q56_a_land_destruction_life_riders_apply_the_printed_values",
+      "covers": "actual despoil applies its printed effects to the chosen target"
+    },
+    {
+      "test": "scenario q56_batch_a::q56_a_canary_simplest_despoil_destroys_a_land_and_its_controller_loses_two",
+      "covers": "actual despoil canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_a::q56_a_land_destruction_life_map_definitions",
+      "covers": "shared registry identity for despoil"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

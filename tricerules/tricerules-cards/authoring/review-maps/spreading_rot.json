@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "3c1b95bd-a2fc-47cd-8940-e4af03bd3ce2",
+  "spans": [
+    {
+      "face_id": "spreading_rot",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_a::q56_a_land_destruction_life_riders_apply_the_printed_values",
+      "covers": "actual spreading_rot applies its printed effects to the chosen target"
+    },
+    {
+      "test": "scenario q56_batch_a::q56_a_land_destruction_cards_do_not_apply_the_rider_to_a_stale_target",
+      "covers": "actual spreading_rot canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_a::q56_a_land_destruction_life_map_definitions",
+      "covers": "shared registry identity for spreading_rot"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

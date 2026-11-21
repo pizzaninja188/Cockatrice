@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "efee0ca0-0897-4972-99c4-432561b6e9f8",
+  "spans": [
+    {
+      "face_id": "veterans_reflexes",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Untap",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_a::q56_a_pump_untap_cards_apply_only_the_printed_values_to_the_target",
+      "covers": "actual veterans_reflexes applies its printed effects to the chosen target"
+    },
+    {
+      "test": "scenario q56_batch_a::q56_a_canary_simplest_veterans_reflexes_pumps_and_untaps",
+      "covers": "actual veterans_reflexes canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_a::q56_a_pump_untap_map_definitions",
+      "covers": "shared registry identity for veterans_reflexes"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

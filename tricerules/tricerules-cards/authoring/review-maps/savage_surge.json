@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "0acbc9a6-0de0-4096-b35c-1a586a1312ea",
+  "spans": [
+    {
+      "face_id": "savage_surge",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Untap",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_a::q56_a_pump_untap_cards_apply_only_the_printed_values_to_the_target",
+      "covers": "actual savage_surge applies its printed effects to the chosen target"
+    },
+    {
+      "test": "scenario q56_batch_a::q56_a_pump_untap_cards_fizzle_when_the_target_leaves",
+      "covers": "actual savage_surge canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_a::q56_a_pump_untap_map_definitions",
+      "covers": "shared registry identity for savage_surge"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

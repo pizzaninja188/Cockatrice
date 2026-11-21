@@ -1,0 +1,19 @@
+// Oracle 3c1b95bd-a2fc-47cd-8940-e4af03bd3ce2; source/rulings checked 2026-11-21 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a/601.2c (target at cast), 701.8 (destroy), 119.3 (the land's controller loses 2 life)
+// and 608.2b (a stale sole target fizzles, so no life is lost). Copy of Rain of Tears' land
+// target plus Vapor Snag's controller-of-target life loss.
+(
+  id: "spreading_rot",
+  name: "Spreading Rot",
+  face_id: "spreading_rot",
+  mana_cost: "{4}{B}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Land]))),
+    LoseLife(amount: Fixed(2), who: ControllerOfTargetGroup(group_index: 0)),
+  ],
+  targeting: Some((groups: [
+    (min: 1, max: 1, prompt: "Choose target land", effect_indices: [0]),
+  ])),
+)
