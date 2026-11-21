@@ -1,0 +1,20 @@
+// Oracle 387b6b07-a283-412d-94c3-f7f1dc76e858; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1 (one player-or-planeswalker target), 120.3 (damage) and 608.2b (stale target). No pinned ruling.
+(
+  id: "lava_axe",
+  name: "Lava Axe",
+  face_id: "lava_axe",
+  mana_cost: "{4}{R}",
+  types: ["Sorcery"],
+  spell_effect: [DamageTarget(
+    amount: 5,
+    target: (any_of: Some([
+      (kind: AnyPlayer),
+      (kind: AnyPermanent, permanent_types: [Planeswalker]),
+    ])),
+  )],
+  targeting: Some((groups: [(
+    min: 1, max: 1, prompt: "Choose target player or planeswalker", effect_indices: [0],
+  )])),
+)

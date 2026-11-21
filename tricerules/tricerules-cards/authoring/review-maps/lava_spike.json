@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "2837888c-bfa8-4955-9334-0605ad409f7e",
+  "spans": [
+    {
+      "face_id": "lava_spike",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q53_batch_a::q53_player_damage_cards_deal_their_printed_damage",
+      "covers": "actual lava_spike printed behavior and shape"
+    },
+    {
+      "test": "scenario q53_batch_a::q53_player_damage_cards_reject_creature_targets",
+      "covers": "actual lava_spike printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_a::q53_player_damage_cards_map_definitions",
+      "covers": "actual lava_spike printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_a::q53_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

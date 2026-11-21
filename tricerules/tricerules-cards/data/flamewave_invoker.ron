@@ -1,0 +1,27 @@
+// Oracle ee17706a-edc0-4301-8330-1da539679c7a; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.2 (activate), 115.1 (one player-or-planeswalker target) and 120.3 (damage). No pinned ruling.
+(
+  id: "flamewave_invoker",
+  name: "Flamewave Invoker",
+  face_id: "flamewave_invoker",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Goblin", "Mutant"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{7}{R}")],
+    effect: [DamageTarget(
+      amount: 5,
+      target: (any_of: Some([
+        (kind: AnyPlayer),
+        (kind: AnyPermanent, permanent_types: [Planeswalker]),
+      ])),
+    )],
+    targeting: Some((groups: [(
+      min: 1, max: 1, prompt: "Choose target player or planeswalker", effect_indices: [0],
+    )])),
+  )],
+)
