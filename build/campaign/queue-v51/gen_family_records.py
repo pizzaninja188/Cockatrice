@@ -98,6 +98,22 @@ REGISTRY = {
     "09-spirit-arcane-payoffs": "q51_spirit_arcane_payoffs_map_the_cast_trigger",
 }
 
+GATES = {
+    "batch-a": ("verify-8bd9732e-bf56-4343-92ef-cec4c77dcc07", "01-token-spells..03-artifact-value-tutors"),
+    "batch-b": ("verify-4c42320b-2186-496e-823a-00b3109b480a", "04-subtype-harbingers..06-etb-each-discard"),
+    "batch-c": ("verify-2703d25f-3914-4e95-8f19-51d135e87681", "08-attack-team-pumps..09-spirit-arcane-payoffs"),
+}
+COMMITS = {
+    "01-token-spells": "3b97c548f",
+    "02-splicer-cycle": "2819f4bc9",
+    "03-artifact-value-tutors": "c21ed13e5",
+    "04-subtype-harbingers": "5c22ada43",
+    "05-aura-restrictions": "340172af7",
+    "06-etb-each-discard": "f003abe7a",
+    "08-attack-team-pumps": "27d0dfcbd",
+    "09-spirit-arcane-payoffs": "35873aa1e",
+}
+
 BATCHES = {
     "01-token-spells": "batch-a",
     "02-splicer-cycle": "batch-a",
@@ -146,7 +162,8 @@ for family, cards in records.items():
         "## Delivery",
         "",
         f"- Independent read-only review: approved in hash-verified `build/campaign/queue-v51/freeze/{BATCHES[family]}.json` after initial and delta reviews; no remaining material findings.",
-        "- Batch gate: pending.",
+        f"- Batch gate: `{GATES[BATCHES[family]][0]}` passed exit 0 (`Side Rust`, `-CardData`) covering `{GATES[BATCHES[family]][1]}`.",
+        f"- Family commit `{COMMITS[family]}`; remote `4ab4e4c99`.",
         "- Acceptance: rules-data only; no GUI, networking, privacy or physical-identity surface.",
         "",
     ]

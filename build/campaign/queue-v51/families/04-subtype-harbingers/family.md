@@ -39,5 +39,6 @@ Exact records and pinned rulings: `source/<oracle-id>.json` and `rulings/<oracle
 ## Delivery
 
 - Independent read-only review: approved in hash-verified `build/campaign/queue-v51/freeze/batch-b.json` after initial and delta reviews; no remaining material findings.
-- Batch gate: pending.
+- Batch gate: `verify-4c42320b-2186-496e-823a-00b3109b480a` passed exit 0 (`Side Rust`, `-CardData`) covering `04-subtype-harbingers..06-etb-each-discard`.
+- Family commit `5c22ada43`; remote `4ab4e4c99`.
 - Acceptance: rules-data only; no GUI, networking, privacy or physical-identity surface.

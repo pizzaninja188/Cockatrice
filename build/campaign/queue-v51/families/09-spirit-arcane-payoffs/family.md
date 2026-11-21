@@ -37,5 +37,6 @@ Exact records and pinned rulings: `source/<oracle-id>.json` and `rulings/<oracle
 ## Delivery
 
 - Independent read-only review: approved in hash-verified `build/campaign/queue-v51/freeze/batch-c.json` after initial and delta reviews; no remaining material findings.
-- Batch gate: pending.
+- Batch gate: `verify-2703d25f-3914-4e95-8f19-51d135e87681` passed exit 0 (`Side Rust`, `-CardData`) covering `08-attack-team-pumps..09-spirit-arcane-payoffs`.
+- Family commit `35873aa1e`; remote `4ab4e4c99`.
 - Acceptance: rules-data only; no GUI, networking, privacy or physical-identity surface.

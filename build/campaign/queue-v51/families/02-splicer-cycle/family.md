@@ -39,5 +39,6 @@ Exact records and pinned rulings: `source/<oracle-id>.json` and `rulings/<oracle
 ## Delivery
 
 - Independent read-only review: approved in hash-verified `build/campaign/queue-v51/freeze/batch-a.json` after initial and delta reviews; no remaining material findings.
-- Batch gate: pending.
+- Batch gate: `verify-8bd9732e-bf56-4343-92ef-cec4c77dcc07` passed exit 0 (`Side Rust`, `-CardData`) covering `01-token-spells..03-artifact-value-tutors`.
+- Family commit `2819f4bc9`; remote `4ab4e4c99`.
 - Acceptance: rules-data only; no GUI, networking, privacy or physical-identity surface.
