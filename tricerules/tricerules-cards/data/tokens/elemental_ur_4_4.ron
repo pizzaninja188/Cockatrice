@@ -1,0 +1,10 @@
+// 4/4 blue and red Elemental creature token (Elemental Summoning).
+(
+  id: "elemental_ur_4_4",
+  name: "Elemental",
+  face_id: "elemental",
+  types: ["Creature", "Elemental"],
+  colors: [Blue, Red],
+  power: 4,
+  toughness: 4,
+)

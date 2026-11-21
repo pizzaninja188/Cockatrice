@@ -1,0 +1,11 @@
+// 5/5 green Wurm creature token with trample (Advent of the Wurm).
+(
+  id: "wurm_g_5_5_trample",
+  name: "Wurm",
+  face_id: "wurm",
+  types: ["Creature", "Wurm"],
+  colors: [Green],
+  power: 5,
+  toughness: 5,
+  keywords: [Trample],
+)

@@ -1,0 +1,12 @@
+// Oracle eb62aa4b-c11b-4195-ae85-cff8f78ce17b; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 111.1-111.2 (creation and ownership), 111.4 (naming) and 608.2c (resolution
+// order). No pinned ruling changes the printed behavior.
+(
+  id: "advent_of_the_wurm",
+  name: "Advent of the Wurm",
+  face_id: "advent_of_the_wurm",
+  mana_cost: "{1}{G}{G}{W}",
+  types: ["Instant"],
+  spell_effect: [CreateTokens(token: "wurm_g_5_5_trample", count: 1)],
+)

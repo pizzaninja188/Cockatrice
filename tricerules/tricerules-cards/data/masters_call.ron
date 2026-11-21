@@ -1,0 +1,12 @@
+// Oracle d6c9c1f0-050f-40e2-ab6c-6566d0af418c; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 111.1-111.2 (creation and ownership), 111.4 (naming) and 608.2c (resolution
+// order). No pinned ruling changes the printed behavior.
+(
+  id: "masters_call",
+  name: "Master's Call",
+  face_id: "masters_call",
+  mana_cost: "{2}{W}",
+  types: ["Instant"],
+  spell_effect: [CreateTokens(token: "myr_token_c_1_1", count: 2)],
+)

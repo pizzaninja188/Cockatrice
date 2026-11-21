@@ -1,0 +1,11 @@
+// 2/3 red Minotaur creature token with haste (Flurry of Horns).
+(
+  id: "minotaur_r_2_3_haste",
+  name: "Minotaur",
+  face_id: "minotaur",
+  types: ["Creature", "Minotaur"],
+  colors: [Red],
+  power: 2,
+  toughness: 3,
+  keywords: [Haste],
+)

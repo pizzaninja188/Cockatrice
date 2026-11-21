@@ -1,0 +1,10 @@
+// 1/1 white Warrior creature token (Take Up Arms).
+(
+  id: "warrior_w_1_1",
+  name: "Warrior",
+  face_id: "warrior",
+  types: ["Creature", "Warrior"],
+  colors: [White],
+  power: 1,
+  toughness: 1,
+)

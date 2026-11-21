@@ -1,0 +1,11 @@
+// 1/1 white Soldier creature token with lifelink (Sworn Companions).
+(
+  id: "soldier_w_1_1_lifelink",
+  name: "Soldier",
+  face_id: "soldier",
+  types: ["Creature", "Soldier"],
+  colors: [White],
+  power: 1,
+  toughness: 1,
+  keywords: [Lifelink],
+)

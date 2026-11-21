@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "4965f5fe-a5fe-4976-822c-5cf40fea8c34",
+  "spans": [
+    {
+      "face_id": "knight_watch",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [
+    "knight_w_2_2_vigilance"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q51_cohorts_batch::q51_token_spells_canary_simplest_call_of_the_conclave_creates_a_centaur",
+      "covers": "actual spell creates its printed token"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_token_spells_canary_hardest_advent_of_the_wurm_keeps_trample",
+      "covers": "actual spell creates the printed Wurm with trample"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_token_spells_create_the_exact_printed_tokens",
+      "covers": "actual spell creates the printed count, name, P/T, colors and types for its controller"
+    },
+    {
+      "test": "mechanic_registry::q51_cohorts_batch::q51_token_spells_map_definitions_and_tokens",
+      "covers": "reviewed identity and typed shape"
+    },
+    {
+      "test": "mechanic_registry::q51_cohorts_batch::q51_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

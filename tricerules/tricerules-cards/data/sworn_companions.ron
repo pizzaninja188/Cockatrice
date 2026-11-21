@@ -1,0 +1,12 @@
+// Oracle d1a9fd14-fecb-4d2a-983c-70143238275b; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 111.1-111.2 (creation and ownership), 111.4 (naming) and 608.2c (resolution
+// order). No pinned ruling changes the printed behavior.
+(
+  id: "sworn_companions",
+  name: "Sworn Companions",
+  face_id: "sworn_companions",
+  mana_cost: "{2}{W}",
+  types: ["Sorcery"],
+  spell_effect: [CreateTokens(token: "soldier_w_1_1_lifelink", count: 2)],
+)

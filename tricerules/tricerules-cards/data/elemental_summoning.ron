@@ -1,0 +1,12 @@
+// Oracle f9e668f9-21af-4fd8-9a37-6505ab2234e3; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 111.1-111.2 (creation and ownership), 111.4 (naming) and 608.2c (resolution
+// order). No pinned ruling changes the printed behavior.
+(
+  id: "elemental_summoning",
+  name: "Elemental Summoning",
+  face_id: "elemental_summoning",
+  mana_cost: "{3}{U/R}{U/R}",
+  types: ["Sorcery", "Lesson"],
+  spell_effect: [CreateTokens(token: "elemental_ur_4_4", count: 1)],
+)
