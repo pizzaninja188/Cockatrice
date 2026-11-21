@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "a2c00788-14e7-4ab5-8c71-2a176621a177",
+  "spans": [
+    {
+      "face_id": "hungry_flames",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q53_batch_b::q53_b_two_target_damage_cards_hit_both_printed_targets",
+      "covers": "actual hungry_flames printed behavior and shape"
+    },
+    {
+      "test": "scenario q53_batch_b::q53_b_two_target_damage_still_resolves_against_a_legal_player",
+      "covers": "actual hungry_flames printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_b::q53_two_target_damage_cards_map_definitions",
+      "covers": "actual hungry_flames printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_b::q53_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    },
+    {
+      "test": "scenario q53_batch_b::q53_b_two_target_damage_rejects_a_single_target",
+      "covers": "actual two-target spell rejects a single target"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

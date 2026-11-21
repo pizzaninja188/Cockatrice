@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "554de904-086c-428c-9f32-b0b2498a6fd5",
+  "spans": [
+    {
+      "face_id": "phyrexian_debaser",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords",
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q53_batch_b::q53_b_shrink_cards_apply_their_printed_values_and_costs",
+      "covers": "actual phyrexian_debaser printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_b::q53_shrink_cards_map_definitions",
+      "covers": "actual phyrexian_debaser printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_b::q53_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

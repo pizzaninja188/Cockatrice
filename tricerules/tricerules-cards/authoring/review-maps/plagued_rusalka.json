@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "d6912f52-e478-4cc6-a34c-67e372abc4fa",
+  "spans": [
+    {
+      "face_id": "plagued_rusalka",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q53_batch_b::q53_b_shrink_cards_apply_their_printed_values_and_costs",
+      "covers": "actual plagued_rusalka printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_b::q53_shrink_cards_map_definitions",
+      "covers": "actual plagued_rusalka printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_b::q53_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    },
+    {
+      "test": "scenario q53_batch_b::q53_b_activated_shrink_rejects_invalid_targets_and_cost_sources",
+      "covers": "actual activated shrink cost, target and rejection behavior"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

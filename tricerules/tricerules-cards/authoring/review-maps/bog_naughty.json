@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "74303ddb-d3b6-433d-a299-e0c4a7267461",
+  "spans": [
+    {
+      "face_id": "bog_naughty",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords",
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q53_batch_b::q53_b_shrink_cards_apply_their_printed_values_and_costs",
+      "covers": "actual bog_naughty printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_b::q53_shrink_cards_map_definitions",
+      "covers": "actual bog_naughty printed behavior and shape"
+    },
+    {
+      "test": "scenario q53_batch_b::q53_b_canary_hardest_bog_naughty_sacrifices_food_and_kills",
+      "covers": "actual bog_naughty printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_b::q53_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    },
+    {
+      "test": "scenario q53_batch_b::q53_b_activated_shrink_rejects_invalid_targets_and_cost_sources",
+      "covers": "actual activated shrink cost, target and rejection behavior"
+    },
+    {
+      "test": "scenario q53_batch_b::q53_b_bog_naughty_sacrifices_a_non_token_food",
+      "covers": "actual Bog Naughty sacrifices a non-token Food"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

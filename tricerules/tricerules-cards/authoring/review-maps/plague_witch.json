@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "532ab335-4873-405b-84b3-c447207172b5",
+  "spans": [
+    {
+      "face_id": "plague_witch",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "AbilityCost::Discard",
+      "typed_path": "/faces/0/activated_abilities/0/costs/2"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q53_batch_b::q53_b_shrink_cards_apply_their_printed_values_and_costs",
+      "covers": "actual plague_witch printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_b::q53_shrink_cards_map_definitions",
+      "covers": "actual plague_witch printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_b::q53_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

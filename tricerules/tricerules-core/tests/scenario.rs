@@ -2510,3 +2510,5 @@ mod q51_cohorts_batch;
 mod q52_cohorts_batch;
 #[path = "scenario/q53_batch_a.rs"]
 mod q53_batch_a;
+#[path = "scenario/q53_batch_b.rs"]
+mod q53_batch_b;

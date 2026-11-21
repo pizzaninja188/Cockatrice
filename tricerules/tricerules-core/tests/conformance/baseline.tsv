@@ -356,6 +356,7 @@ blossoming_sands	0	ability:0	exercised
 blossoming_sands	0	land	exercised
 boar-q-pine	0	cast	exercised
 bog_imp	0	cast	exercised
+bog_naughty	0	ability:0	unsupported: nonmana costs need additional fixture resources
 boggart_birth_rite	0	cast	unsupported: target group 0 needs a richer fixture
 boggart_brute	0	cast	exercised
 boggart_cursecrafter	0	cast	exercised

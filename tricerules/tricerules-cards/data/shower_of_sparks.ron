@@ -1,0 +1,21 @@
+// Oracle a43500ed-4aa6-49de-8a6e-a1781301b108; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1/115.3 (two target instances), 120.3 (damage) and 608.2b (each target is checked independently).
+(
+  id: "shower_of_sparks",
+  name: "Shower of Sparks",
+  face_id: "shower_of_sparks",
+  mana_cost: "{R}",
+  types: ["Instant"],
+  spell_effect: [
+    DamageTarget(amount: 1, target: (kind: Creature)),
+    DamageTarget(amount: 1, target: (any_of: Some([
+      (kind: AnyPlayer),
+      (kind: AnyPermanent, permanent_types: [Planeswalker]),
+    ]))),
+  ],
+  targeting: Some((groups: [
+    (min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0]),
+    (min: 1, max: 1, prompt: "Choose target player or planeswalker", effect_indices: [1]),
+  ])),
+)
