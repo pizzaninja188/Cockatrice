@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "11cf103c-f8a3-4892-942d-2c4472dd5716",
+  "spans": [
+    {
+      "face_id": "go_for_blood",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting",
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Fight",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_c::q55_c_fight_spells_apply_their_riders",
+      "covers": "actual Go for Blood resolves the fight and then cycles itself for {1} to draw"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_c::q55_c_fight_spells_map_definitions",
+      "covers": "shared registry identity for the fight spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_c::q55_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Go for Blood"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

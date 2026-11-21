@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "b22080d6-a9ed-4bdd-a604-058e0e3e9463",
+  "spans": [
+    {
+      "face_id": "mental_discipline",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Discard",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_c::q55_c_discard_draw_enchantments_use_their_printed_costs",
+      "covers": "actual Mental Discipline pays {1}{U} and discards a card to draw one"
+    },
+    {
+      "test": "scenario q55_batch_c::q55_c_discard_draw_rejects_activation_without_a_card_to_discard",
+      "covers": "actual Mental Discipline rejects an activation with no card to discard and keeps its mana"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_c::q55_c_discard_draw_map_definitions",
+      "covers": "shared registry identity for the discard-to-draw abilities"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_c::q55_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Mental Discipline"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

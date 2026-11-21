@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "ebbcbaa4-9dc2-4098-b6a2-393375d86f16",
+  "spans": [
+    {
+      "face_id": "oread_of_mountains_blaze",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Discard",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_c::q55_c_discard_draw_enchantments_use_their_printed_costs",
+      "covers": "actual Oread of Mountain's Blaze pays {2}{R} and discards a card to draw one"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_c::q55_c_discard_draw_map_definitions",
+      "covers": "shared registry identity for the discard-to-draw abilities"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_c::q55_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Oread of Mountain's Blaze"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
