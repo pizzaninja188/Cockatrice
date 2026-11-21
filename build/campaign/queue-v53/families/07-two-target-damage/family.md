@@ -18,11 +18,13 @@ Exact records and pinned rulings: `source/<oracle-id>.json` and `rulings/<oracle
 
 ## Evidence
 
-- Intended red/green: pending batch B execution.
-- Review maps: `tricerules/tricerules-cards/authoring/review-maps/*.json` after promotion.
+- Intended red: `build/campaign/queue-v53/red-b.log` (0/5 exit 101, `MissingCard`).
+- Focused scenario green: `build/campaign/queue-v53/green-b6.log` (8/8 exit 0).
+- Focused registry green: `build/campaign/queue-v53/registry-b5.log` (3/3 exit 0).
+- Review maps: `tricerules/tricerules-cards/authoring/review-maps/*.json`.
 
 ## Delivery
 
-- Independent read-only review: pending.
-- Batch gate: pending.
+- Independent read-only review: approved after three frozen delta reviews; final bundle `build/campaign/queue-v53/freeze/batch-b-final3.json` (`patch_sha256 29516569…`).
+- Batch gate: `build/verification-logs/verify-a2adabfc-b00b-4745-a802-323c68ac7e29/summary.json` passed exit 0 (`Side Rust`, `-CardData -CardsXml build/campaign/source/cards-validation.xml`) covering 06-activated-shrink-remnants..07-two-target-damage.
 - Acceptance: rules-data only; no GUI, networking, privacy or physical-identity surface.
