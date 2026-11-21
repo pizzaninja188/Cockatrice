@@ -1,0 +1,33 @@
+// Oracle c247382f-821e-4f3c-9d34-450794ce74c3; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 601.2i/603.2 (cast trigger), 603.3 (the trigger remains on the stack independently
+// of the spell), 611.2a/514.2 (until end of turn), 701.19 (regenerate), 122.1a
+// (+1/+1 counter), 613 (continuous effects) and 509.1b (can't block). Pinned rulings
+// are in the family record.
+(
+  id: "kami_of_fires_roar",
+  name: "Kami of Fire's Roar",
+  face_id: "kami_of_fires_roar",
+  mana_cost: "{3}{R}",
+  types: ["Creature", "Spirit"],
+  power: 2,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPlayerCastsSpell(
+      caster: Controller,
+      filter: (any_of: Some([
+        (required_subtypes: ["Spirit"]),
+        (required_subtypes: ["Arcane"]),
+      ])),
+    ),
+    effect: [ApplyCombatRestriction(scope: Chosen((kind: Creature)), restriction: (cant_block: true))],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature",
+      effect_indices: [0],
+    )])),
+  )],
+)

@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "913dcf97-0804-4b21-8daa-f2b481dc0f2f",
+  "spans": [
+    {
+      "face_id": "briarknit_kami",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPlayerCastsSpell",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q51_cohorts_batch::q51_spirit_arcane_canary_simplest_briarknit_kami_adds_a_counter",
+      "covers": "actual Kami adds a counter on a Spirit cast"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_spirit_arcane_canary_hardest_kami_of_fires_roar_forbids_blocking",
+      "covers": "actual Kami restricts the target on a Spirit cast"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_spirit_arcane_payoffs_fire_for_each_printed_effect",
+      "covers": "actual payoff resolves its printed effect on a Spirit cast"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_spirit_arcane_payoffs_also_fire_for_an_arcane_spell",
+      "covers": "actual payoff also triggers on an Arcane spell"
+    },
+    {
+      "test": "mechanic_registry::q51_cohorts_batch::q51_spirit_arcane_payoffs_map_the_cast_trigger",
+      "covers": "reviewed identity and typed shape"
+    },
+    {
+      "test": "mechanic_registry::q51_cohorts_batch::q51_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
