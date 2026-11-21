@@ -1,0 +1,20 @@
+// Oracle 36d1a3f4-7903-41aa-9fb7-401d8789b00c; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 508.1m/603.2c (attack trigger), 611.2a/514.2 (until end of turn), 611.2c
+// (affected set locked at resolution), 613.4c (layer 7c pump) and 613.1f (layer 6
+// keyword grant). No pinned ruling changes the printed behavior.
+(
+  id: "fangren_pathcutter",
+  name: "Fangren Pathcutter",
+  face_id: "fangren_pathcutter",
+  mana_cost: "{4}{G}{G}",
+  types: ["Creature", "Beast"],
+  power: 4,
+  toughness: 6,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [GrantKeywordsAll(filter: (attacking: true), keywords: [Trample])],
+  )],
+)

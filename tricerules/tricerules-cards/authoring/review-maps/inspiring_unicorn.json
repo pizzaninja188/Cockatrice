@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "1f9797e2-7ebb-41f9-9199-e9ee575eefd3",
+  "spans": [
+    {
+      "face_id": "inspiring_unicorn",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q51_cohorts_batch::q51_attack_pumps_canary_simplest_goblin_general_pumps_goblins",
+      "covers": "actual General pumps each Goblin and not other creatures"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_attack_pumps_canary_hardest_blood_chin_rager_grants_menace",
+      "covers": "actual Rager grants menace to each Warrior"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_attack_pumps_apply_each_printed_scope",
+      "covers": "actual trigger applies the printed subtype or attacking scope"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_attack_pumps_only_affect_attackers_for_keyword_grants",
+      "covers": "actual keyword grant does not affect nonattackers"
+    },
+    {
+      "test": "mechanic_registry::q51_cohorts_batch::q51_attack_team_pumps_map_attack_triggers",
+      "covers": "reviewed identity and typed shape"
+    },
+    {
+      "test": "mechanic_registry::q51_cohorts_batch::q51_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

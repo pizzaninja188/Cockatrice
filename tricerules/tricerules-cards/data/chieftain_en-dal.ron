@@ -1,0 +1,20 @@
+// Oracle 8aae3a28-dcf3-460e-89f9-4b0c96d6f55e; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 508.1m/603.2c (attack trigger), 611.2a/514.2 (until end of turn), 611.2c
+// (affected set locked at resolution), 613.4c (layer 7c pump) and 613.1f (layer 6
+// keyword grant). No pinned ruling changes the printed behavior.
+(
+  id: "chieftain_en-dal",
+  name: "Chieftain en-Dal",
+  face_id: "chieftain_en_dal",
+  mana_cost: "{1}{W}{W}",
+  types: ["Creature", "Human", "Knight"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [GrantKeywordsAll(filter: (attacking: true), keywords: [FirstStrike])],
+  )],
+)
