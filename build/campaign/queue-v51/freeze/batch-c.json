@@ -1,0 +1,410 @@
+{
+  "format_version": 1,
+  "bundle": "batch-c",
+  "families": [
+    "08-attack-team-pumps",
+    "09-spirit-arcane-payoffs"
+  ],
+  "base_head": "9a37f656b1ea1f0a098682208fc66b30cdb9f2f6",
+  "review_type": "frozen implementation review",
+  "test_evidence": {
+    "scenario_green": "build/verification-logs/20261120-q51-scenario-green4.log",
+    "registry_green": "build/verification-logs/20261120-q51-registry-green4.log",
+    "intended_red": [
+      "build/verification-logs/20261120-q51-intended-red.log"
+    ],
+    "evidence_preparation": "build/verification-logs/card-evidence-f69e990e-c0e2-4ee8-8a8d-da4cc83beba4",
+    "metadata_refresh": "build/verification-logs/card-data-e756693d-c2c1-47a2-83ba-6aedef321489"
+  },
+  "files": [
+    {
+      "path": "build/campaign/blocked.tsv",
+      "sha256": "5e13f534b5fe9cb961a1d7f9a3972578bcf33bd22a08003112a125bd33978112",
+      "bytes": 26306
+    },
+    {
+      "path": "build/campaign/queue-v51/build_queue.py",
+      "sha256": "e705675726979cb2f601da0f11f3ee9af02fc09fc9513250ba01abf4991915df",
+      "bytes": 8092
+    },
+    {
+      "path": "build/campaign/queue-v51/cards.tsv",
+      "sha256": "d6ebc9959c149652ee73aa86fd0fd395e8063d15851227362a6c47e7c8a519dd",
+      "bytes": 3445
+    },
+    {
+      "path": "build/campaign/queue-v51/families/08-attack-team-pumps/family.md",
+      "sha256": "3facbcd3a252f1636c5022dc25cc77dafd6f095661a39bb0ee1c7015d96238dd",
+      "bytes": 3256
+    },
+    {
+      "path": "build/campaign/queue-v51/families/08-attack-team-pumps/rulings/1f9797e2-7ebb-41f9-9199-e9ee575eefd3.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/08-attack-team-pumps/rulings/36d1a3f4-7903-41aa-9fb7-401d8789b00c.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/08-attack-team-pumps/rulings/420d09b5-aced-4f71-914c-90d19f7476dc.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/08-attack-team-pumps/rulings/5fab0d9c-ccf7-4c6a-94b4-959be139dad8.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/08-attack-team-pumps/rulings/8aae3a28-dcf3-460e-89f9-4b0c96d6f55e.jsonl",
+      "sha256": "8e912056eee4cb27effadd87b617f8a2e95ccee91fa0f959aa5f3146161edcbd",
+      "bytes": 199
+    },
+    {
+      "path": "build/campaign/queue-v51/families/08-attack-team-pumps/rulings/a7036d08-6ee4-49b1-bbbf-c96a937afa15.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/08-attack-team-pumps/source/1f9797e2-7ebb-41f9-9199-e9ee575eefd3.json",
+      "sha256": "1e1ed5e35868afff945f8305200715ec0c5f06039f09916c6bc832600d5bcb2c",
+      "bytes": 5598
+    },
+    {
+      "path": "build/campaign/queue-v51/families/08-attack-team-pumps/source/36d1a3f4-7903-41aa-9fb7-401d8789b00c.json",
+      "sha256": "342cdf8398f423f458234d31436f9333078b7a36cc08a0382c42875a84607764",
+      "bytes": 5495
+    },
+    {
+      "path": "build/campaign/queue-v51/families/08-attack-team-pumps/source/420d09b5-aced-4f71-914c-90d19f7476dc.json",
+      "sha256": "41d98478d0b58572cc2510f8ca25f03b832df9b438ef54eb322fb8cd244b633e",
+      "bytes": 5510
+    },
+    {
+      "path": "build/campaign/queue-v51/families/08-attack-team-pumps/source/5fab0d9c-ccf7-4c6a-94b4-959be139dad8.json",
+      "sha256": "db9cf21379f606c76d8529d935a4d283ce4134f1000dc0395dff52397e737078",
+      "bytes": 5479
+    },
+    {
+      "path": "build/campaign/queue-v51/families/08-attack-team-pumps/source/8aae3a28-dcf3-460e-89f9-4b0c96d6f55e.json",
+      "sha256": "7d26bb403c0b99717d76c981b161335b445a825c454770af7aa42b49be5d9dd9",
+      "bytes": 5453
+    },
+    {
+      "path": "build/campaign/queue-v51/families/08-attack-team-pumps/source/a7036d08-6ee4-49b1-bbbf-c96a937afa15.json",
+      "sha256": "8d5ca56420493fb0f63797683c0049205cfb79de06b9022e91f623a9e895546c",
+      "bytes": 5577
+    },
+    {
+      "path": "build/campaign/queue-v51/families/09-spirit-arcane-payoffs/family.md",
+      "sha256": "7a4de8191c8a2b626694c485b32d083b69579543975896c6ff6238812849e79b",
+      "bytes": 2970
+    },
+    {
+      "path": "build/campaign/queue-v51/families/09-spirit-arcane-payoffs/rulings/1566af29-bd7b-41bb-a589-499348fbd32c.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/09-spirit-arcane-payoffs/rulings/3970e021-209d-41d3-9466-8b3ef9ab1a4c.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/09-spirit-arcane-payoffs/rulings/712ec339-ffa8-43bb-a826-a7b0f0120b1f.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/09-spirit-arcane-payoffs/rulings/913dcf97-0804-4b21-8daa-f2b481dc0f2f.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/09-spirit-arcane-payoffs/rulings/c247382f-821e-4f3c-9d34-450794ce74c3.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/09-spirit-arcane-payoffs/source/1566af29-bd7b-41bb-a589-499348fbd32c.json",
+      "sha256": "6e579c738816ce1098624defcfc8382f0e531676fa972d1f52e52aa76c7a7ddf",
+      "bytes": 5606
+    },
+    {
+      "path": "build/campaign/queue-v51/families/09-spirit-arcane-payoffs/source/3970e021-209d-41d3-9466-8b3ef9ab1a4c.json",
+      "sha256": "dc1255a89b42d7878d8211a046db50faa7d02830463bae6daf3d6f541d54dade",
+      "bytes": 5541
+    },
+    {
+      "path": "build/campaign/queue-v51/families/09-spirit-arcane-payoffs/source/712ec339-ffa8-43bb-a826-a7b0f0120b1f.json",
+      "sha256": "6bdf98b568bd83820accd264bb68129238cf03693f0b707dace31075ac5a2a03",
+      "bytes": 5649
+    },
+    {
+      "path": "build/campaign/queue-v51/families/09-spirit-arcane-payoffs/source/913dcf97-0804-4b21-8daa-f2b481dc0f2f.json",
+      "sha256": "4c48f9e4c4ed80b9070c584e32d468951bcaf2303270c5b280d48d246b719bf2",
+      "bytes": 5502
+    },
+    {
+      "path": "build/campaign/queue-v51/families/09-spirit-arcane-payoffs/source/c247382f-821e-4f3c-9d34-450794ce74c3.json",
+      "sha256": "aae99a741b3297d470f9c4955deee15a5f0d0ee94d41c3b0e2cba34db82b21ea",
+      "bytes": 5652
+    },
+    {
+      "path": "build/campaign/queue-v51/freeze_bundles.py",
+      "sha256": "1e096677f1c6ab6cb1576a41bb77cfedc631618bcb5649b361197ef6438a92c3",
+      "bytes": 5458
+    },
+    {
+      "path": "build/campaign/queue-v51/gen_family_records.py",
+      "sha256": "3f95aa93d42da062eb6042de0d3304e5ef06b2ace9777ca4a4e488cc44ef6878",
+      "bytes": 9262
+    },
+    {
+      "path": "build/campaign/queue-v51/gen_maps.py",
+      "sha256": "4e3ed78f080eaf16ac56fa1a52de152508b7966037c827e0faa55619564c325d",
+      "bytes": 15973
+    },
+    {
+      "path": "build/campaign/queue-v51/gen_ron.py",
+      "sha256": "b1b70c8cb4617e460f0b68f656c7479e8d3988b14aa71f5ec82ca2e88f765489",
+      "bytes": 21023
+    },
+    {
+      "path": "build/campaign/queue-v51/map-list.json",
+      "sha256": "b241a9537442ea2024a91ce0f3fd8b86b18184a844e96c1a56930cb9a5a7d74c",
+      "bytes": 3553
+    },
+    {
+      "path": "build/campaign/queue-v51/report.md",
+      "sha256": "3d70e591c50927ee9cb0cee1ddc8663c2401bc18592ac60eb871d2f0b0383077",
+      "bytes": 1728
+    },
+    {
+      "path": "build/campaign/queue-v51/revalidation.tsv",
+      "sha256": "4f03267a2bca1e096692a1dc25e53e0abe7653462024402cae534d4b83fd8c5a",
+      "bytes": 10179
+    },
+    {
+      "path": "build/campaign/queue-v51/selection.md",
+      "sha256": "aa158a7e7f324603ecced556df37958364833dd86e94fc030f6cf76978f238d8",
+      "bytes": 3177
+    },
+    {
+      "path": "tricerules/CARDS.md",
+      "sha256": "ddb562434a94b8a24b5ddb65ed06815bc6184a0187d9a167099788a6de64f0cb",
+      "bytes": 848044
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/presentation-exceptions.tsv",
+      "sha256": "1cb39b6623994efca601e26b6e0729915dd738a9f824572fbd4c460e151e3393",
+      "bytes": 31455
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/blood-chin_rager.json",
+      "sha256": "7183e560af7d049046a42ff76b3f47ff5b44c73c8f3ea2a1578db2ebb21a466b",
+      "bytes": 1725
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/briarknit_kami.json",
+      "sha256": "03c73fbb4aeeb1b1dc215f4abd062038758aa7731f6c409b967ab15661fba558",
+      "bytes": 1735
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/chieftain_en-dal.json",
+      "sha256": "5ad6721eab586b78c2387d2015da193de3c1c4108577af14b74f22ca62f566e4",
+      "bytes": 1725
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/fangren_pathcutter.json",
+      "sha256": "7e83016cb248651725be064be8578c43b02dd84bb49f85952d065bad1ee4a339",
+      "bytes": 1727
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/goblin_general.json",
+      "sha256": "215a4ef4bd518ac6ac627c51bab977751902d6d1827803666b46f6218bba9b93",
+      "bytes": 1714
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/guardian_of_solitude.json",
+      "sha256": "535cd569d3aa50824b8db05be25d586bfbc81c5f836e03d68d20a36b34a50c0c",
+      "bytes": 1743
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/horizon_seed.json",
+      "sha256": "781249f33a9864e2e5932ea8d8f68bcfcf933e423f0c05a0736088ab5338f8f3",
+      "bytes": 1732
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/inspiring_unicorn.json",
+      "sha256": "9464abaf22d9f019e47a5ac0e46c44ab7a2aa629128554de3396ef7fffc9346e",
+      "bytes": 1717
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/kami_of_fires_roar.json",
+      "sha256": "4fe8837bc9a1103adb5f6a458837eeb9828384e324297deeb6b71db72d6831c9",
+      "bytes": 1750
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/riot_ringleader.json",
+      "sha256": "912ce72243d0c37c3e2cea692751cc92e71cc0a6e22aaf9d7ee52991ff0675c8",
+      "bytes": 1715
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/soul_of_magma.json",
+      "sha256": "922ed176edda52f1d5d6ada9ce20debf2305d255827a69bad9c8ec62cb3c7aa4",
+      "bytes": 1735
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/blood-chin_rager.ron",
+      "sha256": "c275ad3022e51d2ca6067f6b7e84ff4267888c6906b662af2d2322893707930f",
+      "bytes": 871
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/briarknit_kami.ron",
+      "sha256": "96ea769685ab9165f4d7e28939892c30ccfd5a3e4b5d62d5f5ebcd2a11c5d788",
+      "bytes": 1175
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/chieftain_en-dal.ron",
+      "sha256": "34875083ca8f4cbab95d2452677a58cf55db38b9e80f50410eee2e3d261aaf56",
+      "bytes": 851
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/fangren_pathcutter.ron",
+      "sha256": "9d1762494716f131e5f8b6bce57fffcb12c316d42d928637e220598c7b3a102d",
+      "bytes": 843
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/goblin_general.ron",
+      "sha256": "a11a5b0fc1b6eca95b9f0ae7ae36a0a11eb5faa2d509ddc26762e6a5cbe87b02",
+      "bytes": 863
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/guardian_of_solitude.ron",
+      "sha256": "58320b5516999317a8405f651cc31eb7e043682e5a632ed8b8285fd17d6d005e",
+      "bytes": 1177
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/horizon_seed.ron",
+      "sha256": "b883114a07e4d15d02bc2fed9b0427808ea2342847f944eb4637887626331ee9",
+      "bytes": 1130
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/inspiring_unicorn.ron",
+      "sha256": "601cc079904c088c61372437bb7f0cefc4b14daae59e176e3b5825eeaa5c435a",
+      "bytes": 843
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/kami_of_fires_roar.ron",
+      "sha256": "2903bb435cdc7a9bb9692c1dfe353d0346f5fdc42473fe951a681fbfd0d9b00f",
+      "bytes": 1192
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/riot_ringleader.ron",
+      "sha256": "e9777805aaaed34ccd7b6c9573f430c496206bbe523fa9e64ad45413054f0f33",
+      "bytes": 861
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/soul_of_magma.ron",
+      "sha256": "b187ce36c6072578aa563e4c00d0031784d7aa8d63a81ce34fb6d4c3318ac0e1",
+      "bytes": 1140
+    },
+    {
+      "path": "tricerules/tricerules-cards/presentation/oracle_fingerprints.tsv",
+      "sha256": "399c19ee3fe7c4075f22eb00016a53fb5367ccafb1370f8ac6027cd1535a833c",
+      "bytes": 650174
+    },
+    {
+      "path": "tricerules/tricerules-cards/tests/q51_cohorts_batch.rs",
+      "sha256": "be3c2a9053abbfac144e6f5bfd266cdc6690ed64b82120083a38198ba1f7133e",
+      "bytes": 32636
+    },
+    {
+      "path": "tricerules/tricerules-cards/tests/suites/mechanic_registry.rs",
+      "sha256": "e21b2c7295a1f39d98b7d065f3bd3b44cc8b05ef969b8814d0a503052fcd3df9",
+      "bytes": 34919
+    },
+    {
+      "path": "tricerules/tricerules-core/tests/scenario.rs",
+      "sha256": "4640d4744c57bca9008c315501a0adb0d1efa3e33dedccd82771af5b148187c7",
+      "bytes": 79736
+    },
+    {
+      "path": "tricerules/tricerules-core/tests/scenario/q51_cohorts_batch.rs",
+      "sha256": "c6e3669cff07ae978fb61cfc8ee74974cc9a67562c3ef89ab31e37fc0ba20c8c",
+      "bytes": 65443
+    }
+  ],
+  "dependencies": {
+    "build/campaign/blocked.tsv": "5e13f534b5fe9cb961a1d7f9a3972578bcf33bd22a08003112a125bd33978112",
+    "build/campaign/queue-v51/build_queue.py": "e705675726979cb2f601da0f11f3ee9af02fc09fc9513250ba01abf4991915df",
+    "build/campaign/queue-v51/cards.tsv": "d6ebc9959c149652ee73aa86fd0fd395e8063d15851227362a6c47e7c8a519dd",
+    "build/campaign/queue-v51/families/08-attack-team-pumps/family.md": "3facbcd3a252f1636c5022dc25cc77dafd6f095661a39bb0ee1c7015d96238dd",
+    "build/campaign/queue-v51/families/08-attack-team-pumps/rulings/1f9797e2-7ebb-41f9-9199-e9ee575eefd3.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/08-attack-team-pumps/rulings/36d1a3f4-7903-41aa-9fb7-401d8789b00c.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/08-attack-team-pumps/rulings/420d09b5-aced-4f71-914c-90d19f7476dc.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/08-attack-team-pumps/rulings/5fab0d9c-ccf7-4c6a-94b4-959be139dad8.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/08-attack-team-pumps/rulings/8aae3a28-dcf3-460e-89f9-4b0c96d6f55e.jsonl": "8e912056eee4cb27effadd87b617f8a2e95ccee91fa0f959aa5f3146161edcbd",
+    "build/campaign/queue-v51/families/08-attack-team-pumps/rulings/a7036d08-6ee4-49b1-bbbf-c96a937afa15.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/08-attack-team-pumps/source/1f9797e2-7ebb-41f9-9199-e9ee575eefd3.json": "1e1ed5e35868afff945f8305200715ec0c5f06039f09916c6bc832600d5bcb2c",
+    "build/campaign/queue-v51/families/08-attack-team-pumps/source/36d1a3f4-7903-41aa-9fb7-401d8789b00c.json": "342cdf8398f423f458234d31436f9333078b7a36cc08a0382c42875a84607764",
+    "build/campaign/queue-v51/families/08-attack-team-pumps/source/420d09b5-aced-4f71-914c-90d19f7476dc.json": "41d98478d0b58572cc2510f8ca25f03b832df9b438ef54eb322fb8cd244b633e",
+    "build/campaign/queue-v51/families/08-attack-team-pumps/source/5fab0d9c-ccf7-4c6a-94b4-959be139dad8.json": "db9cf21379f606c76d8529d935a4d283ce4134f1000dc0395dff52397e737078",
+    "build/campaign/queue-v51/families/08-attack-team-pumps/source/8aae3a28-dcf3-460e-89f9-4b0c96d6f55e.json": "7d26bb403c0b99717d76c981b161335b445a825c454770af7aa42b49be5d9dd9",
+    "build/campaign/queue-v51/families/08-attack-team-pumps/source/a7036d08-6ee4-49b1-bbbf-c96a937afa15.json": "8d5ca56420493fb0f63797683c0049205cfb79de06b9022e91f623a9e895546c",
+    "build/campaign/queue-v51/families/09-spirit-arcane-payoffs/family.md": "7a4de8191c8a2b626694c485b32d083b69579543975896c6ff6238812849e79b",
+    "build/campaign/queue-v51/families/09-spirit-arcane-payoffs/rulings/1566af29-bd7b-41bb-a589-499348fbd32c.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/09-spirit-arcane-payoffs/rulings/3970e021-209d-41d3-9466-8b3ef9ab1a4c.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/09-spirit-arcane-payoffs/rulings/712ec339-ffa8-43bb-a826-a7b0f0120b1f.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/09-spirit-arcane-payoffs/rulings/913dcf97-0804-4b21-8daa-f2b481dc0f2f.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/09-spirit-arcane-payoffs/rulings/c247382f-821e-4f3c-9d34-450794ce74c3.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/09-spirit-arcane-payoffs/source/1566af29-bd7b-41bb-a589-499348fbd32c.json": "6e579c738816ce1098624defcfc8382f0e531676fa972d1f52e52aa76c7a7ddf",
+    "build/campaign/queue-v51/families/09-spirit-arcane-payoffs/source/3970e021-209d-41d3-9466-8b3ef9ab1a4c.json": "dc1255a89b42d7878d8211a046db50faa7d02830463bae6daf3d6f541d54dade",
+    "build/campaign/queue-v51/families/09-spirit-arcane-payoffs/source/712ec339-ffa8-43bb-a826-a7b0f0120b1f.json": "6bdf98b568bd83820accd264bb68129238cf03693f0b707dace31075ac5a2a03",
+    "build/campaign/queue-v51/families/09-spirit-arcane-payoffs/source/913dcf97-0804-4b21-8daa-f2b481dc0f2f.json": "4c48f9e4c4ed80b9070c584e32d468951bcaf2303270c5b280d48d246b719bf2",
+    "build/campaign/queue-v51/families/09-spirit-arcane-payoffs/source/c247382f-821e-4f3c-9d34-450794ce74c3.json": "aae99a741b3297d470f9c4955deee15a5f0d0ee94d41c3b0e2cba34db82b21ea",
+    "build/campaign/queue-v51/freeze_bundles.py": "1e096677f1c6ab6cb1576a41bb77cfedc631618bcb5649b361197ef6438a92c3",
+    "build/campaign/queue-v51/gen_family_records.py": "3f95aa93d42da062eb6042de0d3304e5ef06b2ace9777ca4a4e488cc44ef6878",
+    "build/campaign/queue-v51/gen_maps.py": "4e3ed78f080eaf16ac56fa1a52de152508b7966037c827e0faa55619564c325d",
+    "build/campaign/queue-v51/gen_ron.py": "b1b70c8cb4617e460f0b68f656c7479e8d3988b14aa71f5ec82ca2e88f765489",
+    "build/campaign/queue-v51/map-list.json": "b241a9537442ea2024a91ce0f3fd8b86b18184a844e96c1a56930cb9a5a7d74c",
+    "build/campaign/queue-v51/report.md": "3d70e591c50927ee9cb0cee1ddc8663c2401bc18592ac60eb871d2f0b0383077",
+    "build/campaign/queue-v51/revalidation.tsv": "4f03267a2bca1e096692a1dc25e53e0abe7653462024402cae534d4b83fd8c5a",
+    "build/campaign/queue-v51/selection.md": "aa158a7e7f324603ecced556df37958364833dd86e94fc030f6cf76978f238d8",
+    "tricerules/CARDS.md": "ddb562434a94b8a24b5ddb65ed06815bc6184a0187d9a167099788a6de64f0cb",
+    "tricerules/tricerules-cards/authoring/presentation-exceptions.tsv": "1cb39b6623994efca601e26b6e0729915dd738a9f824572fbd4c460e151e3393",
+    "tricerules/tricerules-cards/authoring/review-maps/blood-chin_rager.json": "7183e560af7d049046a42ff76b3f47ff5b44c73c8f3ea2a1578db2ebb21a466b",
+    "tricerules/tricerules-cards/authoring/review-maps/briarknit_kami.json": "03c73fbb4aeeb1b1dc215f4abd062038758aa7731f6c409b967ab15661fba558",
+    "tricerules/tricerules-cards/authoring/review-maps/chieftain_en-dal.json": "5ad6721eab586b78c2387d2015da193de3c1c4108577af14b74f22ca62f566e4",
+    "tricerules/tricerules-cards/authoring/review-maps/fangren_pathcutter.json": "7e83016cb248651725be064be8578c43b02dd84bb49f85952d065bad1ee4a339",
+    "tricerules/tricerules-cards/authoring/review-maps/goblin_general.json": "215a4ef4bd518ac6ac627c51bab977751902d6d1827803666b46f6218bba9b93",
+    "tricerules/tricerules-cards/authoring/review-maps/guardian_of_solitude.json": "535cd569d3aa50824b8db05be25d586bfbc81c5f836e03d68d20a36b34a50c0c",
+    "tricerules/tricerules-cards/authoring/review-maps/horizon_seed.json": "781249f33a9864e2e5932ea8d8f68bcfcf933e423f0c05a0736088ab5338f8f3",
+    "tricerules/tricerules-cards/authoring/review-maps/inspiring_unicorn.json": "9464abaf22d9f019e47a5ac0e46c44ab7a2aa629128554de3396ef7fffc9346e",
+    "tricerules/tricerules-cards/authoring/review-maps/kami_of_fires_roar.json": "4fe8837bc9a1103adb5f6a458837eeb9828384e324297deeb6b71db72d6831c9",
+    "tricerules/tricerules-cards/authoring/review-maps/riot_ringleader.json": "912ce72243d0c37c3e2cea692751cc92e71cc0a6e22aaf9d7ee52991ff0675c8",
+    "tricerules/tricerules-cards/authoring/review-maps/soul_of_magma.json": "922ed176edda52f1d5d6ada9ce20debf2305d255827a69bad9c8ec62cb3c7aa4",
+    "tricerules/tricerules-cards/data/blood-chin_rager.ron": "c275ad3022e51d2ca6067f6b7e84ff4267888c6906b662af2d2322893707930f",
+    "tricerules/tricerules-cards/data/briarknit_kami.ron": "96ea769685ab9165f4d7e28939892c30ccfd5a3e4b5d62d5f5ebcd2a11c5d788",
+    "tricerules/tricerules-cards/data/chieftain_en-dal.ron": "34875083ca8f4cbab95d2452677a58cf55db38b9e80f50410eee2e3d261aaf56",
+    "tricerules/tricerules-cards/data/fangren_pathcutter.ron": "9d1762494716f131e5f8b6bce57fffcb12c316d42d928637e220598c7b3a102d",
+    "tricerules/tricerules-cards/data/goblin_general.ron": "a11a5b0fc1b6eca95b9f0ae7ae36a0a11eb5faa2d509ddc26762e6a5cbe87b02",
+    "tricerules/tricerules-cards/data/guardian_of_solitude.ron": "58320b5516999317a8405f651cc31eb7e043682e5a632ed8b8285fd17d6d005e",
+    "tricerules/tricerules-cards/data/horizon_seed.ron": "b883114a07e4d15d02bc2fed9b0427808ea2342847f944eb4637887626331ee9",
+    "tricerules/tricerules-cards/data/inspiring_unicorn.ron": "601cc079904c088c61372437bb7f0cefc4b14daae59e176e3b5825eeaa5c435a",
+    "tricerules/tricerules-cards/data/kami_of_fires_roar.ron": "2903bb435cdc7a9bb9692c1dfe353d0346f5fdc42473fe951a681fbfd0d9b00f",
+    "tricerules/tricerules-cards/data/riot_ringleader.ron": "e9777805aaaed34ccd7b6c9573f430c496206bbe523fa9e64ad45413054f0f33",
+    "tricerules/tricerules-cards/data/soul_of_magma.ron": "b187ce36c6072578aa563e4c00d0031784d7aa8d63a81ce34fb6d4c3318ac0e1",
+    "tricerules/tricerules-cards/presentation/oracle_fingerprints.tsv": "399c19ee3fe7c4075f22eb00016a53fb5367ccafb1370f8ac6027cd1535a833c",
+    "tricerules/tricerules-cards/tests/q51_cohorts_batch.rs": "be3c2a9053abbfac144e6f5bfd266cdc6690ed64b82120083a38198ba1f7133e",
+    "tricerules/tricerules-cards/tests/suites/mechanic_registry.rs": "e21b2c7295a1f39d98b7d065f3bd3b44cc8b05ef969b8814d0a503052fcd3df9",
+    "tricerules/tricerules-core/tests/scenario.rs": "4640d4744c57bca9008c315501a0adb0d1efa3e33dedccd82771af5b148187c7",
+    "tricerules/tricerules-core/tests/scenario/q51_cohorts_batch.rs": "c6e3669cff07ae978fb61cfc8ee74974cc9a67562c3ef89ab31e37fc0ba20c8c"
+  },
+  "artifacts": {
+    "batch-c.patch.diff": "8acf84c119c8ecead518dab04824b58013e377cf2d616d55adfbe1ab2a054d63"
+  }
+}

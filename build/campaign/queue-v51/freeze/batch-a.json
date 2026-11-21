@@ -1,0 +1,705 @@
+{
+  "format_version": 1,
+  "bundle": "batch-a",
+  "families": [
+    "01-token-spells",
+    "02-splicer-cycle",
+    "03-artifact-value-tutors"
+  ],
+  "base_head": "9a37f656b1ea1f0a098682208fc66b30cdb9f2f6",
+  "review_type": "frozen implementation review",
+  "test_evidence": {
+    "scenario_green": "build/verification-logs/20261120-q51-scenario-green4.log",
+    "registry_green": "build/verification-logs/20261120-q51-registry-green4.log",
+    "intended_red": [
+      "build/verification-logs/20261120-q51-intended-red.log"
+    ],
+    "evidence_preparation": "build/verification-logs/card-evidence-f69e990e-c0e2-4ee8-8a8d-da4cc83beba4",
+    "metadata_refresh": "build/verification-logs/card-data-e756693d-c2c1-47a2-83ba-6aedef321489"
+  },
+  "files": [
+    {
+      "path": "build/campaign/blocked.tsv",
+      "sha256": "5e13f534b5fe9cb961a1d7f9a3972578bcf33bd22a08003112a125bd33978112",
+      "bytes": 26306
+    },
+    {
+      "path": "build/campaign/queue-v51/build_queue.py",
+      "sha256": "e705675726979cb2f601da0f11f3ee9af02fc09fc9513250ba01abf4991915df",
+      "bytes": 8092
+    },
+    {
+      "path": "build/campaign/queue-v51/cards.tsv",
+      "sha256": "d6ebc9959c149652ee73aa86fd0fd395e8063d15851227362a6c47e7c8a519dd",
+      "bytes": 3445
+    },
+    {
+      "path": "build/campaign/queue-v51/families/01-token-spells/family.md",
+      "sha256": "d4698546a249389cfeb376df6053782e45b449bdd122ea989d757b375edfe19a",
+      "bytes": 3516
+    },
+    {
+      "path": "build/campaign/queue-v51/families/01-token-spells/rulings/0c8ab7bf-7b6a-4a34-b988-9f3f4d84a9ea.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/01-token-spells/rulings/4965f5fe-a5fe-4976-822c-5cf40fea8c34.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/01-token-spells/rulings/61e2d557-f08d-489b-94c8-aff87e5189f9.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/01-token-spells/rulings/76a6ddc2-f894-4331-89a9-87ca16efd0c0.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/01-token-spells/rulings/8fb599a7-2c61-446b-a7a7-cd5367f9b796.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/01-token-spells/rulings/aa8b60b6-cf55-4aaa-9caa-2b17942d8269.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/01-token-spells/rulings/d1a9fd14-fecb-4d2a-983c-70143238275b.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/01-token-spells/rulings/d6c9c1f0-050f-40e2-ab6c-6566d0af418c.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/01-token-spells/rulings/e1635acd-ed1e-4038-a11a-6518df285253.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/01-token-spells/rulings/eb62aa4b-c11b-4195-ae85-cff8f78ce17b.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/01-token-spells/rulings/f9e668f9-21af-4fd8-9a37-6505ab2234e3.jsonl",
+      "sha256": "ba5ee86b90172855e0dc32101ea20bd834fe172efdfa9b5ae57f5be34c420004",
+      "bytes": 623
+    },
+    {
+      "path": "build/campaign/queue-v51/families/01-token-spells/source/0c8ab7bf-7b6a-4a34-b988-9f3f4d84a9ea.json",
+      "sha256": "add30c9c4981f561958fd86360e5a1d315b028080b79d462749dc15d0af536f2",
+      "bytes": 5942
+    },
+    {
+      "path": "build/campaign/queue-v51/families/01-token-spells/source/4965f5fe-a5fe-4976-822c-5cf40fea8c34.json",
+      "sha256": "d4847d1c8f74c7be21cae7fd3b553ece5865bb4cdb2074eb19978acc719ad930",
+      "bytes": 5977
+    },
+    {
+      "path": "build/campaign/queue-v51/families/01-token-spells/source/61e2d557-f08d-489b-94c8-aff87e5189f9.json",
+      "sha256": "9cd77e6c8b313613ceaf339a2770dda857bdd3d2323e734e3352181bfb590758",
+      "bytes": 5881
+    },
+    {
+      "path": "build/campaign/queue-v51/families/01-token-spells/source/76a6ddc2-f894-4331-89a9-87ca16efd0c0.json",
+      "sha256": "328501b48211d167b94fec935d091e5f0a5e12b47882d1923cd88aab8e640255",
+      "bytes": 6012
+    },
+    {
+      "path": "build/campaign/queue-v51/families/01-token-spells/source/8fb599a7-2c61-446b-a7a7-cd5367f9b796.json",
+      "sha256": "c6c2eb2989e93c13ce13cc5606ce3802d5f7f9ab9ef1bc4fd5bca346cd6b5e1c",
+      "bytes": 6006
+    },
+    {
+      "path": "build/campaign/queue-v51/families/01-token-spells/source/aa8b60b6-cf55-4aaa-9caa-2b17942d8269.json",
+      "sha256": "36594ab05980957a4f7652594a0903a6b4723ed44f42537d1d90ed30d36b79a4",
+      "bytes": 6016
+    },
+    {
+      "path": "build/campaign/queue-v51/families/01-token-spells/source/d1a9fd14-fecb-4d2a-983c-70143238275b.json",
+      "sha256": "c90e571e3af350781a728e5e7da065d60cb1eda9fd9eb6b2915d79c69ae1ab43",
+      "bytes": 6020
+    },
+    {
+      "path": "build/campaign/queue-v51/families/01-token-spells/source/d6c9c1f0-050f-40e2-ab6c-6566d0af418c.json",
+      "sha256": "f1ed187c3ad6e23e1ecb4cc52c3f29bf4928289547476ddd9ce8e879e5f93190",
+      "bytes": 5958
+    },
+    {
+      "path": "build/campaign/queue-v51/families/01-token-spells/source/e1635acd-ed1e-4038-a11a-6518df285253.json",
+      "sha256": "f28a2c282a10fc8d917e98964ce276d4c0434a5d7533969c5542a09d290f3b6a",
+      "bytes": 6030
+    },
+    {
+      "path": "build/campaign/queue-v51/families/01-token-spells/source/eb62aa4b-c11b-4195-ae85-cff8f78ce17b.json",
+      "sha256": "809dfc0cefaf2c8e84ea7ba0a961ff9db1b42fd7c7dbd5b09c248dd53ab9eb0c",
+      "bytes": 6028
+    },
+    {
+      "path": "build/campaign/queue-v51/families/01-token-spells/source/f9e668f9-21af-4fd8-9a37-6505ab2234e3.json",
+      "sha256": "2f1b4d3ac36d8f6954e5eac0a5165e3bc2f3628c40fe881f05c4d9200c3bce59",
+      "bytes": 6205
+    },
+    {
+      "path": "build/campaign/queue-v51/families/02-splicer-cycle/family.md",
+      "sha256": "7b883fd4b793bd89c18aef98dbb5cb5e7c7eebf1b3d8e72dc4d0aaa6b9458b3a",
+      "bytes": 3407
+    },
+    {
+      "path": "build/campaign/queue-v51/families/02-splicer-cycle/rulings/194166ad-0179-42a3-86b9-ba7f322ec576.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/02-splicer-cycle/rulings/7fbf6afc-8a16-447b-bdef-b7d0b640f76c.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/02-splicer-cycle/rulings/9676da93-1e17-4f6c-b610-a242b78c71ab.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/02-splicer-cycle/rulings/9e0c5919-aed6-4d98-85c8-2658be78bdf0.jsonl",
+      "sha256": "0fe0a43285ad7e280c10e2ca3183124a573352aed5ac795ea6b26c19a5f9d5b1",
+      "bytes": 349
+    },
+    {
+      "path": "build/campaign/queue-v51/families/02-splicer-cycle/rulings/e1899133-635d-46ff-b90d-6f8d46a1ffe1.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/02-splicer-cycle/source/194166ad-0179-42a3-86b9-ba7f322ec576.json",
+      "sha256": "9b5808b0d808949262e54f854560062af51d094832e7986a54bfc637208f37c8",
+      "bytes": 6088
+    },
+    {
+      "path": "build/campaign/queue-v51/families/02-splicer-cycle/source/7fbf6afc-8a16-447b-bdef-b7d0b640f76c.json",
+      "sha256": "0677c119b844f4cef74d7664dfc6f180d7cd7fc4dc63f6cf781caff05bc0cf3d",
+      "bytes": 6148
+    },
+    {
+      "path": "build/campaign/queue-v51/families/02-splicer-cycle/source/9676da93-1e17-4f6c-b610-a242b78c71ab.json",
+      "sha256": "56d0af58e46b4ab46b83e9fe4330371a797ec1c844388f64d194a5dd82985304",
+      "bytes": 6083
+    },
+    {
+      "path": "build/campaign/queue-v51/families/02-splicer-cycle/source/9e0c5919-aed6-4d98-85c8-2658be78bdf0.json",
+      "sha256": "9f0c4062804b8739ef1d46e79a5bb8f05811675458438e9c6b0dd778cd2822d4",
+      "bytes": 6153
+    },
+    {
+      "path": "build/campaign/queue-v51/families/02-splicer-cycle/source/e1899133-635d-46ff-b90d-6f8d46a1ffe1.json",
+      "sha256": "7e2ec18f2a66f18edd0a2cdeb8223c99d1707f02561fad253142e09051cfd2aa",
+      "bytes": 6211
+    },
+    {
+      "path": "build/campaign/queue-v51/families/03-artifact-value-tutors/family.md",
+      "sha256": "f915073083d7d47f036033e7468db0cafbe2202f7cac0271424e20bc611e5e0d",
+      "bytes": 3125
+    },
+    {
+      "path": "build/campaign/queue-v51/families/03-artifact-value-tutors/rulings/08afc0d7-192f-4ab6-b6a0-c4265cf5e225.jsonl",
+      "sha256": "8770e62adeed324c5efaea306186c08d68aa7e1d1313be6b2e7de60408c4a92b",
+      "bytes": 208
+    },
+    {
+      "path": "build/campaign/queue-v51/families/03-artifact-value-tutors/rulings/991efbf1-299d-4892-aeab-8ff9827f7168.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "build/campaign/queue-v51/families/03-artifact-value-tutors/rulings/c2b51295-8820-425f-a517-55231123c7de.jsonl",
+      "sha256": "097d3226e2dd1ee3d7f10d891f0c011404110d1b1526247ca010568bffe0fdfc",
+      "bytes": 211
+    },
+    {
+      "path": "build/campaign/queue-v51/families/03-artifact-value-tutors/rulings/ffc95093-24a2-4616-a44a-24788e8df9c8.jsonl",
+      "sha256": "bd3a6679e03205c1a29987e5d09b9a3dc7388d12e3ea130b2859e364c1e44c9b",
+      "bytes": 219
+    },
+    {
+      "path": "build/campaign/queue-v51/families/03-artifact-value-tutors/source/08afc0d7-192f-4ab6-b6a0-c4265cf5e225.json",
+      "sha256": "02ef93551f2fc86bbc7115869838a494a6d9c4341d2fca97a9800c4498c120e8",
+      "bytes": 5483
+    },
+    {
+      "path": "build/campaign/queue-v51/families/03-artifact-value-tutors/source/991efbf1-299d-4892-aeab-8ff9827f7168.json",
+      "sha256": "371426fe4b454785c5b1f9a1b97609232e5796151408ec923c374b44f116b347",
+      "bytes": 5633
+    },
+    {
+      "path": "build/campaign/queue-v51/families/03-artifact-value-tutors/source/c2b51295-8820-425f-a517-55231123c7de.json",
+      "sha256": "46ba64ad2e536f56f6848551e39be132b148266b8b5cd67c6f0628aa667a958b",
+      "bytes": 5571
+    },
+    {
+      "path": "build/campaign/queue-v51/families/03-artifact-value-tutors/source/ffc95093-24a2-4616-a44a-24788e8df9c8.json",
+      "sha256": "b28ba72a516cb2d442b27ce35bc0638cc742faeb92819e120c5380919b3bf0a8",
+      "bytes": 5413
+    },
+    {
+      "path": "build/campaign/queue-v51/freeze_bundles.py",
+      "sha256": "1e096677f1c6ab6cb1576a41bb77cfedc631618bcb5649b361197ef6438a92c3",
+      "bytes": 5458
+    },
+    {
+      "path": "build/campaign/queue-v51/gen_family_records.py",
+      "sha256": "3f95aa93d42da062eb6042de0d3304e5ef06b2ace9777ca4a4e488cc44ef6878",
+      "bytes": 9262
+    },
+    {
+      "path": "build/campaign/queue-v51/gen_maps.py",
+      "sha256": "4e3ed78f080eaf16ac56fa1a52de152508b7966037c827e0faa55619564c325d",
+      "bytes": 15973
+    },
+    {
+      "path": "build/campaign/queue-v51/gen_ron.py",
+      "sha256": "b1b70c8cb4617e460f0b68f656c7479e8d3988b14aa71f5ec82ca2e88f765489",
+      "bytes": 21023
+    },
+    {
+      "path": "build/campaign/queue-v51/map-list.json",
+      "sha256": "b241a9537442ea2024a91ce0f3fd8b86b18184a844e96c1a56930cb9a5a7d74c",
+      "bytes": 3553
+    },
+    {
+      "path": "build/campaign/queue-v51/report.md",
+      "sha256": "3d70e591c50927ee9cb0cee1ddc8663c2401bc18592ac60eb871d2f0b0383077",
+      "bytes": 1728
+    },
+    {
+      "path": "build/campaign/queue-v51/revalidation.tsv",
+      "sha256": "4f03267a2bca1e096692a1dc25e53e0abe7653462024402cae534d4b83fd8c5a",
+      "bytes": 10179
+    },
+    {
+      "path": "build/campaign/queue-v51/selection.md",
+      "sha256": "aa158a7e7f324603ecced556df37958364833dd86e94fc030f6cf76978f238d8",
+      "bytes": 3177
+    },
+    {
+      "path": "tricerules/CARDS.md",
+      "sha256": "ddb562434a94b8a24b5ddb65ed06815bc6184a0187d9a167099788a6de64f0cb",
+      "bytes": 848044
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/presentation-exceptions.tsv",
+      "sha256": "1cb39b6623994efca601e26b6e0729915dd738a9f824572fbd4c460e151e3393",
+      "bytes": 31455
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/advent_of_the_wurm.json",
+      "sha256": "e887e1b3ec0e96a9e4debfe94757bd27d79061a5c3ef2dbd9611a75c2d6e1168",
+      "bytes": 1449
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/blade_splicer.json",
+      "sha256": "ee834a3aed6c298d7c82becdfed9b4d8395231468aa8ae2300bafdbbcf2b686a",
+      "bytes": 2408
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/call_of_the_conclave.json",
+      "sha256": "9fb372c0da4b732d94346e14d7d4ddedbe6316888e75eebaa1c888361012a7fb",
+      "bytes": 1446
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/elemental_summoning.json",
+      "sha256": "46999bef0ea3f45a7ca84787ae8be405673a05527881f08a65a053396018e10e",
+      "bytes": 1448
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/flurry_of_horns.json",
+      "sha256": "90795e7a0654dc38849c2f51069b3a1f283594a32441dc258bb5a39a90c1dc67",
+      "bytes": 1448
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/icatian_town.json",
+      "sha256": "b49fcafebbc763f3ebdb5881fa82b696947585bb327dec9a7a2693770d14f909",
+      "bytes": 1438
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/knight_watch.json",
+      "sha256": "8eb4e7cd86cebeca09a15028f77c9091afa0b88af2e107a857d8df840f9ddfb6",
+      "bytes": 1447
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/master_splicer.json",
+      "sha256": "12c39a77875ca6db584112cafa6f305aa0e77cbc40265c55562f59058ba0185d",
+      "bytes": 2405
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/masters_call.json",
+      "sha256": "36e1e4196f12db25fd96e8a782208e416cae88c2fda3f1502b4e2b3d4e841b8c",
+      "bytes": 1440
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/sensor_splicer.json",
+      "sha256": "a9d3f38e83142128ea6b6ddbb93eed836fb1623739eb9d4317adc60b6ab3091e",
+      "bytes": 2410
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/servo_exhibition.json",
+      "sha256": "efc69d14509871a9a9e9922009d959f61254e9d78d3702a86c87bf0fdfef0459",
+      "bytes": 1440
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/spore_swarm.json",
+      "sha256": "de01bf5187bc218df3197883e7c9a4e2306cc3d2719d062770ef514e5e69fd38",
+      "bytes": 1439
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/sworn_companions.json",
+      "sha256": "01340d41b0fcbe22c8bb05880e49a11e0dd6766dbc3ecc2ab76e4a3ef9a05ac8",
+      "bytes": 1451
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/take_up_arms.json",
+      "sha256": "e56a79a1eefa77bfdad245bca9dc43777f1ee802cfa4904d62f445fa01e06437",
+      "bytes": 1438
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/transit_mage.json",
+      "sha256": "1173abd765c8c0b37e040c6f65edf28eb39a472b49c04e0c73c417680b6a0577",
+      "bytes": 1956
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/tribute_mage.json",
+      "sha256": "8be84d3cdf7b8f58a930248579000652663bc1f7d594b1abd09956a3a77cca0c",
+      "bytes": 1956
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/trinket_mage.json",
+      "sha256": "1e22cd58a55ebebab56e0a37b84de19452f5657b18a9bcc39e551e56c5639785",
+      "bytes": 1956
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/trophy_mage.json",
+      "sha256": "fa5dce94bc2af93700cb6a720306e95ba4d91c0b4a48eaeaad58764b861b49ad",
+      "bytes": 1955
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/vital_splicer.json",
+      "sha256": "dbec8e7403c6e3b39e6ed45914e74d602eda04559750eaa2a1dd203579748792",
+      "bytes": 2408
+    },
+    {
+      "path": "tricerules/tricerules-cards/authoring/review-maps/wing_splicer.json",
+      "sha256": "88632b1e9576052cf262abfc4704e33f25e74806a124a218e8ce815d57fbae9b",
+      "bytes": 2406
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/advent_of_the_wurm.ron",
+      "sha256": "0b76eeb3bc7b205346274ed0ced7e90c9772e2b99e14261f5119d57aff88eeef",
+      "bytes": 549
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/blade_splicer.ron",
+      "sha256": "63fe71b060bc45a359a5c0f466a9172642533a3c46ea253b6c128fda6380e5de",
+      "bytes": 916
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/call_of_the_conclave.ron",
+      "sha256": "33f2683605a38b17af2ddc0dee1f09939aae456312d63bdbe8cda9be16947ef1",
+      "bytes": 544
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/elemental_summoning.ron",
+      "sha256": "5cb54d30546bc66ebec18d03527c345a810b18483287e897ea85fe38c53597ac",
+      "bytes": 561
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/flurry_of_horns.ron",
+      "sha256": "109b10204f86d742d76995d81bbd199430fb6c9de7f29d611944e704a150046a",
+      "bytes": 536
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/icatian_town.ron",
+      "sha256": "8e92f3fa8fc99d43e8c71a3202ebc585efdfe3132655aa88f456eed32e635ac6",
+      "bytes": 520
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/knight_watch.ron",
+      "sha256": "deb333e41f20a328b0389950c8dac07fffd198e183868c86581323b88ea6208e",
+      "bytes": 529
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/master_splicer.ron",
+      "sha256": "794115de65f212bd7f0f62de7e31a1913b7f926bc5845eeb6d071338db93782f",
+      "bytes": 916
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/masters_call.ron",
+      "sha256": "4bd456a8cc7df8d67ab4dba9c059b862034c8395117e8f82290b039e876b7e41",
+      "bytes": 523
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/sensor_splicer.ron",
+      "sha256": "4099d7cc7a3d77d4a016e26400ada3604b4927a81acc6bfb410206bf3a169f24",
+      "bytes": 905
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/servo_exhibition.ron",
+      "sha256": "f2f2efc50a08fce5df2c878b4a4af89e2fe314177ca7dc186c7e317de6cc015e",
+      "bytes": 530
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/spore_swarm.ron",
+      "sha256": "3c681eeeb918999d4a450cf7b7a59e9bc1933bc0566c32f51e8631393e1daa77",
+      "bytes": 519
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/sworn_companions.ron",
+      "sha256": "581489ad0e68e6cdaf00d8503d5d2046021ab1665746bab1c35995b937bed853",
+      "bytes": 541
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/take_up_arms.ron",
+      "sha256": "a2828bff91edc059ac7655d65d5a8ffd44cfcbc278fea1d4c513a690c19a591d",
+      "bytes": 520
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/tokens/centaur_g_3_3.ron",
+      "sha256": "12c6708ba6189b04e63f135f8ca05c65d7aecbee64591aad5309aa615c48e704",
+      "bytes": 209
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/tokens/citizen_w_1_1.ron",
+      "sha256": "55a552c8189dbc9ec7054e06586bb5f2ce07b74e6f26d2f0505e50314ad824e5",
+      "bytes": 201
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/tokens/elemental_ur_4_4.ron",
+      "sha256": "46593ddcfa253dc9741df244fc37ec6c700de73d9d4edf6dc091d96251573d05",
+      "bytes": 230
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/tokens/golem_c_3_3.ron",
+      "sha256": "3095c8b98ee7b87ba8311347833c4253ba40bab1e8eb4ba4a6dc0a399bf424a4",
+      "bytes": 221
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/tokens/knight_w_2_2_vigilance.ron",
+      "sha256": "1a9aa96f523b8aef3c4a6c710c29f10e80ea8d4ed42ce5138c8ced9f14222e27",
+      "bytes": 272
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/tokens/minotaur_r_2_3_haste.ron",
+      "sha256": "db7a242ffbc8fd50a117e31b3de9d041ddb31b7ad593836233743e8058a6c224",
+      "bytes": 243
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/tokens/myr_token_c_1_1.ron",
+      "sha256": "2196dba746f7b34a5e8f6003d0e16b2fa6b5efe64c528446bd914e12103ee7a4",
+      "bytes": 216
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/tokens/saproling_g_1_1.ron",
+      "sha256": "5650c2f9e6069138afdfdd9588c2bb4109f2ceed00c6c2a26be07ecaf66ebb4e",
+      "bytes": 246
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/tokens/servo_c_1_1.ron",
+      "sha256": "541085b5b46ca1cf82fcdbe663e44e96c2389551de985bc97e0d6a91ad962c79",
+      "bytes": 201
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/tokens/soldier_w_1_1_lifelink.ron",
+      "sha256": "514125e550d9f9fa832d84d586a9d259db7692963a93502f00fc771c90f9d8a8",
+      "bytes": 252
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/tokens/warrior_w_1_1.ron",
+      "sha256": "acffa00a03b2970165c8465de6b96319a53dd56d0e68654f455dc8da34e965db",
+      "bytes": 201
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/tokens/wurm_g_5_5_trample.ron",
+      "sha256": "428e4387e8142677d9a3b756f140499ccdceb9c7cace18a4232bc1eae605fd8c",
+      "bytes": 236
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/transit_mage.ron",
+      "sha256": "d251b6797659a7d1cb5dd2def03fe0fb4751e7de52086ff6b4d70baf88b59c16",
+      "bytes": 931
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/tribute_mage.ron",
+      "sha256": "c4c4b08f8001720e8d7708a0c5f98b2d68bd4e6a800be70d61ab5cbcae44b655",
+      "bytes": 931
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/trinket_mage.ron",
+      "sha256": "c8fb4c4eeb9af43cdb74373f5cc55a6cb7fa1ca570318ce37eb7ef9511a4561f",
+      "bytes": 931
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/trophy_mage.ron",
+      "sha256": "22ef5b7736a968fe346ddb1516da3ed1bcca0029eb4a64223c17944d3356f25d",
+      "bytes": 928
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/vital_splicer.ron",
+      "sha256": "a842f2dd258ca9f343bb936a4fd3e943c473164d8c663154df5971bc7407cef4",
+      "bytes": 1081
+    },
+    {
+      "path": "tricerules/tricerules-cards/data/wing_splicer.ron",
+      "sha256": "1224c6ac092cc20af667c3bf1a7bbb786558f135fe1da7412349c7c8c4cf60a8",
+      "bytes": 902
+    },
+    {
+      "path": "tricerules/tricerules-cards/presentation/oracle_fingerprints.tsv",
+      "sha256": "399c19ee3fe7c4075f22eb00016a53fb5367ccafb1370f8ac6027cd1535a833c",
+      "bytes": 650174
+    },
+    {
+      "path": "tricerules/tricerules-cards/tests/q51_cohorts_batch.rs",
+      "sha256": "be3c2a9053abbfac144e6f5bfd266cdc6690ed64b82120083a38198ba1f7133e",
+      "bytes": 32636
+    },
+    {
+      "path": "tricerules/tricerules-cards/tests/suites/mechanic_registry.rs",
+      "sha256": "e21b2c7295a1f39d98b7d065f3bd3b44cc8b05ef969b8814d0a503052fcd3df9",
+      "bytes": 34919
+    },
+    {
+      "path": "tricerules/tricerules-core/tests/scenario.rs",
+      "sha256": "4640d4744c57bca9008c315501a0adb0d1efa3e33dedccd82771af5b148187c7",
+      "bytes": 79736
+    },
+    {
+      "path": "tricerules/tricerules-core/tests/scenario/q51_cohorts_batch.rs",
+      "sha256": "c6e3669cff07ae978fb61cfc8ee74974cc9a67562c3ef89ab31e37fc0ba20c8c",
+      "bytes": 65443
+    }
+  ],
+  "dependencies": {
+    "build/campaign/blocked.tsv": "5e13f534b5fe9cb961a1d7f9a3972578bcf33bd22a08003112a125bd33978112",
+    "build/campaign/queue-v51/build_queue.py": "e705675726979cb2f601da0f11f3ee9af02fc09fc9513250ba01abf4991915df",
+    "build/campaign/queue-v51/cards.tsv": "d6ebc9959c149652ee73aa86fd0fd395e8063d15851227362a6c47e7c8a519dd",
+    "build/campaign/queue-v51/families/01-token-spells/family.md": "d4698546a249389cfeb376df6053782e45b449bdd122ea989d757b375edfe19a",
+    "build/campaign/queue-v51/families/01-token-spells/rulings/0c8ab7bf-7b6a-4a34-b988-9f3f4d84a9ea.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/01-token-spells/rulings/4965f5fe-a5fe-4976-822c-5cf40fea8c34.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/01-token-spells/rulings/61e2d557-f08d-489b-94c8-aff87e5189f9.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/01-token-spells/rulings/76a6ddc2-f894-4331-89a9-87ca16efd0c0.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/01-token-spells/rulings/8fb599a7-2c61-446b-a7a7-cd5367f9b796.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/01-token-spells/rulings/aa8b60b6-cf55-4aaa-9caa-2b17942d8269.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/01-token-spells/rulings/d1a9fd14-fecb-4d2a-983c-70143238275b.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/01-token-spells/rulings/d6c9c1f0-050f-40e2-ab6c-6566d0af418c.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/01-token-spells/rulings/e1635acd-ed1e-4038-a11a-6518df285253.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/01-token-spells/rulings/eb62aa4b-c11b-4195-ae85-cff8f78ce17b.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/01-token-spells/rulings/f9e668f9-21af-4fd8-9a37-6505ab2234e3.jsonl": "ba5ee86b90172855e0dc32101ea20bd834fe172efdfa9b5ae57f5be34c420004",
+    "build/campaign/queue-v51/families/01-token-spells/source/0c8ab7bf-7b6a-4a34-b988-9f3f4d84a9ea.json": "add30c9c4981f561958fd86360e5a1d315b028080b79d462749dc15d0af536f2",
+    "build/campaign/queue-v51/families/01-token-spells/source/4965f5fe-a5fe-4976-822c-5cf40fea8c34.json": "d4847d1c8f74c7be21cae7fd3b553ece5865bb4cdb2074eb19978acc719ad930",
+    "build/campaign/queue-v51/families/01-token-spells/source/61e2d557-f08d-489b-94c8-aff87e5189f9.json": "9cd77e6c8b313613ceaf339a2770dda857bdd3d2323e734e3352181bfb590758",
+    "build/campaign/queue-v51/families/01-token-spells/source/76a6ddc2-f894-4331-89a9-87ca16efd0c0.json": "328501b48211d167b94fec935d091e5f0a5e12b47882d1923cd88aab8e640255",
+    "build/campaign/queue-v51/families/01-token-spells/source/8fb599a7-2c61-446b-a7a7-cd5367f9b796.json": "c6c2eb2989e93c13ce13cc5606ce3802d5f7f9ab9ef1bc4fd5bca346cd6b5e1c",
+    "build/campaign/queue-v51/families/01-token-spells/source/aa8b60b6-cf55-4aaa-9caa-2b17942d8269.json": "36594ab05980957a4f7652594a0903a6b4723ed44f42537d1d90ed30d36b79a4",
+    "build/campaign/queue-v51/families/01-token-spells/source/d1a9fd14-fecb-4d2a-983c-70143238275b.json": "c90e571e3af350781a728e5e7da065d60cb1eda9fd9eb6b2915d79c69ae1ab43",
+    "build/campaign/queue-v51/families/01-token-spells/source/d6c9c1f0-050f-40e2-ab6c-6566d0af418c.json": "f1ed187c3ad6e23e1ecb4cc52c3f29bf4928289547476ddd9ce8e879e5f93190",
+    "build/campaign/queue-v51/families/01-token-spells/source/e1635acd-ed1e-4038-a11a-6518df285253.json": "f28a2c282a10fc8d917e98964ce276d4c0434a5d7533969c5542a09d290f3b6a",
+    "build/campaign/queue-v51/families/01-token-spells/source/eb62aa4b-c11b-4195-ae85-cff8f78ce17b.json": "809dfc0cefaf2c8e84ea7ba0a961ff9db1b42fd7c7dbd5b09c248dd53ab9eb0c",
+    "build/campaign/queue-v51/families/01-token-spells/source/f9e668f9-21af-4fd8-9a37-6505ab2234e3.json": "2f1b4d3ac36d8f6954e5eac0a5165e3bc2f3628c40fe881f05c4d9200c3bce59",
+    "build/campaign/queue-v51/families/02-splicer-cycle/family.md": "7b883fd4b793bd89c18aef98dbb5cb5e7c7eebf1b3d8e72dc4d0aaa6b9458b3a",
+    "build/campaign/queue-v51/families/02-splicer-cycle/rulings/194166ad-0179-42a3-86b9-ba7f322ec576.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/02-splicer-cycle/rulings/7fbf6afc-8a16-447b-bdef-b7d0b640f76c.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/02-splicer-cycle/rulings/9676da93-1e17-4f6c-b610-a242b78c71ab.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/02-splicer-cycle/rulings/9e0c5919-aed6-4d98-85c8-2658be78bdf0.jsonl": "0fe0a43285ad7e280c10e2ca3183124a573352aed5ac795ea6b26c19a5f9d5b1",
+    "build/campaign/queue-v51/families/02-splicer-cycle/rulings/e1899133-635d-46ff-b90d-6f8d46a1ffe1.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/02-splicer-cycle/source/194166ad-0179-42a3-86b9-ba7f322ec576.json": "9b5808b0d808949262e54f854560062af51d094832e7986a54bfc637208f37c8",
+    "build/campaign/queue-v51/families/02-splicer-cycle/source/7fbf6afc-8a16-447b-bdef-b7d0b640f76c.json": "0677c119b844f4cef74d7664dfc6f180d7cd7fc4dc63f6cf781caff05bc0cf3d",
+    "build/campaign/queue-v51/families/02-splicer-cycle/source/9676da93-1e17-4f6c-b610-a242b78c71ab.json": "56d0af58e46b4ab46b83e9fe4330371a797ec1c844388f64d194a5dd82985304",
+    "build/campaign/queue-v51/families/02-splicer-cycle/source/9e0c5919-aed6-4d98-85c8-2658be78bdf0.json": "9f0c4062804b8739ef1d46e79a5bb8f05811675458438e9c6b0dd778cd2822d4",
+    "build/campaign/queue-v51/families/02-splicer-cycle/source/e1899133-635d-46ff-b90d-6f8d46a1ffe1.json": "7e2ec18f2a66f18edd0a2cdeb8223c99d1707f02561fad253142e09051cfd2aa",
+    "build/campaign/queue-v51/families/03-artifact-value-tutors/family.md": "f915073083d7d47f036033e7468db0cafbe2202f7cac0271424e20bc611e5e0d",
+    "build/campaign/queue-v51/families/03-artifact-value-tutors/rulings/08afc0d7-192f-4ab6-b6a0-c4265cf5e225.jsonl": "8770e62adeed324c5efaea306186c08d68aa7e1d1313be6b2e7de60408c4a92b",
+    "build/campaign/queue-v51/families/03-artifact-value-tutors/rulings/991efbf1-299d-4892-aeab-8ff9827f7168.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/campaign/queue-v51/families/03-artifact-value-tutors/rulings/c2b51295-8820-425f-a517-55231123c7de.jsonl": "097d3226e2dd1ee3d7f10d891f0c011404110d1b1526247ca010568bffe0fdfc",
+    "build/campaign/queue-v51/families/03-artifact-value-tutors/rulings/ffc95093-24a2-4616-a44a-24788e8df9c8.jsonl": "bd3a6679e03205c1a29987e5d09b9a3dc7388d12e3ea130b2859e364c1e44c9b",
+    "build/campaign/queue-v51/families/03-artifact-value-tutors/source/08afc0d7-192f-4ab6-b6a0-c4265cf5e225.json": "02ef93551f2fc86bbc7115869838a494a6d9c4341d2fca97a9800c4498c120e8",
+    "build/campaign/queue-v51/families/03-artifact-value-tutors/source/991efbf1-299d-4892-aeab-8ff9827f7168.json": "371426fe4b454785c5b1f9a1b97609232e5796151408ec923c374b44f116b347",
+    "build/campaign/queue-v51/families/03-artifact-value-tutors/source/c2b51295-8820-425f-a517-55231123c7de.json": "46ba64ad2e536f56f6848551e39be132b148266b8b5cd67c6f0628aa667a958b",
+    "build/campaign/queue-v51/families/03-artifact-value-tutors/source/ffc95093-24a2-4616-a44a-24788e8df9c8.json": "b28ba72a516cb2d442b27ce35bc0638cc742faeb92819e120c5380919b3bf0a8",
+    "build/campaign/queue-v51/freeze_bundles.py": "1e096677f1c6ab6cb1576a41bb77cfedc631618bcb5649b361197ef6438a92c3",
+    "build/campaign/queue-v51/gen_family_records.py": "3f95aa93d42da062eb6042de0d3304e5ef06b2ace9777ca4a4e488cc44ef6878",
+    "build/campaign/queue-v51/gen_maps.py": "4e3ed78f080eaf16ac56fa1a52de152508b7966037c827e0faa55619564c325d",
+    "build/campaign/queue-v51/gen_ron.py": "b1b70c8cb4617e460f0b68f656c7479e8d3988b14aa71f5ec82ca2e88f765489",
+    "build/campaign/queue-v51/map-list.json": "b241a9537442ea2024a91ce0f3fd8b86b18184a844e96c1a56930cb9a5a7d74c",
+    "build/campaign/queue-v51/report.md": "3d70e591c50927ee9cb0cee1ddc8663c2401bc18592ac60eb871d2f0b0383077",
+    "build/campaign/queue-v51/revalidation.tsv": "4f03267a2bca1e096692a1dc25e53e0abe7653462024402cae534d4b83fd8c5a",
+    "build/campaign/queue-v51/selection.md": "aa158a7e7f324603ecced556df37958364833dd86e94fc030f6cf76978f238d8",
+    "tricerules/CARDS.md": "ddb562434a94b8a24b5ddb65ed06815bc6184a0187d9a167099788a6de64f0cb",
+    "tricerules/tricerules-cards/authoring/presentation-exceptions.tsv": "1cb39b6623994efca601e26b6e0729915dd738a9f824572fbd4c460e151e3393",
+    "tricerules/tricerules-cards/authoring/review-maps/advent_of_the_wurm.json": "e887e1b3ec0e96a9e4debfe94757bd27d79061a5c3ef2dbd9611a75c2d6e1168",
+    "tricerules/tricerules-cards/authoring/review-maps/blade_splicer.json": "ee834a3aed6c298d7c82becdfed9b4d8395231468aa8ae2300bafdbbcf2b686a",
+    "tricerules/tricerules-cards/authoring/review-maps/call_of_the_conclave.json": "9fb372c0da4b732d94346e14d7d4ddedbe6316888e75eebaa1c888361012a7fb",
+    "tricerules/tricerules-cards/authoring/review-maps/elemental_summoning.json": "46999bef0ea3f45a7ca84787ae8be405673a05527881f08a65a053396018e10e",
+    "tricerules/tricerules-cards/authoring/review-maps/flurry_of_horns.json": "90795e7a0654dc38849c2f51069b3a1f283594a32441dc258bb5a39a90c1dc67",
+    "tricerules/tricerules-cards/authoring/review-maps/icatian_town.json": "b49fcafebbc763f3ebdb5881fa82b696947585bb327dec9a7a2693770d14f909",
+    "tricerules/tricerules-cards/authoring/review-maps/knight_watch.json": "8eb4e7cd86cebeca09a15028f77c9091afa0b88af2e107a857d8df840f9ddfb6",
+    "tricerules/tricerules-cards/authoring/review-maps/master_splicer.json": "12c39a77875ca6db584112cafa6f305aa0e77cbc40265c55562f59058ba0185d",
+    "tricerules/tricerules-cards/authoring/review-maps/masters_call.json": "36e1e4196f12db25fd96e8a782208e416cae88c2fda3f1502b4e2b3d4e841b8c",
+    "tricerules/tricerules-cards/authoring/review-maps/sensor_splicer.json": "a9d3f38e83142128ea6b6ddbb93eed836fb1623739eb9d4317adc60b6ab3091e",
+    "tricerules/tricerules-cards/authoring/review-maps/servo_exhibition.json": "efc69d14509871a9a9e9922009d959f61254e9d78d3702a86c87bf0fdfef0459",
+    "tricerules/tricerules-cards/authoring/review-maps/spore_swarm.json": "de01bf5187bc218df3197883e7c9a4e2306cc3d2719d062770ef514e5e69fd38",
+    "tricerules/tricerules-cards/authoring/review-maps/sworn_companions.json": "01340d41b0fcbe22c8bb05880e49a11e0dd6766dbc3ecc2ab76e4a3ef9a05ac8",
+    "tricerules/tricerules-cards/authoring/review-maps/take_up_arms.json": "e56a79a1eefa77bfdad245bca9dc43777f1ee802cfa4904d62f445fa01e06437",
+    "tricerules/tricerules-cards/authoring/review-maps/transit_mage.json": "1173abd765c8c0b37e040c6f65edf28eb39a472b49c04e0c73c417680b6a0577",
+    "tricerules/tricerules-cards/authoring/review-maps/tribute_mage.json": "8be84d3cdf7b8f58a930248579000652663bc1f7d594b1abd09956a3a77cca0c",
+    "tricerules/tricerules-cards/authoring/review-maps/trinket_mage.json": "1e22cd58a55ebebab56e0a37b84de19452f5657b18a9bcc39e551e56c5639785",
+    "tricerules/tricerules-cards/authoring/review-maps/trophy_mage.json": "fa5dce94bc2af93700cb6a720306e95ba4d91c0b4a48eaeaad58764b861b49ad",
+    "tricerules/tricerules-cards/authoring/review-maps/vital_splicer.json": "dbec8e7403c6e3b39e6ed45914e74d602eda04559750eaa2a1dd203579748792",
+    "tricerules/tricerules-cards/authoring/review-maps/wing_splicer.json": "88632b1e9576052cf262abfc4704e33f25e74806a124a218e8ce815d57fbae9b",
+    "tricerules/tricerules-cards/data/advent_of_the_wurm.ron": "0b76eeb3bc7b205346274ed0ced7e90c9772e2b99e14261f5119d57aff88eeef",
+    "tricerules/tricerules-cards/data/blade_splicer.ron": "63fe71b060bc45a359a5c0f466a9172642533a3c46ea253b6c128fda6380e5de",
+    "tricerules/tricerules-cards/data/call_of_the_conclave.ron": "33f2683605a38b17af2ddc0dee1f09939aae456312d63bdbe8cda9be16947ef1",
+    "tricerules/tricerules-cards/data/elemental_summoning.ron": "5cb54d30546bc66ebec18d03527c345a810b18483287e897ea85fe38c53597ac",
+    "tricerules/tricerules-cards/data/flurry_of_horns.ron": "109b10204f86d742d76995d81bbd199430fb6c9de7f29d611944e704a150046a",
+    "tricerules/tricerules-cards/data/icatian_town.ron": "8e92f3fa8fc99d43e8c71a3202ebc585efdfe3132655aa88f456eed32e635ac6",
+    "tricerules/tricerules-cards/data/knight_watch.ron": "deb333e41f20a328b0389950c8dac07fffd198e183868c86581323b88ea6208e",
+    "tricerules/tricerules-cards/data/master_splicer.ron": "794115de65f212bd7f0f62de7e31a1913b7f926bc5845eeb6d071338db93782f",
+    "tricerules/tricerules-cards/data/masters_call.ron": "4bd456a8cc7df8d67ab4dba9c059b862034c8395117e8f82290b039e876b7e41",
+    "tricerules/tricerules-cards/data/sensor_splicer.ron": "4099d7cc7a3d77d4a016e26400ada3604b4927a81acc6bfb410206bf3a169f24",
+    "tricerules/tricerules-cards/data/servo_exhibition.ron": "f2f2efc50a08fce5df2c878b4a4af89e2fe314177ca7dc186c7e317de6cc015e",
+    "tricerules/tricerules-cards/data/spore_swarm.ron": "3c681eeeb918999d4a450cf7b7a59e9bc1933bc0566c32f51e8631393e1daa77",
+    "tricerules/tricerules-cards/data/sworn_companions.ron": "581489ad0e68e6cdaf00d8503d5d2046021ab1665746bab1c35995b937bed853",
+    "tricerules/tricerules-cards/data/take_up_arms.ron": "a2828bff91edc059ac7655d65d5a8ffd44cfcbc278fea1d4c513a690c19a591d",
+    "tricerules/tricerules-cards/data/tokens/centaur_g_3_3.ron": "12c6708ba6189b04e63f135f8ca05c65d7aecbee64591aad5309aa615c48e704",
+    "tricerules/tricerules-cards/data/tokens/citizen_w_1_1.ron": "55a552c8189dbc9ec7054e06586bb5f2ce07b74e6f26d2f0505e50314ad824e5",
+    "tricerules/tricerules-cards/data/tokens/elemental_ur_4_4.ron": "46593ddcfa253dc9741df244fc37ec6c700de73d9d4edf6dc091d96251573d05",
+    "tricerules/tricerules-cards/data/tokens/golem_c_3_3.ron": "3095c8b98ee7b87ba8311347833c4253ba40bab1e8eb4ba4a6dc0a399bf424a4",
+    "tricerules/tricerules-cards/data/tokens/knight_w_2_2_vigilance.ron": "1a9aa96f523b8aef3c4a6c710c29f10e80ea8d4ed42ce5138c8ced9f14222e27",
+    "tricerules/tricerules-cards/data/tokens/minotaur_r_2_3_haste.ron": "db7a242ffbc8fd50a117e31b3de9d041ddb31b7ad593836233743e8058a6c224",
+    "tricerules/tricerules-cards/data/tokens/myr_token_c_1_1.ron": "2196dba746f7b34a5e8f6003d0e16b2fa6b5efe64c528446bd914e12103ee7a4",
+    "tricerules/tricerules-cards/data/tokens/saproling_g_1_1.ron": "5650c2f9e6069138afdfdd9588c2bb4109f2ceed00c6c2a26be07ecaf66ebb4e",
+    "tricerules/tricerules-cards/data/tokens/servo_c_1_1.ron": "541085b5b46ca1cf82fcdbe663e44e96c2389551de985bc97e0d6a91ad962c79",
+    "tricerules/tricerules-cards/data/tokens/soldier_w_1_1_lifelink.ron": "514125e550d9f9fa832d84d586a9d259db7692963a93502f00fc771c90f9d8a8",
+    "tricerules/tricerules-cards/data/tokens/warrior_w_1_1.ron": "acffa00a03b2970165c8465de6b96319a53dd56d0e68654f455dc8da34e965db",
+    "tricerules/tricerules-cards/data/tokens/wurm_g_5_5_trample.ron": "428e4387e8142677d9a3b756f140499ccdceb9c7cace18a4232bc1eae605fd8c",
+    "tricerules/tricerules-cards/data/transit_mage.ron": "d251b6797659a7d1cb5dd2def03fe0fb4751e7de52086ff6b4d70baf88b59c16",
+    "tricerules/tricerules-cards/data/tribute_mage.ron": "c4c4b08f8001720e8d7708a0c5f98b2d68bd4e6a800be70d61ab5cbcae44b655",
+    "tricerules/tricerules-cards/data/trinket_mage.ron": "c8fb4c4eeb9af43cdb74373f5cc55a6cb7fa1ca570318ce37eb7ef9511a4561f",
+    "tricerules/tricerules-cards/data/trophy_mage.ron": "22ef5b7736a968fe346ddb1516da3ed1bcca0029eb4a64223c17944d3356f25d",
+    "tricerules/tricerules-cards/data/vital_splicer.ron": "a842f2dd258ca9f343bb936a4fd3e943c473164d8c663154df5971bc7407cef4",
+    "tricerules/tricerules-cards/data/wing_splicer.ron": "1224c6ac092cc20af667c3bf1a7bbb786558f135fe1da7412349c7c8c4cf60a8",
+    "tricerules/tricerules-cards/presentation/oracle_fingerprints.tsv": "399c19ee3fe7c4075f22eb00016a53fb5367ccafb1370f8ac6027cd1535a833c",
+    "tricerules/tricerules-cards/tests/q51_cohorts_batch.rs": "be3c2a9053abbfac144e6f5bfd266cdc6690ed64b82120083a38198ba1f7133e",
+    "tricerules/tricerules-cards/tests/suites/mechanic_registry.rs": "e21b2c7295a1f39d98b7d065f3bd3b44cc8b05ef969b8814d0a503052fcd3df9",
+    "tricerules/tricerules-core/tests/scenario.rs": "4640d4744c57bca9008c315501a0adb0d1efa3e33dedccd82771af5b148187c7",
+    "tricerules/tricerules-core/tests/scenario/q51_cohorts_batch.rs": "c6e3669cff07ae978fb61cfc8ee74974cc9a67562c3ef89ab31e37fc0ba20c8c"
+  },
+  "artifacts": {
+    "batch-a.patch.diff": "bb41d218951157e0896861ab6376dedc4c044bb82081e5d190a93dcf133ff447"
+  }
+}
