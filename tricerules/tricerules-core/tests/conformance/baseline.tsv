@@ -3742,6 +3742,7 @@ vindictive_warden	0	cast	exercised
 vine_trellis	0	ability:0	exercised
 vine_trellis	0	cast	exercised
 vinereap_mentor	0	cast	exercised
+violent_impact	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 violent_urge	0	cast	exercised
 virulent_emissary	0	cast	exercised
 virus_beetle	0	cast	exercised
@@ -3974,4 +3975,3 @@ zog,_triceraton_castaway	0	cast	exercised
 zombie_goliath	0	cast	exercised
 zombify	0	cast	exercised
 zukos_exile	0	cast	exercised
-violent_impact	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
