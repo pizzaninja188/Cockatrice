@@ -939,7 +939,7 @@ untap-reach and self-unblockable. Implemented 38 cards in nine families:
   `verify-8bd9732e-bf56-4343-92ef-cec4c77dcc07`,
   `verify-4c42320b-2186-496e-823a-00b3109b480a`,
   `verify-2703d25f-3914-4e95-8f19-51d135e87681`, all exit 0 (`Side Rust`, `-CardData`).
-- `CARDS.md`: 5314 full + 8 partial / 35533 cards. `status.tsv`: 440 verified families.
+- `CARDS.md`: 5314 full + 8 partial / 35533 cards. `status.tsv`: 449 verified families.
 - Family commits `3b97c548f`..`35873aa1e`; shared evidence `2b7b2a1b0`; baseline `4ab4e4c99`;
   gated remote `4ab4e4c99`.
 - Invisibility was corrected during review to exclude non-Walls (`excluded_subtypes`), with real
