@@ -40,5 +40,6 @@ Exact records and pinned rulings: `source/<oracle-id>.json` and `rulings/<oracle
 ## Delivery
 
 - Independent read-only review: approved in hash-verified `build/campaign/queue-v52/freeze/batch-d.json` after initial and delta reviews; no remaining material findings.
-- Batch gate: pending.
+- Batch gate: `verify-06a92503-bedd-4c7a-bb41-b45c68878ea2` passed exit 0 (`Side Rust`, `-CardData`) covering `01-destroy-artifact-land`.
+- Family commit `defdacc6b`; remote `fde229a9b`.
 - Acceptance: rules-data only; no GUI, networking, privacy or physical-identity surface.

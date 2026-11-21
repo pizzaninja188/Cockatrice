@@ -946,3 +946,17 @@ untap-reach and self-unblockable. Implemented 38 cards in nine families:
   Wall/non-Wall blocking tests. No engine, protobuf, relay or client change. Manual GUI acceptance:
   N/A (card data plus actual-card tests). No context compaction.
 
+## Phase 24: queue-v52 ninth-family completion
+
+- Queue-v51 delivered eight families; expanded under `build/campaign/queue-v52/` to deliver the
+  ninth: `01-destroy-artifact-land` (Demolish, Sunder from Within, Pillage, Victorious Destruction,
+  Violent Impact) — 5 cards.
+- Family commit `defdacc6b`; shared evidence `5c50e54fe`; baseline `fde229a9b`. Batch D full gate
+  `verify-06a92503-bedd-4c7a-bb41-b45c68878ea2` passed exit 0 (`Side Rust`, `-CardData`).
+- `CARDS.md`: 5319 full + 8 partial / 35533 cards. `status.tsv`: 450 verified families.
+- Independent review approved after fixing the Arcane CR citation, a stale-target test that now
+  destroys the target with an in-response Shatter, and cycling map references. The `violent_impact`
+  hand-zone cycling fixture is classified in `conformance/baseline.tsv`.
+- No engine, protobuf, relay or client change. Manual GUI acceptance: N/A (card data plus
+  actual-card tests). No context compaction.
+
