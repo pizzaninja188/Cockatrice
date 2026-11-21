@@ -1,0 +1,24 @@
+// Oracle 991efbf1-299d-4892-aeab-8ff9827f7168; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters trigger), 701.23 (search), 701.23b/e (private hidden-zone choice),
+// 701.24 (shuffle) and 608.2 (resolution). The search is optional and the found card is
+// revealed. Pinned rulings, where any, are recorded in the family record.
+(
+  id: "transit_mage",
+  name: "Transit Mage",
+  face_id: "transit_mage",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Human", "Wizard"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [SearchLibrary(
+      filter: Some((card_type: Some(Artifact), min_mana_value: Some(4), max_mana_value: Some(5))),
+      optional: true,
+      reveal: true,
+    )],
+  )],
+)

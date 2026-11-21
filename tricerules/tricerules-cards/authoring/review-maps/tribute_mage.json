@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "c2b51295-8820-425f-a517-55231123c7de",
+  "spans": [
+    {
+      "face_id": "tribute_mage",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q51_cohorts_batch::q51_artifact_tutors_canary_simplest_trinket_mage_finds_a_one_drop",
+      "covers": "actual Mage finds only its mana-value band"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_artifact_tutors_canary_hardest_transit_mage_finds_four_or_five",
+      "covers": "actual Transit Mage accepts mana values 4 and 5"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_artifact_tutors_offer_only_matching_artifacts",
+      "covers": "actual Mage rejects wrong type, wrong value and foreign libraries"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_artifact_tutors_may_decline_without_shuffling",
+      "covers": "actual Mage may decline without moving or shuffling"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_artifact_tutors_reveal_shuffle_and_shuffle_on_failure_to_find",
+      "covers": "actual search reveals, shuffles, and shuffles after a qualified failure to find"
+    },
+    {
+      "test": "mechanic_registry::q51_cohorts_batch::q51_artifact_value_tutors_map_bounded_searches",
+      "covers": "reviewed identity and typed shape"
+    },
+    {
+      "test": "mechanic_registry::q51_cohorts_batch::q51_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
