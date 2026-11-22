@@ -1,4 +1,4 @@
-//! Actual Tamiyo with prepared zones/mana/loyalty. Strict normal captures are separate.
+//! Actual Tamiyo with prepared zones/mana/loyalty.
 use super::helpers::*;
 use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::CounterKind;

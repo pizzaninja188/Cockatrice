@@ -1,4 +1,4 @@
-//! Prepared actual-card cases; normal-session reachability is tested separately.
+//! Prepared actual-card cases.
 use super::*;
 
 fn fixture() -> GameEngine {

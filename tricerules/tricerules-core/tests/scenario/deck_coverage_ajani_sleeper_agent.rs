@@ -1,5 +1,5 @@
-//! Actual registered Ajani; explicitly prepared zones/pools/counters. Normal capture and network
-//! transport evidence are separate. No synthetic tail or synthetic planeswalker definition.
+//! Actual registered Ajani; explicitly prepared zones/pools/counters. Network transport evidence
+//! is separate. No synthetic tail or synthetic planeswalker definition.
 use super::helpers::*;
 use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::{CounterKind, Keyword};

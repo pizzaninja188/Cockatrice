@@ -1,5 +1,5 @@
-//! Actual registered Vraska, with explicitly prepared pools/zones/counters. Normal-session
-//! and physical client acceptance are separate evidence.
+//! Actual registered Vraska, with explicitly prepared pools/zones/counters. Physical client
+//! acceptance is separate evidence.
 use super::helpers::*;
 use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::{CounterKind, Keyword};
