@@ -1,0 +1,50 @@
+{
+  "format_version": 1,
+  "oracle_id": "c638957f-88bf-40c2-834c-2be39d73bf41",
+  "spans": [
+    {
+      "face_id": "ob_nixiliss_cruelty",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileIfWouldDieThisTurn",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_b::q56_b_shrink_riders_apply_their_printed_values",
+      "covers": "actual ob_nixiliss_cruelty applies its printed effects"
+    },
+    {
+      "test": "scenario q56_batch_b::q56_b_shrink_riders_exile_a_later_death_that_turn",
+      "covers": "actual ob_nixiliss_cruelty canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_b::q56_b_shrink_rider_map_definitions",
+      "covers": "shared registry identity for ob_nixiliss_cruelty"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_b::q56_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for ob_nixiliss_cruelty"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

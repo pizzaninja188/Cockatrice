@@ -1,0 +1,15 @@
+// Oracle ee243f81-f51c-4d9a-a396-f7cef84b46c1; source/rulings checked 2026-11-21 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 111.1/111.2 (the 3/3 green Elephant token), 702.34a-d (flashback alternative cost and exile)
+// and 514.2/601.2 (timing). Pinned rulings: a flashback cast always exiles afterward, whether it
+// resolves, is countered or leaves the stack. Copy of Mammoth Bellow's token plus Firebolt's
+// flashback cost shape.
+(
+  id: "call_of_the_herd",
+  name: "Call of the Herd",
+  face_id: "call_of_the_herd",
+  mana_cost: "{2}{G}",
+  flashback_cost: Some("{3}{G}"),
+  types: ["Sorcery"],
+  spell_effect: [CreateTokens(token: "elephant_g_3_3", count: 1)],
+)

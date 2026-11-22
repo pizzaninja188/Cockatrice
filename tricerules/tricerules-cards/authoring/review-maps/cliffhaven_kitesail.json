@@ -1,0 +1,77 @@
+{
+  "format_version": 1,
+  "oracle_id": "68fb8f21-4403-4829-8826-f2418664197e",
+  "spans": [
+    {
+      "face_id": "cliffhaven_kitesail",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    },
+    {
+      "face_id": "cliffhaven_kitesail",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "cliffhaven_kitesail",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::AttachSource",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Equip",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_b::q56_b_equipment_etb_cards_apply_the_printed_static_bonus",
+      "covers": "actual cliffhaven_kitesail applies its printed effects"
+    },
+    {
+      "test": "scenario q56_batch_b::q56_b_equipment_etb_cards_reject_an_opponents_creature",
+      "covers": "actual cliffhaven_kitesail canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_b::q56_b_equipment_etb_map_definitions",
+      "covers": "shared registry identity for cliffhaven_kitesail"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_b::q56_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for cliffhaven_kitesail"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

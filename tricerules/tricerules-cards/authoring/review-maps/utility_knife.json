@@ -1,0 +1,77 @@
+{
+  "format_version": 1,
+  "oracle_id": "b546c78c-5180-46c3-8594-b9d5ad9c3988",
+  "spans": [
+    {
+      "face_id": "utility_knife",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    },
+    {
+      "face_id": "utility_knife",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "utility_knife",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::AttachSource",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Equip",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_b::q56_b_equipment_etb_cards_apply_the_printed_static_bonus",
+      "covers": "actual utility_knife applies its printed effects"
+    },
+    {
+      "test": "scenario q56_batch_b::q56_b_canary_simplest_utility_knife_attaches_and_moves_its_bonus",
+      "covers": "actual utility_knife canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_b::q56_b_equipment_etb_map_definitions",
+      "covers": "shared registry identity for utility_knife"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_b::q56_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for utility_knife"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

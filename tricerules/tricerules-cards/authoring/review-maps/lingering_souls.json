@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "0b8c3337-04dd-4798-8203-6d8b8cfb936b",
+  "spans": [
+    {
+      "face_id": "lingering_souls",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "lingering_souls",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardFace::flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [
+    "spirit_w_1_1_flying"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_b::q56_b_flashback_token_cards_make_the_printed_tokens_and_exile_after_flashback",
+      "covers": "actual lingering_souls applies its printed effects"
+    },
+    {
+      "test": "scenario q56_batch_b::q56_b_canary_hardest_lingering_souls_makes_two_flying_spirits",
+      "covers": "actual lingering_souls canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_b::q56_b_flashback_token_map_definitions",
+      "covers": "shared registry identity for lingering_souls"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_b::q56_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for lingering_souls"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

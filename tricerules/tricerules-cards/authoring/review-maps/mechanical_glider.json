@@ -1,0 +1,77 @@
+{
+  "format_version": 1,
+  "oracle_id": "d53d1805-c4ec-4b42-a226-3cd78cd2be84",
+  "spans": [
+    {
+      "face_id": "mechanical_glider",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    },
+    {
+      "face_id": "mechanical_glider",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "mechanical_glider",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::AttachSource",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Equip",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_b::q56_b_equipment_etb_cards_apply_the_printed_static_bonus",
+      "covers": "actual mechanical_glider applies its printed effects"
+    },
+    {
+      "test": "scenario q56_batch_b::q56_b_equipment_etb_cards_remain_unattached_when_the_target_leaves",
+      "covers": "actual mechanical_glider canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_b::q56_b_equipment_etb_map_definitions",
+      "covers": "shared registry identity for mechanical_glider"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_b::q56_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for mechanical_glider"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,50 @@
+{
+  "format_version": 1,
+  "oracle_id": "6c3faf4f-83c1-4098-98b8-bae15d59b0de",
+  "spans": [
+    {
+      "face_id": "bleed_dry",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileIfWouldDieThisTurn",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_b::q56_b_shrink_riders_apply_their_printed_values",
+      "covers": "actual bleed_dry applies its printed effects"
+    },
+    {
+      "test": "scenario q56_batch_b::q56_b_canary_hardest_bleed_dry_exiles_the_lethally_shrunk_creature",
+      "covers": "actual bleed_dry canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_b::q56_b_shrink_rider_map_definitions",
+      "covers": "shared registry identity for bleed_dry"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_b::q56_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for bleed_dry"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
