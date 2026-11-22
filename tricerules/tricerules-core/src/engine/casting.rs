@@ -2401,24 +2401,15 @@ impl GameEngine {
             return 1;
         };
 
-        let mut sources: Vec<_> = self
-            .state
-            .objects
-            .values()
-            .filter(|object| object.zone == Zone::Battlefield && object.controller == controller)
-            .map(|object| object.id)
-            .collect();
-        sources.sort_unstable();
-        sources
-            .into_iter()
-            .flat_map(|source| self.active_static_ability_definitions(source))
-            .filter_map(|static_ability| {
-                match static_ability {
+        self.battlefield_static_sources()
+            .iter()
+            .filter(|source| source.controller == controller)
+            .flat_map(|source| &source.abilities)
+            .filter_map(|static_ability| match static_ability {
                 tricerules_card_model::primitives::StaticAbilityDef::MultiplyManaFromTappedPermanents {
                     multiplier,
-                } => Some(multiplier),
+                } => Some(*multiplier),
                 _ => None,
-            }
             })
             .fold(1_u32, u32::saturating_mul)
     }

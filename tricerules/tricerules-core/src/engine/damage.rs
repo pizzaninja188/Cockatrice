@@ -340,11 +340,8 @@ impl GameEngine {
             if effect.static_origin.as_ref().is_some_and(|origin| {
                 super::characteristics::normalized_static_origin(&self.state, self.registry, origin)
                     .is_none()
-            }) || !super::characteristics::printed_static_source_is_available(
-                &self.state,
-                self.registry,
-                source,
-            ) {
+            }) || !self.printed_static_source_available(source)
+            {
                 return false;
             }
         }
@@ -372,11 +369,7 @@ impl GameEngine {
             };
             if super::characteristics::normalized_static_origin(&self.state, self.registry, origin)
                 .is_none()
-                || !super::characteristics::printed_static_source_is_available(
-                    &self.state,
-                    self.registry,
-                    source,
-                )
+                || !self.printed_static_source_available(source)
             {
                 return false;
             }

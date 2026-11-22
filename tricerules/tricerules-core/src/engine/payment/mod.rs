@@ -521,6 +521,10 @@ impl GameEngine {
         action: TargetingCostAction,
         targets: &[rv1::TargetRef],
     ) -> u32 {
+        // Every increase is conditioned on a protected target; with none, nothing applies.
+        if targets.is_empty() {
+            return 0;
+        }
         let mut sources = self
             .state
             .players
@@ -530,11 +534,7 @@ impl GameEngine {
         sources.sort_unstable();
 
         sources.into_iter().fold(0u32, |total, source_id| {
-            if !super::characteristics::printed_static_source_is_available(
-                &self.state,
-                self.registry,
-                source_id,
-            ) {
+            if !self.printed_static_source_available(source_id) {
                 return total;
             }
             let Some(source_controller) = self.controller_of(source_id) else {
@@ -688,11 +688,7 @@ impl GameEngine {
         sources.sort_unstable();
         let mut applications = Vec::new();
         for source_id in sources {
-            if !super::characteristics::printed_static_source_is_available(
-                &self.state,
-                self.registry,
-                source_id,
-            ) {
+            if !self.printed_static_source_available(source_id) {
                 continue;
             }
             let Some(source_controller) = self.controller_of(source_id) else {

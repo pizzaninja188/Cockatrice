@@ -1,5 +1,4 @@
 //! CR 121/614/616: one resumable transaction for actual draw instructions.
-use super::characteristics::printed_static_source_is_available;
 use super::events::{ev_log, ev_priority_changed, finish_with_events};
 use super::replacement::PendingReplacementEvent;
 use super::triggers::ability_definition_from;
@@ -1772,7 +1771,7 @@ impl GameEngine {
         sources.sort_unstable();
         let mut result = Vec::new();
         for source in sources {
-            if !printed_static_source_is_available(&self.state, self.registry, source) {
+            if !self.printed_static_source_available(source) {
                 continue;
             }
             let source_controller = self.characteristics(source).map(|value| value.controller);

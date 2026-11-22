@@ -558,11 +558,7 @@ impl GameEngine {
         let mut replacements = Vec::new();
 
         for source in sources {
-            if !super::characteristics::printed_static_source_is_available(
-                &self.state,
-                self.registry,
-                source,
-            ) {
+            if !self.printed_static_source_available(source) {
                 continue;
             }
             let Some(characteristics) = self.characteristics(source) else {

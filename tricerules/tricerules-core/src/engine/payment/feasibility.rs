@@ -283,6 +283,8 @@ impl GameEngine {
                                 continue;
                             }
                             next.reconcile_activated_ability_slots();
+                            // The probe is only read from here on; memoize its derived queries.
+                            let _memo = next.read_memo_scope();
                             if next.search_available_mana(
                                 &cost,
                                 source,

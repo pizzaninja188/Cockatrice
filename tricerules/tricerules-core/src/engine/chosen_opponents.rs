@@ -50,13 +50,7 @@ impl GameEngine {
         link: &tricerules_card_model::AbilityLinkId,
     ) -> Option<PlayerId> {
         let object = self.state.objects.get(&source)?;
-        if object.zone != Zone::Battlefield
-            || !characteristics::printed_static_source_is_available(
-                &self.state,
-                self.registry,
-                source,
-            )
-        {
+        if object.zone != Zone::Battlefield || !self.printed_static_source_available(source) {
             return None;
         }
         let face = self.effective_face(source)?;
@@ -132,13 +126,7 @@ impl GameEngine {
         link: &tricerules_card_model::AbilityLinkId,
     ) -> Option<String> {
         let object = self.state.objects.get(&source)?;
-        if object.zone != Zone::Battlefield
-            || !characteristics::printed_static_source_is_available(
-                &self.state,
-                self.registry,
-                source,
-            )
-        {
+        if object.zone != Zone::Battlefield || !self.printed_static_source_available(source) {
             return None;
         }
         let face = self.effective_face(source)?;

@@ -412,11 +412,7 @@ impl GameEngine {
         for (&source_id, object) in &self.state.objects {
             if object.zone != Zone::Battlefield
                 || object.phase_status.is_some()
-                || !super::super::characteristics::printed_static_source_is_available(
-                    &self.state,
-                    self.registry,
-                    source_id,
-                )
+                || !self.printed_static_source_available(source_id)
             {
                 continue;
             }
@@ -1295,11 +1291,7 @@ impl GameEngine {
             if !self.state.objects.contains_key(&source_id) {
                 continue;
             }
-            if !super::super::characteristics::printed_static_source_is_available(
-                &self.state,
-                self.registry,
-                source_id,
-            ) {
+            if !self.printed_static_source_available(source_id) {
                 continue;
             }
             let Some(source_controller) = self

@@ -18,8 +18,8 @@
 //! (CR 616) is the separate shared pipeline in `engine/replacement.rs`.
 //!
 //! The calculation is side-effect-free and depends only on `GameState`, the registry, and the
-//! queried object id. Its owned result and single ordered-effect pass make it straightforward
-//! to memoize later without changing callers.
+//! queried object id, which is why `GameEngine::characteristics` can memoize it inside a
+//! read-only scope (`read_memo`) without changing callers.
 
 use super::history::{
     battlefield_quantity_value, graveyard_aggregate_value, player_life_aggregate_value,
@@ -341,6 +341,7 @@ pub(super) fn characteristics_from(
     registry: &'static CardRegistry,
     oid: ObjectId,
 ) -> Option<Characteristics> {
+    super::read_memo::count_evaluation();
     if state
         .objects
         .get(&oid)
@@ -1808,6 +1809,7 @@ pub(super) fn printed_static_source_is_available(
     registry: &'static CardRegistry,
     source: ObjectId,
 ) -> bool {
+    super::read_memo::count_evaluation();
     state.objects.get(&source).is_some_and(|object| {
         object.zone == Zone::Battlefield
             && object.phase_status.is_none()
@@ -2933,7 +2935,9 @@ impl CharacteristicsEvaluator<'_> {
 impl GameEngine {
     /// Compute the rules-visible characteristics of `oid` through the ordered layer pipeline.
     pub fn characteristics(&self, oid: ObjectId) -> Option<Characteristics> {
-        characteristics_from(&self.state, self.registry, oid)
+        self.memoized_characteristics(oid, || {
+            characteristics_from(&self.state, self.registry, oid)
+        })
     }
 
     /// Project an object through the copy, control, text, type, and color layers used by
@@ -2953,7 +2957,7 @@ impl GameEngine {
     /// this?" — owner and controller coincide only until a permanent changes hands. Hot loops that
     /// run per-permanent per-event may read the `controller` field directly instead (it is the
     /// layer-2 base value, identical while no continuous control effect exists) rather than paying
-    /// for an unmemoized characteristics computation.
+    /// for a characteristics computation outside a read-memo scope.
     pub(super) fn controller_of(&self, oid: ObjectId) -> Option<PlayerId> {
         self.characteristics(oid).map(|c| c.controller)
     }

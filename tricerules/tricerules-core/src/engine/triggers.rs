@@ -795,6 +795,7 @@ impl GameEngine {
     /// snapshot becomes-the-target triggers at target selection, then commit them only after every
     /// cost has been paid and the spell or ability has successfully reached the stack.
     pub(super) fn collect_event_triggers(&self, events: &[GameEvent]) -> Vec<CollectedTrigger> {
+        let _memo = self.read_memo_scope();
         let post_event_sources = self.battlefield_sources_apnap();
         let mut sources = post_event_sources.clone();
         // Zone-leaving sources are no longer in the battlefield index. Their event-local snapshot

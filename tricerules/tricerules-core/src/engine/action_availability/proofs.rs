@@ -78,6 +78,11 @@ pub(super) fn mana_only(
     if !ordinary_tap_mana(ability) {
         return Some(false);
     }
+    // Past the ability check, the answer depends only on the state and the tapped source.
+    engine.memoized_tap_mana_only(player, oid, || ordinary_tap_mana_only(engine, player, oid))
+}
+
+fn ordinary_tap_mana_only(engine: &GameEngine, player: PlayerId, oid: ObjectId) -> Option<bool> {
     if !stable_mana_context(engine) {
         return None;
     }
