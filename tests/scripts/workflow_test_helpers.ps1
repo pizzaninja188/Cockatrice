@@ -73,7 +73,8 @@ $root = Split-Path -Parent $PSScriptRoot
 $joined = $arguments -join ' '
 $record = @{ Tool = $tool; Arguments = $arguments; Cwd = (Get-Location).Path; RequireE2E = $env:RULED_E2E_REQUIRE;
     BuildJobs = $env:CARGO_BUILD_JOBS; TestThreads = $env:RUST_TEST_THREADS; Qpa = $env:QT_QPA_PLATFORM;
-    Incremental = $env:CARGO_INCREMENTAL; CargoTarget = $env:CARGO_TARGET_DIR; CargoBuildDir = $env:CARGO_BUILD_BUILD_DIR }
+    Incremental = $env:CARGO_INCREMENTAL; CargoTarget = $env:CARGO_TARGET_DIR; CargoBuildDir = $env:CARGO_BUILD_BUILD_DIR;
+    ConformanceWorkers = $env:TRICERULES_CONFORMANCE_WORKERS }
 ($record | ConvertTo-Json -Compress) | Add-Content -LiteralPath (Join-Path $root 'trace.jsonl')
 $failure = Join-Path $root 'fail-pattern'
 if ((Test-Path -LiteralPath $failure) -and "$tool $joined" -match ([IO.File]::ReadAllText($failure))) {

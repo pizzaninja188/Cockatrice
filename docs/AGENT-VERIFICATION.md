@@ -88,9 +88,8 @@ directory, rejects an empty suite, and requires ruled E2E prerequisites with
 test discovery. The caller's E2E and Qt platform environment is restored after CTest.
 `-OracleBulk` and `-CardsXml` pass explicit local input paths to CardData Check.
 
-Rust checks the production card-data dependency boundary, then selects full tests, all-target
-Clippy with warnings denied, and a separate format check for every package declared in the
-workspace. `check-rust-format.ps1` reads Cargo's target inventory
+Rust checks the production card-data dependency boundary, then runs a separate format check for every
+package declared in the workspace, all-target Clippy with warnings denied, and the full tests last. `check-rust-format.ps1` reads Cargo's target inventory
 and runs check-only rustfmt with each target's edition in bounded argument chunks. This preserves
 formatting coverage when even one package exceeds Windows command-line limits. Package discovery
 is read-only during Preview; target discovery runs only during the selected check. Cpp selects
@@ -165,9 +164,9 @@ terminated before cleanup, a later disposable run rejects the leftover outputs. 
 and remove the two generated trees or use a fresh worktree. Retain needed logs before
 removing the worktree itself.
 
-Every selection ends with `git diff --check`. Preview prints argument arrays and working
+Every selection runs `git diff --check` immediately after the environment preflight, so cheap checks fail before the long Rust test step. Preview prints argument arrays and working
 directories without running commands or creating artifacts.
-With `-CardData`, the complete read-only card check follows preflight, before the full suites.
+With `-CardData`, the complete read-only card check follows preflight and the diff check, before the full suites.
 It rejects invalid evidence/presentation metadata and generated-data drift early; its own
 referenced-target compilation/listing still runs. The selected final tests and lint run afterward.
 Do not add a second routine standalone Check before this final gate.
@@ -316,7 +315,7 @@ instead of executing it again solely to assemble another review packet.
 
 ## Bounded conformance workers
 
-Ordinary runs keep one internal conformance worker and share strict results within the process.
+Ordinary direct runs keep one internal conformance worker and share strict results within the process. The gate sets `TRICERULES_CONFORMANCE_WORKERS` for its Rust tests step and its card conformance step to half the logical CPUs unless the caller already set it.
 For an explicitly bounded parallel coverage run, use the following settings. Coverage sweeps
 share a lock, results retain deterministic order, worker failures fail the gate, and no results
 are cached across processes or source changes. Campaign overrides take precedence.

@@ -89,7 +89,14 @@ if ($tool -eq 'cargo' -and $arguments -contains 'clippy' -and (Test-Path (Join-P
         Assert-Workflow ($result.ExitCode -ne 0) 'Accepted an incomplete or failed baseline summary.'
     }
     [IO.File]::WriteAllText($baselinePath, $saved)
-    $snapshotPath = Join-Path (Split-Path -Parent $baselinePath) 'routine-inputs.json'
+    # A summary recorded before step environments existed must fail the exact plan comparison cleanly.
+    $legacy = Get-Content -LiteralPath $baselinePath -Raw | ConvertFrom-Json
+    foreach ($step in $legacy.Steps) { $step.PSObject.Properties.Remove('Environment') }
+    [IO.File]::WriteAllText($baselinePath, ($legacy | ConvertTo-Json -Depth 8))
+    $result = Invoke-WorkflowFixture $fixture 'verify.ps1' @('-Side', 'Rust', '-CardData', '-RoutineRonBaseline', $baselinePath)
+    Assert-Workflow ($result.ExitCode -ne 0 -and $result.Output -match 'Baseline verification step is incomplete or changed: Rust tests') "Legacy baseline without step environments was not rejected: $($result.Output)"
+    [IO.File]::WriteAllText($baselinePath, $saved)
+    $snapshotPath =Join-Path (Split-Path -Parent $baselinePath) 'routine-inputs.json'
     [IO.File]::AppendAllText($snapshotPath, ' ')
     $result = Invoke-WorkflowFixture $fixture 'verify.ps1' @('-Side', 'Rust', '-CardData', '-RoutineRonBaseline', $baselinePath)
     Assert-Workflow ($result.ExitCode -ne 0 -and $result.Output -match 'snapshot is missing or changed') 'Accepted a changed baseline snapshot.'

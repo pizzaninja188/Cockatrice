@@ -15,8 +15,10 @@ rust-version = "1.74"
 
 # Shared card-test suites avoid duplicating the corpus across hundreds of binaries.
 # Keep limited debug information and incremental reuse for fast local rebuilds;
-# explicit Cargo profile overrides still work.
+# explicit Cargo profile overrides still work. opt-level 2 (inherited by the test
+# profile) cuts the engine-heavy suites roughly 8x for a modest rebuild cost.
 [profile.dev]
+opt-level = 2
 debug = 1
 incremental = true
 

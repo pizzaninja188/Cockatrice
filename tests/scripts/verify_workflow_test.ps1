@@ -17,18 +17,19 @@ try {
     Set-Content -LiteralPath (Join-Path $fixture 'bad-evidence') -Value 'invalid'
     $earlyFailure = Invoke-WorkflowFixture $fixture 'verify.ps1' @('-Side', 'Both', '-CardData')
     Assert-Workflow ($earlyFailure.ExitCode -eq 13) 'Card evidence failure code was lost.'
-    Assert-Workflow (@(Read-WorkflowTrace $fixture).Count -eq 0) 'Expensive gates ran before invalid card evidence was rejected.'
+    Assert-Workflow (@(Read-WorkflowTrace $fixture | Where-Object Tool -ne 'git').Count -eq 0) 'Expensive gates ran before invalid card evidence was rejected.'
     $earlySummary = Get-ChildItem -LiteralPath (Join-Path $fixture 'build/verification-logs') -Filter summary.json -Recurse |
         ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json }
-    Assert-Workflow ($earlySummary.Steps[1].Label -eq 'Card data' -and $earlySummary.Steps[1].Status -eq 'Fail') 'Card gate did not immediately follow preflight.'
-    foreach ($step in $earlySummary.Steps | Select-Object -Skip 2) {
+    Assert-Workflow ($earlySummary.Steps[1].Label -eq 'Git diff check' -and $earlySummary.Steps[1].Status -eq 'Pass') 'Diff check did not follow preflight.'
+    Assert-Workflow ($earlySummary.Steps[2].Label -eq 'Card data' -and $earlySummary.Steps[2].Status -eq 'Fail') 'Card gate did not immediately follow preflight and the diff check.'
+    foreach ($step in $earlySummary.Steps | Select-Object -Skip 3) {
         Assert-Workflow ($step.Status -eq 'NotRun') 'Failed card gate did not stop verification.'
     }
     Remove-Item -LiteralPath (Join-Path $fixture 'bad-evidence')
     [IO.File]::WriteAllText((Join-Path $fixture 'fingerprint'), 'drift')
     $earlyFailure = Invoke-WorkflowFixture $fixture 'verify.ps1' @('-Side', 'Rust', '-CardData')
     Assert-Workflow ($earlyFailure.ExitCode -eq 9) 'Generated-data drift failure code was lost.'
-    $earlyTrace = @(Read-WorkflowTrace $fixture)
+    $earlyTrace = @(Read-WorkflowTrace $fixture | Where-Object Tool -ne 'git')
     Assert-Workflow ($earlyTrace.Count -eq 1 -and $earlyTrace[0].Arguments -contains 'card-author' -and $earlyTrace[0].Arguments -contains 'metadata' -and $earlyTrace[0].Arguments -contains '--check') 'Full suites ran before source metadata or fingerprint drift was rejected.'
     Remove-WorkflowFixture $fixture
     $fixture = New-WorkflowFixture
@@ -39,6 +40,13 @@ try {
     Assert-Workflow (-not (Test-Path -LiteralPath (Join-Path $fixture 'build'))) 'Preview created build artifacts.'
     $platform = if ($workflowWindows) { 'Windows' } else { 'Linux' }
     Assert-Workflow ($result.Output -match 'Rust tests' -and $result.Output -match "$platform Ninja build" -and $result.Output -match 'Card data') 'Preview omitted gates.'
+    # Cheap checks precede Clippy and the long test step; the diff check runs right after preflight.
+    $previewLabels = @([regex]::Matches($result.Output, '(?m)^\[([^\]]+)\] cwd:') | ForEach-Object { $_.Groups[1].Value })
+    $expectedLabels = @('Verification environment', 'Git diff check', 'Card data', 'Card data dependency boundary') +
+        @('tricerules-proto', 'tricerules-core', 'tricerules-card-model', 'tricerules-cards', 'tricerules-server' | ForEach-Object { "Rust formatting ($_)" }) +
+        @('Rust Clippy', 'Rust tests', "$platform Ninja build", 'C++ tests')
+    Assert-Workflow (($previewLabels -join '|') -eq ($expectedLabels -join '|')) "Preview gate order was not fail-fast: $($previewLabels -join ', ')"
+    Assert-Workflow ($result.Output -match 'Child environment: TRICERULES_CONFORMANCE_WORKERS=[^\r\n]+') 'Preview omitted the conformance worker setting.'
 
     $leasePath = Join-Path $fixture 'build/.verification.lock'
     $buildRoot = Split-Path -Parent $leasePath
@@ -75,16 +83,20 @@ try {
     foreach ($package in @('tricerules-proto', 'tricerules-core', 'tricerules-card-model', 'tricerules-cards', 'tricerules-server')) {
         Assert-Workflow (@($formatCalls | Where-Object { ($_.Arguments -join ' ') -match $package }).Count -eq 1) "Formatting did not cover exactly one $package package."
     }
-    Assert-Workflow (($trace.Tool -join ',') -eq 'cargo,cargo,cargo,cargo,cargo,rustfmt,cargo,rustfmt,cargo,rustfmt,cargo,rustfmt,cargo,rustfmt,build,ctest,git') "Wrong combined gate order: $($trace.Tool -join ',')"
-    foreach ($call in $trace[2..13]) {
+    # Card data runs two card-author/checklist cargo commands; the boundary fixture is a plain echo.
+    Assert-Workflow (($trace.Tool -join ',') -eq 'git,cargo,cargo,cargo,rustfmt,cargo,rustfmt,cargo,rustfmt,cargo,rustfmt,cargo,rustfmt,cargo,cargo,build,ctest') "Wrong combined gate order: $($trace.Tool -join ',')"
+    foreach ($call in $trace[3..14]) {
         Assert-Workflow ($call.Cwd -eq (Join-Path $fixture 'tricerules')) 'Rust command ran outside tricerules.'
     }
-    Assert-Workflow ($trace[15].RequireE2E -eq '1') 'CTest did not require E2E prerequisites.'
+    Assert-Workflow ($trace[16].RequireE2E -eq '1') 'CTest did not require E2E prerequisites.'
     if (-not $workflowWindows) {
-        Assert-Workflow ($trace[15].Qpa -eq 'offscreen') 'Linux CTest did not use offscreen Qt.'
-        Assert-Workflow ($trace[15].Arguments -contains 'build/linux-ninja-all') 'Linux CTest selected the Windows build tree.'
+        Assert-Workflow ($trace[16].Qpa -eq 'offscreen') 'Linux CTest did not use offscreen Qt.'
+        Assert-Workflow ($trace[16].Arguments -contains 'build/linux-ninja-all') 'Linux CTest selected the Windows build tree.'
     }
-    Assert-Workflow ($trace[15].Arguments -contains '--no-tests=error') 'CTest could accept an empty suite.'
+    Assert-Workflow ($trace[16].Arguments -contains '--no-tests=error') 'CTest could accept an empty suite.'
+    $expectedWorkers = if ($env:TRICERULES_CONFORMANCE_WORKERS) { $env:TRICERULES_CONFORMANCE_WORKERS } else { [string][Math]::Max(1, [int][Math]::Floor([Environment]::ProcessorCount / 2)) }
+    $rustTests = @($trace | Where-Object { $_.Tool -eq 'cargo' -and $_.Arguments.Count -eq 1 -and $_.Arguments[0] -eq 'test' })
+    Assert-Workflow ($rustTests.Count -eq 1 -and [string]$rustTests[0].ConformanceWorkers -eq $expectedWorkers) 'Rust tests did not receive the bounded conformance worker setting.'
     $summaries = @(Get-ChildItem -LiteralPath (Join-Path $fixture 'build\verification-logs') -Filter summary.json -Recurse)
     Assert-Workflow ($summaries.Count -eq 1) 'Combined run did not save one summary.'
     $summary = Get-Content -LiteralPath $summaries[0].FullName -Raw | ConvertFrom-Json
@@ -96,18 +108,19 @@ try {
         Assert-Workflow ($step.Executable -and $step.WorkingDirectory -and $step.Arguments.Count -gt 0) 'Summary lacks reproducible command details.'
     }
 
-    # Fail in the second Rust gate. Neither formatting nor later gates may execute.
+    # Fail Clippy after the diff check and formatting. Tests and later gates may not execute.
     Set-Content -LiteralPath (Join-Path $fixture 'fail-pattern') -Value 'cargo clippy' -NoNewline
     $count = $trace.Count
     $result = Invoke-WorkflowFixture $fixture 'verify.ps1' @('-Side', 'Rust')
     Assert-Workflow ($result.ExitCode -eq 7) "Verification lost failure code: $($result.Output)"
     Assert-Workflow ($result.Output -match 'fixture complete failure log') 'Verification hid the full failure log.'
-    Assert-Workflow (@(Read-WorkflowTrace $fixture).Count -eq ($count + 2)) 'Verification continued after failure.'
+    # Diff check (1) + five package format checks, each metadata plus rustfmt (10) + failing Clippy (1).
+    Assert-Workflow (@(Read-WorkflowTrace $fixture).Count -eq ($count + 12)) 'Verification continued after failure.'
     Assert-Workflow ($result.Output -match 'NOT RUN') 'Unexecuted gates were not identified.'
     $failureSummary = Get-ChildItem -LiteralPath (Join-Path $fixture 'build\verification-logs') -Filter summary.json -Recurse |
         ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json } |
         Where-Object { $_.ExitCode -eq 7 }
-    Assert-Workflow ($failureSummary.Steps[3].Status -eq 'Fail' -and $failureSummary.Steps[4].Status -eq 'NotRun') 'Failure summary is misleading.'
+    Assert-Workflow ($failureSummary.Steps[8].Label -eq 'Rust Clippy' -and $failureSummary.Steps[8].Status -eq 'Fail' -and $failureSummary.Steps[9].Status -eq 'NotRun') 'Failure summary is misleading.'
 
     # Check restoration in the same PowerShell process, on success and failure.
     Set-Content -LiteralPath (Join-Path $fixture 'scripts\environment-probe.ps1') -Value @'
@@ -131,8 +144,9 @@ exit $code
     $result = Invoke-WorkflowFixture $fixture 'verify.ps1' @('-Side', 'Rust')
     Assert-Workflow ($result.ExitCode -eq 7 -and $result.Output -match 'fixture complete failure log') 'Package formatting failure lost its log or status.'
     $new = @(Read-WorkflowTrace $fixture | Select-Object -Skip $before)
-    Assert-Workflow ($new.Count -eq 6) 'Verification continued beyond the failing second package format check.'
-    Assert-Workflow (($new[5].Arguments -join ' ') -match 'tricerules-core') 'The expected formatting package did not fail.'
+    # Diff check, first package metadata and rustfmt, second package metadata, then the failing second rustfmt.
+    Assert-Workflow ($new.Count -eq 5) 'Verification continued beyond the failing second package format check.'
+    Assert-Workflow (($new[4].Arguments -join ' ') -match 'tricerules-core') 'The expected formatting package did not fail.'
 
     # Expired evidence is pruned before a real gate; completed summaries remain.
     Remove-Item -LiteralPath (Join-Path $fixture 'fail-pattern') -ErrorAction SilentlyContinue
@@ -147,6 +161,19 @@ exit $code
     Assert-Workflow ($result.ExitCode -eq 0) "Retention verification failed: $($result.Output)"
     Assert-Workflow (-not (Test-Path -LiteralPath (Join-Path $pruneRun 'frames.pb'))) 'Expired capture frames survived a verification run.'
     Assert-Workflow (Test-Path -LiteralPath (Join-Path $pruneRun 'summary.json')) 'Completed verification summary was removed.'
+
+    # With no caller value, the Rust test step sees the computed worker count and the variable is removed afterward.
+    Set-Content -LiteralPath (Join-Path $fixture 'scripts\environment-probe-rust.ps1') -Value @'
+Remove-Item Env:TRICERULES_CONFORMANCE_WORKERS -ErrorAction SilentlyContinue
+& (Join-Path $PSScriptRoot 'verify.ps1') -Side Rust
+$code = $LASTEXITCODE
+if ($null -ne $env:TRICERULES_CONFORMANCE_WORKERS) { throw 'Conformance worker environment was not removed' }
+exit $code
+'@
+    $result = Invoke-WorkflowFixture $fixture 'environment-probe-rust.ps1'
+    Assert-Workflow ($result.ExitCode -eq 0) "Rust gate or conformance environment restoration failed: $($result.Output)"
+    $probeTests = @(Read-WorkflowTrace $fixture | Where-Object { $_.Tool -eq 'cargo' -and $_.Arguments.Count -eq 1 -and $_.Arguments[0] -eq 'test' })
+    Assert-Workflow ([string]$probeTests[-1].ConformanceWorkers -eq [string][Math]::Max(1, [int][Math]::Floor([Environment]::ProcessorCount / 2))) 'Rust tests did not default the conformance worker count to half the logical CPUs.'
 
     # Preview derives coverage from the workspace, including newly added packages, without tools.
     $extra = Join-Path $fixture 'tricerules/extra-member'

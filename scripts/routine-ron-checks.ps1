@@ -102,6 +102,21 @@ function ConvertTo-VerificationSnapshotJson {
     ConvertTo-Json -InputObject $Snapshot -Depth 8 -Compress
 }
 
+# Canonical "NAME=value" text for a step's child environment. Summaries recorded before the
+# Environment property existed read as empty, so they fail the exact comparison cleanly.
+function Get-VerificationStepEnvironmentKey {
+    param([AllowNull()] $Step)
+    $environment = if ($null -ne $Step -and $null -ne $Step.PSObject.Properties['Environment']) { $Step.Environment } else { $null }
+    $pairs = [Collections.Generic.List[string]]::new()
+    if ($environment -is [Collections.IDictionary]) {
+        foreach ($key in $environment.Keys) { $pairs.Add("$key=$($environment[$key])") }
+    }
+    elseif ($null -ne $environment) {
+        foreach ($property in $environment.PSObject.Properties) { $pairs.Add("$($property.Name)=$($property.Value)") }
+    }
+    @($pairs | Sort-Object) -join ';'
+}
+
 function Read-RoutineRonBaseline {
     param([Parameter(Mandatory)][string] $SummaryPath, [Parameter(Mandatory)][object[]] $ExpectedSteps)
     $path = [IO.Path]::GetFullPath($SummaryPath)
@@ -126,6 +141,7 @@ function Read-RoutineRonBaseline {
                 $actual.WorkingDirectory -cne $expected.WorkingDirectory -or $actual.RequireE2E -isnot [bool] -or
                 $actual.RequireE2E -ne $expected.RequireE2E -or $actual.Exact -isnot [bool] -or $actual.Exact -ne $expected.Exact -or
                 (ConvertTo-Json -InputObject @($actual.Arguments) -Compress) -cne (ConvertTo-Json -InputObject @($expected.Arguments) -Compress) -or
+                (Get-VerificationStepEnvironmentKey $actual) -cne (Get-VerificationStepEnvironmentKey $expected) -or
                 $actual.Status -cne 'Pass' -or $null -eq $actual.ExitCode -or $actual.ExitCode -ne 0 -or -not $actual.LogPath) {
             throw "Baseline verification step is incomplete or changed: $($expected.Label)"
         }
