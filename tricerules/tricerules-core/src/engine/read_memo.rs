@@ -19,6 +19,18 @@ pub(super) struct StaticAbilitySource {
     pub abilities: Vec<StaticAbilityDef>,
 }
 
+/// Board-wide facts behind every "does tapping this source only add mana?" proof. Each is a
+/// scan of the whole battlefield, so it is computed once per scope instead of once per source.
+#[derive(Clone, Copy)]
+pub(super) struct TapManaBoard {
+    /// No effect, emblem or static ability can change what a mana activation produces.
+    pub stable: bool,
+    /// Some battlefield trigger has an intervening-if clause, which can read tapped status.
+    pub intervening_if: bool,
+    /// Some battlefield trigger observes a permanent becoming tapped.
+    pub tap_observers: bool,
+}
+
 #[derive(Default)]
 pub(super) struct ReadMemo {
     depth: Cell<u32>,
@@ -27,6 +39,7 @@ pub(super) struct ReadMemo {
     active_static_abilities:
         RefCell<HashMap<ObjectId, Vec<tricerules_card_model::IdentifiedStaticAbility>>>,
     tap_mana_only: RefCell<HashMap<(PlayerId, ObjectId), Option<bool>>>,
+    tap_mana_board: Cell<Option<TapManaBoard>>,
     battlefield_static_sources: RefCell<Option<Arc<Vec<StaticAbilitySource>>>>,
 }
 
@@ -61,6 +74,7 @@ impl ReadMemo {
         self.static_source_available.borrow_mut().clear();
         self.active_static_abilities.borrow_mut().clear();
         self.tap_mana_only.borrow_mut().clear();
+        self.tap_mana_board.take();
         self.battlefield_static_sources.borrow_mut().take();
     }
 }
@@ -152,6 +166,23 @@ impl GameEngine {
         sources
     }
 
+    /// [`TapManaBoard`] for this engine's state.
+    pub(super) fn memoized_tap_mana_board(
+        &self,
+        compute: impl FnOnce() -> TapManaBoard,
+    ) -> TapManaBoard {
+        let memo = &self.read_memo;
+        if memo.depth.get() == 0 {
+            return compute();
+        }
+        if let Some(board) = memo.tap_mana_board.get() {
+            return board;
+        }
+        let board = compute();
+        memo.tap_mana_board.set(Some(board));
+        board
+    }
+
     /// Whether tapping `oid` for ordinary mana does nothing but add mana, for `player`'s
     /// payment proofs. See `action_availability::proofs::mana_only`.
     pub(super) fn memoized_tap_mana_only(
@@ -182,4 +213,36 @@ pub(super) fn count_evaluation() {
 #[cfg(test)]
 pub(super) fn evaluations() -> u64 {
     EVALUATIONS.with(std::cell::Cell::get)
+}
+
+/// Engine-cost probes the board-scaling tests count. Compiled out of non-test builds.
+#[derive(Clone, Copy)]
+pub(super) enum Probe {
+    /// An engine clone made to test whether tapping one source causes a trigger.
+    TapCheckClone,
+    /// An engine clone made by the bounded mana-activation search.
+    PaymentSearchClone,
+    /// A full trigger-source snapshot of one battlefield permanent.
+    TriggerSourceSnapshot,
+}
+
+#[cfg(test)]
+thread_local! {
+    static PROBES: std::cell::Cell<[u64; 3]> = const { std::cell::Cell::new([0; 3]) };
+}
+
+#[inline]
+pub(super) fn count_probe(_probe: Probe) {
+    #[cfg(test)]
+    PROBES.with(|counts| {
+        let mut value = counts.get();
+        value[_probe as usize] += 1;
+        counts.set(value);
+    });
+}
+
+/// Probes of this kind performed on this thread so far.
+#[cfg(test)]
+pub(super) fn probes(probe: Probe) -> u64 {
+    PROBES.with(|counts| counts.get()[probe as usize])
 }

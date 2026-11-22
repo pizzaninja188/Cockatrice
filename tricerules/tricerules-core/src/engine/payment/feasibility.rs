@@ -16,6 +16,23 @@ pub(in crate::engine) enum PoolPaymentFeasibility {
     Unknown,
 }
 
+/// One candidate mana activation in the payment search.
+struct ManaActivation<'a> {
+    oid: ObjectId,
+    slot: u32,
+    option: u32,
+    x: u32,
+    split: u32,
+    selections: &'a [rv1::CostSelection],
+    flex: Vec<rv1::FlexPipPayment>,
+    witness: PaymentWitness,
+}
+
+/// Longest chain of mana activations one witness may use. Each level is one small
+/// `search_available_mana` frame (the probe engine is boxed), so a full-depth chain fits a 2 MB
+/// thread stack even in debug builds; `board_scaling_tests` holds that bound.
+const MAX_ACTIVATION_DEPTH: usize = 64;
+
 impl GameEngine {
     /// Optimistic lower bound for a normal printed spell cost, before enumerating targets.
     /// All generic cost is removed and every Phyrexian pip may use life. A false result is
@@ -62,20 +79,11 @@ impl GameEngine {
             .collect();
         let no_sources = mana_abilities.is_empty();
         if !no_sources {
-            if !self.state.continuous_effects.is_empty()
-                || !self.state.static_emblems.is_empty()
-                || self
-                    .state
-                    .players
-                    .iter()
-                    .flat_map(|p| &p.battlefield)
-                    .any(|&oid| {
-                        self.effective_face(oid).is_none_or(|face| {
-                            !face.static_abilities.is_empty()
-                                || !face.triggered_abilities.is_empty()
-                        })
-                    })
-            {
+            // An intrinsic `{T}: Add` activation emits only a tap event, so tap observers are
+            // the only triggers that could add resources mid-payment. Other triggers, and
+            // mana-inert effects such as a keyword grant, cannot raise this ceiling.
+            let board = super::super::action_availability::proofs::tap_mana_board(self);
+            if !board.stable || board.tap_observers {
                 return true;
             }
             for ability in mana_abilities {
@@ -146,10 +154,14 @@ impl GameEngine {
             eligible,
             remaining,
             0,
+            None,
             initial_sources,
         )
     }
 
+    /// Depth-first search over mana activations. This frame recurses once per activation, so it
+    /// holds only handles: the cost, command and probe temporaries live in the non-inlined
+    /// helpers below, whose frames are gone before the next level starts.
     #[allow(clippy::too_many_arguments)]
     fn search_available_mana(
         &self,
@@ -159,25 +171,28 @@ impl GameEngine {
         eligible: &dyn Fn(&GameEngine) -> Vec<u32>,
         remaining: &mut usize,
         depth: usize,
+        // The (source, ability slot) activated to reach this node. Mana activations are
+        // searched in this canonical order, so each set of activations is tried once rather
+        // than once per ordering. The search proves only positive witnesses; a failure is
+        // `Unknown` to callers, never a proof that the action is unavailable.
+        after: Option<(ObjectId, u32)>,
         initial_sources: Option<&super::candidates::AbilityInventory>,
     ) -> bool {
-        if *remaining == 0 || depth == 64 {
+        if *remaining == 0 || depth == MAX_ACTIVATION_DEPTH {
             return false;
         }
         *remaining -= 1;
-        let mut cost = cost.clone();
-        cost.eligible_restricted_mana = eligible(self);
-        if self
-            .payment_from_current_pool(&cost, source, convoke)
-            .is_some()
-        {
+        if self.current_pool_pays(cost, source, convoke, eligible) {
             return true;
+        }
+        // Children of the deepest node would be rejected unexamined; don't clone for them.
+        if depth + 1 == MAX_ACTIVATION_DEPTH {
+            return false;
         }
         let player = cost.transaction.player();
         let Some(idx) = self.state.player_idx(player) else {
             return false;
         };
-
         let recomputed;
         let sources = if let Some(sources) = initial_sources {
             sources
@@ -192,106 +207,55 @@ impl GameEngine {
         for (oid, abilities) in sources {
             let oid = *oid;
             for effective in abilities {
-                let ability = &effective.definition;
-
-                if !ability.is_mana_ability() {
+                if !effective.definition.is_mana_ability()
+                    || after.is_some_and(|last| (oid, effective.slot) < last)
+                    // A tapped or otherwise unactivatable source would only cost a probe clone
+                    // for `activate_ability` to reject it.
+                    || !self.ability_activatable(
+                        oid,
+                        effective.slot as usize,
+                        &effective.definition,
+                    )
+                {
                     continue;
                 }
-                let mut outputs = Vec::new();
-                if ability.storage_counter_split_mana().is_some() {
-                    let count = self.state.objects[&oid].counter_count(CounterKind::Storage);
-                    // Every split is a real engine command. The shared budget bounds large
-                    // storage counters; exhaustion cannot manufacture an affordable result.
-                    'splits: for x in (1..=count.min(*remaining as u32)).rev() {
-                        for split in 0..=x {
-                            outputs.push((0, x, split));
-                            if outputs.len() == super::candidates::PROPOSAL_LIMIT {
-                                break 'splits;
-                            }
-                        }
-                    }
-                } else if let Some(options) = self.active_mana_options(oid, ability) {
-                    outputs.extend(
-                        options
-                            .iter()
-                            .enumerate()
-                            .filter(|(_, amount)| {
-                                [amount.w, amount.u, amount.b, amount.r, amount.g, amount.c]
-                                    .iter()
-                                    .any(|&n| n > 0)
-                            })
-                            .map(|(n, _)| (n as u32, 0, 0)),
-                    );
-                }
-                let choices = super::super::legal_actions::legal_ability_cost_choices(
-                    self,
-                    player,
-                    oid,
-                    effective.slot as usize,
-                    ability,
-                );
-                for selections in super::candidates::cost_selections(&choices) {
+                let outputs = self.mana_activation_outputs(oid, &effective.definition, *remaining);
+                for selections in self.mana_activation_selections(player, oid, effective) {
                     for &(option, x, split) in &outputs {
                         if *remaining == 0 {
                             return false;
                         }
-                        let Ok(reduction) = self.activated_mana_reduction(player, oid, ability)
-                        else {
-                            continue;
-                        };
-                        let Ok(prepared) = self.prepare_ability_costs(
+                        for (flex, witness) in self.mana_activation_witnesses(
                             player,
                             idx,
                             oid,
-                            &ability.costs,
-                            &[],
+                            effective,
                             &selections,
-                            &[],
                             x,
-                            0,
-                            reduction,
-                        ) else {
-                            continue;
-                        };
-                        for flex in super::candidates::phyrexian_choices(&prepared.mana) {
-                            let mut prepared = prepared.clone();
-                            prepared.flex_payments = flex.clone();
-                            let Some(witness) = self.payment_from_current_pool(
-                                &prepared,
-                                self.payment_object_ref(oid),
-                                false,
-                            ) else {
+                        ) {
+                            let activation = ManaActivation {
+                                oid,
+                                slot: effective.slot,
+                                option,
+                                x,
+                                split,
+                                selections: &selections,
+                                flex,
+                                witness,
+                            };
+                            let Some(next) = self.mana_activation_probe(player, activation) else {
                                 continue;
                             };
-                            let mut next = self.clone();
-                            let command = rv1::ActivateAbility {
-                                source_object_id: oid,
-                                expected_zone_change_generation: self
-                                    .payment_object_ref(oid)
-                                    .zone_change_generation,
-                                ability_index: effective.slot,
-                                mana_option_index: option,
-                                x_value: x,
-                                mana_split_first_color_count: split,
-                                payment: Some(witness.selection),
-                                restricted_mana: witness.restricted_mana,
-                                cost_selections: selections.clone(),
-                                flex_payments: flex,
-                                ..Default::default()
-                            };
-                            if next.activate_ability(player, &command).is_err() {
-                                continue;
-                            }
-                            next.reconcile_activated_ability_slots();
                             // The probe is only read from here on; memoize its derived queries.
                             let _memo = next.read_memo_scope();
                             if next.search_available_mana(
-                                &cost,
+                                cost,
                                 source,
                                 convoke,
                                 eligible,
                                 remaining,
                                 depth + 1,
+                                Some((oid, effective.slot)),
                                 None,
                             ) {
                                 return true;
@@ -302,6 +266,144 @@ impl GameEngine {
             }
         }
         false
+    }
+
+    #[inline(never)]
+    fn current_pool_pays(
+        &self,
+        cost: &PreparedPaymentCosts,
+        source: rv1::CostObjectRef,
+        convoke: bool,
+        eligible: &dyn Fn(&GameEngine) -> Vec<u32>,
+    ) -> bool {
+        let mut cost = cost.clone();
+        cost.eligible_restricted_mana = eligible(self);
+        self.payment_from_current_pool(&cost, source, convoke)
+            .is_some()
+    }
+
+    /// (mana option, X, first-color split) choices for one mana ability.
+    #[inline(never)]
+    fn mana_activation_outputs(
+        &self,
+        oid: ObjectId,
+        ability: &ActivatedAbilityDef,
+        remaining: usize,
+    ) -> Vec<(u32, u32, u32)> {
+        let mut outputs = Vec::new();
+        if ability.storage_counter_split_mana().is_some() {
+            let count = self.state.objects[&oid].counter_count(CounterKind::Storage);
+            // Every split is a real engine command. The shared budget bounds large
+            // storage counters; exhaustion cannot manufacture an affordable result.
+            'splits: for x in (1..=count.min(remaining as u32)).rev() {
+                for split in 0..=x {
+                    outputs.push((0, x, split));
+                    if outputs.len() == super::candidates::PROPOSAL_LIMIT {
+                        break 'splits;
+                    }
+                }
+            }
+        } else if let Some(options) = self.active_mana_options(oid, ability) {
+            outputs.extend(
+                options
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, amount)| {
+                        [amount.w, amount.u, amount.b, amount.r, amount.g, amount.c]
+                            .iter()
+                            .any(|&n| n > 0)
+                    })
+                    .map(|(n, _)| (n as u32, 0, 0)),
+            );
+        }
+        outputs
+    }
+
+    #[inline(never)]
+    fn mana_activation_selections(
+        &self,
+        player: PlayerId,
+        oid: ObjectId,
+        effective: &EffectiveActivatedAbility,
+    ) -> Vec<Vec<rv1::CostSelection>> {
+        let choices = super::super::legal_actions::legal_ability_cost_choices(
+            self,
+            player,
+            oid,
+            effective.slot as usize,
+            &effective.definition,
+        );
+        super::candidates::cost_selections(&choices)
+    }
+
+    /// Each Phyrexian announcement of one activation whose own cost the current pool can pay.
+    #[inline(never)]
+    fn mana_activation_witnesses(
+        &self,
+        player: PlayerId,
+        idx: usize,
+        oid: ObjectId,
+        effective: &EffectiveActivatedAbility,
+        selections: &[rv1::CostSelection],
+        x: u32,
+    ) -> Vec<(Vec<rv1::FlexPipPayment>, PaymentWitness)> {
+        let ability = &effective.definition;
+        let Ok(reduction) = self.activated_mana_reduction(player, oid, ability) else {
+            return Vec::new();
+        };
+        let Ok(prepared) = self.prepare_ability_costs(
+            player,
+            idx,
+            oid,
+            &ability.costs,
+            &[],
+            selections,
+            &[],
+            x,
+            0,
+            reduction,
+        ) else {
+            return Vec::new();
+        };
+        super::candidates::phyrexian_choices(&prepared.mana)
+            .into_iter()
+            .filter_map(|flex| {
+                let mut prepared = prepared.clone();
+                prepared.flex_payments = flex.clone();
+                self.payment_from_current_pool(&prepared, self.payment_object_ref(oid), false)
+                    .map(|witness| (flex, witness))
+            })
+            .collect()
+    }
+
+    /// The engine after one real mana activation, or None if the engine rejects it.
+    #[inline(never)]
+    fn mana_activation_probe(
+        &self,
+        player: PlayerId,
+        activation: ManaActivation<'_>,
+    ) -> Option<Box<GameEngine>> {
+        super::super::read_memo::count_probe(super::super::read_memo::Probe::PaymentSearchClone);
+        // On the heap: one probe per recursion level must not grow the stack.
+        let mut next = Box::new(self.clone());
+        let command = rv1::ActivateAbility {
+            source_object_id: activation.oid,
+            expected_zone_change_generation: self
+                .payment_object_ref(activation.oid)
+                .zone_change_generation,
+            ability_index: activation.slot,
+            mana_option_index: activation.option,
+            x_value: activation.x,
+            mana_split_first_color_count: activation.split,
+            payment: Some(activation.witness.selection),
+            restricted_mana: activation.witness.restricted_mana,
+            cost_selections: activation.selections.to_vec(),
+            flex_payments: activation.flex,
+            ..Default::default()
+        };
+        next.activate_ability(player, &command).ok()?;
+        next.reconcile_activated_ability_slots();
+        Some(next)
     }
 
     pub(in crate::engine) fn payment_from_current_pool(

@@ -1539,7 +1539,8 @@ impl GameEngine {
         if changed.is_empty() {
             return Vec::new();
         }
-        let mut sources = self.battlefield_sources_apnap();
+        // `TapActionSnapshot::sources` is read only by `BecameTapped` trigger matching.
+        let mut sources = self.battlefield_trigger_observers_apnap();
         for source in &mut sources {
             source.triggered_abilities.retain(|(_, ability, _)| {
                 self.intervening_if_holds(
