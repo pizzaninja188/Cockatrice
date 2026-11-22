@@ -1,0 +1,20 @@
+// Oracle 2ed76a99-fe5c-4d68-b572-a30848055c8a; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters-the-battlefield trigger), 701.25 (surveil) and 608.2c (printed order).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "whisper_agent",
+  name: "Whisper Agent",
+  face_id: "whisper_agent",
+  mana_cost: "{1}{U/B}{U/B}",
+  types: ["Creature", "Human", "Rogue"],
+  power: 3,
+  toughness: 2,
+  keywords: [Flash],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil)],
+  )],
+)

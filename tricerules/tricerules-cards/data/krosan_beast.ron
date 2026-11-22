@@ -1,0 +1,23 @@
+// Oracle 042a665d-2f63-4f7e-ac89-0d560da68085; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 611.3a/613.4c (live threshold on layer 7); 207.2c (Threshold is an ability word
+// with no rules meaning).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "krosan_beast",
+  name: "Krosan Beast",
+  face_id: "krosan_beast",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Squirrel", "Beast"],
+  power: 1,
+  toughness: 1,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: ConditionalSelfModifier(
+      condition: GraveyardAggregate(owners: Controller, aggregate: CardCount, min: Some(7)),
+      delta_power: 7,
+      delta_toughness: 7,
+    ),
+  )],
+)

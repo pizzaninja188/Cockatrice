@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "5140cd2f-af30-4405-b5e4-996ef6349f59",
+  "spans": [
+    {
+      "face_id": "viashino_fangtail",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario pinger_batch::pinger_batch_cards_deal_one_damage_to_any_target",
+      "covers": "actual viashino_fangtail clause coverage"
+    },
+    {
+      "test": "scenario pinger_batch::pinger_batch_cards_stop_when_the_target_is_gone",
+      "covers": "actual viashino_fangtail clause coverage"
+    },
+    {
+      "test": "scenario pinger_batch::pinger_batch_cards_require_tap_and_untapped_source",
+      "covers": "actual viashino_fangtail clause coverage"
+    },
+    {
+      "test": "mechanic_registry::pinger_batch::pinger_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of viashino_fangtail"
+    },
+    {
+      "test": "mechanic_registry::pinger_batch::pinger_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for viashino_fangtail"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

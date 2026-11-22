@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "e08c71aa-d35c-4c20-b4db-ae9d36ee3169",
+  "spans": [
+    {
+      "face_id": "miscast",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_b::q55_b_canary_simplest_miscast_counters_an_instant_without_a_rider",
+      "covers": "actual Miscast counters an instant for {U} when the controller declines to pay {3}"
+    },
+    {
+      "test": "scenario q55_batch_b::q55_b_miscast_rejects_a_creature_spell",
+      "covers": "actual Miscast rejects a creature spell at cast and keeps its mana"
+    },
+    {
+      "test": "scenario q55_batch_b::q55_b_soft_counters_fizzle_when_the_target_spell_left_the_stack",
+      "covers": "actual Miscast fizzles without a payment choice when its target left the stack"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_b::q55_b_soft_counter_riders_map_definitions",
+      "covers": "shared registry identity for the soft-counter-with-rider spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_b::q55_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Miscast"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

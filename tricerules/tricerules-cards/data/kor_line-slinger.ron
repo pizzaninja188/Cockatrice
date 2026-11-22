@@ -1,0 +1,23 @@
+// Oracle 1a852283-42d4-4197-91b9-5c952c7325ca; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 and 118.3 (tap activation), 115.1 (target creature), 701.26
+// (tap) and 608.2b (the power check is repeated on resolution; Aysen/Kor rulings).
+// Copy of the reviewed tap-target activated shape with TargetFilter.power AtMost.
+(
+  id: "kor_line-slinger",
+  name: "Kor Line-Slinger",
+  face_id: "kor_line_slinger",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Kor", "Scout"],
+  power: 0,
+  toughness: 1,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [Tap(subject: Chosen((kind: Creature, power: Some(AtMost(3)))))],
+      targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature with power 3 or less", effect_indices: [0])])),
+    ),
+  ],
+)

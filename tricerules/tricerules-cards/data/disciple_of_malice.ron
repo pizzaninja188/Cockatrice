@@ -1,0 +1,22 @@
+// Oracle 63d92baf-0007-4519-a5bc-d189448ea126; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.29a-b (Cycling is a hand-zone activated ability paid with the printed mana and
+// discarding this card, then drawing one card); keyword statics per CR 702.
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "disciple_of_malice",
+  name: "Disciple of Malice",
+  face_id: "disciple_of_malice",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Human", "Cleric"],
+  power: 1,
+  toughness: 2,
+  protections: [Color(White)],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    source_zone: Hand,
+    costs: [Mana("{2}"), DiscardSelf],
+    effect: [Draw(count: 1)],
+  )],
+)

@@ -1,0 +1,12 @@
+// Oracle 205bcab6-8b6b-4d09-9890-0b7391d59788; source/rulings checked 2026-11-15.
+// CR 115.1a/601.2c (target at cast), 120.3 (damage), 702.34a-d
+// (flashback alternative cost and exile) and 608.2b (stale target).
+(
+  id: "fires_of_undeath",
+  name: "Fires of Undeath",
+  face_id: "fires_of_undeath",
+  mana_cost: "{2}{R}",
+  types: ["Instant"],
+  flashback_cost: Some("{5}{B}"),
+  spell_effect: [DamageTarget(amount: 2, target: (kind: AnyTarget))],
+)

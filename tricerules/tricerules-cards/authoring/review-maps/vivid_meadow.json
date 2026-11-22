@@ -1,0 +1,85 @@
+{
+  "format_version": 1,
+  "oracle_id": "dee99df5-628f-4a4e-a203-4dfddc927373",
+  "spans": [
+    {
+      "face_id": "vivid_meadow",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0",
+        "/faces/0/static_abilities/1"
+      ]
+    },
+    {
+      "face_id": "vivid_meadow",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "vivid_meadow",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "StaticAbilityDef::EntersWithCounters",
+      "typed_path": "/faces/0/static_abilities/1/definition"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::RemoveCounters",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario vivid_lands_batch::vivid_lands_batch_cards_enter_tapped_with_two_charge_counters",
+      "covers": "actual vivid_meadow clause coverage"
+    },
+    {
+      "test": "scenario vivid_lands_batch::vivid_lands_batch_cards_add_their_color_and_spend_a_charge_for_any_color",
+      "covers": "actual vivid_meadow clause coverage"
+    },
+    {
+      "test": "scenario vivid_lands_batch::vivid_lands_batch_cards_reject_empty_counter_activation",
+      "covers": "actual vivid_meadow clause coverage"
+    },
+    {
+      "test": "mechanic_registry::vivid_lands_batch::vivid_lands_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of vivid_meadow"
+    },
+    {
+      "test": "mechanic_registry::vivid_lands_batch::vivid_lands_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for vivid_meadow"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "e03322a0-e477-4223-969e-27f6772e3d6d",
+  "spans": [
+    {
+      "face_id": "mythic_proportions",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "mythic_proportions",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q39_aura_static_keyword_batch::q39_aura_static_keyword_canary_hardest",
+      "covers": "hardest canary for this actual card"
+    },
+    {
+      "test": "scenario q39_aura_static_keyword_batch::q39_aura_static_keyword_cards_apply_exact_printed_bonus_and_keywords",
+      "covers": "actual card is exercised by the shared Aura cohort scenario"
+    },
+    {
+      "test": "scenario q39_aura_static_keyword_batch::q39_aura_static_keyword_cards_reject_a_noncreature_target",
+      "covers": "actual card rejects a noncreature target without spending mana"
+    },
+    {
+      "test": "scenario q39_aura_static_keyword_batch::q39_aura_static_keyword_cards_fizzle_when_the_target_left",
+      "covers": "actual card fizzles when its only target left before resolution"
+    },
+    {
+      "test": "scenario q39_aura_static_keyword_batch::q39_aura_static_keyword_unattached_auras_are_put_into_their_owners_graveyard",
+      "covers": "actual card is put into its owner's graveyard when the host leaves"
+    },
+    {
+      "test": "mechanic_registry::q39_aura_static_keyword_batch::q39_aura_static_keyword_maps_definitions",
+      "covers": "reviewed identity, typed values and printed characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

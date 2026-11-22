@@ -1,0 +1,11 @@
+// Oracle c60b8edd-aa3f-48ea-b202-d10599f91d9d; source/rulings checked 2026-11-13.
+// CR 115.1a/601.2c (target at cast), CR 608.2b (stale target), CR 701.8 (destroy).
+(
+  id: "take_vengeance",
+  name: "Take Vengeance",
+  face_id: "take_vengeance",
+  mana_cost: "{1}{W}",
+  types: ["Sorcery"],
+  spell_effect: [Destroy(subject: Chosen((kind: Creature, tapped: true)))],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target tapped creature", effect_indices: [0])])),
+)

@@ -1,0 +1,25 @@
+// Oracle 25c04be3-f2e0-4f45-a1ca-9e75ffffa9b5; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.9a-b (flying), 603.6a (enters-the-battlefield trigger), 603.3d/608.2c (stack and
+// resolution order), 119.3 (effect life loss adjusts the total), 120.3a (damage is a distinct
+// life-loss cause) and 119.4 (paying life is a cost). Foul Imp's pinned ruling confirms the
+// spell can be cast below the lost amount.
+
+(
+  id: "foul_imp",
+  name: "Foul Imp",
+  face_id: "foul_imp",
+  mana_cost: "{B}{B}",
+  types: ["Creature", "Imp"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [LoseLife(amount: Fixed(2))],
+    ),
+  ],
+)

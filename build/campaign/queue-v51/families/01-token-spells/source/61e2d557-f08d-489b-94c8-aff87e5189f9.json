@@ -1,0 +1,148 @@
+{
+ "object": "card",
+ "id": "e707c745-0bb1-4a85-83c1-be97131bf488",
+ "oracle_id": "61e2d557-f08d-489b-94c8-aff87e5189f9",
+ "multiverse_ids": [
+  446079
+ ],
+ "tcgplayer_id": 167860,
+ "cardmarket_id": 358953,
+ "name": "Take Up Arms",
+ "lang": "en",
+ "released_at": "2018-06-08",
+ "uri": "https://api.scryfall.com/cards/e707c745-0bb1-4a85-83c1-be97131bf488",
+ "scryfall_uri": "https://scryfall.com/card/bbd/111/take-up-arms?utm_source=api",
+ "layout": "normal",
+ "highres_image": true,
+ "image_status": "highres_scan",
+ "image_updated_at": "2026-07-13T09:27:17Z",
+ "image_uris": {
+  "small": "https://cards.scryfall.io/small/front/e/7/e707c745-0bb1-4a85-83c1-be97131bf488.jpg?1783934837",
+  "normal": "https://cards.scryfall.io/normal/front/e/7/e707c745-0bb1-4a85-83c1-be97131bf488.jpg?1783934837",
+  "large": "https://cards.scryfall.io/large/front/e/7/e707c745-0bb1-4a85-83c1-be97131bf488.jpg?1783934837",
+  "png": "https://cards.scryfall.io/png/front/e/7/e707c745-0bb1-4a85-83c1-be97131bf488.png?1783934837",
+  "art_crop": "https://cards.scryfall.io/art_crop/front/e/7/e707c745-0bb1-4a85-83c1-be97131bf488.jpg?1783934837",
+  "border_crop": "https://cards.scryfall.io/border_crop/front/e/7/e707c745-0bb1-4a85-83c1-be97131bf488.jpg?1783934837",
+  "thumb": "https://cards.scryfall.io/thumb/front/e/7/e707c745-0bb1-4a85-83c1-be97131bf488.webp?1783934837",
+  "grid": "https://cards.scryfall.io/grid/front/e/7/e707c745-0bb1-4a85-83c1-be97131bf488.webp?1783934837",
+  "display": "https://cards.scryfall.io/display/front/e/7/e707c745-0bb1-4a85-83c1-be97131bf488.webp?1783934837",
+  "art": "https://cards.scryfall.io/art/front/e/7/e707c745-0bb1-4a85-83c1-be97131bf488.webp?1783934837",
+  "crop": "https://cards.scryfall.io/crop/front/e/7/e707c745-0bb1-4a85-83c1-be97131bf488.webp?1783934837",
+  "jpeg": "https://cards.scryfall.io/normal/front/e/7/e707c745-0bb1-4a85-83c1-be97131bf488.jpg?1783934837"
+ },
+ "mana_cost": "{4}{W}",
+ "cmc": 5.0,
+ "type_line": "Instant",
+ "oracle_text": "Create three 1/1 white Warrior creature tokens.",
+ "colors": [
+  "W"
+ ],
+ "color_identity": [
+  "W"
+ ],
+ "keywords": [],
+ "all_parts": [
+  {
+   "object": "related_card",
+   "id": "e707c745-0bb1-4a85-83c1-be97131bf488",
+   "component": "combo_piece",
+   "name": "Take Up Arms",
+   "type_line": "Instant",
+   "uri": "https://api.scryfall.com/cards/e707c745-0bb1-4a85-83c1-be97131bf488"
+  },
+  {
+   "object": "related_card",
+   "id": "d36e3c0e-a759-4adc-aa2f-61b13c0f786d",
+   "component": "token",
+   "name": "Warrior",
+   "type_line": "Token Creature — Warrior",
+   "uri": "https://api.scryfall.com/cards/d36e3c0e-a759-4adc-aa2f-61b13c0f786d"
+  }
+ ],
+ "legalities": {
+  "standard": "not_legal",
+  "future": "not_legal",
+  "historic": "legal",
+  "timeless": "legal",
+  "gladiator": "legal",
+  "pioneer": "legal",
+  "modern": "legal",
+  "legacy": "legal",
+  "pauper": "not_legal",
+  "vintage": "legal",
+  "penny": "legal",
+  "commander": "legal",
+  "oathbreaker": "legal",
+  "standardbrawl": "not_legal",
+  "brawl": "legal",
+  "competitivebrawl": "legal",
+  "alchemy": "not_legal",
+  "paupercommander": "not_legal",
+  "duel": "legal",
+  "oldschool": "not_legal",
+  "premodern": "not_legal",
+  "predh": "not_legal",
+  "tlr": "not_legal"
+ },
+ "games": [
+  "paper"
+ ],
+ "reserved": false,
+ "game_changer": false,
+ "foil": true,
+ "nonfoil": true,
+ "finishes": [
+  "nonfoil",
+  "foil"
+ ],
+ "oversized": false,
+ "promo": false,
+ "reprint": true,
+ "variation": false,
+ "set_id": "95f97fbc-58ef-4645-982e-43e2db6f1124",
+ "set": "bbd",
+ "set_name": "Battlebond",
+ "set_type": "draft_innovation",
+ "set_uri": "https://api.scryfall.com/sets/95f97fbc-58ef-4645-982e-43e2db6f1124",
+ "set_search_uri": "https://api.scryfall.com/cards/search?order=set&q=e%3Abbd&unique=prints",
+ "scryfall_set_uri": "https://scryfall.com/sets/bbd?utm_source=api",
+ "rulings_uri": "https://api.scryfall.com/cards/e707c745-0bb1-4a85-83c1-be97131bf488/rulings",
+ "prints_search_uri": "https://api.scryfall.com/cards/search?order=released&q=oracleid%3A61e2d557-f08d-489b-94c8-aff87e5189f9&unique=prints",
+ "collector_number": "111",
+ "digital": false,
+ "rarity": "uncommon",
+ "flavor_text": "\"Many scales make the skin of a dragon.\"\n—Abzan wisdom",
+ "card_back_id": "0aeebaf5-8c7d-4636-9e82-8c27447861f7",
+ "artist": "Craig J Spearing",
+ "artist_ids": [
+  "b0f15e74-0dd6-4156-959e-c5e30c5cdc52"
+ ],
+ "illustration_id": "a35aa080-8b24-4815-a4fd-a97acb4b788b",
+ "border_color": "black",
+ "frame": "2015",
+ "full_art": false,
+ "textless": false,
+ "booster": true,
+ "story_spotlight": false,
+ "edhrec_rank": 25462,
+ "penny_rank": 18128,
+ "prices": {
+  "usd": "0.04",
+  "usd_foil": null,
+  "usd_etched": null,
+  "eur": "0.09",
+  "eur_foil": "0.16",
+  "tix": null
+ },
+ "related_uris": {
+  "gatherer": "https://gatherer.wizards.com/Pages/Card/Details.aspx?multiverseid=446079&printed=false",
+  "tcgplayer_infinite_articles": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&trafcat=tcgplayer.com%2Fsearch%2Farticles&u=https%3A%2F%2Fwww.tcgplayer.com%2Fsearch%2Farticles%3FproductLineName%3Dmagic%26q%3DTake%2BUp%2BArms",
+  "tcgplayer_infinite_decks": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&trafcat=tcgplayer.com%2Fsearch%2Fdecks&u=https%3A%2F%2Fwww.tcgplayer.com%2Fsearch%2Fdecks%3FproductLineName%3Dmagic%26q%3DTake%2BUp%2BArms",
+  "edhrec": "https://edhrec.com/route/?cc=Take+Up+Arms"
+ },
+ "purchase_uris": {
+  "tcgplayer": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&u=https%3A%2F%2Fwww.tcgplayer.com%2Fproduct%2F167860%3Fpage%3D1",
+  "cardmarket": "https://www.cardmarket.com/en/Magic/Products?idProduct=358953&referrer=scryfall&utm_campaign=card_prices&utm_medium=text&utm_source=scryfall",
+  "cardhoarder": "https://www.cardhoarder.com/cards?affiliate_id=scryfall&data%5Bsearch%5D=Take+Up+Arms&ref=card-profile&utm_campaign=affiliate&utm_medium=card&utm_source=scryfall"
+ }
+}

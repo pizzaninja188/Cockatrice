@@ -1,0 +1,19 @@
+// Oracle 3517abe3-eb18-49af-9f1c-b372d2039d99; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.2 (activate), 115.1 (one creature target), 118.3 (costs) and 611.2c/613.4c (until-end-of-turn penalty).
+(
+  id: "aquus_steed",
+  name: "Aquus Steed",
+  face_id: "aquus_steed",
+  mana_cost: "{3}{U}",
+  types: ["Creature", "Beast"],
+  power: 1,
+  toughness: 3,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{2}{U}"), Tap],
+    effect: [PumpTarget(power: -2, toughness: 0, subject: Chosen((kind: Creature)))],
+    targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+  )],
+)

@@ -1,0 +1,19 @@
+// Oracle 5b3c069b-5bed-4b70-b04c-b7143a4a6e96; source/rulings checked 2026-11-15.
+// CR 702.8a (Flash), 303.4a (Aura target and attach), 613.4c
+// (layer-7c attached P/T modifier) and 704.5m (unattached Aura cleanup).
+(
+  id: "feral_invocation",
+  name: "Feral Invocation",
+  face_id: "feral_invocation",
+  mana_cost: "{2}{G}",
+  types: ["Enchantment", "Aura"],
+  keywords: [Flash],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([3]),
+      definition: AttachedModifier(delta_power: 2, delta_toughness: 2),
+    ),
+  ],
+)

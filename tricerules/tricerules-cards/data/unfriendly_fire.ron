@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle ebb5b792-3906-4cb5-b8f9-063f94c9d135.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "unfriendly_fire",
+  name: "Unfriendly Fire",
+  face_id: "unfriendly_fire",
+  mana_cost: "{4}{R}",
+  types: ["Instant"],
+  spell_effect: [DamageTarget(amount: 4, target: (kind: AnyTarget))],
+)

@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "5e642112-9592-475f-ba03-d71544270cfa",
+  "spans": [
+    {
+      "face_id": "lunge",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q53_batch_b::q53_b_two_target_damage_cards_hit_both_printed_targets",
+      "covers": "actual lunge printed behavior and shape"
+    },
+    {
+      "test": "scenario q53_batch_b::q53_b_two_target_damage_still_resolves_against_a_legal_player",
+      "covers": "actual lunge printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_b::q53_two_target_damage_cards_map_definitions",
+      "covers": "actual lunge printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_b::q53_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    },
+    {
+      "test": "scenario q53_batch_b::q53_b_two_target_damage_rejects_a_single_target",
+      "covers": "actual two-target spell rejects a single target"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

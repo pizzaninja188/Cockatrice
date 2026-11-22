@@ -1,0 +1,15 @@
+// Oracle 2f0741f9-802b-4761-8094-7b1f3ea1a424; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.6 (counter), 701.22 (scry), 608.2b (a stale sole target removes the spell)
+// and 608.2c (printed order: counter, then scry).
+(
+  id: "dissolve",
+  name: "Dissolve",
+  face_id: "dissolve",
+  mana_cost: "{1}{U}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    CounterTargetSpell(spell_filter: ()),
+    Scry(count: 1),
+  ],
+)

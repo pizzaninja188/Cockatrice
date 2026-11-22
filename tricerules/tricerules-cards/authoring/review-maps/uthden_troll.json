@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "d6329dcc-b450-482a-8ee3-45449f7a4b3d",
+  "spans": [
+    {
+      "face_id": "uthden_troll",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Regenerate",
+      "typed_path": "/faces/0/activated_abilities/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario regenerate_batch::regenerate_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual uthden_troll casts with its exact printed mana, enters under its owner/controller, and has the exact printed power and toughness"
+    },
+    {
+      "test": "scenario regenerate_batch::regenerate_batch_cards_place_a_shield_with_the_exact_cost",
+      "covers": "actual uthden_troll pays its exact regeneration cost and places one shield without tapping or changing damage"
+    },
+    {
+      "test": "scenario regenerate_batch::regenerate_batch_cards_survive_lethal_damage_by_consuming_the_shield",
+      "covers": "actual uthden_troll survives lethal damage tapped with damage cleared when its shield is consumed"
+    },
+    {
+      "test": "scenario regenerate_batch::regenerate_batch_cards_reject_activation_when_the_cost_cannot_be_paid",
+      "covers": "actual uthden_troll rejects an unpayable regeneration activation without spending mana or creating a shield"
+    },
+    {
+      "test": "mechanic_registry::regenerate_batch::regenerate_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and regeneration cost/effect of uthden_troll"
+    },
+    {
+      "test": "mechanic_registry::regenerate_batch::regenerate_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for uthden_troll"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

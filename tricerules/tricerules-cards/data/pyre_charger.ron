@@ -1,0 +1,22 @@
+// Oracle 50bc464e-1c8d-455c-a870-ddbbc4618343; source/rulings checked 2026-11-16 against pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.10 (haste), 602.2 (activate), 611.2c/613.4c (until-end-of-turn pump) and 514.2 (cleanup).
+// Copy of the reviewed Nightwing Shade source pump with the printed haste keyword.
+(
+  id: "pyre_charger",
+  name: "Pyre Charger",
+  face_id: "pyre_charger",
+  mana_cost: "{R}{R}",
+  types: ["Creature", "Elemental", "Warrior"],
+  power: 1,
+  toughness: 1,
+  keywords: [Haste],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{R}")],
+      effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
+    ),
+  ],
+)

@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "9debaed0-b605-4778-9977-216d194ecdeb",
+  "spans": [
+    {
+      "face_id": "sun_collared_raptor",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "sun_collared_raptor",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario trample_self_pump_batch::trample_self_pump_batch_canary_cards_cast_and_apply_the_printed_keyword",
+      "covers": "actual sun_collared_raptor is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario trample_self_pump_batch::trample_self_pump_batch_cards_cast_with_exact_characteristics",
+      "covers": "actual sun_collared_raptor is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario trample_self_pump_batch::trample_self_pump_batch_cards_activate_only_the_source_with_the_printed_pump",
+      "covers": "actual sun_collared_raptor is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario trample_self_pump_batch::trample_self_pump_batch_cards_stack_repeated_activations",
+      "covers": "actual sun_collared_raptor is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario trample_self_pump_batch::trample_self_pump_batch_cards_reject_activation_without_the_exact_cost",
+      "covers": "actual sun_collared_raptor is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario trample_self_pump_batch::trample_self_pump_batch_cards_expire_the_pump_at_cleanup",
+      "covers": "actual sun_collared_raptor is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario trample_self_pump_batch::trample_self_pump_batch_cards_trample_excess_after_the_printed_pump",
+      "covers": "actual sun_collared_raptor is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::trample_self_pump_batch::trample_self_pump_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of sun_collared_raptor"
+    },
+    {
+      "test": "mechanic_registry::trample_self_pump_batch::trample_self_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for sun_collared_raptor"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

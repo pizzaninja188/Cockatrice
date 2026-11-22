@@ -1,0 +1,19 @@
+// Oracle f46e9fa0-2ed7-4a94-8ad4-031e87a6da45; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.2 (becomes-tapped trigger) and 120.3 (damage to each opponent). Pinned
+// rulings: it is a triggered ability and requires an actual untapped-to-tapped change.
+(
+  id: "spireside_infiltrator",
+  name: "Spireside Infiltrator",
+  face_id: "spireside_infiltrator",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Human", "Rogue"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverSelfBecomesTapped,
+    effect: [DamagePlayer(amount: 1, who: EachOpponent)],
+  )],
+)

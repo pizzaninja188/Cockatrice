@@ -1,0 +1,14 @@
+// Oracle 1980ca2e-a415-4de1-ac30-7055507e82a2; source/rulings checked 2026-11-11.
+// CR 115.1 (single any-target), 120.1/120.3 (damage), 119.3 (life gain), and 608.2b (stale target fizzle).
+(
+  id: "vampiric_feast",
+  name: "Vampiric Feast",
+  face_id: "vampiric_feast",
+  mana_cost: "{5}{B}{B}",
+  types: ["Sorcery"],
+  spell_effect: [
+    DamageTarget(amount: 4, target: (kind: AnyTarget)),
+    GainLife(amount: 4),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+)

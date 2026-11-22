@@ -1,0 +1,20 @@
+// Oracle 74a1a484-7c35-466a-b097-9aaf6fc2073b; source/rulings checked 2026-11-12.
+// CR 702.9 (Flying), 603.6a (enters trigger) and 701.22 (Scry).
+(
+  id: "thaumaturges_familiar",
+  name: "Thaumaturge's Familiar",
+  face_id: "thaumaturges_familiar",
+  mana_cost: "{3}",
+  types: ["Artifact", "Creature", "Bird"],
+  power: 1,
+  toughness: 3,
+  keywords: [Flying],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Scry(count: 1)],
+    ),
+  ],
+)

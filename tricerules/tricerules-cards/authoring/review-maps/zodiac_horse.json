@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "f778bf66-e823-4b4c-8586-97e1d519efd8",
+  "spans": [
+    {
+      "face_id": "zodiac_horse",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/evasions/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Evasion::Landwalk",
+      "typed_path": "/faces/0/evasions/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario islandwalk_batch::islandwalk_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual zodiac_horse clause coverage"
+    },
+    {
+      "test": "scenario islandwalk_batch::islandwalk_batch_cards_cannot_be_blocked_while_defender_controls_an_island",
+      "covers": "actual zodiac_horse clause coverage"
+    },
+    {
+      "test": "scenario islandwalk_batch::islandwalk_batch_cards_can_be_blocked_without_an_island",
+      "covers": "actual zodiac_horse clause coverage"
+    },
+    {
+      "test": "mechanic_registry::islandwalk_batch::islandwalk_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of zodiac_horse"
+    },
+    {
+      "test": "mechanic_registry::islandwalk_batch::islandwalk_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for zodiac_horse"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,50 @@
+{
+  "format_version": 1,
+  "oracle_id": "23c2cdc9-2b16-423a-b932-2daadeb1021b",
+  "spans": [
+    {
+      "face_id": "whisper_of_the_dross",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::Proliferate",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_b::q56_b_shrink_riders_apply_their_printed_values",
+      "covers": "actual whisper_of_the_dross applies its printed effects"
+    },
+    {
+      "test": "scenario q56_batch_b::q56_b_canary_simplest_whisper_of_the_dross_shrinks_then_proliferates",
+      "covers": "actual whisper_of_the_dross canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_b::q56_b_shrink_rider_map_definitions",
+      "covers": "shared registry identity for whisper_of_the_dross"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_b::q56_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for whisper_of_the_dross"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

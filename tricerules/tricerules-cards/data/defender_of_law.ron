@@ -1,0 +1,14 @@
+// Oracle 656513cf-1bf0-431e-8d3a-2d1ec79d0bec; source/rulings checked 2026-11-15.
+// CR 702.16b-f (protection's targeting, attachment, damage and blocking
+// effects), plus the printed clause's normal rules.
+(
+  id: "defender_of_law",
+  name: "Defender of Law",
+  face_id: "defender_of_law",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Human", "Knight"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flash],
+  protections: [Color(Red)],
+)

@@ -1,0 +1,13 @@
+// Oracle 4d5a970b-dd36-4871-a2aa-36ba21917cdf; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853. No card-specific rulings.
+// CR 115.1a/115.3 (up to two targets chosen at cast), 400.7 (a battlefield permanent moves to
+// hand as a new object) and 608.2b (stale targets).
+(
+  id: "into_the_void",
+  name: "Into the Void",
+  face_id: "into_the_void",
+  mana_cost: "{3}{U}",
+  types: ["Sorcery"],
+  spell_effect: [ReturnToOwnersHand(subject: Chosen((kind: Creature)))],
+  targeting: Some((groups: [(min: 0, max: 2, effect_indices: [0])])),
+)

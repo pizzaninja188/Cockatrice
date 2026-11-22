@@ -1,0 +1,13 @@
+// Oracle 54b3ccdc-e5b0-44d9-bc81-a296fc5dc005; source/rulings checked 2026-11-15.
+// CR 702.51a-c (Convoke taps creatures to pay generic or a matching color),
+// 601.2h (payment order), and the printed keyword's normal rules.
+(
+  id: "rosemane_centaur",
+  name: "Rosemane Centaur",
+  face_id: "rosemane_centaur",
+  mana_cost: "{3}{G}{W}",
+  types: ["Creature", "Centaur", "Soldier"],
+  power: 4,
+  toughness: 4,
+  keywords: [Convoke, Vigilance],
+)

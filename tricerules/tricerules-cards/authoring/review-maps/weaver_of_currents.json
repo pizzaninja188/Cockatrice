@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "9aabb520-7e97-47b2-975c-11f457d0b870",
+  "spans": [
+    {
+      "face_id": "weaver_of_currents",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario colorless_double_mana_batch::colorless_double_mana_batch_cards_activate_for_two_colorless_mana",
+      "covers": "actual weaver_of_currents taps for exactly two colorless mana without using the stack"
+    },
+    {
+      "test": "scenario colorless_double_mana_batch::colorless_double_mana_batch_cards_apply_summoning_sickness",
+      "covers": "actual weaver_of_currents obeys creature summoning sickness when it is a creature"
+    },
+    {
+      "test": "mechanic_registry::colorless_double_mana_batch::colorless_double_mana_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of weaver_of_currents"
+    },
+    {
+      "test": "mechanic_registry::colorless_double_mana_batch::colorless_double_mana_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for weaver_of_currents"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

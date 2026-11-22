@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "1f6bff6c-a2f0-4ed7-8169-acb4d31a7187",
+  "spans": [
+    {
+      "face_id": "mercurial_geists",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "mercurial_geists",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPlayerCastsSpell",
+      "typed_path": "/faces/0/triggered_abilities/0"
+    },
+    {
+      "symbol": "SpellCastFilter.card_type",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger/WheneverPlayerCastsSpell/filter/card_type"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/PumpTarget/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q42_cast_trigger_pump_batch::q42_cast_trigger_pump_cards_apply_their_printed_pump",
+      "covers": "actual card applies its printed pump once per controller instant-or-sorcery cast"
+    },
+    {
+      "test": "scenario q42_cast_trigger_pump_batch::q42_cast_trigger_pump_cards_ignore_creature_casts_and_opponents",
+      "covers": "creature casts and opponents' casts do not trigger"
+    },
+    {
+      "test": "mechanic_registry::q42_cohorts_batch::q42_cast_trigger_pump_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of mercurial_geists"
+    },
+    {
+      "test": "mechanic_registry::q42_cohorts_batch::q42_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for mercurial_geists"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

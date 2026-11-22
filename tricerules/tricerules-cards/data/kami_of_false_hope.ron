@@ -1,0 +1,21 @@
+// Oracle 49984248-4800-4f46-933a-fedd970ae910; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 118.3 and 701.21a (sacrifice as an activation cost), 602.1/602.2 (activation), 605.1a/605.3b (targetless mana abilities resolve immediately), 121/701.9 (draw and discard) or 614.1a/615.1a (damage prevention), as printed.
+
+(
+  id: "kami_of_false_hope",
+  name: "Kami of False Hope",
+  face_id: "kami_of_false_hope",
+  mana_cost: "{W}",
+  types: ["Creature", "Spirit"],
+  power: 1,
+  toughness: 1,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [SacrificeSelf],
+      effect: [PreventAllCombatDamageTurn],
+    ),
+  ],
+)

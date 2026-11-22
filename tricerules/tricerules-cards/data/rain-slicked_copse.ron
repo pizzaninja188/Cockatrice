@@ -1,0 +1,29 @@
+// Oracle 633a41f0-3889-49a0-b2fc-9baf59f4ddc2; source/rulings checked 2026-11-10.
+// CR 305.6 (basic land type mana abilities), CR 614.1c (enters tapped), and CR 702.29a (Cycling).
+(
+  id: "rain-slicked_copse",
+  name: "Rain-Slicked Copse",
+  face_id: "rain_slicked_copse",
+  mana_cost: "",
+  types: ["Land", "Forest", "Island"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]), intrinsic_land_mana: true,
+      costs: [Tap],
+      effect: [ProduceMana(options: [(g: 1), (u: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
+      source_zone: Hand,
+      costs: [Mana("{2}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+  static_abilities: [(
+    ability_id: "enters_tapped",
+    presentation: OracleLines([2]),
+    definition: EntersTapped(affected: Self_),
+  )],
+)

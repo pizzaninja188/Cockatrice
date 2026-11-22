@@ -1,0 +1,19 @@
+// Oracle 0e2f8758-7457-4b54-ae61-a9c68cea4a23; source/rulings checked 2026-11-15.
+// CR 603.6a (enters trigger) and 701.22a-b (scry N).
+(
+  id: "chrome_cat",
+  name: "Chrome Cat",
+  face_id: "chrome_cat",
+  mana_cost: "{3}",
+  types: ["Artifact", "Creature", "Cat"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Scry(count: 1)],
+    ),
+  ],
+)

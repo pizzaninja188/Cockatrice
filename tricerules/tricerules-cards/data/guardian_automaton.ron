@@ -1,0 +1,20 @@
+// Oracle cd29d0fd-685f-4c26-b69c-e96f1c0d59c4; source/rulings checked 2026-11-13.
+// CR 603.6c/700.4 (dies trigger), 119.3 (life gain), and 608.2c
+// (the controller of the trigger gains the life).
+(
+  id: "guardian_automaton",
+  name: "Guardian Automaton",
+  face_id: "guardian_automaton",
+  mana_cost: "{4}",
+  types: ["Artifact", "Creature", "Construct"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfDies,
+      effect: [GainLife(amount: 3)],
+    ),
+  ],
+)

@@ -1,0 +1,12 @@
+// Oracle 568c4d02-501e-44ce-871c-adf9e4b9d8d6; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "river_bear",
+  name: "River Bear",
+  face_id: "river_bear",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Bear"],
+  power: 3,
+  toughness: 3,
+  evasions: [Landwalk(land_subtype: "Island")],
+)

@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "c3c45d50-9038-41df-bb2f-9bc40071845b",
+  "spans": [
+    {
+      "face_id": "merciless_executioner",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseAndSacrifice",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_edict_batch::etb_edict_batch_cards_make_each_player_choose_independently",
+      "covers": "actual merciless_executioner is exercised by the shared etb_edict_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_edict_batch::etb_edict_batch_controller_sacrifices_the_source_when_it_is_the_only_creature",
+      "covers": "actual merciless_executioner is exercised by the shared etb_edict_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_edict_batch::etb_edict_batch_cards_include_every_player_in_a_three_player_game",
+      "covers": "actual merciless_executioner is exercised by the shared etb_edict_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::etb_edict_batch::etb_edict_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of merciless_executioner"
+    },
+    {
+      "test": "mechanic_registry::etb_edict_batch::etb_edict_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for merciless_executioner"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

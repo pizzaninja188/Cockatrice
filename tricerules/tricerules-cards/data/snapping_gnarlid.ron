@@ -1,0 +1,23 @@
+// Oracle eeba70f5-336c-46e6-90db-50818f88e8a5; source/rulings checked 2026-11-13.
+// CR 603.6a (land entry trigger), 611.2c/613.4c (until-end-of-turn pump) and
+// 514.2 (cleanup).
+(
+  id: "snapping_gnarlid",
+  name: "Snapping Gnarlid",
+  face_id: "snapping_gnarlid",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Beast"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WheneverPermanentEntersBattlefield(
+        controller: Controller,
+        filter: (permanent_type: Some(Land)),
+      ),
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    ),
+  ],
+)

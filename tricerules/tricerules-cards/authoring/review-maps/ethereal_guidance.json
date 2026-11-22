@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "0e24c0d2-2333-425c-952e-9a13e6519cd3",
+  "spans": [
+    {
+      "face_id": "ethereal_guidance",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario pump_team_batch::pump_team_cards_apply_exact_printed_delta_to_controlled_creatures",
+      "covers": "actual ethereal_guidance gives exactly +2/+1 to each creature its controller controls at resolution, leaves opponents unchanged and consumes its exact mana cost"
+    },
+    {
+      "test": "scenario pump_team_batch::pump_team_cards_exclude_later_entrants_and_expire_at_cleanup",
+      "covers": "actual ethereal_guidance does not pump a creature that enters after resolution, and its pump expires during cleanup"
+    },
+    {
+      "test": "mechanic_registry::pump_team_batch::pump_team_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and team-pump effect of ethereal_guidance"
+    },
+    {
+      "test": "mechanic_registry::pump_team_batch::pump_team_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for ethereal_guidance"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

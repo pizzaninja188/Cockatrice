@@ -1,0 +1,140 @@
+{
+ "object": "card",
+ "id": "259c04f7-86f2-4584-97fb-8278dca9a213",
+ "oracle_id": "c0239ff1-6ae6-431a-806e-7321d8272a1d",
+ "multiverse_ids": [
+  574534
+ ],
+ "mtgo_id": 102584,
+ "arena_id": 82106,
+ "tcgplayer_id": 282767,
+ "cardmarket_id": 671329,
+ "name": "Impede Momentum",
+ "lang": "en",
+ "released_at": "2022-09-09",
+ "uri": "https://api.scryfall.com/cards/259c04f7-86f2-4584-97fb-8278dca9a213",
+ "scryfall_uri": "https://scryfall.com/card/dmu/54/impede-momentum?utm_source=api",
+ "layout": "normal",
+ "highres_image": true,
+ "image_status": "highres_scan",
+ "image_updated_at": "2026-07-13T05:42:29Z",
+ "image_uris": {
+  "small": "https://cards.scryfall.io/small/front/2/5/259c04f7-86f2-4584-97fb-8278dca9a213.jpg?1783921349",
+  "normal": "https://cards.scryfall.io/normal/front/2/5/259c04f7-86f2-4584-97fb-8278dca9a213.jpg?1783921349",
+  "large": "https://cards.scryfall.io/large/front/2/5/259c04f7-86f2-4584-97fb-8278dca9a213.jpg?1783921349",
+  "png": "https://cards.scryfall.io/png/front/2/5/259c04f7-86f2-4584-97fb-8278dca9a213.png?1783921349",
+  "art_crop": "https://cards.scryfall.io/art_crop/front/2/5/259c04f7-86f2-4584-97fb-8278dca9a213.jpg?1783921349",
+  "border_crop": "https://cards.scryfall.io/border_crop/front/2/5/259c04f7-86f2-4584-97fb-8278dca9a213.jpg?1783921349",
+  "thumb": "https://cards.scryfall.io/thumb/front/2/5/259c04f7-86f2-4584-97fb-8278dca9a213.webp?1783921349",
+  "grid": "https://cards.scryfall.io/grid/front/2/5/259c04f7-86f2-4584-97fb-8278dca9a213.webp?1783921349",
+  "display": "https://cards.scryfall.io/display/front/2/5/259c04f7-86f2-4584-97fb-8278dca9a213.webp?1783921349",
+  "art": "https://cards.scryfall.io/art/front/2/5/259c04f7-86f2-4584-97fb-8278dca9a213.webp?1783921349",
+  "crop": "https://cards.scryfall.io/crop/front/2/5/259c04f7-86f2-4584-97fb-8278dca9a213.webp?1783921349",
+  "jpeg": "https://cards.scryfall.io/normal/front/2/5/259c04f7-86f2-4584-97fb-8278dca9a213.jpg?1783921349"
+ },
+ "mana_cost": "{1}{U}",
+ "cmc": 2.0,
+ "type_line": "Sorcery",
+ "oracle_text": "Tap target creature and put three stun counters on it. (If a permanent with a stun counter would become untapped, remove one from it instead.)\nScry 1. (Look at the top card of your library. You may put that card on the bottom.)",
+ "colors": [
+  "U"
+ ],
+ "color_identity": [
+  "U"
+ ],
+ "keywords": [
+  "Scry"
+ ],
+ "legalities": {
+  "standard": "not_legal",
+  "future": "not_legal",
+  "historic": "legal",
+  "timeless": "legal",
+  "gladiator": "legal",
+  "pioneer": "legal",
+  "modern": "legal",
+  "legacy": "legal",
+  "pauper": "legal",
+  "vintage": "legal",
+  "penny": "not_legal",
+  "commander": "legal",
+  "oathbreaker": "legal",
+  "standardbrawl": "not_legal",
+  "brawl": "legal",
+  "competitivebrawl": "legal",
+  "alchemy": "not_legal",
+  "paupercommander": "legal",
+  "duel": "legal",
+  "oldschool": "not_legal",
+  "premodern": "not_legal",
+  "predh": "not_legal",
+  "tlr": "legal"
+ },
+ "games": [
+  "paper",
+  "arena",
+  "mtgo"
+ ],
+ "reserved": false,
+ "game_changer": false,
+ "foil": true,
+ "nonfoil": true,
+ "finishes": [
+  "nonfoil",
+  "foil"
+ ],
+ "oversized": false,
+ "promo": false,
+ "reprint": false,
+ "variation": false,
+ "set_id": "4e47a6cd-cdeb-4b0f-8f24-cfe1a0127cb3",
+ "set": "dmu",
+ "set_name": "Dominaria United",
+ "set_type": "expansion",
+ "set_uri": "https://api.scryfall.com/sets/4e47a6cd-cdeb-4b0f-8f24-cfe1a0127cb3",
+ "set_search_uri": "https://api.scryfall.com/cards/search?order=set&q=e%3Admu&unique=prints",
+ "scryfall_set_uri": "https://scryfall.com/sets/dmu?utm_source=api",
+ "rulings_uri": "https://api.scryfall.com/cards/259c04f7-86f2-4584-97fb-8278dca9a213/rulings",
+ "prints_search_uri": "https://api.scryfall.com/cards/search?order=released&q=oracleid%3Ac0239ff1-6ae6-431a-806e-7321d8272a1d&unique=prints",
+ "collector_number": "54",
+ "digital": false,
+ "rarity": "common",
+ "card_back_id": "0aeebaf5-8c7d-4636-9e82-8c27447861f7",
+ "artist": "Igor Kieryluk",
+ "artist_ids": [
+  "9c3e9d17-509f-485c-9360-46d897ce716b"
+ ],
+ "illustration_id": "148c1539-8eae-4730-8f87-d5526358e368",
+ "border_color": "black",
+ "frame": "2015",
+ "full_art": false,
+ "textless": false,
+ "booster": true,
+ "story_spotlight": false,
+ "edhrec_rank": 12516,
+ "penny_rank": 13742,
+ "preview": {
+  "source": "Wizards of the Coast",
+  "source_uri": "https://www.twitch.tv/videos/1565562937",
+  "previewed_at": "2022-08-18"
+ },
+ "prices": {
+  "usd": "0.25",
+  "usd_foil": "0.25",
+  "usd_etched": null,
+  "eur": "0.10",
+  "eur_foil": "0.13",
+  "tix": "0.03"
+ },
+ "related_uris": {
+  "gatherer": "https://gatherer.wizards.com/Pages/Card/Details.aspx?multiverseid=574534&printed=false",
+  "tcgplayer_infinite_articles": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&trafcat=tcgplayer.com%2Fsearch%2Farticles&u=https%3A%2F%2Fwww.tcgplayer.com%2Fsearch%2Farticles%3FproductLineName%3Dmagic%26q%3DImpede%2BMomentum",
+  "tcgplayer_infinite_decks": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&trafcat=tcgplayer.com%2Fsearch%2Fdecks&u=https%3A%2F%2Fwww.tcgplayer.com%2Fsearch%2Fdecks%3FproductLineName%3Dmagic%26q%3DImpede%2BMomentum",
+  "edhrec": "https://edhrec.com/route/?cc=Impede+Momentum"
+ },
+ "purchase_uris": {
+  "tcgplayer": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&u=https%3A%2F%2Fwww.tcgplayer.com%2Fproduct%2F282767%3Fpage%3D1",
+  "cardmarket": "https://www.cardmarket.com/en/Magic/Products?idProduct=671329&referrer=scryfall&utm_campaign=card_prices&utm_medium=text&utm_source=scryfall",
+  "cardhoarder": "https://www.cardhoarder.com/cards/102584?affiliate_id=scryfall&ref=card-profile&utm_campaign=affiliate&utm_medium=card&utm_source=scryfall"
+ }
+}

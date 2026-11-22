@@ -1,0 +1,23 @@
+// Oracle bae49475-fe01-400b-8959-f0dde959577c; source/rulings checked 2026-11-13.
+// CR 605.1a/605.3b (mana abilities), 106.1 (mana) and 118.3 (costs).
+(
+  id: "shimmering_grotto",
+  name: "Shimmering Grotto",
+  face_id: "shimmering_grotto",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Mana("{1}"), Tap],
+      effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+    ),
+  ],
+)

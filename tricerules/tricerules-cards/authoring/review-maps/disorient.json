@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "33be346b-a232-4680-9b1b-a5eee57d2e75",
+  "spans": [
+    {
+      "face_id": "disorient",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario shrink_batch::shrink_batch_cards_apply_exact_negative_pump_and_go_to_graveyard",
+      "covers": "actual disorient applies the exact printed negative P/T to the chosen creature, leaves opponent hidden zones unchanged, and puts the spell in its owner graveyard"
+    },
+    {
+      "test": "scenario shrink_batch::shrink_batch_cards_expire_at_cleanup",
+      "covers": "actual disorient returns the creature to its printed P/T during cleanup"
+    },
+    {
+      "test": "scenario shrink_batch::shrink_batch_cards_resolve_toughness_lethality_and_power_floor",
+      "covers": "actual disorient sends a two-toughness creature to the graveyard when the toughness penalty is lethal, or leaves a power-only case alive with power floored at zero"
+    },
+    {
+      "test": "scenario shrink_batch::shrink_batch_cards_fizzle_when_the_target_left",
+      "covers": "actual disorient fizzles without changing characteristics when its chosen creature left before resolution"
+    },
+    {
+      "test": "scenario shrink_batch::disorient_floors_power_at_zero",
+      "covers": "actual Disorient leaves a 1/1 alive with power 0, never negative"
+    },
+    {
+      "test": "mechanic_registry::shrink_batch::shrink_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and negative pump of disorient"
+    },
+    {
+      "test": "mechanic_registry::shrink_batch::shrink_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for disorient"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

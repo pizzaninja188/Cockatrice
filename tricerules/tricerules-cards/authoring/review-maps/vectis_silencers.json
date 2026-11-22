@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "e132bba0-40c5-4095-99a3-02cad520ca99",
+  "spans": [
+    {
+      "face_id": "vectis_silencers",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_b::q54_vectis_silencers_gains_deathtouch_for_black",
+      "covers": "actual Vectis Silencers pays {2}{B} and gains deathtouch"
+    },
+    {
+      "test": "scenario q54_batch_b::q54_keyword_grants_reject_missing_mana",
+      "covers": "actual Vectis Silencers rejects activation without its printed mana"
+    },
+    {
+      "test": "scenario q54_batch_b::q54_keyword_grants_expire_at_cleanup",
+      "covers": "actual Vectis Silencers' deathtouch grant expires at cleanup"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_b::q54_keyword_grant_activated_cards_map_definitions",
+      "covers": "shared registry identity for the three keyword-grant definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_b::q54_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Vectis Silencers"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

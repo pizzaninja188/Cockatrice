@@ -1,0 +1,13 @@
+// Oracle 7a9942cd-32ac-4cc9-8840-3fe6b092d0b8; source/rulings checked 2026-11-14.
+// CR 202.1 and 205.4a: no rules text; the printed mana cost, legendary
+// supertype, type line, power and toughness are the complete card.
+(
+  id: "sir_shandlar_of_eberyn",
+  name: "Sir Shandlar of Eberyn",
+  face_id: "sir_shandlar_of_eberyn",
+  mana_cost: "{4}{G}{W}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Human", "Knight"],
+  power: 4,
+  toughness: 7,
+)

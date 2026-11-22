@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "0b8a508b-20c0-4a87-a73a-08af72c39a0a",
+  "spans": [
+    {
+      "face_id": "morgue_theft",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "morgue_theft",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardFace::flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_c::q56_c_flashback_graveyard_cards_return_the_chosen_card_and_exile_the_spell",
+      "covers": "actual morgue_theft applies its printed effects"
+    },
+    {
+      "test": "scenario q56_batch_c::q56_c_flashback_graveyard_cards_reject_an_opponents_graveyard",
+      "covers": "actual morgue_theft canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_c::q56_c_flashback_graveyard_map_definitions",
+      "covers": "shared registry identity for morgue_theft"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_c::q56_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for morgue_theft"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

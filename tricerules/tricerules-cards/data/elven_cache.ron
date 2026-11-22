@@ -1,0 +1,11 @@
+// Oracle 8a922366-ee2a-4ddb-a904-683dcf4f191a; source/rulings checked 2026-11-12.
+// CR 115.1 and 601.2c (one graveyard-card target), 400.7 (new object on zone change)
+// and 608.2b (illegal target fizzles).
+(
+  id: "elven_cache",
+  name: "Elven Cache",
+  face_id: "elven_cache",
+  mana_cost: "{2}{G}{G}",
+  types: ["Sorcery"],
+  spell_effect: [MoveGraveyardCards(filter: (), destination: Hand, linked_exile_id: None)],
+)

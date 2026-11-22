@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "2f292253-64d3-4cf2-881f-a3eea4fda388",
+  "spans": [
+    {
+      "face_id": "magma_jet",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q36_damage_scry_batch::q36_damage_scry_canary_hardest",
+      "covers": "hardest canary for this actual card"
+    },
+    {
+      "test": "scenario q36_damage_scry_batch::q36_damage_scry_cards_deal_the_printed_damage_and_scry",
+      "covers": "actual card is exercised by the shared 03-damage-scry scenario"
+    },
+    {
+      "test": "scenario q36_damage_scry_batch::q36_damage_scry_cards_can_target_players_and_creatures",
+      "covers": "actual card is exercised by the shared 03-damage-scry scenario"
+    },
+    {
+      "test": "scenario q36_damage_scry_batch::q36_damage_scry_cards_require_an_any_target",
+      "covers": "actual card is exercised by the shared 03-damage-scry scenario"
+    },
+    {
+      "test": "scenario q36_damage_scry_batch::q36_damage_scry_cards_fizzle_without_scrying_when_the_target_is_gone",
+      "covers": "actual card is exercised by the shared 03-damage-scry scenario"
+    },
+    {
+      "test": "mechanic_registry::q36_damage_scry_batch::q36_damage_scry_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q36_damage_scry_batch::q36_damage_scry_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

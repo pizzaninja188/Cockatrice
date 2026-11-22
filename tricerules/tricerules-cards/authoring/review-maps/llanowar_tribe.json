@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "cfd0f0e6-1bbf-4450-97d2-c54907abb7e4",
+  "spans": [
+    {
+      "face_id": "llanowar_tribe",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario multi_mana_producers_batch::multi_mana_producers_batch_cards_produce_the_printed_mana_and_tap",
+      "covers": "actual llanowar_tribe is exercised by the shared 02-multi-mana-producers evidence"
+    },
+    {
+      "test": "scenario multi_mana_producers_batch::multi_mana_producers_batch_cards_require_an_untapped_source",
+      "covers": "actual llanowar_tribe is exercised by the shared 02-multi-mana-producers evidence"
+    },
+    {
+      "test": "scenario multi_mana_producers_batch::multi_mana_producers_batch_creatures_respect_summoning_sickness",
+      "covers": "actual llanowar_tribe is exercised by the shared 02-multi-mana-producers evidence"
+    },
+    {
+      "test": "mechanic_registry::multi_mana_producers_batch::multi_mana_producers_batch_maps_definitions",
+      "covers": "actual llanowar_tribe is exercised by the shared 02-multi-mana-producers evidence"
+    },
+    {
+      "test": "mechanic_registry::multi_mana_producers_batch::multi_mana_producers_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual llanowar_tribe is exercised by the shared 02-multi-mana-producers evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

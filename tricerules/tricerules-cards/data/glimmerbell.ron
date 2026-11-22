@@ -1,0 +1,23 @@
+// Oracle 1a8b7792-e105-40c8-b1b4-ab1a8f3731d8; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.9a-b (flying), 602.1/602.2 (activation), 118.3 (mana cost) and 701.26 (untap).
+// The card has no pinned ruling.
+
+(
+  id: "glimmerbell",
+  name: "Glimmerbell",
+  face_id: "glimmerbell",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Elemental", "Jellyfish"],
+  keywords: [Flying],
+  power: 1,
+  toughness: 3,
+  activated_abilities: [
+    (
+      ability_id: "untap_self",
+      presentation: OracleLines([2]),
+      costs: [Mana("{1}{U}")],
+      effect: [Untap(subject: Source)],
+    ),
+  ],
+)

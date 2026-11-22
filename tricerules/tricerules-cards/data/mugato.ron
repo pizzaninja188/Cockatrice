@@ -1,0 +1,14 @@
+// Oracle eb9a3b52-62ad-467f-b62a-0273ceee48e5; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.17a-b (reach), 702.20a-b (vigilance) and 702.2a-c (deathtouch). No card-specific ruling.
+
+(
+  id: "mugato",
+  name: "Mugato",
+  face_id: "mugato",
+  mana_cost: "{3}{G}{G}",
+  types: ["Creature", "Ape", "Beast"],
+  power: 6,
+  toughness: 6,
+  keywords: [Reach, Vigilance, Deathtouch],
+)

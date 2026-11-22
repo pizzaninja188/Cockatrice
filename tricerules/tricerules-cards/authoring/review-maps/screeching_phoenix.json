@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "2b75759a-c3cc-432d-9609-4f8fa2456870",
+  "spans": [
+    {
+      "face_id": "screeching_phoenix",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords",
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_a::q54_canary_hardest_screeching_phoenix_pumps_the_team",
+      "covers": "actual Screeching Phoenix pays {2}{R} and applies its printed +1/+0 to its controller's creatures only"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_a::q54_team_pump_activated_cards_map_definitions",
+      "covers": "shared registry identity for the four team-pump definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_a::q54_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Screeching Phoenix"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,17 @@
+// Oracle d03860b4-c663-4230-9200-6b89fa849ae7; source/rulings checked 2026-11-13.
+// CR 603.6a (entry trigger) and 119.3 (life gain).
+(
+  id: "spiritual_guardian",
+  name: "Spiritual Guardian",
+  face_id: "spiritual_guardian",
+  mana_cost: "{3}{W}{W}",
+  types: ["Creature", "Spirit"],
+  power: 3,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [GainLife(amount: 4)],
+  )],
+)

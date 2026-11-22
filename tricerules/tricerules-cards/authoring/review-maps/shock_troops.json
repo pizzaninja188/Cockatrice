@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "fdf2a8da-2933-44c5-b483-f035144da752",
+  "spans": [
+    {
+      "face_id": "shock_troops",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q32_self_sac_ping_batch::q32_self_sac_ping_canary_simplest",
+      "covers": "actual shock_troops is exercised by the shared 06-self-sac-ping actual-card scenario"
+    },
+    {
+      "test": "scenario q32_self_sac_ping_batch::q32_self_sac_ping_canary_hardest",
+      "covers": "actual shock_troops is exercised by the shared 06-self-sac-ping actual-card scenario"
+    },
+    {
+      "test": "scenario q32_self_sac_ping_batch::q32_self_sac_ping_cards_deal_the_printed_damage_and_sacrifice_themselves",
+      "covers": "actual shock_troops is exercised by the shared 06-self-sac-ping actual-card scenario"
+    },
+    {
+      "test": "scenario q32_self_sac_ping_batch::q32_self_sac_ping_cards_require_a_legal_target_before_sacrificing",
+      "covers": "actual shock_troops is exercised by the shared 06-self-sac-ping actual-card scenario"
+    },
+    {
+      "test": "scenario q32_self_sac_ping_batch::q32_self_sac_ping_cards_do_not_damage_a_stale_target_but_still_sacrifice",
+      "covers": "actual shock_troops is exercised by the shared 06-self-sac-ping actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::q32_self_sac_ping_batch::q32_self_sac_ping_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and pinned Oracle fingerprint of shock_troops"
+    },
+    {
+      "test": "mechanic_registry::q32_self_sac_ping_batch::q32_self_sac_ping_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "reviewed identity, typed shape and pinned Oracle fingerprint of shock_troops"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

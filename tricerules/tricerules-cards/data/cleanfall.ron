@@ -1,0 +1,10 @@
+// Oracle 826b1c93-4e5d-4436-8d59-2d7d970f609f; source/rulings checked 2026-11-13.
+// CR 701.8 (destroy) and 608.2 (resolution).
+(
+  id: "cleanfall",
+  name: "Cleanfall",
+  face_id: "cleanfall",
+  mana_cost: "{2}{W}",
+  types: ["Sorcery", "Arcane"],
+  spell_effect: [DestroyAll(kind: (kind: AnyPermanent, permanent_types: [Enchantment]))],
+)

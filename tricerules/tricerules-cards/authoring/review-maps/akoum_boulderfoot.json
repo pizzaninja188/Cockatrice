@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "c16367eb-1c0a-4197-8e2f-2d74e4381024",
+  "spans": [
+    {
+      "face_id": "akoum_boulderfoot",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetKind::AnyTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting/groups/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_damage_any_target_batch::etb_damage_any_target_batch_cards_deal_one_damage_to_any_target",
+      "covers": "actual akoum_boulderfoot clause coverage"
+    },
+    {
+      "test": "scenario etb_damage_any_target_batch::etb_damage_any_target_batch_cards_choose_the_target_when_the_trigger_resolves",
+      "covers": "actual akoum_boulderfoot clause coverage"
+    },
+    {
+      "test": "scenario etb_damage_any_target_batch::etb_damage_any_target_batch_cards_do_no_damage_when_the_target_is_gone",
+      "covers": "actual akoum_boulderfoot clause coverage"
+    },
+    {
+      "test": "mechanic_registry::etb_damage_any_target_batch::etb_damage_any_target_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of akoum_boulderfoot"
+    },
+    {
+      "test": "mechanic_registry::etb_damage_any_target_batch::etb_damage_any_target_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for akoum_boulderfoot"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

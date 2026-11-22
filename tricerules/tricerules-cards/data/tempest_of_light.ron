@@ -1,0 +1,10 @@
+// Oracle 9399ed27-31c7-4d6a-99eb-644b74e67344; source/rulings checked 2026-11-13.
+// CR 701.8 (destroy) and 608.2 (resolution).
+(
+  id: "tempest_of_light",
+  name: "Tempest of Light",
+  face_id: "tempest_of_light",
+  mana_cost: "{2}{W}",
+  types: ["Instant"],
+  spell_effect: [DestroyAll(kind: (kind: AnyPermanent, permanent_types: [Enchantment]))],
+)

@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 8f8dfc24-f466-4607-8991-acbcbb415db3.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "steadfastness",
+  name: "Steadfastness",
+  face_id: "steadfastness",
+  mana_cost: "{1}{W}",
+  types: ["Sorcery"],
+  spell_effect: [PumpAll(filter: (controller: YouControl), power: 0, toughness: 3)],
+)

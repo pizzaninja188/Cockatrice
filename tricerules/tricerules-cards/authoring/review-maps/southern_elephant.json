@@ -1,0 +1,26 @@
+{
+  "format_version": 1,
+  "oracle_id": "79de2319-078d-46db-9044-0088c623b73f",
+  "spans": [],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario vanilla_green_batch::vanilla_green_batch_cards_cast_with_printed_characteristics",
+      "covers": "actual southern_elephant clause coverage"
+    },
+    {
+      "test": "scenario vanilla_green_batch::vanilla_green_batch_cards_attack_and_block_with_printed_stats",
+      "covers": "actual southern_elephant clause coverage"
+    },
+    {
+      "test": "mechanic_registry::vanilla_green_batch::vanilla_green_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of southern_elephant"
+    },
+    {
+      "test": "mechanic_registry::vanilla_green_batch::vanilla_green_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for southern_elephant"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

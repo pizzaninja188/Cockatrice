@@ -1,0 +1,22 @@
+// Oracle 1133633a-b717-42cb-b477-4e18584d876f; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 122.1 (counters), 502.3 and 701.26 (tap/untap), 614.1d and 614.5
+// (stun-counter replacement). A pinned ruling confirms an already-tapped target
+// still receives the counters. Pinned ruling: an already-tapped target still gets three stun counters.
+(
+  id: "tranquilize",
+  name: "Tranquilize",
+  face_id: "tranquilize",
+  mana_cost: "{1}{U}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Tap(subject: Chosen((kind: Creature, controller: Opponent))),
+    PutCounters(counter: Stun, count: 3, subject: Chosen((kind: Creature, controller: Opponent))),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature an opponent controls",
+    effect_indices: [0, 1],
+  )])),
+)

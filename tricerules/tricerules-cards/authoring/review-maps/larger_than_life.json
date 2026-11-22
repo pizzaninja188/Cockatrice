@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "96e8210a-a547-431d-8146-7399ec20c591",
+  "spans": [
+    {
+      "face_id": "larger_than_life",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/spell_effect/1/GrantKeywords/keywords"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario pump_trample_batch::pump_trample_batch_cards_cast_with_exact_printed_effects",
+      "covers": "actual larger_than_life casts with its exact printed mana, targets an opponent's creature, applies its exact pump and trample, leaves hidden zones unchanged, and puts the spell in its owner's graveyard"
+    },
+    {
+      "test": "scenario pump_trample_batch::pump_trample_batch_cards_expire_at_cleanup",
+      "covers": "actual larger_than_life returns the target to its printed power and toughness and removes trample during cleanup"
+    },
+    {
+      "test": "scenario pump_trample_batch::pump_trample_batch_cards_reject_a_noncreature_target",
+      "covers": "actual larger_than_life rejects a land target without spending mana, moving the card from hand, adding to the stack, or advancing the command position"
+    },
+    {
+      "test": "scenario pump_trample_batch::pump_trample_batch_cards_fizzle_when_the_target_left",
+      "covers": "actual larger_than_life fizzles without affecting a bystander when its only target leaves before resolution"
+    },
+    {
+      "test": "mechanic_registry::pump_trample_batch::pump_trample_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, exact pump and trample of larger_than_life"
+    },
+    {
+      "test": "mechanic_registry::pump_trample_batch::pump_trample_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for larger_than_life"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

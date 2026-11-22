@@ -1,0 +1,43 @@
+// Oracle 69c63055-ed44-4b32-b591-f3c6c2f3e7d1; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853. Pinned rulings: recorded in the family packet
+// CR 614.1d/614.12 (enters tapped), 603.1/603.2 (ETB trigger), 118.12 (optional
+// payment), 701.21a (sacrifice), 605.1a/605.3b (mana ability), 106.1a (any color).
+(
+  id: "archway_commons",
+  name: "Archway Commons",
+  face_id: "archway_commons",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
+    costs: [Tap],
+    effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    program: Some((body: (steps: [
+      (id: "pay_or_sacrifice", kind: Choose(
+        choice: "pay_or_sacrifice",
+        chooser: Controller,
+        optional: true,
+        branches: [(
+          branch_id: "pay_one",
+          presentation: OracleLines([2]),
+          cost: Mana("{1}"),
+          body: (),
+        )],
+        otherwise: (steps: [
+          (id: "sacrifice_source", kind: Perform(Sacrifice(subject: Source))),
+        ]),
+      )),
+    ]))),
+  )],
+  static_abilities: [(
+    ability_id: "enters_tapped",
+    presentation: OracleLines([1]),
+    definition: EntersTapped(affected: Self_),
+  )],
+)

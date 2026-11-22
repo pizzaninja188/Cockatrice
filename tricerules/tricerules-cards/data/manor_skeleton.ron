@@ -1,0 +1,21 @@
+// Oracle aa3f4938-ac4b-4f52-a8d3-481c1b387467; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.2 (activate), 701.19a-b (regenerate), 118.3 (costs are paid on activation) and
+// the printed keyword static.
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "manor_skeleton",
+  name: "Manor Skeleton",
+  face_id: "manor_skeleton",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Skeleton"],
+  power: 1,
+  toughness: 1,
+  keywords: [Haste],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Mana("{1}{B}")],
+    effect: [Regenerate(subject: Source)],
+  )],
+)

@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "dab9e40f-b73a-4c55-8bb3-63b32c23f07b",
+  "spans": [
+    {
+      "face_id": "palace_familiar",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "palace_familiar",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flying_dies_draw_batch::flying_dies_draw_batch_cards_have_flying_and_draw_when_they_die",
+      "covers": "actual palace_familiar clause coverage"
+    },
+    {
+      "test": "scenario flying_dies_draw_batch::flying_dies_draw_batch_cards_draw_only_for_their_controller",
+      "covers": "actual palace_familiar clause coverage"
+    },
+    {
+      "test": "scenario flying_dies_draw_batch::flying_dies_draw_batch_cards_do_not_draw_when_exiled",
+      "covers": "actual palace_familiar clause coverage"
+    },
+    {
+      "test": "mechanic_registry::flying_dies_draw_batch::flying_dies_draw_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of palace_familiar"
+    },
+    {
+      "test": "mechanic_registry::flying_dies_draw_batch::flying_dies_draw_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for palace_familiar"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

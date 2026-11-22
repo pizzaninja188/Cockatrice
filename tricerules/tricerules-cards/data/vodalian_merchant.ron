@@ -1,0 +1,26 @@
+// Oracle 3d62c8f8-7a1c-4771-891d-05fdaa56bf47; source/rulings checked 2026-11-13.
+// CR 603.6a (entry trigger), 121 (draw) and 701.9 (discard), in printed order.
+(
+  id: "vodalian_merchant",
+  name: "Vodalian Merchant",
+  face_id: "vodalian_merchant",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Merfolk"],
+  power: 1,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    program: Some(
+      (
+        body: (
+          steps: [
+            (id: "draw_cards", kind: Perform(Draw(count: 1))),
+            (id: "discard_cards", kind: Perform(Discard(quantity: Exact(1)))),
+          ],
+        ),
+      ),
+    ),
+  )],
+)

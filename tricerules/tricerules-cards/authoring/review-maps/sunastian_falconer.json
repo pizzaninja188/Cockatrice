@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "3d6314b5-3ace-4793-9549-7b17db2a735d",
+  "spans": [
+    {
+      "face_id": "sunastian_falconer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario colorless_double_mana_batch::colorless_double_mana_batch_cards_activate_for_two_colorless_mana",
+      "covers": "actual sunastian_falconer taps for exactly two colorless mana without using the stack"
+    },
+    {
+      "test": "scenario colorless_double_mana_batch::colorless_double_mana_batch_cards_apply_summoning_sickness",
+      "covers": "actual sunastian_falconer obeys creature summoning sickness when it is a creature"
+    },
+    {
+      "test": "mechanic_registry::colorless_double_mana_batch::colorless_double_mana_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of sunastian_falconer"
+    },
+    {
+      "test": "mechanic_registry::colorless_double_mana_batch::colorless_double_mana_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for sunastian_falconer"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

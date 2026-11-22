@@ -1,0 +1,23 @@
+// Oracle e9e56b1d-5ad2-4807-8c4c-1a1a6a25ecbf; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.2/601.2 (cast trigger), 611.2c/613.4c (until-end-of-turn pump) and the printed
+// keyword static.
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "wee_dragonauts",
+  name: "Wee Dragonauts",
+  face_id: "wee_dragonauts",
+  mana_cost: "{1}{U}{R}",
+  types: ["Creature", "Faerie", "Wizard"],
+  power: 1,
+  toughness: 3,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPlayerCastsSpell(
+      filter: (card_type: Some(InstantOrSorcery)),
+    ),
+    effect: [PumpTarget(power: 2, toughness: 0, subject: Source)],
+  )],
+)

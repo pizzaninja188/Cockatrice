@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "85308fb8-e5a1-4ff1-8606-283cf2056895",
+  "spans": [
+    {
+      "face_id": "patagia_golem",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario grant_flying_activated_batch::grant_flying_activated_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual patagia_golem is exercised by the shared grant_flying_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario grant_flying_activated_batch::grant_flying_activated_batch_cards_gain_flying_only_after_activation",
+      "covers": "actual patagia_golem is exercised by the shared grant_flying_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario grant_flying_activated_batch::grant_flying_activated_batch_cards_lose_flying_at_cleanup",
+      "covers": "actual patagia_golem is exercised by the shared grant_flying_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario grant_flying_activated_batch::grant_flying_activated_batch_cards_reject_activation_when_the_cost_cannot_be_paid",
+      "covers": "actual patagia_golem is exercised by the shared grant_flying_activated_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::grant_flying_activated_batch::grant_flying_activated_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of patagia_golem"
+    },
+    {
+      "test": "mechanic_registry::grant_flying_activated_batch::grant_flying_activated_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for patagia_golem"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

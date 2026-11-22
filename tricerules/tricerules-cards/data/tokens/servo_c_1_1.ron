@@ -1,0 +1,9 @@
+// 1/1 colorless Servo artifact creature token (Servo Exhibition).
+(
+  id: "servo_c_1_1",
+  name: "Servo",
+  face_id: "servo",
+  types: ["Artifact", "Creature", "Servo"],
+  power: 1,
+  toughness: 1,
+)

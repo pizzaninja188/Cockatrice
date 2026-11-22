@@ -1,0 +1,15 @@
+// Oracle 82f18e7d-5c42-47c4-8e74-3fccc9b7b1f0; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 121.5 (not a draw), 401.4 (private look), 601.2 (casting), 609.3 (selection
+// clamps) and 105.1 (colorless objects, including cards with no mana cost).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "ancient_stirrings",
+  name: "Ancient Stirrings",
+  face_id: "ancient_stirrings",
+  mana_cost: "{G}",
+  types: ["Sorcery"],
+  spell_effect: [
+    LookChooseToHand(count: 5, filter: Some((is_colorless: Some(true))), bottom_order: Chosen),
+  ],
+)

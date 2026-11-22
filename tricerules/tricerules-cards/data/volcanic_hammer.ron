@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 98fa5a06-0553-40fd-999c-bc31c9b3f4db.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "volcanic_hammer",
+  name: "Volcanic Hammer",
+  face_id: "volcanic_hammer",
+  mana_cost: "{1}{R}",
+  types: ["Sorcery"],
+  spell_effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
+)

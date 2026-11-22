@@ -1,0 +1,28 @@
+// Oracle 1c482b20-b423-48ef-b162-53960d43b4f7; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 303.4a (Aura attach), 613.4c (layer-7c static and temporary pump), 611.2a/514.2
+// (until-end-of-turn duration) and 602.1/118.3 (printed activation). Copy of the
+// reviewed Aura AttachedModifier shape plus an AttachedObject pump.
+(
+  id: "armor_of_faith",
+  name: "Armor of Faith",
+  face_id: "armor_of_faith",
+  mana_cost: "{W}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(delta_power: 1, delta_toughness: 1),
+    ),
+  ],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([3]),
+      costs: [Mana("{W}")],
+      effect: [PumpTarget(power: 0, toughness: 1, subject: AttachedObject)],
+    ),
+  ],
+)

@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "2c006a63-0550-4a87-a5fe-f4247857271c",
+  "spans": [
+    {
+      "face_id": "luminous_bonds",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "luminous_bonds",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "CombatRestriction.cant_attack",
+      "typed_path": "/faces/0/static_abilities/0/definition/AttachedModifier/restriction"
+    },
+    {
+      "symbol": "CombatRestriction.cant_block",
+      "typed_path": "/faces/0/static_abilities/0/definition/AttachedModifier/restriction"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario aura_cant_attack_block_batch::aura_cant_attack_block_batch_cards_prevent_the_enchanted_creature_from_attacking",
+      "covers": "actual luminous_bonds clause coverage"
+    },
+    {
+      "test": "scenario aura_cant_attack_block_batch::aura_cant_attack_block_batch_cards_prevent_the_enchanted_creature_from_blocking",
+      "covers": "actual luminous_bonds clause coverage"
+    },
+    {
+      "test": "scenario aura_cant_attack_block_batch::aura_cant_attack_block_batch_cards_do_not_enter_when_the_target_is_illegal",
+      "covers": "actual luminous_bonds clause coverage"
+    },
+    {
+      "test": "mechanic_registry::aura_cant_attack_block_batch::aura_cant_attack_block_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of luminous_bonds"
+    },
+    {
+      "test": "mechanic_registry::aura_cant_attack_block_batch::aura_cant_attack_block_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for luminous_bonds"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

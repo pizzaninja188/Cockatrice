@@ -1,0 +1,14 @@
+// Oracle 0b8c3337-04dd-4798-8203-6d8b8cfb936b; source/rulings checked 2026-11-21 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 111.1/111.2 (two 1/1 white Spirit tokens with flying), 702.9 (flying), 702.34a-d (flashback
+// alternative cost and exile) and 601.2 (sorcery timing). Copy of Midnight Haunting's token plus
+// Firebolt's flashback cost shape.
+(
+  id: "lingering_souls",
+  name: "Lingering Souls",
+  face_id: "lingering_souls",
+  mana_cost: "{2}{W}",
+  flashback_cost: Some("{1}{B}"),
+  types: ["Sorcery"],
+  spell_effect: [CreateTokens(token: "spirit_w_1_1_flying", count: 2)],
+)

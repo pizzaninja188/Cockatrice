@@ -1,0 +1,22 @@
+// Oracle 48dab180-4ffd-4b39-9f5a-6bdc017a1eae; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 604.1/611.3a (continuous static ability), 613.1f layer 6 and 702.10a-b (haste); the source's controller owns the affected creatures (CR 109.5).
+// The card has no pinned ruling.
+
+(
+  id: "tuktuk_rubblefort",
+  name: "Tuktuk Rubblefort",
+  face_id: "tuktuk_rubblefort",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Wall"],
+  power: 0,
+  toughness: 3,
+  keywords: [Defender, Reach],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: AnthemKeyword(filter: (controller: YouControl), keyword: Haste),
+    ),
+  ],
+)

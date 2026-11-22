@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "ae1f22a5-89cf-440c-b90d-fed194b2dee5",
+  "spans": [
+    {
+      "face_id": "warthog",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/evasions/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Evasion::Landwalk",
+      "typed_path": "/faces/0/evasions/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario swampwalk_batch::swampwalk_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual warthog clause coverage"
+    },
+    {
+      "test": "scenario swampwalk_batch::swampwalk_batch_cards_cannot_be_blocked_while_defender_controls_a_swamp",
+      "covers": "actual warthog clause coverage"
+    },
+    {
+      "test": "scenario swampwalk_batch::swampwalk_batch_cards_can_be_blocked_without_a_swamp",
+      "covers": "actual warthog clause coverage"
+    },
+    {
+      "test": "mechanic_registry::swampwalk_batch::swampwalk_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of warthog"
+    },
+    {
+      "test": "mechanic_registry::swampwalk_batch::swampwalk_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for warthog"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

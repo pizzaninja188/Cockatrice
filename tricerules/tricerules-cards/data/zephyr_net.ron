@@ -1,0 +1,18 @@
+// Oracle cd510cf2-df54-4024-919b-e4377cdb2be1; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 303.4a (Aura attach), 613.1f (the attached keyword grant), 702.3 (defender)
+// and 702.9 (flying). Both keywords apply to the enchanted creature.
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "zephyr_net",
+  name: "Zephyr Net",
+  face_id: "zephyr_net",
+  mana_cost: "{1}{U}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: AttachedModifier(keywords: [Defender, Flying]),
+  )],
+)

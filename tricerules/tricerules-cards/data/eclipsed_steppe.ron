@@ -1,0 +1,36 @@
+// Oracle 6216635f-8e6e-40a3-9659-ef6352ab92ce; source/rulings checked 2026-11-13.
+// CR 305.6/305.8 (basic land subtypes), 614.1c (enter-tapped replacement) and
+// 605.1a/605.3b (mana ability).
+(
+  id: "eclipsed_steppe",
+  name: "Eclipsed Steppe",
+  face_id: "eclipsed_steppe",
+  mana_cost: "",
+  types: ["Land", "Plains", "Swamp"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      intrinsic_land_mana: true,
+      costs: [Tap],
+      effect: [ProduceMana(options: [
+        (w: 1),
+        (b: 1),
+      ])],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: EntersTapped(
+        affected: Self_,
+        condition: Some(BattlefieldAggregate(
+          filter: (controllers: Controller, card_type: Some(BasicLand), exclude_source: true),
+          aggregate: Count,
+          max: Some(1),
+        )),
+      ),
+    ),
+  ],
+)

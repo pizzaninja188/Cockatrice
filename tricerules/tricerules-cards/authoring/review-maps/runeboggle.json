@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "22000392-99e9-4927-a488-1bcb576f6275",
+  "spans": [
+    {
+      "face_id": "runeboggle",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_b::q55_b_soft_counter_riders_apply_when_the_payment_is_declined",
+      "covers": "actual Runeboggle counters the spell and still draws when the payment is declined"
+    },
+    {
+      "test": "scenario q55_batch_b::q55_b_soft_counter_riders_apply_when_the_payment_is_made",
+      "covers": "actual Runeboggle still draws when the controller pays and the target resolves"
+    },
+    {
+      "test": "scenario q55_batch_b::q55_b_soft_counters_fizzle_when_the_target_spell_left_the_stack",
+      "covers": "actual Runeboggle fizzles without drawing when its target left the stack"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_b::q55_b_soft_counter_riders_map_definitions",
+      "covers": "shared registry identity for the soft-counter-with-rider spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_b::q55_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Runeboggle"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

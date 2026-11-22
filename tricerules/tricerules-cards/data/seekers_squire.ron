@@ -1,0 +1,20 @@
+// Oracle a494cbe7-a4a5-4657-9f68-3811fe56a17e; source/rulings checked 2026-11-13.
+// CR 603.6a (entry trigger), 701.44a-c (explore and last-known information),
+// 701.20a (reveal), and 608.2c/d (instruction order and the graveyard-or-top choice).
+(
+  id: "seekers_squire",
+  name: "Seekers' Squire",
+  face_id: "seekers_squire",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Human", "Scout"],
+  power: 1,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Explore(subject: Source)],
+    ),
+  ],
+)

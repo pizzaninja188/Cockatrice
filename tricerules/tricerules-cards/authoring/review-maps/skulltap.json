@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "17c7878f-891f-40a6-80a7-47fcc7b8e29b",
+  "spans": [
+    {
+      "face_id": "skulltap",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/additional_costs/0"
+      ]
+    },
+    {
+      "face_id": "skulltap",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AdditionalCost::SacrificePermanent",
+      "typed_path": "/faces/0/additional_costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario sacrifice_draw_batch::sacrifice_draw_batch_cards_draw_their_printed_count",
+      "covers": "actual skulltap is exercised by the shared sacrifice_draw_batch actual-card scenario"
+    },
+    {
+      "test": "scenario sacrifice_draw_batch::sacrifice_draw_batch_cards_require_a_creature_you_control",
+      "covers": "actual skulltap is exercised by the shared sacrifice_draw_batch actual-card scenario"
+    },
+    {
+      "test": "scenario sacrifice_draw_batch::sacrifice_draw_batch_cards_reject_an_opponents_creature",
+      "covers": "actual skulltap is exercised by the shared sacrifice_draw_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::sacrifice_draw_batch::sacrifice_draw_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of skulltap"
+    },
+    {
+      "test": "mechanic_registry::sacrifice_draw_batch::sacrifice_draw_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for skulltap"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

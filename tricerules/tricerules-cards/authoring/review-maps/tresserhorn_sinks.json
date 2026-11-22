@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "74a6597c-13ea-47bd-adb3-45671897b11b",
+  "spans": [
+    {
+      "face_id": "tresserhorn_sinks",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "tresserhorn_sinks",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario urborg_volcano_batch::urborg_volcano_batch_cards_enter_tapped_and_reject_immediate_tap",
+      "covers": "actual tresserhorn_sinks enters tapped and rejects an immediate tap activation"
+    },
+    {
+      "test": "scenario urborg_volcano_batch::urborg_volcano_batch_cards_tap_for_each_printed_option_in_order",
+      "covers": "actual tresserhorn_sinks produces black or red in printed option order and does not use the stack"
+    },
+    {
+      "test": "mechanic_registry::urborg_volcano_batch::urborg_volcano_batch_maps_definitions",
+      "covers": "reviewed identity, Snow supertype, entry replacement, mana options and presentation of tresserhorn_sinks"
+    },
+    {
+      "test": "mechanic_registry::urborg_volcano_batch::urborg_volcano_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for tresserhorn_sinks"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

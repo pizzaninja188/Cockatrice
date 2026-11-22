@@ -1,0 +1,23 @@
+// Oracle 6d16c2fa-4118-4b81-92ca-6c8e9efe03b6; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters trigger), 701.26 (tap), 702.8 (flash) and 115.1 (one chosen
+// opponent creature). The card has no pinned ruling.
+(
+  id: "chrome_prowler",
+  name: "Chrome Prowler",
+  face_id: "chrome_prowler",
+  mana_cost: "{2}{U}",
+  types: ["Artifact", "Creature", "Phyrexian", "Cat"],
+  power: 3,
+  toughness: 2,
+  keywords: [Flash],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      Tap(subject: Chosen((kind: Creature, controller: Opponent))),
+    ],
+    targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+  )],
+)

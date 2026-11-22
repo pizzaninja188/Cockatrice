@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "1663d54f-4f39-4a03-aac2-e2923cbb7de8",
+  "spans": [
+    {
+      "face_id": "frost_trickster",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "frost_trickster",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::SkipNextUntap",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_freeze_batch::etb_freeze_batch_cards_tap_the_chosen_opponent_creature_and_skip_its_next_untap",
+      "covers": "actual frost_trickster is exercised by the shared etb_freeze_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_freeze_batch::etb_freeze_batch_cards_still_skip_an_already_tapped_target",
+      "covers": "actual frost_trickster is exercised by the shared etb_freeze_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_freeze_batch::etb_freeze_batch_cards_only_target_an_opponents_creature",
+      "covers": "actual frost_trickster is exercised by the shared etb_freeze_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_freeze_batch::etb_freeze_batch_cards_fizzle_when_the_chosen_creature_leaves",
+      "covers": "actual frost_trickster is exercised by the shared etb_freeze_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::etb_freeze_batch::etb_freeze_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of frost_trickster"
+    },
+    {
+      "test": "mechanic_registry::etb_freeze_batch::etb_freeze_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for frost_trickster"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

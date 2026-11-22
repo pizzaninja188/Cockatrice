@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "c87e056a-6067-49e6-b3f7-bba8234777de",
+  "spans": [
+    {
+      "face_id": "saltfield_recluse",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q41_activated_batch::q41_activated_shrink_cards_apply_their_printed_values",
+      "covers": "actual card applies its printed penalty and printed cost"
+    },
+    {
+      "test": "scenario q41_activated_batch::q41_activated_shrink_cards_expire_at_cleanup",
+      "covers": "the penalty expires at cleanup"
+    },
+    {
+      "test": "mechanic_registry::q41_cohorts_batch::q41_activated_shrink_maps_definitions",
+      "covers": "reviewed identity, costs and printed penalty"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "47f5ea79-2bf2-4e17-9c6d-e1cbcd9d30d1",
+  "spans": [
+    {
+      "face_id": "repel_the_darkness",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_b::q55_b_canary_simplest_repel_the_darkness_draws_without_targets",
+      "covers": "actual Repel the Darkness may be cast with zero targets to draw one card"
+    },
+    {
+      "test": "scenario q55_batch_b::q55_b_tap_two_spells_tap_each_chosen_creature_and_apply_their_riders",
+      "covers": "actual Repel the Darkness taps two chosen creatures and draws one card"
+    },
+    {
+      "test": "scenario q55_batch_b::q55_b_repel_the_darkness_handles_partial_and_all_illegal_targets",
+      "covers": "actual Repel the Darkness taps and draws with one legal target and fizzles without drawing otherwise"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_b::q55_b_tap_two_riders_map_definitions",
+      "covers": "shared registry identity for the tap-two-with-rider spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_b::q55_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Repel the Darkness"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

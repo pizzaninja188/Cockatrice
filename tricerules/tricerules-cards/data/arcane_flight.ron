@@ -1,0 +1,18 @@
+// Oracle 40eee955-bec6-455a-addf-68cdb84c76b9; source/rulings checked 2026-11-15.
+// CR 303.4a (Aura target and attach), 613.4c (layer-7c attached P/T
+// modifier), 702.9a-b (flying) and 704.5m (unattached Aura cleanup).
+(
+  id: "arcane_flight",
+  name: "Arcane Flight",
+  face_id: "arcane_flight",
+  mana_cost: "{U}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(delta_power: 1, delta_toughness: 1, keywords: [Flying]),
+    ),
+  ],
+)

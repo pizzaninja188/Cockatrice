@@ -1,0 +1,17 @@
+// Oracle 8f5822ae-651f-410e-9316-5522eeb52d72; source/rulings checked 2026-11-12.
+// CR 605.1a/605.3b (mana ability, no stack).
+(
+  id: "sisays_ring",
+  name: "Sisay's Ring",
+  face_id: "sisays_ring",
+  mana_cost: "{4}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 2)])],
+    ),
+  ],
+)

@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 1ecd7248-ff28-4e12-b72a-0cb279ec7561.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "bar_the_door",
+  name: "Bar the Door",
+  face_id: "bar_the_door",
+  mana_cost: "{2}{W}",
+  types: ["Instant"],
+  spell_effect: [PumpAll(filter: (controller: YouControl), power: 0, toughness: 4)],
+)

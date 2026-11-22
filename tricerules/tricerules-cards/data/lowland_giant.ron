@@ -1,0 +1,12 @@
+// Oracle 041cc2d0-eb67-484e-8da1-e91ddb2b3f70; source/rulings checked 2026-11-15.
+// CR 109.3, 202.1, and 205.1-2: no rules text; the printed mana cost, type
+// line, power and toughness are the complete card.
+(
+  id: "lowland_giant",
+  name: "Lowland Giant",
+  face_id: "lowland_giant",
+  mana_cost: "{2}{R}{R}",
+  types: ["Creature", "Giant"],
+  power: 4,
+  toughness: 3,
+)

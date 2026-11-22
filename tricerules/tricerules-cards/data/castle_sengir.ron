@@ -1,0 +1,32 @@
+// Oracle c7f0251a-9341-4ff2-8b15-31c06eb4f2e7; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 605.1a/605.3b (mana abilities), 118.3 (tap and mana costs), 107.4 (colored mana) and 305.6 (lands have no intrinsic mana ability).
+// The cycle has no pinned ruling.
+
+(
+  id: "castle_sengir",
+  name: "Castle Sengir",
+  face_id: "castle_sengir",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "mana_colorless",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "mana_single",
+      presentation: OracleLines([2]),
+      costs: [Mana("{1}"), Tap],
+      effect: [ProduceMana(options: [(b: 1)])],
+    ),
+    (
+      ability_id: "mana_pair",
+      presentation: OracleLines([3]),
+      costs: [Mana("{2}"), Tap],
+      effect: [ProduceMana(options: [(u: 1), (r: 1)])],
+    ),
+  ],
+)

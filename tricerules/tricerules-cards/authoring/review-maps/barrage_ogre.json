@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "d556c71e-ce16-4229-880b-744790f93797",
+  "spans": [
+    {
+      "face_id": "barrage_ogre",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "TargetKind::AnyPermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "TargetController::You",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Artifact",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "Amount::Fixed",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetKind::AnyTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q29_sac_artifact_ping_batch::q29_sac_artifact_ping_cards_cast_with_exact_cost_and_body",
+      "covers": "actual barrage_ogre is exercised by the shared 01-sac-artifact-ping evidence"
+    },
+    {
+      "test": "scenario q29_sac_artifact_ping_batch::q29_sac_artifact_ping_cards_deal_exactly_two_damage",
+      "covers": "actual barrage_ogre is exercised by the shared 01-sac-artifact-ping evidence"
+    },
+    {
+      "test": "scenario q29_sac_artifact_ping_batch::q29_sac_artifact_ping_cards_reject_missing_artifact_tapped_and_sick_sources",
+      "covers": "actual barrage_ogre is exercised by the shared 01-sac-artifact-ping evidence"
+    },
+    {
+      "test": "scenario q29_sac_artifact_ping_batch::q29_sac_artifact_ping_stale_target_still_pays_the_artifact_cost",
+      "covers": "actual barrage_ogre is exercised by the shared 01-sac-artifact-ping evidence"
+    },
+    {
+      "test": "mechanic_registry::q29_sac_artifact_ping_batch::q29_sac_artifact_ping_batch_maps_definitions",
+      "covers": "actual barrage_ogre is exercised by the shared 01-sac-artifact-ping evidence"
+    },
+    {
+      "test": "mechanic_registry::q29_sac_artifact_ping_batch::q29_sac_artifact_ping_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual barrage_ogre is exercised by the shared 01-sac-artifact-ping evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

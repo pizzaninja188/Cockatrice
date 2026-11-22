@@ -1,0 +1,22 @@
+// Oracle c339982a-45d6-4c1a-aefc-c72427b40744; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters-the-battlefield trigger) and 701.17a-b (mill the controller's library; a short library mills as many as possible).
+// The card has no pinned ruling.
+
+(
+  id: "screeching_skaab",
+  name: "Screeching Skaab",
+  face_id: "screeching_skaab",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Zombie"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Mill(count: 2)],
+    ),
+  ],
+)

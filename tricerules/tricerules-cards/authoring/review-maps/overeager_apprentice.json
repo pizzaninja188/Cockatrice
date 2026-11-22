@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "3ea71eed-e1ae-4e28-a4f5-44ff115949f4",
+  "spans": [
+    {
+      "face_id": "overeager_apprentice",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Discard",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q49_batch_c::q49_sacrifice_mana_canary_hardest_overeager_apprentice_discards_then_makes_bbb",
+      "covers": "canary hardest discards a card then produces three black"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_c::q49_sacrifice_mana_maps_definitions",
+      "covers": "reviewed identity, ability costs and mana output"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_c::q49_batch_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Overeager Apprentice"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

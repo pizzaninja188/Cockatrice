@@ -1,0 +1,14 @@
+// Oracle 1c4bd85b-03c2-4235-aea1-76c48520adf3; source/rulings checked 2026-11-14.
+// CR 702.9a-b (Flying) and 702.16b-f (protection's five effects: no
+// targeting, Aura/Equipment attachment, damage, blocking, or Fortify).
+(
+  id: "melesse_spirit",
+  name: "Melesse Spirit",
+  face_id: "melesse_spirit",
+  mana_cost: "{3}{W}{W}",
+  types: ["Creature", "Angel", "Spirit"],
+  power: 3,
+  toughness: 3,
+  keywords: [Flying],
+  protections: [Color(Black)],
+)

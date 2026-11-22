@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "ea7fdff3-9d45-4a4a-b7fe-84b334f04291",
+  "spans": [
+    {
+      "face_id": "meng_huo_barbarian_king",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemPt",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q48_cohorts_batch::q48_team_anthem_canary_simplest_scopes_white_creatures",
+      "covers": "canary simplest actual card scopes white creatures only"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_team_anthem_canary_hardest_scopes_other_flyers_only",
+      "covers": "canary hardest scopes other flyers and ends with the source"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_team_anthem_cards_apply_their_printed_scope",
+      "covers": "every actual card applies its printed color or keyword scope"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_team_anthem_maps_definitions",
+      "covers": "reviewed identity and typed anthem definition"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Meng Huo, Barbarian King"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

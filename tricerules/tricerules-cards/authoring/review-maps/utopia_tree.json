@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "73a9122c-60d2-4fdc-bc7b-3576bcbca241",
+  "spans": [
+    {
+      "face_id": "utopia_tree",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario any_color_mana_batch::any_color_mana_batch_cards_cast_and_apply_summoning_sickness",
+      "covers": "actual utopia_tree casts normally and a creature source obeys summoning sickness"
+    },
+    {
+      "test": "scenario any_color_mana_batch::any_color_mana_batch_cards_offer_all_five_colors",
+      "covers": "actual utopia_tree offers exactly five single-color outputs and taps as its cost"
+    },
+    {
+      "test": "mechanic_registry::any_color_mana_batch::any_color_mana_batch_maps_definitions",
+      "covers": "reviewed identity, tap cost and five-color mana options of utopia_tree"
+    },
+    {
+      "test": "mechanic_registry::any_color_mana_batch::any_color_mana_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for utopia_tree"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

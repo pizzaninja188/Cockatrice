@@ -1,0 +1,21 @@
+// Oracle 0ddb3fa0-447c-40c5-928a-541f3d543014; source/rulings checked 2026-11-12.
+// CR 702.17 (reach), 509.3b (one trigger per attacker-blocker edge), 611.2a/514.2
+// (until-end-of-turn duration) and 613.4c (layer 7c pump of the source).
+(
+  id: "netcaster_spider",
+  name: "Netcaster Spider",
+  face_id: "netcaster_spider",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Spider"],
+  power: 2,
+  toughness: 3,
+  keywords: [Reach],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WheneverSelfBlocksCreature(attacker: (required_keywords: [Flying])),
+      effect: [PumpTarget(power: 2, toughness: 0, subject: Source)],
+    ),
+  ],
+)

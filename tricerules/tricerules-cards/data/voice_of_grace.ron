@@ -1,0 +1,14 @@
+// Oracle 7338f964-b7d8-4491-b933-7d8b7d1b56ed; source/rulings checked 2026-11-14.
+// CR 702.9a-b (Flying) and 702.16b-f (protection's five effects: no
+// targeting, Aura/Equipment attachment, damage, blocking, or Fortify).
+(
+  id: "voice_of_grace",
+  name: "Voice of Grace",
+  face_id: "voice_of_grace",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Angel"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+  protections: [Color(Black)],
+)

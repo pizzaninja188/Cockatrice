@@ -1,0 +1,19 @@
+// Oracle 76f335d0-7f71-4b1a-b60d-73de954cbe2c; source/rulings checked 2026-11-13.
+// CR 305.6 (land types), 605.1a/605.3a-b (mana ability) and 118.3 (tap cost).
+(
+  id: "skycloud_expanse",
+  name: "Skycloud Expanse",
+  face_id: "skycloud_expanse",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{1}"), Tap],
+      effect: [ProduceMana(options: [
+        (w: 1, u: 1),
+      ])],
+    ),
+  ],
+)

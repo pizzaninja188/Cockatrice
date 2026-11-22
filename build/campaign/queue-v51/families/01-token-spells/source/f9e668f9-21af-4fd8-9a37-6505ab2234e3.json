@@ -1,0 +1,163 @@
+{
+ "object": "card",
+ "id": "ea51991c-1589-4c62-965b-5ae8d233520b",
+ "oracle_id": "f9e668f9-21af-4fd8-9a37-6505ab2234e3",
+ "multiverse_ids": [
+  513675
+ ],
+ "mtgo_id": 88873,
+ "arena_id": 76591,
+ "tcgplayer_id": 235844,
+ "cardmarket_id": 557609,
+ "name": "Elemental Summoning",
+ "lang": "en",
+ "released_at": "2021-04-23",
+ "uri": "https://api.scryfall.com/cards/ea51991c-1589-4c62-965b-5ae8d233520b",
+ "scryfall_uri": "https://scryfall.com/card/stx/183/elemental-summoning?utm_source=api",
+ "layout": "normal",
+ "highres_image": true,
+ "image_status": "highres_scan",
+ "image_updated_at": "2026-07-13T07:21:56Z",
+ "image_uris": {
+  "small": "https://cards.scryfall.io/small/front/e/a/ea51991c-1589-4c62-965b-5ae8d233520b.jpg?1783927316",
+  "normal": "https://cards.scryfall.io/normal/front/e/a/ea51991c-1589-4c62-965b-5ae8d233520b.jpg?1783927316",
+  "large": "https://cards.scryfall.io/large/front/e/a/ea51991c-1589-4c62-965b-5ae8d233520b.jpg?1783927316",
+  "png": "https://cards.scryfall.io/png/front/e/a/ea51991c-1589-4c62-965b-5ae8d233520b.png?1783927316",
+  "art_crop": "https://cards.scryfall.io/art_crop/front/e/a/ea51991c-1589-4c62-965b-5ae8d233520b.jpg?1783927316",
+  "border_crop": "https://cards.scryfall.io/border_crop/front/e/a/ea51991c-1589-4c62-965b-5ae8d233520b.jpg?1783927316",
+  "thumb": "https://cards.scryfall.io/thumb/front/e/a/ea51991c-1589-4c62-965b-5ae8d233520b.webp?1783927316",
+  "grid": "https://cards.scryfall.io/grid/front/e/a/ea51991c-1589-4c62-965b-5ae8d233520b.webp?1783927316",
+  "display": "https://cards.scryfall.io/display/front/e/a/ea51991c-1589-4c62-965b-5ae8d233520b.webp?1783927316",
+  "art": "https://cards.scryfall.io/art/front/e/a/ea51991c-1589-4c62-965b-5ae8d233520b.webp?1783927316",
+  "crop": "https://cards.scryfall.io/crop/front/e/a/ea51991c-1589-4c62-965b-5ae8d233520b.webp?1783927316",
+  "jpeg": "https://cards.scryfall.io/normal/front/e/a/ea51991c-1589-4c62-965b-5ae8d233520b.jpg?1783927316"
+ },
+ "mana_cost": "{3}{U/R}{U/R}",
+ "cmc": 5.0,
+ "type_line": "Sorcery — Lesson",
+ "oracle_text": "Create a 4/4 blue and red Elemental creature token.",
+ "colors": [
+  "R",
+  "U"
+ ],
+ "color_identity": [
+  "R",
+  "U"
+ ],
+ "keywords": [],
+ "all_parts": [
+  {
+   "object": "related_card",
+   "id": "3d0b9b88-705e-4df0-8a93-3e240b81355b",
+   "component": "token",
+   "name": "Elemental",
+   "type_line": "Token Creature — Elemental",
+   "uri": "https://api.scryfall.com/cards/3d0b9b88-705e-4df0-8a93-3e240b81355b"
+  },
+  {
+   "object": "related_card",
+   "id": "ea51991c-1589-4c62-965b-5ae8d233520b",
+   "component": "combo_piece",
+   "name": "Elemental Summoning",
+   "type_line": "Sorcery — Lesson",
+   "uri": "https://api.scryfall.com/cards/ea51991c-1589-4c62-965b-5ae8d233520b"
+  }
+ ],
+ "legalities": {
+  "standard": "not_legal",
+  "future": "not_legal",
+  "historic": "legal",
+  "timeless": "legal",
+  "gladiator": "legal",
+  "pioneer": "legal",
+  "modern": "legal",
+  "legacy": "legal",
+  "pauper": "legal",
+  "vintage": "legal",
+  "penny": "not_legal",
+  "commander": "legal",
+  "oathbreaker": "legal",
+  "standardbrawl": "not_legal",
+  "brawl": "legal",
+  "competitivebrawl": "legal",
+  "alchemy": "not_legal",
+  "paupercommander": "legal",
+  "duel": "legal",
+  "oldschool": "not_legal",
+  "premodern": "not_legal",
+  "predh": "not_legal",
+  "tlr": "not_legal"
+ },
+ "games": [
+  "arena",
+  "paper",
+  "mtgo"
+ ],
+ "reserved": false,
+ "game_changer": false,
+ "foil": true,
+ "nonfoil": true,
+ "finishes": [
+  "nonfoil",
+  "foil"
+ ],
+ "oversized": false,
+ "promo": false,
+ "reprint": false,
+ "variation": false,
+ "set_id": "541c3c28-8747-40e5-a231-8e8f33234859",
+ "set": "stx",
+ "set_name": "Strixhaven: School of Mages",
+ "set_type": "expansion",
+ "set_uri": "https://api.scryfall.com/sets/541c3c28-8747-40e5-a231-8e8f33234859",
+ "set_search_uri": "https://api.scryfall.com/cards/search?order=set&q=e%3Astx&unique=prints",
+ "scryfall_set_uri": "https://scryfall.com/sets/stx?utm_source=api",
+ "rulings_uri": "https://api.scryfall.com/cards/ea51991c-1589-4c62-965b-5ae8d233520b/rulings",
+ "prints_search_uri": "https://api.scryfall.com/cards/search?order=released&q=oracleid%3Af9e668f9-21af-4fd8-9a37-6505ab2234e3&unique=prints",
+ "collector_number": "183",
+ "digital": false,
+ "rarity": "common",
+ "watermark": "prismari",
+ "flavor_text": "\"You've made a splash. Now show me a torrent.\"\n—Uvilda, Prismari dean",
+ "card_back_id": "0aeebaf5-8c7d-4636-9e82-8c27447861f7",
+ "artist": "Marta Nael",
+ "artist_ids": [
+  "266ab861-ed64-4ba5-865c-f18758421cc3"
+ ],
+ "illustration_id": "d364d863-a1a9-4c83-b769-b0d50cae2f48",
+ "border_color": "black",
+ "frame": "2015",
+ "frame_effects": [
+  "lesson"
+ ],
+ "full_art": false,
+ "textless": false,
+ "booster": true,
+ "story_spotlight": false,
+ "edhrec_rank": 19662,
+ "penny_rank": 11825,
+ "preview": {
+  "source": "Corocoro",
+  "source_uri": "https://corocoro.jp/279032/",
+  "previewed_at": "2021-03-30"
+ },
+ "prices": {
+  "usd": "0.26",
+  "usd_foil": "0.18",
+  "usd_etched": null,
+  "eur": "0.12",
+  "eur_foil": "0.11",
+  "tix": "0.03"
+ },
+ "related_uris": {
+  "gatherer": "https://gatherer.wizards.com/Pages/Card/Details.aspx?multiverseid=513675&printed=false",
+  "tcgplayer_infinite_articles": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&trafcat=tcgplayer.com%2Fsearch%2Farticles&u=https%3A%2F%2Fwww.tcgplayer.com%2Fsearch%2Farticles%3FproductLineName%3Dmagic%26q%3DElemental%2BSummoning",
+  "tcgplayer_infinite_decks": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&trafcat=tcgplayer.com%2Fsearch%2Fdecks&u=https%3A%2F%2Fwww.tcgplayer.com%2Fsearch%2Fdecks%3FproductLineName%3Dmagic%26q%3DElemental%2BSummoning",
+  "edhrec": "https://edhrec.com/route/?cc=Elemental+Summoning"
+ },
+ "purchase_uris": {
+  "tcgplayer": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&u=https%3A%2F%2Fwww.tcgplayer.com%2Fproduct%2F235844%3Fpage%3D1",
+  "cardmarket": "https://www.cardmarket.com/en/Magic/Products?idProduct=557609&referrer=scryfall&utm_campaign=card_prices&utm_medium=text&utm_source=scryfall",
+  "cardhoarder": "https://www.cardhoarder.com/cards/88873?affiliate_id=scryfall&ref=card-profile&utm_campaign=affiliate&utm_medium=card&utm_source=scryfall"
+ }
+}

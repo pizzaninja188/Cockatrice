@@ -1,0 +1,69 @@
+{
+  "format_version": 1,
+  "oracle_id": "bb8c2c0f-fc63-40c6-98c6-691e42b3b8c9",
+  "spans": [
+    {
+      "face_id": "disruptor_pistol",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/2"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/activated_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario artifact_sac_ping_batch::artifact_sac_ping_batch_cards_cast_with_exact_characteristics",
+      "covers": "actual disruptor_pistol is exercised by the shared artifact_sac_ping_batch actual-card scenario: printed mana, artifact type and no body"
+    },
+    {
+      "test": "scenario artifact_sac_ping_batch::artifact_sac_ping_batch_cards_damage_the_target_creature_exactly",
+      "covers": "actual disruptor_pistol is exercised by the shared artifact_sac_ping_batch actual-card scenario: printed damage to the chosen creature"
+    },
+    {
+      "test": "scenario artifact_sac_ping_batch::artifact_sac_ping_batch_cards_sacrifice_itself_as_a_cost",
+      "covers": "actual disruptor_pistol is exercised by the shared artifact_sac_ping_batch actual-card scenario: the artifact moves to the graveyard as a cost"
+    },
+    {
+      "test": "scenario artifact_sac_ping_batch::artifact_sac_ping_batch_cards_reject_activation_when_the_cost_cannot_be_paid",
+      "covers": "actual disruptor_pistol is exercised by the shared artifact_sac_ping_batch actual-card scenario: an unpaid activation keeps the artifact and deals no damage"
+    },
+    {
+      "test": "scenario artifact_sac_ping_batch::artifact_sac_ping_batch_cards_stale_target_fizzles_after_the_creature_leaves",
+      "covers": "actual disruptor_pistol is exercised by the shared artifact_sac_ping_batch actual-card scenario: a departed target fizzles after the cost was paid"
+    },
+    {
+      "test": "mechanic_registry::artifact_sac_ping_batch::artifact_sac_ping_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of disruptor_pistol (sacrifice artifact for damage to target creature)"
+    },
+    {
+      "test": "mechanic_registry::artifact_sac_ping_batch::artifact_sac_ping_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for disruptor_pistol"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

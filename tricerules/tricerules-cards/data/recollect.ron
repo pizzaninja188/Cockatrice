@@ -1,0 +1,11 @@
+// Oracle 5b38fafb-3999-46dc-928b-1677625c1943; source/rulings checked 2026-11-12.
+// CR 115.1 and 601.2c (one graveyard-card target), 400.7 (new object on zone change)
+// and 608.2b (illegal target fizzles).
+(
+  id: "recollect",
+  name: "Recollect",
+  face_id: "recollect",
+  mana_cost: "{2}{G}",
+  types: ["Sorcery"],
+  spell_effect: [MoveGraveyardCards(filter: (), destination: Hand, linked_exile_id: None)],
+)

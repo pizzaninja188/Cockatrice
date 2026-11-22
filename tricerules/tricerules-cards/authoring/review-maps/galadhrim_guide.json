@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "9204de14-cbb6-40e5-9dcc-44cce3723e8e",
+  "spans": [
+    {
+      "face_id": "galadhrim_guide",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_scry_value_batch::etb_scry_value_batch_cards_cast_and_park_the_exact_scry_choice",
+      "covers": "actual galadhrim_guide scries exactly the printed count, offers only the printed top cards, rejects an over-count choice and bottoms the chosen cards"
+    },
+    {
+      "test": "scenario etb_scry_value_batch::etb_scry_value_batch_cards_scope_the_choice_to_their_controller",
+      "covers": "actual galadhrim_guide addresses the scry choice to the entering creature's controller"
+    },
+    {
+      "test": "scenario etb_scry_value_batch::etb_scry_value_batch_cards_leave_no_scry_choice_on_the_opponent_batch",
+      "covers": "actual galadhrim_guide leaves no scry choice on the opponent's priority batch"
+    },
+    {
+      "test": "mechanic_registry::etb_scry_value_batch::etb_scry_value_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of galadhrim_guide"
+    },
+    {
+      "test": "mechanic_registry::etb_scry_value_batch::etb_scry_value_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for galadhrim_guide"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

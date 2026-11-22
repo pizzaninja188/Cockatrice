@@ -1,0 +1,20 @@
+// Oracle ad11ff81-acaa-4529-ba15-718dadbea259; source/rulings checked 2026-11-16 against pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (entry trigger), 111.1 (tokens) and 608.2c (the controller follows the instruction).
+// Copy of the reviewed Elder Auntie entry-token shape with the printed token and count.
+(
+  id: "aviation_pioneer",
+  name: "Aviation Pioneer",
+  face_id: "aviation_pioneer",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Human", "Artificer"],
+  power: 1,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [CreateTokens(token: "thopter_c_1_1_flying", count: 1)],
+    ),
+  ],
+)

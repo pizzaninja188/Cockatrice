@@ -1,0 +1,59 @@
+{
+  "format_version": 1,
+  "oracle_id": "bea6606c-ea9a-4199-a8cd-b35d7c47fd7b",
+  "spans": [
+    {
+      "face_id": "humble_the_brute",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "humble_the_brute",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_c::q56_c_destroy_investigate_cards_apply_their_power_filters",
+      "covers": "actual humble_the_brute applies its printed effects"
+    },
+    {
+      "test": "scenario q56_batch_c::q56_c_destroy_investigate_cards_do_not_investigate_for_a_stale_target",
+      "covers": "actual humble_the_brute canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_c::q56_c_destroy_investigate_map_definitions",
+      "covers": "shared registry identity for humble_the_brute"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_c::q56_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for humble_the_brute"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "d32cf19d-a974-4161-851d-dcbf37069e26",
+  "spans": [
+    {
+      "face_id": "umara_entangler",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPlayerCastsSpell",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario prowess_creatures_batch::prowess_creatures_batch_cards_pump_on_noncreature_casts_and_expire",
+      "covers": "actual umara_entangler triggers once per noncreature cast, pumps itself and expires at cleanup"
+    },
+    {
+      "test": "scenario prowess_creatures_batch::prowess_creatures_batch_cards_ignore_creature_and_opponent_casts",
+      "covers": "actual umara_entangler does not trigger for creature spells or opponent casts"
+    },
+    {
+      "test": "mechanic_registry::prowess_creatures_batch::prowess_creatures_batch_maps_definitions",
+      "covers": "reviewed identity, cast trigger and source pump of umara_entangler"
+    },
+    {
+      "test": "mechanic_registry::prowess_creatures_batch::prowess_creatures_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for umara_entangler"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

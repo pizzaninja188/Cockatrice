@@ -1,0 +1,14 @@
+// Oracle 47d4da1e-b1a2-4a23-9b96-c85d5d20e3ef; source/rulings checked 2026-11-15.
+// CR 702.10b-c (haste ignores summoning sickness for attacks and tap abilities) and
+// 508.1d (an able must-attack creature must be declared as an attacker).
+(
+  id: "flameborn_hellion",
+  name: "Flameborn Hellion",
+  face_id: "flameborn_hellion",
+  mana_cost: "{5}{R}",
+  types: ["Creature", "Hellion"],
+  power: 5,
+  toughness: 4,
+  keywords: [Haste],
+  must_attack_if_able: true,
+)

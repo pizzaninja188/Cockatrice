@@ -1,0 +1,23 @@
+// Oracle f4669822-716b-45c7-a7f2-040062509fe9; source/rulings checked 2026-11-13.
+// CR 605.1a/605.3b (mana abilities), 106.1 (mana) and 118.3 (costs).
+(
+  id: "mana_prism",
+  name: "Mana Prism",
+  face_id: "mana_prism",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Mana("{1}"), Tap],
+      effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+    ),
+  ],
+)

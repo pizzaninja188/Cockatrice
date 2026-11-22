@@ -1,0 +1,20 @@
+// Oracle 4533ce78-0594-4195-96fb-46cbadd0db69; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 and 118.3 (tap cost), 614.1a/615.1 (prevention shield), and 115.1 (target creature).
+// The card has no pinned ruling.
+
+(
+  id: "oasis",
+  name: "Oasis",
+  face_id: "oasis",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [PreventNextDamage(amount: 1, target: (kind: Creature))],
+    ),
+  ],
+)

@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "12ef651c-5a86-49c4-a512-292e9d135a76",
+  "spans": [
+    {
+      "face_id": "gerrards_battle_cry",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_a::q54_canary_simplest_gerrards_battle_cry_pumps_only_your_creatures",
+      "covers": "actual Gerrard's Battle Cry pays {2}{W} and gives only its controller's creatures +1/+1"
+    },
+    {
+      "test": "scenario q54_batch_a::q54_team_pump_rejects_activation_without_the_printed_mana",
+      "covers": "actual Gerrard's Battle Cry rejects activation without its printed mana and does not tap"
+    },
+    {
+      "test": "scenario q54_batch_a::q54_team_pump_expires_at_cleanup",
+      "covers": "actual Gerrard's Battle Cry pump expires during cleanup"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_a::q54_team_pump_activated_cards_map_definitions",
+      "covers": "shared registry identity for the four team-pump definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_a::q54_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Gerrard's Battle Cry"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

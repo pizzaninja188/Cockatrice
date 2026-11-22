@@ -1,0 +1,80 @@
+{
+  "format_version": 1,
+  "oracle_id": "9809d975-7ef8-4946-9041-607c4e954b13",
+  "spans": [
+    {
+      "face_id": "polluted_mire",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "polluted_mire",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "polluted_mire",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario cycling_lands_batch::cycling_lands_batch_cards_enter_tapped_add_color_and_cycle_for_two",
+      "covers": "actual polluted_mire clause coverage"
+    },
+    {
+      "test": "scenario cycling_lands_batch::cycling_lands_batch_cards_reject_cycling_without_the_printed_cost",
+      "covers": "actual polluted_mire clause coverage"
+    },
+    {
+      "test": "scenario cycling_lands_batch::cycling_lands_batch_cards_cycle_only_from_hand",
+      "covers": "actual polluted_mire clause coverage"
+    },
+    {
+      "test": "mechanic_registry::cycling_lands_batch::cycling_lands_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of polluted_mire"
+    },
+    {
+      "test": "mechanic_registry::cycling_lands_batch::cycling_lands_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for polluted_mire"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

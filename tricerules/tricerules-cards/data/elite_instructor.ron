@@ -1,0 +1,26 @@
+// Oracle 6536f72e-ff4e-4cda-bc7d-909145adf829; source/rulings checked 2026-11-13.
+// CR 603.6a (entry trigger), 121 (draw) and 701.9 (discard), in printed order.
+(
+  id: "elite_instructor",
+  name: "Elite Instructor",
+  face_id: "elite_instructor",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Human", "Wizard"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    program: Some(
+      (
+        body: (
+          steps: [
+            (id: "draw_cards", kind: Perform(Draw(count: 1))),
+            (id: "discard_cards", kind: Perform(Discard(quantity: Exact(1)))),
+          ],
+        ),
+      ),
+    ),
+  )],
+)

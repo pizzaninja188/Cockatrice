@@ -1,0 +1,19 @@
+// Oracle 341cf654-faf7-4db9-bd9a-70783f1ccff0; source/rulings checked 2026-11-12.
+// CR 702.108a-b (Prowess) and 514.2 (the pump ends at cleanup).
+(
+  id: "bloodfire_expert",
+  name: "Bloodfire Expert",
+  face_id: "bloodfire_expert",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Efreet", "Monk"],
+  power: 3,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Noncreature))),
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    ),
+  ],
+)

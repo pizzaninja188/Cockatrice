@@ -1,0 +1,22 @@
+// Oracle f1d300b6-f9cf-40a9-8520-d78cd7d813cf; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 503.1 (upkeep step), 603.2 (triggered ability) and 120.3 (damage to the controller).
+// The card has no pinned ruling.
+
+(
+  id: "nettletooth_djinn",
+  name: "Nettletooth Djinn",
+  face_id: "nettletooth_djinn",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Djinn"],
+  power: 4,
+  toughness: 4,
+  triggered_abilities: [
+    (
+      ability_id: "upkeep_damage",
+      presentation: OracleLines([1]),
+      trigger: AtBeginningOfUpkeep(),
+      effect: [DamagePlayer(amount: 1)],
+    ),
+  ],
+)

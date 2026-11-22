@@ -1,0 +1,25 @@
+// Oracle 74a6597c-13ea-47bd-adb3-45671897b11b; source/rulings checked 2026-11-12.
+// CR 205.4g (snow supertype), 614.1d/614.12 (enters-tapped replacement) and
+// 605.1a/605.3b (mana abilities).
+(
+  id: "tresserhorn_sinks",
+  name: "Tresserhorn Sinks",
+  face_id: "tresserhorn_sinks",
+  types: ["Land"],
+  supertypes: ["Snow"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(b: 1), (r: 1)])],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: EntersTapped(affected: Self_),
+    ),
+  ],
+)

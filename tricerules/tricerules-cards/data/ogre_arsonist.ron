@@ -1,0 +1,25 @@
+// Oracle 00af96af-5eae-4044-a2f7-a08cd0699d1e; source/rulings checked 2026-11-14.
+// CR 603.6a (enters trigger), 603.3d and 115.1d (trigger target),
+// 701.8 (destroy), and 608.2b (stale target).
+(
+  id: "ogre_arsonist",
+  name: "Ogre Arsonist",
+  face_id: "ogre_arsonist",
+  mana_cost: "{4}{R}",
+  types: ["Creature", "Ogre"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Land])))],
+      targeting: Some((groups: [(
+        min: 1, max: 1,
+        prompt: "Choose target land",
+        effect_indices: [0],
+      )])),
+    ),
+  ],
+)

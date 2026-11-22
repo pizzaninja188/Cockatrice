@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "d05aeada-2a9f-464d-8a66-b6e90f43bae3",
+  "spans": [
+    {
+      "face_id": "refuse_to_yield",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Untap",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_a::q56_a_pump_untap_cards_apply_only_the_printed_values_to_the_target",
+      "covers": "actual refuse_to_yield applies its printed effects to the chosen target"
+    },
+    {
+      "test": "scenario q56_batch_a::q56_a_canary_hardest_refuse_to_yield_applies_the_printed_pump",
+      "covers": "actual refuse_to_yield canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_a::q56_a_pump_untap_map_definitions",
+      "covers": "shared registry identity for refuse_to_yield"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

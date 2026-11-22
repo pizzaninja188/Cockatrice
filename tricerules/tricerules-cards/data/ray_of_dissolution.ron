@@ -1,0 +1,20 @@
+// Oracle 509bfcbc-a59a-47c8-be78-29823fc010e3; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 119.3 (life gain), 608.2b (stale target) and 115.1a (target).
+(
+  id: "ray_of_dissolution",
+  name: "Ray of Dissolution",
+  face_id: "ray_of_dissolution",
+  mana_cost: "{2}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Enchantment]))),
+    GainLife(amount: 3),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target enchantment",
+    effect_indices: [0],
+  )])),
+)

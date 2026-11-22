@@ -1,0 +1,13 @@
+// Oracle a83073a2-e63d-4105-8bad-9612e411fc85; source/rulings checked 2026-11-13.
+// CR 702.16b-f: protection's five effects (no targeting, no Aura/Equipment
+// attachment, no damage, no blocking, no Fortify).
+(
+  id: "repentant_blacksmith",
+  name: "Repentant Blacksmith",
+  face_id: "repentant_blacksmith",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Human"],
+  power: 1,
+  toughness: 2,
+  protections: [Color(Red)],
+)

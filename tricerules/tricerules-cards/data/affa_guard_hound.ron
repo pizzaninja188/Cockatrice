@@ -1,0 +1,22 @@
+// Oracle 3819daab-fe35-4f99-9282-47bd05c7fcd6; source/rulings checked 2026-11-15 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.8a (flash), 603.6a (entry trigger), 115.1 (target), and
+// 611.2c/514.2 (until-end-of-turn pump).
+(
+  id: "affa_guard_hound",
+  name: "Affa Guard Hound",
+  face_id: "affa_guard_hound",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Dog"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flash],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [PumpTarget(power: 0, toughness: 3, subject: Chosen((kind: Creature)))],
+    ),
+  ],
+)

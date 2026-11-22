@@ -1,0 +1,16 @@
+// Oracle 030e9e3e-ce78-4c3b-bd83-969c07c70459; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1 (one graveyard-card target), 400.7 (the returned card is a new object),
+// 404.1 (graveyard ownership) and 608.2b (a stale sole target fizzles). Kindred is a card type; the Goblin subtype is on the card, not a creature type
+// requirement while it is in the graveyard. Pinned rulings confirm the Kindred update.
+(
+  id: "boggart_birth_rite",
+  name: "Boggart Birth Rite",
+  face_id: "boggart_birth_rite",
+  mana_cost: "{B}",
+  types: ["Kindred", "Sorcery", "Goblin"],
+  spell_effect: [MoveGraveyardCards(
+    filter: (card: Some((required_subtypes: ["Goblin"]))),
+    destination: Hand,
+  )],
+)

@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "619173f4-0403-49cd-9659-2fedd5028a90",
+  "spans": [
+    {
+      "face_id": "shire_terrace",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "shire_terrace",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/1/costs/2"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario warped_landscape_batch::warped_landscape_batch_cards_tap_for_colorless",
+      "covers": "actual shire_terrace activates its mana ability, taps, adds exactly one colorless mana and leaves the stack empty"
+    },
+    {
+      "test": "scenario warped_landscape_batch::warped_landscape_batch_cards_tap_for_colorless_and_search_a_basic_land_tapped",
+      "covers": "actual shire_terrace activates its printed search cost, sacrifices itself, finds a basic land onto the battlefield tapped and keeps exact zones and mana"
+    },
+    {
+      "test": "scenario warped_landscape_batch::warped_landscape_batch_cards_reject_search_without_the_exact_mana",
+      "covers": "actual shire_terrace rejects the search activation without the exact printed mana, leaving battlefield, zones and mana unchanged"
+    },
+    {
+      "test": "mechanic_registry::warped_landscape_batch::warped_landscape_batch_maps_definitions",
+      "covers": "reviewed identity, abilities, costs, basic-land search destination and line presentation of shire_terrace"
+    },
+    {
+      "test": "mechanic_registry::warped_landscape_batch::warped_landscape_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for shire_terrace"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

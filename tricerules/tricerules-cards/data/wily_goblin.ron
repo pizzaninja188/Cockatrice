@@ -1,0 +1,19 @@
+// Oracle d27ffb4c-3a34-41aa-b464-6b897132c4ea; source/rulings checked 2026-11-12.
+// CR 603.6a (enters-the-battlefield trigger) and 111.1 (Treasure token creation).
+(
+  id: "wily_goblin",
+  name: "Wily Goblin",
+  face_id: "wily_goblin",
+  mana_cost: "{R}{R}",
+  types: ["Creature", "Goblin", "Pirate"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [CreateTokens(token: "treasure", count: 1)],
+    ),
+  ],
+)

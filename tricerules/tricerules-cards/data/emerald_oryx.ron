@@ -1,0 +1,12 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 4c26c796-26ec-41f7-b9ca-58f4eb935c47.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "emerald_oryx",
+  name: "Emerald Oryx",
+  face_id: "emerald_oryx",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Antelope"],
+  power: 2,
+  toughness: 3,
+  evasions: [Landwalk(land_subtype: "Forest")],
+)

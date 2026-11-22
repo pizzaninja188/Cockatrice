@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "826b1c93-4e5d-4436-8d59-2d7d970f609f",
+  "spans": [
+    {
+      "face_id": "cleanfall",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DestroyAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter.permanent_types",
+      "typed_path": "/faces/0/spell_effect/0/DestroyAll/kind/permanent_types"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario destroy_all_enchantments_batch::destroy_all_enchantments_batch_cards_destroy_every_enchantment",
+      "covers": "actual cleanfall clause coverage"
+    },
+    {
+      "test": "scenario destroy_all_enchantments_batch::destroy_all_enchantments_batch_cards_leave_nonenchantments",
+      "covers": "actual cleanfall clause coverage"
+    },
+    {
+      "test": "scenario destroy_all_enchantments_batch::destroy_all_enchantments_batch_cards_resolve_with_no_enchantments",
+      "covers": "actual cleanfall clause coverage"
+    },
+    {
+      "test": "mechanic_registry::destroy_all_enchantments_batch::destroy_all_enchantments_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of cleanfall"
+    },
+    {
+      "test": "mechanic_registry::destroy_all_enchantments_batch::destroy_all_enchantments_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for cleanfall"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

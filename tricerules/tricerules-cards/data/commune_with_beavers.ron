@@ -1,0 +1,15 @@
+// Oracle 9108fffb-90f4-444e-8d3e-46a3d4ff3681; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 121.5 (not a draw), 401.4 (private look), 601.2 (casting) and 609.3
+// (selection clamps to available matches).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "commune_with_beavers",
+  name: "Commune with Beavers",
+  face_id: "commune_with_beavers",
+  mana_cost: "{G}",
+  types: ["Sorcery"],
+  spell_effect: [
+    LookChooseToHand(count: 3, filter: Some((any_of: Some([(card_type: Some(Artifact)), (card_type: Some(Creature)), (card_type: Some(Land))]))), bottom_order: Chosen),
+  ],
+)

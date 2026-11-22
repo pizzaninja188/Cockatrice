@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "d2bd23a6-4f77-4d6e-bf8f-339cb7a4184d",
+  "spans": [
+    {
+      "face_id": "mystic_denial",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q48_cohorts_batch::q48_typed_counters_canary_simplest_counters_an_artifact_spell",
+      "covers": "canary simplest counters an artifact spell"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_typed_counters_canary_hardest_requires_blue_instant_for_hybrid",
+      "covers": "canary hardest pays the hybrid cost and rejects a sorcery"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_typed_counters_cards_counter_their_printed_filter",
+      "covers": "every actual card counters its printed filter and rejects others"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_typed_counters_maps_definitions",
+      "covers": "reviewed identity and stack spell filter"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Mystic Denial"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

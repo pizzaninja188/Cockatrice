@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "6e09ceaf-9005-4b06-ac5a-5e2250d4b663",
+  "spans": [
+    {
+      "face_id": "decision_paralysis",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::SkipNextUntap",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_b::q55_b_decision_paralysis_taps_two_and_skips_their_next_untap",
+      "covers": "actual Decision Paralysis taps two chosen creatures and records both next-untap skips"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_b::q55_b_tap_two_riders_map_definitions",
+      "covers": "shared registry identity for the tap-two-with-rider spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_b::q55_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Decision Paralysis"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

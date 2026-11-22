@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "a49a9418-72d1-4ab1-89d9-a1f65ae23d35",
+  "spans": [
+    {
+      "face_id": "siegecraft",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "siegecraft",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario aura_pump_values_batch::aura_pump_values_batch_cards_attach_and_apply_the_printed_power_and_toughness",
+      "covers": "actual siegecraft clause coverage"
+    },
+    {
+      "test": "scenario aura_pump_values_batch::aura_pump_values_batch_cards_affect_only_the_enchanted_creature",
+      "covers": "actual siegecraft clause coverage"
+    },
+    {
+      "test": "scenario aura_pump_values_batch::aura_pump_values_batch_cards_remove_the_modifier_when_the_aura_leaves",
+      "covers": "actual siegecraft clause coverage"
+    },
+    {
+      "test": "scenario aura_pump_values_batch::aura_pump_values_batch_cards_reject_a_noncreature_target",
+      "covers": "actual siegecraft clause coverage"
+    },
+    {
+      "test": "scenario aura_pump_values_batch::aura_pump_values_batch_cards_fizzle_when_the_target_left",
+      "covers": "actual siegecraft clause coverage"
+    },
+    {
+      "test": "scenario aura_pump_values_batch::aura_pump_values_batch_cards_attached_aura_follows_its_creature",
+      "covers": "actual siegecraft clause coverage"
+    },
+    {
+      "test": "mechanic_registry::aura_pump_values_batch::aura_pump_values_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of siegecraft"
+    },
+    {
+      "test": "mechanic_registry::aura_pump_values_batch::aura_pump_values_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for siegecraft"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

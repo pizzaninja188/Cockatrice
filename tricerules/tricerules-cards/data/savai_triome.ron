@@ -1,0 +1,29 @@
+// Oracle 00625242-9348-4ef4-b975-f2ac82fee21d; source/rulings checked 2026-11-10.
+// CR 305.6 (basic land type mana abilities), CR 614.1c (enters tapped), and CR 702.29a (Cycling).
+(
+  id: "savai_triome",
+  name: "Savai Triome",
+  face_id: "savai_triome",
+  mana_cost: "",
+  types: ["Land", "Mountain", "Plains", "Swamp"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]), intrinsic_land_mana: true,
+      costs: [Tap],
+      effect: [ProduceMana(options: [(r: 1), (w: 1), (b: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
+      source_zone: Hand,
+      costs: [Mana("{3}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+  static_abilities: [(
+    ability_id: "enters_tapped",
+    presentation: OracleLines([2]),
+    definition: EntersTapped(affected: Self_),
+  )],
+)

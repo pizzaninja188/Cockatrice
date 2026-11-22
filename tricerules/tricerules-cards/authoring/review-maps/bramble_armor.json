@@ -1,0 +1,77 @@
+{
+  "format_version": 1,
+  "oracle_id": "25328cab-c7c0-4c55-99bb-a4149f6c511a",
+  "spans": [
+    {
+      "face_id": "bramble_armor",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    },
+    {
+      "face_id": "bramble_armor",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "bramble_armor",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::AttachSource",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Equip",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_b::q56_b_equipment_etb_cards_apply_the_printed_static_bonus",
+      "covers": "actual bramble_armor applies its printed effects"
+    },
+    {
+      "test": "scenario q56_batch_b::q56_b_canary_hardest_bramble_armor_moves_plus_two_plus_one",
+      "covers": "actual bramble_armor canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_b::q56_b_equipment_etb_map_definitions",
+      "covers": "shared registry identity for bramble_armor"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_b::q56_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for bramble_armor"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

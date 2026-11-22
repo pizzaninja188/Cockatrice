@@ -1,0 +1,21 @@
+// Oracle 3bdc9211-8eff-4b30-8d6f-d26f4087f77f; source/rulings checked 2026-11-15 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 (activation and tap cost), 305.1 (playing a land versus putting it onto the
+// battlefield), 701.26 (tap) and 608.2 (resolution).
+(
+  id: "llanowar_scout",
+  name: "Llanowar Scout",
+  face_id: "llanowar_scout",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Elf", "Scout"],
+  power: 1,
+  toughness: 3,
+  activated_abilities: [
+    (
+      ability_id: "put_land_from_hand",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [PutPermanentFromHand(filter: Some((card_type: Some(Land))))],
+    ),
+  ],
+)

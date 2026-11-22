@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 8148eaa4-6fde-41f2-9b87-ccfc4d8e822f.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "shield_wall",
+  name: "Shield Wall",
+  face_id: "shield_wall",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  spell_effect: [PumpAll(filter: (controller: YouControl), power: 0, toughness: 2)],
+)

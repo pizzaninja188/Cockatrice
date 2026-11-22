@@ -1,0 +1,33 @@
+// Oracle 0a1d817d-dce8-4e83-a380-909f7c9eee46; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 305.6/605.1a (the first ability is a land mana ability), 602.1/118.3 (activation costs),
+// 701.23b/e (hidden-zone search), 701.24a (shuffle) and 614.1c (the found land enters tapped).
+// Copy of the reviewed Warped Landscape search shape with the printed {1} in the cost.
+(
+  id: "bant_panorama",
+  name: "Bant Panorama",
+  face_id: "bant_panorama",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Mana("{1}"), Tap, SacrificeSelf],
+      effect: [SearchLibrary(
+        filter: Some((any_of: Some([
+        (card_type: Some(BasicLand), required_subtypes: ["Forest"]),
+        (card_type: Some(BasicLand), required_subtypes: ["Plains"]),
+        (card_type: Some(BasicLand), required_subtypes: ["Island"]),
+      ]))),
+        destination: Battlefield(tapped: true),
+      )],
+    ),
+  ],
+)

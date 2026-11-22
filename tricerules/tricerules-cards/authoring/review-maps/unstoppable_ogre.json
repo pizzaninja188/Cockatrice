@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "1733777d-87fe-4975-b099-1ff803a721e8",
+  "spans": [
+    {
+      "face_id": "unstoppable_ogre",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ApplyCombatRestriction",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_cant_block_batch::etb_cant_block_batch_cards_reject_the_target_as_a_blocker",
+      "covers": "actual unstoppable_ogre is exercised by the shared etb_cant_block_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_cant_block_batch::etb_cant_block_batch_cards_may_target_their_own_creature",
+      "covers": "actual unstoppable_ogre is exercised by the shared etb_cant_block_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_cant_block_batch::etb_cant_block_batch_cards_expire_at_cleanup",
+      "covers": "actual unstoppable_ogre is exercised by the shared etb_cant_block_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_cant_block_batch::etb_cant_block_batch_cards_fizzle_when_the_target_leaves",
+      "covers": "actual unstoppable_ogre is exercised by the shared etb_cant_block_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::etb_cant_block_batch::etb_cant_block_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of unstoppable_ogre"
+    },
+    {
+      "test": "mechanic_registry::etb_cant_block_batch::etb_cant_block_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for unstoppable_ogre"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

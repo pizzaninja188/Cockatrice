@@ -1,0 +1,11 @@
+// Oracle 705531b3-77cc-4d1f-851b-45e03c029991; source/rulings checked 2026-11-15.
+// CR 611.2c (the affected set is fixed at resolution), 613.4c
+// (layer-7c modification) and 514.2 (cleanup expiry).
+(
+  id: "hysterical_blindness",
+  name: "Hysterical Blindness",
+  face_id: "hysterical_blindness",
+  mana_cost: "{2}{U}",
+  types: ["Instant"],
+  spell_effect: [PumpAll(filter: (controller: Opponents), power: -4, toughness: 0)],
+)

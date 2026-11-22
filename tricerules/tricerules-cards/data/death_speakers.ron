@@ -1,0 +1,13 @@
+// Oracle 4a1db129-cc7c-410a-a41e-d633e30cfdad; source/rulings checked 2026-11-13.
+// CR 702.16b-f: protection's five effects (no targeting, no Aura/Equipment
+// attachment, no damage, no blocking, no Fortify).
+(
+  id: "death_speakers",
+  name: "Death Speakers",
+  face_id: "death_speakers",
+  mana_cost: "{W}",
+  types: ["Creature", "Human", "Cleric"],
+  power: 1,
+  toughness: 1,
+  protections: [Color(Black)],
+)

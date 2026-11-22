@@ -1,0 +1,21 @@
+// Oracle ea1af948-686d-4b40-ad4e-cb48a0258269; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 510.1-510.2 (combat damage), 603.2 (trigger) and 122.1 (a +1/+1 counter is a
+// permanent's counter).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "slith_firewalker",
+  name: "Slith Firewalker",
+  face_id: "slith_firewalker",
+  mana_cost: "{R}{R}",
+  types: ["Creature", "Slith"],
+  power: 1,
+  toughness: 1,
+  keywords: [Haste],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverSelfDealsCombatDamageToPlayer,
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+  )],
+)

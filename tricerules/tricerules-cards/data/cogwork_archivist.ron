@@ -1,0 +1,20 @@
+// Oracle 60674ef7-f8e2-41e8-bab3-0100cfc9fbe9; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 400.2/404.1 (public graveyard), 601.2c/602.2 (target and activation) and
+// 608.2b (stale target).
+(
+  id: "cogwork_archivist",
+  name: "Cogwork Archivist",
+  face_id: "cogwork_archivist",
+  mana_cost: "{6}",
+  types: ["Artifact", "Creature", "Construct"],
+  power: 4,
+  toughness: 5,
+  keywords: [Reach],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Mana("{2}"), Tap],
+    effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: LibraryBottom)],
+  )],
+)

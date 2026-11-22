@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "2d1446f4-cf71-4798-b921-8f6824350319",
+  "spans": [
+    {
+      "face_id": "wei_ambush_force",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario attack_pump_batch::attack_pump_batch_cards_apply_the_printed_effect",
+      "covers": "actual wei_ambush_force clause coverage"
+    },
+    {
+      "test": "scenario attack_pump_batch::attack_pump_batch_cards_scope_the_trigger_to_the_attacking_source",
+      "covers": "actual wei_ambush_force clause coverage"
+    },
+    {
+      "test": "scenario attack_pump_batch::attack_pump_batch_cards_expire_at_end_of_turn",
+      "covers": "actual wei_ambush_force clause coverage"
+    },
+    {
+      "test": "mechanic_registry::attack_pump_batch::attack_pump_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of wei_ambush_force"
+    },
+    {
+      "test": "mechanic_registry::attack_pump_batch::attack_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for wei_ambush_force"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,15 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 4f0ec90b-e5a0-49bd-8fa0-9be6ba259a62.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 611.2a/514.2: pump and trample last until end of turn; CR 613.4c/613.1f: layer-7c pump,
+// layer-6 trample.
+(
+  id: "massive_might",
+  name: "Massive Might",
+  face_id: "massive_might",
+  mana_cost: "{G}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 2, toughness: 2),
+    GrantKeywords(keywords: [Trample]),
+  ],
+)

@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "3a51485b-31b2-4fa5-824a-a919f9d28ca8",
+  "spans": [
+    {
+      "face_id": "boil",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DestroyAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetKind::AnyPermanent",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Land",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q29_destroy_islands_batch::q29_destroy_islands_cards_destroy_every_island_including_snow_islands",
+      "covers": "actual boil is exercised by the shared 08-destroy-islands evidence"
+    },
+    {
+      "test": "scenario q29_destroy_islands_batch::q29_destroy_islands_boil_is_an_instant_and_the_sorceries_are_not",
+      "covers": "actual boil is exercised by the shared 08-destroy-islands evidence"
+    },
+    {
+      "test": "mechanic_registry::q29_destroy_islands_batch::q29_destroy_islands_batch_maps_definitions",
+      "covers": "actual boil is exercised by the shared 08-destroy-islands evidence"
+    },
+    {
+      "test": "mechanic_registry::q29_destroy_islands_batch::q29_destroy_islands_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual boil is exercised by the shared 08-destroy-islands evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

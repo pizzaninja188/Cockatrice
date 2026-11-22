@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "d9353eb6-c7e7-4d85-a0c2-32b1d091881a",
+  "spans": [
+    {
+      "face_id": "cruel_tutor",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_program"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "InstructionKind::Perform",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind"
+    },
+    {
+      "symbol": "SearchDestination::TopOfLibrary",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind"
+    },
+    {
+      "symbol": "LifeAmount::Fixed",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q29_search_top_lose_two_batch::q29_search_top_lose_two_cards_search_any_card_and_lose_two",
+      "covers": "actual cruel_tutor is exercised by the shared 09-search-top-lose-two evidence"
+    },
+    {
+      "test": "scenario q29_search_top_lose_two_batch::q29_search_top_lose_two_cards_can_choose_a_land_card",
+      "covers": "actual cruel_tutor is exercised by the shared 09-search-top-lose-two evidence"
+    },
+    {
+      "test": "scenario q29_search_top_lose_two_batch::q29_search_top_lose_two_only_the_instant_can_be_cast_with_a_nonempty_stack",
+      "covers": "actual cruel_tutor is exercised by the shared 09-search-top-lose-two evidence"
+    },
+    {
+      "test": "mechanic_registry::q29_search_top_lose_two_batch::q29_search_top_lose_two_batch_maps_definitions",
+      "covers": "actual cruel_tutor is exercised by the shared 09-search-top-lose-two evidence"
+    },
+    {
+      "test": "mechanic_registry::q29_search_top_lose_two_batch::q29_search_top_lose_two_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual cruel_tutor is exercised by the shared 09-search-top-lose-two evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 359ceca4-7063-4089-8088-ba54bc6fb7cf.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 613.4c: negative P/T applies in layer 7c until end of turn.
+(
+  id: "fatal_fumes",
+  name: "Fatal Fumes",
+  face_id: "fatal_fumes",
+  mana_cost: "{3}{B}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: -4, toughness: -2)],
+)

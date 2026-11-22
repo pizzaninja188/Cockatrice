@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "1451b623-8214-4d81-9436-62dbe8b79539",
+  "spans": [
+    {
+      "face_id": "hulking_goblin",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::SelfCombatRestriction",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario cant_block_batch::cant_block_batch_cards_have_the_printed_characteristics_and_cannot_block",
+      "covers": "actual hulking_goblin clause coverage"
+    },
+    {
+      "test": "scenario cant_block_batch::cant_block_batch_cards_are_rejected_as_blockers",
+      "covers": "actual hulking_goblin clause coverage"
+    },
+    {
+      "test": "scenario cant_block_batch::cant_block_batch_cards_allow_other_creatures_to_block",
+      "covers": "actual hulking_goblin clause coverage"
+    },
+    {
+      "test": "mechanic_registry::cant_block_batch::cant_block_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of hulking_goblin"
+    },
+    {
+      "test": "mechanic_registry::cant_block_batch::cant_block_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for hulking_goblin"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

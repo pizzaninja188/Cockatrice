@@ -1,0 +1,24 @@
+// Oracle 5dcbed75-bafc-492a-85a1-44f3ff06fa78; source/rulings checked 2026-11-15.
+// CR 702.19a-e (trample), 603.6a (landfall enters trigger) and 613.4c
+// (until-end-of-turn pump).
+(
+  id: "grove_rumbler",
+  name: "Grove Rumbler",
+  face_id: "grove_rumbler",
+  mana_cost: "{2}{R}{G}",
+  types: ["Creature", "Elemental"],
+  power: 3,
+  toughness: 3,
+  keywords: [Trample],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WheneverPermanentEntersBattlefield(
+        controller: Controller,
+        filter: (permanent_type: Some(Land)),
+      ),
+      effect: [PumpTarget(power: 2, toughness: 2, subject: Source)],
+    ),
+  ],
+)

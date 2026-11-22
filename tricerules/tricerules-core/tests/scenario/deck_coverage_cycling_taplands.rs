@@ -1,4 +1,4 @@
-//! Exact deck-corpus coverage for six tapped cycling lands.
+//! Exact deck-corpus coverage for tapped cycling lands.
 //!
 //! Expectations come from the pinned Oracle text and the current Comprehensive Rules: CR 614.1c
 //! (enters-tapped replacement), CR 605.1a/605.3b (mana abilities resolve immediately), and
@@ -17,7 +17,7 @@ struct CyclingTapland {
     mana_options: &'static [ManaOption],
 }
 
-const LANDS: [CyclingTapland; 6] = [
+const LANDS: [CyclingTapland; 22] = [
     CyclingTapland {
         card: "tranquil_thicket",
         cycling_cost: (0, 0, 0, 0, 1, 0),
@@ -47,6 +47,86 @@ const LANDS: [CyclingTapland; 6] = [
         card: "sheltered_thicket",
         cycling_cost: (0, 0, 0, 0, 0, 2),
         mana_options: &[(0, 0, 0, 1, 0, 0), (0, 0, 0, 0, 1, 0)],
+    },
+    CyclingTapland {
+        card: "canyon_slough",
+        cycling_cost: (0, 0, 0, 0, 0, 2),
+        mana_options: &[(0, 0, 1, 0, 0, 0), (0, 0, 0, 1, 0, 0)],
+    },
+    CyclingTapland {
+        card: "savai_triome",
+        cycling_cost: (0, 0, 0, 0, 0, 3),
+        mana_options: &[(0, 0, 0, 1, 0, 0), (1, 0, 0, 0, 0, 0), (0, 0, 1, 0, 0, 0)],
+    },
+    CyclingTapland {
+        card: "coastal_peak",
+        cycling_cost: (0, 0, 0, 0, 0, 2),
+        mana_options: &[(0, 1, 0, 0, 0, 0), (0, 0, 0, 1, 0, 0)],
+    },
+    CyclingTapland {
+        card: "festering_thicket",
+        cycling_cost: (0, 0, 0, 0, 0, 2),
+        mana_options: &[(0, 0, 1, 0, 0, 0), (0, 0, 0, 0, 1, 0)],
+    },
+    CyclingTapland {
+        card: "glittering_massif",
+        cycling_cost: (0, 0, 0, 0, 0, 2),
+        mana_options: &[(0, 0, 0, 1, 0, 0), (1, 0, 0, 0, 0, 0)],
+    },
+    CyclingTapland {
+        card: "rain-slicked_copse",
+        cycling_cost: (0, 0, 0, 0, 0, 2),
+        mana_options: &[(0, 0, 0, 0, 1, 0), (0, 1, 0, 0, 0, 0)],
+    },
+    CyclingTapland {
+        card: "umbral_expanse",
+        cycling_cost: (0, 0, 0, 0, 0, 2),
+        mana_options: &[(1, 0, 0, 0, 0, 0), (0, 0, 1, 0, 0, 0)],
+    },
+    CyclingTapland {
+        card: "indatha_triome",
+        cycling_cost: (0, 0, 0, 0, 0, 3),
+        mana_options: &[(1, 0, 0, 0, 0, 0), (0, 0, 1, 0, 0, 0), (0, 0, 0, 0, 1, 0)],
+    },
+    CyclingTapland {
+        card: "jetmirs_garden",
+        cycling_cost: (0, 0, 0, 0, 0, 3),
+        mana_options: &[(0, 0, 0, 1, 0, 0), (0, 0, 0, 0, 1, 0), (1, 0, 0, 0, 0, 0)],
+    },
+    CyclingTapland {
+        card: "ketria_triome",
+        cycling_cost: (0, 0, 0, 0, 0, 3),
+        mana_options: &[(0, 0, 0, 0, 1, 0), (0, 1, 0, 0, 0, 0), (0, 0, 0, 1, 0, 0)],
+    },
+    CyclingTapland {
+        card: "raffines_tower",
+        cycling_cost: (0, 0, 0, 0, 0, 3),
+        mana_options: &[(1, 0, 0, 0, 0, 0), (0, 1, 0, 0, 0, 0), (0, 0, 1, 0, 0, 0)],
+    },
+    CyclingTapland {
+        card: "raugrin_triome",
+        cycling_cost: (0, 0, 0, 0, 0, 3),
+        mana_options: &[(0, 1, 0, 0, 0, 0), (0, 0, 0, 1, 0, 0), (1, 0, 0, 0, 0, 0)],
+    },
+    CyclingTapland {
+        card: "sparas_headquarters",
+        cycling_cost: (0, 0, 0, 0, 0, 3),
+        mana_options: &[(0, 0, 0, 0, 1, 0), (1, 0, 0, 0, 0, 0), (0, 1, 0, 0, 0, 0)],
+    },
+    CyclingTapland {
+        card: "xanders_lounge",
+        cycling_cost: (0, 0, 0, 0, 0, 3),
+        mana_options: &[(0, 1, 0, 0, 0, 0), (0, 0, 1, 0, 0, 0), (0, 0, 0, 1, 0, 0)],
+    },
+    CyclingTapland {
+        card: "zagoth_triome",
+        cycling_cost: (0, 0, 0, 0, 0, 3),
+        mana_options: &[(0, 0, 1, 0, 0, 0), (0, 0, 0, 0, 1, 0), (0, 1, 0, 0, 0, 0)],
+    },
+    CyclingTapland {
+        card: "ziatoras_proving_ground",
+        cycling_cost: (0, 0, 0, 0, 0, 3),
+        mana_options: &[(0, 0, 1, 0, 0, 0), (0, 0, 0, 1, 0, 0), (0, 0, 0, 0, 1, 0)],
     },
 ];
 
@@ -187,7 +267,10 @@ fn deck_coverage_cycling_taplands_pay_the_printed_cost_discard_and_draw() {
                 c: land.cycling_cost.5,
             },
         );
+        let hand_before = engine.state.players[0].hand.len();
+        let library_before = engine.state.players[0].library.len();
         let opponent_hand = engine.state.players[1].hand.clone();
+        let opponent_library = engine.state.players[1].library.len();
         semantic::accepted(&mut engine, 0, &command);
         assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
         assert_eq!(engine.state.objects[&drawn].zone, Zone::Library);
@@ -195,7 +278,10 @@ fn deck_coverage_cycling_taplands_pay_the_printed_cost_discard_and_draw() {
 
         resolve_entire_stack_two_player(&mut engine);
         assert_eq!(engine.state.objects[&drawn].zone, Zone::Hand);
+        assert_eq!(engine.state.players[0].hand.len(), hand_before);
+        assert_eq!(engine.state.players[0].library.len(), library_before - 1);
         assert_eq!(engine.state.players[1].hand, opponent_hand);
+        assert_eq!(engine.state.players[1].library.len(), opponent_library);
         engine
             .apply_scenario_command(0, &command)
             .expect_err("the spent Cycling card is no longer in hand");

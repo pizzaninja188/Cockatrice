@@ -1,0 +1,22 @@
+// Oracle d3bac8b8-0b2a-4c67-b087-7a0bf1359468; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 509.3d (one occurrence per blocking creature), 611.2a/514.2 (until end of turn) and 613.4c (layer 7c self pump).
+// The card has no pinned ruling.
+
+(
+  id: "cave_tiger",
+  name: "Cave Tiger",
+  face_id: "cave_tiger",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Cat"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WheneverSelfBecomesBlockedByCreature(blocker: ()),
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    ),
+  ],
+)

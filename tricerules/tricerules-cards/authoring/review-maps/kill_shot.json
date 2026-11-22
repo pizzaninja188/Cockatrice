@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "e1ce32c7-a882-4d3a-9fd6-e5e2943382fb",
+  "spans": [
+    {
+      "face_id": "kill_shot",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario destroy_attacking_batch::destroy_attacking_batch_cards_destroy_only_an_attacking_creature",
+      "covers": "actual kill_shot clause coverage"
+    },
+    {
+      "test": "scenario destroy_attacking_batch::destroy_attacking_batch_cards_reject_a_nonattacking_creature",
+      "covers": "actual kill_shot clause coverage"
+    },
+    {
+      "test": "scenario destroy_attacking_batch::destroy_attacking_batch_cards_fizzle_a_stale_attacker",
+      "covers": "actual kill_shot clause coverage"
+    },
+    {
+      "test": "scenario destroy_attacking_batch::destroy_attacking_batch_cards_destroy_an_opponents_attacker",
+      "covers": "actual kill_shot clause coverage"
+    },
+    {
+      "test": "scenario destroy_attacking_batch::destroy_attacking_batch_cards_leave_a_creature_that_stopped_attacking",
+      "covers": "actual kill_shot clause coverage"
+    },
+    {
+      "test": "mechanic_registry::destroy_attacking_batch::destroy_attacking_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of kill_shot"
+    },
+    {
+      "test": "mechanic_registry::destroy_attacking_batch::destroy_attacking_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for kill_shot"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

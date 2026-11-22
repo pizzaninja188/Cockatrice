@@ -1,0 +1,15 @@
+// Oracle 5ccb57e1-ca94-4b5a-8e5f-b8b5e692cfb9; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 205.1/208.1 (type line and printed P/T) and the printed keyword's own CR rule.
+// The card has no pinned ruling.
+
+(
+  id: "steel_wall",
+  name: "Steel Wall",
+  face_id: "steel_wall",
+  mana_cost: "{1}",
+  types: ["Artifact", "Creature", "Wall"],
+  power: 0,
+  toughness: 4,
+  keywords: [Defender],
+)

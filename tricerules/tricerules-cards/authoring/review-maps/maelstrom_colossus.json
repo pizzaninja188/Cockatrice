@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "06fc3eb1-7a48-42a0-8a5c-d61bd5aacfff",
+  "spans": [
+    {
+      "face_id": "maelstrom_colossus",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_keywords/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellKeyword::Cascade",
+      "typed_path": "/faces/0/spell_keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q41_static_keyword_batch::q41_cascade_cards_exile_only_lower_mana_value_nonlands",
+      "covers": "actual card exiles through lands and finds only a cheaper nonland"
+    },
+    {
+      "test": "mechanic_registry::q41_cohorts_batch::q41_cascade_creatures_map_definitions",
+      "covers": "reviewed identity and printed cascade keyword"
+    },
+    {
+      "test": "scenario q41_static_keyword_batch::q41_cascade_canary_hardest_finds_a_cheaper_spell_at_eight_mana",
+      "covers": "hardest canary: eight-mana cascade"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

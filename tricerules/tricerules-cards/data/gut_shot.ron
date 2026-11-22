@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 9afb3b6e-4909-4efa-aa79-81c0229411c9.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 107.4f: {R/P} is paid with red mana or 2 life; CR 119.4 limits the life payment.
+(
+  id: "gut_shot",
+  name: "Gut Shot",
+  face_id: "gut_shot",
+  mana_cost: "{R/P}",
+  types: ["Instant"],
+  spell_effect: [DamageTarget(amount: 1, target: (kind: AnyTarget))],
+)

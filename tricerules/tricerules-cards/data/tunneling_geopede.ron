@@ -1,0 +1,22 @@
+// Oracle 78cd6d20-033f-471f-a86e-59ec8307ae1f; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (landfall entry trigger) and 120.3 (damage to each opponent). Pinned
+// rulings confirm any land entry for any reason triggers landfall.
+(
+  id: "tunneling_geopede",
+  name: "Tunneling Geopede",
+  face_id: "tunneling_geopede",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Insect"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Land)),
+    ),
+    effect: [DamagePlayer(amount: 1, who: EachOpponent)],
+  )],
+)

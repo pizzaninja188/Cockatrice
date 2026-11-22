@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "910e8269-6001-479a-ab2e-5a935569c33c",
+  "spans": [
+    {
+      "face_id": "scrapskin_drake",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "scrapskin_drake",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "StaticAbilityDef::SelfCombatRestriction",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flier_blocker_batch::flier_blocker_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual scrapskin_drake casts with the exact printed cost, body and Flying"
+    },
+    {
+      "test": "scenario flier_blocker_batch::flier_blocker_batch_cards_block_flying_attackers",
+      "covers": "actual scrapskin_drake is offered as a legal blocker for a flying attacker"
+    },
+    {
+      "test": "scenario flier_blocker_batch::flier_blocker_batch_cards_reject_ground_and_reach_only_attackers",
+      "covers": "actual scrapskin_drake cannot block ground or reach-only attackers"
+    },
+    {
+      "test": "mechanic_registry::flier_blocker_batch::flier_blocker_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of scrapskin_drake"
+    },
+    {
+      "test": "mechanic_registry::flier_blocker_batch::flier_blocker_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for scrapskin_drake"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

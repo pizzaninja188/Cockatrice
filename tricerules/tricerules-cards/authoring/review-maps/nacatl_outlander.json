@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "333555d6-3fcc-4021-ab60-afc36d723877",
+  "spans": [
+    {
+      "face_id": "nacatl_outlander",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/protections"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Protection::Color",
+      "typed_path": "/faces/0/protections"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario protection_cycle_batch::protection_cycle_batch_cards_cast_with_exact_printed_characteristics_and_protection_quality",
+      "covers": "actual nacatl_outlander clause coverage"
+    },
+    {
+      "test": "scenario protection_cycle_batch::protection_cycle_batch_cards_reject_targeting_by_the_protected_quality",
+      "covers": "actual nacatl_outlander clause coverage"
+    },
+    {
+      "test": "scenario protection_cycle_batch::protection_cycle_batch_cards_prevent_damage_from_the_protected_quality",
+      "covers": "actual nacatl_outlander clause coverage"
+    },
+    {
+      "test": "scenario protection_cycle_batch::protection_cycle_batch_cards_cannot_be_blocked_by_the_protected_quality",
+      "covers": "actual nacatl_outlander clause coverage"
+    },
+    {
+      "test": "mechanic_registry::protection_cycle_batch::protection_cycle_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of nacatl_outlander"
+    },
+    {
+      "test": "mechanic_registry::protection_cycle_batch::protection_cycle_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for nacatl_outlander"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

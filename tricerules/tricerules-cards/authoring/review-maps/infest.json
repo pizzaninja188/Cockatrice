@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "d6850616-7db5-4141-9ab0-ae8d1f08114f",
+  "spans": [
+    {
+      "face_id": "infest",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario all_creature_shrink_batch::all_creature_shrink_batch_cards_shrink_every_creature_by_the_printed_amount",
+      "covers": "actual infest is exercised by the shared all_creature_shrink_batch actual-card scenario"
+    },
+    {
+      "test": "scenario all_creature_shrink_batch::all_creature_shrink_batch_cards_kill_every_creature_whose_toughness_reaches_zero",
+      "covers": "actual infest is exercised by the shared all_creature_shrink_batch actual-card scenario"
+    },
+    {
+      "test": "scenario all_creature_shrink_batch::all_creature_shrink_batch_cards_do_not_affect_creatures_that_enter_after_resolution",
+      "covers": "actual infest is exercised by the shared all_creature_shrink_batch actual-card scenario"
+    },
+    {
+      "test": "scenario all_creature_shrink_batch::all_creature_shrink_batch_cards_keep_affecting_a_creature_that_changes_controller",
+      "covers": "actual infest is exercised by the shared all_creature_shrink_batch actual-card scenario"
+    },
+    {
+      "test": "scenario all_creature_shrink_batch::all_creature_shrink_batch_cards_expire_at_cleanup",
+      "covers": "actual infest is exercised by the shared all_creature_shrink_batch actual-card scenario"
+    },
+    {
+      "test": "scenario all_creature_shrink_batch::all_creature_shrink_batch_cards_reject_a_cast_the_mana_cannot_pay",
+      "covers": "actual infest is exercised by the shared all_creature_shrink_batch actual-card scenario"
+    },
+    {
+      "test": "scenario all_creature_shrink_batch::all_creature_shrink_batch_cards_leave_hidden_zones_and_life_unchanged",
+      "covers": "actual infest is exercised by the shared all_creature_shrink_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::all_creature_shrink_batch::all_creature_shrink_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of infest"
+    },
+    {
+      "test": "mechanic_registry::all_creature_shrink_batch::all_creature_shrink_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for infest"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

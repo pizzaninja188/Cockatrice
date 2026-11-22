@@ -1,0 +1,23 @@
+// Oracle 90d375fa-0487-4990-9a98-260f9ee28d2a; source/rulings checked 2026-11-15.
+// CR 603.6a (enters trigger) and 613.4c (until-end-of-turn pump); the
+// source is excluded because the printed clause says "another".
+(
+  id: "llanowar_stalker",
+  name: "Llanowar Stalker",
+  face_id: "llanowar_stalker",
+  mana_cost: "{G}",
+  types: ["Creature", "Elf", "Warrior"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WheneverPermanentEntersBattlefield(
+        controller: Controller,
+        filter: (permanent_type: Some(Creature), exclude_source: true),
+      ),
+      effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
+    ),
+  ],
+)

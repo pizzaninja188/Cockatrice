@@ -1,0 +1,23 @@
+// Oracle c0239ff1-6ae6-431a-806e-7321d8272a1d; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 122.1 (counters), 502.3 and 701.26 (tap/untap), 614.1d and 614.5
+// (stun-counter replacement). A pinned ruling confirms an already-tapped target
+// still receives the counters. Pinned rulings also confirm only one stun counter is removed per untap.
+(
+  id: "impede_momentum",
+  name: "Impede Momentum",
+  face_id: "impede_momentum",
+  mana_cost: "{1}{U}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Tap(subject: Chosen((kind: Creature))),
+    PutCounters(counter: Stun, count: 3, subject: Chosen((kind: Creature))),
+    Scry(count: 1),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature",
+    effect_indices: [0, 1],
+  )])),
+)

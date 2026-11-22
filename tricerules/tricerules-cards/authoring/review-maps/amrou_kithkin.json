@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "79644192-8f99-4d04-b151-6f74a4dbda0a",
+  "spans": [
+    {
+      "face_id": "amrou_kithkin",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::SelfCombatRestriction",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q34_power_evasion_batch::q34_power_evasion_canary_simplest",
+      "covers": "actual card is exercised by the shared 08-power-evasion scenario"
+    },
+    {
+      "test": "scenario q34_power_evasion_batch::q34_power_evasion_canary_hardest",
+      "covers": "actual card is exercised by the shared 08-power-evasion scenario"
+    },
+    {
+      "test": "scenario q34_power_evasion_batch::q34_power_evasion_cards_allow_only_blockers_below_the_printed_threshold",
+      "covers": "actual card is exercised by the shared 08-power-evasion scenario"
+    },
+    {
+      "test": "scenario q34_power_evasion_batch::q34_power_evasion_legal_block_persists_when_the_blocker_grows",
+      "covers": "actual card is exercised by the shared 08-power-evasion scenario"
+    },
+    {
+      "test": "mechanic_registry::q34_power_evasion_batch::q34_power_evasion_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q34_power_evasion_batch::q34_power_evasion_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

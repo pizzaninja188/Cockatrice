@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "15323e45-8260-43dc-b72b-efd661a58d75",
+  "spans": [
+    {
+      "face_id": "spirit_of_malevolence",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario dies_drain_batch::dies_drain_batch_canary_cards_drain_each_opponent_and_credit_their_controller",
+      "covers": "actual spirit_of_malevolence is exercised by the shared dies_drain_batch canary scenario"
+    },
+    {
+      "test": "scenario dies_drain_batch::dies_drain_batch_cards_use_their_printed_amounts",
+      "covers": "actual spirit_of_malevolence is exercised by the shared dies_drain_batch actual-card scenario"
+    },
+    {
+      "test": "scenario dies_drain_batch::dies_drain_batch_cards_hit_every_opponent_in_a_three_player_game",
+      "covers": "actual spirit_of_malevolence is exercised by the shared dies_drain_batch actual-card scenario"
+    },
+    {
+      "test": "scenario dies_drain_batch::dies_drain_batch_cards_do_not_trigger_when_exiled",
+      "covers": "actual spirit_of_malevolence is exercised by the shared dies_drain_batch actual-card scenario"
+    },
+    {
+      "test": "scenario dies_drain_batch::dies_drain_batch_cards_can_kill_an_opponent_at_low_life",
+      "covers": "actual spirit_of_malevolence is exercised by the shared dies_drain_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::dies_drain_batch::dies_drain_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of spirit_of_malevolence"
+    },
+    {
+      "test": "mechanic_registry::dies_drain_batch::dies_drain_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for spirit_of_malevolence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

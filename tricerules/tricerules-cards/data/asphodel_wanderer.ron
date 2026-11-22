@@ -1,0 +1,20 @@
+// Oracle a6ffcbc9-0990-4d95-a995-1b2f321256d7; source/rulings checked 2026-11-15 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 (activation and printed cost) and 701.19a-b (regeneration shield).
+(
+  id: "asphodel_wanderer",
+  name: "Asphodel Wanderer",
+  face_id: "asphodel_wanderer",
+  mana_cost: "{B}",
+  types: ["Creature", "Skeleton", "Soldier"],
+  power: 1,
+  toughness: 1,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{2}{B}")],
+      effect: [Regenerate(subject: Source)],
+    ),
+  ],
+)

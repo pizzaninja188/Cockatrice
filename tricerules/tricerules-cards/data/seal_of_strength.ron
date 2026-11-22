@@ -1,0 +1,16 @@
+// Oracle e41a68b3-e1cb-4f51-bd54-68882d2cc015; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853. No card-specific rulings.
+// CR 602.1/602.2, 701.21a, 611.2a, 514.2 and 613.4c: sacrifice the enchantment for +3/+3 until end of turn.
+(
+  id: "seal_of_strength",
+  name: "Seal of Strength",
+  face_id: "seal_of_strength",
+  mana_cost: "{G}",
+  types: ["Enchantment"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [SacrificeSelf],
+    effect: [PumpTarget(power: 3, toughness: 3, subject: Chosen((kind: Creature)))],
+  )],
+)

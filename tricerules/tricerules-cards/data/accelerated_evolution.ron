@@ -1,0 +1,28 @@
+// Oracle 6401d0ae-4635-497d-91ef-ce2eabefb893; source/rulings checked 2026-11-15.
+// CR 702.8a (Flash), 303.4a (Aura target and attach), 603.6a (entry
+// trigger), 611.2a (until-end-of-turn grant), 613.4c (attached P/T
+// modifier), 704.5m (unattached Aura cleanup) and 514.2 (cleanup).
+(
+  id: "accelerated_evolution",
+  name: "Accelerated Evolution",
+  face_id: "accelerated_evolution",
+  mana_cost: "{2}{G}",
+  types: ["Enchantment", "Aura"],
+  keywords: [Flash],
+  spell_effect: [AuraAttach(target: (kind: Creature, controller: You))],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([3]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [GrantKeywords(subject: AttachedObject, keywords: [Hexproof])],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([4]),
+      definition: AttachedModifier(delta_power: 2, delta_toughness: 2),
+    ),
+  ],
+)

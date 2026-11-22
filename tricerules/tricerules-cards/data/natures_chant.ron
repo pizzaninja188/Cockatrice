@@ -1,0 +1,16 @@
+// Oracle 46e4ace2-e8bf-4b72-81de-286215886a10; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1 (target), 601.2c (target at cast) and 701.8 (destroy). No pinned ruling.
+(
+  id: "natures_chant",
+  name: "Nature's Chant",
+  face_id: "natures_chant",
+  mana_cost: "{1}{G/W}",
+  types: ["Instant"],
+  spell_effect: [Destroy(subject: Chosen((
+    any_of: Some([
+      (kind: AnyPermanent, permanent_types: [Artifact]),
+      (kind: AnyPermanent, permanent_types: [Enchantment]),
+    ]),
+  )))],
+)

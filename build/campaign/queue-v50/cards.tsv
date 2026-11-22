@@ -1,0 +1,35 @@
+family	oracle_id	name
+01-put-on-top	6e072b3a-7a83-4d77-bae3-72de0e646b81	Repel
+01-put-on-top	0d96e4bc-ff4e-4f37-89b6-8a4e3c1069a0	Grasp of Phantoms
+01-put-on-top	6ef9bf18-6b09-4398-a502-6867d999ab0c	Run Aground
+01-put-on-top	567b676b-54f3-44c7-8654-4d2b0262ea12	Banishment Decree
+01-put-on-top	3a35e772-2547-41a3-a2a2-125b48c23aa5	Temporal Eddy
+01-put-on-top	05a4acfd-3bf3-4ec2-a28a-bc43ba7c6fbf	Fallow Earth
+02-graveyard-to-hand	030e9e3e-ce78-4c3b-bd83-969c07c70459	Boggart Birth Rite
+02-graveyard-to-hand	0b6c74a7-d7d3-4c05-84b1-bcb580bb476f	Argivian Find
+02-graveyard-to-hand	565922d6-8152-411f-8d4d-dc7c8523a49b	Nature's Spiral
+02-graveyard-to-hand	7408b9c5-7266-4627-be4e-b691cf5c622c	Déjà Vu
+03-tap-stun-spells	846ba66c-a4eb-4d00-a0f1-d9f9524b9695	Cryogenic Stasis
+03-tap-stun-spells	c0239ff1-6ae6-431a-806e-7321d8272a1d	Impede Momentum
+03-tap-stun-spells	1133633a-b717-42cb-b477-4e18584d876f	Tranquilize
+03-tap-stun-spells	8bf90bb0-f9c1-49c8-905e-32747e921e92	Freeze in Place
+04-etb-shrink	09cacd93-5c20-4993-9ee2-a756204796f7	Eyeblight Assassin
+04-etb-shrink	ad804712-18ba-49d7-9af2-4361edaa6cf8	Black Dragon
+04-etb-shrink	ccbf7141-69c9-407d-b68e-c1c63ddef213	Faerie Duelist
+04-etb-shrink	eba73313-5ec5-4004-8040-658861b71a8f	Brinebarrow Intruder
+05-etb-pump-target	35023c04-ae62-47bf-80a0-faa2d7a67788	Haazda Officer
+05-etb-pump-target	6bb7d985-b033-46a2-9bbb-6f7ee62aaaff	Herald of the Fair
+05-etb-pump-target	658d54d4-e967-490c-b958-3743b3b1ef45	Rage-Scarred Berserker
+06-etb-counter-another	17cbeec4-b180-48e9-9156-42271f918a9d	Stromkirk Mentor
+06-etb-counter-another	391f1331-7577-4bf4-a9ed-2f55ded4cbd8	Sanguine Glorifier
+06-etb-counter-another	72ddbc9b-f584-433f-9d2d-6e4c374129c4	Jade Bearer
+07-basic-land-to-hand	0f539127-535f-4e0d-abaa-e884521098d2	Gatecreeper Vine
+07-basic-land-to-hand	1eb4c001-1115-4b99-bbbf-703eb551a381	District Guide
+07-basic-land-to-hand	7d306de8-a93b-429b-9436-0501be97dc8d	Farfinder
+07-basic-land-to-hand	66155010-cc2c-449a-85d5-92c95aade514	Pilgrim's Eye
+08-treasure-on-death	7d48ad95-d428-4e2d-b697-56907c3ce579	Dire Fleet Hoarder
+08-treasure-on-death	bbfee53c-30a6-4ed0-beef-5c254be75fc5	Jewel-Eyed Cobra
+08-treasure-on-death	47f8df80-abc9-4d46-8078-8fbc23430259	Patron of the Arts
+09-destroy-artifact-enchant	bdb3ca68-ec1f-4e16-81cc-d23f8f52c728	Naturalize
+09-destroy-artifact-enchant	46e4ace2-e8bf-4b72-81de-286215886a10	Nature's Chant
+09-destroy-artifact-enchant	722f2965-a1ec-4b97-a4bd-b99364f58b1e	Return to the Earth

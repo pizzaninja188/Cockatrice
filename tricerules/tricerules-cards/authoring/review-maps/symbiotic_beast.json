@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "70ecc25b-2004-4a3c-80c3-6d97bf0711eb",
+  "spans": [
+    {
+      "face_id": "symbiotic_beast",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "insect_g_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q45_cohorts_batch::q45_dies_insect_tokens_canary_simplest_creates_four",
+      "covers": "canary creates four 1/1 Insects"
+    },
+    {
+      "test": "scenario q45_cohorts_batch::q45_dies_insect_tokens_cards_create_their_printed_counts",
+      "covers": "every card creates its printed Insect count"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_dies_insect_tokens_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of symbiotic_beast"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for symbiotic_beast"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

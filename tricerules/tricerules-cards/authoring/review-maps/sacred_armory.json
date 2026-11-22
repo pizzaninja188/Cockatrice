@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "37d74df9-cf87-4b82-842a-3941064078fb",
+  "spans": [
+    {
+      "face_id": "sacred_armory",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario mana_target_pump_batch::mana_target_pump_batch_canary_cards_pump_a_chosen_creature",
+      "covers": "actual sacred_armory is exercised by the shared mana_target_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario mana_target_pump_batch::mana_target_pump_batch_cards_activate_through_the_stack",
+      "covers": "actual sacred_armory is exercised by the shared mana_target_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario mana_target_pump_batch::mana_target_pump_batch_cards_fizzle_a_target_that_left_before_resolution",
+      "covers": "actual sacred_armory is exercised by the shared mana_target_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario mana_target_pump_batch::mana_target_pump_batch_cards_target_any_creature_and_leave_others_unchanged",
+      "covers": "actual sacred_armory is exercised by the shared mana_target_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario mana_target_pump_batch::mana_target_pump_batch_cards_stack_repeated_activations",
+      "covers": "actual sacred_armory is exercised by the shared mana_target_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario mana_target_pump_batch::mana_target_pump_batch_cards_reject_illegal_targets_without_paying",
+      "covers": "actual sacred_armory is exercised by the shared mana_target_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario mana_target_pump_batch::mana_target_pump_batch_cards_expire_the_pump_at_cleanup",
+      "covers": "actual sacred_armory is exercised by the shared mana_target_pump_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::mana_target_pump_batch::mana_target_pump_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of sacred_armory"
+    },
+    {
+      "test": "mechanic_registry::mana_target_pump_batch::mana_target_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for sacred_armory"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

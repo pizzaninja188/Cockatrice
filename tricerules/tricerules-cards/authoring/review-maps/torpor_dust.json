@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "da1ca3ec-8bef-4b7e-896e-4d50e8cffbe5",
+  "spans": [
+    {
+      "face_id": "torpor_dust",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "torpor_dust",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "torpor_dust",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flash_aura_shrink_batch::flash_aura_shrink_batch_cards_attach_and_apply_the_printed_shrink",
+      "covers": "actual torpor_dust is exercised by the shared 05-flash-aura-shrink actual-card scenario"
+    },
+    {
+      "test": "scenario flash_aura_shrink_batch::flash_aura_shrink_batch_cards_apply_lethal_toughness_reduction_only_when_printed",
+      "covers": "actual torpor_dust is exercised by the shared 05-flash-aura-shrink actual-card scenario"
+    },
+    {
+      "test": "scenario flash_aura_shrink_batch::flash_aura_shrink_batch_cards_use_flash_timing_on_an_opponent_turn",
+      "covers": "actual torpor_dust is exercised by the shared 05-flash-aura-shrink actual-card scenario"
+    },
+    {
+      "test": "scenario flash_aura_shrink_batch::flash_aura_shrink_batch_cards_reject_a_noncreature_and_fizzle_a_stale_target",
+      "covers": "actual torpor_dust is exercised by the shared 05-flash-aura-shrink actual-card scenario"
+    },
+    {
+      "test": "scenario flash_aura_shrink_batch::flash_aura_shrink_batch_cards_remove_the_shrink_when_the_aura_leaves",
+      "covers": "actual torpor_dust is exercised by the shared 05-flash-aura-shrink actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::flash_aura_shrink_batch::flash_aura_shrink_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of torpor_dust"
+    },
+    {
+      "test": "mechanic_registry::flash_aura_shrink_batch::flash_aura_shrink_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for torpor_dust"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

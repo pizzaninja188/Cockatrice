@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "8df64d89-64ee-4388-826d-dd091db4510a",
+  "spans": [
+    {
+      "face_id": "monk_realist",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q40_remaining_cohorts_batch::q40_etb_destroy_enchantment_cards_destroy_the_chosen_aura",
+      "covers": "actual card destroys the chosen enchantment"
+    },
+    {
+      "test": "scenario q40_remaining_cohorts_batch::q40_etb_destroy_enchantment_does_nothing_without_a_legal_target",
+      "covers": "no trigger is put on the stack without a legal enchantment"
+    },
+    {
+      "test": "mechanic_registry::q40_cohorts_batch::q40_etb_destroy_enchantment_maps_definitions",
+      "covers": "reviewed identity, target filter and printed values"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

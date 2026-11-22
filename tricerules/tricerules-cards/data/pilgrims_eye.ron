@@ -1,0 +1,40 @@
+// Oracle 66155010-cc2c-449a-85d5-92c95aade514; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.1 (entry trigger), 701.20a/701.23e (reveal the found card), 701.23
+// (search) and 701.24 (shuffle). CR 702.9 (flying). No pinned ruling.
+(
+  id: "pilgrims_eye",
+  name: "Pilgrim's Eye",
+  face_id: "pilgrims_eye",
+  mana_cost: "{3}",
+  types: ["Artifact", "Creature", "Thopter"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    program: Some((body: (steps: [
+      (id: "search_choice", kind: Choose(
+        choice: "search",
+        chooser: Controller,
+        optional: true,
+        branches: [(
+          branch_id: "search_for_a_land",
+          presentation: Fallback,
+          cost: None,
+          body: (steps: [
+            (id: "search_hand", kind: Perform(SearchLibrary(
+              filter: Some((card_type: Some(BasicLand))),
+              zones: Fixed([Library]),
+              reveal: true,
+              selection_bounds: Some((min: 0, max: 1)),
+            )))
+          ]),
+        )],
+        otherwise: (),
+      )),
+    ]))),
+  )],
+)

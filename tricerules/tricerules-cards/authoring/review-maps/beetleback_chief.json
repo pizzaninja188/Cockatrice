@@ -1,0 +1,58 @@
+{
+  "format_version": 1,
+  "oracle_id": "f5c5f64c-6911-430c-a825-b32b96d39c7d",
+  "spans": [
+    {
+      "face_id": "beetleback_chief",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "goblin_r_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_cards_create_only_their_printed_token",
+      "covers": "actual beetleback_chief is exercised by the shared etb_vanilla_tokens_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_cards_cast_with_exact_cost_and_body",
+      "covers": "actual beetleback_chief is exercised by the shared etb_vanilla_tokens_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_cards_create_tokens_once_per_entry",
+      "covers": "actual beetleback_chief is exercised by the shared etb_vanilla_tokens_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_cards_source_effect_is_controller_scoped",
+      "covers": "actual beetleback_chief is exercised by the shared etb_vanilla_tokens_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_count_two_cards_present_simultaneous_entry_order",
+      "covers": "actual beetleback_chief presents and answers the simultaneous token-entry order"
+    },
+    {
+      "test": "mechanic_registry::etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of beetleback_chief"
+    },
+    {
+      "test": "mechanic_registry::etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for beetleback_chief"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

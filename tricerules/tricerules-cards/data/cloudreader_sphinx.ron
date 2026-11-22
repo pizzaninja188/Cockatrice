@@ -1,0 +1,20 @@
+// Oracle b5a4bf91-4d31-4557-9ec4-a96ff4d9be6b; source/rulings checked 2026-11-12.
+// CR 702.9 (Flying), 603.6a (enters trigger) and 701.22 (Scry).
+(
+  id: "cloudreader_sphinx",
+  name: "Cloudreader Sphinx",
+  face_id: "cloudreader_sphinx",
+  mana_cost: "{4}{U}",
+  types: ["Creature", "Sphinx"],
+  power: 3,
+  toughness: 4,
+  keywords: [Flying],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Scry(count: 2)],
+    ),
+  ],
+)

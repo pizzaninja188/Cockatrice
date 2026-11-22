@@ -1,0 +1,12 @@
+// Oracle 01f07ab9-3c3e-4fea-9cd6-543a5b7056b8; source/rulings checked 2026-11-12.
+// CR 702.9a-b (Flying evasion ability).
+(
+  id: "roc_of_kher_ridges",
+  name: "Roc of Kher Ridges",
+  face_id: "roc_of_kher_ridges",
+  mana_cost: "{3}{R}",
+  types: ["Creature", "Bird"],
+  power: 3,
+  toughness: 3,
+  keywords: [Flying],
+)

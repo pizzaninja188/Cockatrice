@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "562aaf81-e70a-401d-a638-bb7ce4f40626",
+  "spans": [
+    {
+      "face_id": "ridge_rannet",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilitySourceZone::Hand",
+      "typed_path": "/faces/0/activated_abilities/0/source_zone"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario cycling_two_batch::cycling_two_batch_cards_cycle_for_two_and_draw_one",
+      "covers": "actual ridge_rannet clause coverage"
+    },
+    {
+      "test": "scenario cycling_two_batch::cycling_two_batch_cards_reject_cycling_without_the_printed_cost",
+      "covers": "actual ridge_rannet clause coverage"
+    },
+    {
+      "test": "scenario cycling_two_batch::cycling_two_batch_cards_reject_cycling_outside_the_hand",
+      "covers": "actual ridge_rannet clause coverage"
+    },
+    {
+      "test": "mechanic_registry::cycling_two_batch::cycling_two_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of ridge_rannet"
+    },
+    {
+      "test": "mechanic_registry::cycling_two_batch::cycling_two_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for ridge_rannet"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

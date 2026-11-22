@@ -1,0 +1,24 @@
+// Oracle 05baf38c-677a-42e3-bb8c-a52a0a478984; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 (activation), 107.5/118.3 ({T} cost), 701.23a-b (a library search with a
+// stated quality may fail to find) and 701.24 (shuffle).
+// A filtered search may fail to find (CR 701.23b); a failed search still shuffles
+// (CR 701.24).
+(
+  id: "ramosian_commander",
+  name: "Ramosian Commander",
+  face_id: "ramosian_commander",
+  mana_cost: "{2}{W}{W}",
+  types: ["Creature", "Human", "Rebel"],
+  power: 2,
+  toughness: 4,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{6}"), Tap],
+    effect: [SearchLibrary(
+      filter: Some((card_type: Some(NonlandPermanent), required_subtypes: ["Rebel"], max_mana_value: Some(5))),
+      destination: Battlefield(tapped: false),
+    )],
+  )],
+)

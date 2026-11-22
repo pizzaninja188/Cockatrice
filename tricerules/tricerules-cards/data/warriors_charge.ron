@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 5cf28c04-76af-4eb8-9969-366dc8e04690.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "warriors_charge",
+  name: "Warrior's Charge",
+  face_id: "warriors_charge",
+  mana_cost: "{2}{W}",
+  types: ["Sorcery"],
+  spell_effect: [PumpAll(filter: (controller: YouControl), power: 1, toughness: 1)],
+)

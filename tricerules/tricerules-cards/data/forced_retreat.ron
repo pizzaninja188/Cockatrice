@@ -1,0 +1,23 @@
+// Oracle ccf1336c-2ea5-4582-84a5-0b29b3cca6c2; source/rulings checked 2026-11-13.
+// CR 400.3 (owner's zone) and 608.2b (departed target).
+(
+  id: "forced_retreat",
+  name: "Forced Retreat",
+  face_id: "forced_retreat",
+  mana_cost: "{2}{U}",
+  types: ["Sorcery"],
+  spell_program: Some(
+    (
+      body: (
+        steps: [
+          (id: "put_in_owners_library",
+            kind: Perform(PutInOwnersLibrary(
+              subject: Chosen((kind: Creature)), placement: Top,
+            ))),
+        ],
+      ),
+      target_bindings: [(instruction_id: "put_in_owners_library", role: Subject, target_group_index: 0)],
+    ),
+  ),
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [])])),
+)

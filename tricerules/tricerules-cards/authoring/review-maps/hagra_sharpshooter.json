@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "d2f59fa6-8e61-4a70-8044-196d7b26ec9e",
+  "spans": [
+    {
+      "face_id": "hagra_sharpshooter",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PumpTarget/subject"
+    },
+    {
+      "symbol": "TargetKind::Creature",
+      "typed_path": "/faces/0/activated_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q43_activated_target_pump_batch::q43_activated_target_pump_canary_pumps_a_chosen_creature",
+      "covers": "actual card pays exactly and pumps only the chosen creature"
+    },
+    {
+      "test": "scenario q43_activated_target_pump_batch::q43_activated_target_pump_cards_apply_their_printed_values",
+      "covers": "every actual card applies its printed pump"
+    },
+    {
+      "test": "scenario q43_activated_target_pump_batch::q43_activated_target_pump_cards_expire_and_reject_illegal_activation",
+      "covers": "the pump expires at cleanup; missing mana and noncreature targets are rejected"
+    },
+    {
+      "test": "scenario q43_activated_target_pump_batch::q43_activated_target_pump_cards_fizzle_a_target_that_left",
+      "covers": "a target that left before resolution receives no pump and installs no effect"
+    },
+    {
+      "test": "mechanic_registry::q43_cohorts_batch::q43_activated_target_pump_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of hagra_sharpshooter"
+    },
+    {
+      "test": "mechanic_registry::q43_cohorts_batch::q43_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for hagra_sharpshooter"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "9f31dbb1-c350-46f8-bd1d-9f23a073d2f1",
+  "spans": [
+    {
+      "face_id": "endless_cockroaches",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ReturnTriggeredCard",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q40_remaining_cohorts_batch::q40_dies_return_self_cards_return_to_their_owners_hand",
+      "covers": "actual card returns itself to its owner's hand after dying"
+    },
+    {
+      "test": "scenario q40_remaining_cohorts_batch::q40_dies_return_self_does_not_return_a_card_that_left_the_graveyard",
+      "covers": "a card that left the graveyard is not returned"
+    },
+    {
+      "test": "mechanic_registry::q40_cohorts_batch::q40_dies_return_self_maps_definitions",
+      "covers": "reviewed identity, trigger and zone-change destination"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "6eb21aca-116e-427b-9e75-8adaee0cc62a",
+  "spans": [
+    {
+      "face_id": "wormhole_serpent",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ApplyCombatRestriction",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/activated_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario targeted_evasion_batch::targeted_evasion_batch_cards_grant_unblockable_with_the_exact_cost",
+      "covers": "actual wormhole_serpent is exercised by the shared targeted_evasion_batch actual-card scenario"
+    },
+    {
+      "test": "scenario targeted_evasion_batch::targeted_evasion_batch_cards_make_the_target_unblockable_in_combat",
+      "covers": "actual wormhole_serpent is exercised by the shared targeted_evasion_batch actual-card scenario"
+    },
+    {
+      "test": "scenario targeted_evasion_batch::targeted_evasion_batch_cards_expire_at_cleanup",
+      "covers": "actual wormhole_serpent is exercised by the shared targeted_evasion_batch actual-card scenario"
+    },
+    {
+      "test": "scenario targeted_evasion_batch::targeted_evasion_batch_cards_reject_illegal_targets_and_missing_mana",
+      "covers": "actual wormhole_serpent is exercised by the shared targeted_evasion_batch actual-card scenario"
+    },
+    {
+      "test": "scenario targeted_evasion_batch::targeted_evasion_batch_cards_drop_a_stale_target_without_returning_it",
+      "covers": "actual wormhole_serpent is exercised by the shared targeted_evasion_batch actual-card scenario"
+    },
+    {
+      "test": "scenario targeted_evasion_batch::targeted_evasion_batch_cards_may_target_an_opponents_creature",
+      "covers": "actual wormhole_serpent is exercised by the shared targeted_evasion_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::targeted_evasion_batch::targeted_evasion_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of wormhole_serpent"
+    },
+    {
+      "test": "mechanic_registry::targeted_evasion_batch::targeted_evasion_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for wormhole_serpent"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

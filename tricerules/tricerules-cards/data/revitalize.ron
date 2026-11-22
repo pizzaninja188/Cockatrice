@@ -1,0 +1,12 @@
+// Oracle b1385b03-cb4b-4812-857f-7421f1df39af; source/rulings checked 2026-11-15 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 119.3 (life gain), 121.1 (draw), 601.2 (casting) and
+// 608.2 (resolution order).
+(
+  id: "revitalize",
+  name: "Revitalize",
+  face_id: "revitalize",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  spell_effect: [GainLife(amount: 3), Draw(count: 1)],
+)

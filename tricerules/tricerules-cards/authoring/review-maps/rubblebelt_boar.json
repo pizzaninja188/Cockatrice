@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "b815cbbd-d79f-4180-8204-504a15df7152",
+  "spans": [
+    {
+      "face_id": "rubblebelt_boar",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetKind::Creature",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/PumpTarget/subject/Chosen/kind"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_target_pump_batch::etb_target_pump_batch_cards_pump_the_chosen_creature_by_the_printed_amount",
+      "covers": "actual rubblebelt_boar clause coverage"
+    },
+    {
+      "test": "scenario etb_target_pump_batch::etb_target_pump_batch_cards_choose_the_target_when_the_trigger_is_put_on_the_stack",
+      "covers": "actual rubblebelt_boar clause coverage"
+    },
+    {
+      "test": "scenario etb_target_pump_batch::etb_target_pump_batch_cards_reject_a_declined_mandatory_target",
+      "covers": "actual rubblebelt_boar clause coverage"
+    },
+    {
+      "test": "scenario etb_target_pump_batch::etb_target_pump_batch_cards_do_not_pump_a_target_that_left",
+      "covers": "actual rubblebelt_boar clause coverage"
+    },
+    {
+      "test": "scenario etb_target_pump_batch::etb_target_pump_batch_cards_expire_at_end_of_turn",
+      "covers": "actual rubblebelt_boar clause coverage"
+    },
+    {
+      "test": "mechanic_registry::etb_target_pump_batch::etb_target_pump_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of rubblebelt_boar"
+    },
+    {
+      "test": "mechanic_registry::etb_target_pump_batch::etb_target_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for rubblebelt_boar"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

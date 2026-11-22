@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "9e8e5ad4-05a3-4757-8797-c37bf49506d5",
+  "spans": [
+    {
+      "face_id": "lead_astray",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q45_cohorts_batch::q45_tap_up_to_canary_simplest_taps_two",
+      "covers": "canary taps two chosen creatures"
+    },
+    {
+      "test": "scenario q45_cohorts_batch::q45_tap_up_to_cards_allow_zero_targets_and_honor_their_maximum",
+      "covers": "zero targets are legal and each maximum is honored"
+    },
+    {
+      "test": "scenario q45_cohorts_batch::q45_tap_up_to_cards_tap_the_remaining_legal_targets",
+      "covers": "a remaining legal target still taps after another target is destroyed"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_tap_up_to_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of lead_astray"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for lead_astray"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

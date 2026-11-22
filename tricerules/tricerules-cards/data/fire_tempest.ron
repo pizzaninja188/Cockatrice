@@ -1,0 +1,16 @@
+// Oracle ede6a352-52de-4ae0-816f-50140033dedf; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 120.2/120.3 (damage to creatures and players), 119.3 (each player loses life),
+// 608.2c (instructions in order), 702.9/704.5g (lethal damage) and 514.2 (damage marked
+// until cleanup). Copy of the reviewed Slagstorm DamageAll/DamagePlayer halves.
+(
+  id: "fire_tempest",
+  name: "Fire Tempest",
+  face_id: "fire_tempest",
+  mana_cost: "{5}{R}{R}",
+  types: ["Sorcery"],
+  spell_effect: [
+    DamageAll(amount: 6, kind: (kind: Creature)),
+    DamagePlayer(amount: 6, who: EachPlayer),
+  ],
+)

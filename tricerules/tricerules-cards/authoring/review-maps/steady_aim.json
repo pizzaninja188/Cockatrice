@@ -1,0 +1,62 @@
+{
+  "format_version": 1,
+  "oracle_id": "e5fe1fc3-d9fe-4b1b-85d3-7d8ecb84a829",
+  "spans": [
+    {
+      "face_id": "steady_aim",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Untap",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/2"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q36_untap_reach_pump_batch::q36_untap_reach_pump_canary_simplest",
+      "covers": "simplest canary for this actual card"
+    },
+    {
+      "test": "scenario q36_untap_reach_pump_batch::q36_untap_reach_pump_cards_apply_the_printed_changes_and_expire",
+      "covers": "actual card is exercised by the shared 08-untap-reach-pump scenario"
+    },
+    {
+      "test": "scenario q36_untap_reach_pump_batch::q36_untap_reach_pump_cards_accept_an_already_untapped_creature",
+      "covers": "actual card is exercised by the shared 08-untap-reach-pump scenario"
+    },
+    {
+      "test": "scenario q36_untap_reach_pump_batch::q36_untap_reach_pump_cards_require_a_creature_target",
+      "covers": "actual card is exercised by the shared 08-untap-reach-pump scenario"
+    },
+    {
+      "test": "scenario q36_untap_reach_pump_batch::q36_untap_reach_pump_cards_fizzle_when_the_target_is_gone",
+      "covers": "actual card is exercised by the shared 08-untap-reach-pump scenario"
+    },
+    {
+      "test": "mechanic_registry::q36_untap_reach_pump_batch::q36_untap_reach_pump_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q36_untap_reach_pump_batch::q36_untap_reach_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

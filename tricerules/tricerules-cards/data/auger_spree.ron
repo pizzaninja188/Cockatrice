@@ -1,0 +1,13 @@
+// Oracle c0c96c7a-02d8-40cb-a08b-4a2a3b631eef; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 613.4c (layer 7c negative toughness), 611.2a/514.2 (until end of turn) and 115.1 (target).
+// The card has no pinned ruling.
+
+(
+  id: "auger_spree",
+  name: "Auger Spree",
+  face_id: "auger_spree",
+  mana_cost: "{1}{B}{R}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: 4, toughness: -4)],
+)

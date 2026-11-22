@@ -1,0 +1,12 @@
+// Oracle 5ea4d1d7-219b-4842-99ea-291842baca0d; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "zodiac_rat",
+  name: "Zodiac Rat",
+  face_id: "zodiac_rat",
+  mana_cost: "{B}",
+  types: ["Creature", "Rat"],
+  power: 1,
+  toughness: 1,
+  evasions: [Landwalk(land_subtype: "Swamp")],
+)

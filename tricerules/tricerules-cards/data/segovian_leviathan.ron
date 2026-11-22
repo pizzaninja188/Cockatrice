@@ -1,0 +1,12 @@
+// Oracle 853b02e1-fc0a-413b-8381-88596624440f; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "segovian_leviathan",
+  name: "Segovian Leviathan",
+  face_id: "segovian_leviathan",
+  mana_cost: "{4}{U}",
+  types: ["Creature", "Leviathan"],
+  power: 3,
+  toughness: 3,
+  evasions: [Landwalk(land_subtype: "Island")],
+)

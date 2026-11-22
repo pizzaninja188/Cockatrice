@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle c3c9da49-ef4f-48c7-99c8-0f226b485285.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "warriors_honor",
+  name: "Warrior's Honor",
+  face_id: "warriors_honor",
+  mana_cost: "{2}{W}",
+  types: ["Instant"],
+  spell_effect: [PumpAll(filter: (controller: YouControl), power: 1, toughness: 1)],
+)

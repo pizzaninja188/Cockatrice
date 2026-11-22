@@ -1,0 +1,20 @@
+// Oracle 045b2b84-96bd-46fb-8aae-a33968e741c7; source/rulings checked 2026-11-13.
+// CR 603.6c/700.4 (dies trigger), 115.1 (targets), 120.1/120.3 (damage), and
+// 608.2b (a target that left is not damaged).
+(
+  id: "mudbutton_torchrunner",
+  name: "Mudbutton Torchrunner",
+  face_id: "mudbutton_torchrunner",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Goblin", "Warrior"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfDies,
+      effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
+    ),
+  ],
+)

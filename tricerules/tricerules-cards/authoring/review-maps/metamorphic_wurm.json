@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "512477f0-1083-423b-9675-a8bc852f7d88",
+  "spans": [
+    {
+      "face_id": "metamorphic_wurm",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::ConditionalSelfModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition/ConditionalSelfModifier"
+    },
+    {
+      "symbol": "GameCondition::GraveyardAggregate",
+      "typed_path": "/faces/0/static_abilities/0/definition/ConditionalSelfModifier/condition/GraveyardAggregate"
+    },
+    {
+      "symbol": "GraveyardAggregate::CardCount",
+      "typed_path": "/faces/0/static_abilities/0/definition/ConditionalSelfModifier/condition/GraveyardAggregate/aggregate"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q41_static_keyword_batch::q41_threshold_pump_cards_apply_their_printed_bonus",
+      "covers": "actual card applies its printed bonus at seven cards and loses it below seven"
+    },
+    {
+      "test": "mechanic_registry::q41_cohorts_batch::q41_threshold_pump_maps_definitions",
+      "covers": "reviewed identity and printed threshold values"
+    },
+    {
+      "test": "scenario q41_static_keyword_batch::q41_threshold_pump_canary_hardest_uses_only_the_controllers_graveyard",
+      "covers": "hardest canary: opponent graveyards do not count"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

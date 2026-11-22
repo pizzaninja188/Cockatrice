@@ -1,0 +1,20 @@
+// Oracle ee3fd92c-48e0-4651-aeda-7eb2c75acbb0; source/rulings checked 2026-11-12.
+// CR 702.9 (Flying), 603.6a (enters trigger) and 701.22 (Scry).
+(
+  id: "willow-wind",
+  name: "Willow-Wind",
+  face_id: "willow_wind",
+  mana_cost: "{4}{U}",
+  types: ["Creature", "Elemental"],
+  power: 3,
+  toughness: 4,
+  keywords: [Flying],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Scry(count: 2)],
+    ),
+  ],
+)

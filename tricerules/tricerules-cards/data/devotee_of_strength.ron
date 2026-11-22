@@ -1,0 +1,25 @@
+// Oracle a6d8f944-f516-49d7-9aa8-77b98e862d6a; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 (activation), 118.3 (paying the printed cost), 115.1 (one target
+// creature), 611.2a/613.4c (until-end-of-turn pump) and 514.2 (cleanup expiry).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "devotee_of_strength",
+  name: "Devotee of Strength",
+  face_id: "devotee_of_strength",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Snake", "Wizard"],
+  power: 3,
+  toughness: 2,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{4}{G}")],
+    effect: [PumpTarget(power: 2, toughness: 2, subject: Chosen((kind: Creature)))],
+    targeting: Some((groups: [(
+      min: 1, max: 1,
+      prompt: "Choose target creature",
+      effect_indices: [0],
+    )])),
+  )],
+)

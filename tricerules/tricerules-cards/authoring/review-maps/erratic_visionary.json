@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "334c0913-0ce0-4934-979d-64dbc1ec4aa2",
+  "spans": [
+    {
+      "face_id": "erratic_visionary",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/program/body/steps/0",
+        "/faces/0/activated_abilities/0/program/body/steps/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/activated_abilities/0/program/body/steps/1/kind/Perform/Discard"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario soothsayer_adept_batch::soothsayer_adept_batch_cards_draw_then_discard_mandatorily",
+      "covers": "actual erratic_visionary draws before the mandatory one-card discard and applies both in one resolution"
+    },
+    {
+      "test": "scenario soothsayer_adept_batch::soothsayer_adept_batch_cards_require_mana_and_an_untapped_creature",
+      "covers": "actual erratic_visionary rejects activation without mana or an untapped creature without changing state"
+    },
+    {
+      "test": "mechanic_registry::soothsayer_adept_batch::soothsayer_adept_batch_maps_definitions",
+      "covers": "reviewed identity, costs, body, Program order and presentation of erratic_visionary"
+    },
+    {
+      "test": "mechanic_registry::soothsayer_adept_batch::soothsayer_adept_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for erratic_visionary"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

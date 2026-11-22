@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "7408b9c5-7266-4627-be4e-b691cf5c622c",
+  "spans": [
+    {
+      "face_id": "deja_vu",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q50_cohorts_batch::q50_graveyard_to_hand_cards_return_only_their_filtered_cards",
+      "covers": "actual card returns only a matching card from its controller's graveyard"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_graveyard_to_hand_cards_reject_opponent_graveyards_and_fizzle_stale_targets",
+      "covers": "actual card rejects another graveyard and fizzles a stale target"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_graveyard_to_hand_cards_reject_nonmatching_cards",
+      "covers": "actual card rejects a nonmatching card in the controller's graveyard"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_graveyard_to_hand_maps_definitions",
+      "covers": "reviewed graveyard return identity and filter"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for D\u00e9j\u00e0 Vu"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

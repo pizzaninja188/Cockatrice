@@ -1,0 +1,66 @@
+{
+  "format_version": 1,
+  "oracle_id": "de8ebe4b-d86d-478b-946e-f83e1409b63f",
+  "spans": [
+    {
+      "face_id": "gerrards_command",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Untap",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q32_untap_pump_batch::q32_untap_pump_canary_simplest",
+      "covers": "actual gerrards_command is exercised by the shared 09-untap-pump actual-card scenario"
+    },
+    {
+      "test": "scenario q32_untap_pump_batch::q32_untap_pump_canary_hardest",
+      "covers": "actual gerrards_command is exercised by the shared 09-untap-pump actual-card scenario"
+    },
+    {
+      "test": "scenario q32_untap_pump_batch::q32_untap_pump_cards_untap_and_apply_the_printed_pump_until_cleanup",
+      "covers": "actual gerrards_command is exercised by the shared 09-untap-pump actual-card scenario"
+    },
+    {
+      "test": "scenario q32_untap_pump_batch::q32_untap_pump_cards_may_target_an_already_untapped_creature",
+      "covers": "actual gerrards_command is exercised by the shared 09-untap-pump actual-card scenario"
+    },
+    {
+      "test": "scenario q32_untap_pump_batch::q32_untap_pump_cards_may_target_an_opponents_creature",
+      "covers": "actual gerrards_command is exercised by the shared 09-untap-pump actual-card scenario"
+    },
+    {
+      "test": "scenario q32_untap_pump_batch::q32_untap_pump_cards_reject_a_noncreature_and_fizzle_a_stale_target",
+      "covers": "actual gerrards_command is exercised by the shared 09-untap-pump actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::q32_untap_pump_batch::q32_untap_pump_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and pinned Oracle fingerprint of gerrards_command"
+    },
+    {
+      "test": "mechanic_registry::q32_untap_pump_batch::q32_untap_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "reviewed identity, typed shape and pinned Oracle fingerprint of gerrards_command"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

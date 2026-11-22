@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "3eabd27c-bd65-479a-9743-e90e4273c016",
+  "spans": [
+    {
+      "face_id": "sneaking_guide",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ApplyCombatRestriction",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "CombatRestriction.cant_be_blocked",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/ApplyCombatRestriction/restriction"
+    },
+    {
+      "symbol": "TargetFilter.power",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/ApplyCombatRestriction/scope"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q43_power_unblockable_batch::q43_power_unblockable_canary_restricts_the_chosen_creature",
+      "covers": "actual card pays exactly and restricts only the chosen legal creature"
+    },
+    {
+      "test": "scenario q43_power_unblockable_batch::q43_power_unblockable_cards_apply_the_printed_power_limit",
+      "covers": "every actual card applies its printed power limit"
+    },
+    {
+      "test": "scenario q43_power_unblockable_batch::q43_power_unblockable_cards_require_the_printed_mana_and_respect_the_power_limit",
+      "covers": "missing mana is rejected and an over-limit creature is not a target"
+    },
+    {
+      "test": "scenario q43_power_unblockable_batch::q43_power_unblockable_cards_recheck_the_power_limit_at_resolution",
+      "covers": "the power limit is rechecked at resolution and a later pump does not remove the restriction"
+    },
+    {
+      "test": "scenario q43_power_unblockable_batch::q43_power_unblockable_access_tunnel_adds_colorless_mana",
+      "covers": "Access Tunnel's separate mana ability taps for one colorless mana"
+    },
+    {
+      "test": "mechanic_registry::q43_cohorts_batch::q43_power_unblockable_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of sneaking_guide"
+    },
+    {
+      "test": "mechanic_registry::q43_cohorts_batch::q43_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for sneaking_guide"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

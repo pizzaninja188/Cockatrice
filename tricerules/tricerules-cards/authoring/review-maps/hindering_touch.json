@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "90c6f338-fc41-4499-8f39-1cd202a2cd31",
+  "spans": [
+    {
+      "face_id": "hindering_touch",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_keywords",
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellKeyword::Storm",
+      "typed_path": "/faces/0/spell_keywords"
+    },
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_b::q55_b_hindering_touch_storm_copies_counter_each_target",
+      "covers": "actual Hindering Touch creates a storm copy that counters the shared target"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_b::q55_b_soft_counter_riders_map_definitions",
+      "covers": "shared registry identity for the soft-counter-with-rider spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_b::q55_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Hindering Touch"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

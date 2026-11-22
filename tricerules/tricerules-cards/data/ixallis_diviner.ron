@@ -1,0 +1,20 @@
+// Oracle 56c930c4-77e8-4547-8d55-663dc68ccf13; source/rulings checked 2026-11-13.
+// CR 603.6a (entry trigger), 701.44a-c (explore and last-known information),
+// 701.20a (reveal), and 608.2c/d (instruction order and the graveyard-or-top choice).
+(
+  id: "ixallis_diviner",
+  name: "Ixalli's Diviner",
+  face_id: "ixallis_diviner",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Human", "Druid"],
+  power: 0,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Explore(subject: Source)],
+    ),
+  ],
+)

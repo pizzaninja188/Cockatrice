@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "2e44fd5c-5c7f-4ca8-90cd-34015047eb26",
+  "spans": [
+    {
+      "face_id": "war_priest_of_thune",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q30_etb_naturalize_batch::q30_etb_naturalize_cards_cast_with_exact_cost_and_body",
+      "covers": "actual war_priest_of_thune is exercised by the shared 07-etb-naturalize evidence"
+    },
+    {
+      "test": "scenario q30_etb_naturalize_batch::q30_etb_naturalize_cards_may_destroy_matching_permanent",
+      "covers": "actual war_priest_of_thune is exercised by the shared 07-etb-naturalize evidence"
+    },
+    {
+      "test": "scenario q30_etb_naturalize_batch::q30_etb_naturalize_cards_may_decline",
+      "covers": "actual war_priest_of_thune is exercised by the shared 07-etb-naturalize evidence"
+    },
+    {
+      "test": "scenario q30_etb_naturalize_batch::q30_etb_naturalize_cards_ignore_the_other_permanent_type",
+      "covers": "actual war_priest_of_thune is exercised by the shared 07-etb-naturalize evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_etb_naturalize_batch::q30_etb_naturalize_batch_maps_definitions",
+      "covers": "actual war_priest_of_thune is exercised by the shared 07-etb-naturalize evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_etb_naturalize_batch::q30_etb_naturalize_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual war_priest_of_thune is exercised by the shared 07-etb-naturalize evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

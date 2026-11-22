@@ -1,0 +1,16 @@
+// Oracle 3c88108e-d983-427a-9b85-b9cdd2d5083b; source/rulings checked 2026-11-15.
+// CR 702.41a (affinity for artifacts), 601.2f (cost reduction while
+// the spell is on the stack) and 702.9a-b (flying).
+(
+  id: "somber_hoverguard",
+  name: "Somber Hoverguard",
+  face_id: "somber_hoverguard",
+  mana_cost: "{5}{U}",
+  types: ["Creature", "Drone"],
+  power: 3,
+  toughness: 2,
+  keywords: [Flying],
+  cost_modifiers: [
+    BattlefieldCountGenericReduction(amount_per_match: 1, filter: (controllers: Controller, card_type: Some(Artifact), name: None)),
+  ],
+)

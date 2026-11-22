@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "658d54d4-e967-490c-b958-3743b3b1ef45",
+  "spans": [
+    {
+      "face_id": "rage_scarred_berserker",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q50_cohorts_batch::q50_etb_pump_canary_hardest_rage_scarred_berserker_grants_indestructible",
+      "covers": "canary hardest grants indestructible"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_etb_pump_cards_target_only_your_creatures_and_expire",
+      "covers": "actual card pumps only a creature you control and expires at cleanup"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_etb_triggered_cards_fizzle_stale_targets",
+      "covers": "actual card fizzles when its chosen target left"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_etb_pump_maps_definitions",
+      "covers": "reviewed pump creature identity and trigger"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Rage-Scarred Berserker"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "bf0948b7-f7af-4d99-a8aa-ea7e6a69232d",
+  "spans": [
+    {
+      "face_id": "nyleas_forerunner",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "nyleas_forerunner",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "StaticAbilityDef::AnthemKeyword",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q47_cohorts_batch::q47_team_trample_canary_simplest_grants_other_creatures_trample",
+      "covers": "canary simplest actual card grants trample only to other controlled creatures"
+    },
+    {
+      "test": "scenario q47_cohorts_batch::q47_team_trample_canary_hardest_supports_an_ability_word",
+      "covers": "canary hardest preserves an ability-word line while granting trample"
+    },
+    {
+      "test": "scenario q47_cohorts_batch::q47_team_trample_cards_share_the_printed_shape",
+      "covers": "every actual card keeps the live anthem and ends it when the source leaves"
+    },
+    {
+      "test": "mechanic_registry::q47_cohorts_batch::q47_team_trample_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q47_cohorts_batch::q47_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

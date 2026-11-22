@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "07beecfd-1720-42a1-93f8-f06604c3c228",
+  "spans": [
+    {
+      "face_id": "lace_with_moonglove",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "lace_with_moonglove",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_a::q56_a_keyword_cantrips_grant_only_the_printed_keyword_to_the_target",
+      "covers": "actual lace_with_moonglove applies its printed effects to the chosen target"
+    },
+    {
+      "test": "scenario q56_batch_a::q56_a_canary_hardest_lace_with_moonglove_grants_deathtouch_and_draws",
+      "covers": "actual lace_with_moonglove canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_a::q56_a_keyword_cantrips_map_definitions",
+      "covers": "shared registry identity for lace_with_moonglove"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

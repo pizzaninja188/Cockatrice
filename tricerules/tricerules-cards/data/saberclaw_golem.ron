@@ -1,0 +1,22 @@
+// Oracle 4989d38e-332f-48f5-863b-1566921156c8; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 and 118.3 (mana cost), 611.2a/514.2 (until end of turn), 613 layer 6 (keyword grant) and 702.7 (first strike).
+// The card has no pinned ruling.
+
+(
+  id: "saberclaw_golem",
+  name: "Saberclaw Golem",
+  face_id: "saberclaw_golem",
+  mana_cost: "{5}",
+  types: ["Artifact", "Creature", "Golem"],
+  power: 4,
+  toughness: 2,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{R}")],
+      effect: [GrantKeywords(subject: Source, keywords: [FirstStrike])],
+    ),
+  ],
+)

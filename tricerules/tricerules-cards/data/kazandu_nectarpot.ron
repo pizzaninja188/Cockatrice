@@ -1,0 +1,22 @@
+// Oracle 263b526c-8b81-44ee-a7c4-5c24bf9b42a4; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (landfall entry trigger) and 119.3 (life gain). Pinned rulings confirm
+// any land entry for any reason triggers landfall; no other behavior changes.
+(
+  id: "kazandu_nectarpot",
+  name: "Kazandu Nectarpot",
+  face_id: "kazandu_nectarpot",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Insect"],
+  power: 1,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Land)),
+    ),
+    effect: [GainLife(amount: 1)],
+  )],
+)

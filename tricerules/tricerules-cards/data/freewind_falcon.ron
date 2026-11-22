@@ -1,0 +1,14 @@
+// Oracle 8cdda36f-5e82-4c2f-8eaa-75b9bbc93a02; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying) and 702.16b-f (protection from a color: no targeting, damage,
+// attachment, or blocking by red sources).
+(
+  id: "freewind_falcon",
+  name: "Freewind Falcon",
+  face_id: "freewind_falcon",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Bird"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+  protections: [Color(Red)],
+)

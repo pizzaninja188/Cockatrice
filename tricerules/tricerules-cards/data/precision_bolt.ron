@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 5f9ea6e4-f5be-4ea2-95b4-fbdc69685ac5.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "precision_bolt",
+  name: "Precision Bolt",
+  face_id: "precision_bolt",
+  mana_cost: "{2}{R}",
+  types: ["Sorcery"],
+  spell_effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
+)

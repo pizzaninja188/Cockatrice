@@ -1,0 +1,160 @@
+diff --git a/build/campaign/next/HANDOFF-queue-v50.md b/build/campaign/next/HANDOFF-queue-v50.md
+new file mode 100644
+index 000000000..97ea6ba78
+--- /dev/null
++++ b/build/campaign/next/HANDOFF-queue-v50.md
+@@ -0,0 +1,44 @@
++# Handoff after queue-v50
++
++## Delivered
++
++Nine families, 34 cards, independently reviewed, gated, committed and pushed to
++`origin/card-campaign`. Family commits `8a1a0054c`..`882b764d6`; shared evidence commits
++`99a3b0991`, `c664a8f83`, `628b74170`, `0c2a0ed5e`; remote SHA
++`0c2a0ed5ea6fee54a2760f1fe3cfcd061586ed82`.
++
++| Family | Cards | Gate |
++|---|---:|---|
++| `01-put-on-top` | 6 | `verify-03010474-87bb-4f4c-a841-cc732863c003` |
++| `02-graveyard-to-hand` | 4 | same consolidated gate |
++| `03-tap-stun-spells` | 4 | same consolidated gate |
++| `04-etb-shrink` | 4 | same consolidated gate |
++| `05-etb-pump-target` | 3 | same consolidated gate |
++| `06-etb-counter-another` | 3 | same consolidated gate |
++| `07-basic-land-to-hand` | 4 | same consolidated gate |
++| `08-treasure-on-death` | 3 | same consolidated gate |
++| `09-destroy-artifact-enchant` | 3 | same consolidated gate |
++
++The consolidated full gate passed exit 0 (`Side Rust`, `-CardData`). `CARDS.md` now reports
++5267 full + 8 partial / 35533 cards. `status.tsv` has nine new verified rows.
++
++## Queue state
++
++`build/campaign/queue-v50/` holds the selection, revalidation, source/rulings, maps, family
++records, frozen bundles and report. Queue-v50 is exhausted. The next run should expand under
++`queue-v51/`.
++
++## Ready candidates not selected
++
++- Further filtered graveyard returns, ETB shrink/pump cohorts, basic-land searches and
++  artifact/enchantment destruction remain visible in the pinned bulk; revalidate each against a
++  shipped analogue.
++- `Revive` / `Reborn Hope` are blocked on #524 (color/multicolored graveyard-card predicate).
++- Existing blockers #515–#523 were not retried.
++
++## Environment notes
++
++- Reuse `build/campaign/run-final-gate.sh` with `-CardsXml build/campaign/source/cards-validation.xml`.
++- `cargo clean --profile dev` remains the disk recovery; it freed 30.2 GiB here.
++- The authoring-feature Clippy precheck retains the pre-existing q46 type-inference failure; the
++  default full-gate Clippy used by delivery passes.
+diff --git a/build/campaign/queue-v50/families/04-etb-shrink/family.md b/build/campaign/queue-v50/families/04-etb-shrink/family.md
+index 1454ca247..89b4322dd 100644
+--- a/build/campaign/queue-v50/families/04-etb-shrink/family.md
++++ b/build/campaign/queue-v50/families/04-etb-shrink/family.md
+@@ -37,6 +37,7 @@ Exact records and pinned rulings: `source/<oracle-id>.json` and `rulings/<oracle
+ 
+ ## Delivery
+ 
+-- Independent read-only review: pending.
+-- Batch gate: pending.
++- Independent read-only review: approved in hash-verified `build/campaign/queue-v50/freeze/batch-b.json` (initial review plus delta reviews; no remaining blocking findings).
++- Batch gate: consolidated queue-v50 full gate `verify-03010474-87bb-4f4c-a841-cc732863c003` passed exit 0 (`Side Rust`, `-CardData`) covering `01-put-on-top`..`09-destroy-artifact-enchant`.
++- Family commit `d8dca4c9b`; shared evidence commit `0c2a0ed5e`.
+ - Acceptance: rules-data only; no GUI, networking, privacy or physical-identity surface.
+diff --git a/build/campaign/queue-v50/families/05-etb-pump-target/family.md b/build/campaign/queue-v50/families/05-etb-pump-target/family.md
+index b787e18ba..7f2117f77 100644
+--- a/build/campaign/queue-v50/families/05-etb-pump-target/family.md
++++ b/build/campaign/queue-v50/families/05-etb-pump-target/family.md
+@@ -36,6 +36,7 @@ Exact records and pinned rulings: `source/<oracle-id>.json` and `rulings/<oracle
+ 
+ ## Delivery
+ 
+-- Independent read-only review: pending.
+-- Batch gate: pending.
++- Independent read-only review: approved in hash-verified `build/campaign/queue-v50/freeze/batch-b.json` (initial review plus delta reviews; no remaining blocking findings).
++- Batch gate: consolidated queue-v50 full gate `verify-03010474-87bb-4f4c-a841-cc732863c003` passed exit 0 (`Side Rust`, `-CardData`) covering `01-put-on-top`..`09-destroy-artifact-enchant`.
++- Family commit `933a9f526`; shared evidence commit `0c2a0ed5e`.
+ - Acceptance: rules-data only; no GUI, networking, privacy or physical-identity surface.
+diff --git a/build/campaign/queue-v50/families/06-etb-counter-another/family.md b/build/campaign/queue-v50/families/06-etb-counter-another/family.md
+index 9c008a895..c50be160f 100644
+--- a/build/campaign/queue-v50/families/06-etb-counter-another/family.md
++++ b/build/campaign/queue-v50/families/06-etb-counter-another/family.md
+@@ -36,6 +36,7 @@ Exact records and pinned rulings: `source/<oracle-id>.json` and `rulings/<oracle
+ 
+ ## Delivery
+ 
+-- Independent read-only review: pending.
+-- Batch gate: pending.
++- Independent read-only review: approved in hash-verified `build/campaign/queue-v50/freeze/batch-b.json` (initial review plus delta reviews; no remaining blocking findings).
++- Batch gate: consolidated queue-v50 full gate `verify-03010474-87bb-4f4c-a841-cc732863c003` passed exit 0 (`Side Rust`, `-CardData`) covering `01-put-on-top`..`09-destroy-artifact-enchant`.
++- Family commit `0608ab3c0`; shared evidence commit `0c2a0ed5e`.
+ - Acceptance: rules-data only; no GUI, networking, privacy or physical-identity surface.
+diff --git a/build/campaign/queue-v50/report.md b/build/campaign/queue-v50/report.md
+new file mode 100644
+index 000000000..2c78ab0ae
+--- /dev/null
++++ b/build/campaign/queue-v50/report.md
+@@ -0,0 +1,62 @@
++# Queue v50 report
++
++## Result
++
++Nine families, 34 cards, independently reviewed, gated, committed and pushed to
++`origin/card-campaign`. Family commits `8a1a0054c`..`882b764d6`; shared evidence commits
++`99a3b0991`, `c664a8f83`, `628b74170`, `0c2a0ed5e`; remote SHA
++`0c2a0ed5ea6fee54a2760f1fe3cfcd061586ed82`.
++
++| Family | Cards | Commit | Bundle |
++|---|---:|---|---|
++| `01-put-on-top` | 6 | `8a1a0054c` | A |
++| `02-graveyard-to-hand` | 4 | `db143f0a0` | A |
++| `03-tap-stun-spells` | 4 | `d0ebf0420` | A |
++| `04-etb-shrink` | 4 | `d8dca4c9b` | B |
++| `05-etb-pump-target` | 3 | `933a9f526` | B |
++| `06-etb-counter-another` | 3 | `0608ab3c0` | B |
++| `07-basic-land-to-hand` | 4 | `5be57344f` | C |
++| `08-treasure-on-death` | 3 | `a1d883392` | C |
++| `09-destroy-artifact-enchant` | 3 | `882b764d6` | C |
++
++The consolidated queue-v50 full gate `verify-03010474-87bb-4f4c-a841-cc732863c003` passed
++exit 0 (`Side Rust`, `-CardData`). The worktree was clean before the gate; no unrelated changes
++were staged.
++
++## Evidence
++
++- Intended red: two canary tests per family held out of the registry, all exit 101 with
++  `MissingCard` (`build/verification-logs/*q50-intended-red-*.log`).
++- Focused green: 41/41 scenario and 10/10 registry tests, exit 0
++  (`20261120-163633-114-q50-scenario-green-v4.log`,
++  `20261120-163633-113-q50-registry-green-v4.log`).
++- Review maps: 34 selected maps passed Preparation evidence and executable-reference checks
++  (`card-evidence-6e6ed57a-3ed0-4a08-9a24-329fdc3d6dd3`, exit 0).
++- Metadata: one refresh; 34 fingerprint rows and 34 checklist flips changed, no unrelated drift.
++- Independent review: three hash-verified frozen bundles approved after material/delta findings
++  (graveyard filter negatives, Boggart noncreature Goblin, disjunctive put-top branches, family-06
++  scope and `another`, Cobra death, Return-to-the-Earth artifact branch, stale-target loop,
++  nonbasic search negative, map citations, CR citations). Prior bundles are preserved under
++  `freeze/v2`, `freeze/v3`, `freeze/v4`; current bundles are `freeze/batch-a.json` etc.
++- Presentation: a mechanical exception row was added for the four optional search branches
++  (`presentation-exceptions.tsv`), matching the existing `sylvan_ranger` convention.
++
++## Queue state
++
++`build/campaign/queue-v50/` holds the selection, revalidation, per-family source/rulings and
++records, maps, frozen bundles and this report. Queue-v50 is exhausted.
++
++## Ejected or deferred
++
++- `Revive` (`51991d28-...`) and `Reborn Hope` (`683d8deb-...`) were deferred: `ZoneCardFilter`
++  has no color or multicolored predicate. Filed issue #524 and recorded both rows in
++  `blocked.tsv`; the remaining four-card graveyard family was admitted whole.
++- Existing blockers #515–#523 were not retried.
++
++## Environment notes
++
++- `cargo clean --profile dev` freed 30.2 GiB after the first gate stop reported 10.0 GiB
++  available against a 10.0 GiB requirement.
++- The full gate's Clippy step required two test-only `vec!` -> array fixes; no production change.
++- The conformance baseline needed the three unsupported graveyard-target fixture classifications;
++  they are target-group fixture limitations, not card semantics.

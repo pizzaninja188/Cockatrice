@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "1492e778-b85e-4675-b48c-bc0a2eb1d105",
+  "spans": [
+    {
+      "face_id": "sootwalkers",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::SelfCombatRestriction",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "CombatRestriction.cant_be_blocked_by",
+      "typed_path": "/faces/0/static_abilities/0/definition/SelfCombatRestriction/restriction"
+    },
+    {
+      "symbol": "TargetFilter.is_color",
+      "typed_path": "/faces/0/static_abilities/0/definition/SelfCombatRestriction/restriction/cant_be_blocked_by"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q44_cohorts_batch::q44_hybrid_evasion_canary_checks_the_printed_color",
+      "covers": "actual card rejects a blocker of its printed color and allows another color"
+    },
+    {
+      "test": "scenario q44_cohorts_batch::q44_hybrid_evasion_cards_reject_only_the_printed_color",
+      "covers": "every actual card applies only its printed blocker-color restriction"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_hybrid_evasion_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of sootwalkers"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for sootwalkers"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

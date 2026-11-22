@@ -1,0 +1,24 @@
+// Oracle 9d061ec5-1edf-46e7-9e6a-4ddc9ced4114; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (landfall entry trigger), 611.2c/613.4c (until-end-of-turn pump) and the
+// printed keyword or combat restriction static.
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "ondu_greathorn",
+  name: "Ondu Greathorn",
+  face_id: "ondu_greathorn",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Beast"],
+  power: 2,
+  toughness: 3,
+  keywords: [FirstStrike],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Land)),
+    ),
+    effect: [PumpTarget(power: 2, toughness: 2, subject: Source)],
+  )],
+)

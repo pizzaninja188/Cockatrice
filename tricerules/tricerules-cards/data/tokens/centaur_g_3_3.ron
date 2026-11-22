@@ -1,0 +1,10 @@
+// 3/3 green Centaur creature token (Call of the Conclave).
+(
+  id: "centaur_g_3_3",
+  name: "Centaur",
+  face_id: "centaur",
+  types: ["Creature", "Centaur"],
+  colors: [Green],
+  power: 3,
+  toughness: 3,
+)

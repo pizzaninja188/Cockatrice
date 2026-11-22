@@ -1,0 +1,22 @@
+// Oracle 032cc574-f7e7-4753-9a30-76cbd45d9563; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 700.4/603.6c (dies trigger), 119.3 (life loss) and 608.2c (each player follows the instruction).
+// The card has no pinned ruling.
+
+(
+  id: "caustic_hound",
+  name: "Caustic Hound",
+  face_id: "caustic_hound",
+  mana_cost: "{5}{B}",
+  types: ["Creature", "Phyrexian", "Dog"],
+  power: 4,
+  toughness: 4,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfDies,
+      effect: [LoseLife(amount: Fixed(4), who: EachPlayer)],
+    ),
+  ],
+)

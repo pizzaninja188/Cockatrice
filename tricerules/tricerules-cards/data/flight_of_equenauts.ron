@@ -1,0 +1,13 @@
+// Oracle 5212e707-b487-46b6-aa51-cea3be8cbe00; source/rulings checked 2026-11-15.
+// CR 702.51a-c (Convoke taps creatures to pay generic or a matching color),
+// 601.2h (payment order), and the printed keyword's normal rules.
+(
+  id: "flight_of_equenauts",
+  name: "Flight of Equenauts",
+  face_id: "flight_of_equenauts",
+  mana_cost: "{7}{W}",
+  types: ["Creature", "Human", "Knight"],
+  power: 4,
+  toughness: 5,
+  keywords: [Convoke, Flying],
+)

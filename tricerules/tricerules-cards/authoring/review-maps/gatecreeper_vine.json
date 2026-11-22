@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "0f539127-535f-4e0d-abaa-e884521098d2",
+  "spans": [
+    {
+      "face_id": "gatecreeper_vine",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "gatecreeper_vine",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Defender",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/SearchLibrary"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q50_cohorts_batch::q50_basic_land_search_cards_offer_only_their_printed_filters",
+      "covers": "actual card offers only basic lands and its printed subtype"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_basic_land_search_cards_may_decline_the_search",
+      "covers": "actual card may decline the optional search"
+    },
+    {
+      "test": "scenario issue_110_library_search::embermouth_rechecks_the_dragon_condition_when_the_search_completes",
+      "covers": "shared search path asserts exactly one revealed found card and one shuffle after an accepted search"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_basic_land_maps_definitions",
+      "covers": "reviewed basic-land search identity and program"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Gatecreeper Vine"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

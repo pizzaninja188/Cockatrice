@@ -1,0 +1,20 @@
+// Oracle 4f92804f-a231-4406-9a16-f4e102517b06; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.2 (activate), 115.1 (one creature target), 118.3 (costs) and 611.2c/613.4c (until-end-of-turn penalty).
+(
+  id: "grandmother_sengir",
+  name: "Grandmother Sengir",
+  face_id: "grandmother_sengir",
+  mana_cost: "{4}{B}",
+  types: ["Creature", "Human", "Wizard"],
+  supertypes: ["Legendary"],
+  power: 3,
+  toughness: 3,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{1}{B}"), Tap],
+    effect: [PumpTarget(power: -1, toughness: -1, subject: Chosen((kind: Creature)))],
+    targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+  )],
+)

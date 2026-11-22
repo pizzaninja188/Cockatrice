@@ -1,0 +1,22 @@
+// Oracle ab4a25d8-e1d0-454e-9d06-f7960a0352bc; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/118.3 (activated ability and cost), 701.26 (tap), 120.2/120.3 (damage),
+// 115.1a (any target) and 302.6 (summoning sickness; haste overrides).
+(
+  id: "cunning_sparkmage",
+  name: "Cunning Sparkmage",
+  face_id: "cunning_sparkmage",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Human", "Shaman"],
+  power: 0,
+  toughness: 1,
+  keywords: [Haste],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [DamageTarget(amount: 1, target: (kind: AnyTarget))],
+    ),
+  ],
+)

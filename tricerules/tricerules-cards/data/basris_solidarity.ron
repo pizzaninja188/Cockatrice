@@ -1,0 +1,17 @@
+// Oracle 68281e06-64e3-490b-8691-8f4169614ec0; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 122.1 (a counter is a marker), 608.2c (follow the spell's instructions in order),
+// and 613.4c (a +1/+1 counter modifies power and toughness in layer 7c). No card-specific ruling.
+
+(
+  id: "basris_solidarity",
+  name: "Basri's Solidarity",
+  face_id: "basris_solidarity",
+  mana_cost: "{1}{W}",
+  types: ["Sorcery"],
+  spell_effect: [PutCountersAll(
+    counter: PlusOnePlusOne,
+    count: 1,
+    filter: (controller: Some(YouControl)),
+  )],
+)

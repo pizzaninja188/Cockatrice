@@ -1,0 +1,41 @@
+// Oracle 046f5783-cc7b-416a-8cf6-2bcef9c2cc1a; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 614.1d/614.12 (enters tapped), 603.6a (enters trigger), 115.1d/608.2c-d (the land is chosen during resolution, not targeted), 401.4/400.7 (the returned card is a new object) and 605.1a/605.3b (the intrinsic two-mana ability).
+// The enters trigger is mandatory and chooses a land during resolution; the source itself is a legal choice.
+
+(
+  id: "simic_growth_chamber",
+  name: "Simic Growth Chamber",
+  face_id: "simic_growth_chamber",
+  mana_cost: "",
+  types: ["Land"],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      program: Some((body: (steps: [
+        (id: "choose_land", bind: ["land"], kind: Perform(ChoosePermanents(
+          filter: (kind: AnyPermanent, permanent_types: [Land], controller: You),
+          min: 1,
+          max: 1,
+        ))),
+        (id: "return_land", input: Some("land"), kind: Perform(
+          ReturnToOwnersHand(subject: PreviousEffectObject))),
+      ]))),
+    ),
+  ],
+  activated_abilities: [
+    (
+      ability_id: "mana",
+      presentation: OracleLines([3]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [
+        (g: 1, u: 1),
+      ])],
+    ),
+  ],
+  static_abilities: [
+    (ability_id: "enters_tapped", presentation: OracleLines([1]), definition: EntersTapped(affected: Self_)),
+  ],
+)

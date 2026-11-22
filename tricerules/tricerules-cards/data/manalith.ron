@@ -1,0 +1,17 @@
+// Oracle bd9e416a-89b3-4912-be9b-49fce6a93dc9; source/rulings checked 2026-11-12.
+// CR 605.1a/605.3b (tap mana ability), 106.1a (five colors), and 302.6/602.5a (a creature must be untapped and not summoning-sick).
+(
+  id: "manalith",
+  name: "Manalith",
+  face_id: "manalith",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+    ),
+  ],
+)

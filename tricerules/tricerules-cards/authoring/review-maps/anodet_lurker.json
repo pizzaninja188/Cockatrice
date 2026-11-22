@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "5c2dbe90-5784-4bc4-a715-76a61c1ecfbc",
+  "spans": [
+    {
+      "face_id": "anodet_lurker",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario dies_gain_life_batch::dies_gain_life_batch_cards_gain_their_printed_life_when_they_die",
+      "covers": "actual anodet_lurker clause coverage"
+    },
+    {
+      "test": "scenario dies_gain_life_batch::dies_gain_life_batch_cards_do_not_gain_life_when_exiled",
+      "covers": "actual anodet_lurker clause coverage"
+    },
+    {
+      "test": "scenario dies_gain_life_batch::dies_gain_life_batch_cards_scope_the_gain_to_their_controller",
+      "covers": "actual anodet_lurker clause coverage"
+    },
+    {
+      "test": "mechanic_registry::dies_gain_life_batch::dies_gain_life_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of anodet_lurker"
+    },
+    {
+      "test": "mechanic_registry::dies_gain_life_batch::dies_gain_life_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for anodet_lurker"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

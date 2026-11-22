@@ -1,0 +1,14 @@
+// Oracle 09386931-59bd-481f-bccc-32e8a8abc0f9; source/rulings checked 2026-11-21 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 111.1/111.2 (the 3/3 green Elephant token), 702.34a-d (flashback alternative cost and exile)
+// and 304.2/601.2 (instant timing). Copy of Mammoth Bellow's token plus Firebolt's flashback cost
+// shape, retaining the Instant type.
+(
+  id: "elephant_ambush",
+  name: "Elephant Ambush",
+  face_id: "elephant_ambush",
+  mana_cost: "{2}{G}{G}",
+  flashback_cost: Some("{6}{G}{G}"),
+  types: ["Instant"],
+  spell_effect: [CreateTokens(token: "elephant_g_3_3", count: 1)],
+)

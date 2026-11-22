@@ -1,0 +1,27 @@
+// Oracle c910c1c0-2b78-4e0f-bb55-e0581b2e07e8; source/rulings checked 2026-11-11.
+// CR 702.8a (Flash), 303.4 (Aura attach), 603.6a (entry trigger), 611.2a (until-end-of-turn grant),
+// 613.4c (attached P/T modifier), 704.5m (unattached Aura cleanup), and 514.2 (cleanup).
+(
+  id: "military_discipline",
+  name: "Military Discipline",
+  face_id: "military_discipline",
+  mana_cost: "{W}",
+  types: ["Enchantment", "Aura"],
+  keywords: [Flash],
+  spell_effect: [AuraAttach()],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([3]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [GrantKeywords(subject: AttachedObject, keywords: [FirstStrike])],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([4]),
+      definition: AttachedModifier(delta_power: 1),
+    ),
+  ],
+)

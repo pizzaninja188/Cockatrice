@@ -1,0 +1,12 @@
+// Oracle f0163420-2f91-493c-bad4-2cd33e9856bf; source/rulings checked 2026-11-15.
+// CR 115.1a/601.2c (target at cast), 120.3 (damage), 702.34a-d
+// (flashback alternative cost and exile) and 608.2b (stale target).
+(
+  id: "tome_blast",
+  name: "Tome Blast",
+  face_id: "tome_blast",
+  mana_cost: "{1}{R}",
+  types: ["Sorcery"],
+  flashback_cost: Some("{4}{R}"),
+  spell_effect: [DamageTarget(amount: 2, target: (kind: AnyTarget))],
+)

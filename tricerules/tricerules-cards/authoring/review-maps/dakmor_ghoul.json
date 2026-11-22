@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "6b25b7d7-ebb1-474c-9898-e027dbf0bbdd",
+  "spans": [
+    {
+      "face_id": "dakmor_ghoul",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::DrainTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q40_remaining_cohorts_batch::q40_etb_drain_cards_apply_printed_life_changes",
+      "covers": "actual card applies its printed life loss and life gain"
+    },
+    {
+      "test": "mechanic_registry::q40_cohorts_batch::q40_etb_drain_maps_definitions",
+      "covers": "reviewed identity, target and printed amount"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

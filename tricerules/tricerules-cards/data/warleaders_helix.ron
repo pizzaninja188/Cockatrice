@@ -1,0 +1,14 @@
+// Oracle b1ea88f5-162b-4f08-bec3-be1f06dec392; source/rulings checked 2026-11-11.
+// CR 115.1 (single any-target), 120.1/120.3 (damage), 119.3 (life gain), and 608.2b (stale target fizzle).
+(
+  id: "warleaders_helix",
+  name: "Warleader's Helix",
+  face_id: "warleaders_helix",
+  mana_cost: "{2}{R}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    DamageTarget(amount: 4, target: (kind: AnyTarget)),
+    GainLife(amount: 4),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+)

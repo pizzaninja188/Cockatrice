@@ -1,0 +1,21 @@
+// Oracle a1408bae-ed5f-4837-a1a7-438dc30a2786; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1/601.2c (one creature target), 400.3 (the card moves to its owner's hand),
+// 119.3 (the target's controller loses 1 life) and 608.2b (stale target). No pinned ruling.
+(
+  id: "vapor_snag",
+  name: "Vapor Snag",
+  face_id: "vapor_snag",
+  mana_cost: "{U}",
+  types: ["Instant"],
+  spell_effect: [
+    ReturnToOwnersHand(subject: Chosen((kind: Creature))),
+    LoseLife(amount: Fixed(1), who: ControllerOfTargetGroup(group_index: 0)),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature",
+    effect_indices: [0],
+  )])),
+)

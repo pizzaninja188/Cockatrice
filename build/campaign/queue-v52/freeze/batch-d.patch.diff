@@ -1,0 +1,2302 @@
+diff --git a/build/campaign/queue-v52/build_queue.py b/build/campaign/queue-v52/build_queue.py
+new file mode 100644
+index 000000000..0ce7d226c
+--- /dev/null
++++ b/build/campaign/queue-v52/build_queue.py
+@@ -0,0 +1,186 @@
++#!/usr/bin/env python3
++"""Build the queue-v52 source/rulings packets from the pinned datasets (read-only join)."""
++from __future__ import annotations
++
++import gzip
++import hashlib
++import json
++import re
++import unicodedata
++from collections import defaultdict
++from pathlib import Path
++
++ROOT = Path("/home/ubuntu/Cockatrice")
++BUILD = ROOT / "build" / "campaign"
++OUT = BUILD / "queue-v52"
++BULK = ROOT / "oracle-cards.jsonl.gz"
++RULINGS = BUILD / "source" / "rulings.jsonl.gz"
++DATA = ROOT / "tricerules" / "tricerules-cards" / "data"
++VALIDATION = BUILD / "source" / "cards-validation.xml"
++CARDS_MD = ROOT / "tricerules" / "CARDS.md"
++
++BULK_SHA = "a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853"
++RULINGS_SHA = "3ee07dbf91347f7940b4067ab1c01e0d5097da8f6c27ef620c202ed4262aaf1f"
++
++FAMILIES = {
++    "01-destroy-artifact-land": [
++        "Demolish", "Sunder from Within", "Pillage",
++        "Victorious Destruction", "Violent Impact",
++    ],
++}
++
++
++def sha256(path: Path) -> str:
++    h = hashlib.sha256()
++    with path.open("rb") as fh:
++        for chunk in iter(lambda: fh.read(1 << 20), b""):
++            h.update(chunk)
++    return h.hexdigest()
++
++
++def slugify(name: str) -> str:
++    folded = unicodedata.normalize("NFD", name.lower())
++    text = "".join(ch for ch in folded if not unicodedata.combining(ch))
++    return "_".join(text.replace("'", "").replace("/", " ").split())
++
++
++def norm_text(card: dict) -> str:
++    parts = [card.get("oracle_text", "")]
++    for face in card.get("card_faces") or []:
++        parts.append(face.get("oracle_text", ""))
++    return re.sub(r"\s+", " ", "\n".join(parts)).strip().lower()
++
++
++def main() -> int:
++    if sha256(BULK) != BULK_SHA:
++        raise SystemExit("bulk SHA mismatch")
++    if sha256(RULINGS) != RULINGS_SHA:
++        raise SystemExit("rulings SHA mismatch")
++
++    by_name: dict[str, list[dict]] = defaultdict(list)
++    with gzip.open(BULK, "rt", encoding="utf-8") as fh:
++        for line in fh:
++            card = json.loads(line)
++            by_name[card["name"]].append(card)
++    rulings: dict[str, list[dict]] = defaultdict(list)
++    with gzip.open(RULINGS, "rt", encoding="utf-8") as fh:
++        for line in fh:
++            row = json.loads(line)
++            rulings[row["oracle_id"]].append(row)
++
++    registry_names = set()
++    registry_slugs = set()
++    for path in sorted(DATA.rglob("*.ron")):
++        if "tokens" in path.parts:
++            continue
++        text = path.read_text(encoding="utf-8")
++        for match in re.finditer(r'\bname:\s*"((?:[^"\\]|\\.)*)"', text):
++            registry_names.add(match.group(1).replace('\\"', '"').lower())
++        registry_slugs.add(path.stem)
++
++    blocked = set()
++    for line in (BUILD / "blocked.tsv").read_text(encoding="utf-8").splitlines()[1:]:
++        fields = line.split("\t")
++        if fields and fields[0]:
++            blocked.add(fields[0])
++
++    exclusions = set()
++    for line in (BUILD / "queue-exclusions.txt").read_text(encoding="utf-8").splitlines():
++        value = line.strip()
++        if value and not value.startswith("#"):
++            exclusions.add(value.lower())
++
++    done = set()
++    undone = set()
++    for line in CARDS_MD.read_text(encoding="utf-8").splitlines():
++        if line.startswith("- [x] "):
++            done.add(line[6:].strip().lower())
++        elif line.startswith("- [ ] "):
++            undone.add(line[6:].strip().lower())
++
++    validation = VALIDATION.read_text(encoding="utf-8", errors="replace")
++
++    ambiguous = set()
++    for name, group in by_name.items():
++        if len({norm_text(card) for card in group}) > 1:
++            ambiguous.add(name)
++
++    revalidation_rows = []
++    cards_rows = []
++    seen_ids = set()
++    seen_names = set()
++    for family, names in FAMILIES.items():
++        family_dir = OUT / "families" / family
++        (family_dir / "source").mkdir(parents=True, exist_ok=True)
++        (family_dir / "rulings").mkdir(parents=True, exist_ok=True)
++        for name in names:
++            group = by_name.get(name, [])
++            ok = [
++                c
++                for c in group
++                if c.get("legalities", {}).get("commander") == "legal"
++                and c.get("layout") == "normal"
++                and not c.get("card_faces")
++            ]
++            if len(ok) != 1:
++                raise SystemExit(f"{name}: expected one normal commander-legal record, found {len(ok)}")
++            card = ok[0]
++            oid = card["oracle_id"]
++            failures = []
++            if name.lower() in registry_names:
++                failures.append("already in registry")
++            if name.lower() in exclusions:
++                failures.append("in queue-exclusions")
++            if oid in blocked:
++                failures.append("in blocked.tsv")
++            if name in ambiguous:
++                failures.append("ambiguous presentation name")
++            if name.lower() not in undone:
++                failures.append("not an unchecked CARDS.md row")
++            if f"<name>{name}</name>" not in validation:
++                failures.append("not in cards-validation.xml")
++            if oid in seen_ids or name.lower() in seen_names:
++                failures.append("duplicate candidate")
++            if slugify(name) in registry_slugs:
++                failures.append("slug already in registry")
++            if failures:
++                raise SystemExit(f"{name}: {'; '.join(failures)}")
++            seen_ids.add(oid)
++            seen_names.add(name.lower())
++            (family_dir / "source" / f"{oid}.json").write_text(
++                json.dumps(card, indent=1, ensure_ascii=False), encoding="utf-8"
++            )
++            rows = rulings.get(oid, [])
++            (family_dir / "rulings" / f"{oid}.jsonl").write_text(
++                "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows),
++                encoding="utf-8",
++            )
++            oracle_flat = re.sub(r"\s+", " ", card.get("oracle_text", "")).strip()
++            revalidation_rows.append([
++                family, oid, name, card.get("mana_cost", ""), card.get("type_line", ""),
++                card.get("power", ""), card.get("toughness", ""), card.get("layout", ""),
++                card.get("legalities", {}).get("commander", ""), oracle_flat,
++                str(len(rows)),
++            ])
++            cards_rows.append([family, oid, name])
++
++    header = [
++        "family", "oracle_id", "name", "mana_cost", "type_line", "power", "toughness",
++        "layout", "commander", "oracle_text", "rulings",
++    ]
++    (OUT / "revalidation.tsv").write_text(
++        "\t".join(header) + "\n" + "\n".join("\t".join(r) for r in revalidation_rows) + "\n",
++        encoding="utf-8",
++    )
++    (OUT / "cards.tsv").write_text(
++        "family\toracle_id\tname\n"
++        + "\n".join("\t".join(r) for r in cards_rows)
++        + "\n",
++        encoding="utf-8",
++    )
++    print(f"wrote {len(cards_rows)} candidates in {len(FAMILIES)} families")
++    return 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+diff --git a/build/campaign/queue-v52/cards.tsv b/build/campaign/queue-v52/cards.tsv
+new file mode 100644
+index 000000000..bd57a44ad
+--- /dev/null
++++ b/build/campaign/queue-v52/cards.tsv
+@@ -0,0 +1,6 @@
++family	oracle_id	name
++01-destroy-artifact-land	08c6d2fd-d9ae-4f95-bb9d-7e16b1039814	Demolish
++01-destroy-artifact-land	09f75f28-09b9-4a6e-a1b0-671208d274d3	Sunder from Within
++01-destroy-artifact-land	0b137853-7cb9-424b-8285-12938991eafb	Pillage
++01-destroy-artifact-land	fa5d6c02-53b2-4144-87cb-e223b529ba7d	Victorious Destruction
++01-destroy-artifact-land	d48d9e93-72a2-48f2-8164-8032615ee217	Violent Impact
+diff --git a/build/campaign/queue-v52/families/01-destroy-artifact-land/family.md b/build/campaign/queue-v52/families/01-destroy-artifact-land/family.md
+new file mode 100644
+index 000000000..c549db25f
+--- /dev/null
++++ b/build/campaign/queue-v52/families/01-destroy-artifact-land/family.md
+@@ -0,0 +1,44 @@
++# 01-destroy-artifact-land
++
++Shape: One-shot sorcery destroying exactly one artifact or land, with only a supported rider (regeneration prevention, controller life loss, or cycling).
++
++## Source and identity
++
++| Card | Oracle ID | Cost | Type | Oracle text |
++|---|---|---|---|---|
++| Demolish | `08c6d2fd-d9ae-4f95-bb9d-7e16b1039814` | {3}{R} | Sorcery | Destroy target artifact or land. |
++| Sunder from Within | `09f75f28-09b9-4a6e-a1b0-671208d274d3` | {2}{R}{R} | Sorcery — Arcane | Destroy target artifact or land. |
++| Pillage | `0b137853-7cb9-424b-8285-12938991eafb` | {1}{R}{R} | Sorcery | Destroy target artifact or land. It can't be regenerated. |
++| Victorious Destruction | `fa5d6c02-53b2-4144-87cb-e223b529ba7d` | {4}{R} | Sorcery | Destroy target artifact or land. Its controller loses 1 life. |
++| Violent Impact | `d48d9e93-72a2-48f2-8164-8032615ee217` | {3}{R} | Sorcery | Destroy target artifact or land. Cycling {2} ({2}, Discard this card: Draw a card.) |
++
++Exact records and pinned rulings: `source/<oracle-id>.json` and `rulings/<oracle-id>.jsonl`.
++
++## Reuse
++
++`naturalize` / `return_to_the_earth` for the `Destroy(subject: Chosen(any_of ...))` target union; `pongify`/`flesh_to_dust` for `DestroyPreventingRegeneration`; `inevitable_defeat` for `LoseLife(who: ControllerOfTargetGroup)`; `barkhide_mauler` for hand-zone cycling.
++
++## Evidence
++
++- Historical red: `build/verification-logs/20261121-q52-intended-red.log` (6/6 tests exit 101 with `MissingCard` while the five definitions are held out).
++- Focused green: `build/verification-logs/20261121-q52-scenario-green.log` (6/6) and `build/verification-logs/20261121-q52-registry-green.log` (2/2), both exit 0.
++- Review maps: `build/campaign/queue-v52/map-list.json`.
++- Scenario module: `tricerules/tricerules-core/tests/scenario/q52_cohorts_batch.rs`.
++- Registry module: `tricerules/tricerules-cards/tests/q52_cohorts_batch.rs`.
++
++## Assertions
++
++- `q52_cohorts_batch::q52_canary_simplest_demolish_destroys_an_artifact`
++- `q52_cohorts_batch::q52_canary_hardest_victorious_destruction_destroys_a_land_and_drains`
++- `q52_cohorts_batch::q52_cards_accept_each_branch_and_reject_other_types`
++- `q52_cohorts_batch::q52_cards_fizzle_a_departed_target`
++- `q52_cohorts_batch::q52_pillage_prevents_regeneration`
++- `q52_cohorts_batch::q52_violent_impact_cycles_for_two_and_draws`
++- `mechanic_registry::q52_cohorts_batch::q52_maps_definitions_and_target_unions`
++- `mechanic_registry::q52_cohorts_batch::q52_fingerprints_match_the_pinned_oracle_text`
++
++## Delivery
++
++- Independent read-only review: pending.
++- Batch gate: pending.
++- Acceptance: rules-data only; no GUI, networking, privacy or physical-identity surface.
+diff --git a/build/campaign/queue-v52/families/01-destroy-artifact-land/rulings/08c6d2fd-d9ae-4f95-bb9d-7e16b1039814.jsonl b/build/campaign/queue-v52/families/01-destroy-artifact-land/rulings/08c6d2fd-d9ae-4f95-bb9d-7e16b1039814.jsonl
+new file mode 100644
+index 000000000..e69de29bb
+diff --git a/build/campaign/queue-v52/families/01-destroy-artifact-land/rulings/09f75f28-09b9-4a6e-a1b0-671208d274d3.jsonl b/build/campaign/queue-v52/families/01-destroy-artifact-land/rulings/09f75f28-09b9-4a6e-a1b0-671208d274d3.jsonl
+new file mode 100644
+index 000000000..e69de29bb
+diff --git a/build/campaign/queue-v52/families/01-destroy-artifact-land/rulings/0b137853-7cb9-424b-8285-12938991eafb.jsonl b/build/campaign/queue-v52/families/01-destroy-artifact-land/rulings/0b137853-7cb9-424b-8285-12938991eafb.jsonl
+new file mode 100644
+index 000000000..e69de29bb
+diff --git a/build/campaign/queue-v52/families/01-destroy-artifact-land/rulings/d48d9e93-72a2-48f2-8164-8032615ee217.jsonl b/build/campaign/queue-v52/families/01-destroy-artifact-land/rulings/d48d9e93-72a2-48f2-8164-8032615ee217.jsonl
+new file mode 100644
+index 000000000..e69de29bb
+diff --git a/build/campaign/queue-v52/families/01-destroy-artifact-land/rulings/fa5d6c02-53b2-4144-87cb-e223b529ba7d.jsonl b/build/campaign/queue-v52/families/01-destroy-artifact-land/rulings/fa5d6c02-53b2-4144-87cb-e223b529ba7d.jsonl
+new file mode 100644
+index 000000000..e69de29bb
+diff --git a/build/campaign/queue-v52/families/01-destroy-artifact-land/source/08c6d2fd-d9ae-4f95-bb9d-7e16b1039814.json b/build/campaign/queue-v52/families/01-destroy-artifact-land/source/08c6d2fd-d9ae-4f95-bb9d-7e16b1039814.json
+new file mode 100644
+index 000000000..a2231899f
+--- /dev/null
++++ b/build/campaign/queue-v52/families/01-destroy-artifact-land/source/08c6d2fd-d9ae-4f95-bb9d-7e16b1039814.json
+@@ -0,0 +1,132 @@
++{
++ "object": "card",
++ "id": "3abaf8fe-5fab-442c-b219-45137f9ae112",
++ "oracle_id": "08c6d2fd-d9ae-4f95-bb9d-7e16b1039814",
++ "multiverse_ids": [
++  643113
++ ],
++ "mtgo_id": 120739,
++ "tcgplayer_id": 531212,
++ "cardmarket_id": 748454,
++ "name": "Demolish",
++ "lang": "en",
++ "released_at": "2024-01-12",
++ "uri": "https://api.scryfall.com/cards/3abaf8fe-5fab-442c-b219-45137f9ae112",
++ "scryfall_uri": "https://scryfall.com/card/rvr/106/demolish?utm_source=api",
++ "layout": "normal",
++ "highres_image": true,
++ "image_status": "highres_scan",
++ "image_updated_at": "2026-07-13T03:28:35Z",
++ "image_uris": {
++  "small": "https://cards.scryfall.io/small/front/3/a/3abaf8fe-5fab-442c-b219-45137f9ae112.jpg?1783913315",
++  "normal": "https://cards.scryfall.io/normal/front/3/a/3abaf8fe-5fab-442c-b219-45137f9ae112.jpg?1783913315",
++  "large": "https://cards.scryfall.io/large/front/3/a/3abaf8fe-5fab-442c-b219-45137f9ae112.jpg?1783913315",
++  "png": "https://cards.scryfall.io/png/front/3/a/3abaf8fe-5fab-442c-b219-45137f9ae112.png?1783913315",
++  "art_crop": "https://cards.scryfall.io/art_crop/front/3/a/3abaf8fe-5fab-442c-b219-45137f9ae112.jpg?1783913315",
++  "border_crop": "https://cards.scryfall.io/border_crop/front/3/a/3abaf8fe-5fab-442c-b219-45137f9ae112.jpg?1783913315",
++  "thumb": "https://cards.scryfall.io/thumb/front/3/a/3abaf8fe-5fab-442c-b219-45137f9ae112.webp?1783913315",
++  "grid": "https://cards.scryfall.io/grid/front/3/a/3abaf8fe-5fab-442c-b219-45137f9ae112.webp?1783913315",
++  "display": "https://cards.scryfall.io/display/front/3/a/3abaf8fe-5fab-442c-b219-45137f9ae112.webp?1783913315",
++  "art": "https://cards.scryfall.io/art/front/3/a/3abaf8fe-5fab-442c-b219-45137f9ae112.webp?1783913315",
++  "crop": "https://cards.scryfall.io/crop/front/3/a/3abaf8fe-5fab-442c-b219-45137f9ae112.webp?1783913315",
++  "jpeg": "https://cards.scryfall.io/normal/front/3/a/3abaf8fe-5fab-442c-b219-45137f9ae112.jpg?1783913315"
++ },
++ "mana_cost": "{3}{R}",
++ "cmc": 4.0,
++ "type_line": "Sorcery",
++ "oracle_text": "Destroy target artifact or land.",
++ "colors": [
++  "R"
++ ],
++ "color_identity": [
++  "R"
++ ],
++ "keywords": [],
++ "legalities": {
++  "standard": "not_legal",
++  "future": "not_legal",
++  "historic": "legal",
++  "timeless": "legal",
++  "gladiator": "legal",
++  "pioneer": "legal",
++  "modern": "legal",
++  "legacy": "legal",
++  "pauper": "legal",
++  "vintage": "legal",
++  "penny": "legal",
++  "commander": "legal",
++  "oathbreaker": "legal",
++  "standardbrawl": "not_legal",
++  "brawl": "legal",
++  "competitivebrawl": "legal",
++  "alchemy": "not_legal",
++  "paupercommander": "legal",
++  "duel": "legal",
++  "oldschool": "not_legal",
++  "premodern": "legal",
++  "predh": "legal",
++  "tlr": "not_legal"
++ },
++ "games": [
++  "paper",
++  "mtgo"
++ ],
++ "reserved": false,
++ "game_changer": false,
++ "foil": true,
++ "nonfoil": true,
++ "finishes": [
++  "nonfoil",
++  "foil"
++ ],
++ "oversized": false,
++ "promo": false,
++ "reprint": true,
++ "variation": false,
++ "set_id": "fed2c8cd-ab92-44f6-808a-41e7809bcfe2",
++ "set": "rvr",
++ "set_name": "Ravnica Remastered",
++ "set_type": "masters",
++ "set_uri": "https://api.scryfall.com/sets/fed2c8cd-ab92-44f6-808a-41e7809bcfe2",
++ "set_search_uri": "https://api.scryfall.com/cards/search?order=set&q=e%3Arvr&unique=prints",
++ "scryfall_set_uri": "https://scryfall.com/sets/rvr?utm_source=api",
++ "rulings_uri": "https://api.scryfall.com/cards/3abaf8fe-5fab-442c-b219-45137f9ae112/rulings",
++ "prints_search_uri": "https://api.scryfall.com/cards/search?order=released&q=oracleid%3A08c6d2fd-d9ae-4f95-bb9d-7e16b1039814&unique=prints",
++ "collector_number": "106",
++ "digital": false,
++ "rarity": "common",
++ "flavor_text": "\"For every inch of land they take from us, we take it back or we burn it. Give them nothing.\"\n—Aurelia",
++ "card_back_id": "0aeebaf5-8c7d-4636-9e82-8c27447861f7",
++ "artist": "Adam Paquette",
++ "artist_ids": [
++  "89023dad-e6c0-41e0-83fb-eb2bfbbdc3f2"
++ ],
++ "illustration_id": "7c0e96e5-b962-4264-be11-900353010219",
++ "border_color": "black",
++ "frame": "2015",
++ "full_art": false,
++ "textless": false,
++ "booster": true,
++ "story_spotlight": false,
++ "edhrec_rank": 13610,
++ "penny_rank": 12436,
++ "prices": {
++  "usd": "0.20",
++  "usd_foil": "0.10",
++  "usd_etched": null,
++  "eur": "0.03",
++  "eur_foil": "0.05",
++  "tix": "0.04"
++ },
++ "related_uris": {
++  "gatherer": "https://gatherer.wizards.com/Pages/Card/Details.aspx?multiverseid=643113&printed=false",
++  "tcgplayer_infinite_articles": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&trafcat=tcgplayer.com%2Fsearch%2Farticles&u=https%3A%2F%2Fwww.tcgplayer.com%2Fsearch%2Farticles%3FproductLineName%3Dmagic%26q%3DDemolish",
++  "tcgplayer_infinite_decks": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&trafcat=tcgplayer.com%2Fsearch%2Fdecks&u=https%3A%2F%2Fwww.tcgplayer.com%2Fsearch%2Fdecks%3FproductLineName%3Dmagic%26q%3DDemolish",
++  "edhrec": "https://edhrec.com/route/?cc=Demolish"
++ },
++ "purchase_uris": {
++  "tcgplayer": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&u=https%3A%2F%2Fwww.tcgplayer.com%2Fproduct%2F531212%3Fpage%3D1",
++  "cardmarket": "https://www.cardmarket.com/en/Magic/Products?idProduct=748454&referrer=scryfall&utm_campaign=card_prices&utm_medium=text&utm_source=scryfall",
++  "cardhoarder": "https://www.cardhoarder.com/cards/120739?affiliate_id=scryfall&ref=card-profile&utm_campaign=affiliate&utm_medium=card&utm_source=scryfall"
++ }
++}
+\ No newline at end of file
+diff --git a/build/campaign/queue-v52/families/01-destroy-artifact-land/source/09f75f28-09b9-4a6e-a1b0-671208d274d3.json b/build/campaign/queue-v52/families/01-destroy-artifact-land/source/09f75f28-09b9-4a6e-a1b0-671208d274d3.json
+new file mode 100644
+index 000000000..9f4905870
+--- /dev/null
++++ b/build/campaign/queue-v52/families/01-destroy-artifact-land/source/09f75f28-09b9-4a6e-a1b0-671208d274d3.json
+@@ -0,0 +1,132 @@
++{
++ "object": "card",
++ "id": "46783ba7-6e23-43d0-b5aa-9a0ea75cfb67",
++ "oracle_id": "09f75f28-09b9-4a6e-a1b0-671208d274d3",
++ "multiverse_ids": [
++  88808
++ ],
++ "mtgo_id": 22212,
++ "mtgo_foil_id": 22213,
++ "tcgplayer_id": 12549,
++ "cardmarket_id": 12777,
++ "name": "Sunder from Within",
++ "lang": "en",
++ "released_at": "2005-06-03",
++ "uri": "https://api.scryfall.com/cards/46783ba7-6e23-43d0-b5aa-9a0ea75cfb67",
++ "scryfall_uri": "https://scryfall.com/card/sok/117/sunder-from-within?utm_source=api",
++ "layout": "normal",
++ "highres_image": true,
++ "image_status": "highres_scan",
++ "image_updated_at": "2026-07-13T12:02:22Z",
++ "image_uris": {
++  "small": "https://cards.scryfall.io/small/front/4/6/46783ba7-6e23-43d0-b5aa-9a0ea75cfb67.jpg?1783944142",
++  "normal": "https://cards.scryfall.io/normal/front/4/6/46783ba7-6e23-43d0-b5aa-9a0ea75cfb67.jpg?1783944142",
++  "large": "https://cards.scryfall.io/large/front/4/6/46783ba7-6e23-43d0-b5aa-9a0ea75cfb67.jpg?1783944142",
++  "png": "https://cards.scryfall.io/png/front/4/6/46783ba7-6e23-43d0-b5aa-9a0ea75cfb67.png?1783944142",
++  "art_crop": "https://cards.scryfall.io/art_crop/front/4/6/46783ba7-6e23-43d0-b5aa-9a0ea75cfb67.jpg?1783944142",
++  "border_crop": "https://cards.scryfall.io/border_crop/front/4/6/46783ba7-6e23-43d0-b5aa-9a0ea75cfb67.jpg?1783944142",
++  "thumb": "https://cards.scryfall.io/thumb/front/4/6/46783ba7-6e23-43d0-b5aa-9a0ea75cfb67.webp?1783944142",
++  "grid": "https://cards.scryfall.io/grid/front/4/6/46783ba7-6e23-43d0-b5aa-9a0ea75cfb67.webp?1783944142",
++  "display": "https://cards.scryfall.io/display/front/4/6/46783ba7-6e23-43d0-b5aa-9a0ea75cfb67.webp?1783944142",
++  "art": "https://cards.scryfall.io/art/front/4/6/46783ba7-6e23-43d0-b5aa-9a0ea75cfb67.webp?1783944142",
++  "crop": "https://cards.scryfall.io/crop/front/4/6/46783ba7-6e23-43d0-b5aa-9a0ea75cfb67.webp?1783944142",
++  "jpeg": "https://cards.scryfall.io/normal/front/4/6/46783ba7-6e23-43d0-b5aa-9a0ea75cfb67.jpg?1783944142"
++ },
++ "mana_cost": "{2}{R}{R}",
++ "cmc": 4.0,
++ "type_line": "Sorcery — Arcane",
++ "oracle_text": "Destroy target artifact or land.",
++ "colors": [
++  "R"
++ ],
++ "color_identity": [
++  "R"
++ ],
++ "keywords": [],
++ "legalities": {
++  "standard": "not_legal",
++  "future": "not_legal",
++  "historic": "not_legal",
++  "timeless": "not_legal",
++  "gladiator": "not_legal",
++  "pioneer": "not_legal",
++  "modern": "legal",
++  "legacy": "legal",
++  "pauper": "not_legal",
++  "vintage": "legal",
++  "penny": "not_legal",
++  "commander": "legal",
++  "oathbreaker": "legal",
++  "standardbrawl": "not_legal",
++  "brawl": "not_legal",
++  "competitivebrawl": "not_legal",
++  "alchemy": "not_legal",
++  "paupercommander": "not_legal",
++  "duel": "legal",
++  "oldschool": "not_legal",
++  "premodern": "not_legal",
++  "predh": "legal",
++  "tlr": "not_legal"
++ },
++ "games": [
++  "paper",
++  "mtgo"
++ ],
++ "reserved": false,
++ "game_changer": false,
++ "foil": true,
++ "nonfoil": true,
++ "finishes": [
++  "nonfoil",
++  "foil"
++ ],
++ "oversized": false,
++ "promo": false,
++ "reprint": false,
++ "variation": false,
++ "set_id": "4db16ad3-2b95-442f-bb6b-e9aa7fe7f769",
++ "set": "sok",
++ "set_name": "Saviors of Kamigawa",
++ "set_type": "expansion",
++ "set_uri": "https://api.scryfall.com/sets/4db16ad3-2b95-442f-bb6b-e9aa7fe7f769",
++ "set_search_uri": "https://api.scryfall.com/cards/search?order=set&q=e%3Asok&unique=prints",
++ "scryfall_set_uri": "https://scryfall.com/sets/sok?utm_source=api",
++ "rulings_uri": "https://api.scryfall.com/cards/46783ba7-6e23-43d0-b5aa-9a0ea75cfb67/rulings",
++ "prints_search_uri": "https://api.scryfall.com/cards/search?order=released&q=oracleid%3A09f75f28-09b9-4a6e-a1b0-671208d274d3&unique=prints",
++ "collector_number": "117",
++ "digital": false,
++ "rarity": "uncommon",
++ "flavor_text": "Trapped for eons within the sacred gong, the kami boomed and clanged to a deafening tempo as they destroyed their erstwhile prison.",
++ "card_back_id": "0aeebaf5-8c7d-4636-9e82-8c27447861f7",
++ "artist": "Jeff Miracola",
++ "artist_ids": [
++  "9b465bde-3656-4495-ace4-af4ce29999ed"
++ ],
++ "illustration_id": "a9504f0b-0c95-4842-b4ef-8136bf85897f",
++ "border_color": "black",
++ "frame": "2003",
++ "full_art": false,
++ "textless": false,
++ "booster": true,
++ "story_spotlight": false,
++ "edhrec_rank": 25674,
++ "prices": {
++  "usd": "0.28",
++  "usd_foil": "1.30",
++  "usd_etched": null,
++  "eur": "0.11",
++  "eur_foil": "0.59",
++  "tix": "0.04"
++ },
++ "related_uris": {
++  "gatherer": "https://gatherer.wizards.com/Pages/Card/Details.aspx?multiverseid=88808&printed=false",
++  "tcgplayer_infinite_articles": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&trafcat=tcgplayer.com%2Fsearch%2Farticles&u=https%3A%2F%2Fwww.tcgplayer.com%2Fsearch%2Farticles%3FproductLineName%3Dmagic%26q%3DSunder%2Bfrom%2BWithin",
++  "tcgplayer_infinite_decks": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&trafcat=tcgplayer.com%2Fsearch%2Fdecks&u=https%3A%2F%2Fwww.tcgplayer.com%2Fsearch%2Fdecks%3FproductLineName%3Dmagic%26q%3DSunder%2Bfrom%2BWithin",
++  "edhrec": "https://edhrec.com/route/?cc=Sunder+from+Within"
++ },
++ "purchase_uris": {
++  "tcgplayer": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&u=https%3A%2F%2Fwww.tcgplayer.com%2Fproduct%2F12549%3Fpage%3D1",
++  "cardmarket": "https://www.cardmarket.com/en/Magic/Products?idProduct=12777&referrer=scryfall&utm_campaign=card_prices&utm_medium=text&utm_source=scryfall",
++  "cardhoarder": "https://www.cardhoarder.com/cards/22212?affiliate_id=scryfall&ref=card-profile&utm_campaign=affiliate&utm_medium=card&utm_source=scryfall"
++ }
++}
+\ No newline at end of file
+diff --git a/build/campaign/queue-v52/families/01-destroy-artifact-land/source/0b137853-7cb9-424b-8285-12938991eafb.json b/build/campaign/queue-v52/families/01-destroy-artifact-land/source/0b137853-7cb9-424b-8285-12938991eafb.json
+new file mode 100644
+index 000000000..00e2e2317
+--- /dev/null
++++ b/build/campaign/queue-v52/families/01-destroy-artifact-land/source/0b137853-7cb9-424b-8285-12938991eafb.json
+@@ -0,0 +1,137 @@
++{
++ "object": "card",
++ "id": "bdd06d55-a40f-4b0e-905b-3cd0ce12eb82",
++ "oracle_id": "0b137853-7cb9-424b-8285-12938991eafb",
++ "multiverse_ids": [
++  464088
++ ],
++ "mtgo_id": 72650,
++ "tcgplayer_id": 190999,
++ "cardmarket_id": 374985,
++ "name": "Pillage",
++ "lang": "en",
++ "released_at": "2019-06-14",
++ "uri": "https://api.scryfall.com/cards/bdd06d55-a40f-4b0e-905b-3cd0ce12eb82",
++ "scryfall_uri": "https://scryfall.com/card/mh1/139/pillage?utm_source=api",
++ "layout": "normal",
++ "highres_image": true,
++ "image_status": "highres_scan",
++ "image_updated_at": "2026-07-13T08:58:27Z",
++ "image_uris": {
++  "small": "https://cards.scryfall.io/small/front/b/d/bdd06d55-a40f-4b0e-905b-3cd0ce12eb82.jpg?1783933107",
++  "normal": "https://cards.scryfall.io/normal/front/b/d/bdd06d55-a40f-4b0e-905b-3cd0ce12eb82.jpg?1783933107",
++  "large": "https://cards.scryfall.io/large/front/b/d/bdd06d55-a40f-4b0e-905b-3cd0ce12eb82.jpg?1783933107",
++  "png": "https://cards.scryfall.io/png/front/b/d/bdd06d55-a40f-4b0e-905b-3cd0ce12eb82.png?1783933107",
++  "art_crop": "https://cards.scryfall.io/art_crop/front/b/d/bdd06d55-a40f-4b0e-905b-3cd0ce12eb82.jpg?1783933107",
++  "border_crop": "https://cards.scryfall.io/border_crop/front/b/d/bdd06d55-a40f-4b0e-905b-3cd0ce12eb82.jpg?1783933107",
++  "thumb": "https://cards.scryfall.io/thumb/front/b/d/bdd06d55-a40f-4b0e-905b-3cd0ce12eb82.webp?1783933107",
++  "grid": "https://cards.scryfall.io/grid/front/b/d/bdd06d55-a40f-4b0e-905b-3cd0ce12eb82.webp?1783933107",
++  "display": "https://cards.scryfall.io/display/front/b/d/bdd06d55-a40f-4b0e-905b-3cd0ce12eb82.webp?1783933107",
++  "art": "https://cards.scryfall.io/art/front/b/d/bdd06d55-a40f-4b0e-905b-3cd0ce12eb82.webp?1783933107",
++  "crop": "https://cards.scryfall.io/crop/front/b/d/bdd06d55-a40f-4b0e-905b-3cd0ce12eb82.webp?1783933107",
++  "jpeg": "https://cards.scryfall.io/normal/front/b/d/bdd06d55-a40f-4b0e-905b-3cd0ce12eb82.jpg?1783933107"
++ },
++ "mana_cost": "{1}{R}{R}",
++ "cmc": 3.0,
++ "type_line": "Sorcery",
++ "oracle_text": "Destroy target artifact or land. It can't be regenerated.",
++ "colors": [
++  "R"
++ ],
++ "color_identity": [
++  "R"
++ ],
++ "keywords": [],
++ "legalities": {
++  "standard": "not_legal",
++  "future": "not_legal",
++  "historic": "not_legal",
++  "timeless": "not_legal",
++  "gladiator": "not_legal",
++  "pioneer": "not_legal",
++  "modern": "legal",
++  "legacy": "legal",
++  "pauper": "legal",
++  "vintage": "legal",
++  "penny": "not_legal",
++  "commander": "legal",
++  "oathbreaker": "legal",
++  "standardbrawl": "not_legal",
++  "brawl": "not_legal",
++  "competitivebrawl": "not_legal",
++  "alchemy": "not_legal",
++  "paupercommander": "legal",
++  "duel": "legal",
++  "oldschool": "not_legal",
++  "premodern": "legal",
++  "predh": "legal",
++  "tlr": "legal"
++ },
++ "games": [
++  "paper",
++  "mtgo"
++ ],
++ "reserved": false,
++ "game_changer": false,
++ "foil": true,
++ "nonfoil": true,
++ "finishes": [
++  "nonfoil",
++  "foil"
++ ],
++ "oversized": false,
++ "promo": false,
++ "reprint": true,
++ "variation": false,
++ "set_id": "d7efccd6-55bc-4fb8-9138-e72577510a99",
++ "set": "mh1",
++ "set_name": "Modern Horizons",
++ "set_type": "draft_innovation",
++ "set_uri": "https://api.scryfall.com/sets/d7efccd6-55bc-4fb8-9138-e72577510a99",
++ "set_search_uri": "https://api.scryfall.com/cards/search?order=set&q=e%3Amh1&unique=prints",
++ "scryfall_set_uri": "https://scryfall.com/sets/mh1?utm_source=api",
++ "rulings_uri": "https://api.scryfall.com/cards/bdd06d55-a40f-4b0e-905b-3cd0ce12eb82/rulings",
++ "prints_search_uri": "https://api.scryfall.com/cards/search?order=released&q=oracleid%3A0b137853-7cb9-424b-8285-12938991eafb&unique=prints",
++ "collector_number": "139",
++ "digital": false,
++ "rarity": "uncommon",
++ "flavor_text": "\"The embers of our homes still smolder, and already the villages of Kjeldor burn in retaliation. What they have started, we will finish.\"\n—Lovisa Coldeyes",
++ "card_back_id": "0aeebaf5-8c7d-4636-9e82-8c27447861f7",
++ "artist": "Jesper Ejsing",
++ "artist_ids": [
++  "a5f8354a-8b51-4e59-96b2-0e3aeae4fa1d"
++ ],
++ "illustration_id": "9ec02821-8d84-4665-b841-1037423cbe1e",
++ "border_color": "black",
++ "frame": "2015",
++ "full_art": false,
++ "textless": false,
++ "booster": true,
++ "story_spotlight": false,
++ "edhrec_rank": 13997,
++ "penny_rank": 1014,
++ "preview": {
++  "source": "Face to Face Games",
++  "source_uri": "https://www.youtube.com/watch?v=3jrv_zJpMcc",
++  "previewed_at": "2019-05-24"
++ },
++ "prices": {
++  "usd": "0.22",
++  "usd_foil": "0.30",
++  "usd_etched": null,
++  "eur": "0.17",
++  "eur_foil": "0.58",
++  "tix": "0.03"
++ },
++ "related_uris": {
++  "gatherer": "https://gatherer.wizards.com/Pages/Card/Details.aspx?multiverseid=464088&printed=false",
++  "tcgplayer_infinite_articles": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&trafcat=tcgplayer.com%2Fsearch%2Farticles&u=https%3A%2F%2Fwww.tcgplayer.com%2Fsearch%2Farticles%3FproductLineName%3Dmagic%26q%3DPillage",
++  "tcgplayer_infinite_decks": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&trafcat=tcgplayer.com%2Fsearch%2Fdecks&u=https%3A%2F%2Fwww.tcgplayer.com%2Fsearch%2Fdecks%3FproductLineName%3Dmagic%26q%3DPillage",
++  "edhrec": "https://edhrec.com/route/?cc=Pillage"
++ },
++ "purchase_uris": {
++  "tcgplayer": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&u=https%3A%2F%2Fwww.tcgplayer.com%2Fproduct%2F190999%3Fpage%3D1",
++  "cardmarket": "https://www.cardmarket.com/en/Magic/Products?idProduct=374985&referrer=scryfall&utm_campaign=card_prices&utm_medium=text&utm_source=scryfall",
++  "cardhoarder": "https://www.cardhoarder.com/cards/72650?affiliate_id=scryfall&ref=card-profile&utm_campaign=affiliate&utm_medium=card&utm_source=scryfall"
++ }
++}
+\ No newline at end of file
+diff --git a/build/campaign/queue-v52/families/01-destroy-artifact-land/source/d48d9e93-72a2-48f2-8164-8032615ee217.json b/build/campaign/queue-v52/families/01-destroy-artifact-land/source/d48d9e93-72a2-48f2-8164-8032615ee217.json
+new file mode 100644
+index 000000000..3d71f8084
+--- /dev/null
++++ b/build/campaign/queue-v52/families/01-destroy-artifact-land/source/d48d9e93-72a2-48f2-8164-8032615ee217.json
+@@ -0,0 +1,135 @@
++{
++ "object": "card",
++ "id": "49b8673a-ce93-4881-b712-8db82446d83c",
++ "oracle_id": "d48d9e93-72a2-48f2-8164-8032615ee217",
++ "multiverse_ids": [
++  426856
++ ],
++ "mtgo_id": 63910,
++ "mtgo_foil_id": 63911,
++ "tcgplayer_id": 130295,
++ "cardmarket_id": 297196,
++ "name": "Violent Impact",
++ "lang": "en",
++ "released_at": "2017-04-28",
++ "uri": "https://api.scryfall.com/cards/49b8673a-ce93-4881-b712-8db82446d83c",
++ "scryfall_uri": "https://scryfall.com/card/akh/154/violent-impact?utm_source=api",
++ "layout": "normal",
++ "highres_image": true,
++ "image_status": "highres_scan",
++ "image_updated_at": "2026-07-13T09:54:41Z",
++ "image_uris": {
++  "small": "https://cards.scryfall.io/small/front/4/9/49b8673a-ce93-4881-b712-8db82446d83c.jpg?1783936481",
++  "normal": "https://cards.scryfall.io/normal/front/4/9/49b8673a-ce93-4881-b712-8db82446d83c.jpg?1783936481",
++  "large": "https://cards.scryfall.io/large/front/4/9/49b8673a-ce93-4881-b712-8db82446d83c.jpg?1783936481",
++  "png": "https://cards.scryfall.io/png/front/4/9/49b8673a-ce93-4881-b712-8db82446d83c.png?1783936481",
++  "art_crop": "https://cards.scryfall.io/art_crop/front/4/9/49b8673a-ce93-4881-b712-8db82446d83c.jpg?1783936481",
++  "border_crop": "https://cards.scryfall.io/border_crop/front/4/9/49b8673a-ce93-4881-b712-8db82446d83c.jpg?1783936481",
++  "thumb": "https://cards.scryfall.io/thumb/front/4/9/49b8673a-ce93-4881-b712-8db82446d83c.webp?1783936481",
++  "grid": "https://cards.scryfall.io/grid/front/4/9/49b8673a-ce93-4881-b712-8db82446d83c.webp?1783936481",
++  "display": "https://cards.scryfall.io/display/front/4/9/49b8673a-ce93-4881-b712-8db82446d83c.webp?1783936481",
++  "art": "https://cards.scryfall.io/art/front/4/9/49b8673a-ce93-4881-b712-8db82446d83c.webp?1783936481",
++  "crop": "https://cards.scryfall.io/crop/front/4/9/49b8673a-ce93-4881-b712-8db82446d83c.webp?1783936481",
++  "jpeg": "https://cards.scryfall.io/normal/front/4/9/49b8673a-ce93-4881-b712-8db82446d83c.jpg?1783936481"
++ },
++ "mana_cost": "{3}{R}",
++ "cmc": 4.0,
++ "type_line": "Sorcery",
++ "oracle_text": "Destroy target artifact or land.\nCycling {2} ({2}, Discard this card: Draw a card.)",
++ "colors": [
++  "R"
++ ],
++ "color_identity": [
++  "R"
++ ],
++ "keywords": [
++  "Cycling"
++ ],
++ "legalities": {
++  "standard": "not_legal",
++  "future": "not_legal",
++  "historic": "not_legal",
++  "timeless": "not_legal",
++  "gladiator": "not_legal",
++  "pioneer": "legal",
++  "modern": "legal",
++  "legacy": "legal",
++  "pauper": "legal",
++  "vintage": "legal",
++  "penny": "legal",
++  "commander": "legal",
++  "oathbreaker": "legal",
++  "standardbrawl": "not_legal",
++  "brawl": "not_legal",
++  "competitivebrawl": "not_legal",
++  "alchemy": "not_legal",
++  "paupercommander": "legal",
++  "duel": "legal",
++  "oldschool": "not_legal",
++  "premodern": "not_legal",
++  "predh": "not_legal",
++  "tlr": "not_legal"
++ },
++ "games": [
++  "paper",
++  "mtgo"
++ ],
++ "reserved": false,
++ "game_changer": false,
++ "foil": true,
++ "nonfoil": true,
++ "finishes": [
++  "nonfoil",
++  "foil"
++ ],
++ "oversized": false,
++ "promo": false,
++ "reprint": false,
++ "variation": false,
++ "set_id": "02d1c536-68bc-4208-9b65-7741ef1f9da8",
++ "set": "akh",
++ "set_name": "Amonkhet",
++ "set_type": "expansion",
++ "set_uri": "https://api.scryfall.com/sets/02d1c536-68bc-4208-9b65-7741ef1f9da8",
++ "set_search_uri": "https://api.scryfall.com/cards/search?order=set&q=e%3Aakh&unique=prints",
++ "scryfall_set_uri": "https://scryfall.com/sets/akh?utm_source=api",
++ "rulings_uri": "https://api.scryfall.com/cards/49b8673a-ce93-4881-b712-8db82446d83c/rulings",
++ "prints_search_uri": "https://api.scryfall.com/cards/search?order=released&q=oracleid%3Ad48d9e93-72a2-48f2-8164-8032615ee217&unique=prints",
++ "collector_number": "154",
++ "digital": false,
++ "rarity": "common",
++ "flavor_text": "Initiates in the heat of combat must be able to adapt to changing conditions.",
++ "card_back_id": "0aeebaf5-8c7d-4636-9e82-8c27447861f7",
++ "artist": "Jason Rainville",
++ "artist_ids": [
++  "6ed7e669-579b-443d-b223-e5cbcb2a7483"
++ ],
++ "illustration_id": "0238a4bc-4dd0-40ee-87f8-712a397e29d6",
++ "border_color": "black",
++ "frame": "2015",
++ "full_art": false,
++ "textless": false,
++ "booster": true,
++ "story_spotlight": false,
++ "edhrec_rank": 20651,
++ "penny_rank": 9081,
++ "prices": {
++  "usd": "0.10",
++  "usd_foil": "0.24",
++  "usd_etched": null,
++  "eur": "0.11",
++  "eur_foil": "0.15",
++  "tix": "0.03"
++ },
++ "related_uris": {
++  "gatherer": "https://gatherer.wizards.com/Pages/Card/Details.aspx?multiverseid=426856&printed=false",
++  "tcgplayer_infinite_articles": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&trafcat=tcgplayer.com%2Fsearch%2Farticles&u=https%3A%2F%2Fwww.tcgplayer.com%2Fsearch%2Farticles%3FproductLineName%3Dmagic%26q%3DViolent%2BImpact",
++  "tcgplayer_infinite_decks": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&trafcat=tcgplayer.com%2Fsearch%2Fdecks&u=https%3A%2F%2Fwww.tcgplayer.com%2Fsearch%2Fdecks%3FproductLineName%3Dmagic%26q%3DViolent%2BImpact",
++  "edhrec": "https://edhrec.com/route/?cc=Violent+Impact"
++ },
++ "purchase_uris": {
++  "tcgplayer": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&u=https%3A%2F%2Fwww.tcgplayer.com%2Fproduct%2F130295%3Fpage%3D1",
++  "cardmarket": "https://www.cardmarket.com/en/Magic/Products?idProduct=297196&referrer=scryfall&utm_campaign=card_prices&utm_medium=text&utm_source=scryfall",
++  "cardhoarder": "https://www.cardhoarder.com/cards/63910?affiliate_id=scryfall&ref=card-profile&utm_campaign=affiliate&utm_medium=card&utm_source=scryfall"
++ }
++}
+\ No newline at end of file
+diff --git a/build/campaign/queue-v52/families/01-destroy-artifact-land/source/fa5d6c02-53b2-4144-87cb-e223b529ba7d.json b/build/campaign/queue-v52/families/01-destroy-artifact-land/source/fa5d6c02-53b2-4144-87cb-e223b529ba7d.json
+new file mode 100644
+index 000000000..c994c41cd
+--- /dev/null
++++ b/build/campaign/queue-v52/families/01-destroy-artifact-land/source/fa5d6c02-53b2-4144-87cb-e223b529ba7d.json
+@@ -0,0 +1,133 @@
++{
++ "object": "card",
++ "id": "7b81cb30-e9f8-41f3-a10b-26e0ba2503aa",
++ "oracle_id": "fa5d6c02-53b2-4144-87cb-e223b529ba7d",
++ "multiverse_ids": [
++  227549
++ ],
++ "mtgo_id": 39912,
++ "mtgo_foil_id": 39913,
++ "tcgplayer_id": 39599,
++ "cardmarket_id": 245925,
++ "name": "Victorious Destruction",
++ "lang": "en",
++ "released_at": "2011-05-13",
++ "uri": "https://api.scryfall.com/cards/7b81cb30-e9f8-41f3-a10b-26e0ba2503aa",
++ "scryfall_uri": "https://scryfall.com/card/nph/99/victorious-destruction?utm_source=api",
++ "layout": "normal",
++ "highres_image": true,
++ "image_status": "highres_scan",
++ "image_updated_at": "2026-07-13T11:15:04Z",
++ "image_uris": {
++  "small": "https://cards.scryfall.io/small/front/7/b/7b81cb30-e9f8-41f3-a10b-26e0ba2503aa.jpg?1783941304",
++  "normal": "https://cards.scryfall.io/normal/front/7/b/7b81cb30-e9f8-41f3-a10b-26e0ba2503aa.jpg?1783941304",
++  "large": "https://cards.scryfall.io/large/front/7/b/7b81cb30-e9f8-41f3-a10b-26e0ba2503aa.jpg?1783941304",
++  "png": "https://cards.scryfall.io/png/front/7/b/7b81cb30-e9f8-41f3-a10b-26e0ba2503aa.png?1783941304",
++  "art_crop": "https://cards.scryfall.io/art_crop/front/7/b/7b81cb30-e9f8-41f3-a10b-26e0ba2503aa.jpg?1783941304",
++  "border_crop": "https://cards.scryfall.io/border_crop/front/7/b/7b81cb30-e9f8-41f3-a10b-26e0ba2503aa.jpg?1783941304",
++  "thumb": "https://cards.scryfall.io/thumb/front/7/b/7b81cb30-e9f8-41f3-a10b-26e0ba2503aa.webp?1783941304",
++  "grid": "https://cards.scryfall.io/grid/front/7/b/7b81cb30-e9f8-41f3-a10b-26e0ba2503aa.webp?1783941304",
++  "display": "https://cards.scryfall.io/display/front/7/b/7b81cb30-e9f8-41f3-a10b-26e0ba2503aa.webp?1783941304",
++  "art": "https://cards.scryfall.io/art/front/7/b/7b81cb30-e9f8-41f3-a10b-26e0ba2503aa.webp?1783941304",
++  "crop": "https://cards.scryfall.io/crop/front/7/b/7b81cb30-e9f8-41f3-a10b-26e0ba2503aa.webp?1783941304",
++  "jpeg": "https://cards.scryfall.io/normal/front/7/b/7b81cb30-e9f8-41f3-a10b-26e0ba2503aa.jpg?1783941304"
++ },
++ "mana_cost": "{4}{R}",
++ "cmc": 5.0,
++ "type_line": "Sorcery",
++ "oracle_text": "Destroy target artifact or land. Its controller loses 1 life.",
++ "colors": [
++  "R"
++ ],
++ "color_identity": [
++  "R"
++ ],
++ "keywords": [],
++ "legalities": {
++  "standard": "not_legal",
++  "future": "not_legal",
++  "historic": "not_legal",
++  "timeless": "not_legal",
++  "gladiator": "not_legal",
++  "pioneer": "not_legal",
++  "modern": "legal",
++  "legacy": "legal",
++  "pauper": "legal",
++  "vintage": "legal",
++  "penny": "legal",
++  "commander": "legal",
++  "oathbreaker": "legal",
++  "standardbrawl": "not_legal",
++  "brawl": "not_legal",
++  "competitivebrawl": "not_legal",
++  "alchemy": "not_legal",
++  "paupercommander": "legal",
++  "duel": "legal",
++  "oldschool": "not_legal",
++  "premodern": "not_legal",
++  "predh": "legal",
++  "tlr": "not_legal"
++ },
++ "games": [
++  "paper",
++  "mtgo"
++ ],
++ "reserved": false,
++ "game_changer": false,
++ "foil": true,
++ "nonfoil": true,
++ "finishes": [
++  "nonfoil",
++  "foil"
++ ],
++ "oversized": false,
++ "promo": false,
++ "reprint": false,
++ "variation": false,
++ "set_id": "e8e356d8-6d01-4dab-aa07-d0999dc9359f",
++ "set": "nph",
++ "set_name": "New Phyrexia",
++ "set_type": "expansion",
++ "set_uri": "https://api.scryfall.com/sets/e8e356d8-6d01-4dab-aa07-d0999dc9359f",
++ "set_search_uri": "https://api.scryfall.com/cards/search?order=set&q=e%3Anph&unique=prints",
++ "scryfall_set_uri": "https://scryfall.com/sets/nph?utm_source=api",
++ "rulings_uri": "https://api.scryfall.com/cards/7b81cb30-e9f8-41f3-a10b-26e0ba2503aa/rulings",
++ "prints_search_uri": "https://api.scryfall.com/cards/search?order=released&q=oracleid%3Afa5d6c02-53b2-4144-87cb-e223b529ba7d&unique=prints",
++ "collector_number": "99",
++ "digital": false,
++ "rarity": "common",
++ "watermark": "phyrexian",
++ "flavor_text": "\"The refugees look at these structures with hope. We must relieve them of this burden.\"\n—Juex, tormentor exarch",
++ "card_back_id": "0aeebaf5-8c7d-4636-9e82-8c27447861f7",
++ "artist": "Jung Park",
++ "artist_ids": [
++  "269392ac-4c06-4650-98e2-d49a5a7f2371"
++ ],
++ "illustration_id": "e9a6f900-e161-452a-aa19-fec1a7109c43",
++ "border_color": "black",
++ "frame": "2003",
++ "full_art": false,
++ "textless": false,
++ "booster": true,
++ "story_spotlight": false,
++ "edhrec_rank": 30208,
++ "prices": {
++  "usd": "0.05",
++  "usd_foil": "0.23",
++  "usd_etched": null,
++  "eur": "0.09",
++  "eur_foil": "0.18",
++  "tix": "0.03"
++ },
++ "related_uris": {
++  "gatherer": "https://gatherer.wizards.com/Pages/Card/Details.aspx?multiverseid=227549&printed=false",
++  "tcgplayer_infinite_articles": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&trafcat=tcgplayer.com%2Fsearch%2Farticles&u=https%3A%2F%2Fwww.tcgplayer.com%2Fsearch%2Farticles%3FproductLineName%3Dmagic%26q%3DVictorious%2BDestruction",
++  "tcgplayer_infinite_decks": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&trafcat=tcgplayer.com%2Fsearch%2Fdecks&u=https%3A%2F%2Fwww.tcgplayer.com%2Fsearch%2Fdecks%3FproductLineName%3Dmagic%26q%3DVictorious%2BDestruction",
++  "edhrec": "https://edhrec.com/route/?cc=Victorious+Destruction"
++ },
++ "purchase_uris": {
++  "tcgplayer": "https://partner.tcgplayer.com/c/4931599/1830156/21018?subId1=api&u=https%3A%2F%2Fwww.tcgplayer.com%2Fproduct%2F39599%3Fpage%3D1",
++  "cardmarket": "https://www.cardmarket.com/en/Magic/Products?idProduct=245925&referrer=scryfall&utm_campaign=card_prices&utm_medium=text&utm_source=scryfall",
++  "cardhoarder": "https://www.cardhoarder.com/cards/39912?affiliate_id=scryfall&ref=card-profile&utm_campaign=affiliate&utm_medium=card&utm_source=scryfall"
++ }
++}
+\ No newline at end of file
+diff --git a/build/campaign/queue-v52/freeze_bundle.py b/build/campaign/queue-v52/freeze_bundle.py
+new file mode 100644
+index 000000000..3aec191f8
+--- /dev/null
++++ b/build/campaign/queue-v52/freeze_bundle.py
+@@ -0,0 +1,37 @@
++import hashlib, json, subprocess
++from pathlib import Path
++ROOT=Path('/home/ubuntu/Cockatrice'); OUT=ROOT/'build/campaign/queue-v52/freeze'; OUT.mkdir(parents=True,exist_ok=True)
++def sha(p):
++    h=hashlib.sha256()
++    with p.open('rb') as f:
++        for chunk in iter(lambda:f.read(1<<20),b''): h.update(chunk)
++    return h.hexdigest()
++def git(*a): return subprocess.check_output(['git','-C',str(ROOT),*a],text=True)
++cards=[l.split('\t') for l in (ROOT/'build/campaign/queue-v52/cards.tsv').read_text().splitlines()[1:]]
++paths=[
++ 'tricerules/tricerules-core/tests/scenario/q52_cohorts_batch.rs',
++ 'tricerules/tricerules-core/tests/scenario.rs',
++ 'tricerules/tricerules-cards/tests/q52_cohorts_batch.rs',
++ 'tricerules/tricerules-cards/tests/suites/mechanic_registry.rs',
++ 'tricerules/tricerules-cards/presentation/oracle_fingerprints.tsv',
++ 'tricerules/CARDS.md',
++ 'build/campaign/queue-v52/build_queue.py','build/campaign/queue-v52/gen_ron.py','build/campaign/queue-v52/gen_maps.py','build/campaign/queue-v52/gen_records.py','build/campaign/queue-v52/freeze_bundle.py','build/campaign/queue-v52/cards.tsv','build/campaign/queue-v52/revalidation.tsv','build/campaign/queue-v52/selection.md','build/campaign/queue-v52/report.md','build/campaign/queue-v52/map-list.json','build/campaign/queue-v52/families/01-destroy-artifact-land/family.md']
++for fam,oid,name in cards:
++    cid=name.lower().replace(' ','_').replace("'",'')
++    paths += [f'tricerules/tricerules-cards/data/{cid}.ron', f'tricerules/tricerules-cards/authoring/review-maps/{cid}.json']
++fdir=ROOT/'build/campaign/queue-v52/families/01-destroy-artifact-land'
++paths += [str(p.relative_to(ROOT)) for p in sorted((fdir/'source').glob('*.json'))]
++paths += [str(p.relative_to(ROOT)) for p in sorted((fdir/'rulings').glob('*.jsonl'))]
++paths=sorted(set(paths))
++manifest={'format_version':1,'bundle':'batch-d','families':['01-destroy-artifact-land'],'base_head':git('rev-parse','HEAD').strip(),'review_type':'frozen implementation review','test_evidence':{'scenario_green':'build/verification-logs/20261121-q52-scenario-green.log','registry_green':'build/verification-logs/20261121-q52-registry-green.log','intended_red':['build/verification-logs/20261121-q52-intended-red.log'],'evidence_preparation':'build/verification-logs/card-evidence-d112cdb7-eb59-4b4a-9f95-7a5a09753d08','metadata_refresh':'build/verification-logs/card-data-9743fa9f-0d12-414d-b7c1-76ea359d8033'},'files':[],'dependencies':{},'artifacts':{}}
++patch=[]
++for rel in paths:
++    p=ROOT/rel; assert p.is_file(), rel; d=sha(p)
++    manifest['files'].append({'path':rel,'sha256':d,'bytes':p.stat().st_size}); manifest['dependencies'][rel]=d
++    if rel in git('ls-files','--',rel).splitlines(): patch.append(git('diff','--',rel))
++    else:
++        r=subprocess.run(['git','diff','--no-index','--','/dev/null',rel],cwd=ROOT,text=True,capture_output=True); patch.append(r.stdout)
++pp=OUT/'batch-d.patch.diff'; pp.write_text(''.join(patch),encoding='utf-8')
++manifest['artifacts'][pp.name]=sha(pp)
++(OUT/'batch-d.json').write_text(json.dumps(manifest,indent=2)+'\n',encoding='utf-8')
++print('batch-d:',len(paths),'files, patch',sha(pp)[:12])
+diff --git a/build/campaign/queue-v52/gen_maps.py b/build/campaign/queue-v52/gen_maps.py
+new file mode 100644
+index 000000000..5ccafc4ff
+--- /dev/null
++++ b/build/campaign/queue-v52/gen_maps.py
+@@ -0,0 +1,46 @@
++import json
++from pathlib import Path
++ROOT=Path('/home/ubuntu/Cockatrice'); MAPS=ROOT/'tricerules/tricerules-cards/authoring/review-maps'; OUT=ROOT/'build/campaign/queue-v52'
++cards=[l.split('\t') for l in (OUT/'cards.tsv').read_text().splitlines()[1:]]
++effects={
++ 'demolish':('Destroy','/faces/0/spell_effect/0',False,False),
++ 'sunder_from_within':('Destroy','/faces/0/spell_effect/0',False,False),
++ 'pillage':('DestroyPreventingRegeneration','/faces/0/spell_effect/0',False,False),
++ 'victorious_destruction':('Destroy','/faces/0/spell_effect/0',True,False),
++ 'violent_impact':('Destroy','/faces/0/spell_effect/0',False,True),
++}
++for fam,oid,name in cards:
++    cid=name.lower().replace(' ','_')
++    symbol,path,drains,cycling=effects[cid]
++    refs=[('SpellEffectKind::'+symbol,path)]
++    spans=[(1,1,['/faces/0/spell_effect/0'])]
++    if drains:
++        refs.append(('SpellEffectKind::LoseLife','/faces/0/spell_effect/1'))
++        spans[0]=(1,1,['/faces/0/spell_effect/0','/faces/0/spell_effect/1'])
++    if cycling:
++        refs += [
++          ('SpellEffectKind::Draw','/faces/0/activated_abilities/0/effect/0'),
++          ('AbilitySourceZone::Hand','/faces/0/activated_abilities/0/source_zone'),
++          ('AbilityCost::Mana','/faces/0/activated_abilities/0/costs/0'),
++          ('AbilityCost::DiscardSelf','/faces/0/activated_abilities/0/costs/1'),
++        ]
++        spans.append((2,2,['/faces/0/activated_abilities/0']))
++    payload={
++      'format_version':1,'oracle_id':oid,
++      'spans':[{'face_id':cid,'start_line':s,'end_line':e,'typed_paths':paths} for s,e,paths in spans],
++      'primitive_references':[{'symbol':sym,'typed_path':p} for sym,p in refs],
++      'tokens':[],
++      'semantic_fixtures':[
++        {'test':'scenario q52_cohorts_batch::q52_canary_simplest_demolish_destroys_an_artifact','covers':'actual Demolish destroys an artifact'},
++        {'test':'scenario q52_cohorts_batch::q52_canary_hardest_victorious_destruction_destroys_a_land_and_drains','covers':'actual Victorious Destruction destroys a land and drains its controller'},
++        {'test':'scenario q52_cohorts_batch::q52_cards_accept_each_branch_and_reject_other_types','covers':'actual card accepts artifact and land and rejects other types'},
++        {'test':'scenario q52_cohorts_batch::q52_cards_fizzle_a_departed_target','covers':'actual card fizzles a departed target'},
++        {'test':'scenario q52_cohorts_batch::q52_pillage_prevents_regeneration','covers':'actual Pillage ignores a regeneration shield'},
++        {'test':'scenario q52_cohorts_batch::q52_violent_impact_cycles_for_two_and_draws','covers':'actual Violent Impact cycles for two and draws one'},
++        {'test':'mechanic_registry::q52_cohorts_batch::q52_maps_definitions_and_target_unions','covers':'reviewed identity and typed shape'},
++        {'test':'mechanic_registry::q52_cohorts_batch::q52_fingerprints_match_the_pinned_oracle_text','covers':'pinned normalized Oracle text fingerprint'},
++      ],
++      'complete_definition_review_confirmed':True,
++    }
++    (MAPS/f'{cid}.json').write_text(json.dumps(payload,indent=2)+'\n',encoding='utf-8')
++print('wrote',len(cards),'maps')
+diff --git a/build/campaign/queue-v52/gen_records.py b/build/campaign/queue-v52/gen_records.py
+new file mode 100644
+index 000000000..36487dfbd
+--- /dev/null
++++ b/build/campaign/queue-v52/gen_records.py
+@@ -0,0 +1,11 @@
++from pathlib import Path
++ROOT=Path('/home/ubuntu/Cockatrice'); OUT=ROOT/'build/campaign/queue-v52'; F=OUT/'families/01-destroy-artifact-land'
++F.mkdir(parents=True,exist_ok=True)
++rows=[]
++for line in (OUT/'revalidation.tsv').read_text().splitlines()[1:]:
++    fam,oid,name,mana,tl,pw,tw,layout,cmd,text,rulings=line.split('\t'); rows.append((oid,name,mana,tl,text))
++lines=['# 01-destroy-artifact-land','','Shape: One-shot sorcery destroying exactly one artifact or land, with only a supported rider (regeneration prevention, controller life loss, or cycling).','','## Source and identity','','| Card | Oracle ID | Cost | Type | Oracle text |','|---|---|---|---|---|']
++for oid,name,mana,tl,text in rows: lines.append(f'| {name} | `{oid}` | {mana} | {tl} | {text} |')
++lines += ['','Exact records and pinned rulings: `source/<oracle-id>.json` and `rulings/<oracle-id>.jsonl`.','','## Reuse','','`naturalize` / `return_to_the_earth` for the `Destroy(subject: Chosen(any_of ...))` target union; `pongify`/`flesh_to_dust` for `DestroyPreventingRegeneration`; `inevitable_defeat` for `LoseLife(who: ControllerOfTargetGroup)`; `barkhide_mauler` for hand-zone cycling.','','## Evidence','','- Historical red: `build/verification-logs/20261121-q52-intended-red.log` (6/6 tests exit 101 with `MissingCard` while the five definitions are held out).','- Focused green: `build/verification-logs/20261121-q52-scenario-green.log` (6/6) and `build/verification-logs/20261121-q52-registry-green.log` (2/2), both exit 0.','- Review maps: `build/campaign/queue-v52/map-list.json`.','- Scenario module: `tricerules/tricerules-core/tests/scenario/q52_cohorts_batch.rs`.','- Registry module: `tricerules/tricerules-cards/tests/q52_cohorts_batch.rs`.','','## Assertions','','- `q52_cohorts_batch::q52_canary_simplest_demolish_destroys_an_artifact`','- `q52_cohorts_batch::q52_canary_hardest_victorious_destruction_destroys_a_land_and_drains`','- `q52_cohorts_batch::q52_cards_accept_each_branch_and_reject_other_types`','- `q52_cohorts_batch::q52_cards_fizzle_a_departed_target`','- `q52_cohorts_batch::q52_pillage_prevents_regeneration`','- `q52_cohorts_batch::q52_violent_impact_cycles_for_two_and_draws`','- `mechanic_registry::q52_cohorts_batch::q52_maps_definitions_and_target_unions`','- `mechanic_registry::q52_cohorts_batch::q52_fingerprints_match_the_pinned_oracle_text`','','## Delivery','','- Independent read-only review: pending.','- Batch gate: pending.','- Acceptance: rules-data only; no GUI, networking, privacy or physical-identity surface.','']
++(F/'family.md').write_text('\n'.join(lines),encoding='utf-8')
++print('wrote family record')
+diff --git a/build/campaign/queue-v52/gen_ron.py b/build/campaign/queue-v52/gen_ron.py
+new file mode 100644
+index 000000000..3b590a857
+--- /dev/null
++++ b/build/campaign/queue-v52/gen_ron.py
+@@ -0,0 +1,61 @@
++#!/usr/bin/env python3
++"""Write the queue-v52 reviewed RON definitions."""
++from pathlib import Path
++
++ROOT = Path("/home/ubuntu/Cockatrice")
++DATA = ROOT / "tricerules" / "tricerules-cards" / "data"
++SHA = "a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853"
++
++TARGET = '''(any_of: Some([
++            (kind: AnyPermanent, permanent_types: [Artifact]),
++            (kind: AnyPermanent, permanent_types: [Land]),
++          ]))'''
++
++cards = [
++    ("demolish", "08c6d2fd-d9ae-4f95-bb9d-7e16b1039814", "Demolish", "{3}{R}", ["Sorcery"],
++     "// CR 701.8 (destroy) and 115.1/601.2c (one artifact-or-land target). No pinned ruling.",
++     [('Destroy(subject: Chosen(%s))' % TARGET, None)]),
++    ("sunder_from_within", "09f75f28-09b9-4a6e-a1b0-671208d274d3", "Sunder from Within", "{2}{R}{R}", ["Sorcery", "Arcane"],
++     "// CR 701.8 (destroy), 115.1/601.2c (one artifact-or-land target) and 205.3k (Arcane\n// spell subtype). No pinned ruling.",
++     [('Destroy(subject: Chosen(%s))' % TARGET, None)]),
++    ("pillage", "0b137853-7cb9-424b-8285-12938991eafb", "Pillage", "{1}{R}{R}", ["Sorcery"],
++     "// CR 701.8 and 701.19c (destruction that prevents regeneration) and 115.1/601.2c\n// (one artifact-or-land target). No pinned ruling.",
++     [('DestroyPreventingRegeneration(subject: Chosen(%s))' % TARGET, None)]),
++    ("victorious_destruction", "fa5d6c02-53b2-4144-87cb-e223b529ba7d", "Victorious Destruction", "{4}{R}", ["Sorcery"],
++     "// CR 701.8 (destroy), 119.3 (its controller loses 1 life) and 115.1/601.2c (one\n// artifact-or-land target). No pinned ruling.",
++     [('Destroy(subject: Chosen(%s))' % TARGET, None),
++      ('LoseLife(amount: Fixed(1), who: ControllerOfTargetGroup(group_index: 0))', None)]),
++    ("violent_impact", "d48d9e93-72a2-48f2-8164-8032615ee217", "Violent Impact", "{3}{R}", ["Sorcery"],
++     "// CR 701.8 (destroy), 702.29a-b (cycling) and 115.1/601.2c (one artifact-or-land\n// target). No pinned ruling.",
++     [('Destroy(subject: Chosen(%s))' % TARGET, None)]),
++]
++
++for card_id, oid, name, mana, types, note, effects in cards:
++    lines = [
++        f"// Oracle {oid}; source/rulings checked 2026-11-21 against the pinned Scryfall bulk",
++        f"// SHA-256 {SHA}.",
++        note,
++        "(",
++        f'  id: "{card_id}",',
++        f'  name: "{name}",',
++        f'  face_id: "{card_id}",',
++        f'  mana_cost: "{mana}",',
++        '  types: [' + ", ".join(f'"{t}"' for t in types) + "],",
++        "  spell_effect: [",
++    ]
++    for effect, _ in effects:
++        lines.append(f"    {effect},")
++    lines.append("  ],")
++    if card_id == "violent_impact":
++        lines += [
++            "  activated_abilities: [(",
++            '    ability_id: "activated_01",',
++            "    presentation: OracleLines([2]),",
++            "    source_zone: Hand,",
++            '    costs: [Mana("{2}"), DiscardSelf],',
++            "    effect: [Draw(count: 1)],",
++            "  )],",
++        ]
++    lines.append(")")
++    (DATA / f"{card_id}.ron").write_text("\n".join(lines) + "\n", encoding="utf-8")
++print("wrote", len(cards), "cards")
+diff --git a/build/campaign/queue-v52/map-list.json b/build/campaign/queue-v52/map-list.json
+new file mode 100644
+index 000000000..34c254d74
+--- /dev/null
++++ b/build/campaign/queue-v52/map-list.json
+@@ -0,0 +1,7 @@
++[
++  "tricerules/tricerules-cards/authoring/review-maps/demolish.json",
++  "tricerules/tricerules-cards/authoring/review-maps/pillage.json",
++  "tricerules/tricerules-cards/authoring/review-maps/sunder_from_within.json",
++  "tricerules/tricerules-cards/authoring/review-maps/victorious_destruction.json",
++  "tricerules/tricerules-cards/authoring/review-maps/violent_impact.json"
++]
+\ No newline at end of file
+diff --git a/build/campaign/queue-v52/report.md b/build/campaign/queue-v52/report.md
+new file mode 100644
+index 000000000..315fbd221
+--- /dev/null
++++ b/build/campaign/queue-v52/report.md
+@@ -0,0 +1,17 @@
++# Queue v52 report
++
++## Result
++
++Pending delivery.
++
++## Evidence
++
++- Historical red: `build/verification-logs/20261121-q52-intended-red.log` (6/6 scenario tests exit
++  101 with `MissingCard` while the five definitions are held out).
++- Focused green: `build/verification-logs/20261121-q52-scenario-green.log` (6/6) and
++  `build/verification-logs/20261121-q52-registry-green.log` (2/2), both exit 0.
++- Review maps: 5 selected maps passed Preparation evidence and executable-reference checks
++  (`build/verification-logs/card-evidence-d112cdb7-eb59-4b4a-9f95-7a5a09753d08`, exit 0).
++- Presentation audit: problems 0 (`build/verification-logs/20261120-231452-958-Offline-card-author.log`).
++- Metadata: one refresh `card-data-9743fa9f-0d12-414d-b7c1-76ea359d8033`; five fingerprint rows
++  and five checklist flips changed, no unrelated drift.
+diff --git a/build/campaign/queue-v52/revalidation.tsv b/build/campaign/queue-v52/revalidation.tsv
+new file mode 100644
+index 000000000..e137171ce
+--- /dev/null
++++ b/build/campaign/queue-v52/revalidation.tsv
+@@ -0,0 +1,6 @@
++family	oracle_id	name	mana_cost	type_line	power	toughness	layout	commander	oracle_text	rulings
++01-destroy-artifact-land	08c6d2fd-d9ae-4f95-bb9d-7e16b1039814	Demolish	{3}{R}	Sorcery			normal	legal	Destroy target artifact or land.	0
++01-destroy-artifact-land	09f75f28-09b9-4a6e-a1b0-671208d274d3	Sunder from Within	{2}{R}{R}	Sorcery — Arcane			normal	legal	Destroy target artifact or land.	0
++01-destroy-artifact-land	0b137853-7cb9-424b-8285-12938991eafb	Pillage	{1}{R}{R}	Sorcery			normal	legal	Destroy target artifact or land. It can't be regenerated.	0
++01-destroy-artifact-land	fa5d6c02-53b2-4144-87cb-e223b529ba7d	Victorious Destruction	{4}{R}	Sorcery			normal	legal	Destroy target artifact or land. Its controller loses 1 life.	0
++01-destroy-artifact-land	d48d9e93-72a2-48f2-8164-8032615ee217	Violent Impact	{3}{R}	Sorcery			normal	legal	Destroy target artifact or land. Cycling {2} ({2}, Discard this card: Draw a card.)	0
+diff --git a/build/campaign/queue-v52/selection.md b/build/campaign/queue-v52/selection.md
+new file mode 100644
+index 000000000..d3e98cdfd
+--- /dev/null
++++ b/build/campaign/queue-v52/selection.md
+@@ -0,0 +1,24 @@
++# Queue v52 — post-v51 expansion
++
++Source: pinned Commander-legal `oracle-cards.jsonl.gz` (SHA-256
++`a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853`) and pinned rulings
++(SHA-256 `3ee07dbf91347f7940b4067ab1c01e0d5097da8f6c27ef620c202ed4262aaf1f`). Read-only join by
++Oracle ID and printed name to the live registry, maps, `CARDS.md`, `queue-exclusions.txt` and
++`blocked.tsv`; every implementation through `52a578954` is excluded.
++
++## Revalidation
++
++Exact Oracle IDs, costs, type lines, text, layout, Commander legality and presentation shape were
++checked against the pinned bulk and stored in `revalidation.tsv` (5 admitted cards). None appears
++in `blocked.tsv`, `queue-exclusions.txt` or the live registry. All are normal-layout, unique-name,
++non-ambiguous, present in `cards-validation.xml` and unchecked in `CARDS.md` before selection.
++
++## Selected family
++
++- `01-destroy-artifact-land` — 5 cards: destroy exactly one artifact or land, with only supported
++  riders: regeneration prevention (Pillage), controller loses 1 life (Victorious Destruction), and
++  cycling {2} (Violent Impact).
++
++## Delivery
++
++Pending independent review, the batch gate, and push; see `report.md`.
+diff --git a/tricerules/CARDS.md b/tricerules/CARDS.md
+index d75cbecad..f88b6eb9b 100644
+--- a/tricerules/CARDS.md
++++ b/tricerules/CARDS.md
+@@ -2,7 +2,7 @@
+ 
+ _Generated by `gen-checklist` — do not edit by hand._
+ 
+-Implemented: 5314 full + 8 partial / 35533 cards across 343 sets.
++Implemented: 5319 full + 8 partial / 35533 cards across 343 sets.
+ 
+ Legend: `[x]` = fully implemented · `[ ] 🟡 partial` = partially implemented · `[ ]` = not implemented.
+ 
+@@ -1675,7 +1675,7 @@ Legend: `[x]` = fully implemented · `[ ] 🟡 partial` = partially implemented
+ - [ ] Phyrexian Devourer
+ - [ ] Phyrexian Portal
+ - [ ] Phyrexian War Beast
+-- [ ] Pillage
++- [x] Pillage
+ - [ ] Primitive Justice
+ - [ ] Pyrokinesis
+ - [ ] Reinforcements
+@@ -5487,7 +5487,7 @@ Legend: `[x]` = fully implemented · `[ ] 🟡 partial` = partially implemented
+ - [ ] Delaying Shield
+ - [ ] Deluge
+ - [ ] Dematerialize
+-- [ ] Demolish
++- [x] Demolish
+ - [ ] Demoralize
+ - [ ] Deserted Temple
+ - [ ] Devoted Caretaker
+@@ -10357,7 +10357,7 @@ Legend: `[x]` = fully implemented · `[ ] 🟡 partial` = partially implemented
+ - [ ] Spiraling Embers
+ - [ ] Spiritual Visit
+ - [ ] Stampeding Serow
+-- [ ] Sunder from Within
++- [x] Sunder from Within
+ - [ ] Thoughts of Ruin
+ - [ ] Tomb of Urami
+ - [ ] Torii Watchward
+@@ -14393,7 +14393,7 @@ Legend: `[x]` = fully implemented · `[ ] 🟡 partial` = partially implemented
+ - [x] Unwinding Clock
+ - [ ] Urabrask the Hidden
+ - [ ] Vapor Snag
+-- [ ] Victorious Destruction
++- [x] Victorious Destruction
+ - [ ] Viral Drake
+ - [ ] Viridian Betrayers
+ - [ ] Viridian Harvest
+@@ -19470,7 +19470,7 @@ Legend: `[x]` = fully implemented · `[ ] 🟡 partial` = partially implemented
+ - [ ] Trial of Zeal
+ - [ ] Trueheart Twins
+ - [ ] Unwavering Initiate
+-- [ ] Violent Impact
++- [x] Violent Impact
+ - [ ] Vizier of Deferment
+ - [ ] Vizier of Many Faces
+ - [ ] Vizier of Remedies
+diff --git a/tricerules/tricerules-cards/authoring/review-maps/demolish.json b/tricerules/tricerules-cards/authoring/review-maps/demolish.json
+new file mode 100644
+index 000000000..afad57094
+--- /dev/null
++++ b/tricerules/tricerules-cards/authoring/review-maps/demolish.json
+@@ -0,0 +1,56 @@
++{
++  "format_version": 1,
++  "oracle_id": "08c6d2fd-d9ae-4f95-bb9d-7e16b1039814",
++  "spans": [
++    {
++      "face_id": "demolish",
++      "start_line": 1,
++      "end_line": 1,
++      "typed_paths": [
++        "/faces/0/spell_effect/0"
++      ]
++    }
++  ],
++  "primitive_references": [
++    {
++      "symbol": "SpellEffectKind::Destroy",
++      "typed_path": "/faces/0/spell_effect/0"
++    }
++  ],
++  "tokens": [],
++  "semantic_fixtures": [
++    {
++      "test": "scenario q52_cohorts_batch::q52_canary_simplest_demolish_destroys_an_artifact",
++      "covers": "actual Demolish destroys an artifact"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_canary_hardest_victorious_destruction_destroys_a_land_and_drains",
++      "covers": "actual Victorious Destruction destroys a land and drains its controller"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_cards_accept_each_branch_and_reject_other_types",
++      "covers": "actual card accepts artifact and land and rejects other types"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_cards_fizzle_a_departed_target",
++      "covers": "actual card fizzles a departed target"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_pillage_prevents_regeneration",
++      "covers": "actual Pillage ignores a regeneration shield"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_violent_impact_cycles_for_two_and_draws",
++      "covers": "actual Violent Impact cycles for two and draws one"
++    },
++    {
++      "test": "mechanic_registry::q52_cohorts_batch::q52_maps_definitions_and_target_unions",
++      "covers": "reviewed identity and typed shape"
++    },
++    {
++      "test": "mechanic_registry::q52_cohorts_batch::q52_fingerprints_match_the_pinned_oracle_text",
++      "covers": "pinned normalized Oracle text fingerprint"
++    }
++  ],
++  "complete_definition_review_confirmed": true
++}
+diff --git a/tricerules/tricerules-cards/authoring/review-maps/pillage.json b/tricerules/tricerules-cards/authoring/review-maps/pillage.json
+new file mode 100644
+index 000000000..3f0dcddf0
+--- /dev/null
++++ b/tricerules/tricerules-cards/authoring/review-maps/pillage.json
+@@ -0,0 +1,56 @@
++{
++  "format_version": 1,
++  "oracle_id": "0b137853-7cb9-424b-8285-12938991eafb",
++  "spans": [
++    {
++      "face_id": "pillage",
++      "start_line": 1,
++      "end_line": 1,
++      "typed_paths": [
++        "/faces/0/spell_effect/0"
++      ]
++    }
++  ],
++  "primitive_references": [
++    {
++      "symbol": "SpellEffectKind::DestroyPreventingRegeneration",
++      "typed_path": "/faces/0/spell_effect/0"
++    }
++  ],
++  "tokens": [],
++  "semantic_fixtures": [
++    {
++      "test": "scenario q52_cohorts_batch::q52_canary_simplest_demolish_destroys_an_artifact",
++      "covers": "actual Demolish destroys an artifact"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_canary_hardest_victorious_destruction_destroys_a_land_and_drains",
++      "covers": "actual Victorious Destruction destroys a land and drains its controller"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_cards_accept_each_branch_and_reject_other_types",
++      "covers": "actual card accepts artifact and land and rejects other types"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_cards_fizzle_a_departed_target",
++      "covers": "actual card fizzles a departed target"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_pillage_prevents_regeneration",
++      "covers": "actual Pillage ignores a regeneration shield"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_violent_impact_cycles_for_two_and_draws",
++      "covers": "actual Violent Impact cycles for two and draws one"
++    },
++    {
++      "test": "mechanic_registry::q52_cohorts_batch::q52_maps_definitions_and_target_unions",
++      "covers": "reviewed identity and typed shape"
++    },
++    {
++      "test": "mechanic_registry::q52_cohorts_batch::q52_fingerprints_match_the_pinned_oracle_text",
++      "covers": "pinned normalized Oracle text fingerprint"
++    }
++  ],
++  "complete_definition_review_confirmed": true
++}
+diff --git a/tricerules/tricerules-cards/authoring/review-maps/sunder_from_within.json b/tricerules/tricerules-cards/authoring/review-maps/sunder_from_within.json
+new file mode 100644
+index 000000000..d250d273c
+--- /dev/null
++++ b/tricerules/tricerules-cards/authoring/review-maps/sunder_from_within.json
+@@ -0,0 +1,56 @@
++{
++  "format_version": 1,
++  "oracle_id": "09f75f28-09b9-4a6e-a1b0-671208d274d3",
++  "spans": [
++    {
++      "face_id": "sunder_from_within",
++      "start_line": 1,
++      "end_line": 1,
++      "typed_paths": [
++        "/faces/0/spell_effect/0"
++      ]
++    }
++  ],
++  "primitive_references": [
++    {
++      "symbol": "SpellEffectKind::Destroy",
++      "typed_path": "/faces/0/spell_effect/0"
++    }
++  ],
++  "tokens": [],
++  "semantic_fixtures": [
++    {
++      "test": "scenario q52_cohorts_batch::q52_canary_simplest_demolish_destroys_an_artifact",
++      "covers": "actual Demolish destroys an artifact"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_canary_hardest_victorious_destruction_destroys_a_land_and_drains",
++      "covers": "actual Victorious Destruction destroys a land and drains its controller"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_cards_accept_each_branch_and_reject_other_types",
++      "covers": "actual card accepts artifact and land and rejects other types"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_cards_fizzle_a_departed_target",
++      "covers": "actual card fizzles a departed target"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_pillage_prevents_regeneration",
++      "covers": "actual Pillage ignores a regeneration shield"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_violent_impact_cycles_for_two_and_draws",
++      "covers": "actual Violent Impact cycles for two and draws one"
++    },
++    {
++      "test": "mechanic_registry::q52_cohorts_batch::q52_maps_definitions_and_target_unions",
++      "covers": "reviewed identity and typed shape"
++    },
++    {
++      "test": "mechanic_registry::q52_cohorts_batch::q52_fingerprints_match_the_pinned_oracle_text",
++      "covers": "pinned normalized Oracle text fingerprint"
++    }
++  ],
++  "complete_definition_review_confirmed": true
++}
+diff --git a/tricerules/tricerules-cards/authoring/review-maps/victorious_destruction.json b/tricerules/tricerules-cards/authoring/review-maps/victorious_destruction.json
+new file mode 100644
+index 000000000..94829752b
+--- /dev/null
++++ b/tricerules/tricerules-cards/authoring/review-maps/victorious_destruction.json
+@@ -0,0 +1,61 @@
++{
++  "format_version": 1,
++  "oracle_id": "fa5d6c02-53b2-4144-87cb-e223b529ba7d",
++  "spans": [
++    {
++      "face_id": "victorious_destruction",
++      "start_line": 1,
++      "end_line": 1,
++      "typed_paths": [
++        "/faces/0/spell_effect/0",
++        "/faces/0/spell_effect/1"
++      ]
++    }
++  ],
++  "primitive_references": [
++    {
++      "symbol": "SpellEffectKind::Destroy",
++      "typed_path": "/faces/0/spell_effect/0"
++    },
++    {
++      "symbol": "SpellEffectKind::LoseLife",
++      "typed_path": "/faces/0/spell_effect/1"
++    }
++  ],
++  "tokens": [],
++  "semantic_fixtures": [
++    {
++      "test": "scenario q52_cohorts_batch::q52_canary_simplest_demolish_destroys_an_artifact",
++      "covers": "actual Demolish destroys an artifact"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_canary_hardest_victorious_destruction_destroys_a_land_and_drains",
++      "covers": "actual Victorious Destruction destroys a land and drains its controller"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_cards_accept_each_branch_and_reject_other_types",
++      "covers": "actual card accepts artifact and land and rejects other types"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_cards_fizzle_a_departed_target",
++      "covers": "actual card fizzles a departed target"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_pillage_prevents_regeneration",
++      "covers": "actual Pillage ignores a regeneration shield"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_violent_impact_cycles_for_two_and_draws",
++      "covers": "actual Violent Impact cycles for two and draws one"
++    },
++    {
++      "test": "mechanic_registry::q52_cohorts_batch::q52_maps_definitions_and_target_unions",
++      "covers": "reviewed identity and typed shape"
++    },
++    {
++      "test": "mechanic_registry::q52_cohorts_batch::q52_fingerprints_match_the_pinned_oracle_text",
++      "covers": "pinned normalized Oracle text fingerprint"
++    }
++  ],
++  "complete_definition_review_confirmed": true
++}
+diff --git a/tricerules/tricerules-cards/authoring/review-maps/violent_impact.json b/tricerules/tricerules-cards/authoring/review-maps/violent_impact.json
+new file mode 100644
+index 000000000..5eb2ec61b
+--- /dev/null
++++ b/tricerules/tricerules-cards/authoring/review-maps/violent_impact.json
+@@ -0,0 +1,80 @@
++{
++  "format_version": 1,
++  "oracle_id": "d48d9e93-72a2-48f2-8164-8032615ee217",
++  "spans": [
++    {
++      "face_id": "violent_impact",
++      "start_line": 1,
++      "end_line": 1,
++      "typed_paths": [
++        "/faces/0/spell_effect/0"
++      ]
++    },
++    {
++      "face_id": "violent_impact",
++      "start_line": 2,
++      "end_line": 2,
++      "typed_paths": [
++        "/faces/0/activated_abilities/0"
++      ]
++    }
++  ],
++  "primitive_references": [
++    {
++      "symbol": "SpellEffectKind::Destroy",
++      "typed_path": "/faces/0/spell_effect/0"
++    },
++    {
++      "symbol": "SpellEffectKind::Draw",
++      "typed_path": "/faces/0/activated_abilities/0/effect/0"
++    },
++    {
++      "symbol": "AbilitySourceZone::Hand",
++      "typed_path": "/faces/0/activated_abilities/0/source_zone"
++    },
++    {
++      "symbol": "AbilityCost::Mana",
++      "typed_path": "/faces/0/activated_abilities/0/costs/0"
++    },
++    {
++      "symbol": "AbilityCost::DiscardSelf",
++      "typed_path": "/faces/0/activated_abilities/0/costs/1"
++    }
++  ],
++  "tokens": [],
++  "semantic_fixtures": [
++    {
++      "test": "scenario q52_cohorts_batch::q52_canary_simplest_demolish_destroys_an_artifact",
++      "covers": "actual Demolish destroys an artifact"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_canary_hardest_victorious_destruction_destroys_a_land_and_drains",
++      "covers": "actual Victorious Destruction destroys a land and drains its controller"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_cards_accept_each_branch_and_reject_other_types",
++      "covers": "actual card accepts artifact and land and rejects other types"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_cards_fizzle_a_departed_target",
++      "covers": "actual card fizzles a departed target"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_pillage_prevents_regeneration",
++      "covers": "actual Pillage ignores a regeneration shield"
++    },
++    {
++      "test": "scenario q52_cohorts_batch::q52_violent_impact_cycles_for_two_and_draws",
++      "covers": "actual Violent Impact cycles for two and draws one"
++    },
++    {
++      "test": "mechanic_registry::q52_cohorts_batch::q52_maps_definitions_and_target_unions",
++      "covers": "reviewed identity and typed shape"
++    },
++    {
++      "test": "mechanic_registry::q52_cohorts_batch::q52_fingerprints_match_the_pinned_oracle_text",
++      "covers": "pinned normalized Oracle text fingerprint"
++    }
++  ],
++  "complete_definition_review_confirmed": true
++}
+diff --git a/tricerules/tricerules-cards/data/demolish.ron b/tricerules/tricerules-cards/data/demolish.ron
+new file mode 100644
+index 000000000..84a387bcf
+--- /dev/null
++++ b/tricerules/tricerules-cards/data/demolish.ron
+@@ -0,0 +1,16 @@
++// Oracle 08c6d2fd-d9ae-4f95-bb9d-7e16b1039814; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
++// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
++// CR 701.8 (destroy) and 115.1/601.2c (one artifact-or-land target). No pinned ruling.
++(
++  id: "demolish",
++  name: "Demolish",
++  face_id: "demolish",
++  mana_cost: "{3}{R}",
++  types: ["Sorcery"],
++  spell_effect: [
++    Destroy(subject: Chosen((any_of: Some([
++            (kind: AnyPermanent, permanent_types: [Artifact]),
++            (kind: AnyPermanent, permanent_types: [Land]),
++          ])))),
++  ],
++)
+diff --git a/tricerules/tricerules-cards/data/pillage.ron b/tricerules/tricerules-cards/data/pillage.ron
+new file mode 100644
+index 000000000..e8d501ade
+--- /dev/null
++++ b/tricerules/tricerules-cards/data/pillage.ron
+@@ -0,0 +1,17 @@
++// Oracle 0b137853-7cb9-424b-8285-12938991eafb; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
++// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
++// CR 701.8 and 701.19c (destruction that prevents regeneration) and 115.1/601.2c
++// (one artifact-or-land target). No pinned ruling.
++(
++  id: "pillage",
++  name: "Pillage",
++  face_id: "pillage",
++  mana_cost: "{1}{R}{R}",
++  types: ["Sorcery"],
++  spell_effect: [
++    DestroyPreventingRegeneration(subject: Chosen((any_of: Some([
++            (kind: AnyPermanent, permanent_types: [Artifact]),
++            (kind: AnyPermanent, permanent_types: [Land]),
++          ])))),
++  ],
++)
+diff --git a/tricerules/tricerules-cards/data/sunder_from_within.ron b/tricerules/tricerules-cards/data/sunder_from_within.ron
+new file mode 100644
+index 000000000..6deef01be
+--- /dev/null
++++ b/tricerules/tricerules-cards/data/sunder_from_within.ron
+@@ -0,0 +1,17 @@
++// Oracle 09f75f28-09b9-4a6e-a1b0-671208d274d3; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
++// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
++// CR 701.8 (destroy), 115.1/601.2c (one artifact-or-land target) and 205.3k (Arcane
++// spell subtype). No pinned ruling.
++(
++  id: "sunder_from_within",
++  name: "Sunder from Within",
++  face_id: "sunder_from_within",
++  mana_cost: "{2}{R}{R}",
++  types: ["Sorcery", "Arcane"],
++  spell_effect: [
++    Destroy(subject: Chosen((any_of: Some([
++            (kind: AnyPermanent, permanent_types: [Artifact]),
++            (kind: AnyPermanent, permanent_types: [Land]),
++          ])))),
++  ],
++)
+diff --git a/tricerules/tricerules-cards/data/victorious_destruction.ron b/tricerules/tricerules-cards/data/victorious_destruction.ron
+new file mode 100644
+index 000000000..d0b60758c
+--- /dev/null
++++ b/tricerules/tricerules-cards/data/victorious_destruction.ron
+@@ -0,0 +1,18 @@
++// Oracle fa5d6c02-53b2-4144-87cb-e223b529ba7d; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
++// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
++// CR 701.8 (destroy), 119.3 (its controller loses 1 life) and 115.1/601.2c (one
++// artifact-or-land target). No pinned ruling.
++(
++  id: "victorious_destruction",
++  name: "Victorious Destruction",
++  face_id: "victorious_destruction",
++  mana_cost: "{4}{R}",
++  types: ["Sorcery"],
++  spell_effect: [
++    Destroy(subject: Chosen((any_of: Some([
++            (kind: AnyPermanent, permanent_types: [Artifact]),
++            (kind: AnyPermanent, permanent_types: [Land]),
++          ])))),
++    LoseLife(amount: Fixed(1), who: ControllerOfTargetGroup(group_index: 0)),
++  ],
++)
+diff --git a/tricerules/tricerules-cards/data/violent_impact.ron b/tricerules/tricerules-cards/data/violent_impact.ron
+new file mode 100644
+index 000000000..9c7adb376
+--- /dev/null
++++ b/tricerules/tricerules-cards/data/violent_impact.ron
+@@ -0,0 +1,24 @@
++// Oracle d48d9e93-72a2-48f2-8164-8032615ee217; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
++// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
++// CR 701.8 (destroy), 702.29a-b (cycling) and 115.1/601.2c (one artifact-or-land
++// target). No pinned ruling.
++(
++  id: "violent_impact",
++  name: "Violent Impact",
++  face_id: "violent_impact",
++  mana_cost: "{3}{R}",
++  types: ["Sorcery"],
++  spell_effect: [
++    Destroy(subject: Chosen((any_of: Some([
++            (kind: AnyPermanent, permanent_types: [Artifact]),
++            (kind: AnyPermanent, permanent_types: [Land]),
++          ])))),
++  ],
++  activated_abilities: [(
++    ability_id: "activated_01",
++    presentation: OracleLines([2]),
++    source_zone: Hand,
++    costs: [Mana("{2}"), DiscardSelf],
++    effect: [Draw(count: 1)],
++  )],
++)
+diff --git a/tricerules/tricerules-cards/presentation/oracle_fingerprints.tsv b/tricerules/tricerules-cards/presentation/oracle_fingerprints.tsv
+index 642cf988f..b601c19fd 100644
+--- a/tricerules/tricerules-cards/presentation/oracle_fingerprints.tsv
++++ b/tricerules/tricerules-cards/presentation/oracle_fingerprints.tsv
+@@ -1032,6 +1032,7 @@ deja_vu	Déjà Vu	deja_vu	Déjà Vu	88f985fa2908cacfd4a140f396377f7b1c0e4be56681
+ deliberate	Deliberate	deliberate	Deliberate	99e8a5125a55289e674cc1878a461d8a3c30a23fa0aa6524d602c870c1b17c1a
+ delta_bloodflies	Delta Bloodflies	delta_bloodflies	Delta Bloodflies	c8846a67069a35d837da74d0715ddea5b8a83ab53ed0a1c6632d54376fb9057a
+ demand_answers	Demand Answers	demand_answers	Demand Answers	59d099e2756f836ff2862c5e44a48098d6c0b94638e0944fa876102e13ade1fa
++demolish	Demolish	demolish	Demolish	201a63119d5504eecbbfebdb7854bb188c6f109536c85a7776e65243fada6764
+ demolition_field	Demolition Field	demolition_field	Demolition Field	84a8771139d9080caa0f97f3dc725c81aae477e81691dc90a8e916b04e404e41
+ demonic_tutor	Demonic Tutor	demonic_tutor	Demonic Tutor	e759f75c52513ff4702fecc196ac14e3c579969a34c8470c7f44ded97a3560bd
+ demons_grasp	Demon's Grasp	demons_grasp	Demon's Grasp	617372107c755f0b210aa44262a00ab1d78c6b27de5c180951c1de3723d7f92b
+@@ -3083,6 +3084,7 @@ pileated_provisioner	Pileated Provisioner	pileated_provisioner	Pileated Provisio
+ pilfer	Pilfer	pilfer	Pilfer	daed12d3769f725a8a9bbf9c97b1378198645e001fc39c4cda66a374cfc13584
+ pilgrim_of_the_fires	Pilgrim of the Fires	pilgrim_of_the_fires	Pilgrim of the Fires	c93f29270b3abea65f3b0a71fabee0da907d0f157a10a42f6a0859e80fef3009
+ pilgrims_eye	Pilgrim's Eye	pilgrims_eye	Pilgrim's Eye	06075c8cee2b109ff43accc82bd4b6a559fb41483be799bcc0d8833818e103fb
++pillage	Pillage	pillage	Pillage	d0c712d44e5ac17fd6b01b34eb0b8bac2f774a7d7d2d17eb4e0d2b7c9a344289
+ pillar_launch	Pillar Launch	pillar_launch	Pillar Launch	c372a661bf4599db4c5fcd7da5ee48dd591439aa048425be27299c1b8bcd78a6
+ pin_to_the_earth	Pin to the Earth	pin_to_the_earth	Pin to the Earth	3e929df5470221cfd401ead2515cba554030b76422abddb57efe5cf6b7e321e1
+ pincher_beetles	Pincher Beetles	pincher_beetles	Pincher Beetles	28ed10c86ec5fd6ebe0f09abc53b1e2d297558f02388590d18b855449b602fc4
+@@ -4138,6 +4140,7 @@ sunastian_falconer	Sunastian Falconer	sunastian_falconer	Sunastian Falconer	8310
+ sunbaked_canyon	Sunbaked Canyon	sunbaked_canyon	Sunbaked Canyon	8b51a4288ebe83aac343bd4addc008f8bc20a50f42a6258a24dfd969255235ff
+ sunbillow_verge	Sunbillow Verge	sunbillow_verge	Sunbillow Verge	f8a7f49001c7f8075a3d82889ad6d0d1267af1009f9b273cc8da56701c308367
+ sunblade_angel	Sunblade Angel	sunblade_angel	Sunblade Angel	1242a1f8693f04df07aee4315150fe1c7bf9fe335ec7a9ae37fe1a45302bafc3
++sunder_from_within	Sunder from Within	sunder_from_within	Sunder from Within	201a63119d5504eecbbfebdb7854bb188c6f109536c85a7776e65243fada6764
+ sunderflock	Sunderflock	sunderflock	Sunderflock	75dbfc1c3ef32cacd54b4af45401cf43ddd3fab3dc0ffb1299b3e57bd36831b4
+ sundering_eruption_volcanic_fissure	Sundering Eruption // Volcanic Fissure	sundering_eruption	Sundering Eruption	de2dc2838223af0e5e2eac9562a78d24dd25624d82b92f242e051051c8f6a823
+ sundering_eruption_volcanic_fissure	Sundering Eruption // Volcanic Fissure	volcanic_fissure	Volcanic Fissure	75a4089357813fe059553fdac77b768e0b5f3211e854cff9d7183389c9542acf
+@@ -4667,6 +4670,7 @@ vibrant_outburst	Vibrant Outburst	vibrant_outburst	Vibrant Outburst	63c708d5bc3b
+ vicious_clown	Vicious Clown	vicious_clown	Vicious Clown	b594a9a23cc1694353540c6233524296064d5a08146d979b1b2b96fb40249e38
+ vicious_hunger	Vicious Hunger	vicious_hunger	Vicious Hunger	6379c750ccf32b5966582b5ccc76a742687fdaa2c8ecd5a6a3141c8d25c3b7b3
+ vicious_kavu	Vicious Kavu	vicious_kavu	Vicious Kavu	024a8ccf72ff8b013a6c257bccc1e915f30cc44395aa10a70f689903b3ea03ee
++victorious_destruction	Victorious Destruction	victorious_destruction	Victorious Destruction	4b99f979941f44323c101473e5a474f09d85984b4bfcfa5646949f36b41e2e92
+ vigilance	Vigilance	vigilance	Vigilance	8f0012dcd44b9ce486328c04c4ea5e5f531d308bc1ad4327802811a697021057
+ vigilant_baloth	Vigilant Baloth	vigilant_baloth	Vigilant Baloth	713185635adb649f365b07ed8e8b0bd39a7dc84b34a41ece29fb179fdd2086ef
+ vigilant_drake	Vigilant Drake	vigilant_drake	Vigilant Drake	818d5aab56b3b375cb2fdc85b7826f36e818680c4f2ce252f711e644ad522a09
+@@ -4679,6 +4683,7 @@ vine_trellis	Vine Trellis	vine_trellis	Vine Trellis	9afd610db53d46bcfaa5694dce7b
+ vinelasher_kudzu	Vinelasher Kudzu	vinelasher_kudzu	Vinelasher Kudzu	7a7d23901b416640fb08645c9879bfae58acc25b746ecd5d4329feca6bb0cf62
+ vinereap_mentor	Vinereap Mentor	vinereap_mentor	Vinereap Mentor	eaafb15449cdcee8620a2db3df8601a1b419014e1939f437219b5705a48773a8
+ vines_of_the_recluse	Vines of the Recluse	vines_of_the_recluse	Vines of the Recluse	9ee6b69441fc64f8d380f7d5193de2516a574519c2e01aa23fe729556cd68a09
++violent_impact	Violent Impact	violent_impact	Violent Impact	7e506dd5f4c8a17bec520727d79f45d34f653e43cbcbd8fddd2e87cf65dab9e0
+ violent_urge	Violent Urge	violent_urge	Violent Urge	6f72ce7424293615854a5f0717c4d5dd35929870e5422854952868c5481127e5
+ viridescent_bog	Viridescent Bog	viridescent_bog	Viridescent Bog	acb0a020e21025ccde4321fcb890b29f6ad91a39ef04ddd3f5b17862623899e8
+ viridian_acolyte	Viridian Acolyte	viridian_acolyte	Viridian Acolyte	775370524b31efa9d987f120742403a8f58afe68c1c378b4c59908167bd8c206
+diff --git a/tricerules/tricerules-cards/tests/q52_cohorts_batch.rs b/tricerules/tricerules-cards/tests/q52_cohorts_batch.rs
+new file mode 100644
+index 000000000..1732faf6a
+--- /dev/null
++++ b/tricerules/tricerules-cards/tests/q52_cohorts_batch.rs
+@@ -0,0 +1,211 @@
++//! Registry conformance for the queue-v52 destroy-artifact-or-land cohort.
++#![allow(clippy::type_complexity)]
++use tricerules_cards::primitives::{
++    AbilityCost, Amount, LifeAmount, PermanentTypeFilter, SpellEffectKind, TargetKind,
++};
++use tricerules_cards::{registry, CardDefinition, CardFace, Layout, ManaCost};
++
++fn definition(id: &str) -> &'static CardDefinition {
++    registry::global()
++        .get(id)
++        .unwrap_or_else(|| panic!("missing {id}"))
++}
++
++fn face_id(name: &str) -> String {
++    name.to_lowercase().replace(' ', "_").replace('\'', "")
++}
++
++fn identity(id: &str, name: &str, mana: &str, types: &[&str]) -> &'static CardFace {
++    let definition = definition(id);
++    assert_eq!(definition.layout, Layout::Normal, "{id}");
++    assert_eq!(registry::global().id_for_name(name), Some(id), "{id}");
++    let f = definition.primary_face();
++    assert_eq!(f.face_id.as_str(), face_id(name), "{id} face id");
++    assert_eq!(f.name, name, "{id} name");
++    assert_eq!(f.mana_cost.to_string(), mana, "{id} mana");
++    assert_eq!(
++        f.types.iter().map(String::as_str).collect::<Vec<_>>(),
++        types,
++        "{id} types"
++    );
++    f
++}
++
++fn artifact_or_land(filter: &tricerules_cards::primitives::TargetFilter) -> bool {
++    let branches = filter.any_of.as_ref().expect("disjunctive target filter");
++    branches.len() == 2
++        && branches.iter().any(|branch| {
++            branch.kind == TargetKind::AnyPermanent
++                && branch.permanent_types == [PermanentTypeFilter::Artifact]
++        })
++        && branches.iter().any(|branch| {
++            branch.kind == TargetKind::AnyPermanent
++                && branch.permanent_types == [PermanentTypeFilter::Land]
++        })
++}
++
++#[test]
++fn q52_maps_definitions_and_target_unions() {
++    for (id, name, mana, types, prevent, drains, cycling) in [
++        (
++            "demolish",
++            "Demolish",
++            "{3}{R}",
++            &["Sorcery"][..],
++            false,
++            false,
++            false,
++        ),
++        (
++            "sunder_from_within",
++            "Sunder from Within",
++            "{2}{R}{R}",
++            &["Sorcery", "Arcane"][..],
++            false,
++            false,
++            false,
++        ),
++        (
++            "pillage",
++            "Pillage",
++            "{1}{R}{R}",
++            &["Sorcery"][..],
++            true,
++            false,
++            false,
++        ),
++        (
++            "victorious_destruction",
++            "Victorious Destruction",
++            "{4}{R}",
++            &["Sorcery"][..],
++            false,
++            true,
++            false,
++        ),
++        (
++            "violent_impact",
++            "Violent Impact",
++            "{3}{R}",
++            &["Sorcery"][..],
++            false,
++            false,
++            true,
++        ),
++    ] {
++        let f = identity(id, name, mana, types);
++        let destroy = f.spell_effect.first().expect("destroy effect");
++        match destroy {
++            SpellEffectKind::Destroy { subject } => {
++                assert!(!prevent, "{id}: plain destroy");
++                match subject {
++                    tricerules_cards::primitives::EffectSubject::Chosen(filter) => {
++                        assert!(artifact_or_land(filter), "{id}: artifact or land");
++                    }
++                    other => panic!("{id}: unexpected subject {other:?}"),
++                }
++            }
++            SpellEffectKind::DestroyPreventingRegeneration { subject } => {
++                assert!(prevent, "{id}: regeneration prevention");
++                match subject {
++                    tricerules_cards::primitives::EffectSubject::Chosen(filter) => {
++                        assert!(artifact_or_land(filter), "{id}: artifact or land");
++                    }
++                    other => panic!("{id}: unexpected subject {other:?}"),
++                }
++            }
++            other => panic!("{id}: unexpected first effect {other:?}"),
++        }
++        if drains {
++            assert!(
++                matches!(
++                    f.spell_effect.get(1),
++                    Some(SpellEffectKind::LoseLife {
++                        amount: LifeAmount::Fixed(1),
++                        who:
++                            tricerules_cards::primitives::PlayerRecipient::ControllerOfTargetGroup {
++                                group_index: 0
++                            },
++                    })
++                ),
++                "{id}: controller loses 1"
++            );
++        } else {
++            assert_eq!(f.spell_effect.len(), 1, "{id}: one effect");
++        }
++        if cycling {
++            let ability = &f.activated_abilities[0];
++            assert_eq!(ability.costs.len(), 2, "{id}: mana and discard");
++            assert_eq!(
++                ability.costs[0],
++                AbilityCost::Mana(ManaCost::parse("{2}").unwrap()),
++                "{id}"
++            );
++            assert_eq!(ability.costs[1], AbilityCost::DiscardSelf, "{id}");
++            assert_eq!(
++                ability.source_zone,
++                tricerules_cards::primitives::AbilitySourceZone::Hand,
++                "{id}: hand-zone cycling"
++            );
++            assert!(
++                matches!(
++                    ability.effect.as_slice(),
++                    [SpellEffectKind::Draw {
++                        count: Amount::Fixed(1),
++                        ..
++                    }]
++                ),
++                "{id}: draw one"
++            );
++        } else {
++            assert!(
++                f.activated_abilities.is_empty(),
++                "{id}: no activated ability"
++            );
++        }
++    }
++}
++
++#[test]
++fn q52_fingerprints_match_the_pinned_oracle_text() {
++    let fingerprints = include_str!("../presentation/oracle_fingerprints.tsv");
++    for (id, name, digest) in [
++        (
++            "demolish",
++            "Demolish",
++            "201a63119d5504eecbbfebdb7854bb188c6f109536c85a7776e65243fada6764",
++        ),
++        (
++            "sunder_from_within",
++            "Sunder from Within",
++            "201a63119d5504eecbbfebdb7854bb188c6f109536c85a7776e65243fada6764",
++        ),
++        (
++            "pillage",
++            "Pillage",
++            "d0c712d44e5ac17fd6b01b34eb0b8bac2f774a7d7d2d17eb4e0d2b7c9a344289",
++        ),
++        (
++            "victorious_destruction",
++            "Victorious Destruction",
++            "4b99f979941f44323c101473e5a474f09d85984b4bfcfa5646949f36b41e2e92",
++        ),
++        (
++            "violent_impact",
++            "Violent Impact",
++            "7e506dd5f4c8a17bec520727d79f45d34f653e43cbcbd8fddd2e87cf65dab9e0",
++        ),
++    ] {
++        let row = fingerprints
++            .lines()
++            .find(|line| line.starts_with(&format!("{id}\t")))
++            .unwrap_or_else(|| panic!("missing fingerprint row for {id}"));
++        let fields: Vec<&str> = row.split('\t').collect();
++        assert_eq!(fields.len(), 5, "{id}");
++        assert_eq!(fields[0], id);
++        assert_eq!(fields[1], name);
++        assert_eq!(fields[2], face_id(name), "face id drift for {id}");
++        assert_eq!(fields[3], name);
++        assert_eq!(fields[4], digest, "pinned fingerprint digest for {id}");
++    }
++}
+diff --git a/tricerules/tricerules-cards/tests/suites/mechanic_registry.rs b/tricerules/tricerules-cards/tests/suites/mechanic_registry.rs
+index 4b4b4c9e0..1a9cf608c 100644
+--- a/tricerules/tricerules-cards/tests/suites/mechanic_registry.rs
++++ b/tricerules/tricerules-cards/tests/suites/mechanic_registry.rs
+@@ -1309,3 +1309,6 @@ mod q50_cohorts_batch;
+ 
+ #[path = "../q51_cohorts_batch.rs"]
+ mod q51_cohorts_batch;
++
++#[path = "../q52_cohorts_batch.rs"]
++mod q52_cohorts_batch;
+diff --git a/tricerules/tricerules-core/tests/scenario.rs b/tricerules/tricerules-core/tests/scenario.rs
+index 8f358a05e..0d6bdf044 100644
+--- a/tricerules/tricerules-core/tests/scenario.rs
++++ b/tricerules/tricerules-core/tests/scenario.rs
+@@ -2505,3 +2505,6 @@ mod q50_cohorts_batch;
+ 
+ #[path = "scenario/q51_cohorts_batch.rs"]
+ mod q51_cohorts_batch;
++
++#[path = "scenario/q52_cohorts_batch.rs"]
++mod q52_cohorts_batch;
+diff --git a/tricerules/tricerules-core/tests/scenario/q52_cohorts_batch.rs b/tricerules/tricerules-core/tests/scenario/q52_cohorts_batch.rs
+new file mode 100644
+index 000000000..aa3ad93e2
+--- /dev/null
++++ b/tricerules/tricerules-core/tests/scenario/q52_cohorts_batch.rs
+@@ -0,0 +1,263 @@
++//! Actual-card scenarios for the queue-v52 destroy-artifact-or-land cohort.
++//!
++//! Expectations are printed Oracle values. CR 701.8 defines destruction,
++//! CR 701.19c prevents regeneration, CR 119.3 covers the controller's life loss,
++//! CR 702.29a-b covers cycling, and CR 608.2b fizzles a departed target.
++use crate::helpers::ScenarioCommandExt;
++
++use super::helpers::*;
++use tricerules_core::Zone;
++use tricerules_proto::ruled::v1::ruled_command::Cmd;
++use tricerules_proto::ruled::v1::{AbilitySourceZone, ActivateAbility, RuledCommand};
++
++struct Case {
++    id: &'static str,
++    mana: ManaGift,
++}
++
++fn cases() -> [Case; 5] {
++    [
++        Case {
++            id: "demolish",
++            mana: ManaGift {
++                r: 1,
++                c: 3,
++                ..Default::default()
++            },
++        },
++        Case {
++            id: "sunder_from_within",
++            mana: ManaGift {
++                r: 2,
++                c: 2,
++                ..Default::default()
++            },
++        },
++        Case {
++            id: "pillage",
++            mana: ManaGift {
++                r: 2,
++                c: 1,
++                ..Default::default()
++            },
++        },
++        Case {
++            id: "victorious_destruction",
++            mana: ManaGift {
++                r: 1,
++                c: 4,
++                ..Default::default()
++            },
++        },
++        Case {
++            id: "violent_impact",
++            mana: ManaGift {
++                r: 1,
++                c: 3,
++                ..Default::default()
++            },
++        },
++    ]
++}
++
++fn gift(m: &ManaGift) -> ManaGift {
++    ManaGift {
++        w: m.w,
++        u: m.u,
++        b: m.b,
++        r: m.r,
++        g: m.g,
++        c: m.c,
++    }
++}
++
++fn engine(seed: u64, card: &str) -> GameEngine {
++    let decks = Some(vec![
++        deck_with("mountain", &[card]),
++        deck_with("forest", &["grizzly_bears", "pewter_golem"]),
++    ]);
++    let mut e = GameEngine::new(
++        tricerules_cards::registry::global(),
++        seed,
++        &[0, 1],
++        20,
++        decks,
++        true,
++    )
++    .expect("engine");
++    advance_to_main1_from_game_start(&mut e);
++    e
++}
++
++fn pool(e: &GameEngine) -> (u32, u32, u32, u32, u32, u32) {
++    let p = &e.state.players[0].mana_pool;
++    (p.white, p.blue, p.black, p.red, p.green, p.colorless)
++}
++
++fn cast_at(e: &mut GameEngine, case: &Case, target: u32) {
++    inject_card_into_hand(e, 0, case.id);
++    give_mana(e, 0, gift(&case.mana));
++    let slot = hand_index_for_card(e, 0, case.id);
++    e.apply_scenario_command(0, &cast_spell(slot, target_object(target)))
++        .unwrap_or_else(|error| panic!("cast {}: {error:?}", case.id));
++    resolve_entire_stack_two_player(e);
++    assert_eq!(pool(e), (0, 0, 0, 0, 0, 0), "{}: exact cost", case.id);
++}
++
++fn hand_ability(e: &GameEngine, source: u32) -> RuledCommand {
++    RuledCommand {
++        cmd: Some(Cmd::ActivateAbility(ActivateAbility {
++            source_object_id: source,
++            source_zone: AbilitySourceZone::Hand as i32,
++            expected_zone_change_generation: e
++                .state
++                .zone_change_generation
++                .get(&source)
++                .copied()
++                .unwrap_or(0),
++            ability_index: 0,
++            ..Default::default()
++        })),
++    }
++}
++
++#[test]
++fn q52_canary_simplest_demolish_destroys_an_artifact() {
++    let case = &cases()[0];
++    let mut e = engine(52_010_001, case.id);
++    let artifact = inject_permanent_on_battlefield(&mut e, 1, "sol_ring");
++    cast_at(&mut e, case, artifact);
++    assert_eq!(e.state.objects[&artifact].zone, Zone::Graveyard);
++    assert_eq!(e.state.players[1].life, 20, "no life loss rider");
++}
++
++#[test]
++fn q52_canary_hardest_victorious_destruction_destroys_a_land_and_drains() {
++    let case = &cases()[3];
++    let mut e = engine(52_010_002, case.id);
++    let land = inject_permanent_on_battlefield(&mut e, 1, "forest");
++    cast_at(&mut e, case, land);
++    assert_eq!(e.state.objects[&land].zone, Zone::Graveyard);
++    assert_eq!(e.state.players[1].life, 19, "the land's controller loses 1");
++    assert_eq!(e.state.players[0].life, 20, "the caster does not lose life");
++}
++
++#[test]
++fn q52_cards_accept_each_branch_and_reject_other_types() {
++    for (index, case) in cases().iter().enumerate() {
++        for (branch, card) in [("artifact", "sol_ring"), ("land", "forest")] {
++            let mut e = engine(52_011_000 + index as u64, case.id);
++            let target = inject_permanent_on_battlefield(&mut e, 1, card);
++            cast_at(&mut e, case, target);
++            assert_eq!(
++                e.state.objects[&target].zone,
++                Zone::Graveyard,
++                "{}: {branch} branch",
++                case.id
++            );
++        }
++        for (invalid, card) in [("creature", "grizzly_bears"), ("enchantment", "pacifism")] {
++            let mut e = engine(52_012_000 + index as u64, case.id);
++            let target = inject_permanent_on_battlefield(&mut e, 1, card);
++            inject_card_into_hand(&mut e, 0, case.id);
++            give_mana(&mut e, 0, gift(&case.mana));
++            let slot = hand_index_for_card(&e, 0, case.id);
++            assert!(
++                e.apply_scenario_command(0, &cast_spell(slot, target_object(target)))
++                    .is_err(),
++                "{}: {invalid} is not a legal target",
++                case.id
++            );
++        }
++    }
++}
++
++#[test]
++fn q52_cards_fizzle_a_departed_target() {
++    for (index, case) in cases().iter().enumerate() {
++        let mut e = engine(52_013_000 + index as u64, case.id);
++        let target = inject_permanent_on_battlefield(&mut e, 1, "sol_ring");
++        inject_card_into_hand(&mut e, 0, case.id);
++        give_mana(&mut e, 0, gift(&case.mana));
++        let slot = hand_index_for_card(&e, 0, case.id);
++        e.apply_scenario_command(0, &cast_spell(slot, target_object(target)))
++            .expect("cast the destruction spell");
++        inject_card_into_hand(&mut e, 0, "shatter");
++        give_mana(
++            &mut e,
++            0,
++            ManaGift {
++                r: 1,
++                c: 1,
++                ..Default::default()
++            },
++        );
++        let shatter = hand_index_for_card(&e, 0, "shatter");
++        e.apply_scenario_command(0, &cast_spell(shatter, target_object(target)))
++            .expect("destroy the target in response");
++        resolve_entire_stack_two_player(&mut e);
++        assert_eq!(e.state.objects[&target].zone, Zone::Graveyard);
++        assert!(
++            e.state.players[1].graveyard.contains(&target),
++            "{}: the target is in its owner's graveyard",
++            case.id
++        );
++        assert_eq!(
++            e.state.players[1].life, 20,
++            "{}: a stale target produces no life loss",
++            case.id
++        );
++        assert!(e.state.stack.is_empty(), "{}: stack is empty", case.id);
++    }
++}
++
++#[test]
++fn q52_pillage_prevents_regeneration() {
++    let case = &cases()[2];
++    let mut e = engine(52_020_001, case.id);
++    let golem = inject_permanent_on_battlefield(&mut e, 1, "pewter_golem");
++    e.state
++        .objects
++        .get_mut(&golem)
++        .unwrap()
++        .regeneration_shields = 1;
++    cast_at(&mut e, case, golem);
++    assert_eq!(e.state.objects[&golem].zone, Zone::Graveyard);
++    assert_eq!(e.state.objects[&golem].regeneration_shields, 0);
++}
++
++#[test]
++fn q52_violent_impact_cycles_for_two_and_draws() {
++    let case = &cases()[4];
++    let mut e = engine(52_030_001, case.id);
++    ensure_in_hand(&mut e, 0, case.id);
++    let card = e.state.players[0].hand[hand_index_for_card(&e, 0, case.id)];
++    let drawn = inject_library_card(&mut e, 0, "grizzly_bears");
++    e.state.players[0]
++        .library
++        .retain(|candidate| *candidate != drawn);
++    e.state.players[0].library.push_front(drawn);
++    give_mana(
++        &mut e,
++        0,
++        ManaGift {
++            c: 2,
++            ..Default::default()
++        },
++    );
++    e.apply_scenario_command(0, &hand_ability(&e, card))
++        .expect("activate Cycling {2}");
++    assert_eq!(
++        e.state.objects[&card].zone,
++        Zone::Graveyard,
++        "cycling discards itself"
++    );
++    assert_eq!(pool(&e), (0, 0, 0, 0, 0, 0));
++    resolve_entire_stack_two_player(&mut e);
++    assert_eq!(
++        e.state.objects[&drawn].zone,
++        Zone::Hand,
++        "cycling draws one"
++    );
++    assert!(e.state.players[0].hand.contains(&drawn));
++}

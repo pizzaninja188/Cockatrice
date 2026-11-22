@@ -1,0 +1,21 @@
+// Oracle e20b80f2-9913-4886-a61b-04f3fd27c2ad; source/rulings checked 2026-11-13.
+// CR 602.1a/602.2 (activation and printed cost), 602.5b (once each turn), 611.2c/613.4c
+// (pump), and 514.2 (cleanup); the printed limit is activation_limit.
+(
+  id: "plated_rootwalla",
+  name: "Plated Rootwalla",
+  face_id: "plated_rootwalla",
+  mana_cost: "{4}{G}",
+  types: ["Creature", "Lizard"],
+  power: 3,
+  toughness: 3,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{2}{G}")],
+      effect: [PumpTarget(power: 3, toughness: 3, subject: Source)],
+      activation_limit: Some(PerTurn(max_activations: 1)),
+    ),
+  ],
+)

@@ -1,0 +1,26 @@
+// Oracle 567b676b-54f3-44c7-8654-4d2b0262ea12; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 400.3 (owner's zone) and 608.2b (departed target fizzles).
+// No pinned ruling.
+(
+  id: "banishment_decree",
+  name: "Banishment Decree",
+  face_id: "banishment_decree",
+  mana_cost: "{3}{W}{W}",
+  types: ["Instant"],
+  spell_program: Some((
+    body: (steps: [
+      (id: "put_in_owners_library",
+        kind: Perform(PutInOwnersLibrary(
+          subject: Chosen((any_of: Some([
+            (kind: AnyPermanent, permanent_types: [Artifact]),
+            (kind: Creature),
+            (kind: AnyPermanent, permanent_types: [Enchantment]),
+          ]))),
+          placement: Top,
+        ))),
+    ]),
+    target_bindings: [(instruction_id: "put_in_owners_library", role: Subject, target_group_index: 0)],
+  )),
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [])])),
+)

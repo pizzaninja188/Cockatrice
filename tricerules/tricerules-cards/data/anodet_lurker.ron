@@ -1,0 +1,20 @@
+// Oracle 5c2dbe90-5784-4bc4-a715-76a61c1ecfbc; source/rulings checked 2026-11-13.
+// CR 603.6c/700.4 (dies trigger), 119.3 (life gain), and 608.2c
+// (the controller of the trigger gains the life).
+(
+  id: "anodet_lurker",
+  name: "Anodet Lurker",
+  face_id: "anodet_lurker",
+  mana_cost: "{5}",
+  types: ["Artifact", "Creature", "Construct"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfDies,
+      effect: [GainLife(amount: 3)],
+    ),
+  ],
+)

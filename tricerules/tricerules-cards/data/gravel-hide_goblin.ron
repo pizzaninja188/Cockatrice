@@ -1,0 +1,20 @@
+// Oracle 71d284ee-5b29-4db3-b355-a6bdc142a05b; source/rulings checked 2026-11-15.
+// CR 602.1/602.2 (activation and printed cost), 611.2a/613.4c
+// (until-end-of-turn pump), and 514.2 (cleanup expiry).
+(
+  id: "gravel-hide_goblin",
+  name: "Gravel-Hide Goblin",
+  face_id: "gravel_hide_goblin",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Goblin", "Shaman"],
+  power: 2,
+  toughness: 1,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{3}{G}")],
+      effect: [PumpTarget(power: 2, toughness: 2, subject: Source)],
+    ),
+  ],
+)

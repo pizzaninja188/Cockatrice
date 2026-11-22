@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "fa46ced5-b701-4aa3-b4a1-36fb15b80696",
+  "spans": [
+    {
+      "face_id": "unnatural_speed",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q37_grant_keyword_batch::q37_grant_keyword_cards_grant_the_printed_keywords_only_to_the_target",
+      "covers": "actual card is exercised by the shared 07-grant-keyword scenario"
+    },
+    {
+      "test": "scenario q37_grant_keyword_batch::q37_grant_keyword_cards_require_a_creature_target",
+      "covers": "actual card is exercised by the shared 07-grant-keyword scenario"
+    },
+    {
+      "test": "scenario q37_grant_keyword_batch::q37_grant_keyword_cards_fizzle_when_the_target_is_gone",
+      "covers": "actual card is exercised by the shared 07-grant-keyword scenario"
+    },
+    {
+      "test": "mechanic_registry::q37_grant_keyword_batch::q37_grant_keyword_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q37_grant_keyword_batch::q37_grant_keyword_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

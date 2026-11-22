@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "a2529491-7389-4cfa-92d2-145eda779603",
+  "spans": [
+    {
+      "face_id": "darksteel_ingot",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords",
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Indestructible",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q53_batch_c::q53_c_any_color_mana_cards_produce_each_color",
+      "covers": "actual darksteel_ingot printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_c::q53_any_color_mana_cards_map_definitions",
+      "covers": "actual darksteel_ingot printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_c::q53_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

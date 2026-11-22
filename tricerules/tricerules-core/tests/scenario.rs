@@ -1242,6 +1242,36 @@ mod issue_misc9_batch;
 #[path = "scenario/issue_removal_batch.rs"]
 mod issue_removal_batch;
 
+#[path = "scenario/damage_any_target_batch.rs"]
+mod damage_any_target_batch;
+
+#[path = "scenario/pump_team_batch.rs"]
+mod pump_team_batch;
+
+#[path = "scenario/equipment_batch.rs"]
+mod equipment_batch;
+
+#[path = "scenario/forestwalk_batch.rs"]
+mod forestwalk_batch;
+
+#[path = "scenario/regenerate_batch.rs"]
+mod regenerate_batch;
+
+#[path = "scenario/shrink_batch.rs"]
+mod shrink_batch;
+
+#[path = "scenario/pump_self_batch.rs"]
+mod pump_self_batch;
+
+#[path = "scenario/pump_self_cohort.rs"]
+mod pump_self_cohort;
+
+#[path = "scenario/pump_trample_batch.rs"]
+mod pump_trample_batch;
+
+#[path = "scenario/pump_aura_batch.rs"]
+mod pump_aura_batch;
+
 #[path = "scenario/deck_coverage_anarchomancer_mastermind.rs"]
 mod deck_coverage_anarchomancer_mastermind;
 
@@ -1374,3 +1404,1140 @@ mod vronos_per_opponent;
 
 #[path = "scenario/deck_coverage_vronos_masked_inquisitor.rs"]
 mod deck_coverage_vronos_masked_inquisitor;
+
+#[path = "scenario/warped_landscape_batch.rs"]
+mod warped_landscape_batch;
+
+#[path = "scenario/arachnoid_adaptation_batch.rs"]
+mod arachnoid_adaptation_batch;
+
+#[path = "scenario/hieromancers_cage_batch.rs"]
+mod hieromancers_cage_batch;
+
+#[path = "scenario/captains_tutelage_batch.rs"]
+mod captains_tutelage_batch;
+
+#[path = "scenario/viashino_racketeer_batch.rs"]
+mod viashino_racketeer_batch;
+
+#[path = "scenario/agonizing_syphon_batch.rs"]
+mod agonizing_syphon_batch;
+
+#[path = "scenario/glint_batch.rs"]
+mod glint_batch;
+
+#[path = "scenario/high_rise_sawjack_batch.rs"]
+mod high_rise_sawjack_batch;
+
+#[path = "scenario/puncturing_blow_batch.rs"]
+mod puncturing_blow_batch;
+
+#[path = "scenario/soothsayer_adept_batch.rs"]
+mod soothsayer_adept_batch;
+
+#[path = "scenario/darkness_batch.rs"]
+mod darkness_batch;
+
+#[path = "scenario/izzet_chronarch_batch.rs"]
+mod izzet_chronarch_batch;
+
+#[path = "scenario/urborg_volcano_batch.rs"]
+mod urborg_volcano_batch;
+
+#[path = "scenario/dueling_rapier_batch.rs"]
+mod dueling_rapier_batch;
+
+#[path = "scenario/recollect_batch.rs"]
+mod recollect_batch;
+
+#[path = "scenario/aggressive_urge_batch.rs"]
+mod aggressive_urge_batch;
+
+#[path = "scenario/quirion_explorer_batch.rs"]
+mod quirion_explorer_batch;
+
+#[path = "scenario/mindstatic_batch.rs"]
+mod mindstatic_batch;
+
+#[path = "scenario/colorless_two_mana_batch.rs"]
+mod colorless_two_mana_batch;
+
+#[path = "scenario/timber_gorge_batch.rs"]
+mod timber_gorge_batch;
+
+#[path = "scenario/ronom_unicorn_batch.rs"]
+mod ronom_unicorn_batch;
+
+#[path = "scenario/brazen_freebooter_batch.rs"]
+mod brazen_freebooter_batch;
+
+#[path = "scenario/gaeas_anthem_batch.rs"]
+mod gaeas_anthem_batch;
+
+#[path = "scenario/sylvan_ranger_batch.rs"]
+mod sylvan_ranger_batch;
+
+#[path = "scenario/breath_of_life_batch.rs"]
+mod breath_of_life_batch;
+
+#[path = "scenario/tap_dual_remnants_batch.rs"]
+mod tap_dual_remnants_batch;
+
+#[path = "scenario/any_color_mana_batch.rs"]
+mod any_color_mana_batch;
+
+#[path = "scenario/graveyard_two_to_hand_batch.rs"]
+mod graveyard_two_to_hand_batch;
+
+#[path = "scenario/enters_tapped_creatures_batch.rs"]
+mod enters_tapped_creatures_batch;
+
+#[path = "scenario/prowess_creatures_batch.rs"]
+mod prowess_creatures_batch;
+
+#[path = "scenario/flying_etb_scry_batch.rs"]
+mod flying_etb_scry_batch;
+
+#[path = "scenario/flying_creatures_batch.rs"]
+mod flying_creatures_batch;
+
+#[path = "scenario/colorless_double_mana_batch.rs"]
+mod colorless_double_mana_batch;
+
+#[path = "scenario/destroy_artifact_batch.rs"]
+mod destroy_artifact_batch;
+
+#[path = "scenario/tap_target_activated_batch.rs"]
+mod tap_target_activated_batch;
+
+#[path = "scenario/destroy_land_batch.rs"]
+mod destroy_land_batch;
+
+#[path = "scenario/attack_pump_batch.rs"]
+mod attack_pump_batch;
+
+#[path = "scenario/etb_counter_target_batch.rs"]
+mod etb_counter_target_batch;
+
+#[path = "scenario/exile_artifact_enchantment_batch.rs"]
+mod exile_artifact_enchantment_batch;
+
+#[path = "scenario/destroy_tapped_batch.rs"]
+mod destroy_tapped_batch;
+
+#[path = "scenario/landfall_pump_batch.rs"]
+mod landfall_pump_batch;
+
+#[path = "scenario/attack_each_combat_batch.rs"]
+mod attack_each_combat_batch;
+
+#[path = "scenario/counter_creature_spell_batch.rs"]
+mod counter_creature_spell_batch;
+
+#[path = "scenario/flying_cant_block_batch.rs"]
+mod flying_cant_block_batch;
+
+#[path = "scenario/flying_prowess_batch.rs"]
+mod flying_prowess_batch;
+
+#[path = "scenario/etb_team_pump_batch.rs"]
+mod etb_team_pump_batch;
+
+#[path = "scenario/dies_draw_batch.rs"]
+mod dies_draw_batch;
+
+#[path = "scenario/etb_gain_four_life_batch.rs"]
+mod etb_gain_four_life_batch;
+
+#[path = "scenario/aura_tap_lock_batch.rs"]
+mod aura_tap_lock_batch;
+
+#[path = "scenario/destroy_all_enchantments_batch.rs"]
+mod destroy_all_enchantments_batch;
+
+#[path = "scenario/draw_three_discard_batch.rs"]
+mod draw_three_discard_batch;
+
+#[path = "scenario/pinger_batch.rs"]
+mod pinger_batch;
+
+#[path = "scenario/exile_target_creature_batch.rs"]
+mod exile_target_creature_batch;
+
+#[path = "scenario/etb_damage_any_target_batch.rs"]
+mod etb_damage_any_target_batch;
+
+#[path = "scenario/combat_damage_draw_batch.rs"]
+mod combat_damage_draw_batch;
+
+#[path = "scenario/dies_shrink_opponent_batch.rs"]
+mod dies_shrink_opponent_batch;
+
+#[path = "scenario/aura_cant_attack_block_batch.rs"]
+mod aura_cant_attack_block_batch;
+
+#[path = "scenario/put_creature_on_top_batch.rs"]
+mod put_creature_on_top_batch;
+
+#[path = "scenario/etb_loot_batch.rs"]
+mod etb_loot_batch;
+
+#[path = "scenario/flying_etb_loot_batch.rs"]
+mod flying_etb_loot_batch;
+
+#[path = "scenario/mana_any_color_batch.rs"]
+mod mana_any_color_batch;
+
+#[path = "scenario/filter_lands_batch.rs"]
+mod filter_lands_batch;
+
+#[path = "scenario/pain_lands_batch.rs"]
+mod pain_lands_batch;
+
+#[path = "scenario/cycling_lands_batch.rs"]
+mod cycling_lands_batch;
+
+#[path = "scenario/cycling_color_lands_batch.rs"]
+mod cycling_color_lands_batch;
+
+#[path = "scenario/vivid_lands_batch.rs"]
+mod vivid_lands_batch;
+
+#[path = "scenario/explore_etb_batch.rs"]
+mod explore_etb_batch;
+
+#[path = "scenario/dies_damage_any_target_batch.rs"]
+mod dies_damage_any_target_batch;
+
+#[path = "scenario/dies_gain_life_batch.rs"]
+mod dies_gain_life_batch;
+
+#[path = "scenario/team_pump_activated_batch.rs"]
+mod team_pump_activated_batch;
+
+#[path = "scenario/refuge_lands_batch.rs"]
+mod refuge_lands_batch;
+
+#[path = "scenario/talisman_cycle_batch.rs"]
+mod talisman_cycle_batch;
+
+#[path = "scenario/islandwalk_batch.rs"]
+mod islandwalk_batch;
+
+#[path = "scenario/mountainwalk_batch.rs"]
+mod mountainwalk_batch;
+
+#[path = "scenario/etb_target_pump_batch.rs"]
+mod etb_target_pump_batch;
+
+#[path = "scenario/aura_pump_values_batch.rs"]
+mod aura_pump_values_batch;
+
+#[path = "scenario/sliver_anthem_batch.rs"]
+mod sliver_anthem_batch;
+
+#[path = "scenario/attack_pump_values_batch.rs"]
+mod attack_pump_values_batch;
+
+#[path = "scenario/self_pump_once_batch.rs"]
+mod self_pump_once_batch;
+
+#[path = "scenario/swampwalk_batch.rs"]
+mod swampwalk_batch;
+
+#[path = "scenario/protection_red_flying_batch.rs"]
+mod protection_red_flying_batch;
+
+#[path = "scenario/signet_cycle_batch.rs"]
+mod signet_cycle_batch;
+
+#[path = "scenario/filter_land_cycle_batch.rs"]
+mod filter_land_cycle_batch;
+
+#[path = "scenario/damage_target_creature_batch.rs"]
+mod damage_target_creature_batch;
+
+#[path = "scenario/pump_first_strike_batch.rs"]
+mod pump_first_strike_batch;
+
+#[path = "scenario/tap_target_two_batch.rs"]
+mod tap_target_two_batch;
+
+#[path = "scenario/landfall_pump_remnant_batch.rs"]
+mod landfall_pump_remnant_batch;
+
+#[path = "scenario/battle_land_cycle_batch.rs"]
+mod battle_land_cycle_batch;
+
+#[path = "scenario/tapped_dual_basic_batch.rs"]
+mod tapped_dual_basic_batch;
+
+#[path = "scenario/snow_tapped_dual_basic_batch.rs"]
+mod snow_tapped_dual_basic_batch;
+
+#[path = "scenario/all_creature_shrink_batch.rs"]
+mod all_creature_shrink_batch;
+
+#[path = "scenario/targeted_evasion_batch.rs"]
+mod targeted_evasion_batch;
+
+#[path = "scenario/loot_activated_batch.rs"]
+mod loot_activated_batch;
+
+#[path = "scenario/put_land_from_hand_batch.rs"]
+mod put_land_from_hand_batch;
+
+#[path = "scenario/pay_life_any_color_batch.rs"]
+mod pay_life_any_color_batch;
+
+#[path = "scenario/any_color_mana_activation_batch.rs"]
+mod any_color_mana_activation_batch;
+
+#[path = "scenario/self_pump_negative_batch.rs"]
+mod self_pump_negative_batch;
+
+#[path = "scenario/cant_block_batch.rs"]
+mod cant_block_batch;
+
+#[path = "scenario/cant_be_blocked_batch.rs"]
+mod cant_be_blocked_batch;
+
+#[path = "scenario/protection_cycle_batch.rs"]
+mod protection_cycle_batch;
+
+#[path = "scenario/flying_blocks_only_flying_batch.rs"]
+mod flying_blocks_only_flying_batch;
+
+#[path = "scenario/cycling_two_batch.rs"]
+mod cycling_two_batch;
+
+#[path = "scenario/flying_cycling_two_batch.rs"]
+mod flying_cycling_two_batch;
+
+#[path = "scenario/etb_scry_two_batch.rs"]
+mod etb_scry_two_batch;
+
+#[path = "scenario/flying_dies_draw_batch.rs"]
+mod flying_dies_draw_batch;
+
+#[path = "scenario/etb_destroy_artifact_batch.rs"]
+mod etb_destroy_artifact_batch;
+
+#[path = "scenario/tap_gain_life_batch.rs"]
+mod tap_gain_life_batch;
+
+#[path = "scenario/tap_untap_land_batch.rs"]
+mod tap_untap_land_batch;
+
+#[path = "scenario/destroy_attacking_batch.rs"]
+mod destroy_attacking_batch;
+
+#[path = "scenario/etb_destroy_land_batch.rs"]
+mod etb_destroy_land_batch;
+
+#[path = "scenario/wither_batch.rs"]
+mod wither_batch;
+
+#[path = "scenario/flying_protection_batch.rs"]
+mod flying_protection_batch;
+
+#[path = "scenario/vanilla_colorless_batch.rs"]
+mod vanilla_colorless_batch;
+
+#[path = "scenario/vanilla_green_batch.rs"]
+mod vanilla_green_batch;
+
+#[path = "scenario/vanilla_gold_batch.rs"]
+mod vanilla_gold_batch;
+
+#[path = "scenario/attack_haste_batch.rs"]
+mod attack_haste_batch;
+
+#[path = "scenario/bounce_draw_batch.rs"]
+mod bounce_draw_batch;
+
+#[path = "scenario/tap_ping_self_batch.rs"]
+mod tap_ping_self_batch;
+
+#[path = "scenario/regenerate_green_batch.rs"]
+mod regenerate_green_batch;
+
+#[path = "scenario/red_pump_one_batch.rs"]
+mod red_pump_one_batch;
+
+#[path = "scenario/red_pump_two_batch.rs"]
+mod red_pump_two_batch;
+
+#[path = "scenario/vanilla_remnants_batch.rs"]
+mod vanilla_remnants_batch;
+
+#[path = "scenario/blue_gain_flying_batch.rs"]
+mod blue_gain_flying_batch;
+
+#[path = "scenario/white_gain_vigilance_batch.rs"]
+mod white_gain_vigilance_batch;
+
+#[path = "scenario/vanilla_red_batch.rs"]
+mod vanilla_red_batch;
+
+#[path = "scenario/first_strike_batch.rs"]
+mod first_strike_batch;
+
+#[path = "scenario/trample_batch.rs"]
+mod trample_batch;
+
+#[path = "scenario/self_pump_black_batch.rs"]
+mod self_pump_black_batch;
+
+#[path = "scenario/self_pump_red_batch.rs"]
+mod self_pump_red_batch;
+
+#[path = "scenario/self_pump_green_batch.rs"]
+mod self_pump_green_batch;
+
+#[path = "scenario/convoke_batch.rs"]
+mod convoke_batch;
+
+#[path = "scenario/prowess_batch.rs"]
+mod prowess_batch;
+
+#[path = "scenario/protection_red_batch.rs"]
+mod protection_red_batch;
+
+#[path = "scenario/flier_blocker_batch.rs"]
+mod flier_blocker_batch;
+
+#[path = "scenario/flash_hexproof_aura_batch.rs"]
+mod flash_hexproof_aura_batch;
+
+#[path = "scenario/etb_scry_value_batch.rs"]
+mod etb_scry_value_batch;
+
+#[path = "scenario/aura_menace_batch.rs"]
+mod aura_menace_batch;
+
+#[path = "scenario/first_strike_scry_batch.rs"]
+mod first_strike_scry_batch;
+
+#[path = "scenario/shrink_draw_batch.rs"]
+mod shrink_draw_batch;
+
+#[path = "scenario/landfall_trample_batch.rs"]
+mod landfall_trample_batch;
+
+#[path = "scenario/etb_damage_creature_batch.rs"]
+mod etb_damage_creature_batch;
+
+#[path = "scenario/team_pump_on_enter_batch.rs"]
+mod team_pump_on_enter_batch;
+
+#[path = "scenario/flying_self_pump_batch.rs"]
+mod flying_self_pump_batch;
+
+#[path = "scenario/aura_flying_pump_batch.rs"]
+mod aura_flying_pump_batch;
+
+#[path = "scenario/flash_aura_pump_batch.rs"]
+mod flash_aura_pump_batch;
+
+#[path = "scenario/aura_etb_draw_pump_batch.rs"]
+mod aura_etb_draw_pump_batch;
+
+#[path = "scenario/flash_aura_shrink_batch.rs"]
+mod flash_aura_shrink_batch;
+
+#[path = "scenario/damage_flashback_batch.rs"]
+mod damage_flashback_batch;
+
+#[path = "scenario/mass_shrink_batch.rs"]
+mod mass_shrink_batch;
+
+#[path = "scenario/lifelink_pump_batch.rs"]
+mod lifelink_pump_batch;
+
+#[path = "scenario/affinity_flying_batch.rs"]
+mod affinity_flying_batch;
+
+#[path = "scenario/wall_regenerate_batch.rs"]
+mod wall_regenerate_batch;
+
+#[path = "scenario/flier_regenerate_batch.rs"]
+mod flier_regenerate_batch;
+
+#[path = "scenario/wall_pump_batch.rs"]
+mod wall_pump_batch;
+
+#[path = "scenario/flash_etb_pump_batch.rs"]
+mod flash_etb_pump_batch;
+
+#[path = "scenario/equipment_vigilance_batch.rs"]
+mod equipment_vigilance_batch;
+
+#[path = "scenario/vanilla_vehicles_batch.rs"]
+mod vanilla_vehicles_batch;
+
+#[path = "scenario/soft_counter_cycling_batch.rs"]
+mod soft_counter_cycling_batch;
+
+#[path = "scenario/fog_cycling_batch.rs"]
+mod fog_cycling_batch;
+
+#[path = "scenario/artifact_sac_ping_batch.rs"]
+mod artifact_sac_ping_batch;
+
+#[path = "scenario/regenerate_activated_batch.rs"]
+mod regenerate_activated_batch;
+
+#[path = "scenario/self_pump_activated_batch.rs"]
+mod self_pump_activated_batch;
+
+#[path = "scenario/tap_target_mana_batch.rs"]
+mod tap_target_mana_batch;
+
+#[path = "scenario/grant_flying_activated_batch.rs"]
+mod grant_flying_activated_batch;
+
+#[path = "scenario/gain_life_draw_batch.rs"]
+mod gain_life_draw_batch;
+
+#[path = "scenario/vigilance_crew_batch.rs"]
+mod vigilance_crew_batch;
+
+#[path = "scenario/cycling_keyword_batch.rs"]
+mod cycling_keyword_batch;
+
+#[path = "scenario/tap_grant_haste_batch.rs"]
+mod tap_grant_haste_batch;
+
+#[path = "scenario/changeling_keyword_batch.rs"]
+mod changeling_keyword_batch;
+
+#[path = "scenario/dies_counter_target_batch.rs"]
+mod dies_counter_target_batch;
+
+#[path = "scenario/dies_drain_batch.rs"]
+mod dies_drain_batch;
+
+#[path = "scenario/sacrifice_draw_batch.rs"]
+mod sacrifice_draw_batch;
+
+#[path = "scenario/sac_lands_cc_batch.rs"]
+mod sac_lands_cc_batch;
+
+#[path = "scenario/investigate_lands_batch.rs"]
+mod investigate_lands_batch;
+
+#[path = "scenario/artifact_lands_bridge_batch.rs"]
+mod artifact_lands_bridge_batch;
+
+#[path = "scenario/etb_edict_batch.rs"]
+mod etb_edict_batch;
+
+#[path = "scenario/etb_cant_block_batch.rs"]
+mod etb_cant_block_batch;
+
+#[path = "scenario/etb_draw_lose_life_batch.rs"]
+mod etb_draw_lose_life_batch;
+
+#[path = "scenario/etb_basic_search_tapped_batch.rs"]
+mod etb_basic_search_tapped_batch;
+
+#[path = "scenario/flying_neg_pump_batch.rs"]
+mod flying_neg_pump_batch;
+
+#[path = "scenario/aura_pump_haste_batch.rs"]
+mod aura_pump_haste_batch;
+
+#[path = "scenario/flying_any_mana_batch.rs"]
+mod flying_any_mana_batch;
+
+#[path = "scenario/equipment_haste_batch.rs"]
+mod equipment_haste_batch;
+
+#[path = "scenario/mana_target_pump_batch.rs"]
+mod mana_target_pump_batch;
+
+#[path = "scenario/haste_self_pump_batch.rs"]
+mod haste_self_pump_batch;
+
+#[path = "scenario/trample_self_pump_batch.rs"]
+mod trample_self_pump_batch;
+
+#[path = "scenario/naturalize_lifegain_batch.rs"]
+mod naturalize_lifegain_batch;
+
+#[path = "scenario/damage_creature_lifegain_batch.rs"]
+mod damage_creature_lifegain_batch;
+
+#[path = "scenario/prevention_shield_batch.rs"]
+mod prevention_shield_batch;
+
+#[path = "scenario/etb_vanilla_tokens_batch.rs"]
+mod etb_vanilla_tokens_batch;
+
+#[path = "scenario/tri_mana_obelisks_batch.rs"]
+mod tri_mana_obelisks_batch;
+
+#[path = "scenario/sac_creature_three_batch.rs"]
+mod sac_creature_three_batch;
+
+#[path = "scenario/blocks_pump_batch.rs"]
+mod blocks_pump_batch;
+
+#[path = "scenario/becomes_target_sacrifice_batch.rs"]
+mod becomes_target_sacrifice_batch;
+
+#[path = "scenario/flying_grant_activated_batch.rs"]
+mod flying_grant_activated_batch;
+
+#[path = "scenario/unblockable_power_two_batch.rs"]
+mod unblockable_power_two_batch;
+
+#[path = "scenario/horizon_canopy_cycle_batch.rs"]
+mod horizon_canopy_cycle_batch;
+
+#[path = "scenario/slow_lands_batch.rs"]
+mod slow_lands_batch;
+
+#[path = "scenario/fast_lands_batch.rs"]
+mod fast_lands_batch;
+
+#[path = "scenario/desert_cycling_batch.rs"]
+mod desert_cycling_batch;
+
+#[path = "scenario/botanical_plaza_batch.rs"]
+mod botanical_plaza_batch;
+
+#[path = "scenario/sac_creature_self_pump_batch.rs"]
+mod sac_creature_self_pump_batch;
+
+#[path = "scenario/cameo_artifacts_batch.rs"]
+mod cameo_artifacts_batch;
+
+#[path = "scenario/sliver_anthem_controlled_batch.rs"]
+mod sliver_anthem_controlled_batch;
+
+#[path = "scenario/abandoned_outpost_batch.rs"]
+mod abandoned_outpost_batch;
+
+#[path = "scenario/pain_taplands_batch.rs"]
+mod pain_taplands_batch;
+
+#[path = "scenario/cluestones_batch.rs"]
+mod cluestones_batch;
+
+#[path = "scenario/lockets_batch.rs"]
+mod lockets_batch;
+
+#[path = "scenario/banners_batch.rs"]
+mod banners_batch;
+
+#[path = "scenario/other_anthems_batch.rs"]
+mod other_anthems_batch;
+
+#[path = "scenario/flying_once_pump_batch.rs"]
+mod flying_once_pump_batch;
+
+#[path = "scenario/etb_lose_life_flyers_batch.rs"]
+mod etb_lose_life_flyers_batch;
+
+#[path = "scenario/etb_pump_flying_batch.rs"]
+mod etb_pump_flying_batch;
+
+#[path = "scenario/mill_two_batch.rs"]
+mod mill_two_batch;
+
+#[path = "scenario/blocked_by_power_two_batch.rs"]
+mod blocked_by_power_two_batch;
+
+#[path = "scenario/max_one_blocker_batch.rs"]
+mod max_one_blocker_batch;
+
+#[path = "scenario/counter_typed_spells_batch.rs"]
+mod counter_typed_spells_batch;
+
+#[path = "scenario/graveyard_type_recursion_batch.rs"]
+mod graveyard_type_recursion_batch;
+
+#[path = "scenario/bounce_spells_batch.rs"]
+mod bounce_spells_batch;
+
+#[path = "scenario/etb_freeze_batch.rs"]
+mod etb_freeze_batch;
+
+#[path = "scenario/dies_destroy_land_batch.rs"]
+mod dies_destroy_land_batch;
+
+#[path = "scenario/graveyard_to_top_batch.rs"]
+mod graveyard_to_top_batch;
+
+#[path = "scenario/look_three_batch.rs"]
+mod look_three_batch;
+
+#[path = "scenario/team_counters_batch.rs"]
+mod team_counters_batch;
+
+#[path = "scenario/keyword_only_batch.rs"]
+mod keyword_only_batch;
+
+#[path = "scenario/multi_mana_producers_batch.rs"]
+mod multi_mana_producers_batch;
+
+#[path = "scenario/double_strike_grants_batch.rs"]
+mod double_strike_grants_batch;
+
+#[path = "scenario/x_pumps_batch.rs"]
+mod x_pumps_batch;
+
+#[path = "scenario/draw_two_lose_two_batch.rs"]
+mod draw_two_lose_two_batch;
+
+#[path = "scenario/attack_tap_batch.rs"]
+mod attack_tap_batch;
+
+#[path = "scenario/untap_self_batch.rs"]
+mod untap_self_batch;
+
+#[path = "scenario/sac_artifact_pump_batch.rs"]
+mod sac_artifact_pump_batch;
+
+#[path = "scenario/q29_sac_artifact_ping_batch.rs"]
+mod q29_sac_artifact_ping_batch;
+
+#[path = "scenario/q29_dies_another_counter_batch.rs"]
+mod q29_dies_another_counter_batch;
+
+#[path = "scenario/q29_attack_may_tap_batch.rs"]
+mod q29_attack_may_tap_batch;
+
+#[path = "scenario/q29_target_sacrifice_batch.rs"]
+mod q29_target_sacrifice_batch;
+
+#[path = "scenario/q29_snow_basics_batch.rs"]
+mod q29_snow_basics_batch;
+
+#[path = "scenario/q29_ally_counter_batch.rs"]
+mod q29_ally_counter_batch;
+
+#[path = "scenario/q29_opponent_shrink_batch.rs"]
+mod q29_opponent_shrink_batch;
+
+#[path = "scenario/q29_destroy_islands_batch.rs"]
+mod q29_destroy_islands_batch;
+
+#[path = "scenario/q29_search_top_lose_two_batch.rs"]
+mod q29_search_top_lose_two_batch;
+
+#[path = "scenario/q30_counter_draw_batch.rs"]
+mod q30_counter_draw_batch;
+
+#[path = "scenario/q30_destroy_creature_filtered_batch.rs"]
+mod q30_destroy_creature_filtered_batch;
+
+#[path = "scenario/q30_free_sac_outlets_batch.rs"]
+mod q30_free_sac_outlets_batch;
+
+#[path = "scenario/q30_tap_looters_batch.rs"]
+mod q30_tap_looters_batch;
+
+#[path = "scenario/q30_protection_remnants_batch.rs"]
+mod q30_protection_remnants_batch;
+
+#[path = "scenario/q30_no_flying_block_batch.rs"]
+mod q30_no_flying_block_batch;
+
+#[path = "scenario/q30_etb_naturalize_batch.rs"]
+mod q30_etb_naturalize_batch;
+
+#[path = "scenario/q30_etb_bounce_batch.rs"]
+mod q30_etb_bounce_batch;
+
+#[path = "scenario/q30_exile_creature_filtered_batch.rs"]
+mod q30_exile_creature_filtered_batch;
+
+#[path = "scenario/q31_checklands_batch.rs"]
+mod q31_checklands_batch;
+
+#[path = "scenario/q31_bounce_lands_batch.rs"]
+mod q31_bounce_lands_batch;
+
+#[path = "scenario/q31_turbulent_lands_batch.rs"]
+mod q31_turbulent_lands_batch;
+
+#[path = "scenario/q31_sphere_lands_batch.rs"]
+mod q31_sphere_lands_batch;
+
+#[path = "scenario/q31_metalcraft_batch.rs"]
+mod q31_metalcraft_batch;
+
+#[path = "scenario/q31_heroic_counters_batch.rs"]
+mod q31_heroic_counters_batch;
+
+#[path = "scenario/q31_battle_cry_batch.rs"]
+mod q31_battle_cry_batch;
+
+#[path = "scenario/q31_treasure_loot_batch.rs"]
+mod q31_treasure_loot_batch;
+
+#[path = "scenario/q31_graveyard_top_draw_batch.rs"]
+mod q31_graveyard_top_draw_batch;
+
+#[path = "scenario/q32_diamond_artifacts_batch.rs"]
+mod q32_diamond_artifacts_batch;
+
+#[path = "scenario/q32_ramos_artifacts_batch.rs"]
+mod q32_ramos_artifacts_batch;
+
+#[path = "scenario/q32_elder_lands_batch.rs"]
+mod q32_elder_lands_batch;
+
+#[path = "scenario/q32_crystal_cycle_batch.rs"]
+mod q32_crystal_cycle_batch;
+
+#[path = "scenario/q32_plus_minus_auras_batch.rs"]
+mod q32_plus_minus_auras_batch;
+
+#[path = "scenario/q32_self_sac_ping_batch.rs"]
+mod q32_self_sac_ping_batch;
+
+#[path = "scenario/q32_activated_lifegain_batch.rs"]
+mod q32_activated_lifegain_batch;
+
+#[path = "scenario/q32_flying_untap_batch.rs"]
+mod q32_flying_untap_batch;
+
+#[path = "scenario/q32_untap_pump_batch.rs"]
+mod q32_untap_pump_batch;
+
+#[path = "scenario/q33_upkeep_damage_batch.rs"]
+mod q33_upkeep_damage_batch;
+
+#[path = "scenario/q33_lifegain_counter_batch.rs"]
+mod q33_lifegain_counter_batch;
+
+#[path = "scenario/q33_soul_warden_batch.rs"]
+mod q33_soul_warden_batch;
+
+#[path = "scenario/q33_etb_team_counter_batch.rs"]
+mod q33_etb_team_counter_batch;
+
+#[path = "scenario/q33_graveyard_self_return_batch.rs"]
+mod q33_graveyard_self_return_batch;
+
+#[path = "scenario/q33_cost_reduction_batch.rs"]
+mod q33_cost_reduction_batch;
+
+#[path = "scenario/q33_creature_mana_abilities_batch.rs"]
+mod q33_creature_mana_abilities_batch;
+
+#[path = "scenario/q33_tapland_remnants_batch.rs"]
+mod q33_tapland_remnants_batch;
+
+#[path = "scenario/q33_keyword_only_remnants_batch.rs"]
+mod q33_keyword_only_remnants_batch;
+
+#[path = "scenario/q34_shrink_spells_batch.rs"]
+mod q34_shrink_spells_batch;
+
+#[path = "scenario/q34_prevention_shields_batch.rs"]
+mod q34_prevention_shields_batch;
+
+#[path = "scenario/q34_targeted_lifegain_batch.rs"]
+mod q34_targeted_lifegain_batch;
+
+#[path = "scenario/q34_death_shrink_batch.rs"]
+mod q34_death_shrink_batch;
+
+#[path = "scenario/q34_death_life_loss_batch.rs"]
+mod q34_death_life_loss_batch;
+
+#[path = "scenario/q34_blocked_pump_batch.rs"]
+mod q34_blocked_pump_batch;
+
+#[path = "scenario/q34_power_evasion_batch.rs"]
+mod q34_power_evasion_batch;
+
+#[path = "scenario/q34_during_turn_pump_batch.rs"]
+mod q34_during_turn_pump_batch;
+
+#[path = "scenario/q34_self_first_strike_batch.rs"]
+mod q34_self_first_strike_batch;
+
+#[path = "scenario/q35_prevent_creature_batch.rs"]
+mod q35_prevent_creature_batch;
+
+#[path = "scenario/q35_trample_pump_batch.rs"]
+mod q35_trample_pump_batch;
+
+#[path = "scenario/q35_self_first_strike_batch.rs"]
+mod q35_self_first_strike_batch;
+
+#[path = "scenario/q35_target_first_strike_batch.rs"]
+mod q35_target_first_strike_batch;
+
+#[path = "scenario/q35_cant_block_batch.rs"]
+mod q35_cant_block_batch;
+
+#[path = "scenario/q35_campus_lands_batch.rs"]
+mod q35_campus_lands_batch;
+
+#[path = "scenario/q35_reach_pump_batch.rs"]
+mod q35_reach_pump_batch;
+
+#[path = "scenario/q35_two_target_pump_batch.rs"]
+mod q35_two_target_pump_batch;
+
+#[path = "scenario/q35_double_pump_shrink_batch.rs"]
+mod q35_double_pump_shrink_batch;
+
+#[path = "scenario/q36_pump_scry_batch.rs"]
+mod q36_pump_scry_batch;
+
+#[path = "scenario/q36_shrink_scry_batch.rs"]
+mod q36_shrink_scry_batch;
+
+#[path = "scenario/q36_damage_scry_batch.rs"]
+mod q36_damage_scry_batch;
+
+#[path = "scenario/q36_etb_mill_batch.rs"]
+mod q36_etb_mill_batch;
+
+#[path = "scenario/q36_team_haste_batch.rs"]
+mod q36_team_haste_batch;
+
+#[path = "scenario/q36_self_deathtouch_batch.rs"]
+mod q36_self_deathtouch_batch;
+
+#[path = "scenario/q36_pump_fight_batch.rs"]
+mod q36_pump_fight_batch;
+
+#[path = "scenario/q36_untap_reach_pump_batch.rs"]
+mod q36_untap_reach_pump_batch;
+
+#[path = "scenario/q36_self_unblockable_batch.rs"]
+mod q36_self_unblockable_batch;
+
+#[path = "scenario/q37_panorama_lands_batch.rs"]
+mod q37_panorama_lands_batch;
+
+#[path = "scenario/q37_cycling_fetch_lands_batch.rs"]
+mod q37_cycling_fetch_lands_batch;
+
+#[path = "scenario/q37_prevention_activated_batch.rs"]
+mod q37_prevention_activated_batch;
+
+#[path = "scenario/q37_self_keyword_activated_batch.rs"]
+mod q37_self_keyword_activated_batch;
+
+#[path = "scenario/q37_target_keyword_activated_batch.rs"]
+mod q37_target_keyword_activated_batch;
+
+#[path = "scenario/q37_pump_keyword_batch.rs"]
+mod q37_pump_keyword_batch;
+
+#[path = "scenario/q37_grant_keyword_batch.rs"]
+mod q37_grant_keyword_batch;
+
+#[path = "scenario/q37_landfall_keyword_batch.rs"]
+mod q37_landfall_keyword_batch;
+
+#[path = "scenario/q37_tap_keyword_activated_batch.rs"]
+mod q37_tap_keyword_activated_batch;
+
+#[path = "scenario/q38_creature_player_sweep_batch.rs"]
+mod q38_creature_player_sweep_batch;
+
+#[path = "scenario/q38_hand_damage_batch.rs"]
+mod q38_hand_damage_batch;
+
+#[path = "scenario/q38_flyer_damage_batch.rs"]
+mod q38_flyer_damage_batch;
+
+#[path = "scenario/q38_flyer_sweep_batch.rs"]
+mod q38_flyer_sweep_batch;
+
+#[path = "scenario/q38_attacking_sweep_batch.rs"]
+mod q38_attacking_sweep_batch;
+
+#[path = "scenario/q38_spiketail_counters_batch.rs"]
+mod q38_spiketail_counters_batch;
+
+#[path = "scenario/q38_tap_power_batch.rs"]
+mod q38_tap_power_batch;
+
+#[path = "scenario/q38_mountain_damage_batch.rs"]
+mod q38_mountain_damage_batch;
+
+#[path = "scenario/q38_aura_pump_batch.rs"]
+mod q38_aura_pump_batch;
+
+#[path = "scenario/q39_aura_static_keyword_batch.rs"]
+mod q39_aura_static_keyword_batch;
+
+#[path = "scenario/q39_equipment_static_keyword_batch.rs"]
+mod q39_equipment_static_keyword_batch;
+
+#[path = "scenario/q39_land_etb_target_batch.rs"]
+mod q39_land_etb_target_batch;
+
+#[path = "scenario/q39_draw_discard_batch.rs"]
+mod q39_draw_discard_batch;
+
+#[path = "scenario/q39_destroy_gain_life_batch.rs"]
+mod q39_destroy_gain_life_batch;
+
+#[path = "scenario/q39_exile_simple_batch.rs"]
+mod q39_exile_simple_batch;
+
+#[path = "scenario/q39_counter_rider_batch.rs"]
+mod q39_counter_rider_batch;
+
+#[path = "scenario/q39_tap_ping_batch.rs"]
+mod q39_tap_ping_batch;
+
+#[path = "scenario/q39_targeted_utility_lands_batch.rs"]
+mod q39_targeted_utility_lands_batch;
+
+#[path = "scenario/q40_look_choose_hand_batch.rs"]
+mod q40_look_choose_hand_batch;
+
+#[path = "scenario/q40_etb_look_choose_batch.rs"]
+mod q40_etb_look_choose_batch;
+
+#[path = "scenario/q40_etb_surveil_batch.rs"]
+mod q40_etb_surveil_batch;
+
+#[path = "scenario/q40_remaining_cohorts_batch.rs"]
+mod q40_remaining_cohorts_batch;
+
+#[path = "scenario/q41_tutor_batch.rs"]
+mod q41_tutor_batch;
+
+#[path = "scenario/q41_static_keyword_batch.rs"]
+mod q41_static_keyword_batch;
+
+#[path = "scenario/q41_etb_spell_batch.rs"]
+mod q41_etb_spell_batch;
+
+#[path = "scenario/q41_activated_batch.rs"]
+mod q41_activated_batch;
+
+#[path = "scenario/q42_cycling_keyword_batch.rs"]
+mod q42_cycling_keyword_batch;
+
+#[path = "scenario/q42_regenerate_self_batch.rs"]
+mod q42_regenerate_self_batch;
+
+#[path = "scenario/q42_landfall_pump_batch.rs"]
+mod q42_landfall_pump_batch;
+
+#[path = "scenario/q42_cast_trigger_pump_batch.rs"]
+mod q42_cast_trigger_pump_batch;
+
+#[path = "scenario/q42_explore_etb_batch.rs"]
+mod q42_explore_etb_batch;
+
+#[path = "scenario/q42_combat_damage_counter_batch.rs"]
+mod q42_combat_damage_counter_batch;
+
+#[path = "scenario/q42_activated_self_pump_batch.rs"]
+mod q42_activated_self_pump_batch;
+
+#[path = "scenario/q42_attacking_pump_batch.rs"]
+mod q42_attacking_pump_batch;
+
+#[path = "scenario/q42_pump_keyword_batch.rs"]
+mod q42_pump_keyword_batch;
+
+#[path = "scenario/q43_aura_pump_batch.rs"]
+mod q43_aura_pump_batch;
+
+#[path = "scenario/q43_goblin_tokens_batch.rs"]
+mod q43_goblin_tokens_batch;
+
+#[path = "scenario/q43_activated_target_pump_batch.rs"]
+mod q43_activated_target_pump_batch;
+
+#[path = "scenario/q43_convoke_pump_batch.rs"]
+mod q43_convoke_pump_batch;
+
+#[path = "scenario/q43_power_unblockable_batch.rs"]
+mod q43_power_unblockable_batch;
+
+#[path = "scenario/q43_activated_self_pump_batch.rs"]
+mod q43_activated_self_pump_batch;
+
+#[path = "scenario/q43_discard_spells_batch.rs"]
+mod q43_discard_spells_batch;
+
+#[path = "scenario/q43_etb_counter_target_batch.rs"]
+mod q43_etb_counter_target_batch;
+
+#[path = "scenario/q43_order_pump_batch.rs"]
+mod q43_order_pump_batch;
+
+#[path = "scenario/q44_cohorts_batch.rs"]
+mod q44_cohorts_batch;
+
+#[path = "scenario/q45_cohorts_batch.rs"]
+mod q45_cohorts_batch;
+
+#[path = "scenario/q46_cohorts_batch.rs"]
+mod q46_cohorts_batch;
+
+#[path = "scenario/q47_cohorts_batch.rs"]
+mod q47_cohorts_batch;
+
+#[path = "scenario/q48_cohorts_batch.rs"]
+mod q48_cohorts_batch;
+
+#[path = "scenario/q49_cohorts_batch.rs"]
+mod q49_cohorts_batch;
+
+#[path = "scenario/q49_batch_b.rs"]
+mod q49_batch_b;
+
+#[path = "scenario/q49_batch_c.rs"]
+mod q49_batch_c;
+
+#[path = "scenario/q50_cohorts_batch.rs"]
+mod q50_cohorts_batch;
+
+#[path = "scenario/q51_cohorts_batch.rs"]
+mod q51_cohorts_batch;
+
+#[path = "scenario/q52_cohorts_batch.rs"]
+mod q52_cohorts_batch;
+#[path = "scenario/q53_batch_a.rs"]
+mod q53_batch_a;
+#[path = "scenario/q53_batch_b.rs"]
+mod q53_batch_b;
+#[path = "scenario/q53_batch_c.rs"]
+mod q53_batch_c;
+
+#[path = "scenario/q54_batch_a.rs"]
+mod q54_batch_a;
+
+#[path = "scenario/q54_batch_b.rs"]
+mod q54_batch_b;
+
+#[path = "scenario/q54_batch_c.rs"]
+mod q54_batch_c;
+
+#[path = "scenario/q55_batch_a.rs"]
+mod q55_batch_a;
+
+#[path = "scenario/q55_batch_b.rs"]
+mod q55_batch_b;
+
+#[path = "scenario/q55_batch_c.rs"]
+mod q55_batch_c;
+
+#[path = "scenario/q56_batch_a.rs"]
+mod q56_batch_a;
+
+#[path = "scenario/q56_batch_b.rs"]
+mod q56_batch_b;
+
+#[path = "scenario/q56_batch_c.rs"]
+mod q56_batch_c;

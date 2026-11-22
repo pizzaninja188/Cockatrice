@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "f8f450c1-f405-4ccc-aef3-f0186d1f5056",
+  "spans": [
+    {
+      "face_id": "elvish_hexhunter",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/2"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Enchantment",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/Destroy/subject/Chosen/permanent_types"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q41_activated_batch::q41_sacrifice_destroy_enchantment_cards_use_their_printed_mana",
+      "covers": "actual card pays its printed mana, taps, sacrifices and destroys the chosen enchantment"
+    },
+    {
+      "test": "scenario q41_activated_batch::q41_sacrifice_destroy_enchantment_requires_a_legal_target",
+      "covers": "a non-enchantment target is rejected without paying"
+    },
+    {
+      "test": "mechanic_registry::q41_cohorts_batch::q41_sacrifice_destroy_enchantment_maps_definitions",
+      "covers": "reviewed identity, costs and target filter"
+    },
+    {
+      "test": "scenario q41_activated_batch::q41_sacrifice_destroy_enchantment_canary_hardest_uses_white_hybrid",
+      "covers": "hardest canary: hybrid mana"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

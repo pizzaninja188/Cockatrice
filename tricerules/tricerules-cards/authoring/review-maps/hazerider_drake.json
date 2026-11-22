@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "b9be76a3-e14f-48dd-8824-17d5708ac7e0",
+  "spans": [
+    {
+      "face_id": "hazerider_drake",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords",
+        "/faces/0/protections"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "Protection::Color",
+      "typed_path": "/faces/0/protections"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario protection_red_flying_batch::protection_red_flying_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual hazerider_drake clause coverage"
+    },
+    {
+      "test": "scenario protection_red_flying_batch::protection_red_flying_batch_cards_cannot_be_blocked_by_ground_creatures",
+      "covers": "actual hazerider_drake clause coverage"
+    },
+    {
+      "test": "scenario protection_red_flying_batch::protection_red_flying_batch_cards_can_be_blocked_by_flying_or_reach",
+      "covers": "actual hazerider_drake clause coverage"
+    },
+    {
+      "test": "scenario protection_red_flying_batch::protection_red_flying_batch_cards_prevent_red_damage",
+      "covers": "actual hazerider_drake clause coverage"
+    },
+    {
+      "test": "mechanic_registry::protection_red_flying_batch::protection_red_flying_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of hazerider_drake"
+    },
+    {
+      "test": "mechanic_registry::protection_red_flying_batch::protection_red_flying_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for hazerider_drake"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

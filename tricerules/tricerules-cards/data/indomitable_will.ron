@@ -1,0 +1,19 @@
+// Oracle cca60afe-b044-4401-8322-170aa015873c; source/rulings checked 2026-11-15.
+// CR 702.8a (Flash), 303.4a (Aura target and attach), 613.4c
+// (layer-7c attached P/T modifier) and 704.5m (unattached Aura cleanup).
+(
+  id: "indomitable_will",
+  name: "Indomitable Will",
+  face_id: "indomitable_will",
+  mana_cost: "{1}{W}",
+  types: ["Enchantment", "Aura"],
+  keywords: [Flash],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([3]),
+      definition: AttachedModifier(delta_power: 1, delta_toughness: 2),
+    ),
+  ],
+)

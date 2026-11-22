@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "62204fac-a367-475c-bfb9-80a87af2d2f1",
+  "spans": [
+    {
+      "face_id": "vinelasher_kudzu",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q47_cohorts_batch::q47_landfall_counter_canary_simplest_adds_one_counter",
+      "covers": "canary simplest actual-card landfall counter and opponent-scope check"
+    },
+    {
+      "test": "scenario q47_cohorts_batch::q47_landfall_counter_canary_hardest_keeps_keyword_and_stacks",
+      "covers": "canary hardest keeps the printed keyword while the counter applies"
+    },
+    {
+      "test": "scenario q47_cohorts_batch::q47_landfall_counter_cards_share_the_printed_shape",
+      "covers": "every actual card adds one +1/+1 counter on its controller's landfall"
+    },
+    {
+      "test": "mechanic_registry::q47_cohorts_batch::q47_landfall_counter_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q47_cohorts_batch::q47_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

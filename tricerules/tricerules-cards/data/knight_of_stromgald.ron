@@ -1,0 +1,29 @@
+// Oracle 8cf57287-21b0-4194-8da3-62d00160234f; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.16 (protection), 602.1/602.2 (activation), 118.3 (paying the printed costs),
+// 613.1f (first strike) and 611.2a/613.4c (until-end-of-turn pump).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "knight_of_stromgald",
+  name: "Knight of Stromgald",
+  face_id: "knight_of_stromgald",
+  mana_cost: "{B}{B}",
+  types: ["Creature", "Human", "Knight"],
+  power: 2,
+  toughness: 1,
+  protections: [Color(White)],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{B}")],
+      effect: [GrantKeywords(subject: Source, keywords: [FirstStrike])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
+      costs: [Mana("{B}{B}")],
+      effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
+    ),
+  ],
+)

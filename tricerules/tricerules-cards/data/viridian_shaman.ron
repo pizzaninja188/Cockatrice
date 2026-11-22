@@ -1,0 +1,25 @@
+// Oracle 5aa6d553-a144-4c5b-83fa-65e931903899; source/rulings checked 2026-11-13.
+// CR 603.6a (enters trigger), 603.3d (trigger target choice), 701.8a
+// (destroy), and 115.1 (target).
+(
+  id: "viridian_shaman",
+  name: "Viridian Shaman",
+  face_id: "viridian_shaman",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Elf", "Shaman"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact])))],
+      targeting: Some((groups: [(
+        min: 1, max: 1,
+        prompt: "Choose target artifact",
+        effect_indices: [0],
+      )])),
+    ),
+  ],
+)

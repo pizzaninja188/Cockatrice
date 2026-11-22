@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "75b2dd64-a2f5-4032-a19f-5b485dc44b16",
+  "spans": [
+    {
+      "face_id": "flash_counter",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardTypeFilter",
+      "typed_path": "/faces/0/spell_effect/0/CounterTargetSpell/spell_filter/card_type"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario counter_typed_spells_batch::counter_typed_spells_batch_cards_counter_their_printed_spell_type",
+      "covers": "actual flash_counter is exercised by the shared counter_typed_spells_batch actual-card scenario"
+    },
+    {
+      "test": "scenario counter_typed_spells_batch::counter_typed_spells_batch_cards_reject_the_other_spell_type",
+      "covers": "actual flash_counter is exercised by the shared counter_typed_spells_batch actual-card scenario"
+    },
+    {
+      "test": "scenario counter_typed_spells_batch::counter_typed_spells_batch_cards_fizzle_when_the_target_spell_leaves_the_stack",
+      "covers": "actual flash_counter is exercised by the shared counter_typed_spells_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::counter_typed_spells_batch::counter_typed_spells_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of flash_counter"
+    },
+    {
+      "test": "mechanic_registry::counter_typed_spells_batch::counter_typed_spells_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for flash_counter"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

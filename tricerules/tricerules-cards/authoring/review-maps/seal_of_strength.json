@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "e41a68b3-e1cb-4f51-bd54-68882d2cc015",
+  "spans": [
+    {
+      "face_id": "seal_of_strength",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PumpTarget/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q45_cohorts_batch::q45_sacrifice_pump_cards_apply_their_printed_pump",
+      "covers": "every card applies its printed pump"
+    },
+    {
+      "test": "scenario q45_cohorts_batch::q45_sacrifice_pump_canary_hardest_is_an_enchantment",
+      "covers": "the enchantment can sacrifice itself for its pump"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_sacrifice_pump_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of seal_of_strength"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for seal_of_strength"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

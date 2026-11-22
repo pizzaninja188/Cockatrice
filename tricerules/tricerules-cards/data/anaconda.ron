@@ -1,0 +1,12 @@
+// Oracle 3eff03f1-2c5f-4c59-b465-a8c4cd05e1ba; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "anaconda",
+  name: "Anaconda",
+  face_id: "anaconda",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Snake"],
+  power: 3,
+  toughness: 3,
+  evasions: [Landwalk(land_subtype: "Swamp")],
+)

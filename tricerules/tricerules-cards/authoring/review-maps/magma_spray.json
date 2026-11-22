@@ -1,0 +1,62 @@
+{
+  "format_version": 1,
+  "oracle_id": "fe16f1ab-58b4-4452-abe4-cbd9addd348f",
+  "spans": [
+    {
+      "face_id": "magma_spray",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileIfWouldDieThisTurn",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario puncturing_blow_batch::puncturing_blow_batch_cards_deal_their_printed_damage",
+      "covers": "actual magma_spray deals its printed damage to a creature"
+    },
+    {
+      "test": "scenario puncturing_blow_batch::puncturing_blow_batch_cards_exile_a_lethally_damaged_creature",
+      "covers": "actual magma_spray exiles a creature it lethally damages"
+    },
+    {
+      "test": "scenario puncturing_blow_batch::puncturing_blow_batch_cards_exile_a_later_death_after_prevented_damage",
+      "covers": "actual magma_spray still exiles the target after prevented damage and a later sacrifice, per the saved rulings"
+    },
+    {
+      "test": "scenario puncturing_blow_batch::puncturing_blow_batch_cards_reject_a_land_target",
+      "covers": "actual magma_spray rejects a noncreature target without spending mana"
+    },
+    {
+      "test": "scenario puncturing_blow_batch::puncturing_blow_batch_cards_fizzle_when_the_target_leaves_before_resolution",
+      "covers": "actual magma_spray fizzles and applies no damage or replacement when its only target leaves the battlefield before resolution"
+    },
+    {
+      "test": "mechanic_registry::puncturing_blow_batch::puncturing_blow_batch_maps_definitions",
+      "covers": "reviewed identity, damage, exile replacement and one creature target of magma_spray"
+    },
+    {
+      "test": "mechanic_registry::puncturing_blow_batch::puncturing_blow_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for magma_spray"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,39 @@
+// Oracle 7ceec1fd-4af5-40d4-9d17-424e21889d64; source/rulings checked 2026-11-12.
+// CR 301.5/702.6 (Equipment and equip), 603.6a (entry trigger), 701.3 (attach),
+// 613.4c (attached P/T modifier) and 702.8a (flash).
+(
+  id: "dueling_rapier",
+  name: "Dueling Rapier",
+  face_id: "dueling_rapier",
+  mana_cost: "{R}",
+  types: ["Artifact", "Equipment"],
+  keywords: [Flash],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([4]),
+      costs: [Mana("{4}")],
+      effect: [Equip()],
+    ),
+  ],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [AttachSource(target: (kind: Creature, controller: You))],
+      targeting: Some(
+        (
+          groups: [(min: 1, max: 1, effect_indices: [0])],
+        ),
+      ),
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([3]),
+      definition: AttachedModifier(delta_power: 2, delta_toughness: 0),
+    ),
+  ],
+)

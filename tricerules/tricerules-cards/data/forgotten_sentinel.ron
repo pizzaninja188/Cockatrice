@@ -1,0 +1,18 @@
+// Oracle 9bd4a0bd-d10c-434a-8254-89f38740aafd; source/rulings checked 2026-11-12.
+// CR 614.1d/614.12 (enters-tapped replacement effect).
+(
+  id: "forgotten_sentinel",
+  name: "Forgotten Sentinel",
+  face_id: "forgotten_sentinel",
+  mana_cost: "{4}",
+  types: ["Artifact", "Creature", "Golem"],
+  power: 4,
+  toughness: 3,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: EntersTapped(affected: Self_),
+    ),
+  ],
+)

@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "69d08521-74e1-4215-9ed4-3f12137332a4",
+  "spans": [
+    {
+      "face_id": "fit_of_rage",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "Keyword::FirstStrike",
+      "typed_path": "/faces/0/spell_effect/1/GrantKeywords/keywords"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario pump_first_strike_batch::pump_first_strike_batch_cards_cast_with_exact_printed_effects",
+      "covers": "actual fit_of_rage clause coverage"
+    },
+    {
+      "test": "scenario pump_first_strike_batch::pump_first_strike_batch_cards_expire_at_cleanup",
+      "covers": "actual fit_of_rage clause coverage"
+    },
+    {
+      "test": "scenario pump_first_strike_batch::pump_first_strike_batch_cards_reject_a_noncreature_target",
+      "covers": "actual fit_of_rage clause coverage"
+    },
+    {
+      "test": "scenario pump_first_strike_batch::pump_first_strike_batch_cards_fizzle_when_the_target_left",
+      "covers": "actual fit_of_rage clause coverage"
+    },
+    {
+      "test": "scenario pump_first_strike_batch::pump_first_strike_batch_cards_reject_a_cast_without_the_printed_mana",
+      "covers": "actual fit_of_rage rejects a cast without its printed mana"
+    },
+    {
+      "test": "mechanic_registry::pump_first_strike_batch::pump_first_strike_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of fit_of_rage"
+    },
+    {
+      "test": "mechanic_registry::pump_first_strike_batch::pump_first_strike_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for fit_of_rage"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

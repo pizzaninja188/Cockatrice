@@ -1,0 +1,23 @@
+// Oracle 2742d506-897f-4d30-ba43-ce0374984849; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 605.1a/605.3a-b (mana ability), 118.3 (tap or mana cost) and 107.4 (colored mana).
+// The card has no pinned ruling.
+
+(
+  id: "riven_turnbull",
+  name: "Riven Turnbull",
+  face_id: "riven_turnbull",
+  mana_cost: "{5}{U}{B}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Human", "Advisor"],
+  power: 5,
+  toughness: 7,
+  activated_abilities: [
+    (
+      ability_id: "mana",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(b: 1)])],
+    ),
+  ],
+)

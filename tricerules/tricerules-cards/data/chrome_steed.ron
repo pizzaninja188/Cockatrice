@@ -1,0 +1,24 @@
+// Oracle 8475f55e-473c-4df0-bae2-3cbbbde4ff12; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 611.3/613.4c: the artifact count is reevaluated continuously and includes the
+// source when it is an artifact creature.
+(
+  id: "chrome_steed",
+  name: "Chrome Steed",
+  face_id: "chrome_steed",
+  mana_cost: "{4}",
+  types: ["Artifact", "Creature", "Horse"],
+  power: 2,
+  toughness: 2,
+  static_abilities: [
+    (ability_id: "metalcraft", presentation: OracleLines([1]), definition: ConditionalSelfModifier(
+      condition: BattlefieldAggregate(
+        filter: (controllers: Controller, card_type: Some(Artifact)),
+        aggregate: Count,
+        min: Some(3),
+      ),
+      delta_power: 2,
+      delta_toughness: 2,
+    )),
+  ],
+)

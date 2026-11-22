@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "b6bde4eb-15f0-4e6e-9d25-459a2f75ccf2",
+  "spans": [
+    {
+      "face_id": "sheltering_boughs",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "sheltering_boughs",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "sheltering_boughs",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario aura_etb_draw_pump_batch::aura_etb_draw_pump_batch_cards_attach_draw_one_and_apply_the_printed_pump",
+      "covers": "actual sheltering_boughs is exercised by the shared 04-aura-etb-draw-pump actual-card scenario"
+    },
+    {
+      "test": "scenario aura_etb_draw_pump_batch::aura_etb_draw_pump_batch_cards_do_not_draw_when_the_aura_fizzles",
+      "covers": "actual sheltering_boughs is exercised by the shared 04-aura-etb-draw-pump actual-card scenario"
+    },
+    {
+      "test": "scenario aura_etb_draw_pump_batch::aura_etb_draw_pump_batch_cards_still_draw_when_the_aura_leaves_before_the_trigger_resolves",
+      "covers": "actual sheltering_boughs is exercised by the shared 04-aura-etb-draw-pump actual-card scenario"
+    },
+    {
+      "test": "scenario aura_etb_draw_pump_batch::aura_etb_draw_pump_batch_cards_keep_the_static_pump_after_cleanup",
+      "covers": "actual sheltering_boughs is exercised by the shared 04-aura-etb-draw-pump actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::aura_etb_draw_pump_batch::aura_etb_draw_pump_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of sheltering_boughs"
+    },
+    {
+      "test": "mechanic_registry::aura_etb_draw_pump_batch::aura_etb_draw_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for sheltering_boughs"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

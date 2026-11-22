@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "8ec6b0f1-8928-457c-adf0-c74a28edc86f",
+  "spans": [
+    {
+      "face_id": "blister_beetle",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q40_remaining_cohorts_batch::q40_etb_shrink_canary_simplest",
+      "covers": "simplest canary for this actual card"
+    },
+    {
+      "test": "scenario q40_remaining_cohorts_batch::q40_etb_shrink_cards_apply_the_printed_penalty_until_end_of_turn",
+      "covers": "actual card applies its printed penalty until cleanup"
+    },
+    {
+      "test": "scenario q40_remaining_cohorts_batch::q40_etb_shrink_cards_must_choose_a_creature_when_none_other_exists",
+      "covers": "the mandatory target chooses the source when it is the only creature"
+    },
+    {
+      "test": "mechanic_registry::q40_cohorts_batch::q40_etb_shrink_maps_definitions",
+      "covers": "reviewed identity, target filter and printed values"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

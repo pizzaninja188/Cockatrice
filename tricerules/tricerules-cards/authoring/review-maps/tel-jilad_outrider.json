@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "d83d784e-e95b-48a1-9b4a-362f4fccc529",
+  "spans": [
+    {
+      "face_id": "tel_jilad_outrider",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/protections"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Protection::CardType",
+      "typed_path": "/faces/0/protections"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario protection_cycle_batch::protection_cycle_batch_cards_cast_with_exact_printed_characteristics_and_protection_quality",
+      "covers": "actual tel-jilad_outrider clause coverage"
+    },
+    {
+      "test": "scenario protection_cycle_batch::protection_cycle_batch_cards_reject_targeting_by_the_protected_quality",
+      "covers": "actual tel-jilad_outrider clause coverage"
+    },
+    {
+      "test": "scenario protection_cycle_batch::protection_cycle_batch_cards_prevent_damage_from_the_protected_quality",
+      "covers": "actual tel-jilad_outrider clause coverage"
+    },
+    {
+      "test": "scenario protection_cycle_batch::protection_cycle_batch_cards_cannot_be_blocked_by_the_protected_quality",
+      "covers": "actual tel-jilad_outrider clause coverage"
+    },
+    {
+      "test": "mechanic_registry::protection_cycle_batch::protection_cycle_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of tel-jilad_outrider"
+    },
+    {
+      "test": "mechanic_registry::protection_cycle_batch::protection_cycle_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for tel-jilad_outrider"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

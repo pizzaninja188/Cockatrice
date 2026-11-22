@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "cec11318-4578-4c66-a9be-1704df0c296c",
+  "spans": [
+    {
+      "face_id": "qumulox",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cost_modifiers/0"
+      ]
+    },
+    {
+      "face_id": "qumulox",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellCostModifier::BattlefieldCountGenericReduction",
+      "typed_path": "/faces/0/cost_modifiers/0"
+    },
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario affinity_flying_batch::affinity_flying_batch_cards_cast_with_exact_characteristics_and_flying",
+      "covers": "actual qumulox is exercised by the shared 09-affinity-flying actual-card scenario"
+    },
+    {
+      "test": "scenario affinity_flying_batch::affinity_flying_batch_cards_reduce_only_for_artifacts_you_control",
+      "covers": "actual qumulox is exercised by the shared 09-affinity-flying actual-card scenario"
+    },
+    {
+      "test": "scenario affinity_flying_batch::affinity_flying_batch_cards_floor_the_generic_cost_at_zero_and_keep_colored_pips",
+      "covers": "actual qumulox is exercised by the shared 09-affinity-flying actual-card scenario"
+    },
+    {
+      "test": "scenario affinity_flying_batch::affinity_flying_batch_cards_do_not_count_opponents_artifacts_or_the_spell_itself",
+      "covers": "actual qumulox is exercised by the shared 09-affinity-flying actual-card scenario"
+    },
+    {
+      "test": "scenario affinity_flying_batch::affinity_flying_batch_cards_leave_hidden_zones_and_life_totals_unchanged",
+      "covers": "actual qumulox is exercised by the shared 09-affinity-flying actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::affinity_flying_batch::affinity_flying_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of qumulox"
+    },
+    {
+      "test": "mechanic_registry::affinity_flying_batch::affinity_flying_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for qumulox"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

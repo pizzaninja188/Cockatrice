@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "391f1331-7577-4bf4-a9ed-2f55ded4cbd8",
+  "spans": [
+    {
+      "face_id": "sanguine_glorifier",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q50_cohorts_batch::q50_etb_counter_cards_require_another_typed_creature_you_control",
+      "covers": "actual card requires another creature of the printed subtype you control"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_etb_triggered_cards_fizzle_stale_targets",
+      "covers": "actual card fizzles when its chosen target left"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_etb_counter_maps_definitions",
+      "covers": "reviewed counter creature identity and trigger"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Sanguine Glorifier"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,32 @@
+{
+  "format_version": 1,
+  "oracle_id": "69191459-36ca-4e71-b4bb-0270c4cdaee9",
+  "spans": [
+    {
+      "face_id": "enlisted_wurm",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_keywords/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellKeyword::Cascade",
+      "typed_path": "/faces/0/spell_keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q41_static_keyword_batch::q41_cascade_cards_exile_only_lower_mana_value_nonlands",
+      "covers": "actual card exiles through lands and finds only a cheaper nonland"
+    },
+    {
+      "test": "mechanic_registry::q41_cohorts_batch::q41_cascade_creatures_map_definitions",
+      "covers": "reviewed identity and printed cascade keyword"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

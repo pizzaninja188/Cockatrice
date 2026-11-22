@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "8af6646a-10ba-448b-bd5e-48feb70de5e5",
+  "spans": [
+    {
+      "face_id": "merfolk_traders",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/Perform/Discard"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_loot_batch::etb_loot_batch_cards_draw_then_discard_on_entry",
+      "covers": "actual merfolk_traders clause coverage"
+    },
+    {
+      "test": "scenario etb_loot_batch::etb_loot_batch_cards_make_the_discard_mandatory",
+      "covers": "actual merfolk_traders clause coverage"
+    },
+    {
+      "test": "scenario etb_loot_batch::etb_loot_batch_cards_draw_the_top_card_then_discard",
+      "covers": "actual merfolk_traders clause coverage"
+    },
+    {
+      "test": "mechanic_registry::etb_loot_batch::etb_loot_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of merfolk_traders"
+    },
+    {
+      "test": "mechanic_registry::etb_loot_batch::etb_loot_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for merfolk_traders"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

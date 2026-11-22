@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "30062dd0-c049-4872-8011-8b4810a3fa26",
+  "spans": [
+    {
+      "face_id": "envelop",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardTypeFilter",
+      "typed_path": "/faces/0/spell_effect/0/CounterTargetSpell/spell_filter/card_type"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario counter_typed_spells_batch::counter_typed_spells_batch_cards_counter_their_printed_spell_type",
+      "covers": "actual envelop is exercised by the shared counter_typed_spells_batch actual-card scenario"
+    },
+    {
+      "test": "scenario counter_typed_spells_batch::counter_typed_spells_batch_cards_reject_the_other_spell_type",
+      "covers": "actual envelop is exercised by the shared counter_typed_spells_batch actual-card scenario"
+    },
+    {
+      "test": "scenario counter_typed_spells_batch::counter_typed_spells_batch_cards_fizzle_when_the_target_spell_leaves_the_stack",
+      "covers": "actual envelop is exercised by the shared counter_typed_spells_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::counter_typed_spells_batch::counter_typed_spells_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of envelop"
+    },
+    {
+      "test": "mechanic_registry::counter_typed_spells_batch::counter_typed_spells_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for envelop"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

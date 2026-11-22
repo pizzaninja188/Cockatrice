@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "771be8ad-5ab5-40b1-ad9b-e5e834949d32",
+  "spans": [
+    {
+      "face_id": "lurching_rotbeast",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilitySourceZone::Hand",
+      "typed_path": "/faces/0/activated_abilities/0/source_zone"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario cycling_keyword_batch::cycling_keyword_batch_cards_cycle_for_the_printed_cost_and_draw_one",
+      "covers": "actual lurching_rotbeast is exercised by the shared cycling_keyword_batch actual-card scenario"
+    },
+    {
+      "test": "scenario cycling_keyword_batch::cycling_keyword_batch_cards_reject_cycling_without_the_printed_cost",
+      "covers": "actual lurching_rotbeast is exercised by the shared cycling_keyword_batch actual-card scenario"
+    },
+    {
+      "test": "scenario cycling_keyword_batch::cycling_keyword_batch_cards_reject_cycling_outside_the_hand",
+      "covers": "actual lurching_rotbeast is exercised by the shared cycling_keyword_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::cycling_keyword_batch::cycling_keyword_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of lurching_rotbeast"
+    },
+    {
+      "test": "mechanic_registry::cycling_keyword_batch::cycling_keyword_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for lurching_rotbeast"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

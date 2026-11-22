@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "381539ce-fc05-4855-80da-b0807a7c07c2",
+  "spans": [
+    {
+      "face_id": "grim_physician",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetController::Opponent",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/PumpTarget/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario dies_shrink_opponent_batch::dies_shrink_opponent_batch_cards_shrink_an_opponent_creature_when_they_die",
+      "covers": "actual grim_physician clause coverage"
+    },
+    {
+      "test": "scenario dies_shrink_opponent_batch::dies_shrink_opponent_batch_cards_cannot_target_their_controllers_creature",
+      "covers": "actual grim_physician clause coverage"
+    },
+    {
+      "test": "scenario dies_shrink_opponent_batch::dies_shrink_opponent_batch_cards_do_not_trigger_when_exiled",
+      "covers": "actual grim_physician clause coverage"
+    },
+    {
+      "test": "mechanic_registry::dies_shrink_opponent_batch::dies_shrink_opponent_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of grim_physician"
+    },
+    {
+      "test": "mechanic_registry::dies_shrink_opponent_batch::dies_shrink_opponent_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for grim_physician"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

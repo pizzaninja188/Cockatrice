@@ -1,0 +1,18 @@
+// Oracle c16367eb-1c0a-4197-8e2f-2d74e4381024; source/rulings checked 2026-11-13.
+// CR 603.6a (entry trigger), 115 (targets) and 120 (damage).
+(
+  id: "akoum_boulderfoot",
+  name: "Akoum Boulderfoot",
+  face_id: "akoum_boulderfoot",
+  mana_cost: "{4}{R}{R}",
+  types: ["Creature", "Giant", "Warrior"],
+  power: 4,
+  toughness: 5,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [DamageTarget(amount: 1, target: ())],
+    targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+  )],
+)

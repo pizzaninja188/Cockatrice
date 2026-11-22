@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle ed14c7fa-632c-47ee-9db0-8c492771121a.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "burn_bright",
+  name: "Burn Bright",
+  face_id: "burn_bright",
+  mana_cost: "{2}{R}",
+  types: ["Instant"],
+  spell_effect: [PumpAll(filter: (controller: YouControl), power: 2, toughness: 0)],
+)

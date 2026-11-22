@@ -1,0 +1,25 @@
+// Oracle e3179dd6-5558-4385-8883-f78f9d1b1c4f; source/rulings checked 2026-11-11.
+// CR 603.6a/603.3 (entry trigger and stack), 701.9a (discard to owner's graveyard),
+// 608.2c (ordered optional instruction), and 121.1 (draw).
+(
+  id: "immersturm_raider",
+  name: "Immersturm Raider",
+  face_id: "immersturm_raider",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Demon", "Berserker"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      program: Some((body: (steps: [
+        (id: "discard_one", bind: ["discarded"], kind: Perform(Discard( quantity: OptionalExact(1)))),
+        (id: "draw_if_discarded", kind: IfResult(condition: DiscardOutcome(result: "discarded", outcome: ChosenToPay),
+          yes: (steps: [(id: "draw_one", kind: Perform(Draw( count: 1)))]),
+          no: ())),
+      ]))),
+    ),
+  ],
+)

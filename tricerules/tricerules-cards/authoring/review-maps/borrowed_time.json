@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "f1ac4e0e-5633-46e4-9a21-d3924e481d13",
+  "spans": [
+    {
+      "face_id": "borrowed_time",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileUntilSourceLeaves",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario hieromancers_cage_batch::hieromancers_cage_batch_cards_exile_and_return_the_chosen_permanent",
+      "covers": "actual borrowed_time enters, targets an opponent's nonland permanent, exiles it, then returns it when the source leaves"
+    },
+    {
+      "test": "scenario hieromancers_cage_batch::hieromancers_cage_batch_cards_reject_land_and_own_permanent_targets",
+      "covers": "actual borrowed_time rejects a land or its controller's own permanent without exiling or moving the source"
+    },
+    {
+      "test": "scenario hieromancers_cage_batch::hieromancers_cage_batch_cards_do_not_exile_when_the_source_left_before_the_trigger",
+      "covers": "actual borrowed_time leaves before its entry trigger resolves, so the saved ruling requires the target to stay on the battlefield"
+    },
+    {
+      "test": "scenario hieromancers_cage_batch::hieromancers_cage_batch_cards_fizzle_when_the_target_left_before_the_trigger",
+      "covers": "actual borrowed_time entry trigger is removed when its target has left before resolution"
+    },
+    {
+      "test": "mechanic_registry::hieromancers_cage_batch::hieromancers_cage_batch_maps_definitions",
+      "covers": "reviewed identity, trigger, target filter and line presentation of borrowed_time"
+    },
+    {
+      "test": "mechanic_registry::hieromancers_cage_batch::hieromancers_cage_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for borrowed_time"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

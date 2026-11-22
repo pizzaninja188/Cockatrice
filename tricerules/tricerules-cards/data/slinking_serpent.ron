@@ -1,0 +1,12 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 23875679-5c08-44ff-90b3-13a1a758e5f7.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "slinking_serpent",
+  name: "Slinking Serpent",
+  face_id: "slinking_serpent",
+  mana_cost: "{2}{U}{B}",
+  types: ["Creature", "Serpent"],
+  power: 2,
+  toughness: 3,
+  evasions: [Landwalk(land_subtype: "Forest")],
+)

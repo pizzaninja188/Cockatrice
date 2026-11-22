@@ -1,0 +1,37 @@
+// Oracle 185c70c1-8403-4ae5-b45d-3679d4ee092a; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 614.1d/614.12 (enters-tapped replacement effect), 605.1a/605.3b (mana ability),
+// 109.2 (the source is not an "other land" for itself) and 305.6. The pinned ruling
+// states that lands entering at the same time are not counted.
+
+(
+  id: "rockfall_vale",
+  name: "Rockfall Vale",
+  face_id: "rockfall_vale",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(r: 1), (g: 1)])],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: EntersTapped(
+        affected: Self_,
+        condition: Some(
+          BattlefieldAggregate(
+            filter: (controllers: Controller, card_type: Some(Land), name: None, exclude_source: true),
+            aggregate: Count,
+            max: Some(1),
+          ),
+        ),
+      ),
+    ),
+  ],
+)

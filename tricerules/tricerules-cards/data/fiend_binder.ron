@@ -1,0 +1,27 @@
+// Oracle 060c7999-ab81-4e37-af65-7cd219b693c8; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 508.3a/603.2c (attack trigger), 115.1 (target) and 701.26 (tap).
+// The pinned ruling confirms that in multiplayer only a creature controlled by the player
+// this creature is attacking (or the controller of the planeswalker it is attacking) is legal.
+
+(
+  id: "fiend_binder",
+  name: "Fiend Binder",
+  face_id: "fiend_binder",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [Tap(subject: Chosen((kind: Creature, controller: DefendingPlayer)))],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature defending player controls",
+      effect_indices: [0],
+    )])),
+  )],
+)

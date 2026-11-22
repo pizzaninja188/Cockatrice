@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "36b5022d-fa62-46ea-97ab-23c0f60f62a5",
+  "spans": [
+    {
+      "face_id": "charge",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario pump_team_batch::pump_team_cards_apply_exact_printed_delta_to_controlled_creatures",
+      "covers": "actual charge gives exactly +1/+1 to each creature its controller controls at resolution, leaves opponents unchanged and consumes its exact mana cost"
+    },
+    {
+      "test": "scenario pump_team_batch::pump_team_cards_exclude_later_entrants_and_expire_at_cleanup",
+      "covers": "actual charge does not pump a creature that enters after resolution, and its pump expires during cleanup"
+    },
+    {
+      "test": "mechanic_registry::pump_team_batch::pump_team_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and team-pump effect of charge"
+    },
+    {
+      "test": "mechanic_registry::pump_team_batch::pump_team_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for charge"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

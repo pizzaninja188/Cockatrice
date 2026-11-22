@@ -1,0 +1,26 @@
+// Oracle c8cdc08a-975b-475f-8e30-85d61f6f3a9b; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 301.5/702.6 (Equipment and equip), 613.4c (layer-7c attached modifier),
+// 613.1f (layer 6 keywords) and 702.6a (equip timing and target).
+(
+  id: "bladed_pinions",
+  name: "Bladed Pinions",
+  face_id: "bladed_pinions",
+  mana_cost: "{2}",
+  types: ["Artifact", "Equipment"],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: AttachedModifier(delta_power: 0, keywords: [Flying, FirstStrike]),
+    ),
+  ],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{2}")],
+      effect: [Equip(target: (kind: Creature, controller: You))],
+    ),
+  ],
+)

@@ -1,0 +1,23 @@
+// Oracle 314748a6-4e7f-4afb-b77e-5ef366e02b90; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (land entry trigger), 611.2a/514.2 (until-end-of-turn grant), 702.7
+// (first strike), 702.9 (flying) or 702.20 (vigilance).
+// Copy of the reviewed Akoum Hellhound landfall trigger with a keyword grant.
+(
+  id: "fledgling_griffin",
+  name: "Fledgling Griffin",
+  face_id: "fledgling_griffin",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Griffin"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Land)),
+    ),
+    effect: [GrantKeywords(subject: Source, keywords: [Flying])],
+  )],
+)

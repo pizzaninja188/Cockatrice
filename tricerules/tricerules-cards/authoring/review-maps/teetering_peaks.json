@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "4a9437a6-4e61-48b6-8194-1c6ba6432250",
+  "spans": [
+    {
+      "face_id": "teetering_peaks",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "teetering_peaks",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "teetering_peaks",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q39_land_etb_target_batch::q39_land_etb_target_cards_apply_their_printed_pump_and_keyword",
+      "covers": "actual card is exercised by the shared land entry cohort scenario"
+    },
+    {
+      "test": "scenario q39_land_etb_target_batch::q39_land_etb_target_trigger_does_not_go_on_the_stack_without_a_creature",
+      "covers": "actual card's trigger is not put on the stack without a legal target"
+    },
+    {
+      "test": "scenario q39_land_etb_target_batch::q39_land_etb_target_cards_fizzle_when_the_chosen_creature_leaves",
+      "covers": "actual card's trigger fizzles on a stale target"
+    },
+    {
+      "test": "mechanic_registry::q39_land_etb_target_batch::q39_land_etb_target_maps_definitions",
+      "covers": "reviewed identity, typed values and printed characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

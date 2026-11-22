@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "072288da-5ba0-4176-b0e6-b3e43ecab2ec",
+  "spans": [
+    {
+      "face_id": "packs_favor",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "packs_favor",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Convoke",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/spell_effect/0/PumpTarget/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q43_convoke_pump_batch::q43_convoke_pump_canary_uses_convoke_and_pumps",
+      "covers": "actual card taps creatures to pay generic and applies its pump"
+    },
+    {
+      "test": "scenario q43_convoke_pump_batch::q43_convoke_pump_cards_apply_their_printed_values",
+      "covers": "every actual card applies its printed pump"
+    },
+    {
+      "test": "scenario q43_convoke_pump_batch::q43_convoke_pump_cards_reject_a_generic_contribution_and_illegal_targets",
+      "covers": "a generic convoke contribution cannot pay a colored pip; a player is not a creature target"
+    },
+    {
+      "test": "scenario q43_convoke_pump_batch::q43_convoke_pump_cards_accept_a_matching_color_contribution",
+      "covers": "a matching-color convoke contribution can pay a colored pip"
+    },
+    {
+      "test": "mechanic_registry::q43_cohorts_batch::q43_convoke_pump_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of packs_favor"
+    },
+    {
+      "test": "mechanic_registry::q43_cohorts_batch::q43_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for packs_favor"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

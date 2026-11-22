@@ -1,0 +1,22 @@
+// Oracle 7b4c2dcf-86f4-409d-90c3-8fe83966cac0; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying) and 509.1b (blocking restrictions); reach does not
+// make a creature a legal blocker for this restriction.
+(
+  id: "wanderlight_spirit",
+  name: "Wanderlight Spirit",
+  face_id: "wanderlight_spirit",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Spirit"],
+  power: 2,
+  toughness: 3,
+  keywords: [Flying],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: SelfCombatRestriction(restriction: (
+        cant_block_creatures_matching: [(kind: Creature, excluded_keywords: [Flying])],
+      )),
+    ),
+  ],
+)

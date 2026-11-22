@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "8a69a0f0-5f0f-4098-ab6d-be3233af5cd3",
+  "spans": [
+    {
+      "face_id": "dryads_revival",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "dryads_revival",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardFace::flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_c::q56_c_flashback_graveyard_cards_return_the_chosen_card_and_exile_the_spell",
+      "covers": "actual dryads_revival applies its printed effects"
+    },
+    {
+      "test": "scenario q56_batch_c::q56_c_canary_simplest_dryads_revival_returns_a_card_and_flashes_back",
+      "covers": "actual dryads_revival canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_c::q56_c_flashback_graveyard_map_definitions",
+      "covers": "shared registry identity for dryads_revival"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_c::q56_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for dryads_revival"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

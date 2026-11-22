@@ -1,0 +1,59 @@
+{
+  "format_version": 1,
+  "oracle_id": "18b09c2d-20cb-40e9-8209-8a1ec2edde97",
+  "spans": [
+    {
+      "face_id": "viashino_racketeer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/1",
+        "/faces/0/triggered_abilities/0/program/body/steps/1/kind/IfResult/yes/steps/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/Discard"
+    },
+    {
+      "symbol": "InstructionKind::IfResult",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/IfResult"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1/kind/IfResult/yes/steps/0/kind/Perform/Draw"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario viashino_racketeer_batch::viashino_racketeer_batch_cards_decline_does_not_draw",
+      "covers": "actual viashino_racketeer offers an optional discard of at most one card; declining draws nothing"
+    },
+    {
+      "test": "scenario viashino_racketeer_batch::viashino_racketeer_batch_cards_discard_then_draws",
+      "covers": "actual viashino_racketeer discards exactly one chosen card and then draws one"
+    },
+    {
+      "test": "scenario viashino_racketeer_batch::viashino_racketeer_batch_cards_offer_only_one_discard",
+      "covers": "actual viashino_racketeer offers a (0,1) discard choice, matching the saved Fissure Wizard ruling"
+    },
+    {
+      "test": "mechanic_registry::viashino_racketeer_batch::viashino_racketeer_batch_maps_definitions",
+      "covers": "reviewed identity, entry trigger, optional-discard program and line presentation of viashino_racketeer"
+    },
+    {
+      "test": "mechanic_registry::viashino_racketeer_batch::viashino_racketeer_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for viashino_racketeer"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

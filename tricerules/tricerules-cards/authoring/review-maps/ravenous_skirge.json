@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "b8ae71b3-8ee7-49a0-87ea-7e938166ccb3",
+  "spans": [
+    {
+      "face_id": "ravenous_skirge",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "ravenous_skirge",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q40_remaining_cohorts_batch::q40_attack_self_pump_cards_pump_only_the_attacking_source",
+      "covers": "actual card pumps only itself when it attacks"
+    },
+    {
+      "test": "mechanic_registry::q40_cohorts_batch::q40_attack_self_pump_maps_definitions",
+      "covers": "reviewed identity, trigger and printed pump"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

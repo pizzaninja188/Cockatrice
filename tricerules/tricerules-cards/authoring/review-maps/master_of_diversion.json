@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "3402aa73-5e63-4158-b114-6f1d42ec8992",
+  "spans": [
+    {
+      "face_id": "master_of_diversion",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetController::DefendingPlayer",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetKind::Creature",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting/groups/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario attack_tap_batch::attack_tap_batch_cards_tap_a_creature_controlled_by_the_defending_player",
+      "covers": "actual master_of_diversion is exercised by the shared 07-attack-tap evidence"
+    },
+    {
+      "test": "scenario attack_tap_batch::attack_tap_batch_cards_offer_no_target_when_the_defender_has_no_creature",
+      "covers": "actual master_of_diversion is exercised by the shared 07-attack-tap evidence"
+    },
+    {
+      "test": "scenario attack_tap_batch::attack_tap_batch_cards_use_defending_player_scope_in_a_three_player_game",
+      "covers": "actual master_of_diversion is exercised by the shared 07-attack-tap evidence"
+    },
+    {
+      "test": "mechanic_registry::attack_tap_batch::attack_tap_batch_maps_definitions",
+      "covers": "actual master_of_diversion is exercised by the shared 07-attack-tap evidence"
+    },
+    {
+      "test": "mechanic_registry::attack_tap_batch::attack_tap_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual master_of_diversion is exercised by the shared 07-attack-tap evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

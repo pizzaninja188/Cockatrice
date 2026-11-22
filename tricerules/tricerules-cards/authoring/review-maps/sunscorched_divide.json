@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "8d2b2675-19df-4f40-9e8e-196ec097b91c",
+  "spans": [
+    {
+      "face_id": "sunscorched_divide",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario filter_land_cycle_batch::filter_land_cycle_batch_cards_add_each_printed_color_pair",
+      "covers": "actual sunscorched_divide clause coverage"
+    },
+    {
+      "test": "scenario filter_land_cycle_batch::filter_land_cycle_batch_cards_require_the_generic_mana_and_tap_cost",
+      "covers": "actual sunscorched_divide clause coverage"
+    },
+    {
+      "test": "scenario filter_land_cycle_batch::filter_land_cycle_batch_cards_do_not_add_mana_when_activation_is_rejected",
+      "covers": "actual sunscorched_divide clause coverage"
+    },
+    {
+      "test": "mechanic_registry::filter_land_cycle_batch::filter_land_cycle_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of sunscorched_divide"
+    },
+    {
+      "test": "mechanic_registry::filter_land_cycle_batch::filter_land_cycle_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for sunscorched_divide"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

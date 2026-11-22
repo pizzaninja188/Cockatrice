@@ -1,0 +1,12 @@
+// Oracle f097a059-5505-4c3c-b879-7853ab6972ed; source/rulings checked 2026-11-12.
+// CR 702.9a-b (Flying evasion ability).
+(
+  id: "armored_pegasus",
+  name: "Armored Pegasus",
+  face_id: "armored_pegasus",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Pegasus"],
+  power: 1,
+  toughness: 2,
+  keywords: [Flying],
+)

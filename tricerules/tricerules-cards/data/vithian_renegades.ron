@@ -1,0 +1,25 @@
+// Oracle 78fa248d-7f45-4d43-b3e3-c726db938b0f; source/rulings checked 2026-11-13.
+// CR 603.6a (enters trigger), 603.3d (trigger target choice), 701.8a
+// (destroy), and 115.1 (target).
+(
+  id: "vithian_renegades",
+  name: "Vithian Renegades",
+  face_id: "vithian_renegades",
+  mana_cost: "{1}{R}{G}",
+  types: ["Creature", "Human", "Shaman"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact])))],
+      targeting: Some((groups: [(
+        min: 1, max: 1,
+        prompt: "Choose target artifact",
+        effect_indices: [0],
+      )])),
+    ),
+  ],
+)

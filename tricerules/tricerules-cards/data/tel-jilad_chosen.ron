@@ -1,0 +1,13 @@
+// Oracle de6854d1-bdb0-4b9a-b442-08d4d90a538d; source/rulings checked 2026-11-13.
+// CR 702.16b-f: protection's five effects (no targeting, no Aura/Equipment
+// attachment, no damage, no blocking, no Fortify).
+(
+  id: "tel-jilad_chosen",
+  name: "Tel-Jilad Chosen",
+  face_id: "tel_jilad_chosen",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Elf", "Warrior"],
+  power: 2,
+  toughness: 1,
+  protections: [CardType(Artifact)],
+)

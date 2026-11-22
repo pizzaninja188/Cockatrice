@@ -1,0 +1,13 @@
+// Oracle 01d70534-7c26-4a54-9eca-d0ebbefc2159; source/rulings checked 2026-11-13.
+// CR 702.16b-f: protection's five effects (no targeting, no Aura/Equipment
+// attachment, no damage, no blocking, no Fortify).
+(
+  id: "valeron_outlander",
+  name: "Valeron Outlander",
+  face_id: "valeron_outlander",
+  mana_cost: "{G}{W}",
+  types: ["Creature", "Human", "Scout"],
+  power: 2,
+  toughness: 2,
+  protections: [Color(Black)],
+)

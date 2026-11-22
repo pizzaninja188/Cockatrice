@@ -1,0 +1,12 @@
+// Oracle 4916773d-5ccb-48ff-8aa3-09771ae88e81; source/rulings checked 2026-11-12.
+// CR 702.9a-b (Flying evasion ability).
+(
+  id: "spotted_griffin",
+  name: "Spotted Griffin",
+  face_id: "spotted_griffin",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Griffin"],
+  power: 2,
+  toughness: 3,
+  keywords: [Flying],
+)

@@ -1,0 +1,62 @@
+{
+  "format_version": 1,
+  "oracle_id": "ff27ff37-96c0-41af-8881-a078e884e67b",
+  "spans": [
+    {
+      "face_id": "sorin_s_thirst",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario damage_creature_lifegain_batch::damage_creature_lifegain_batch_cards_mark_nonlethal_damage_and_gain_life",
+      "covers": "actual sorins_thirst is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario damage_creature_lifegain_batch::damage_creature_lifegain_batch_cards_still_gain_life_when_damage_is_prevented",
+      "covers": "actual sorins_thirst is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario damage_creature_lifegain_batch::damage_creature_lifegain_batch_cards_fizzle_a_stale_target_without_life",
+      "covers": "actual sorins_thirst is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario damage_creature_lifegain_batch::damage_creature_lifegain_batch_cards_reject_a_noncreature_target_without_paying",
+      "covers": "actual sorins_thirst is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario damage_creature_lifegain_batch::damage_creature_lifegain_batch_cards_respect_instant_and_sorcery_timing",
+      "covers": "actual sorins_thirst is exercised by the shared damage_creature_lifegain_batch timing scenario"
+    },
+    {
+      "test": "mechanic_registry::damage_creature_lifegain_batch::damage_creature_lifegain_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of sorins_thirst"
+    },
+    {
+      "test": "mechanic_registry::damage_creature_lifegain_batch::damage_creature_lifegain_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for sorins_thirst"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

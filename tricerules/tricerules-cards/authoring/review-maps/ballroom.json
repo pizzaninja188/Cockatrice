@@ -1,0 +1,86 @@
+{
+  "format_version": 1,
+  "oracle_id": "cb91e842-9f06-4863-a328-2cabe1bcfe27",
+  "spans": [
+    {
+      "face_id": "ballroom",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "ballroom",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "ballroom",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario investigate_lands_batch::investigate_lands_batch_cards_enter_tapped_and_reject_immediate_activation",
+      "covers": "actual ballroom is exercised by the shared investigate_lands_batch actual-card scenario"
+    },
+    {
+      "test": "scenario investigate_lands_batch::investigate_lands_batch_cards_tap_for_each_printed_option_in_order",
+      "covers": "actual ballroom is exercised by the shared investigate_lands_batch actual-card scenario"
+    },
+    {
+      "test": "scenario investigate_lands_batch::investigate_lands_batch_cards_create_one_clue_per_activation",
+      "covers": "actual ballroom is exercised by the shared investigate_lands_batch actual-card scenario"
+    },
+    {
+      "test": "scenario investigate_lands_batch::investigate_lands_batch_cards_reject_investigate_without_four_mana",
+      "covers": "actual ballroom is exercised by the shared investigate_lands_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::investigate_lands_batch::investigate_lands_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of ballroom"
+    },
+    {
+      "test": "mechanic_registry::investigate_lands_batch::investigate_lands_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for ballroom"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

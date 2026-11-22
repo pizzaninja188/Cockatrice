@@ -1,0 +1,27 @@
+// Oracle 099a5835-da6c-4e03-ad3e-aeb448897fed; source/rulings checked 2026-11-13.
+// CR 702.9a-b (flying), 603.6a (entry trigger), 121 (draw) and 701.9 (discard).
+(
+  id: "owl_familiar",
+  name: "Owl Familiar",
+  face_id: "owl_familiar",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Bird"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    program: Some(
+      (
+        body: (
+          steps: [
+            (id: "draw_cards", kind: Perform(Draw(count: 1))),
+            (id: "discard_cards", kind: Perform(Discard(quantity: Exact(1)))),
+          ],
+        ),
+      ),
+    ),
+  )],
+)

@@ -1,0 +1,20 @@
+// Oracle 2825ff5a-5340-4494-bfde-80f6f5bce5a2; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// Ruling: the hand size is checked both when the trigger would fire and when it resolves.
+// CR 503.1 (the opponent's upkeep), 603.4 (intervening "if") and 120.3 (damage to the player).
+(
+  id: "lavaborn_muse",
+  name: "Lavaborn Muse",
+  face_id: "lavaborn_muse",
+  mana_cost: "{3}{R}",
+  types: ["Creature", "Spirit"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: AtBeginningOfUpkeep(player: Opponent),
+    intervening_if: Some(CardsInHand(players: AffectedPlayer, max: Some(2))),
+    effect: [DamagePlayer(amount: 3, who: AffectedPlayer)],
+  )],
+)

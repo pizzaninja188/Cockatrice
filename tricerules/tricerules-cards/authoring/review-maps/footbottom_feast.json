@@ -1,0 +1,65 @@
+{
+  "format_version": 1,
+  "oracle_id": "0a35df9d-80a0-4b6f-91d5-dad980af47e1",
+  "spans": [
+    {
+      "face_id": "footbottom_feast",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "footbottom_feast",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "GraveyardDestination::LibraryTop",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q31_graveyard_top_draw_batch::q31_graveyard_top_draw_cards_choose_any_number_of_creature_cards",
+      "covers": "actual footbottom_feast is exercised by the shared 09-graveyard-top-draw evidence"
+    },
+    {
+      "test": "scenario q31_graveyard_top_draw_batch::q31_graveyard_top_draw_cards_may_choose_zero",
+      "covers": "actual footbottom_feast is exercised by the shared 09-graveyard-top-draw evidence"
+    },
+    {
+      "test": "scenario q31_graveyard_top_draw_batch::q31_graveyard_top_draw_cards_reject_an_opponents_graveyard",
+      "covers": "actual footbottom_feast is exercised by the shared 09-graveyard-top-draw evidence"
+    },
+    {
+      "test": "scenario q31_graveyard_top_draw_batch::q31_graveyard_top_draw_cards_skip_a_stale_target_and_still_draw",
+      "covers": "actual footbottom_feast is exercised by the shared 09-graveyard-top-draw evidence"
+    },
+    {
+      "test": "mechanic_registry::q31_graveyard_top_draw_batch::q31_graveyard_top_draw_batch_maps_definitions",
+      "covers": "actual footbottom_feast is exercised by the shared 09-graveyard-top-draw evidence"
+    },
+    {
+      "test": "mechanic_registry::q31_graveyard_top_draw_batch::q31_graveyard_top_draw_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual footbottom_feast is exercised by the shared 09-graveyard-top-draw evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

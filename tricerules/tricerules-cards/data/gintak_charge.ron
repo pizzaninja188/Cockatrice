@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 286213a8-ae53-4f97-9f81-e13bed462d0a.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "gintak_charge",
+  name: "Gin'tak Charge",
+  face_id: "gintak_charge",
+  mana_cost: "{R}",
+  types: ["Sorcery"],
+  spell_effect: [DamageTarget(amount: 2, target: (kind: AnyTarget))],
+)

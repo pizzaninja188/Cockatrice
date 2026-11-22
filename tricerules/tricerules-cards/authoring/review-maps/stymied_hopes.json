@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "b081726f-0ed6-4ab0-833e-f510ac6fbeaa",
+  "spans": [
+    {
+      "face_id": "stymied_hopes",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_b::q55_b_soft_counter_riders_apply_when_the_payment_is_declined",
+      "covers": "actual Stymied Hopes counters the spell and still scries when the payment is declined"
+    },
+    {
+      "test": "scenario q55_batch_b::q55_b_soft_counters_fizzle_when_the_target_spell_left_the_stack",
+      "covers": "actual Stymied Hopes fizzles without scrying when its target left the stack"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_b::q55_b_soft_counter_riders_map_definitions",
+      "covers": "shared registry identity for the soft-counter-with-rider spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_b::q55_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Stymied Hopes"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

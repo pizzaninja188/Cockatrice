@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "76c02534-35e3-4950-b4b3-90c679cdf6a7",
+  "spans": [
+    {
+      "face_id": "goblin_commando",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_damage_creature_batch::etb_damage_creature_batch_cards_deal_exactly_two_damage_to_a_chosen_creature",
+      "covers": "actual goblin_commando deals exactly two damage to the chosen creature"
+    },
+    {
+      "test": "scenario etb_damage_creature_batch::etb_damage_creature_batch_cards_must_target_themselves_when_no_other_creature_exists",
+      "covers": "actual goblin_commando targets itself when it is the only creature"
+    },
+    {
+      "test": "scenario etb_damage_creature_batch::etb_damage_creature_batch_cards_fizzle_when_the_chosen_creature_left",
+      "covers": "actual goblin_commando does not deal damage when the chosen creature left"
+    },
+    {
+      "test": "scenario etb_damage_creature_batch::etb_damage_creature_batch_cards_offer_only_creature_targets",
+      "covers": "actual goblin_commando publishes only creature permanents as legal targets"
+    },
+    {
+      "test": "mechanic_registry::etb_damage_creature_batch::etb_damage_creature_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of goblin_commando"
+    },
+    {
+      "test": "mechanic_registry::etb_damage_creature_batch::etb_damage_creature_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for goblin_commando"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

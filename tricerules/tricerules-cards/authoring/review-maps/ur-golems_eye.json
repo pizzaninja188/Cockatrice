@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "fb34fc00-e60d-41fc-9393-ca4248ec0a1c",
+  "spans": [
+    {
+      "face_id": "ur_golems_eye",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario colorless_double_mana_batch::colorless_double_mana_batch_cards_activate_for_two_colorless_mana",
+      "covers": "actual ur-golems_eye taps for exactly two colorless mana without using the stack"
+    },
+    {
+      "test": "scenario colorless_double_mana_batch::colorless_double_mana_batch_cards_apply_summoning_sickness",
+      "covers": "actual ur-golems_eye obeys creature summoning sickness when it is a creature"
+    },
+    {
+      "test": "mechanic_registry::colorless_double_mana_batch::colorless_double_mana_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of ur-golems_eye"
+    },
+    {
+      "test": "mechanic_registry::colorless_double_mana_batch::colorless_double_mana_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for ur-golems_eye"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

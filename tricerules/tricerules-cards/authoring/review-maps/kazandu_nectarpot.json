@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "263b526c-8b81-44ee-a7c4-5c24bf9b42a4",
+  "spans": [
+    {
+      "face_id": "kazandu_nectarpot",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q49_batch_b::q49_landfall_canary_simplest_kazandu_nectarpot_gains_life",
+      "covers": "canary simplest gains 1 life on a land entry"
+    },
+    {
+      "test": "scenario q49_batch_b::q49_landfall_cards_apply_their_printed_effect",
+      "covers": "every actual card applies its printed landfall effect to the printed scope"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_b::q49_landfall_maps_definitions",
+      "covers": "reviewed identity, landfall trigger and printed effect"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_b::q49_batch_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Kazandu Nectarpot"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

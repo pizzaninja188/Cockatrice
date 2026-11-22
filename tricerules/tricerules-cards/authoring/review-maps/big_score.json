@@ -1,0 +1,63 @@
+{
+  "format_version": 1,
+  "oracle_id": "a5cbd257-c836-493e-bb1a-76242619dea2",
+  "spans": [
+    {
+      "face_id": "big_score",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0"
+      ]
+    },
+    {
+      "face_id": "big_score",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostOptionDef::DiscardCard",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q31_treasure_loot_batch::q31_treasure_loot_cards_draw_two_and_create_two_treasures",
+      "covers": "actual big_score is exercised by the shared 08-treasure-loot evidence"
+    },
+    {
+      "test": "scenario q31_treasure_loot_batch::q31_treasure_loot_cards_require_the_discard_cost",
+      "covers": "actual big_score is exercised by the shared 08-treasure-loot evidence"
+    },
+    {
+      "test": "scenario q31_treasure_loot_batch::q31_treasure_loot_cards_consume_their_exact_mana",
+      "covers": "actual big_score is exercised by the shared 08-treasure-loot evidence"
+    },
+    {
+      "test": "mechanic_registry::q31_treasure_loot_batch::q31_treasure_loot_batch_maps_definitions",
+      "covers": "actual big_score is exercised by the shared 08-treasure-loot evidence"
+    },
+    {
+      "test": "mechanic_registry::q31_treasure_loot_batch::q31_treasure_loot_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual big_score is exercised by the shared 08-treasure-loot evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

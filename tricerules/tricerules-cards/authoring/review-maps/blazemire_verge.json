@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "977c2f33-b622-4172-9efb-7f523becd32b",
+  "spans": [
+    {
+      "face_id": "blazemire_verge",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "blazemire_verge",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "GameCondition::BattlefieldAggregate",
+      "typed_path": "/faces/0/activated_abilities/1/conditions/0"
+    },
+    {
+      "symbol": "TargetFilter.required_subtypes",
+      "typed_path": "/faces/0/activated_abilities/1/conditions/0/BattlefieldAggregate/filter"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q44_cohorts_batch::q44_verge_cards_require_their_printed_condition",
+      "covers": "every actual card requires one of its two printed basic subtypes"
+    },
+    {
+      "test": "scenario q44_cohorts_batch::q44_verge_cards_keep_the_unconditional_first_ability",
+      "covers": "every actual card keeps the unconditional first mana ability"
+    },
+    {
+      "test": "scenario q44_cohorts_batch::q44_verge_condition_ignores_opponent_lands",
+      "covers": "an opponent's basic land does not enable the condition"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_verge_lands_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of blazemire_verge"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for blazemire_verge"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

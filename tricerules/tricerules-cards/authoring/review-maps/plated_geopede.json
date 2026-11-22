@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "d1efc4fd-2978-4434-8fdf-ddc05484ebb1",
+  "spans": [
+    {
+      "face_id": "plated_geopede",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "plated_geopede",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/PumpTarget/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q42_landfall_pump_batch::q42_landfall_pump_cards_apply_the_printed_effect_to_the_source_only",
+      "covers": "actual card applies the printed landfall +2/+2 to its source only and publishes its printed static"
+    },
+    {
+      "test": "scenario q42_landfall_pump_batch::q42_landfall_pump_cards_scope_the_trigger_to_the_controller",
+      "covers": "the landfall trigger is controller-scoped"
+    },
+    {
+      "test": "mechanic_registry::q42_cohorts_batch::q42_landfall_pump_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of plated_geopede"
+    },
+    {
+      "test": "mechanic_registry::q42_cohorts_batch::q42_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for plated_geopede"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

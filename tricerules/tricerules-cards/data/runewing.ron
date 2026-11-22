@@ -1,0 +1,20 @@
+// Oracle cc300649-ae50-47e7-ad0f-ffbdffddb989; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying), 603.6c and 700.4 (dies trigger), and 121.1 (draw).
+(
+  id: "runewing",
+  name: "Runewing",
+  face_id: "runewing",
+  mana_cost: "{3}{U}",
+  types: ["Creature", "Bird"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfDies,
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

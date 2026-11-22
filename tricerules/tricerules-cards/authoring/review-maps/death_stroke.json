@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "3ebaa91f-5cbf-4a82-9759-9bd4d93a3e87",
+  "spans": [
+    {
+      "face_id": "death_stroke",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter.tapped",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen/tapped"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario destroy_tapped_batch::destroy_tapped_batch_cards_apply_the_printed_effect",
+      "covers": "actual death_stroke clause coverage"
+    },
+    {
+      "test": "scenario destroy_tapped_batch::destroy_tapped_batch_cards_reject_illegal_targets",
+      "covers": "actual death_stroke clause coverage"
+    },
+    {
+      "test": "scenario destroy_tapped_batch::destroy_tapped_batch_cards_handle_stale_or_expired_state",
+      "covers": "actual death_stroke clause coverage"
+    },
+    {
+      "test": "mechanic_registry::destroy_tapped_batch::destroy_tapped_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of death_stroke"
+    },
+    {
+      "test": "mechanic_registry::destroy_tapped_batch::destroy_tapped_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for death_stroke"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

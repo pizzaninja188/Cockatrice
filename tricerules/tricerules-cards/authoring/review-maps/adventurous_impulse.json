@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "5bf49f39-b3d5-4148-8dc2-b5b5011769d2",
+  "spans": [
+    {
+      "face_id": "adventurous_impulse",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::LookChooseToHand",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q40_look_choose_hand_batch::q40_look_choose_canary_simplest",
+      "covers": "simplest canary for this actual card"
+    },
+    {
+      "test": "scenario q40_look_choose_hand_batch::q40_look_choose_short_library_does_as_much_as_possible",
+      "covers": "short library clamps to available cards"
+    },
+    {
+      "test": "scenario q40_look_choose_hand_batch::q40_look_choose_cards_apply_their_printed_filter_and_order_policy",
+      "covers": "actual card applies its printed filter and bottom-order policy"
+    },
+    {
+      "test": "mechanic_registry::q40_cohorts_batch::q40_look_choose_hand_maps_definitions",
+      "covers": "reviewed identity, typed values and printed characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

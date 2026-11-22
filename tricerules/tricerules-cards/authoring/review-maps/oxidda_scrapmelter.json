@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "cef64ec6-cdfb-42a4-9a4a-3ef5448e93fc",
+  "spans": [
+    {
+      "face_id": "oxidda_scrapmelter",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_destroy_artifact_batch::etb_destroy_artifact_batch_cards_destroy_a_target_artifact_on_entry",
+      "covers": "actual oxidda_scrapmelter clause coverage"
+    },
+    {
+      "test": "scenario etb_destroy_artifact_batch::etb_destroy_artifact_batch_cards_allow_artifact_creature_targets",
+      "covers": "actual oxidda_scrapmelter clause coverage"
+    },
+    {
+      "test": "scenario etb_destroy_artifact_batch::etb_destroy_artifact_batch_cards_reject_nonartifact_targets",
+      "covers": "actual oxidda_scrapmelter clause coverage"
+    },
+    {
+      "test": "scenario etb_destroy_artifact_batch::etb_destroy_artifact_batch_cards_fizzle_stale_artifact_targets",
+      "covers": "actual oxidda_scrapmelter clause coverage"
+    },
+    {
+      "test": "scenario etb_destroy_artifact_batch::etb_destroy_artifact_batch_cards_require_a_target_when_only_the_controller_has_an_artifact",
+      "covers": "actual oxidda_scrapmelter clause coverage"
+    },
+    {
+      "test": "mechanic_registry::etb_destroy_artifact_batch::etb_destroy_artifact_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of oxidda_scrapmelter"
+    },
+    {
+      "test": "mechanic_registry::etb_destroy_artifact_batch::etb_destroy_artifact_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for oxidda_scrapmelter"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

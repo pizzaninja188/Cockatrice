@@ -1,0 +1,15 @@
+// Oracle 75b2dd64-a2f5-4032-a19f-5b485dc44b16; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.6 (counter), 115.1a/601.2c (a spell on the stack is the target), 304.1 (instant
+// timing) and 608.2b (illegal target).
+
+(
+  id: "flash_counter",
+  name: "Flash Counter",
+  face_id: "flash_counter",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  spell_effect: [CounterTargetSpell(
+    spell_filter: (card_type: Some(Instant)),
+  )],
+)

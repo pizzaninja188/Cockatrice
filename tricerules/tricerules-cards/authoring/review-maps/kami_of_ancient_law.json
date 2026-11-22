@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "e937e0f5-ca35-4dce-9f05-8f2075731628",
+  "spans": [
+    {
+      "face_id": "kami_of_ancient_law",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario ronom_unicorn_batch::ronom_unicorn_batch_cards_sacrifice_as_a_cost_and_destroy_only_enchantments",
+      "covers": "actual kami_of_ancient_law sacrifices itself as a cost, rejects non-enchantments and destroys the chosen enchantment"
+    },
+    {
+      "test": "scenario ronom_unicorn_batch::ronom_unicorn_batch_cards_fizzle_when_the_enchantment_already_left",
+      "covers": "actual kami_of_ancient_law keeps its paid sacrifice when the enchantment target already left"
+    },
+    {
+      "test": "mechanic_registry::ronom_unicorn_batch::ronom_unicorn_batch_maps_definitions",
+      "covers": "reviewed identity, body, sacrifice cost and enchantment-only destroy of kami_of_ancient_law"
+    },
+    {
+      "test": "mechanic_registry::ronom_unicorn_batch::ronom_unicorn_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for kami_of_ancient_law"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

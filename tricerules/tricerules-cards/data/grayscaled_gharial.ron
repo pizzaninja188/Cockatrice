@@ -1,0 +1,12 @@
+// Oracle 59483597-4d8c-4cdc-8bb5-226b1eef10f5; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "grayscaled_gharial",
+  name: "Grayscaled Gharial",
+  face_id: "grayscaled_gharial",
+  mana_cost: "{U}",
+  types: ["Creature", "Crocodile"],
+  power: 1,
+  toughness: 1,
+  evasions: [Landwalk(land_subtype: "Island")],
+)

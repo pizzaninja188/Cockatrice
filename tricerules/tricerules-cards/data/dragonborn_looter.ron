@@ -1,0 +1,24 @@
+// Oracle f74e53e1-e575-4386-a128-5c87124987d4; source/rulings checked 2026-11-15 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 (activation and cost), 121.1 (draw), 701.9 (discard) and 608.2c (instructions in printed order).
+(
+  id: "dragonborn_looter",
+  name: "Dragonborn Looter",
+  face_id: "dragonborn_looter",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Dragon", "Rogue"],
+  power: 1,
+  toughness: 2,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{1}"), Tap],
+      effect: [],
+      program: Some((body: (steps: [
+        (id: "draw_one", kind: Perform(Draw(count: 1))),
+        (id: "discard_one", kind: Perform(Discard(quantity: Exact(1)))),
+      ]))),
+    ),
+  ],
+)

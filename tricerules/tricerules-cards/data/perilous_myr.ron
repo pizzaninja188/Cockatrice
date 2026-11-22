@@ -1,0 +1,20 @@
+// Oracle f1e8f746-1837-4ea8-9a07-e57946883353; source/rulings checked 2026-11-13.
+// CR 603.6c/700.4 (dies trigger), 115.1 (targets), 120.1/120.3 (damage), and
+// 608.2b (a target that left is not damaged).
+(
+  id: "perilous_myr",
+  name: "Perilous Myr",
+  face_id: "perilous_myr",
+  mana_cost: "{2}",
+  types: ["Artifact", "Creature", "Phyrexian", "Myr"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfDies,
+      effect: [DamageTarget(amount: 2, target: (kind: AnyTarget))],
+    ),
+  ],
+)

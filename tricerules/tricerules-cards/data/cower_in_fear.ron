@@ -1,0 +1,11 @@
+// Oracle f1519fe3-af13-4491-9020-4a8d8f474713; source/rulings checked 2026-11-15.
+// CR 611.2c (the affected set is fixed at resolution), 613.4c
+// (layer-7c modification) and 514.2 (cleanup expiry).
+(
+  id: "cower_in_fear",
+  name: "Cower in Fear",
+  face_id: "cower_in_fear",
+  mana_cost: "{1}{B}{B}",
+  types: ["Instant"],
+  spell_effect: [PumpAll(filter: (controller: Opponents), power: -1, toughness: -1)],
+)

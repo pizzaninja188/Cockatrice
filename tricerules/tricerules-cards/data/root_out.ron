@@ -1,0 +1,19 @@
+// Oracle bec03edc-261a-4b02-be37-2006f657e905; source/rulings checked 2026-11-21 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 115.1/601.2c (artifact-or-enchantment target at cast), 701.16 (investigate
+// creates a Clue) and 608.2b. Pinned ruling: an illegal sole target means no investigate.
+// Copy of Appetite for the Unnatural's target filter plus Auspicious Arrival's Clue token.
+(
+  id: "root_out",
+  name: "Root Out",
+  face_id: "root_out",
+  mana_cost: "{2}{G}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact, Enchantment]))),
+    CreateTokens(token: "clue", count: 1),
+  ],
+  targeting: Some((groups: [
+    (min: 1, max: 1, prompt: "Choose target artifact or enchantment", effect_indices: [0]),
+  ])),
+)

@@ -1,0 +1,18 @@
+// Oracle 63604320-68de-415e-b1f9-dd0f85c5d8a3; source/rulings checked 2026-11-13.
+// CR 303.4a (Aura target and attach), 613.4c (layer-7c attached P/T modifier), and
+// 704.5m (unattached Aura cleanup).
+(
+  id: "knights_pledge",
+  name: "Knight's Pledge",
+  face_id: "knights_pledge",
+  mana_cost: "{1}{W}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(delta_power: 2, delta_toughness: 2),
+    ),
+  ],
+)

@@ -1,0 +1,36 @@
+// Oracle 5dd0cc44-4647-4857-ad3b-22494099d08a; source/rulings checked 2026-11-13.
+// CR 305.6/305.8 (basic land subtypes), 614.1c (enter-tapped replacement) and
+// 605.1a/605.3b (mana ability).
+(
+  id: "radiant_summit",
+  name: "Radiant Summit",
+  face_id: "radiant_summit",
+  mana_cost: "",
+  types: ["Land", "Mountain", "Plains"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      intrinsic_land_mana: true,
+      costs: [Tap],
+      effect: [ProduceMana(options: [
+        (r: 1),
+        (w: 1),
+      ])],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: EntersTapped(
+        affected: Self_,
+        condition: Some(BattlefieldAggregate(
+          filter: (controllers: Controller, card_type: Some(BasicLand), exclude_source: true),
+          aggregate: Count,
+          max: Some(1),
+        )),
+      ),
+    ),
+  ],
+)

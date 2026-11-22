@@ -1,0 +1,32 @@
+// Oracle 0bd8917c-bec4-4603-bc3f-8e0c2afae56a; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853. No card-specific rulings.
+// CR 601.2a (casting a spell), 603.1/603.2 (the cast trigger and its resolution order), 105.2
+// (a spell's colors) and 118.12 (the optional {1} payment). The trigger watches every player's casts.
+(
+  id: "wooden_sphere",
+  name: "Wooden Sphere",
+  face_id: "wooden_sphere",
+  mana_cost: "{1}",
+  types: ["Artifact"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPlayerCastsSpell(caster: AnyPlayer, filter: (is_color: Some(Green))),
+    program: Some((body: (steps: [
+      (id: "pay_or_pass", kind: Choose(
+        choice: "pay_or_pass",
+        chooser: Controller,
+        optional: true,
+        branches: [(
+          branch_id: "pay_one",
+          presentation: OracleLines([1]),
+          cost: Mana("{1}"),
+          body: (steps: [
+            (id: "gain_one", kind: Perform(GainLife(amount: 1))),
+          ]),
+        )],
+        otherwise: (),
+      )),
+    ]))),
+  )],
+)

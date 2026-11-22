@@ -1,0 +1,20 @@
+// Oracle a297f9a2-3461-4138-8a3e-75027cbdbe12; source/rulings checked 2026-11-15.
+// CR 602.1/602.2 (activation and printed cost), 611.2a/613.4c
+// (until-end-of-turn pump), and 514.2 (cleanup expiry).
+(
+  id: "fathom_fleet_firebrand",
+  name: "Fathom Fleet Firebrand",
+  face_id: "fathom_fleet_firebrand",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Human", "Pirate"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{1}{R}")],
+      effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
+    ),
+  ],
+)

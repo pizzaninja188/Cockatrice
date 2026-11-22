@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "aa76cc50-5be0-4844-b3a4-fb33fca3cdd3",
+  "spans": [
+    {
+      "face_id": "bloodthrone_vampire",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario sac_creature_self_pump_batch::sac_creature_self_pump_batch_cards_sacrifice_another_creature_and_pump",
+      "covers": "actual bloodthrone_vampire is exercised by the shared sac_creature_self_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario sac_creature_self_pump_batch::sac_creature_self_pump_batch_cards_can_sacrifice_themselves_without_a_bonus",
+      "covers": "actual bloodthrone_vampire is exercised by the shared sac_creature_self_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario sac_creature_self_pump_batch::sac_creature_self_pump_batch_cards_need_no_tap_and_ignore_summoning_sickness",
+      "covers": "actual bloodthrone_vampire is exercised by the shared sac_creature_self_pump_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::sac_creature_self_pump_batch::sac_creature_self_pump_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of bloodthrone_vampire"
+    },
+    {
+      "test": "mechanic_registry::sac_creature_self_pump_batch::sac_creature_self_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for bloodthrone_vampire"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

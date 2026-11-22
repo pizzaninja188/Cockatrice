@@ -1,0 +1,27 @@
+// Oracle 43d44a7f-829a-4f4d-9f71-2f4384ddd803; source/rulings checked 2026-11-16 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 700.4 (dies), 603.6c (leaves-the-battlefield trigger), 122.1 (counters) and
+// 608.2c (the controller follows the instruction). Copy of the reviewed Steadfast Sentry shape.
+(
+  id: "spinal_centipede",
+  name: "Spinal Centipede",
+  face_id: "spinal_centipede",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Insect"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfDies,
+      effect: [
+        PutCounters(
+          counter: PlusOnePlusOne,
+          count: 1,
+          subject: Chosen((kind: Creature, controller: You)),
+        ),
+      ],
+    ),
+  ],
+)

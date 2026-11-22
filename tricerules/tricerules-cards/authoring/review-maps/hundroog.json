@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "ade82acb-80c0-4033-aa02-4fa3d69aad69",
+  "spans": [
+    {
+      "face_id": "hundroog",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilitySourceZone::Hand",
+      "typed_path": "/faces/0/activated_abilities/0/source_zone"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario cycling_keyword_batch::cycling_keyword_batch_cards_cycle_for_the_printed_cost_and_draw_one",
+      "covers": "actual hundroog is exercised by the shared cycling_keyword_batch actual-card scenario"
+    },
+    {
+      "test": "scenario cycling_keyword_batch::cycling_keyword_batch_cards_reject_cycling_without_the_printed_cost",
+      "covers": "actual hundroog is exercised by the shared cycling_keyword_batch actual-card scenario"
+    },
+    {
+      "test": "scenario cycling_keyword_batch::cycling_keyword_batch_cards_reject_cycling_outside_the_hand",
+      "covers": "actual hundroog is exercised by the shared cycling_keyword_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::cycling_keyword_batch::cycling_keyword_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of hundroog"
+    },
+    {
+      "test": "mechanic_registry::cycling_keyword_batch::cycling_keyword_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for hundroog"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

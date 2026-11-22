@@ -1,0 +1,13 @@
+// Oracle c2f0b795-9f73-43db-aa8c-3b06963ba2b6; source/rulings checked 2026-11-14.
+// CR 702.80a: damage dealt to a creature by a source with wither is not
+// marked; its controller puts that many -1/-1 counters on the creature.
+(
+  id: "wildslayer_elves",
+  name: "Wildslayer Elves",
+  face_id: "wildslayer_elves",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Elf", "Warrior"],
+  power: 3,
+  toughness: 3,
+  keywords: [Wither],
+)

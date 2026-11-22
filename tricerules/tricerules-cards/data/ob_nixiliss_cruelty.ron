@@ -1,0 +1,18 @@
+// Oracle c638957f-88bf-40c2-834c-2be39d73bf41; source/rulings checked 2026-11-21 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a (one creature target), 613.4c (-5/-5 until end of turn), 614.6/616.1 (the exile
+// replacement applies to any death that turn) and 608.2b. Pinned ruling: the replacement applies
+// to any death that turn, not only immediately after resolution.
+// Copy of Afflict's shrink plus Betrayer's Bargain's exile replacement.
+(
+  id: "ob_nixiliss_cruelty",
+  name: "Ob Nixilis's Cruelty",
+  face_id: "ob_nixiliss_cruelty",
+  mana_cost: "{2}{B}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: -5, toughness: -5, subject: Chosen((kind: Creature))),
+    ExileIfWouldDieThisTurn(target: (kind: Creature)),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0, 1])])),
+)

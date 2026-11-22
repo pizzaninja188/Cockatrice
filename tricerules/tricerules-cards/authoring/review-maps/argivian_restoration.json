@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "d887919a-68d5-455d-977c-4f1f0b4b3141",
+  "spans": [
+    {
+      "face_id": "argivian_restoration",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_c::q55_c_canary_simplest_argivian_restoration_returns_an_artifact",
+      "covers": "actual Argivian Restoration returns the chosen artifact card untapped under its controller"
+    },
+    {
+      "test": "scenario q55_batch_c::q55_c_reanimation_rejects_wrong_card_types_and_stale_targets",
+      "covers": "actual Argivian Restoration rejects a nonartifact card at cast and keeps its mana"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_c::q55_c_reanimation_map_definitions",
+      "covers": "shared registry identity for the reanimation spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_c::q55_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Argivian Restoration"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

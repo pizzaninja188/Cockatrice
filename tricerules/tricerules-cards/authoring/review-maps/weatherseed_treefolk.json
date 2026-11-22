@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "4e9b878b-80a2-433b-941b-92d854e83d58",
+  "spans": [
+    {
+      "face_id": "weatherseed_treefolk",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "weatherseed_treefolk",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ReturnTriggeredCard",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q40_remaining_cohorts_batch::q40_dies_return_self_cards_return_to_their_owners_hand",
+      "covers": "actual card returns itself to its owner's hand after dying"
+    },
+    {
+      "test": "scenario q40_remaining_cohorts_batch::q40_dies_return_self_does_not_return_a_card_that_left_the_graveyard",
+      "covers": "a card that left the graveyard is not returned"
+    },
+    {
+      "test": "mechanic_registry::q40_cohorts_batch::q40_dies_return_self_maps_definitions",
+      "covers": "reviewed identity, trigger and zone-change destination"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

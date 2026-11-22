@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "65dd4ae3-432c-4d57-ac14-4d827262ea0b",
+  "spans": [
+    {
+      "face_id": "watercourser",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario self_pump_negative_batch::self_pump_negative_batch_cards_apply_the_exact_printed_pump",
+      "covers": "actual watercourser is exercised by the shared self_pump_negative_batch actual-card scenario"
+    },
+    {
+      "test": "scenario self_pump_negative_batch::self_pump_negative_batch_cards_stack_two_activations",
+      "covers": "actual watercourser is exercised by the shared self_pump_negative_batch actual-card scenario"
+    },
+    {
+      "test": "scenario self_pump_negative_batch::self_pump_negative_batch_cards_die_at_zero_toughness",
+      "covers": "actual watercourser is exercised by the shared self_pump_negative_batch actual-card scenario"
+    },
+    {
+      "test": "scenario self_pump_negative_batch::self_pump_negative_batch_cards_expire_at_cleanup",
+      "covers": "actual watercourser is exercised by the shared self_pump_negative_batch actual-card scenario"
+    },
+    {
+      "test": "scenario self_pump_negative_batch::self_pump_negative_batch_cards_reject_activation_without_mana",
+      "covers": "actual watercourser is exercised by the shared self_pump_negative_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::self_pump_negative_batch::self_pump_negative_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of watercourser"
+    },
+    {
+      "test": "mechanic_registry::self_pump_negative_batch::self_pump_negative_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for watercourser"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,12 @@
+// Oracle 41283a82-ce3f-41a6-995e-bc30d8ab5cf9; source/rulings checked 2026-11-15.
+// CR 109.3, 202.1, and 205.1-2: no rules text; the printed mana cost, type
+// line, power and toughness are the complete card.
+(
+  id: "wei_infantry",
+  name: "Wei Infantry",
+  face_id: "wei_infantry",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 2,
+  toughness: 1,
+)

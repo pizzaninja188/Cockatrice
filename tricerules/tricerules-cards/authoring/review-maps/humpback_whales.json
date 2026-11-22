@@ -1,0 +1,73 @@
+{
+  "format_version": 1,
+  "oracle_id": "a7285536-6cc1-448e-839a-606d585fbd9d",
+  "spans": [
+    {
+      "face_id": "humpback_whales",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords",
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "humpback_whales",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Vigilance",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverSelfBecomesTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/CounterTriggeringStackObjectUnlessPays/cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q48_cohorts_batch::q48_landcycling_canary_simplest_cycles_for_a_basic_land",
+      "covers": "canary simplest cycles for a basic land"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_landcycling_canary_hardest_keeps_the_ward_cost",
+      "covers": "canary hardest keeps the ward cost"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_landcycling_cards_cycle_for_a_basic_land",
+      "covers": "every actual card cycles for a basic land"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_landcycling_creatures_maps_definitions",
+      "covers": "reviewed identity, keywords, ward, and basic landcycling"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Humpback Whales"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "7a8405f5-ef37-460e-8e0b-55378f3b407b",
+  "spans": [
+    {
+      "face_id": "vedalken_blademaster",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPlayerCastsSpell",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario prowess_creatures_batch::prowess_creatures_batch_cards_pump_on_noncreature_casts_and_expire",
+      "covers": "actual vedalken_blademaster triggers once per noncreature cast, pumps itself and expires at cleanup"
+    },
+    {
+      "test": "scenario prowess_creatures_batch::prowess_creatures_batch_cards_ignore_creature_and_opponent_casts",
+      "covers": "actual vedalken_blademaster does not trigger for creature spells or opponent casts"
+    },
+    {
+      "test": "mechanic_registry::prowess_creatures_batch::prowess_creatures_batch_maps_definitions",
+      "covers": "reviewed identity, cast trigger and source pump of vedalken_blademaster"
+    },
+    {
+      "test": "mechanic_registry::prowess_creatures_batch::prowess_creatures_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for vedalken_blademaster"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

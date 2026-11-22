@@ -1,0 +1,50 @@
+{
+  "format_version": 1,
+  "oracle_id": "9ccb6ce8-ccb6-4809-a1cc-cebd38744815",
+  "spans": [
+    {
+      "face_id": "goblin_rally",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "Token::goblin_r_1_1",
+      "typed_path": "/faces/0/spell_effect/0/CreateTokens/token"
+    }
+  ],
+  "tokens": [
+    "goblin_r_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q43_goblin_tokens_batch::q43_goblin_tokens_canary_creates_the_printed_count",
+      "covers": "actual card creates its printed number of red Goblin tokens with exact cost"
+    },
+    {
+      "test": "scenario q43_goblin_tokens_batch::q43_goblin_tokens_cards_create_exact_goblin_tokens_for_their_printed_cost",
+      "covers": "every actual card creates the printed count and red 1/1 Goblin characteristics"
+    },
+    {
+      "test": "scenario q43_goblin_tokens_batch::q43_goblin_tokens_cards_do_not_create_tokens_without_mana",
+      "covers": "an unpaid cast creates no token"
+    },
+    {
+      "test": "mechanic_registry::q43_cohorts_batch::q43_goblin_tokens_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of goblin_rally"
+    },
+    {
+      "test": "mechanic_registry::q43_cohorts_batch::q43_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for goblin_rally"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

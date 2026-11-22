@@ -1,0 +1,19 @@
+// Oracle c8ebfc8b-3cee-491b-a568-8a8dcb22541d; source/rulings checked 2026-11-12.
+// CR 702.108a-b (Prowess) and 514.2 (the pump ends at cleanup).
+(
+  id: "jeskai_student",
+  name: "Jeskai Student",
+  face_id: "jeskai_student",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Human", "Monk"],
+  power: 1,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Noncreature))),
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    ),
+  ],
+)

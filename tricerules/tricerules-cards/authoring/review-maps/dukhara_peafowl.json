@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "abc5ac3e-f196-49df-8a9d-16df3114ffad",
+  "spans": [
+    {
+      "face_id": "dukhara_peafowl",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario blue_gain_flying_batch::blue_gain_flying_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual dukhara_peafowl clause coverage"
+    },
+    {
+      "test": "scenario blue_gain_flying_batch::blue_gain_flying_batch_cards_gain_flying_only_after_activation",
+      "covers": "actual dukhara_peafowl clause coverage"
+    },
+    {
+      "test": "scenario blue_gain_flying_batch::blue_gain_flying_batch_cards_allow_a_ground_blocker_only_before_activation",
+      "covers": "actual dukhara_peafowl clause coverage"
+    },
+    {
+      "test": "scenario blue_gain_flying_batch::blue_gain_flying_batch_cards_lose_flying_at_cleanup",
+      "covers": "actual dukhara_peafowl clause coverage"
+    },
+    {
+      "test": "scenario blue_gain_flying_batch::blue_gain_flying_batch_cards_reject_activation_when_the_cost_cannot_be_paid",
+      "covers": "actual dukhara_peafowl clause coverage"
+    },
+    {
+      "test": "mechanic_registry::blue_gain_flying_batch::blue_gain_flying_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of dukhara_peafowl"
+    },
+    {
+      "test": "mechanic_registry::blue_gain_flying_batch::blue_gain_flying_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for dukhara_peafowl"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

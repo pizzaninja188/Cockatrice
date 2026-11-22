@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "9d277206-9156-4dc9-bdd2-9d9219787735",
+  "spans": [
+    {
+      "face_id": "stonewood_invoker",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario self_pump_green_batch::self_pump_green_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual stonewood_invoker clause coverage"
+    },
+    {
+      "test": "scenario self_pump_green_batch::self_pump_green_batch_cards_apply_the_printed_pump_only_to_themselves",
+      "covers": "actual stonewood_invoker clause coverage"
+    },
+    {
+      "test": "scenario self_pump_green_batch::self_pump_green_batch_cards_allow_repeated_activations_in_one_turn",
+      "covers": "actual stonewood_invoker clause coverage"
+    },
+    {
+      "test": "scenario self_pump_green_batch::self_pump_green_batch_cards_pump_expires_at_cleanup",
+      "covers": "actual stonewood_invoker clause coverage"
+    },
+    {
+      "test": "scenario self_pump_green_batch::self_pump_green_batch_cards_reject_activation_when_the_cost_cannot_be_paid",
+      "covers": "actual stonewood_invoker clause coverage"
+    },
+    {
+      "test": "mechanic_registry::self_pump_green_batch::self_pump_green_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of stonewood_invoker"
+    },
+    {
+      "test": "mechanic_registry::self_pump_green_batch::self_pump_green_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for stonewood_invoker"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

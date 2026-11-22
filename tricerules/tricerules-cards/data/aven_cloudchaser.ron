@@ -1,0 +1,26 @@
+// Oracle 48bda7dd-d023-41e8-8c28-e0cfda0d07ca; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters trigger), 603.3d (trigger target choice), 701.8a (destroy) and
+// 115.1 (target).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "aven_cloudchaser",
+  name: "Aven Cloudchaser",
+  face_id: "aven_cloudchaser",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Bird", "Soldier"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Enchantment])))],
+    targeting: Some((groups: [(
+      min: 1, max: 1,
+      prompt: "Choose target enchantment",
+      effect_indices: [0],
+    )])),
+  )],
+)

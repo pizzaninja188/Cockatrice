@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "58ed1294-ba7d-43a1-b988-8d78d9fa0e3e",
+  "spans": [
+    {
+      "face_id": "phyrexian_battleflies",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "phyrexian_battleflies",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ActivationLimit",
+      "typed_path": "/faces/0/activated_abilities/0/activation_limit"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q46_cohorts_batch::q46_flying_twice_pump_canary_simplest_pumps_once",
+      "covers": "canary simplest actual-card behavior"
+    },
+    {
+      "test": "scenario q46_cohorts_batch::q46_flying_twice_pump_canary_hardest_allows_exactly_two_activations",
+      "covers": "canary hardest actual-card behavior"
+    },
+    {
+      "test": "mechanic_registry::q46_cohorts_batch::q46_flying_twice_pump_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q46_cohorts_batch::q46_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

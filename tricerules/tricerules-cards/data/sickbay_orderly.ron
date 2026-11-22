@@ -1,0 +1,15 @@
+// Oracle 94688e62-f39f-41fd-9309-f16b715ef724; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 205.1/208.1 (type line and printed P/T) and the printed keyword's own CR rule.
+// The card has no pinned ruling.
+
+(
+  id: "sickbay_orderly",
+  name: "Sickbay Orderly",
+  face_id: "sickbay_orderly",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Caitian", "Doctor"],
+  power: 3,
+  toughness: 2,
+  keywords: [Lifelink],
+)

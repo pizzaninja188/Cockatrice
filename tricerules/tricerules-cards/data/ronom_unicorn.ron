@@ -1,0 +1,20 @@
+// Oracle 3c6913cc-c543-45f8-ad3b-ccd282efa6f7; source/rulings checked 2026-11-12.
+// CR 602.2b/601.2h (costs are paid during activation), 701.21a (sacrifice) and
+// 701.8a (destroy). The sacrifice is paid before the ability resolves.
+(
+  id: "ronom_unicorn",
+  name: "Ronom Unicorn",
+  face_id: "ronom_unicorn",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Unicorn"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [SacrificeSelf],
+      effect: [Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Enchantment])))],
+    ),
+  ],
+)

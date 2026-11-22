@@ -1,0 +1,18 @@
+// Oracle d14d41a5-6f38-43c7-b95c-b4a723002c20; source/rulings checked 2026-11-13.
+// CR 702.9a-b (flying), 702.108a-b (Prowess) and 514.2 (pump ends at cleanup).
+(
+  id: "niblis_of_dusk",
+  name: "Niblis of Dusk",
+  face_id: "niblis_of_dusk",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Spirit"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Noncreature))),
+    effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+  )],
+)

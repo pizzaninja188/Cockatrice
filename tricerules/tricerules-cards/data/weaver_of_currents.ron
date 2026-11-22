@@ -1,0 +1,19 @@
+// Oracle 9aabb520-7e97-47b2-975c-11f457d0b870; source/rulings checked 2026-11-12.
+// CR 605.1a/605.3b (tap mana ability) and 106.1a-b (colorless mana).
+(
+  id: "weaver_of_currents",
+  name: "Weaver of Currents",
+  face_id: "weaver_of_currents",
+  mana_cost: "{1}{G}{U}",
+  types: ["Creature", "Snake", "Druid"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 2)])],
+    ),
+  ],
+)

@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "6b75b94e-83b7-457e-ac41-7ca90b5a59aa",
+  "spans": [
+    {
+      "face_id": "battlefield_forge",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "battlefield_forge",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamagePlayer",
+      "typed_path": "/faces/0/activated_abilities/1/effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario pain_lands_batch::pain_lands_batch_cards_add_colorless_or_each_color_and_deal_one_damage",
+      "covers": "actual battlefield_forge clause coverage"
+    },
+    {
+      "test": "scenario pain_lands_batch::pain_lands_batch_cards_require_tap_and_untapped_source",
+      "covers": "actual battlefield_forge clause coverage"
+    },
+    {
+      "test": "scenario pain_lands_batch::pain_lands_batch_cards_do_not_damage_when_activation_is_rejected",
+      "covers": "actual battlefield_forge clause coverage"
+    },
+    {
+      "test": "mechanic_registry::pain_lands_batch::pain_lands_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of battlefield_forge"
+    },
+    {
+      "test": "mechanic_registry::pain_lands_batch::pain_lands_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for battlefield_forge"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

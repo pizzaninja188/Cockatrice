@@ -1,0 +1,21 @@
+// Oracle bcaf3f32-c4e5-4d39-be98-bfc00327021b; source/rulings checked 2026-11-12.
+// CR 702.17 (reach), 509.3b (one trigger per attacker-blocker edge), 611.2a/514.2
+// (until-end-of-turn duration) and 613.4c (layer 7c pump of the source).
+(
+  id: "ezuris_archers",
+  name: "Ezuri's Archers",
+  face_id: "ezuris_archers",
+  mana_cost: "{G}",
+  types: ["Creature", "Elf", "Archer"],
+  power: 1,
+  toughness: 2,
+  keywords: [Reach],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WheneverSelfBlocksCreature(attacker: (required_keywords: [Flying])),
+      effect: [PumpTarget(power: 3, toughness: 0, subject: Source)],
+    ),
+  ],
+)

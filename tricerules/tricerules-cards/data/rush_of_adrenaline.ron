@@ -1,0 +1,15 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle ec9975f4-dfff-4b72-9da8-8f2025f0524a.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 611.2a/514.2: pump and trample last until end of turn; CR 613.4c/613.1f: layer-7c pump,
+// layer-6 trample.
+(
+  id: "rush_of_adrenaline",
+  name: "Rush of Adrenaline",
+  face_id: "rush_of_adrenaline",
+  mana_cost: "{R}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 2, toughness: 1),
+    GrantKeywords(keywords: [Trample]),
+  ],
+)

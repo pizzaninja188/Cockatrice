@@ -1,0 +1,48 @@
+family	oracle_id	name
+01-token-spells	e1635acd-ed1e-4038-a11a-6518df285253	Call of the Conclave
+01-token-spells	f9e668f9-21af-4fd8-9a37-6505ab2234e3	Elemental Summoning
+01-token-spells	eb62aa4b-c11b-4195-ae85-cff8f78ce17b	Advent of the Wurm
+01-token-spells	8fb599a7-2c61-446b-a7a7-cd5367f9b796	Spore Swarm
+01-token-spells	d6c9c1f0-050f-40e2-ab6c-6566d0af418c	Master's Call
+01-token-spells	76a6ddc2-f894-4331-89a9-87ca16efd0c0	Servo Exhibition
+01-token-spells	d1a9fd14-fecb-4d2a-983c-70143238275b	Sworn Companions
+01-token-spells	aa8b60b6-cf55-4aaa-9caa-2b17942d8269	Icatian Town
+01-token-spells	4965f5fe-a5fe-4976-822c-5cf40fea8c34	Knight Watch
+01-token-spells	0c8ab7bf-7b6a-4a34-b988-9f3f4d84a9ea	Flurry of Horns
+01-token-spells	61e2d557-f08d-489b-94c8-aff87e5189f9	Take Up Arms
+02-splicer-cycle	7fbf6afc-8a16-447b-bdef-b7d0b640f76c	Wing Splicer
+02-splicer-cycle	9676da93-1e17-4f6c-b610-a242b78c71ab	Sensor Splicer
+02-splicer-cycle	9e0c5919-aed6-4d98-85c8-2658be78bdf0	Master Splicer
+02-splicer-cycle	194166ad-0179-42a3-86b9-ba7f322ec576	Blade Splicer
+02-splicer-cycle	e1899133-635d-46ff-b90d-6f8d46a1ffe1	Vital Splicer
+03-artifact-value-tutors	ffc95093-24a2-4616-a44a-24788e8df9c8	Trinket Mage
+03-artifact-value-tutors	c2b51295-8820-425f-a517-55231123c7de	Tribute Mage
+03-artifact-value-tutors	08afc0d7-192f-4ab6-b6a0-c4265cf5e225	Trophy Mage
+03-artifact-value-tutors	991efbf1-299d-4892-aeab-8ff9827f7168	Transit Mage
+04-subtype-harbingers	56508ae7-6013-4149-8935-96b8d5091baa	Boggart Harbinger
+04-subtype-harbingers	a3d68848-e8cc-497c-951b-e7111f6d5142	Kithkin Harbinger
+04-subtype-harbingers	2445e58b-87ed-4ab2-8209-a5e1f566fba7	Giant Harbinger
+04-subtype-harbingers	d6585e30-4ca0-4701-b274-b24f3508dd97	Flamekin Harbinger
+04-subtype-harbingers	28ddc23c-5b0b-4747-9a33-6845acf27bec	Elvish Harbinger
+04-subtype-harbingers	98c387bd-c9ba-464a-8380-839a5604a37f	Treefolk Harbinger
+05-aura-restrictions	13358b1d-0a35-48ed-a7fb-70359fa3998f	Cloak of Mists
+05-aura-restrictions	0a90d1fb-7a76-4b62-b001-4a539a8e5df1	Aether Tunnel
+05-aura-restrictions	1fba543c-bd22-4f7b-9ff4-0631af8ee814	Protective Bubble
+05-aura-restrictions	c333eb79-300e-4dc0-9126-8dca1bac6ef2	Demotion
+05-aura-restrictions	81728b98-8cf9-4734-a318-69184bb4d15c	Arrest
+05-aura-restrictions	c1459d75-2bc2-4dae-8c7e-4e759a4dffc9	Paralyzing Grasp
+05-aura-restrictions	de26b0c6-dfb7-45a8-9d7f-f8d45522d675	Invisibility
+06-etb-each-discard	b5b049d4-242a-48ec-85d1-1ef66c8cfa4c	Miasmic Mummy
+06-etb-each-discard	4880c976-b417-48e4-98a2-9e5a8da0d758	Sibsig Icebreakers
+06-etb-each-discard	6c14ecbf-0097-4fd8-97a3-a32b532c21e0	Earsplitting Rats
+08-attack-team-pumps	5fab0d9c-ccf7-4c6a-94b4-959be139dad8	Goblin General
+08-attack-team-pumps	420d09b5-aced-4f71-914c-90d19f7476dc	Riot Ringleader
+08-attack-team-pumps	a7036d08-6ee4-49b1-bbbf-c96a937afa15	Blood-Chin Rager
+08-attack-team-pumps	1f9797e2-7ebb-41f9-9199-e9ee575eefd3	Inspiring Unicorn
+08-attack-team-pumps	8aae3a28-dcf3-460e-89f9-4b0c96d6f55e	Chieftain en-Dal
+08-attack-team-pumps	36d1a3f4-7903-41aa-9fb7-401d8789b00c	Fangren Pathcutter
+09-spirit-arcane-payoffs	913dcf97-0804-4b21-8daa-f2b481dc0f2f	Briarknit Kami
+09-spirit-arcane-payoffs	3970e021-209d-41d3-9466-8b3ef9ab1a4c	Horizon Seed
+09-spirit-arcane-payoffs	712ec339-ffa8-43bb-a826-a7b0f0120b1f	Guardian of Solitude
+09-spirit-arcane-payoffs	c247382f-821e-4f3c-9d34-450794ce74c3	Kami of Fire's Roar
+09-spirit-arcane-payoffs	1566af29-bd7b-41bb-a589-499348fbd32c	Soul of Magma

@@ -1,0 +1,12 @@
+// Oracle ae1f22a5-89cf-440c-b90d-fed194b2dee5; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "warthog",
+  name: "Warthog",
+  face_id: "warthog",
+  mana_cost: "{1}{G}{G}",
+  types: ["Creature", "Boar"],
+  power: 3,
+  toughness: 2,
+  evasions: [Landwalk(land_subtype: "Swamp")],
+)

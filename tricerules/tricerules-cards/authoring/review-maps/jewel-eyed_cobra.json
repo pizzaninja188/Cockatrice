@@ -1,0 +1,58 @@
+{
+  "format_version": 1,
+  "oracle_id": "bbfee53c-30a6-4ed0-beef-5c254be75fc5",
+  "spans": [
+    {
+      "face_id": "jewel_eyed_cobra",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "jewel_eyed_cobra",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Deathtouch",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q50_cohorts_batch::q50_treasure_cards_credit_the_creatures_controller_and_do_not_trigger_on_exile",
+      "covers": "actual card credits its controller and does not trigger on exile"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_treasure_jewel_eyed_cobra_makes_a_treasure_on_death",
+      "covers": "actual Jewel-Eyed Cobra dies and creates exactly one Treasure under its controller"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_treasure_maps_definitions",
+      "covers": "reviewed Treasure creature identity and trigger"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Jewel-Eyed Cobra"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

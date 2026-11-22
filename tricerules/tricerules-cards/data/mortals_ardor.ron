@@ -1,0 +1,15 @@
+// Oracle c3401995-4fb4-4b43-b852-5ccad6dc3154; source/rulings checked 2026-11-15.
+// CR 115.1a/601.2c (target at cast), 611.2a/514.2 (until-end-of-turn
+// duration), 613.4c (pump) and 702.15a-b (lifelink).
+(
+  id: "mortals_ardor",
+  name: "Mortal's Ardor",
+  face_id: "mortals_ardor",
+  mana_cost: "{W}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 1, toughness: 1),
+    GrantKeywords(keywords: [Lifelink]),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0, 1])])),
+)

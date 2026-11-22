@@ -1,0 +1,15 @@
+// Oracle e08c71aa-d35c-4c20-b4db-ae9d36ee3169; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.6 (counter), 118.12a (optional payment on resolution), 608.2b (stale target) and
+// 115.1/601.2c (the counter spell targets a spell). No pinned ruling.
+(
+  id: "miscast",
+  name: "Miscast",
+  face_id: "miscast",
+  mana_cost: "{U}",
+  types: ["Instant"],
+  spell_effect: [CounterTargetSpell(
+    spell_filter: (card_type: Some(InstantOrSorcery)),
+    unless_controller_pays: Some(3),
+  )],
+)

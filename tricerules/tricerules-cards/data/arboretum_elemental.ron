@@ -1,0 +1,13 @@
+// Oracle 1708d60d-30af-4184-bc95-2f7a7aed4a6e; source/rulings checked 2026-11-15.
+// CR 702.51a-c (Convoke taps creatures to pay generic or a matching color),
+// 601.2h (payment order), and the printed keyword's normal rules.
+(
+  id: "arboretum_elemental",
+  name: "Arboretum Elemental",
+  face_id: "arboretum_elemental",
+  mana_cost: "{7}{G}{G}",
+  types: ["Creature", "Elemental"],
+  power: 7,
+  toughness: 5,
+  keywords: [Convoke, Hexproof],
+)

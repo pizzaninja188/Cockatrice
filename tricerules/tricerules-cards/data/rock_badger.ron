@@ -1,0 +1,12 @@
+// Oracle 1f5ac983-a7a5-4b9d-a25c-727a7de6c465; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "rock_badger",
+  name: "Rock Badger",
+  face_id: "rock_badger",
+  mana_cost: "{4}{R}",
+  types: ["Creature", "Badger", "Beast"],
+  power: 3,
+  toughness: 3,
+  evasions: [Landwalk(land_subtype: "Mountain")],
+)

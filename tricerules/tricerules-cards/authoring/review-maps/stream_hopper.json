@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "153cd93c-7bba-4482-893c-55a602c4439b",
+  "spans": [
+    {
+      "face_id": "stream_hopper",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario grant_flying_activated_batch::grant_flying_activated_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual stream_hopper is exercised by the shared grant_flying_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario grant_flying_activated_batch::grant_flying_activated_batch_cards_gain_flying_only_after_activation",
+      "covers": "actual stream_hopper is exercised by the shared grant_flying_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario grant_flying_activated_batch::grant_flying_activated_batch_cards_lose_flying_at_cleanup",
+      "covers": "actual stream_hopper is exercised by the shared grant_flying_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario grant_flying_activated_batch::grant_flying_activated_batch_cards_reject_activation_when_the_cost_cannot_be_paid",
+      "covers": "actual stream_hopper is exercised by the shared grant_flying_activated_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::grant_flying_activated_batch::grant_flying_activated_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of stream_hopper"
+    },
+    {
+      "test": "mechanic_registry::grant_flying_activated_batch::grant_flying_activated_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for stream_hopper"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

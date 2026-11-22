@@ -1,0 +1,17 @@
+// Oracle ec8bf245-4b2c-432b-9b2a-8d7b9224258c; source/rulings checked 2026-11-13.
+// CR 603.6a (entry trigger) and 119.3 (life gain).
+(
+  id: "staunch_defenders",
+  name: "Staunch Defenders",
+  face_id: "staunch_defenders",
+  mana_cost: "{3}{W}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 3,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [GainLife(amount: 4)],
+  )],
+)

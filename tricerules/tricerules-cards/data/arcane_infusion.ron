@@ -1,0 +1,16 @@
+// Oracle d5251d47-11de-41f7-9965-1f921e12d927; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 121.5 (not a draw), 401.4 (private look), 601.2 (casting), 609.3 (selection
+// clamps) and 702.34 (flashback casts from the graveyard and exiles the spell).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "arcane_infusion",
+  name: "Arcane Infusion",
+  face_id: "arcane_infusion",
+  mana_cost: "{U}{R}",
+  flashback_cost: Some("{3}{U}{R}"),
+  types: ["Instant"],
+  spell_effect: [
+    LookChooseToHand(count: 4, filter: Some((card_type: Some(InstantOrSorcery))), bottom_order: Random),
+  ],
+)

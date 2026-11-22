@@ -1,0 +1,18 @@
+// Oracle d52b72ff-a82d-430e-94c7-675c83b43e50; source/rulings checked 2026-11-14.
+// CR 107.5 and 118.3 (tap cost), 602.1b/602.2 (activated ability),
+// and 119.3 (life gain).
+(
+  id: "braidwood_cup",
+  name: "Braidwood Cup",
+  face_id: "braidwood_cup",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [GainLife(amount: 1)],
+    ),
+  ],
+)

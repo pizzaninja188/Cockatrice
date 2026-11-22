@@ -1,0 +1,17 @@
+// Oracle 47f5ea79-2bf2-4e17-9c6d-e1cbcd9d30d1; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a/115.3 (up to two targets), 701.26 (tap), 121.1 (draw) and 608.2b. Pinned rulings:
+// zero, one, or two creatures may be targeted; one remaining legal target still taps and draws;
+// an illegal sole target or all-illegal pair fizzles the spell.
+(
+  id: "repel_the_darkness",
+  name: "Repel the Darkness",
+  face_id: "repel_the_darkness",
+  mana_cost: "{2}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    Tap(subject: Chosen((kind: Creature))),
+    Draw(count: 1),
+  ],
+  targeting: Some((groups: [(min: 0, max: 2, effect_indices: [0])])),
+)

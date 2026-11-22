@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "2ec1860b-89cc-4529-8b8c-fb47f79f2b4b",
+  "spans": [
+    {
+      "face_id": "sower_of_chaos",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ApplyCombatRestriction",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q35_cant_block_batch::q35_cant_block_canary_simplest",
+      "covers": "simplest canary for this actual card"
+    },
+    {
+      "test": "scenario q35_cant_block_batch::q35_cant_block_cards_forbid_only_the_chosen_blocker",
+      "covers": "actual card is exercised by the shared 05-cant-block scenario"
+    },
+    {
+      "test": "scenario q35_cant_block_batch::q35_cant_block_cards_expire_at_cleanup",
+      "covers": "actual card is exercised by the shared 05-cant-block scenario"
+    },
+    {
+      "test": "scenario q35_cant_block_batch::q35_cant_block_cards_reject_illegal_targets_and_foreign_controllers",
+      "covers": "actual card is exercised by the shared 05-cant-block scenario"
+    },
+    {
+      "test": "mechanic_registry::q35_cant_block_batch::q35_cant_block_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q35_cant_block_batch::q35_cant_block_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

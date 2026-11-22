@@ -1,0 +1,12 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 61652a2d-dfe6-4d4f-8fad-9de1960208cb.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "lynx",
+  name: "Lynx",
+  face_id: "lynx",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Cat"],
+  power: 2,
+  toughness: 1,
+  evasions: [Landwalk(land_subtype: "Forest")],
+)

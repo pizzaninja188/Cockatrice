@@ -1,0 +1,20 @@
+// Oracle 1c99a5cc-d974-4a4b-a03b-a78bfe738ed7; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 508.1m/603.2c (attack trigger), 611.2c/613.4c (until-end-of-turn pump).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "charging_griffin",
+  name: "Charging Griffin",
+  face_id: "charging_griffin",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Griffin"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+  )],
+)

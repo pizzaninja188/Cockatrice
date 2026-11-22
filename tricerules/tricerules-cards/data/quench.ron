@@ -1,0 +1,11 @@
+// Oracle fa1b722a-109e-4a43-bd7b-818292728cb3; source/rulings checked 2026-11-12.
+// CR 701.6 (counter), 118.12/118.12a (optional payment as the spell resolves) and
+// 608.2b (stale target fizzles).
+(
+  id: "quench",
+  name: "Quench",
+  face_id: "quench",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  spell_effect: [CounterTargetSpell(spell_filter: (), unless_controller_pays: Some(2))],
+)

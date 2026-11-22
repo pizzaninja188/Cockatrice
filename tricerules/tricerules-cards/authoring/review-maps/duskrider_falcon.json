@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "d87ab916-5d49-4840-8d5b-805af800a83c",
+  "spans": [
+    {
+      "face_id": "duskrider_falcon",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords",
+        "/faces/0/protections"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "Protection::Color",
+      "typed_path": "/faces/0/protections"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flying_protection_batch::flying_protection_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual duskrider_falcon clause coverage"
+    },
+    {
+      "test": "scenario flying_protection_batch::flying_protection_batch_cards_cannot_be_blocked_by_ground_creatures",
+      "covers": "actual duskrider_falcon clause coverage"
+    },
+    {
+      "test": "scenario flying_protection_batch::flying_protection_batch_cards_can_be_blocked_by_flying_or_reach",
+      "covers": "actual duskrider_falcon clause coverage"
+    },
+    {
+      "test": "scenario flying_protection_batch::flying_protection_batch_cards_prevent_damage_from_the_protected_color",
+      "covers": "actual duskrider_falcon clause coverage"
+    },
+    {
+      "test": "mechanic_registry::flying_protection_batch::flying_protection_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of duskrider_falcon"
+    },
+    {
+      "test": "mechanic_registry::flying_protection_batch::flying_protection_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for duskrider_falcon"
+    },
+    {
+      "test": "scenario flying_protection_batch::flying_protection_batch_cards_reject_blockers_of_the_protected_color",
+      "covers": "actual duskrider_falcon rejects a protected-color blocker"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

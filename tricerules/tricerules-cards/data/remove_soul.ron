@@ -1,0 +1,12 @@
+// Oracle b13c0f76-fbda-4911-9442-c3d7e97f1aac; source/rulings checked 2026-11-13.
+// CR 701.6 (counter), CR 115.1a/601.2c (creature spell target).
+(
+  id: "remove_soul",
+  name: "Remove Soul",
+  face_id: "remove_soul",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  spell_effect: [CounterTargetSpell(
+    spell_filter: (card_type: Some(Creature)),
+  )],
+)

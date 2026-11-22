@@ -1,0 +1,20 @@
+// Oracle 7ddf9c12-8f75-481c-a218-d42f925c6503; source/rulings checked 2026-11-12.
+// CR 702.9 (Flying), 603.6a (enters trigger) and 701.22 (Scry).
+(
+  id: "senate_griffin",
+  name: "Senate Griffin",
+  face_id: "senate_griffin",
+  mana_cost: "{2}{W/U}{W/U}",
+  types: ["Creature", "Griffin"],
+  power: 3,
+  toughness: 2,
+  keywords: [Flying],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Scry(count: 1)],
+    ),
+  ],
+)

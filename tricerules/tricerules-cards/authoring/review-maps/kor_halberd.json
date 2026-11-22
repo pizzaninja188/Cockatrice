@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "450e84c7-afbe-4b30-a3e9-1dff968a5200",
+  "spans": [
+    {
+      "face_id": "kor_halberd",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "kor_halberd",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Equip",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario equipment_vigilance_batch::equipment_vigilance_batch_cards_cast_and_equip_with_exact_cost",
+      "covers": "actual kor_halberd is exercised by the shared equipment_vigilance_batch actual-card scenario: printed cast and equip costs"
+    },
+    {
+      "test": "scenario equipment_vigilance_batch::equipment_vigilance_batch_cards_grant_printed_pump_and_vigilance",
+      "covers": "actual kor_halberd is exercised by the shared equipment_vigilance_batch actual-card scenario: attached pump and vigilance"
+    },
+    {
+      "test": "scenario equipment_vigilance_batch::equipment_vigilance_batch_cards_unattached_equipment_grants_nothing",
+      "covers": "actual kor_halberd is exercised by the shared equipment_vigilance_batch actual-card scenario: no bonus while unattached"
+    },
+    {
+      "test": "scenario equipment_vigilance_batch::equipment_vigilance_batch_cards_equip_only_targets_creatures_you_control",
+      "covers": "actual kor_halberd is exercised by the shared equipment_vigilance_batch actual-card scenario: equip target scope"
+    },
+    {
+      "test": "scenario equipment_vigilance_batch::equipment_vigilance_batch_cards_remain_attached_when_the_creature_dies",
+      "covers": "actual kor_halberd is exercised by the shared equipment_vigilance_batch actual-card scenario: the Equipment stays and becomes unattached"
+    },
+    {
+      "test": "mechanic_registry::equipment_vigilance_batch::equipment_vigilance_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of kor_halberd (equipment pump with vigilance)"
+    },
+    {
+      "test": "mechanic_registry::equipment_vigilance_batch::equipment_vigilance_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for kor_halberd"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

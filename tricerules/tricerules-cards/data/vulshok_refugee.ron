@@ -1,0 +1,13 @@
+// Oracle 7220769a-9d63-4211-9365-9feaf4d9a518; source/rulings checked 2026-11-13.
+// CR 702.16b-f: protection's five effects (no targeting, no Aura/Equipment
+// attachment, no damage, no blocking, no Fortify).
+(
+  id: "vulshok_refugee",
+  name: "Vulshok Refugee",
+  face_id: "vulshok_refugee",
+  mana_cost: "{1}{R}{R}",
+  types: ["Creature", "Human", "Warrior"],
+  power: 3,
+  toughness: 2,
+  protections: [Color(Red)],
+)

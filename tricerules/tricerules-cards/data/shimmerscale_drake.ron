@@ -1,0 +1,21 @@
+// Oracle f3bd5ca1-9854-4bc0-b108-b555808e1d5f; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying) and 702.29a-b (Cycling as a hand-zone activated ability).
+(
+  id: "shimmerscale_drake",
+  name: "Shimmerscale Drake",
+  face_id: "shimmerscale_drake",
+  mana_cost: "{4}{U}",
+  types: ["Creature", "Drake"],
+  power: 3,
+  toughness: 4,
+  keywords: [Flying],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      source_zone: Hand,
+      costs: [Mana("{2}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

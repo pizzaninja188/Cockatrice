@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "7b0767b8-b504-456e-93bd-218502f73b3d",
+  "spans": [
+    {
+      "face_id": "palladium_myr",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario colorless_two_mana_batch::colorless_two_mana_batch_cards_add_exactly_two_colorless_without_the_stack",
+      "covers": "actual palladium_myr adds exactly two colorless mana without the stack and rejects a second activation"
+    },
+    {
+      "test": "scenario colorless_two_mana_batch::colorless_two_mana_batch_creatures_respect_summoning_sickness",
+      "covers": "actual palladium_myr respects summoning sickness for its tap ability where applicable"
+    },
+    {
+      "test": "mechanic_registry::colorless_two_mana_batch::colorless_two_mana_batch_maps_definitions",
+      "covers": "reviewed identity, cost, type/body and exact two-colorless output of palladium_myr"
+    },
+    {
+      "test": "mechanic_registry::colorless_two_mana_batch::colorless_two_mana_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for palladium_myr"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

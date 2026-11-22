@@ -1,0 +1,13 @@
+// Oracle 475412c9-8960-4085-bd8f-5f8a7c7485b9; source/rulings checked 2026-11-13.
+// CR 702.16b-f: protection's five effects (no targeting, no Aura/Equipment
+// attachment, no damage, no blocking, no Fortify).
+(
+  id: "nacatl_savage",
+  name: "Nacatl Savage",
+  face_id: "nacatl_savage",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Cat", "Warrior"],
+  power: 2,
+  toughness: 1,
+  protections: [CardType(Artifact)],
+)

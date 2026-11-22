@@ -1,0 +1,15 @@
+// Oracle f7571a2e-aaf3-4148-ab76-2a2e35273c70; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 119.3 (life gain), 115.1 (target player) and 608.2b (stale target).
+// The card has no pinned ruling.
+
+(
+  id: "natural_spring",
+  name: "Natural Spring",
+  face_id: "natural_spring",
+  mana_cost: "{3}{G}{G}",
+  types: ["Sorcery"],
+  spell_effect: [
+    TargetPlayerGainsLife(amount: 8, target: (kind: AnyPlayer)),
+  ],
+)

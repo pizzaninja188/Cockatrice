@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "bf3b7489-e9d6-4b3c-9fb8-3bb727584db9",
+  "spans": [
+    {
+      "face_id": "dross_ripper",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario self_pump_activated_batch::self_pump_activated_batch_cards_cast_with_exact_characteristics",
+      "covers": "actual dross_ripper is exercised by the shared self_pump_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario self_pump_activated_batch::self_pump_activated_batch_cards_activate_for_the_exact_printed_pump",
+      "covers": "actual dross_ripper is exercised by the shared self_pump_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario self_pump_activated_batch::self_pump_activated_batch_cards_stack_two_activations",
+      "covers": "actual dross_ripper is exercised by the shared self_pump_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario self_pump_activated_batch::self_pump_activated_batch_cards_reject_activation_when_the_cost_cannot_be_paid",
+      "covers": "actual dross_ripper is exercised by the shared self_pump_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario self_pump_activated_batch::self_pump_activated_batch_cards_expire_the_pump_at_cleanup",
+      "covers": "actual dross_ripper is exercised by the shared self_pump_activated_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::self_pump_activated_batch::self_pump_activated_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of dross_ripper"
+    },
+    {
+      "test": "mechanic_registry::self_pump_activated_batch::self_pump_activated_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for dross_ripper"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

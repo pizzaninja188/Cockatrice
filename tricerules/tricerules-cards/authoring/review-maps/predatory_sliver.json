@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "6b589e70-9c1d-48dd-a597-479959e692bf",
+  "spans": [
+    {
+      "face_id": "predatory_sliver",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemPt",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario sliver_anthem_controlled_batch::sliver_anthem_batch_cards_pump_only_your_slivers_including_self",
+      "covers": "actual predatory_sliver is exercised by the shared sliver_anthem_controlled_batch actual-card scenario"
+    },
+    {
+      "test": "scenario sliver_anthem_controlled_batch::sliver_anthem_batch_cards_stack_with_a_second_copy",
+      "covers": "actual predatory_sliver is exercised by the shared sliver_anthem_controlled_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::sliver_anthem_controlled_batch::sliver_anthem_controlled_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of predatory_sliver"
+    },
+    {
+      "test": "mechanic_registry::sliver_anthem_controlled_batch::sliver_anthem_controlled_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for predatory_sliver"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

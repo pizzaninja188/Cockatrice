@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "6d16c2fa-4118-4b81-92ca-6c8e9efe03b6",
+  "spans": [
+    {
+      "face_id": "chrome_prowler",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "chrome_prowler",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q48_cohorts_batch::q48_etb_tap_canary_simplest_taps_an_opponents_creature",
+      "covers": "canary simplest taps an opponent's creature"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_etb_tap_canary_hardest_adds_a_stun_counter",
+      "covers": "canary hardest taps and adds a stun counter"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_etb_tap_cards_apply_their_printed_tap_and_stun",
+      "covers": "every actual card applies its printed tap and stun"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_etb_tap_maps_definitions",
+      "covers": "reviewed identity, enters trigger, tap, and stun"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Chrome Prowler"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

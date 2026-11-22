@@ -1,0 +1,50 @@
+{
+  "format_version": 1,
+  "oracle_id": "6cd58a88-6434-4c55-bf93-a739b5ed9bc1",
+  "spans": [
+    {
+      "face_id": "witherbloom_campus",
+      "start_line": 1,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/1",
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q35_campus_lands_batch::q35_campus_lands_cards_enter_tapped_and_produce_the_printed_pair",
+      "covers": "actual card is exercised by the shared 06-campus-lands scenario"
+    },
+    {
+      "test": "scenario q35_campus_lands_batch::q35_campus_lands_cards_scry_for_four_mana_and_a_tap",
+      "covers": "actual card is exercised by the shared 06-campus-lands scenario"
+    },
+    {
+      "test": "mechanic_registry::q35_campus_lands_batch::q35_campus_lands_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q35_campus_lands_batch::q35_campus_lands_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

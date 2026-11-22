@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "1b2826ea-a3d5-4b8a-b362-0b0880d1cc48",
+  "spans": [
+    {
+      "face_id": "hedron_rover",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario landfall_pump_batch::landfall_pump_batch_cards_apply_the_printed_effect",
+      "covers": "actual hedron_rover clause coverage"
+    },
+    {
+      "test": "scenario landfall_pump_batch::landfall_pump_batch_cards_scope_the_trigger_to_the_controller",
+      "covers": "actual hedron_rover clause coverage"
+    },
+    {
+      "test": "scenario landfall_pump_batch::landfall_pump_batch_cards_stack_multiple_triggers_and_expire",
+      "covers": "actual hedron_rover clause coverage"
+    },
+    {
+      "test": "mechanic_registry::landfall_pump_batch::landfall_pump_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of hedron_rover"
+    },
+    {
+      "test": "mechanic_registry::landfall_pump_batch::landfall_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for hedron_rover"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

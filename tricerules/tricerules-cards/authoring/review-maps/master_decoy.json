@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "94a16609-8529-4301-8a3d-47ced194f7cd",
+  "spans": [
+    {
+      "face_id": "master_decoy",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario tap_target_activated_batch::tap_target_activated_batch_cards_apply_the_printed_effect",
+      "covers": "actual master_decoy clause coverage"
+    },
+    {
+      "test": "scenario tap_target_activated_batch::tap_target_activated_batch_cards_reject_illegal_targets",
+      "covers": "actual master_decoy clause coverage"
+    },
+    {
+      "test": "scenario tap_target_activated_batch::tap_target_activated_batch_cards_handle_stale_or_expired_state",
+      "covers": "actual master_decoy clause coverage"
+    },
+    {
+      "test": "mechanic_registry::tap_target_activated_batch::tap_target_activated_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of master_decoy"
+    },
+    {
+      "test": "mechanic_registry::tap_target_activated_batch::tap_target_activated_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for master_decoy"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

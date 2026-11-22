@@ -1,0 +1,17 @@
+// Oracle 38ec5b13-b143-4818-9243-b1715dab3bef; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853. No card-specific rulings.
+// CR 503.1, 603.4 (intervening "if") and 120.3: the opponent's hand is checked at trigger and resolution.
+(
+  id: "paupers_cage",
+  name: "Paupers' Cage",
+  face_id: "paupers_cage",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: AtBeginningOfUpkeep(player: Opponent),
+    intervening_if: Some(CardsInHand(players: AffectedPlayer, max: Some(2))),
+    effect: [DamagePlayer(amount: 2, who: AffectedPlayer)],
+  )],
+)

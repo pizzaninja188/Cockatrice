@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "77a5305a-2611-4a64-adb4-da131dcea233",
+  "spans": [
+    {
+      "face_id": "footlight_fiend",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetKind::AnyTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/DamageTarget/target/kind"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario dies_damage_any_target_batch::dies_damage_any_target_batch_cards_deal_their_printed_damage_to_players",
+      "covers": "actual footlight_fiend clause coverage"
+    },
+    {
+      "test": "scenario dies_damage_any_target_batch::dies_damage_any_target_batch_cards_can_target_creatures",
+      "covers": "actual footlight_fiend clause coverage"
+    },
+    {
+      "test": "scenario dies_damage_any_target_batch::dies_damage_any_target_batch_cards_do_not_damage_a_departed_target",
+      "covers": "actual footlight_fiend clause coverage"
+    },
+    {
+      "test": "scenario dies_damage_any_target_batch::dies_damage_any_target_batch_cards_do_not_trigger_when_exiled",
+      "covers": "actual footlight_fiend clause coverage"
+    },
+    {
+      "test": "mechanic_registry::dies_damage_any_target_batch::dies_damage_any_target_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of footlight_fiend"
+    },
+    {
+      "test": "mechanic_registry::dies_damage_any_target_batch::dies_damage_any_target_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for footlight_fiend"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

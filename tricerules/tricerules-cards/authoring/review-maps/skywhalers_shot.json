@@ -1,0 +1,55 @@
+{
+  "format_version": 1,
+  "oracle_id": "f3d4e48e-5f98-44a6-ad5c-a1c068aa01eb",
+  "spans": [
+    {
+      "face_id": "skywhalers_shot",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/0/Destroy/subject",
+        "/faces/0/targeting",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "PowerComparison::AtLeast",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen/power"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q41_etb_spell_batch::q41_destroy_power_scry_cards_apply_their_printed_threshold_and_count",
+      "covers": "actual card applies its printed power threshold and scry count"
+    },
+    {
+      "test": "scenario q41_etb_spell_batch::q41_destroy_power_scry_rejects_a_creature_below_the_printed_power",
+      "covers": "the actual card rejects a creature below its printed power"
+    },
+    {
+      "test": "scenario q41_etb_spell_batch::q41_destroy_power_scry_fizzles_without_scrying_when_the_target_leaves",
+      "covers": "a stale sole target stops the spell and the scry"
+    },
+    {
+      "test": "mechanic_registry::q41_cohorts_batch::q41_destroy_power_scry_maps_definitions",
+      "covers": "reviewed identity, target filter and printed counts"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

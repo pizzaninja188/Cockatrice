@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "29f27482-724d-4c15-b177-13337246d007",
+  "spans": [
+    {
+      "face_id": "daru_encampment",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "daru_encampment",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q39_targeted_utility_lands_batch::q39_targeted_utility_lands_canary_simplest",
+      "covers": "simplest canary for this actual card"
+    },
+    {
+      "test": "scenario q39_targeted_utility_lands_batch::q39_targeted_utility_lands_cards_produce_their_printed_mana",
+      "covers": "actual card produces its printed mana"
+    },
+    {
+      "test": "scenario q39_targeted_utility_lands_batch::q39_targeted_utility_lands_cards_apply_their_printed_pump_or_keyword",
+      "covers": "actual card applies its printed pump or keyword"
+    },
+    {
+      "test": "scenario q39_targeted_utility_lands_batch::q39_targeted_utility_lands_cards_reject_an_illegal_target_and_missing_mana",
+      "covers": "actual card rejects an illegal target and missing mana"
+    },
+    {
+      "test": "scenario q39_targeted_utility_lands_batch::q39_targeted_utility_lands_cards_fizzle_when_the_target_left",
+      "covers": "actual card fizzles on a stale target"
+    },
+    {
+      "test": "mechanic_registry::q39_targeted_utility_lands_batch::q39_targeted_utility_lands_maps_definitions",
+      "covers": "reviewed identity, costs and typed abilities"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

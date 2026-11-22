@@ -1,0 +1,13 @@
+// Oracle 508c673c-2b11-4b7d-8f4b-ff3a364eb4fe; source/rulings checked 2026-11-14.
+// CR 702.80a: damage dealt to a creature by a source with wither is not
+// marked; its controller puts that many -1/-1 counters on the creature.
+(
+  id: "scuzzback_scrapper",
+  name: "Scuzzback Scrapper",
+  face_id: "scuzzback_scrapper",
+  mana_cost: "{R/G}",
+  types: ["Creature", "Goblin", "Warrior"],
+  power: 1,
+  toughness: 1,
+  keywords: [Wither],
+)

@@ -1,0 +1,17 @@
+// Oracle d4b50749-a016-4aff-8d70-a1707cabf57b; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 509.1b (blocking restrictions), 611.2a/514.2 (until end of turn) and 702.9a-b (flying). The restriction is untargeted and applies to every current nonflier.
+
+(
+  id: "falter",
+  name: "Falter",
+  face_id: "falter",
+  mana_cost: "{1}{R}",
+  types: ["Instant"],
+  spell_effect: [
+    ApplyCombatRestriction(
+      scope: Matching((kind: Creature, excluded_keywords: [Flying])),
+      restriction: (cant_block: true),
+    ),
+  ],
+)

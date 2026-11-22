@@ -1,0 +1,74 @@
+{
+  "format_version": 1,
+  "oracle_id": "7fbf6afc-8a16-447b-bdef-b7d0b640f76c",
+  "spans": [
+    {
+      "face_id": "wing_splicer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "wing_splicer",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AnthemKeyword",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [
+    "golem_c_3_3"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q51_cohorts_batch::q51_splicers_canary_simplest_wing_splicer_grants_flying",
+      "covers": "actual Splicer creates a Golem and grants its printed keyword"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_splicers_canary_hardest_vital_splicer_regenerates_a_golem",
+      "covers": "actual Vital Splicer regenerates a target Golem"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_splicers_create_one_golem_and_apply_the_printed_lord",
+      "covers": "actual Splicers create one Golem and apply only their printed lord"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_splicers_do_not_modify_other_creatures",
+      "covers": "actual lord does not modify non-Golems"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_splicers_scope_their_lord_to_your_golems",
+      "covers": "actual lord affects your Golems and not an opponent's"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_vital_splicer_rejects_non_golem_and_opposing_golem_targets",
+      "covers": "actual Vital Splicer rejects illegal targets and shields your Golem"
+    },
+    {
+      "test": "mechanic_registry::q51_cohorts_batch::q51_splicers_map_entry_and_lord_profiles",
+      "covers": "reviewed identity and typed shape"
+    },
+    {
+      "test": "mechanic_registry::q51_cohorts_batch::q51_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

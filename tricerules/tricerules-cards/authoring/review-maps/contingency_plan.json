@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "67bc4116-539e-4748-95e1-033df78173ec",
+  "spans": [
+    {
+      "face_id": "contingency_plan",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::LibraryPartition",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_b::q55_b_canary_simplest_contingency_plan_surveils_five",
+      "covers": "actual Contingency Plan surveils five and moves the chosen cards to the graveyard"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_b::q55_b_surveil_spells_map_definitions",
+      "covers": "shared registry identity for the surveil spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_b::q55_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Contingency Plan"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

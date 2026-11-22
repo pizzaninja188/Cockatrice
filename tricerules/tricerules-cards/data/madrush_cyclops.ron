@@ -1,0 +1,21 @@
+// Oracle f45a2a66-04cc-4622-9c70-f2dfc1391bb1; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 604.1/611.3a (continuous static ability), 613.1f layer 6 and 702.10a-b (haste); the source's controller owns the affected creatures (CR 109.5).
+// Pinned ruling: Madrush Cyclops gives itself haste.
+
+(
+  id: "madrush_cyclops",
+  name: "Madrush Cyclops",
+  face_id: "madrush_cyclops",
+  mana_cost: "{1}{B}{R}{G}",
+  types: ["Creature", "Cyclops", "Warrior"],
+  power: 3,
+  toughness: 4,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: AnthemKeyword(filter: (controller: YouControl), keyword: Haste),
+    ),
+  ],
+)

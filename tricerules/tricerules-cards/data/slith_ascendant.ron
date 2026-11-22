@@ -1,0 +1,21 @@
+// Oracle 72f5095f-b4ba-45ba-82e5-9a22bddd544b; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 510.1-510.2 (combat damage), 603.2 (trigger) and 122.1 (a +1/+1 counter is a
+// permanent's counter).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "slith_ascendant",
+  name: "Slith Ascendant",
+  face_id: "slith_ascendant",
+  mana_cost: "{1}{W}{W}",
+  types: ["Creature", "Slith"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverSelfDealsCombatDamageToPlayer,
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+  )],
+)

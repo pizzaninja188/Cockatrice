@@ -1,0 +1,12 @@
+// Oracle f474c1f8-43bb-4e56-8131-27c71b3193d2; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "farbog_explorer",
+  name: "Farbog Explorer",
+  face_id: "farbog_explorer",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Human", "Scout"],
+  power: 2,
+  toughness: 3,
+  evasions: [Landwalk(land_subtype: "Swamp")],
+)

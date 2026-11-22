@@ -1,0 +1,15 @@
+// Oracle 16fe0abe-04fa-4023-8ee0-043a076e78bb; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 120.3 (damage), 702.9 (the printed flying filter), 704.5g (lethal damage)
+// and 514.2 (damage lasts until cleanup). Copy of Seismic Rupture's DamageAll keyword filter.
+(
+  id: "squall",
+  name: "Squall",
+  face_id: "squall",
+  mana_cost: "{2}{G}",
+  types: ["Sorcery"],
+  spell_effect: [DamageAll(
+    amount: 2,
+    kind: (kind: Creature, required_keywords: [Flying]),
+  )],
+)

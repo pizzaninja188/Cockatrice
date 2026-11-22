@@ -1,0 +1,26 @@
+// Oracle f014b1a1-20ef-475c-bf83-f1a82e68ab97; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.29a-b (basic landcycling), 601.2h (cost payment), 701.23a-b (search), 701.24
+// (shuffle), 120.3a (damage to a creature), 115.1/601.2c (target) and 608.2b (stale target).
+// Pinned rulings match the shared basic-landcycling cohort.
+(
+  id: "fiery_fall",
+  name: "Fiery Fall",
+  face_id: "fiery_fall",
+  mana_cost: "{5}{R}",
+  types: ["Instant"],
+  spell_effect: [DamageTarget(amount: 5, target: (kind: Creature))],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature",
+    effect_indices: [0],
+  )])),
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    source_zone: Hand,
+    costs: [Mana("{1}{R}"), DiscardSelf],
+    effect: [SearchLibrary(filter: Some((card_type: Some(BasicLand))), reveal: true)],
+  )],
+)

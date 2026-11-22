@@ -1,0 +1,28 @@
+// Oracle 8e7641e1-e814-4d5a-9cb3-71ad2f4ceee8; source/rulings checked 2026-11-13.
+// CR 107.4e (hybrid mana symbols), 605.1a/605.3b (mana abilities), 106.1 (mana) and
+// 118.3 (every printed cost must be payable).
+(
+  id: "rugged_prairie",
+  name: "Rugged Prairie",
+  face_id: "rugged_prairie",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Mana("{R/W}"), Tap],
+      effect: [ProduceMana(options: [
+        (r: 2),
+        (r: 1, w: 1),
+        (w: 2),
+      ])],
+    ),
+  ],
+)

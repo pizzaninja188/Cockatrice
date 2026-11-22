@@ -1,0 +1,23 @@
+// Oracle c2f2fd39-4a21-489b-893e-4258f8d2aa63; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1-2 (activated ability and printed cost), CR 702.9a-b (flying evasion), CR 611.2a
+// (until-end-of-turn grant), CR 509.1b/509.1h (a later grant does not undo an existing block) and
+// CR 514.2 (cleanup ends the grant). The pinned Leaping Master ruling restates the post-block case.
+
+(
+  id: "roofstalker_wight",
+  name: "Roofstalker Wight",
+  face_id: "roofstalker_wight",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Zombie"],
+  power: 2,
+  toughness: 1,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{1}{U}")],
+      effect: [GrantKeywords(subject: Source, keywords: [Flying])],
+    ),
+  ],
+)

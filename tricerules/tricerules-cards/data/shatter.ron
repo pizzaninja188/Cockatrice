@@ -1,0 +1,11 @@
+// Oracle 84d32e68-72b9-432d-a023-7bc6a26b8ad0; source/rulings checked 2026-11-12.
+// CR 115.1a (artifact target), 601.2c (target at cast), 608.2b (stale target) and 701.8 (destroy).
+(
+  id: "shatter",
+  name: "Shatter",
+  face_id: "shatter",
+  mana_cost: "{1}{R}",
+  types: ["Instant"],
+  spell_effect: [Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact])))],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target artifact", effect_indices: [0])])),
+)

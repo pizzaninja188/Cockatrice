@@ -1,0 +1,30 @@
+// Oracle 326ba371-124c-4949-a048-3a0c8962e567; source/rulings checked 2026-11-13.
+// CR 614.1d/614.12 (enters tapped), 605.1a/605.3b (mana ability), 702.29a (Cycling), and
+// 118.3 (the printed colored cycling cost must be payable).
+(
+  id: "barren_moor",
+  name: "Barren Moor",
+  face_id: "barren_moor",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(b: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
+      source_zone: Hand,
+      costs: [Mana("{B}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+  static_abilities: [(
+    ability_id: "enters_tapped",
+    presentation: OracleLines([1]),
+    definition: EntersTapped(affected: Self_),
+  )],
+)

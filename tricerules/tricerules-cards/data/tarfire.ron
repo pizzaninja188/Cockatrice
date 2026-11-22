@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle f07b821c-bbc1-4def-b009-6c03689478d0.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 308.2: kindred is a card type, and Goblin is a shared creature subtype.
+(
+  id: "tarfire",
+  name: "Tarfire",
+  face_id: "tarfire",
+  mana_cost: "{R}",
+  types: ["Kindred", "Instant", "Goblin"],
+  spell_effect: [DamageTarget(amount: 2, target: (kind: AnyTarget))],
+)

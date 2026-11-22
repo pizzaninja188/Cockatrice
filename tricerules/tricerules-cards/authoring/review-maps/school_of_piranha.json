@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "fad69c20-d6f4-4cf5-8e4c-bbda8d268edd",
+  "spans": [
+    {
+      "face_id": "school_of_piranha",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/cost",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise/steps/0/kind/Perform/Sacrifice"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::AtBeginningOfUpkeep",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
+    },
+    {
+      "symbol": "ResolutionCost::Mana",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/cost"
+    },
+    {
+      "symbol": "SpellEffectKind::Sacrifice",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise/steps/0/kind/Perform/Sacrifice"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/otherwise/steps/0/kind/Perform/Sacrifice/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q45_cohorts_batch::q45_upkeep_sacrifice_cards_pay_their_printed_cost_or_die",
+      "covers": "every card pays its printed cost or is sacrificed"
+    },
+    {
+      "test": "scenario q45_cohorts_batch::q45_upkeep_sacrifice_does_not_trigger_on_the_opponents_upkeep",
+      "covers": "the trigger is limited to its controller's upkeep"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_upkeep_sacrifice_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of school_of_piranha"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for school_of_piranha"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

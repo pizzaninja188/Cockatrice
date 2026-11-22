@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "773c7a1e-0f59-4606-a2fc-c47bda760ecd",
+  "spans": [
+    {
+      "face_id": "foul_play",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_c::q56_c_destroy_investigate_cards_apply_their_power_filters",
+      "covers": "actual foul_play applies its printed effects"
+    },
+    {
+      "test": "scenario q56_batch_c::q56_c_canary_simplest_foul_play_destroys_a_small_creature_and_investigates",
+      "covers": "actual foul_play canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_c::q56_c_destroy_investigate_map_definitions",
+      "covers": "shared registry identity for foul_play"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_c::q56_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for foul_play"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

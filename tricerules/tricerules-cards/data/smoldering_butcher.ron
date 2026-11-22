@@ -1,0 +1,13 @@
+// Oracle b0f56eef-1abc-437e-8e2e-c079731fe783; source/rulings checked 2026-11-14.
+// CR 702.80a: damage dealt to a creature by a source with wither is not
+// marked; its controller puts that many -1/-1 counters on the creature.
+(
+  id: "smoldering_butcher",
+  name: "Smoldering Butcher",
+  face_id: "smoldering_butcher",
+  mana_cost: "{3}{B}",
+  types: ["Creature", "Elemental", "Warrior"],
+  power: 4,
+  toughness: 2,
+  keywords: [Wither],
+)

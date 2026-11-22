@@ -1,0 +1,27 @@
+// Oracle 1b1214e9-1581-4008-b3d4-8b7af6b092fd; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 604.2/611.3b (the continuous effect is active while the source remains on the
+// battlefield), 613.4c (layer 7c) and 109.5 ("you" is the source's controller); the
+// printed "other" excludes the source. Benalish Marshal's pinned ruling confirms that
+// marked damage can become lethal when the anthem leaves.
+
+(
+  id: "veteran_armorer",
+  name: "Veteran Armorer",
+  face_id: "veteran_armorer",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 2,
+  toughness: 2,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: AnthemPt(
+        filter: (controller: YouControl, exclude_self: true),
+        delta_power: 0,
+        delta_toughness: 1,
+      ),
+    ),
+  ],
+)

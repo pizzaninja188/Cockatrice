@@ -1,0 +1,19 @@
+// Oracle dcb6d317-5c55-4973-8e3d-2e98211dc30e; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 303.4a (Aura attach), 613.4c (layer-7c attached modifier), 613.1f (layer 6 keywords),
+// 611.2a (continuous effect) and 704.5m (unattached Aura cleanup).
+(
+  id: "gift_of_orzhova",
+  name: "Gift of Orzhova",
+  face_id: "gift_of_orzhova",
+  mana_cost: "{1}{W/B}{W/B}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(delta_power: 1, delta_toughness: 1, keywords: [Flying, Lifelink]),
+    ),
+  ],
+)

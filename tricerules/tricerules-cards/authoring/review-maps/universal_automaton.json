@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "d50b1d2e-1825-432a-ab73-068fdc356f50",
+  "spans": [
+    {
+      "face_id": "universal_automaton",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/characteristic_defining_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CharacteristicDefiningAbility::Changeling",
+      "typed_path": "/faces/0/characteristic_defining_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario changeling_keyword_batch::changeling_keyword_batch_cards_have_every_creature_type_in_every_zone",
+      "covers": "actual universal_automaton has changeling's every-creature-type characteristic in hand, library and graveyard"
+    },
+    {
+      "test": "scenario changeling_keyword_batch::changeling_keyword_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual universal_automaton is exercised by the shared changeling_keyword_batch actual-card scenario"
+    },
+    {
+      "test": "scenario changeling_keyword_batch::changeling_keyword_batch_cards_have_every_creature_type",
+      "covers": "actual universal_automaton is exercised by the shared changeling_keyword_batch actual-card scenario"
+    },
+    {
+      "test": "scenario changeling_keyword_batch::changeling_keyword_batch_cards_satisfy_a_live_goblin_lord",
+      "covers": "actual universal_automaton is exercised by the shared changeling_keyword_batch actual-card scenario"
+    },
+    {
+      "test": "scenario changeling_keyword_batch::changeling_keyword_batch_cards_are_artifacts_only_when_printed",
+      "covers": "actual universal_automaton is exercised by the shared changeling_keyword_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::changeling_keyword_batch::changeling_keyword_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of universal_automaton"
+    },
+    {
+      "test": "mechanic_registry::changeling_keyword_batch::changeling_keyword_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for universal_automaton"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

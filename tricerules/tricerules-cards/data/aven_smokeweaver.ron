@@ -1,0 +1,14 @@
+// Oracle e80be353-8b19-42d2-9141-5353a8409c8e; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying) and 702.16b-f (protection from a color: no targeting, damage,
+// attachment, or blocking by red sources).
+(
+  id: "aven_smokeweaver",
+  name: "Aven Smokeweaver",
+  face_id: "aven_smokeweaver",
+  mana_cost: "{2}{U}{U}",
+  types: ["Creature", "Bird", "Soldier"],
+  power: 2,
+  toughness: 3,
+  keywords: [Flying],
+  protections: [Color(Red)],
+)

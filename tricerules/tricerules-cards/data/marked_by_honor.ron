@@ -1,0 +1,17 @@
+// Oracle aa5a7940-976d-4d96-9ddf-1c3891885c7e; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 303.4/303.4b (Aura attach), 613.4c (layer-7c pump), 613.1f (layer-6 keyword
+// grant), 611.3a-b (continuous effect) and 704.5m (cleanup). CR 702.20 (vigilance). No pinned ruling.
+(
+  id: "marked_by_honor",
+  name: "Marked by Honor",
+  face_id: "marked_by_honor",
+  mana_cost: "{3}{W}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: AttachedModifier(delta_power: 2, delta_toughness: 2, keywords: [Vigilance]),
+  )],
+)

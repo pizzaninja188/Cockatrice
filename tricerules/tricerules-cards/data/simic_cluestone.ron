@@ -1,0 +1,27 @@
+// Oracle 0b65050d-a9cd-4b6c-9114-af89bfa6682f; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 605.1a/605.3a-b (artifact mana ability, immediate resolution), 118.3 and 701.21a
+// (tap and sacrifice costs), 107.4 and 202.1 (colored mana in an artifact's cost) and
+// 121.1 (draw). This cycle has no pinned ruling.
+
+(
+  id: "simic_cluestone",
+  name: "Simic Cluestone",
+  face_id: "simic_cluestone",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(g: 1), (u: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Mana("{G}{U}"), Tap, SacrificeSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

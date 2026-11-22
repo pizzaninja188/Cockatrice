@@ -1,0 +1,23 @@
+// Oracle 7fbf6afc-8a16-447b-bdef-b7d0b640f76c; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters trigger), 111.1-111.2 (token), 613.1f (layer 6 flying grant). No pinned ruling changes the printed behavior.
+(
+  id: "wing_splicer",
+  name: "Wing Splicer",
+  face_id: "wing_splicer",
+  mana_cost: "{3}{U}",
+  types: ["Creature", "Phyrexian", "Human", "Artificer"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "golem_c_3_3", count: 1)],
+  )],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: AnthemKeyword(filter: (controller: YouControl, subtype: "Golem"), keyword: Flying),
+  )],
+)

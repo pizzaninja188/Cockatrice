@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "ff16f889-9203-4874-919b-42e540cadcbc",
+  "spans": [
+    {
+      "face_id": "wild_wanderer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/SearchLibrary"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_basic_search_tapped_batch::etb_basic_search_tapped_batch_cards_search_every_printed_card",
+      "covers": "actual wild_wanderer is exercised by the shared etb_basic_search_tapped_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_basic_search_tapped_batch::etb_basic_search_tapped_batch_cards_may_decline",
+      "covers": "actual wild_wanderer is exercised by the shared etb_basic_search_tapped_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_basic_search_tapped_batch::etb_basic_search_tapped_batch_cards_shuffle_after_searching",
+      "covers": "actual wild_wanderer is exercised by the shared etb_basic_search_tapped_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::etb_basic_search_tapped_batch::etb_basic_search_tapped_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of wild_wanderer"
+    },
+    {
+      "test": "mechanic_registry::etb_basic_search_tapped_batch::etb_basic_search_tapped_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for wild_wanderer"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

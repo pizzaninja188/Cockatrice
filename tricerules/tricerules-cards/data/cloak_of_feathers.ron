@@ -1,0 +1,17 @@
+// Oracle cb4baf53-51ed-468b-a468-5d7d45a6dc26; source/rulings checked 2026-11-21 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a (one creature target), 601.2a/601.2h (cast and payment), 611.2a/514.2 (the grant
+// ends at cleanup), 121.1 (draw) and 608.2b (an illegal sole target fizzles).
+// Copy of the reviewed Unnatural Speed keyword-grant shape plus Afflict's draw.
+(
+  id: "cloak_of_feathers",
+  name: "Cloak of Feathers",
+  face_id: "cloak_of_feathers",
+  mana_cost: "{U}",
+  types: ["Sorcery"],
+  spell_effect: [
+    GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Flying]),
+    Draw(count: 1),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+)

@@ -1,0 +1,21 @@
+// Oracle ad804712-18ba-49d7-9af2-4361edaa6cf8; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters-the-battlefield trigger), 115.1 (target), 611.2a/514.2
+// and 613.4c (until-end-of-turn -N/-N). CR 702.9 (flying). No pinned ruling.
+(
+  id: "black_dragon",
+  name: "Black Dragon",
+  face_id: "black_dragon",
+  mana_cost: "{5}{B}{B}",
+  types: ["Creature", "Dragon"],
+  power: 4,
+  toughness: 4,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [PumpTarget(power: -3, toughness: -3, subject: Chosen((kind: Creature, controller: Opponent)))],
+    targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature an opponent controls", effect_indices: [0])])),
+  )],
+)

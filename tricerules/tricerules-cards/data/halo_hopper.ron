@@ -1,0 +1,13 @@
+// Oracle f48d30ee-bba6-4449-8c50-caf0d7f06528; source/rulings checked 2026-11-15.
+// CR 702.51a-c (Convoke taps creatures to pay generic or a matching color),
+// 601.2h (payment order), and the printed keyword's normal rules.
+(
+  id: "halo_hopper",
+  name: "Halo Hopper",
+  face_id: "halo_hopper",
+  mana_cost: "{3}",
+  types: ["Artifact", "Creature", "Frog"],
+  power: 3,
+  toughness: 2,
+  keywords: [Convoke],
+)

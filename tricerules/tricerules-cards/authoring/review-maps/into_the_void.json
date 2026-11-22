@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "4d5a970b-dd36-4871-a2aa-36ba21917cdf",
+  "spans": [
+    {
+      "face_id": "into_the_void",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q45_cohorts_batch::q45_bounce_canary_simplest_returns_two",
+      "covers": "canary returns two chosen creatures"
+    },
+    {
+      "test": "scenario q45_cohorts_batch::q45_bounce_cards_return_every_legal_target",
+      "covers": "every card returns up to its printed maximum"
+    },
+    {
+      "test": "scenario q45_cohorts_batch::q45_bounce_cards_allow_zero_targets_and_honor_their_maximum",
+      "covers": "zero targets are legal"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_bounce_up_to_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of into_the_void"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for into_the_void"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

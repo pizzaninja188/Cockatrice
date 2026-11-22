@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "3e554ab4-8179-4d3e-84ba-9a67b51cff7f",
+  "spans": [
+    {
+      "face_id": "diminish",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::SetBasePowerToughness",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q53_batch_a::q53_base_power_toughness_cards_apply_their_printed_values",
+      "covers": "actual diminish printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_a::q53_base_power_toughness_cards_map_definitions",
+      "covers": "actual diminish printed behavior and shape"
+    },
+    {
+      "test": "scenario q53_batch_a::q53_canary_simplest_diminish_sets_one_one",
+      "covers": "actual diminish printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_a::q53_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    },
+    {
+      "test": "scenario q53_batch_a::q53_base_power_toughness_fizzles_a_departed_target",
+      "covers": "actual Diminish target departing before resolution"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

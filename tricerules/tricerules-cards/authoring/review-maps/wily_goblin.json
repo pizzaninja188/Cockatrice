@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "d27ffb4c-3a34-41aa-b464-6b897132c4ea",
+  "spans": [
+    {
+      "face_id": "wily_goblin",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario brazen_freebooter_batch::brazen_freebooter_batch_cards_create_one_treasure_on_entry",
+      "covers": "actual wily_goblin creates exactly one canonical Treasure and the token's mana ability works"
+    },
+    {
+      "test": "scenario brazen_freebooter_batch::brazen_freebooter_batch_cards_create_one_treasure_per_entry",
+      "covers": "actual wily_goblin creates one Treasure per entry and no extra tokens"
+    },
+    {
+      "test": "mechanic_registry::brazen_freebooter_batch::brazen_freebooter_batch_maps_definitions",
+      "covers": "reviewed identity, body, entry trigger and Treasure token of wily_goblin"
+    },
+    {
+      "test": "mechanic_registry::brazen_freebooter_batch::brazen_freebooter_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for wily_goblin"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

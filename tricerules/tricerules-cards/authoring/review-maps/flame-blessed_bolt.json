@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "6a521eed-0965-4fce-8a11-190dc2863da8",
+  "spans": [
+    {
+      "face_id": "flame_blessed_bolt",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileIfWouldDieThisTurn",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_a::q55_a_flame_blessed_bolt_exiles_a_creature_that_would_die",
+      "covers": "actual Flame-Blessed Bolt exiles a creature that would die from its 2 damage"
+    },
+    {
+      "test": "scenario q55_batch_a::q55_a_flame_blessed_bolt_exiles_a_later_death_that_turn",
+      "covers": "actual Flame-Blessed Bolt exiles a surviving creature that dies later in the turn"
+    },
+    {
+      "test": "scenario q55_batch_a::q55_a_creature_or_planeswalker_burn_deals_exact_damage",
+      "covers": "actual Flame-Blessed Bolt deals exactly 2 damage to a creature"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_damage_creature_or_planeswalker_map_definitions",
+      "covers": "shared registry identity for the creature-or-planeswalker burn spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Flame-Blessed Bolt"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

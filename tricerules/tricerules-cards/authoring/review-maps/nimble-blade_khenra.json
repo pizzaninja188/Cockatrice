@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "09c68fb5-2000-4bb8-b03b-94b093e50bca",
+  "spans": [
+    {
+      "face_id": "nimble_blade_khenra",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPlayerCastsSpell",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario prowess_creatures_batch::prowess_creatures_batch_cards_pump_on_noncreature_casts_and_expire",
+      "covers": "actual nimble-blade_khenra triggers once per noncreature cast, pumps itself and expires at cleanup"
+    },
+    {
+      "test": "scenario prowess_creatures_batch::prowess_creatures_batch_cards_ignore_creature_and_opponent_casts",
+      "covers": "actual nimble-blade_khenra does not trigger for creature spells or opponent casts"
+    },
+    {
+      "test": "mechanic_registry::prowess_creatures_batch::prowess_creatures_batch_maps_definitions",
+      "covers": "reviewed identity, cast trigger and source pump of nimble-blade_khenra"
+    },
+    {
+      "test": "mechanic_registry::prowess_creatures_batch::prowess_creatures_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for nimble-blade_khenra"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

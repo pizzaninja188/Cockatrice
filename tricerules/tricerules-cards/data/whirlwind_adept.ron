@@ -1,0 +1,21 @@
+// Oracle 0c7e261f-45d5-4c86-8cba-9b6edce8ef49; source/rulings checked 2026-11-15.
+// CR 702.108a-b (Prowess triggers once per noncreature spell its controller
+// casts) and 514.2 (the pump ends at cleanup).
+(
+  id: "whirlwind_adept",
+  name: "Whirlwind Adept",
+  face_id: "whirlwind_adept",
+  mana_cost: "{4}{U}",
+  types: ["Creature", "Djinn", "Monk"],
+  power: 4,
+  toughness: 2,
+  keywords: [Hexproof],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Noncreature))),
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    ),
+  ],
+)

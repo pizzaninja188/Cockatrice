@@ -1,0 +1,26 @@
+// Oracle 5ffca600-5286-4086-9efe-c398babeb6ae; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 700.4 (dies), 603.6c (leaves-the-battlefield trigger), 115.1/608.2b (target land),
+// 701.8 (destroy) and 608.2c (the source's controller follows the instruction). Goblin
+// Gardener's pinned ruling confirms the ability is mandatory and may target your own land.
+
+(
+  id: "polluted_dead",
+  name: "Polluted Dead",
+  face_id: "polluted_dead",
+  mana_cost: "{4}{B}",
+  types: ["Creature", "Zombie"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfDies,
+    effect: [Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Land])))],
+    targeting: Some((groups: [(
+      min: 1, max: 1,
+      prompt: "Choose target land",
+      effect_indices: [0],
+    )])),
+  )],
+)

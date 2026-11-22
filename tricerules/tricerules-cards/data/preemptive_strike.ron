@@ -1,0 +1,12 @@
+// Oracle 250f8642-9754-48fd-8f09-70ed13d7a42c; source/rulings checked 2026-11-13.
+// CR 701.6 (counter), CR 115.1a/601.2c (creature spell target).
+(
+  id: "preemptive_strike",
+  name: "Preemptive Strike",
+  face_id: "preemptive_strike",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  spell_effect: [CounterTargetSpell(
+    spell_filter: (card_type: Some(Creature)),
+  )],
+)

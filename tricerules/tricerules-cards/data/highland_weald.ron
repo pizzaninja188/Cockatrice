@@ -1,0 +1,25 @@
+// Oracle 66d845a2-be4c-41bb-a357-3650461c03ed; source/rulings checked 2026-11-12.
+// CR 205.4g (snow supertype), 614.1d/614.12 (enters-tapped replacement) and
+// 605.1a/605.3b (mana abilities).
+(
+  id: "highland_weald",
+  name: "Highland Weald",
+  face_id: "highland_weald",
+  types: ["Land"],
+  supertypes: ["Snow"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(r: 1), (g: 1)])],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: EntersTapped(affected: Self_),
+    ),
+  ],
+)

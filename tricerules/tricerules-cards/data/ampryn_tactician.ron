@@ -1,0 +1,23 @@
+// Oracle 4ae19803-23a7-4724-a4cd-dc6f3c16fb24; source/rulings checked 2026-11-13.
+// CR 603.6a (entry trigger), 611.2c (affected set at resolution), 613.4c and 514.2.
+(
+  id: "ampryn_tactician",
+  name: "Ampryn Tactician",
+  face_id: "ampryn_tactician",
+  mana_cost: "{2}{W}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      PumpAll(
+        filter: (controller: YouControl),
+        power: 1,
+        toughness: 1,
+      ),
+    ],
+  )],
+)

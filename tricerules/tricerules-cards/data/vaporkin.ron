@@ -1,0 +1,22 @@
+// Oracle 169e415a-9ff6-43bb-bb68-fc49e69f95a8; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying) and 509.1b (blocking restrictions); reach does not
+// make a creature a legal blocker for this restriction.
+(
+  id: "vaporkin",
+  name: "Vaporkin",
+  face_id: "vaporkin",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Elemental"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flying],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: SelfCombatRestriction(restriction: (
+        cant_block_creatures_matching: [(kind: Creature, excluded_keywords: [Flying])],
+      )),
+    ),
+  ],
+)

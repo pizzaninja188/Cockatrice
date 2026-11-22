@@ -1,0 +1,14 @@
+// Oracle 3552eea9-aee9-4555-b3cb-8e4fc5b728cc; source/rulings checked 2026-11-15.
+// CR 702.16b-f (protection's targeting, attachment, damage and blocking
+// effects), plus the printed clause's normal rules.
+(
+  id: "narwhal",
+  name: "Narwhal",
+  face_id: "narwhal",
+  mana_cost: "{2}{U}{U}",
+  types: ["Creature", "Whale"],
+  power: 2,
+  toughness: 2,
+  keywords: [FirstStrike],
+  protections: [Color(Red)],
+)

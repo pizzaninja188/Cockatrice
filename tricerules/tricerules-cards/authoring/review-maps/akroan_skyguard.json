@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "f4e8be6f-2a1f-47b2-a4d8-7e576e25ab60",
+  "spans": [
+    {
+      "face_id": "akroan_skyguard",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "akroan_skyguard",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfBecomesTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "TargetingSourceFilter::SpellCast",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "CounterKind::PlusOnePlusOne",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q31_heroic_counters_batch::q31_heroic_cards_place_their_printed_counter_count",
+      "covers": "actual akroan_skyguard is exercised by the shared 06-heroic-counters evidence"
+    },
+    {
+      "test": "scenario q31_heroic_counters_batch::q31_heroic_cards_keep_their_printed_flying_and_body",
+      "covers": "actual akroan_skyguard is exercised by the shared 06-heroic-counters evidence"
+    },
+    {
+      "test": "scenario q31_heroic_counters_batch::q31_heroic_does_not_trigger_for_a_spell_that_does_not_target_it",
+      "covers": "actual akroan_skyguard is exercised by the shared 06-heroic-counters evidence"
+    },
+    {
+      "test": "scenario q31_heroic_counters_batch::q31_heroic_does_not_trigger_for_an_opponents_targeting_spell",
+      "covers": "actual akroan_skyguard is exercised by the shared 06-heroic-counters evidence"
+    },
+    {
+      "test": "scenario q31_heroic_counters_batch::q31_heroic_cards_enter_through_their_exact_mana_cost",
+      "covers": "actual akroan_skyguard is exercised by the shared 06-heroic-counters evidence"
+    },
+    {
+      "test": "mechanic_registry::q31_heroic_counters_batch::q31_heroic_counters_batch_maps_definitions",
+      "covers": "actual akroan_skyguard is exercised by the shared 06-heroic-counters evidence"
+    },
+    {
+      "test": "mechanic_registry::q31_heroic_counters_batch::q31_heroic_counters_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual akroan_skyguard is exercised by the shared 06-heroic-counters evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

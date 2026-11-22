@@ -1,0 +1,12 @@
+// Oracle d62e9510-dc41-493f-8289-6e11303884fc; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "rootwater_commando",
+  name: "Rootwater Commando",
+  face_id: "rootwater_commando",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Merfolk"],
+  power: 2,
+  toughness: 2,
+  evasions: [Landwalk(land_subtype: "Island")],
+)

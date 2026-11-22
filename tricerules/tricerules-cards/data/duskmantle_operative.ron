@@ -1,0 +1,23 @@
+// Oracle 7734ee04-1d99-4807-be68-b889e75a7551; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 509.1b (declared blockers must satisfy the attacker's restrictions) and 613.1g/613.4 (current power).
+// The card has a pinned ruling.
+
+(
+  id: "duskmantle_operative",
+  name: "Duskmantle Operative",
+  face_id: "duskmantle_operative",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Human", "Rogue"],
+  power: 2,
+  toughness: 2,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: SelfCombatRestriction(restriction: (
+        cant_be_blocked_by: [(kind: Creature, power: Some(AtLeast(4)))],
+      )),
+    ),
+  ],
+)

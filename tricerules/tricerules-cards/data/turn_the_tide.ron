@@ -1,0 +1,11 @@
+// Oracle 2546db90-1f6e-43f7-a116-2fefe67d489d; source/rulings checked 2026-11-15.
+// CR 611.2c (the affected set is fixed at resolution), 613.4c
+// (layer-7c modification) and 514.2 (cleanup expiry).
+(
+  id: "turn_the_tide",
+  name: "Turn the Tide",
+  face_id: "turn_the_tide",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  spell_effect: [PumpAll(filter: (controller: Opponents), power: -2, toughness: 0)],
+)

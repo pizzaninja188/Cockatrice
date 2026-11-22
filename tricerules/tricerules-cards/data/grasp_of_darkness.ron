@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 494c819d-7d73-432b-8c96-4cb9dcd31094.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 613.4c: negative P/T applies in layer 7c until end of turn.
+(
+  id: "grasp_of_darkness",
+  name: "Grasp of Darkness",
+  face_id: "grasp_of_darkness",
+  mana_cost: "{B}{B}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: -4, toughness: -4)],
+)

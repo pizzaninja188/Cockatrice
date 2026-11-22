@@ -1,0 +1,20 @@
+// Oracle 4f25b125-1ded-4a34-9ed1-e6ce087ec48d; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters-the-battlefield trigger), 701.25 (surveil) and 608.2c (printed order).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "barrier_of_bones",
+  name: "Barrier of Bones",
+  face_id: "barrier_of_bones",
+  mana_cost: "{B}",
+  types: ["Creature", "Skeleton", "Wall"],
+  power: 0,
+  toughness: 3,
+  keywords: [Defender],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil)],
+  )],
+)

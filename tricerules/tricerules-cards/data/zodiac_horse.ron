@@ -1,0 +1,12 @@
+// Oracle f778bf66-e823-4b4c-8586-97e1d519efd8; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "zodiac_horse",
+  name: "Zodiac Horse",
+  face_id: "zodiac_horse",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Horse"],
+  power: 3,
+  toughness: 3,
+  evasions: [Landwalk(land_subtype: "Island")],
+)

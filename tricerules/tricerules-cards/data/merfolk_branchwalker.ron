@@ -1,0 +1,20 @@
+// Oracle 24b5dbe3-578a-4897-8215-e723f00a8f1a; source/rulings checked 2026-11-13.
+// CR 603.6a (entry trigger), 701.44a-c (explore and last-known information),
+// 701.20a (reveal), and 608.2c/d (instruction order and the graveyard-or-top choice).
+(
+  id: "merfolk_branchwalker",
+  name: "Merfolk Branchwalker",
+  face_id: "merfolk_branchwalker",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Merfolk", "Scout"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Explore(subject: Source)],
+    ),
+  ],
+)

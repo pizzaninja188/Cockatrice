@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "01ab37a4-21d2-49f4-9b85-cb522a4d04ad",
+  "spans": [
+    {
+      "face_id": "zendikar_farguide",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/evasions/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Evasion::Landwalk",
+      "typed_path": "/faces/0/evasions/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario forestwalk_batch::forestwalk_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual zendikar_farguide casts with its exact printed mana, enters under its owner/controller, and has the exact printed power and toughness"
+    },
+    {
+      "test": "scenario forestwalk_batch::forestwalk_batch_cards_cannot_be_blocked_while_defender_controls_a_forest",
+      "covers": "actual zendikar_farguide cannot be blocked while the defending player controls a Forest"
+    },
+    {
+      "test": "scenario forestwalk_batch::forestwalk_batch_cards_can_be_blocked_without_a_forest",
+      "covers": "actual zendikar_farguide can be blocked when the defending player controls no Forest"
+    },
+    {
+      "test": "mechanic_registry::forestwalk_batch::forestwalk_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and Forest landwalk of zendikar_farguide"
+    },
+    {
+      "test": "mechanic_registry::forestwalk_batch::forestwalk_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for zendikar_farguide"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

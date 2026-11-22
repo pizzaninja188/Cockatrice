@@ -1,0 +1,20 @@
+// Oracle 29e8d973-0233-446e-b587-1c7508352642; source/rulings checked 2026-11-15 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 (activation and printed cost) and 701.19a-b (regeneration shield).
+(
+  id: "selesnya_sentry",
+  name: "Selesnya Sentry",
+  face_id: "selesnya_sentry",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Elephant", "Soldier"],
+  power: 3,
+  toughness: 2,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{5}{G}")],
+      effect: [Regenerate(subject: Source)],
+    ),
+  ],
+)

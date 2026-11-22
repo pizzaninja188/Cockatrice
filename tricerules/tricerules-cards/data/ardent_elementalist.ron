@@ -1,0 +1,19 @@
+// Oracle 1edd4f50-05ee-43e0-a288-c26666910c8b; source/rulings checked 2026-11-12.
+// CR 603.6a (entry trigger), 406.3/400.7 (graveyard card identity), 608.2b (stale target).
+(
+  id: "ardent_elementalist",
+  name: "Ardent Elementalist",
+  face_id: "ardent_elementalist",
+  mana_cost: "{3}{R}",
+  types: ["Creature", "Human", "Shaman"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [MoveGraveyardCards(filter: ( card: Some((card_type: Some(InstantOrSorcery)))), destination: Hand)],
+    ),
+  ],
+)

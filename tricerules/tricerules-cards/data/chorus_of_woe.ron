@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle e175a3c1-df6c-4aa7-a4c9-893b466ad9e0.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "chorus_of_woe",
+  name: "Chorus of Woe",
+  face_id: "chorus_of_woe",
+  mana_cost: "{B}",
+  types: ["Sorcery"],
+  spell_effect: [PumpAll(filter: (controller: YouControl), power: 1, toughness: 0)],
+)

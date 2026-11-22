@@ -1,0 +1,18 @@
+// Oracle 6c3faf4f-83c1-4098-98b8-bae15d59b0de; source/rulings checked 2026-11-21 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a (one creature target), 613.4c (-13/-13 until end of turn), 614.6/616.1 (the exile
+// replacement applies to any death that turn) and 608.2b. Pinned ruling: the creature is exiled
+// any time it would die that turn, not only from lethal shrink.
+// Copy of Afflict's shrink plus Betrayer's Bargain's exile replacement.
+(
+  id: "bleed_dry",
+  name: "Bleed Dry",
+  face_id: "bleed_dry",
+  mana_cost: "{2}{B}{B}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: -13, toughness: -13, subject: Chosen((kind: Creature))),
+    ExileIfWouldDieThisTurn(target: (kind: Creature)),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0, 1])])),
+)

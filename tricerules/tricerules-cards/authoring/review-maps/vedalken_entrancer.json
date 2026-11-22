@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "04cc5292-a485-4bb8-a143-9364229d480f",
+  "spans": [
+    {
+      "face_id": "vedalken_entrancer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::MillTargetPlayer",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetKind::AnyPlayer",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/MillTargetPlayer/target/kind"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario mill_two_batch::mill_two_batch_cards_mill_the_target_player_for_exactly_two",
+      "covers": "actual vedalken_entrancer is exercised by the shared mill_two_batch actual-card scenario"
+    },
+    {
+      "test": "scenario mill_two_batch::mill_two_batch_cards_can_target_their_controller",
+      "covers": "actual vedalken_entrancer is exercised by the shared mill_two_batch actual-card scenario"
+    },
+    {
+      "test": "scenario mill_two_batch::mill_two_batch_cards_reject_missing_targets",
+      "covers": "actual vedalken_entrancer is exercised by the shared mill_two_batch actual-card scenario"
+    },
+    {
+      "test": "scenario mill_two_batch::mill_two_batch_cards_mill_as_much_as_possible_without_causing_a_loss",
+      "covers": "actual vedalken_entrancer is exercised by the shared mill_two_batch actual-card scenario"
+    },
+    {
+      "test": "scenario mill_two_batch::mill_two_batch_cards_reject_a_second_activation_while_tapped",
+      "covers": "actual vedalken_entrancer is exercised by the shared mill_two_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::mill_two_batch::mill_two_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of vedalken_entrancer"
+    },
+    {
+      "test": "mechanic_registry::mill_two_batch::mill_two_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for vedalken_entrancer"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

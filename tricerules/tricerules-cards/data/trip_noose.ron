@@ -1,0 +1,17 @@
+// Oracle 456f2991-ab64-41bc-9bd1-a1b1e7993ed6; source/rulings checked 2026-11-13.
+// CR 602.1/602.2 (activated ability), 118.3 (mana payment), 701.26 (tap) and 608.2b.
+(
+  id: "trip_noose",
+  name: "Trip Noose",
+  face_id: "trip_noose",
+  mana_cost: "{2}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{2}"), Tap],
+      effect: [Tap(subject: Chosen((kind: Creature)))],
+    ),
+  ],
+)

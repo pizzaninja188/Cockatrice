@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 9342fbb8-ab35-4895-946d-951ba6a2b067.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "scorching_spear",
+  name: "Scorching Spear",
+  face_id: "scorching_spear",
+  mana_cost: "{R}",
+  types: ["Sorcery"],
+  spell_effect: [DamageTarget(amount: 1, target: (kind: AnyTarget))],
+)

@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "67fba605-9cfa-499c-83e0-4fbd023bcfa0",
+  "spans": [
+    {
+      "face_id": "blood_knight",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0",
+        "/faces/0/protections/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::FirstStrike",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "Protection::Color",
+      "typed_path": "/faces/0/protections/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q49_cohorts_batch::q49_protection_white_canary_simplest_blood_knight_rejects_white_targeting",
+      "covers": "canary simplest rejects a white Aura target"
+    },
+    {
+      "test": "scenario q49_cohorts_batch::q49_protection_white_cards_expose_their_printed_keywords_and_protection",
+      "covers": "every actual card exposes its printed first strike and protection from white"
+    },
+    {
+      "test": "scenario q49_cohorts_batch::q49_protection_white_cards_reject_white_aura_targeting",
+      "covers": "protection rejects a white Aura target on every card"
+    },
+    {
+      "test": "scenario q49_cohorts_batch::q49_protection_white_cards_prevent_white_source_damage",
+      "covers": "protection prevents damage from a white source"
+    },
+    {
+      "test": "scenario q49_cohorts_batch::q49_protection_white_cards_cannot_be_blocked_by_white",
+      "covers": "protection prevents a white creature from blocking"
+    },
+    {
+      "test": "mechanic_registry::q49_cohorts_batch::q49_protection_white_maps_definitions",
+      "covers": "reviewed identity, first strike, and protection quality"
+    },
+    {
+      "test": "mechanic_registry::q49_cohorts_batch::q49_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Blood Knight"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

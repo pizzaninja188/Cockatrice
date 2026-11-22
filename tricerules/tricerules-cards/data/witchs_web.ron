@@ -1,0 +1,10 @@
+// Oracle 6ec9a14a-0a62-4f8a-9147-3cab01411a65; source/rulings checked 2026-11-11.
+// CR 601.2a/601.2h (cast and payment), 611.2a (until-end-of-turn pump), 701.26 (untap), and 514.2 (cleanup).
+(
+  id: "witchs_web",
+  name: "Witch's Web",
+  face_id: "witchs_web",
+  mana_cost: "{1}{G}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: 3, toughness: 3), GrantKeywords(keywords: [Reach]), Untap()],
+)

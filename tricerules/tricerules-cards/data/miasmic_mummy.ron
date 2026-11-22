@@ -1,0 +1,20 @@
+// Oracle b5b049d4-242a-48ec-85d1-1ef66c8cfa4c; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters trigger), 701.9 (discard) and 101.4/APNAP (each player's hidden
+// choice); Earsplitting Rats also uses 701.19 (regenerate). No pinned ruling changes
+// the printed behavior.
+(
+  id: "miasmic_mummy",
+  name: "Miasmic Mummy",
+  face_id: "miasmic_mummy",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Zombie", "Jackal"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Discard(who: EachPlayer, quantity: Exact(1))],
+  )],
+)

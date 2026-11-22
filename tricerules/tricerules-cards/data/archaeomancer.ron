@@ -1,0 +1,19 @@
+// Oracle a91a3266-cadd-47a0-9b20-160307f14c07; source/rulings checked 2026-11-12.
+// CR 603.6a (entry trigger), 406.3/400.7 (graveyard card identity), 608.2b (stale target).
+(
+  id: "archaeomancer",
+  name: "Archaeomancer",
+  face_id: "archaeomancer",
+  mana_cost: "{2}{U}{U}",
+  types: ["Creature", "Human", "Wizard"],
+  power: 1,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [MoveGraveyardCards(filter: ( card: Some((card_type: Some(InstantOrSorcery)))), destination: Hand)],
+    ),
+  ],
+)

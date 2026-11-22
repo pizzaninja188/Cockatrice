@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "174cf7cd-3e8c-4f90-abc1-a78a0ce832d2",
+  "spans": [
+    {
+      "face_id": "shu_soldier_farmers",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_gain_four_life_batch::etb_gain_four_life_batch_cards_gain_four_life_on_entry",
+      "covers": "actual shu_soldier-farmers clause coverage"
+    },
+    {
+      "test": "scenario etb_gain_four_life_batch::etb_gain_four_life_batch_cards_gain_only_for_their_controller",
+      "covers": "actual shu_soldier-farmers clause coverage"
+    },
+    {
+      "test": "scenario etb_gain_four_life_batch::etb_gain_four_life_batch_cards_do_not_trigger_from_other_entries",
+      "covers": "actual shu_soldier-farmers clause coverage"
+    },
+    {
+      "test": "mechanic_registry::etb_gain_four_life_batch::etb_gain_four_life_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of shu_soldier-farmers"
+    },
+    {
+      "test": "mechanic_registry::etb_gain_four_life_batch::etb_gain_four_life_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for shu_soldier-farmers"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

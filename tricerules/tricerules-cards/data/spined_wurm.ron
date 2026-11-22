@@ -1,0 +1,12 @@
+// Oracle 05425f2f-7228-4bf5-8fe1-6fe99107e8e0; source/rulings checked 2026-11-14.
+// CR 202.1: no rules text; the printed mana cost, type line, power and
+// toughness are the complete card.
+(
+  id: "spined_wurm",
+  name: "Spined Wurm",
+  face_id: "spined_wurm",
+  mana_cost: "{4}{G}",
+  types: ["Creature", "Wurm"],
+  power: 5,
+  toughness: 4,
+)

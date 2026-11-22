@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "e894ccf5-fc71-48bd-bca5-cfeb05315f42",
+  "spans": [
+    {
+      "face_id": "skywinder_drake",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "skywinder_drake",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "StaticAbilityDef::SelfCombatRestriction",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flying_blocks_only_flying_batch::flying_blocks_only_flying_batch_cards_have_flying_and_the_restriction",
+      "covers": "actual skywinder_drake clause coverage"
+    },
+    {
+      "test": "scenario flying_blocks_only_flying_batch::flying_blocks_only_flying_batch_cards_block_flying_attackers",
+      "covers": "actual skywinder_drake clause coverage"
+    },
+    {
+      "test": "scenario flying_blocks_only_flying_batch::flying_blocks_only_flying_batch_cards_reject_ground_and_reach_only_attackers",
+      "covers": "actual skywinder_drake clause coverage"
+    },
+    {
+      "test": "mechanic_registry::flying_blocks_only_flying_batch::flying_blocks_only_flying_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of skywinder_drake"
+    },
+    {
+      "test": "mechanic_registry::flying_blocks_only_flying_batch::flying_blocks_only_flying_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for skywinder_drake"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

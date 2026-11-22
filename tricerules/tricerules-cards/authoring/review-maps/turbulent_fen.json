@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "114dd40d-5ad8-4913-a08f-572b9521eb5b",
+  "spans": [
+    {
+      "face_id": "turbulent_fen",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "turbulent_fen",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "GameCondition::BattlefieldAggregate",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "RelativePlayerSet::Opponents",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "CardTypeFilter::Land",
+      "typed_path": "/faces/0/static_abilities/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q31_turbulent_lands_batch::q31_turbulent_lands_enter_tapped_below_eight_opponent_lands",
+      "covers": "actual turbulent_fen is exercised by the shared 03-turbulent-lands evidence"
+    },
+    {
+      "test": "scenario q31_turbulent_lands_batch::q31_turbulent_lands_enter_untapped_with_eight_opponent_lands",
+      "covers": "actual turbulent_fen is exercised by the shared 03-turbulent-lands evidence"
+    },
+    {
+      "test": "scenario q31_turbulent_lands_batch::q31_turbulent_lands_ignore_your_own_lands",
+      "covers": "actual turbulent_fen is exercised by the shared 03-turbulent-lands evidence"
+    },
+    {
+      "test": "scenario q31_turbulent_lands_batch::q31_turbulent_lands_produce_each_printed_pair",
+      "covers": "actual turbulent_fen is exercised by the shared 03-turbulent-lands evidence"
+    },
+    {
+      "test": "mechanic_registry::q31_turbulent_lands_batch::q31_turbulent_lands_batch_maps_definitions",
+      "covers": "actual turbulent_fen is exercised by the shared 03-turbulent-lands evidence"
+    },
+    {
+      "test": "mechanic_registry::q31_turbulent_lands_batch::q31_turbulent_lands_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual turbulent_fen is exercised by the shared 03-turbulent-lands evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,26 @@
+{
+  "format_version": 1,
+  "oracle_id": "27e6de72-68c4-4154-807f-5944fe97c92b",
+  "spans": [],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario vanilla_green_batch::vanilla_green_batch_cards_cast_with_printed_characteristics",
+      "covers": "actual meng_huos_horde clause coverage"
+    },
+    {
+      "test": "scenario vanilla_green_batch::vanilla_green_batch_cards_attack_and_block_with_printed_stats",
+      "covers": "actual meng_huos_horde clause coverage"
+    },
+    {
+      "test": "mechanic_registry::vanilla_green_batch::vanilla_green_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of meng_huos_horde"
+    },
+    {
+      "test": "mechanic_registry::vanilla_green_batch::vanilla_green_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for meng_huos_horde"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

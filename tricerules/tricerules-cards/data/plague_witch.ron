@@ -1,0 +1,19 @@
+// Oracle 532ab335-4873-405b-84b3-c447207172b5; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.2 (activate), 115.1 (one creature target), 118.3/701.9 (discard cost) and 611.2c/613.4c (until-end-of-turn penalty).
+(
+  id: "plague_witch",
+  name: "Plague Witch",
+  face_id: "plague_witch",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Elf", "Spellshaper"],
+  power: 1,
+  toughness: 1,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{B}"), Tap, Discard],
+    effect: [PumpTarget(power: -1, toughness: -1, subject: Chosen((kind: Creature)))],
+    targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+  )],
+)

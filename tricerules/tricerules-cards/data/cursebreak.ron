@@ -1,0 +1,20 @@
+// Oracle ac5a13b1-0725-4978-8c93-cebd76be58ba; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 119.3 (life gain), 608.2b (stale target) and 115.1a (target).
+(
+  id: "cursebreak",
+  name: "Cursebreak",
+  face_id: "cursebreak",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Enchantment]))),
+    GainLife(amount: 2),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target enchantment",
+    effect_indices: [0],
+  )])),
+)

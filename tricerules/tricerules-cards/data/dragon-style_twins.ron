@@ -1,0 +1,21 @@
+// Oracle d150f456-c33a-4b19-ac73-b1d818d5db8f; source/rulings checked 2026-11-15.
+// CR 702.108a-b (Prowess triggers once per noncreature spell its controller
+// casts) and 514.2 (the pump ends at cleanup).
+(
+  id: "dragon-style_twins",
+  name: "Dragon-Style Twins",
+  face_id: "dragon_style_twins",
+  mana_cost: "{3}{R}{R}",
+  types: ["Creature", "Human", "Monk"],
+  power: 3,
+  toughness: 3,
+  keywords: [DoubleStrike],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Noncreature))),
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    ),
+  ],
+)

@@ -1,0 +1,58 @@
+{
+  "format_version": 1,
+  "oracle_id": "1980ca2e-a415-4de1-ac30-7055507e82a2",
+  "spans": [
+    {
+      "face_id": "vampiric_feast",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario agonizing_syphon_batch::agonizing_syphon_batch_cards_deal_damage_to_a_player_and_gain_life",
+      "covers": "actual vampiric_feast deals its printed damage to an opponent and its controller gains the printed life"
+    },
+    {
+      "test": "scenario agonizing_syphon_batch::agonizing_syphon_batch_cards_deal_damage_to_a_creature_and_gain_life",
+      "covers": "actual vampiric_feast can target a creature, deals the printed damage and gains the printed life"
+    },
+    {
+      "test": "scenario agonizing_syphon_batch::agonizing_syphon_batch_cards_fizzle_without_life_gain",
+      "covers": "actual vampiric_feast fails to resolve and gains no life when its only target becomes illegal, per the saved rulings"
+    },
+    {
+      "test": "scenario agonizing_syphon_batch::agonizing_syphon_batch_cards_reject_a_land_target",
+      "covers": "actual vampiric_feast rejects a land target without spending mana"
+    },
+    {
+      "test": "mechanic_registry::agonizing_syphon_batch::agonizing_syphon_batch_maps_definitions",
+      "covers": "reviewed identity, any-target damage, life gain and line presentation of vampiric_feast"
+    },
+    {
+      "test": "mechanic_registry::agonizing_syphon_batch::agonizing_syphon_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for vampiric_feast"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

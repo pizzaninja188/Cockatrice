@@ -1,0 +1,24 @@
+// Oracle 9e623e0a-3c2d-4536-b12f-9437ef820499; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 611.3/613.4c: the artifact count is reevaluated continuously and includes the
+// source when it is an artifact creature.
+(
+  id: "carapace_forger",
+  name: "Carapace Forger",
+  face_id: "carapace_forger",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Elf", "Artificer"],
+  power: 2,
+  toughness: 2,
+  static_abilities: [
+    (ability_id: "metalcraft", presentation: OracleLines([1]), definition: ConditionalSelfModifier(
+      condition: BattlefieldAggregate(
+        filter: (controllers: Controller, card_type: Some(Artifact)),
+        aggregate: Count,
+        min: Some(3),
+      ),
+      delta_power: 2,
+      delta_toughness: 2,
+    )),
+  ],
+)

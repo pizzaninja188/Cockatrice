@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "86fd8f95-0f1c-42c0-a63e-567c59ce89c4",
+  "spans": [
+    {
+      "face_id": "caller_of_gales",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q37_tap_keyword_activated_batch::q37_tap_keyword_activated_canary_hardest",
+      "covers": "hardest canary for this actual card"
+    },
+    {
+      "test": "scenario q37_tap_keyword_activated_batch::q37_tap_keyword_activated_cards_grant_only_the_chosen_target",
+      "covers": "actual card is exercised by the shared 09-tap-keyword-activated scenario"
+    },
+    {
+      "test": "scenario q37_tap_keyword_activated_batch::q37_tap_keyword_activated_cards_require_a_target_mana_and_an_untapped_source",
+      "covers": "actual card is exercised by the shared 09-tap-keyword-activated scenario"
+    },
+    {
+      "test": "mechanic_registry::q37_tap_keyword_activated_batch::q37_tap_keyword_activated_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q37_tap_keyword_activated_batch::q37_tap_keyword_activated_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

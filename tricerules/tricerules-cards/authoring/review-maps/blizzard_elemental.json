@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "dd489f30-d1cf-4236-8390-9c21cd8659e0",
+  "spans": [
+    {
+      "face_id": "blizzard_elemental",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "blizzard_elemental",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Untap",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q32_flying_untap_batch::q32_flying_untap_canary_simplest",
+      "covers": "actual blizzard_elemental is exercised by the shared 08-flying-untap actual-card scenario"
+    },
+    {
+      "test": "scenario q32_flying_untap_batch::q32_flying_untap_canary_hardest",
+      "covers": "actual blizzard_elemental is exercised by the shared 08-flying-untap actual-card scenario"
+    },
+    {
+      "test": "scenario q32_flying_untap_batch::q32_flying_untap_cards_cast_with_their_printed_cost_and_body",
+      "covers": "actual blizzard_elemental is exercised by the shared 08-flying-untap actual-card scenario"
+    },
+    {
+      "test": "scenario q32_flying_untap_batch::q32_flying_untap_cards_require_the_printed_mana_and_reject_foreign_controllers",
+      "covers": "actual blizzard_elemental is exercised by the shared 08-flying-untap actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::q32_flying_untap_batch::q32_flying_untap_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and pinned Oracle fingerprint of blizzard_elemental"
+    },
+    {
+      "test": "mechanic_registry::q32_flying_untap_batch::q32_flying_untap_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "reviewed identity, typed shape and pinned Oracle fingerprint of blizzard_elemental"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

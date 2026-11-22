@@ -1,0 +1,20 @@
+// Oracle e8c0fbea-a678-46b0-b385-e36f14c07672; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters-the-battlefield trigger), 701.25 (surveil) and 608.2c (printed order).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "watcher_in_the_mist",
+  name: "Watcher in the Mist",
+  face_id: "watcher_in_the_mist",
+  mana_cost: "{3}{U}{U}",
+  types: ["Creature", "Spirit"],
+  power: 3,
+  toughness: 4,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [LibraryPartition(count: 2, top_min: 0, top_max: None, kind: Surveil)],
+  )],
+)

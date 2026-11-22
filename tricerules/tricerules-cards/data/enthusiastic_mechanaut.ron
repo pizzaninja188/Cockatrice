@@ -1,0 +1,26 @@
+// Oracle c9722086-23e8-43dc-8a8c-541ff6962318; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 601.2f (cost reduction) and 301.1 (artifact spells).
+// The card has no pinned ruling.
+
+(
+  id: "enthusiastic_mechanaut",
+  name: "Enthusiastic Mechanaut",
+  face_id: "enthusiastic_mechanaut",
+  mana_cost: "{U}{R}",
+  types: ["Artifact", "Creature", "Goblin", "Artificer"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+  static_abilities: [
+    (
+      ability_id: "cost_reduction",
+      presentation: OracleLines([2]),
+      definition: SpellGenericReduction(
+        casters: Controller,
+        spell_filter: Some((card_type: Some(Artifact))),
+        amount: 1,
+      ),
+    ),
+  ],
+)

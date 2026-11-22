@@ -1,0 +1,26 @@
+// Oracle 66efb37f-9eab-4ff4-a1d4-65fe9ca7332b; source/rulings checked 2026-11-15.
+// CR 303.4a (Aura target and attach), 603.6a (enters trigger), 121.1
+// (draw), 613.4c (layer-7c attached P/T modifier) and 704.5m.
+(
+  id: "scourgemark",
+  name: "Scourgemark",
+  face_id: "scourgemark",
+  mana_cost: "{1}{B}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Draw(count: 1)],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([3]),
+      definition: AttachedModifier(delta_power: 1, delta_toughness: 0),
+    ),
+  ],
+)

@@ -1,0 +1,14 @@
+// Oracle 857524d5-9b5c-42ac-a6cf-2d9bfebd7015; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.16b-f (protection's five effects), 702.9a-b (flying), 702.3 (defender) and 702.29a (cycling).
+
+(
+  id: "zombie_outlander",
+  name: "Zombie Outlander",
+  face_id: "zombie_outlander",
+  mana_cost: "{U}{B}",
+  types: ["Creature", "Zombie", "Scout"],
+  power: 2,
+  toughness: 2,
+  protections: [Color(Green)],
+)

@@ -1,0 +1,12 @@
+// Oracle a16509da-ad46-4ee3-86f3-06c521c23481; source/rulings checked 2026-11-14.
+// CR 202.1: no rules text; the printed mana cost, type line, power and
+// toughness are the complete card.
+(
+  id: "phyrexian_hulk",
+  name: "Phyrexian Hulk",
+  face_id: "phyrexian_hulk",
+  mana_cost: "{6}",
+  types: ["Artifact", "Creature", "Phyrexian", "Golem"],
+  power: 5,
+  toughness: 4,
+)

@@ -1,0 +1,25 @@
+// Oracle 695661ac-6f50-4a0e-9831-a0e285bab4bf; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters trigger), 603.3d/115.1d (trigger target), 701.8 (destroy) and 608.2b (stale target). The controller may decline the optional ability.
+
+(
+  id: "wild_celebrants",
+  name: "Wild Celebrants",
+  face_id: "wild_celebrants",
+  mana_cost: "{3}{R}{R}",
+  types: ["Creature", "Satyr"],
+  power: 5,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact])))],
+      targeting: Some((groups: [
+        (min: 1, max: 1, prompt: "Choose target artifact", effect_indices: [0]),
+      ])),
+      may: true,
+    ),
+  ],
+)

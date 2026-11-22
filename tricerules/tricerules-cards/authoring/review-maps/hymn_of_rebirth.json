@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "f06fca68-593b-4fbd-a5a9-618060311172",
+  "spans": [
+    {
+      "face_id": "hymn_of_rebirth",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_c::q55_c_reanimation_uses_the_printed_graveyard_and_controller",
+      "covers": "actual Hymn of Rebirth returns an opponent's creature under the caster's control"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_c::q55_c_reanimation_map_definitions",
+      "covers": "shared registry identity for the reanimation spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_c::q55_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Hymn of Rebirth"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

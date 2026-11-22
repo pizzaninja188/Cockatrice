@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "41b49a8e-09c5-4fd1-95f9-e5a51ce24f69",
+  "spans": [
+    {
+      "face_id": "lavafume_invoker",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_a::q54_team_pump_cards_apply_their_printed_offsets",
+      "covers": "actual Lavafume Invoker pays {8} and applies its printed +3/+0 to its controller's creatures only"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_a::q54_team_pump_activated_cards_map_definitions",
+      "covers": "shared registry identity for the four team-pump definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_a::q54_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Lavafume Invoker"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

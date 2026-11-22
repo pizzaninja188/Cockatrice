@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "d2e7198a-0eb5-4d30-973f-4b2d9617436f",
+  "spans": [
+    {
+      "face_id": "fan_bearer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario tap_target_two_batch::tap_target_two_batch_cards_apply_the_printed_effect",
+      "covers": "actual fan_bearer clause coverage"
+    },
+    {
+      "test": "scenario tap_target_two_batch::tap_target_two_batch_cards_reject_illegal_targets",
+      "covers": "actual fan_bearer clause coverage"
+    },
+    {
+      "test": "scenario tap_target_two_batch::tap_target_two_batch_cards_require_the_printed_cost",
+      "covers": "actual fan_bearer clause coverage"
+    },
+    {
+      "test": "scenario tap_target_two_batch::tap_target_two_batch_cards_fizzle_when_the_target_left",
+      "covers": "actual fan_bearer clause coverage"
+    },
+    {
+      "test": "mechanic_registry::tap_target_two_batch::tap_target_two_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of fan_bearer"
+    },
+    {
+      "test": "mechanic_registry::tap_target_two_batch::tap_target_two_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for fan_bearer"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "362fc643-ab76-4160-a73e-73397464db40",
+  "spans": [
+    {
+      "face_id": "deliberate",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0",
+        "/faces/0/spell_program/body/steps/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/Scry"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Draw"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q48_cohorts_batch::q48_scry_draw_canary_simplest_bottoms_both_then_draws",
+      "covers": "canary simplest scries then draws"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_scry_draw_canary_hardest_keeps_four_then_draws_two",
+      "covers": "canary hardest scries four then draws two"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_scry_draw_cards_draw_their_printed_count",
+      "covers": "every actual card uses its printed scry and draw counts"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_scry_draw_maps_definitions",
+      "covers": "reviewed identity and scry-then-draw program"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Deliberate"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

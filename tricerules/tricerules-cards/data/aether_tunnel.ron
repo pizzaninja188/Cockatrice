@@ -1,0 +1,16 @@
+// Oracle 0a90d1fb-7a76-4b62-b001-4a539a8e5df1; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 303.4 (Aura enchant), 509.1b (blocking restrictions), 613.1f/613.4c (layer 6
+// keyword and P/T modifiers), 602.5 (prohibit activated abilities) and 502.3
+// (doesn't untap). No pinned ruling changes the printed behavior.
+(
+  id: "aether_tunnel",
+  name: "Aether Tunnel",
+  face_id: "aether_tunnel",
+  mana_cost: "{1}{U}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (ability_id: "static_01", presentation: OracleLines([2]), definition: AttachedModifier(delta_power: 1, restriction: (cant_be_blocked: true))),
+  ],
+)

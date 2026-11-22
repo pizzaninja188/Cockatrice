@@ -1,0 +1,12 @@
+// Oracle a1f20695-6f08-4d5c-9fba-b0018bee298e; source/rulings checked 2026-11-12.
+// CR 702.9a-b (Flying evasion ability).
+(
+  id: "scryb_sprites",
+  name: "Scryb Sprites",
+  face_id: "scryb_sprites",
+  mana_cost: "{G}",
+  types: ["Creature", "Faerie"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+)

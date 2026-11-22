@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "bae49475-fe01-400b-8959-f0dde959577c",
+  "spans": [
+    {
+      "face_id": "shimmering_grotto",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "shimmering_grotto",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario mana_any_color_batch::mana_any_color_batch_cards_produce_colorless_mana",
+      "covers": "actual shimmering_grotto clause coverage"
+    },
+    {
+      "test": "scenario mana_any_color_batch::mana_any_color_batch_cards_offer_all_five_colors",
+      "covers": "actual shimmering_grotto clause coverage"
+    },
+    {
+      "test": "scenario mana_any_color_batch::mana_any_color_batch_cards_require_the_printed_costs",
+      "covers": "actual shimmering_grotto clause coverage"
+    },
+    {
+      "test": "mechanic_registry::mana_any_color_batch::mana_any_color_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of shimmering_grotto"
+    },
+    {
+      "test": "mechanic_registry::mana_any_color_batch::mana_any_color_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for shimmering_grotto"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

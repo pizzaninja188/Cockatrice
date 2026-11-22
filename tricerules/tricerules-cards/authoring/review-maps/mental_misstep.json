@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "1a0770e6-b093-4439-baff-6889a50ba12e",
+  "spans": [
+    {
+      "face_id": "mental_misstep",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/mana_cost"
+      ]
+    },
+    {
+      "face_id": "mental_misstep",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_a::q54_canary_simplest_mental_misstep_counters_a_one_mana_spell",
+      "covers": "actual Mental Misstep counters a mana-value-1 spell for {U} and leaves life totals unchanged"
+    },
+    {
+      "test": "scenario q54_batch_a::q54_mental_misstep_rejects_a_two_mana_spell",
+      "covers": "actual Mental Misstep rejects a mana-value-2 spell and keeps the card and mana"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_a::q54_counter_spell_riders_map_definitions",
+      "covers": "shared registry identity for the three counter-with-rider definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_a::q54_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Mental Misstep"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

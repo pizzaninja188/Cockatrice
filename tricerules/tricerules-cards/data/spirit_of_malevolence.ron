@@ -1,0 +1,24 @@
+// Oracle 15323e45-8260-43dc-b72b-efd661a58d75; source/rulings checked 2026-11-16 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 700.4 (dies), 603.6c (leaves-the-battlefield trigger), 119.3 (life loss/gain) and
+// 608.2c (the source controller follows the instruction).
+(
+  id: "spirit_of_malevolence",
+  name: "Spirit of Malevolence",
+  face_id: "spirit_of_malevolence",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Spirit"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfDies,
+      effect: [
+        LoseLife(amount: Fixed(1), who: EachOpponent),
+        GainLife(amount: 1),
+      ],
+    ),
+  ],
+)

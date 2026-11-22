@@ -1,0 +1,14 @@
+// Oracle b20302d9-eb45-4895-9597-cf3af1abce56; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.9a-b (flying) and 702.10a-b (haste). No card-specific ruling.
+
+(
+  id: "brimstone_dragon",
+  name: "Brimstone Dragon",
+  face_id: "brimstone_dragon",
+  mana_cost: "{6}{R}{R}",
+  types: ["Creature", "Dragon"],
+  power: 6,
+  toughness: 6,
+  keywords: [Flying, Haste],
+)

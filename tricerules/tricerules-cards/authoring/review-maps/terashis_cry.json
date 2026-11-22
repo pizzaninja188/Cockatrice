@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "64212311-9d66-4c25-8cf0-88ae4cac132f",
+  "spans": [
+    {
+      "face_id": "terashis_cry",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q45_cohorts_batch::q45_tap_up_to_canary_hardest_taps_three",
+      "covers": "the hardest canary taps three chosen creatures"
+    },
+    {
+      "test": "scenario q45_cohorts_batch::q45_tap_up_to_cards_allow_zero_targets_and_honor_their_maximum",
+      "covers": "zero targets are legal and each maximum is honored"
+    },
+    {
+      "test": "scenario q45_cohorts_batch::q45_tap_up_to_cards_tap_the_remaining_legal_targets",
+      "covers": "a remaining legal target still taps after another target is destroyed"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_tap_up_to_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of terashis_cry"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for terashis_cry"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,24 @@
+// Oracle 8bf90bb0-f9c1-49c8-905e-32747e921e92; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 122.1 (counters), 502.3 and 701.26 (tap/untap), 614.1d and 614.5
+// (stun-counter replacement). A pinned ruling confirms an already-tapped target
+// still receives the counters. Pinned rulings: a tapped target still gets the counters; a stale target
+// fizzles and the scry does not happen.
+(
+  id: "freeze_in_place",
+  name: "Freeze in Place",
+  face_id: "freeze_in_place",
+  mana_cost: "{1}{U}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Tap(subject: Chosen((kind: Creature, controller: Opponent))),
+    PutCounters(counter: Stun, count: 3, subject: Chosen((kind: Creature, controller: Opponent))),
+    Scry(count: 2),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature an opponent controls",
+    effect_indices: [0, 1],
+  )])),
+)

@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle b99ddb27-a59a-4cd3-88b1-97c759ddbd93.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 613.4c: negative P/T applies in layer 7c until end of turn.
+(
+  id: "pull_under",
+  name: "Pull Under",
+  face_id: "pull_under",
+  mana_cost: "{5}{B}",
+  types: ["Instant", "Arcane"],
+  spell_effect: [PumpTarget(power: -5, toughness: -5)],
+)

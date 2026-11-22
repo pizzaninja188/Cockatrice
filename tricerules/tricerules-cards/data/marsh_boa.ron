@@ -1,0 +1,12 @@
+// Oracle 246f7446-036d-469c-9583-5699ebdcec6d; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "marsh_boa",
+  name: "Marsh Boa",
+  face_id: "marsh_boa",
+  mana_cost: "{G}",
+  types: ["Creature", "Snake"],
+  power: 1,
+  toughness: 1,
+  evasions: [Landwalk(land_subtype: "Swamp")],
+)

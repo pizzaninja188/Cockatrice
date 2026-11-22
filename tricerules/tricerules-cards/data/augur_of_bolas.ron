@@ -1,0 +1,20 @@
+// Oracle be5d6779-ecc9-44b9-8c4d-97a243059d55; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters-the-battlefield trigger), 121.5 (not a draw), 401.4 (private look)
+// and 609.3 (selection clamps to available matches).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "augur_of_bolas",
+  name: "Augur of Bolas",
+  face_id: "augur_of_bolas",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Merfolk", "Wizard"],
+  power: 1,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [LookChooseToHand(count: 3, filter: Some((card_type: Some(InstantOrSorcery))), bottom_order: Chosen)],
+  )],
+)

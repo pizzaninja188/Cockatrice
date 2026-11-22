@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "bb4d9770-f230-4413-a7a4-bb1f1303661a",
+  "spans": [
+    {
+      "face_id": "thundering_rebuke",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_a::q55_a_creature_or_planeswalker_burn_deals_exact_damage",
+      "covers": "actual Thundering Rebuke deals exactly 4 damage to a creature"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_damage_creature_or_planeswalker_map_definitions",
+      "covers": "shared registry identity for the three creature-or-planeswalker burn spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Thundering Rebuke"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

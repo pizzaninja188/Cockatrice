@@ -1,0 +1,10 @@
+// Oracle b8d8ece6-397e-4bc9-b86c-7caa1d675d0f; source/rulings checked 2026-11-13.
+// CR 701.8 (destroy) and 608.2 (resolution).
+(
+  id: "back_to_nature",
+  name: "Back to Nature",
+  face_id: "back_to_nature",
+  mana_cost: "{1}{G}",
+  types: ["Instant"],
+  spell_effect: [DestroyAll(kind: (kind: AnyPermanent, permanent_types: [Enchantment]))],
+)

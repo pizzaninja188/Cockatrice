@@ -1,0 +1,23 @@
+// Oracle 0a35df9d-80a0-4b6f-91d5-dad980af47e1; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1/601.2c (any number of graveyard-card targets), 608.2b (stale targets
+// skipped), 401.4 (top-of-library order) and 121 (draw).
+(
+  id: "footbottom_feast",
+  name: "Footbottom Feast",
+  face_id: "footbottom_feast",
+  mana_cost: "{2}{B}",
+  types: ["Instant"],
+  spell_effect: [
+    MoveGraveyardCards(filter: (card: Some((card_type: Some(Creature)))), destination: LibraryTop),
+    Draw(count: 1),
+  ],
+  targeting: Some((groups: [
+    (
+      min: 0,
+      max: 4294967295,
+      prompt: "Choose any number of target creature cards from your graveyard",
+      effect_indices: [0],
+    ),
+  ])),
+)

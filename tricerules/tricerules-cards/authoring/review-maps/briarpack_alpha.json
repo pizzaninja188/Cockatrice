@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "5604c475-6e01-4e9d-b4e6-8e8d72874581",
+  "spans": [
+    {
+      "face_id": "briarpack_alpha",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "briarpack_alpha",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetKind::Creature",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/PumpTarget/subject/Chosen/kind"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flash_etb_pump_batch::flash_etb_pump_batch_cards_cast_at_instant_speed_and_pump_on_entry",
+      "covers": "actual briarpack_alpha is exercised by the shared flash_etb_pump_batch actual-card scenario: flash timing, entry trigger and printed pump"
+    },
+    {
+      "test": "scenario flash_etb_pump_batch::flash_etb_pump_batch_cards_target_any_creature",
+      "covers": "actual briarpack_alpha is exercised by the shared flash_etb_pump_batch actual-card scenario: the trigger can pump any creature, including an opponent's"
+    },
+    {
+      "test": "scenario flash_etb_pump_batch::flash_etb_pump_batch_cards_pump_expires_at_end_of_turn",
+      "covers": "actual briarpack_alpha is exercised by the shared flash_etb_pump_batch actual-card scenario: the pump ends during cleanup"
+    },
+    {
+      "test": "scenario flash_etb_pump_batch::flash_etb_pump_batch_cards_can_target_the_source",
+      "covers": "actual briarpack_alpha is exercised by the shared flash_etb_pump_batch actual-card scenario: the source itself is a legal target for the mandatory trigger"
+    },
+    {
+      "test": "scenario flash_etb_pump_batch::flash_etb_pump_batch_cards_stale_target_fizzles_without_pumping_another",
+      "covers": "actual briarpack_alpha is exercised by the shared flash_etb_pump_batch actual-card scenario: a departed target fizzles without retargeting"
+    },
+    {
+      "test": "mechanic_registry::flash_etb_pump_batch::flash_etb_pump_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of briarpack_alpha (flash body + entry target pump)"
+    },
+    {
+      "test": "mechanic_registry::flash_etb_pump_batch::flash_etb_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for briarpack_alpha"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

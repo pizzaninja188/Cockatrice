@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "d9c57520-9827-4b8b-8f81-43cca4227c60",
+  "spans": [
+    {
+      "face_id": "taigams_scheming",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::LibraryPartition",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_b::q55_b_taigams_scheming_surveils_five_and_orders_the_rest_on_top",
+      "covers": "actual Taigam's Scheming surveils five and moves exactly the chosen cards"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_b::q55_b_surveil_spells_map_definitions",
+      "covers": "shared registry identity for the surveil spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_b::q55_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Taigam's Scheming"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

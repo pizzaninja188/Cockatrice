@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "0d96e4bc-ff4e-4f37-89b6-8a4e3c1069a0",
+  "spans": [
+    {
+      "face_id": "grasp_of_phantoms",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_program",
+        "/faces/0/targeting/groups/0"
+      ]
+    },
+    {
+      "face_id": "grasp_of_phantoms",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PutInOwnersLibrary",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/PutInOwnersLibrary"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting/groups/0"
+    },
+    {
+      "symbol": "CardFaceDef.flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q50_cohorts_batch::q50_put_top_cards_put_only_their_matching_permanents_on_top",
+      "covers": "actual card accepts only its printed target types and moves the permanent to the top"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_put_top_cards_fizzle_when_the_target_leaves",
+      "covers": "actual card fizzles when its target left before resolution"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_put_top_grasp_of_phantoms_flashes_back_and_exiles",
+      "covers": "actual Grasp of Phantoms casts from the graveyard for its flashback cost, places the target on top, and exiles itself"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_put_top_maps_definitions",
+      "covers": "reviewed placement spell identity and target filter"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Grasp of Phantoms"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

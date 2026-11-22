@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "811c6f52-03cb-49a9-a3c7-7f4ae40e7155",
+  "spans": [
+    {
+      "face_id": "woolly_spider",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "woolly_spider",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Reach",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverSelfBlocksCreature",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario high_rise_sawjack_batch::high_rise_sawjack_batch_cards_pump_when_blocking_a_flyer",
+      "covers": "actual woolly_spider blocks a Flying attacker with Reach and pumps itself by the printed values"
+    },
+    {
+      "test": "scenario high_rise_sawjack_batch::high_rise_sawjack_batch_cards_do_not_trigger_on_a_nonflyer",
+      "covers": "actual woolly_spider does not trigger when it blocks a nonflying attacker"
+    },
+    {
+      "test": "scenario high_rise_sawjack_batch::high_rise_sawjack_batch_cards_keep_reach_against_flyers",
+      "covers": "actual woolly_spider keeps printed Reach"
+    },
+    {
+      "test": "mechanic_registry::high_rise_sawjack_batch::high_rise_sawjack_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Reach, flying filter and self pump of woolly_spider"
+    },
+    {
+      "test": "mechanic_registry::high_rise_sawjack_batch::high_rise_sawjack_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for woolly_spider"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

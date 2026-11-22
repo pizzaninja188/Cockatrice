@@ -1,0 +1,30 @@
+// Oracle 0b7393aa-d563-45bc-9946-8e7d1729d498; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 305.6/305.8 (the named basic land subtypes), 701.23b/e (hidden-zone search),
+// 701.24a (shuffle), 701.21a (sacrificing as a cost) and 614.1d/614.12 (the found land
+// enters untapped unless its own replacement says otherwise).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "mountain_valley",
+  name: "Mountain Valley",
+  face_id: "mountain_valley",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Tap, SacrificeSelf],
+    effect: [SearchLibrary(
+      filter: Some((any_of: Some([
+        (required_subtypes: ["Mountain"]),
+        (required_subtypes: ["Forest"]),
+      ]))),
+      destination: Battlefield(tapped: false),
+    )],
+  )],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: EntersTapped(affected: Self_),
+  )],
+)

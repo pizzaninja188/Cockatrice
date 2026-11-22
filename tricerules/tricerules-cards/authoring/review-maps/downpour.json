@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "78eb5fb1-cb91-4300-9056-4225a416aec0",
+  "spans": [
+    {
+      "face_id": "downpour",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q45_cohorts_batch::q45_tap_up_to_cards_allow_zero_targets_and_honor_their_maximum",
+      "covers": "zero targets are legal and each maximum is honored"
+    },
+    {
+      "test": "scenario q45_cohorts_batch::q45_tap_up_to_cards_tap_the_remaining_legal_targets",
+      "covers": "a remaining legal target still taps after another target is destroyed"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_tap_up_to_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of downpour"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for downpour"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

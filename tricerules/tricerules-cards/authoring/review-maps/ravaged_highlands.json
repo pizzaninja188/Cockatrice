@@ -1,0 +1,80 @@
+{
+  "format_version": 1,
+  "oracle_id": "68919931-b995-4aa0-9d2a-e80eae2f335f",
+  "spans": [
+    {
+      "face_id": "ravaged_highlands",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "ravaged_highlands",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "ravaged_highlands",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario abandoned_outpost_batch::abandoned_outpost_batch_cards_enter_tapped_and_produce_their_color",
+      "covers": "actual ravaged_highlands is exercised by the shared abandoned_outpost_batch actual-card scenario"
+    },
+    {
+      "test": "scenario abandoned_outpost_batch::abandoned_outpost_batch_cards_sacrifice_for_any_printed_color",
+      "covers": "actual ravaged_highlands is exercised by the shared abandoned_outpost_batch actual-card scenario"
+    },
+    {
+      "test": "scenario abandoned_outpost_batch::abandoned_outpost_batch_cards_reject_the_sacrifice_while_tapped",
+      "covers": "actual ravaged_highlands is exercised by the shared abandoned_outpost_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::abandoned_outpost_batch::abandoned_outpost_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of ravaged_highlands"
+    },
+    {
+      "test": "mechanic_registry::abandoned_outpost_batch::abandoned_outpost_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for ravaged_highlands"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

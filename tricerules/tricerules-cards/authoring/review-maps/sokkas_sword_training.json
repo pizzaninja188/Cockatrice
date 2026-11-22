@@ -1,0 +1,43 @@
+{
+  "format_version": 1,
+  "oracle_id": "19963c90-e7b2-4935-adcd-d41f0faf401a",
+  "spans": [
+    {
+      "face_id": "sokkas_sword_training",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_c::q54_canary_hardest_sokkas_sword_training_pumps_and_makes_a_clue",
+      "covers": "actual Sokka's Sword Training gives +2/+2 and creates one Clue token under the caster"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_c::q54_pump_spell_riders_map_definitions",
+      "covers": "shared registry identity for the three pump-with-rider definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_c::q54_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Sokka's Sword Training"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

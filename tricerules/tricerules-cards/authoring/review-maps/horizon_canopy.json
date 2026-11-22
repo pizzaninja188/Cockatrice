@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "262a5d83-506c-4781-9bc9-1a2b5d83955c",
+  "spans": [
+    {
+      "face_id": "horizon_canopy",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "horizon_canopy",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::PayLife",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/1/costs/2"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario horizon_canopy_cycle_batch::horizon_canopy_cycle_batch_cards_pay_one_life_for_each_printed_color",
+      "covers": "actual horizon_canopy is exercised by the shared horizon_canopy_cycle_batch actual-card scenario"
+    },
+    {
+      "test": "scenario horizon_canopy_cycle_batch::horizon_canopy_cycle_batch_cards_reject_the_life_payment_at_zero_life",
+      "covers": "actual horizon_canopy is exercised by the shared horizon_canopy_cycle_batch actual-card scenario"
+    },
+    {
+      "test": "scenario horizon_canopy_cycle_batch::horizon_canopy_cycle_batch_cards_draw_after_sacrificing_the_source",
+      "covers": "actual horizon_canopy is exercised by the shared horizon_canopy_cycle_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::horizon_canopy_cycle_batch::horizon_canopy_cycle_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of horizon_canopy"
+    },
+    {
+      "test": "mechanic_registry::horizon_canopy_cycle_batch::horizon_canopy_cycle_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for horizon_canopy"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

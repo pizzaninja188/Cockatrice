@@ -1,0 +1,26 @@
+// Oracle a375b739-6a6c-4e07-9b1c-a304f84ea2cc; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 508.3a/603.2c (attack trigger), 115.1 (target) and 701.26 (tap). The defending-player
+// target scope follows the printed wording and the queue-v28 Fiend Binder/Master of Diversion rulings.
+
+(
+  id: "star-crowned_stag",
+  name: "Star-Crowned Stag",
+  face_id: "star_crowned_stag",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Elk"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [Tap(subject: Chosen((kind: Creature, controller: DefendingPlayer)))],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature defending player controls",
+      effect_indices: [0],
+    )])),
+  )],
+)

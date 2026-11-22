@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "3d2b5201-c2bf-4753-89ad-543795740216",
+  "spans": [
+    {
+      "face_id": "ebony_rhino",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario trample_batch::trample_batch_cards_cast_with_exact_printed_characteristics",
+      "covers": "actual ebony_rhino clause coverage"
+    },
+    {
+      "test": "scenario trample_batch::trample_batch_cards_deal_unblocked_combat_damage_to_the_player",
+      "covers": "actual ebony_rhino clause coverage"
+    },
+    {
+      "test": "scenario trample_batch::trample_batch_cards_assign_lethal_and_trample_the_excess",
+      "covers": "actual ebony_rhino clause coverage"
+    },
+    {
+      "test": "mechanic_registry::trample_batch::trample_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of ebony_rhino"
+    },
+    {
+      "test": "mechanic_registry::trample_batch::trample_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for ebony_rhino"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

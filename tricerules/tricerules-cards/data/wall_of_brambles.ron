@@ -1,0 +1,22 @@
+// Oracle f8d82a00-c10e-4b9e-9642-d05706900a97; source/rulings checked 2026-11-15 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.3a (defender), 701.19a/b (regenerate), and 602.1a/602.2
+// (activated ability and cost).
+(
+  id: "wall_of_brambles",
+  name: "Wall of Brambles",
+  face_id: "wall_of_brambles",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Plant", "Wall"],
+  power: 2,
+  toughness: 3,
+  keywords: [Defender],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{G}")],
+      effect: [Regenerate(subject: Source)],
+    ),
+  ],
+)

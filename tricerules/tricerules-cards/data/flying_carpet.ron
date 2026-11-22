@@ -1,0 +1,21 @@
+// Oracle 453524fb-2ffa-421f-883c-b77ae2850c52; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 and 118.3 (mana and tap costs), 115.1 (target creature), 611.2a/514.2
+// (until-end-of-turn grant) and the granted keyword's rule.
+// Copy of the reviewed Iron Lance tap-and-grant shape.
+(
+  id: "flying_carpet",
+  name: "Flying Carpet",
+  face_id: "flying_carpet",
+  mana_cost: "{4}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{2}"), Tap],
+      effect: [GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Flying])],
+      targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+    ),
+  ],
+)

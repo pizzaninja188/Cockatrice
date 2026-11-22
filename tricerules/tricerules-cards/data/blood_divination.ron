@@ -1,0 +1,15 @@
+// Oracle c1cf9d74-e700-456a-9e5a-1c4df22db268; source/rulings checked 2026-11-16 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 118.8 and 601.2f-h (sacrifice is an additional cost paid before casting),
+// 701.21 (sacrifice) and 121.1 (draw). Copy of the reviewed Village Rites shape.
+(
+  id: "blood_divination",
+  name: "Blood Divination",
+  face_id: "blood_divination",
+  mana_cost: "{3}{B}",
+  additional_costs: [
+    SacrificePermanent(filter: (kind: Creature, controller: You)),
+  ],
+  types: ["Sorcery"],
+  spell_effect: [Draw(count: 3)],
+)

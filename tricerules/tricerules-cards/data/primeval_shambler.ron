@@ -1,0 +1,20 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 7a2722c6-04a0-4790-be45-dafb7832bb41.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 602.1a/602.2: activated ability and cost; CR 611.2a/514.2: pump until end of turn.
+(
+  id: "primeval_shambler",
+  name: "Primeval Shambler",
+  face_id: "primeval_shambler",
+  mana_cost: "{4}{B}",
+  types: ["Creature", "Horror", "Mercenary"],
+  power: 3,
+  toughness: 3,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{B}")],
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    ),
+  ],
+)

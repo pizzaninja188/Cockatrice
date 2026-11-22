@@ -1,0 +1,63 @@
+{
+  "format_version": 1,
+  "oracle_id": "f0748ff2-94b1-45a9-8d56-8459bd86704a",
+  "spans": [
+    {
+      "face_id": "storm_strike",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/spell_effect/2"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario first_strike_scry_batch::first_strike_scry_batch_cards_pump_grant_first_strike_and_park_the_scry_choice",
+      "covers": "actual storm_strike pumps, grants first strike and parks a one-card scry choice"
+    },
+    {
+      "test": "scenario first_strike_scry_batch::first_strike_scry_batch_cards_deal_first_strike_damage_before_the_regular_step",
+      "covers": "actual storm_strike deals combat damage in the first-strike step"
+    },
+    {
+      "test": "scenario first_strike_scry_batch::first_strike_scry_batch_cards_expire_the_pump_and_grant_at_cleanup",
+      "covers": "actual storm_strike ends the pump and first strike at cleanup"
+    },
+    {
+      "test": "scenario first_strike_scry_batch::first_strike_scry_batch_cards_fizzle_a_stale_target_without_scrying",
+      "covers": "actual storm_strike does not scry when the only target is illegal"
+    },
+    {
+      "test": "mechanic_registry::first_strike_scry_batch::first_strike_scry_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of storm_strike"
+    },
+    {
+      "test": "mechanic_registry::first_strike_scry_batch::first_strike_scry_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for storm_strike"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

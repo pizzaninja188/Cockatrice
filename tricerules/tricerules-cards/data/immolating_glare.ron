@@ -1,0 +1,16 @@
+// Oracle 046b6989-5b56-4b52-a655-109b1eb26a93; source/rulings checked 2026-11-14.
+// CR 115.1a and 601.2c (target at cast), 608.2b (stale target),
+// 701.8 (destroy), and 508.1k (attacking creature).
+(
+  id: "immolating_glare",
+  name: "Immolating Glare",
+  face_id: "immolating_glare",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  spell_effect: [Destroy(subject: Chosen((kind: Creature, combat_role: Attacking)))],
+  targeting: Some((groups: [(
+    min: 1, max: 1,
+    prompt: "Choose target attacking creature",
+    effect_indices: [0],
+  )])),
+)

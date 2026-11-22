@@ -1,0 +1,27 @@
+// Oracle 6c14ecbf-0097-4fd8-97a3-a32b532c21e0; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters trigger), 701.9 (discard) and 101.4/APNAP (each player's hidden
+// choice); Earsplitting Rats also uses 701.19 (regenerate). No pinned ruling changes
+// the printed behavior.
+(
+  id: "earsplitting_rats",
+  name: "Earsplitting Rats",
+  face_id: "earsplitting_rats",
+  mana_cost: "{3}{B}",
+  types: ["Creature", "Rat"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Discard(who: EachPlayer, quantity: Exact(1))],
+  )],
+
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Discard],
+    effect: [Regenerate(subject: Source)],
+  )],
+)

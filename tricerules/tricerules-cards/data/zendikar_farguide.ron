@@ -1,0 +1,12 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 01ab37a4-21d2-49f4-9b85-cb522a4d04ad.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "zendikar_farguide",
+  name: "Zendikar Farguide",
+  face_id: "zendikar_farguide",
+  mana_cost: "{4}{G}",
+  types: ["Creature", "Elemental"],
+  power: 3,
+  toughness: 3,
+  evasions: [Landwalk(land_subtype: "Forest")],
+)

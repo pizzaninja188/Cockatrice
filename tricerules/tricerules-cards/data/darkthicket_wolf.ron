@@ -1,0 +1,21 @@
+// Oracle a78ab15e-72e7-4d2b-bc42-b2960147ea7b; source/rulings checked 2026-11-13.
+// CR 602.1a/602.2 (activation and printed cost), 602.5b (once each turn), 611.2c/613.4c
+// (pump), and 514.2 (cleanup); the printed limit is activation_limit.
+(
+  id: "darkthicket_wolf",
+  name: "Darkthicket Wolf",
+  face_id: "darkthicket_wolf",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Wolf"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{2}{G}")],
+      effect: [PumpTarget(power: 2, toughness: 2, subject: Source)],
+      activation_limit: Some(PerTurn(max_activations: 1)),
+    ),
+  ],
+)

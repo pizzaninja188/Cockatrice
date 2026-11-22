@@ -1,0 +1,16 @@
+// Oracle e5f04e8a-e9ae-4f00-8ada-f63b3454ed30; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.16b-f (protection's five effects: no targeting, Aura/Equipment attachment,
+// damage, blocking, or Fortify) and the printed keyword's normal rules. CR 702.8 (flash). Pinned ruling: the card is always a creature spell,
+// never an instant spell, no matter when it is cast.
+(
+  id: "defender_of_chaos",
+  name: "Defender of Chaos",
+  face_id: "defender_of_chaos",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Human", "Knight"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flash],
+  protections: [Color(White)],
+)

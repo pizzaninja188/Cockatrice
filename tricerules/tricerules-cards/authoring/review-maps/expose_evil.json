@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "b5483037-5dd2-4282-a201-de2e08aaa76e",
+  "spans": [
+    {
+      "face_id": "expose_evil",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_b::q55_b_expose_evil_investigates_with_or_without_targets",
+      "covers": "actual Expose Evil creates a Clue with zero targets and not when its only target is illegal"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_b::q55_b_tap_two_riders_map_definitions",
+      "covers": "shared registry identity for the tap-two-with-rider spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_b::q55_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Expose Evil"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

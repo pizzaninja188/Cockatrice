@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "ca5ca2c9-2ddd-4e70-b738-8de61aa82570",
+  "spans": [
+    {
+      "face_id": "opaline_unicorn",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario any_color_mana_batch::any_color_mana_batch_cards_cast_and_apply_summoning_sickness",
+      "covers": "actual opaline_unicorn casts normally and a creature source obeys summoning sickness"
+    },
+    {
+      "test": "scenario any_color_mana_batch::any_color_mana_batch_cards_offer_all_five_colors",
+      "covers": "actual opaline_unicorn offers exactly five single-color outputs and taps as its cost"
+    },
+    {
+      "test": "mechanic_registry::any_color_mana_batch::any_color_mana_batch_maps_definitions",
+      "covers": "reviewed identity, tap cost and five-color mana options of opaline_unicorn"
+    },
+    {
+      "test": "mechanic_registry::any_color_mana_batch::any_color_mana_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for opaline_unicorn"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

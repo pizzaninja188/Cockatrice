@@ -1,0 +1,22 @@
+// Oracle dbd86a37-8ac1-4bdb-9ba1-7caee99ab5f7; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying) and 509.1b (blocking restrictions); reach does not
+// make a creature a legal blocker for this restriction.
+(
+  id: "stronghold_zeppelin",
+  name: "Stronghold Zeppelin",
+  face_id: "stronghold_zeppelin",
+  mana_cost: "{2}{U}{U}",
+  types: ["Creature", "Human"],
+  power: 3,
+  toughness: 3,
+  keywords: [Flying],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: SelfCombatRestriction(restriction: (
+        cant_block_creatures_matching: [(kind: Creature, excluded_keywords: [Flying])],
+      )),
+    ),
+  ],
+)

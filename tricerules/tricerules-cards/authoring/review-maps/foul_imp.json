@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "25c04be3-f2e0-4f45-a1ca-9e75ffffa9b5",
+  "spans": [
+    {
+      "face_id": "foul_imp",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "foul_imp",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "LifeAmount::Fixed",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/LoseLife/amount"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_lose_life_flyers_batch::etb_lose_life_flyers_batch_cards_lose_the_printed_life_and_have_flying",
+      "covers": "actual foul_imp is exercised by the shared etb_lose_life_flyers_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_lose_life_flyers_batch::etb_lose_life_flyers_batch_cards_scope_the_loss_to_their_controller",
+      "covers": "actual foul_imp is exercised by the shared etb_lose_life_flyers_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_lose_life_flyers_batch::etb_lose_life_flyers_batch_cards_lose_the_game_at_exactly_the_printed_life",
+      "covers": "actual foul_imp is exercised by the shared etb_lose_life_flyers_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_lose_life_flyers_batch::foul_imp_can_be_cast_below_its_entry_life_loss",
+      "covers": "actual foul_imp is exercised by the shared etb_lose_life_flyers_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::etb_lose_life_flyers_batch::etb_lose_life_flyers_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of foul_imp"
+    },
+    {
+      "test": "mechanic_registry::etb_lose_life_flyers_batch::etb_lose_life_flyers_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for foul_imp"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

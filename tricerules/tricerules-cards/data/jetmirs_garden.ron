@@ -1,0 +1,29 @@
+// Oracle f5896356-5744-4f7e-a4e5-1cc36dde5958; source/rulings checked 2026-11-10.
+// CR 305.6 (basic land type mana abilities), CR 614.1c (enters tapped), and CR 702.29a (Cycling).
+(
+  id: "jetmirs_garden",
+  name: "Jetmir's Garden",
+  face_id: "jetmirs_garden",
+  mana_cost: "",
+  types: ["Land", "Mountain", "Forest", "Plains"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]), intrinsic_land_mana: true,
+      costs: [Tap],
+      effect: [ProduceMana(options: [(r: 1), (g: 1), (w: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
+      source_zone: Hand,
+      costs: [Mana("{3}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+  static_abilities: [(
+    ability_id: "enters_tapped",
+    presentation: OracleLines([2]),
+    definition: EntersTapped(affected: Self_),
+  )],
+)

@@ -1,0 +1,19 @@
+// Oracle b723fcec-f208-4397-a178-e1e47b729cf1; source/rulings checked 2026-11-13.
+// CR 509.1b (a declaration of blockers is illegal when a blocking restriction
+// is disobeyed); the restriction is source-only and unconditional.
+(
+  id: "metathran_soldier",
+  name: "Metathran Soldier",
+  face_id: "metathran_soldier",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Metathran", "Soldier"],
+  power: 1,
+  toughness: 1,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: SelfCombatRestriction(restriction: (cant_be_blocked: true)),
+    ),
+  ],
+)

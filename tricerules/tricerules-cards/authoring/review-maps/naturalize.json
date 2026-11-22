@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "bdb3ca68-ec1f-4e16-81cc-d23f8f52c728",
+  "spans": [
+    {
+      "face_id": "naturalize",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q50_cohorts_batch::q50_destroy_canary_simplest_naturalize_destroys_an_artifact",
+      "covers": "canary simplest destroys an artifact"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_destroy_cards_accept_only_their_printed_target_types",
+      "covers": "actual card accepts only its printed target types"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_destroy_cards_fizzle_when_the_target_already_left",
+      "covers": "actual card fizzles when its target already left"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_destroy_maps_definitions",
+      "covers": "reviewed destroy spell identity and target filter"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Naturalize"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

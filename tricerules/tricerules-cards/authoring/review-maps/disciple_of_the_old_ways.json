@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "d19d69c5-9f11-4ac1-9fc7-1636689f23a0",
+  "spans": [
+    {
+      "face_id": "disciple_of_the_old_ways",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q34_self_first_strike_batch::q34_self_first_strike_canary_simplest",
+      "covers": "actual card is exercised by the shared 06-self-first-strike scenario"
+    },
+    {
+      "test": "scenario q34_self_first_strike_batch::q34_self_first_strike_canary_hardest",
+      "covers": "actual card is exercised by the shared 06-self-first-strike scenario"
+    },
+    {
+      "test": "scenario q34_self_first_strike_batch::q34_self_first_strike_cards_grant_the_printed_keyword_to_the_source_only",
+      "covers": "actual card is exercised by the shared 06-self-first-strike scenario"
+    },
+    {
+      "test": "scenario q34_self_first_strike_batch::q34_self_first_strike_cards_reject_foreign_controllers",
+      "covers": "actual card is exercised by the shared 06-self-first-strike scenario"
+    },
+    {
+      "test": "mechanic_registry::q34_self_first_strike_batch::q34_self_first_strike_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q34_self_first_strike_batch::q34_self_first_strike_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

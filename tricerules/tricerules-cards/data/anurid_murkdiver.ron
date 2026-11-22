@@ -1,0 +1,12 @@
+// Oracle e7dc3d8b-2c79-463d-b862-9f01ccea05fd; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "anurid_murkdiver",
+  name: "Anurid Murkdiver",
+  face_id: "anurid_murkdiver",
+  mana_cost: "{4}{B}{B}",
+  types: ["Creature", "Zombie", "Frog", "Beast"],
+  power: 4,
+  toughness: 3,
+  evasions: [Landwalk(land_subtype: "Swamp")],
+)

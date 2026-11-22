@@ -1,0 +1,12 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle cee3d8e5-f26f-4f47-8a7b-9ac07ebf9025.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "cat_warriors",
+  name: "Cat Warriors",
+  face_id: "cat_warriors",
+  mana_cost: "{1}{G}{G}",
+  types: ["Creature", "Cat", "Warrior"],
+  power: 2,
+  toughness: 2,
+  evasions: [Landwalk(land_subtype: "Forest")],
+)

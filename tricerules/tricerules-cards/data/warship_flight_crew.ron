@@ -1,0 +1,12 @@
+// Oracle d55977f8-1655-4d97-adbf-ef6cb979ea55; source/rulings checked 2026-11-15.
+// CR 109.3, 202.1, and 205.1-2: no rules text; the printed mana cost, type
+// line, power and toughness are the complete card.
+(
+  id: "warship_flight_crew",
+  name: "Warship Flight Crew",
+  face_id: "warship_flight_crew",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Klingon", "Pilot"],
+  power: 2,
+  toughness: 2,
+)

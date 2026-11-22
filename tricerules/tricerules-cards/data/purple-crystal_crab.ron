@@ -1,0 +1,17 @@
+// Oracle df4569d7-ee75-4ba0-bbc3-7766ac686523; source/rulings checked 2026-11-13.
+// CR 603.6c and 700.4 (dies trigger).
+(
+  id: "purple-crystal_crab",
+  name: "Purple-Crystal Crab",
+  face_id: "purple_crystal_crab",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Crab"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfDies,
+    effect: [Draw(count: 1)],
+  )],
+)

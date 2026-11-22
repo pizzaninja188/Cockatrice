@@ -1,0 +1,19 @@
+// Oracle da1ca3ec-8bef-4b7e-896e-4d50e8cffbe5; source/rulings checked 2026-11-15.
+// CR 702.8a (Flash), 303.4a (Aura target and attach), 613.4c
+// (layer-7c attached P/T modifier) and 704.5m (unattached Aura cleanup).
+(
+  id: "torpor_dust",
+  name: "Torpor Dust",
+  face_id: "torpor_dust",
+  mana_cost: "{2}{U/B}",
+  types: ["Enchantment", "Aura"],
+  keywords: [Flash],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([3]),
+      definition: AttachedModifier(delta_power: -3, delta_toughness: 0),
+    ),
+  ],
+)

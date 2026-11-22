@@ -1,0 +1,42 @@
+// Oracle ff16f889-9203-4874-919b-42e540cadcbc; source/rulings checked 2026-11-16 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (entry trigger), 701.23 (optional basic-land search; a filtered search may
+// fail to find) and 701.24 (shuffle). Copy of the reviewed Larval Scoutlander program.
+(
+  id: "wild_wanderer",
+  name: "Wild Wanderer",
+  face_id: "wild_wanderer",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Elf", "Druid"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      program: Some((
+        body: (steps: [
+          (id: "search_choice", kind: Choose(
+            choice: "search",
+            chooser: Controller,
+            optional: true,
+            branches: [(
+              branch_id: "search_for_a_basic_land",
+              presentation: Fallback,
+              cost: None,
+              body: (steps: [
+                (id: "search", kind: Perform(SearchLibrary(
+                  filter: Some((card_type: Some(BasicLand))),
+                  destination: Battlefield(tapped: true),
+                  selection_bounds: Some((min: 0, max: 1)),
+                )))
+              ]),
+            )],
+            otherwise: (),
+          )),
+        ]),
+      )),
+    ),
+  ],
+)

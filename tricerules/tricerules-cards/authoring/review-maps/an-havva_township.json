@@ -1,0 +1,84 @@
+{
+  "format_version": 1,
+  "oracle_id": "40ae17be-9998-4ee4-9d95-82a08895405f",
+  "spans": [
+    {
+      "face_id": "an_havva_township",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "an_havva_township",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    },
+    {
+      "face_id": "an_havva_township",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/2/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q32_elder_lands_batch::q32_elder_lands_canary_simplest",
+      "covers": "actual an_havva_township is exercised by the shared 03-elder-lands actual-card scenario"
+    },
+    {
+      "test": "scenario q32_elder_lands_batch::q32_elder_lands_canary_hardest",
+      "covers": "actual an_havva_township is exercised by the shared 03-elder-lands actual-card scenario"
+    },
+    {
+      "test": "scenario q32_elder_lands_batch::q32_elder_lands_cards_offer_each_printed_mana_ability",
+      "covers": "actual an_havva_township is exercised by the shared 03-elder-lands actual-card scenario"
+    },
+    {
+      "test": "scenario q32_elder_lands_batch::q32_elder_lands_cards_require_the_printed_mana_and_reject_foreign_controllers",
+      "covers": "actual an_havva_township is exercised by the shared 03-elder-lands actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::q32_elder_lands_batch::q32_elder_lands_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and pinned Oracle fingerprint of an_havva_township"
+    },
+    {
+      "test": "mechanic_registry::q32_elder_lands_batch::q32_elder_lands_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "reviewed identity, typed shape and pinned Oracle fingerprint of an_havva_township"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

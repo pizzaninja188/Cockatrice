@@ -1,0 +1,19 @@
+// Oracle d36e0c9f-c025-4dfe-9644-9cad2461ce38; source/rulings checked 2026-11-13.
+// CR 605.1a/605.3a-b (mana ability and immediate resolution) and 118.3 (tap cost).
+(
+  id: "gruul_signet",
+  name: "Gruul Signet",
+  face_id: "gruul_signet",
+  mana_cost: "{2}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{1}"), Tap],
+      effect: [ProduceMana(options: [
+        (r: 1, g: 1),
+      ])],
+    ),
+  ],
+)

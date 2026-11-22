@@ -1,0 +1,26 @@
+// Oracle a1bdea9f-56d0-411a-9da8-601dd6dc6d32; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 605.1a/605.3b (mana abilities), 118.3 and 701.21a (sacrifice cost) and 107.4 (colored mana).
+// Pinned ruling: the sacrifice ability can be activated while this artifact is tapped.
+
+(
+  id: "eye_of_ramos",
+  name: "Eye of Ramos",
+  face_id: "eye_of_ramos",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "mana_tap",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(u: 1)])],
+    ),
+    (
+      ability_id: "mana_sacrifice",
+      presentation: OracleLines([2]),
+      costs: [SacrificeSelf],
+      effect: [ProduceMana(options: [(u: 1)])],
+    ),
+  ],
+)

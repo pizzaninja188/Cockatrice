@@ -1,0 +1,12 @@
+// Oracle 7aa31280-12c3-479d-a6dd-f1c669043083; source/rulings checked 2026-11-15.
+// CR 115.1a/601.2c (target at cast), 120.3 (damage), 702.34a-d
+// (flashback alternative cost and exile) and 608.2b (stale target).
+(
+  id: "firebolt",
+  name: "Firebolt",
+  face_id: "firebolt",
+  mana_cost: "{R}",
+  types: ["Sorcery"],
+  flashback_cost: Some("{4}{R}"),
+  spell_effect: [DamageTarget(amount: 2, target: (kind: AnyTarget))],
+)

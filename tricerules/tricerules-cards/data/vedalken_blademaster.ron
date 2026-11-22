@@ -1,0 +1,19 @@
+// Oracle 7a8405f5-ef37-460e-8e0b-55378f3b407b; source/rulings checked 2026-11-12.
+// CR 702.108a-b (Prowess) and 514.2 (the pump ends at cleanup).
+(
+  id: "vedalken_blademaster",
+  name: "Vedalken Blademaster",
+  face_id: "vedalken_blademaster",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Vedalken", "Soldier"],
+  power: 2,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Noncreature))),
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    ),
+  ],
+)

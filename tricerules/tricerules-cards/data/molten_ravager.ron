@@ -1,0 +1,20 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 697c851d-8475-479e-8783-cebdbe9a892d.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 602.1a/602.2: activated ability and cost; CR 611.2a/514.2: pump until end of turn.
+(
+  id: "molten_ravager",
+  name: "Molten Ravager",
+  face_id: "molten_ravager",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Elemental"],
+  power: 0,
+  toughness: 4,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{R}")],
+      effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
+    ),
+  ],
+)

@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "c9722086-23e8-43dc-8a8c-541ff6962318",
+  "spans": [
+    {
+      "face_id": "enthusiastic_mechanaut",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "enthusiastic_mechanaut",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::SpellGenericReduction",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q33_cost_reduction_batch::q33_cost_reduction_cards_reduce_only_their_printed_filter",
+      "covers": "actual card is exercised by the shared 06-cost-reduction all-card scenario"
+    },
+    {
+      "test": "mechanic_registry::q33_cost_reduction_batch::q33_cost_reduction_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q33_cost_reduction_batch::q33_cost_reduction_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

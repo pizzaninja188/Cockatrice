@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "5c0c3f08-4f65-4b04-8bfc-1532160f3e28",
+  "spans": [
+    {
+      "face_id": "hornet_harasser",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q34_death_shrink_batch::q34_death_shrink_canary_simplest",
+      "covers": "actual card is exercised by the shared 04-death-shrink scenario"
+    },
+    {
+      "test": "scenario q34_death_shrink_batch::q34_death_shrink_canary_hardest",
+      "covers": "actual card is exercised by the shared 04-death-shrink scenario"
+    },
+    {
+      "test": "scenario q34_death_shrink_batch::q34_death_shrink_cards_apply_their_printed_shrink_to_any_creature",
+      "covers": "actual card is exercised by the shared 04-death-shrink scenario"
+    },
+    {
+      "test": "scenario q34_death_shrink_batch::q34_death_shrink_cards_reject_noncreature_targets",
+      "covers": "actual card is exercised by the shared 04-death-shrink scenario"
+    },
+    {
+      "test": "scenario q34_death_shrink_batch::q34_death_shrink_cards_do_not_trigger_on_exile",
+      "covers": "actual card is exercised by the shared 04-death-shrink scenario"
+    },
+    {
+      "test": "mechanic_registry::q34_death_shrink_batch::q34_death_shrink_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q34_death_shrink_batch::q34_death_shrink_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,40 @@
+// Oracle db659cae-2078-423e-a6ed-63898dbab87f; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 305.6/605.1a (land mana ability), 602.1/118.3 (activation costs), 701.23b/e
+// (hidden-zone search), 701.24a (shuffle), 614.1c (found land enters tapped) and 702.29a (cycling).
+// Combines the reviewed Warped Landscape search and Sheltered Thicket cycling shapes.
+(
+  id: "twisted_landscape",
+  name: "Twisted Landscape",
+  face_id: "twisted_landscape",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Tap, SacrificeSelf],
+      effect: [SearchLibrary(
+        filter: Some((any_of: Some([
+        (card_type: Some(BasicLand), required_subtypes: ["Swamp"]),
+        (card_type: Some(BasicLand), required_subtypes: ["Mountain"]),
+        (card_type: Some(BasicLand), required_subtypes: ["Forest"]),
+      ]))),
+        destination: Battlefield(tapped: true),
+      )],
+    ),
+    (
+      ability_id: "activated_03",
+      presentation: OracleLines([3]),
+      source_zone: Hand,
+      costs: [Mana("{B}{R}{G}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

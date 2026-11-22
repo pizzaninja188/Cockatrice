@@ -1,0 +1,36 @@
+// Oracle 03332772-18b0-446a-a7e2-a4bdf38c4f0c; source/rulings checked 2026-11-13.
+// CR 603.6d and 614.1d/614.12 (enters tapped), 603.6a (entry trigger), 119.3 (life gain),
+// and 605.1a/605.3b (mana ability).
+(
+  id: "kazandu_refuge",
+  name: "Kazandu Refuge",
+  face_id: "kazandu_refuge",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([3]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [
+        (r: 1),
+        (g: 1),
+      ])],
+    ),
+  ],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [GainLife(amount: 1)],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: EntersTapped(affected: Self_),
+    ),
+  ],
+)

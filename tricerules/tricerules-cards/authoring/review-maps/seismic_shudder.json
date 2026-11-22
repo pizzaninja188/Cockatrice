@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "10c0f705-4c23-4761-afa9-4a29cf90e8ae",
+  "spans": [
+    {
+      "face_id": "seismic_shudder",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q47_cohorts_batch::q47_sweeper_canary_simplest_damages_every_creature",
+      "covers": "canary simplest actual card damages every creature"
+    },
+    {
+      "test": "scenario q47_cohorts_batch::q47_sweeper_canary_hardest_excludes_flyers",
+      "covers": "canary hardest excludes creatures with flying"
+    },
+    {
+      "test": "scenario q47_cohorts_batch::q47_sweeper_canary_hardest_cycles_sweltering_suns",
+      "covers": "canary hardest cycles Sweltering Suns for one card"
+    },
+    {
+      "test": "scenario q47_cohorts_batch::q47_sweeper_cards_apply_the_printed_amount_and_filter",
+      "covers": "every actual card applies its printed amount and flying filter"
+    },
+    {
+      "test": "mechanic_registry::q47_cohorts_batch::q47_sweeper_damage_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q47_cohorts_batch::q47_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

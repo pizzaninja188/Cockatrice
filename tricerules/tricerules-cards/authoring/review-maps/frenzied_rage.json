@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "1a04c31c-f5e4-43ff-a5b5-207426b8dca6",
+  "spans": [
+    {
+      "face_id": "frenzied_rage",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "frenzied_rage",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario aura_menace_batch::aura_menace_batch_cards_attach_and_apply_the_printed_pump_and_menace",
+      "covers": "actual frenzied_rage attaches and applies the printed P/T pump and menace"
+    },
+    {
+      "test": "scenario aura_menace_batch::aura_menace_batch_cards_require_two_blockers_because_of_menace",
+      "covers": "actual frenzied_rage requires two blockers while enchanted"
+    },
+    {
+      "test": "scenario aura_menace_batch::aura_menace_batch_cards_remove_the_pump_and_menace_when_the_aura_leaves",
+      "covers": "actual frenzied_rage removes the pump and menace when the Aura leaves"
+    },
+    {
+      "test": "scenario aura_menace_batch::aura_menace_batch_cards_reject_a_noncreature_target_and_fizzle_a_stale_target",
+      "covers": "actual frenzied_rage rejects a noncreature target and fizzles a stale creature target"
+    },
+    {
+      "test": "mechanic_registry::aura_menace_batch::aura_menace_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of frenzied_rage"
+    },
+    {
+      "test": "mechanic_registry::aura_menace_batch::aura_menace_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for frenzied_rage"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

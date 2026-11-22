@@ -1,0 +1,50 @@
+{
+  "format_version": 1,
+  "oracle_id": "e4912bc3-bee9-4a2f-a13e-3a99018f8a65",
+  "spans": [
+    {
+      "face_id": "drown_in_ichor",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::Proliferate",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_b::q56_b_shrink_riders_apply_their_printed_values",
+      "covers": "actual drown_in_ichor applies its printed effects"
+    },
+    {
+      "test": "scenario q56_batch_b::q56_b_drown_in_ichor_proliferates_a_chosen_counter_bearing_permanent",
+      "covers": "actual Drown in Ichor shrinks then adds one counter of each kind to the chosen recipient"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_b::q56_b_shrink_rider_map_definitions",
+      "covers": "shared registry identity for drown_in_ichor"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_b::q56_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for drown_in_ichor"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

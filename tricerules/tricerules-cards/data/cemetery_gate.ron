@@ -1,0 +1,15 @@
+// Oracle 443f8dd1-333d-42c4-a286-302a9496209a; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.16b-f (protection's five effects), 702.9a-b (flying), 702.3 (defender) and 702.29a (cycling).
+
+(
+  id: "cemetery_gate",
+  name: "Cemetery Gate",
+  face_id: "cemetery_gate",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Wall"],
+  power: 0,
+  toughness: 5,
+  keywords: [Defender],
+  protections: [Color(Black)],
+)

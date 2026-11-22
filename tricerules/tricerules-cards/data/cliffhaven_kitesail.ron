@@ -1,0 +1,41 @@
+// Oracle 68fb8f21-4403-4829-8826-f2418664197e; source/rulings checked 2026-11-21 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 301.5/702.6 (Equipment and equip), 603.6a (entry trigger), 701.3 (attach), 613.1f/613.4c
+// (attached keyword) and 608.2b (illegal entry target). Pinned rulings: the entry trigger is not
+// the equip ability, and an illegal target leaves the Equipment unattached.
+// Copy of the reviewed Dueling Rapier shape with Cobbled Wings' flying modifier.
+(
+  id: "cliffhaven_kitesail",
+  name: "Cliffhaven Kitesail",
+  face_id: "cliffhaven_kitesail",
+  mana_cost: "{1}",
+  types: ["Artifact", "Equipment"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([3]),
+      costs: [Mana("{2}")],
+      effect: [Equip()],
+    ),
+  ],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [AttachSource(target: (kind: Creature, controller: You))],
+      targeting: Some(
+        (
+          groups: [(min: 1, max: 1, effect_indices: [0])],
+        ),
+      ),
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(delta_power: 0, keywords: [Flying]),
+    ),
+  ],
+)

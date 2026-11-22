@@ -1,0 +1,15 @@
+// Oracle 7756d2b9-7b10-4d05-8ad3-8d8f39c1eb23; source/rulings checked 2026-11-12.
+// CR 115.1 (one creature you control), 611.2a/514.2 (until-end-of-turn duration),
+// 613.1f (layer 6 hexproof grant) and 613.4c (layer 7c pump).
+(
+  id: "woodcutters_grit",
+  name: "Woodcutter's Grit",
+  face_id: "woodcutters_grit",
+  mana_cost: "{2}{G}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 3, toughness: 3, subject: Chosen((kind: Creature, controller: You))),
+    GrantKeywords(subject: Chosen((kind: Creature, controller: You)), keywords: [Hexproof]),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0, 1])])),
+)

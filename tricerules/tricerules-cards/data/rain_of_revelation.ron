@@ -1,0 +1,19 @@
+// Oracle 7d5dfa6b-f685-4925-b93a-ae5815a3c0a7; source/rulings checked 2026-11-13.
+// CR 121 (draw) and 701.9 (discard), applied in printed order.
+(
+  id: "rain_of_revelation",
+  name: "Rain of Revelation",
+  face_id: "rain_of_revelation",
+  mana_cost: "{3}{U}",
+  types: ["Instant"],
+  spell_program: Some(
+    (
+      body: (
+        steps: [
+          (id: "draw_cards", kind: Perform(Draw(count: 3))),
+          (id: "discard_cards", kind: Perform(Discard(quantity: Exact(1)))),
+        ],
+      ),
+    ),
+  ),
+)

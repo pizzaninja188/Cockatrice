@@ -1,0 +1,21 @@
+// Oracle 651a1f3d-d6f0-4a38-a776-bceba698127b; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.2/115.9b (heroic triggers on a cast spell with this creature as a target),
+// 603.2c (one trigger per spell) and 122.1 (the printed +1/+1 counters).
+(
+  id: "pheres-band_thunderhoof",
+  name: "Pheres-Band Thunderhoof",
+  face_id: "pheres_band_thunderhoof",
+  mana_cost: "{4}{G}",
+  types: ["Creature", "Centaur", "Warrior"],
+  power: 3,
+  toughness: 4,
+  triggered_abilities: [
+    (
+      ability_id: "heroic",
+      presentation: OracleLines([1]),
+      trigger: WheneverSelfBecomesTarget(source: SpellCast, source_controller: Controller),
+      effect: [PutCounters(counter: PlusOnePlusOne, count: 2, subject: Source)],
+    ),
+  ],
+)

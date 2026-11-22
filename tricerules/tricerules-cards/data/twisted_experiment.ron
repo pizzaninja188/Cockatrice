@@ -1,0 +1,20 @@
+// Oracle 4066d4df-d98f-44cd-bf25-ebb5e9d9ddeb; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 303.4a (Aura target and attach), 613.4c (layer-7c modifier) and 704.5m (unattached Aura cleanup).
+// The card has no pinned ruling.
+
+(
+  id: "twisted_experiment",
+  name: "Twisted Experiment",
+  face_id: "twisted_experiment",
+  mana_cost: "{1}{B}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "attached_modifier",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(delta_power: 3, delta_toughness: -1),
+    ),
+  ],
+)

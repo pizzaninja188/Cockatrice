@@ -1,0 +1,30 @@
+// Oracle 14d2979d-5728-42d7-a027-0eb1f754655d; source/rulings checked 2026-11-13.
+// CR 605.1a/605.3a-b (mana abilities and immediate resolution), 120.3a (damage to a
+// player), and 118.3 (tap cost must be payable).
+(
+  id: "talisman_of_creativity",
+  name: "Talisman of Creativity",
+  face_id: "talisman_of_creativity",
+  mana_cost: "{2}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [
+        ProduceMana(options: [
+          (u: 1),
+          (r: 1),
+        ]),
+        DamagePlayer(amount: 1),
+      ],
+    ),
+  ],
+)

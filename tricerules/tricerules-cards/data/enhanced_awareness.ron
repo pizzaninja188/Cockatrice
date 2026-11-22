@@ -1,0 +1,19 @@
+// Oracle 397964db-465a-407d-9dc7-d0a4944473ac; source/rulings checked 2026-11-13.
+// CR 121 (draw) and 701.9 (discard), applied in printed order.
+(
+  id: "enhanced_awareness",
+  name: "Enhanced Awareness",
+  face_id: "enhanced_awareness",
+  mana_cost: "{4}{U}",
+  types: ["Instant"],
+  spell_program: Some(
+    (
+      body: (
+        steps: [
+          (id: "draw_cards", kind: Perform(Draw(count: 3))),
+          (id: "discard_cards", kind: Perform(Discard(quantity: Exact(1)))),
+        ],
+      ),
+    ),
+  ),
+)

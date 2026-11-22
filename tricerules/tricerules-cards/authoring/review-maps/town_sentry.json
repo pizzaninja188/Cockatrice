@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "ec1ac4df-b031-43b4-a2de-ca58a1599053",
+  "spans": [
+    {
+      "face_id": "town_sentry",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfBlocksCreature",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario blocks_pump_batch::blocks_pump_batch_cards_pump_when_blocking_every_printed_card",
+      "covers": "actual town_sentry is exercised by the shared blocks_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario blocks_pump_batch::blocks_pump_batch_cards_do_not_pump_when_attacking_and_blocked",
+      "covers": "actual town_sentry is exercised by the shared blocks_pump_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::blocks_pump_batch::blocks_pump_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of town_sentry"
+    },
+    {
+      "test": "mechanic_registry::blocks_pump_batch::blocks_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for town_sentry"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

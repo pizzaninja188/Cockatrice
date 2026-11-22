@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "cf459f47-e565-4bbb-89e4-ed54da8adae1",
+  "spans": [
+    {
+      "face_id": "zhalfirin_shapecraft",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::SetBasePowerToughness",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q53_batch_a::q53_base_power_toughness_cards_apply_their_printed_values",
+      "covers": "actual zhalfirin_shapecraft printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_a::q53_base_power_toughness_cards_map_definitions",
+      "covers": "actual zhalfirin_shapecraft printed behavior and shape"
+    },
+    {
+      "test": "scenario q53_batch_a::q53_canary_hardest_zhalfirin_shapecraft_sets_four_three_and_draws",
+      "covers": "actual zhalfirin_shapecraft printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_a::q53_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

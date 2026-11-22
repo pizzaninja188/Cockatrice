@@ -1,0 +1,23 @@
+// Oracle 498c10c9-253d-4b15-b48c-1509381b17e8; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 601.2b/601.2f (additional cost), 701.16 (discard), 121 (draw), 111/701.6
+// (Treasure tokens) and 608.2c (printed order).
+(
+  id: "unexpected_windfall",
+  name: "Unexpected Windfall",
+  face_id: "unexpected_windfall",
+  mana_cost: "{2}{R}{R}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    group_id: "additional_cost",
+    presentation: OracleLines([1]),
+    min: 1,
+    options: [
+      DiscardCard(option_id: "discard_card", presentation: OracleLines([1])),
+    ],
+  )],
+  spell_effect: [
+    Draw(count: 2),
+    CreateTokens(token: "treasure", count: 2),
+  ],
+)

@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 7b094a2b-2b69-4a9b-9829-c1aabc53f75e.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "solidarity",
+  name: "Solidarity",
+  face_id: "solidarity",
+  mana_cost: "{3}{W}",
+  types: ["Instant"],
+  spell_effect: [PumpAll(filter: (controller: YouControl), power: 0, toughness: 5)],
+)

@@ -1,0 +1,81 @@
+{
+  "format_version": 1,
+  "oracle_id": "cfdae813-7241-4f6c-99f0-c772af34af91",
+  "spans": [
+    {
+      "face_id": "spell_snip",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "spell_snip",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "AbilitySourceZone::Hand",
+      "typed_path": "/faces/0/activated_abilities/0/source_zone"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario soft_counter_cycling_batch::soft_counter_cycling_batch_cards_counter_unless_controller_pays",
+      "covers": "actual spell_snip is exercised by the shared soft_counter_cycling_batch actual-card scenario: the exact optional payment counter path"
+    },
+    {
+      "test": "scenario soft_counter_cycling_batch::soft_counter_cycling_batch_cards_counter_when_controller_declines",
+      "covers": "actual spell_snip is exercised by the shared soft_counter_cycling_batch actual-card scenario: the decline path counters the spell"
+    },
+    {
+      "test": "scenario soft_counter_cycling_batch::soft_counter_cycling_batch_cards_cycling_discards_self_and_draws_one",
+      "covers": "actual spell_snip is exercised by the shared soft_counter_cycling_batch actual-card scenario: cycling from hand pays its cost and draws one"
+    },
+    {
+      "test": "scenario soft_counter_cycling_batch::soft_counter_cycling_batch_cards_cycling_rejects_when_cost_unavailable",
+      "covers": "actual spell_snip is exercised by the shared soft_counter_cycling_batch actual-card scenario: an unpaid cycling activation changes nothing"
+    },
+    {
+      "test": "scenario soft_counter_cycling_batch::soft_counter_cycling_batch_cards_stale_target_fizzles",
+      "covers": "actual spell_snip is exercised by the shared soft_counter_cycling_batch actual-card scenario: a departed spell target fizzles without affecting another spell"
+    },
+    {
+      "test": "mechanic_registry::soft_counter_cycling_batch::soft_counter_cycling_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of spell_snip (soft counter + cycling)"
+    },
+    {
+      "test": "mechanic_registry::soft_counter_cycling_batch::soft_counter_cycling_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for spell_snip"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

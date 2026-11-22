@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "1fba543c-bd22-4f7b-9ff4-0631af8ee814",
+  "spans": [
+    {
+      "face_id": "protective_bubble",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "protective_bubble",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q51_cohorts_batch::q51_auras_canary_simplest_cloak_of_mists_makes_the_creature_unblockable",
+      "covers": "actual Aura attaches and publishes Can't be blocked"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_auras_canary_hardest_arrest_locks_attack_block_and_activation",
+      "covers": "actual Arrest publishes both combat restrictions and the activation prohibition"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_auras_apply_each_printed_restriction",
+      "covers": "actual Auras apply their printed power, keyword and restriction profile"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_unblockable_auras_reject_an_ordinary_blocker",
+      "covers": "actual unblockable Auras reject an ordinary blocker"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_arrest_and_demotion_reject_the_printed_combat_actions",
+      "covers": "actual Arrest and Demotion reject the printed attack/block actions"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_aura_follows_its_host_to_the_graveyard",
+      "covers": "actual Aura follows its host to the graveyard"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_paralyzing_grasp_keeps_the_creature_tapped",
+      "covers": "actual Paralyzing Grasp prevents the untap-step action"
+    },
+    {
+      "test": "scenario q51_cohorts_batch::q51_invisibility_is_blocked_only_by_walls",
+      "covers": "actual Invisibility publishes the Wall-only exception"
+    },
+    {
+      "test": "mechanic_registry::q51_cohorts_batch::q51_aura_restrictions_map_static_profiles",
+      "covers": "reviewed identity and typed shape"
+    },
+    {
+      "test": "mechanic_registry::q51_cohorts_batch::q51_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

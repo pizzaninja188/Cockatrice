@@ -1,0 +1,12 @@
+// Oracle 27882623-b5ad-49f2-b5ab-f0bdb93268a1; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "cliff_threader",
+  name: "Cliff Threader",
+  face_id: "cliff_threader",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Kor", "Scout"],
+  power: 2,
+  toughness: 1,
+  evasions: [Landwalk(land_subtype: "Mountain")],
+)

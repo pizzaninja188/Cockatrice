@@ -1,0 +1,14 @@
+// Oracle 965139fb-2e58-4ef2-b639-3ceaa2995c00; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 121 (draw), 608.2c (printed order), 701.9 (discard) and 601.2 (cast and payment).
+(
+  id: "catalog",
+  name: "Catalog",
+  face_id: "catalog",
+  mana_cost: "{2}{U}",
+  types: ["Instant"],
+  spell_program: Some((body: (steps: [
+    (id: "draw_cards", kind: Perform(Draw(count: 2))),
+    (id: "discard_cards", kind: Perform(Discard(quantity: Exact(1)))),
+  ]))),
+)

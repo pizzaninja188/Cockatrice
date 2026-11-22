@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "a6cc516d-5a4b-455a-ab16-367d64215527",
+  "spans": [
+    {
+      "face_id": "dakmor_plague",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamagePlayer",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q38_creature_player_sweep_batch::q38_creature_player_sweep_cards_deal_the_printed_amount_to_each_creature_and_player",
+      "covers": "actual card is exercised by the shared 01-creature-player-sweep scenario"
+    },
+    {
+      "test": "scenario q38_creature_player_sweep_batch::q38_creature_player_sweep_cards_mark_damage_until_cleanup_without_targets",
+      "covers": "actual card is exercised by the shared 01-creature-player-sweep scenario"
+    },
+    {
+      "test": "mechanic_registry::q38_creature_player_sweep_batch::q38_creature_player_sweep_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q38_creature_player_sweep_batch::q38_creature_player_sweep_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

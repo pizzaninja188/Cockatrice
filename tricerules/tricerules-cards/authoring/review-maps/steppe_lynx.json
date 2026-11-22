@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "b16cef02-dcf8-4866-ac42-6ee929ddbea2",
+  "spans": [
+    {
+      "face_id": "steppe_lynx",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario landfall_pump_batch::landfall_pump_batch_cards_apply_the_printed_effect",
+      "covers": "actual steppe_lynx clause coverage"
+    },
+    {
+      "test": "scenario landfall_pump_batch::landfall_pump_batch_cards_scope_the_trigger_to_the_controller",
+      "covers": "actual steppe_lynx clause coverage"
+    },
+    {
+      "test": "scenario landfall_pump_batch::landfall_pump_batch_cards_stack_multiple_triggers_and_expire",
+      "covers": "actual steppe_lynx clause coverage"
+    },
+    {
+      "test": "mechanic_registry::landfall_pump_batch::landfall_pump_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of steppe_lynx"
+    },
+    {
+      "test": "mechanic_registry::landfall_pump_batch::landfall_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for steppe_lynx"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

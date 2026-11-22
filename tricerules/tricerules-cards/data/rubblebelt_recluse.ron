@@ -1,0 +1,12 @@
+// Oracle 3ef0fff2-6010-42de-a7ce-e4cac295a481; source/rulings checked 2026-11-13.
+// CR 508.1d: this creature must be declared as an attacker whenever it is able.
+(
+  id: "rubblebelt_recluse",
+  name: "Rubblebelt Recluse",
+  face_id: "rubblebelt_recluse",
+  mana_cost: "{4}{R}",
+  types: ["Creature", "Ogre", "Berserker"],
+  power: 6,
+  toughness: 5,
+  must_attack_if_able: true,
+)

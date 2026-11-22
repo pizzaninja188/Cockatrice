@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "11fd2650-2150-4e62-8b64-e820d734a231",
+  "spans": [
+    {
+      "face_id": "borderland_marauder",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario attack_pump_batch::attack_pump_batch_cards_apply_the_printed_effect",
+      "covers": "actual borderland_marauder clause coverage"
+    },
+    {
+      "test": "scenario attack_pump_batch::attack_pump_batch_cards_scope_the_trigger_to_the_attacking_source",
+      "covers": "actual borderland_marauder clause coverage"
+    },
+    {
+      "test": "scenario attack_pump_batch::attack_pump_batch_cards_expire_at_end_of_turn",
+      "covers": "actual borderland_marauder clause coverage"
+    },
+    {
+      "test": "mechanic_registry::attack_pump_batch::attack_pump_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of borderland_marauder"
+    },
+    {
+      "test": "mechanic_registry::attack_pump_batch::attack_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for borderland_marauder"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

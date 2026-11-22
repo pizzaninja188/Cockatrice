@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 252330b1-67cf-4d9e-a413-917ba61e731f.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 613.4c: negative P/T applies in layer 7c until end of turn.
+(
+  id: "shrink",
+  name: "Shrink",
+  face_id: "shrink",
+  mana_cost: "{G}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: -5, toughness: -0)],
+)

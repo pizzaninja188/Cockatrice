@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "f48d30ee-bba6-4449-8c50-caf0d7f06528",
+  "spans": [
+    {
+      "face_id": "halo_hopper",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Convoke",
+      "typed_path": "/faces/0/keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario convoke_batch::convoke_batch_cards_cast_with_convoke_and_exact_printed_characteristics",
+      "covers": "actual halo_hopper clause coverage"
+    },
+    {
+      "test": "scenario convoke_batch::convoke_batch_cards_require_colored_mana_and_keep_printed_keywords",
+      "covers": "actual halo_hopper clause coverage"
+    },
+    {
+      "test": "mechanic_registry::convoke_batch::convoke_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of halo_hopper"
+    },
+    {
+      "test": "mechanic_registry::convoke_batch::convoke_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for halo_hopper"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "0126f620-1dbf-405c-b5cf-f48b7ef02d32",
+  "spans": [
+    {
+      "face_id": "dirtwater_wraith",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/evasions",
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Evasion::Landwalk",
+      "typed_path": "/faces/0/evasions"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q53_batch_c::q53_c_self_pump_cards_apply_their_printed_values",
+      "covers": "actual dirtwater_wraith printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_c::q53_self_pump_cards_map_definitions",
+      "covers": "actual dirtwater_wraith printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_c::q53_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    },
+    {
+      "test": "scenario q53_batch_c::q53_c_self_pump_cards_expire_at_cleanup",
+      "covers": "actual pump expires at cleanup"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

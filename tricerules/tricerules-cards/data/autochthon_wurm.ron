@@ -1,0 +1,13 @@
+// Oracle 18379907-ddba-479e-8953-3adc1ed40458; source/rulings checked 2026-11-15.
+// CR 702.51a-c (Convoke taps creatures to pay generic or a matching color),
+// 601.2h (payment order), and the printed keyword's normal rules.
+(
+  id: "autochthon_wurm",
+  name: "Autochthon Wurm",
+  face_id: "autochthon_wurm",
+  mana_cost: "{10}{G}{G}{G}{W}{W}",
+  types: ["Creature", "Wurm"],
+  power: 9,
+  toughness: 14,
+  keywords: [Convoke, Trample],
+)

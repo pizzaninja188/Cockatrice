@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "45b42694-9ee8-44f3-9de3-aa2c0f1b6a13",
+  "spans": [
+    {
+      "face_id": "jungle_lion",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::SelfCombatRestriction",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario cant_block_batch::cant_block_batch_cards_have_the_printed_characteristics_and_cannot_block",
+      "covers": "actual jungle_lion clause coverage"
+    },
+    {
+      "test": "scenario cant_block_batch::cant_block_batch_cards_are_rejected_as_blockers",
+      "covers": "actual jungle_lion clause coverage"
+    },
+    {
+      "test": "scenario cant_block_batch::cant_block_batch_cards_allow_other_creatures_to_block",
+      "covers": "actual jungle_lion clause coverage"
+    },
+    {
+      "test": "mechanic_registry::cant_block_batch::cant_block_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of jungle_lion"
+    },
+    {
+      "test": "mechanic_registry::cant_block_batch::cant_block_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for jungle_lion"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,15 @@
+// Oracle 06fc3eb1-7a48-42a0-8a5c-d61bd5aacfff; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.85a-c (cascade): when the spell is cast, exile through the first nonland card
+// with a lower mana value, may cast it without paying its cost, and bottom the rest.
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "maelstrom_colossus",
+  name: "Maelstrom Colossus",
+  face_id: "maelstrom_colossus",
+  mana_cost: "{8}",
+  types: ["Artifact", "Creature", "Golem"],
+  power: 7,
+  toughness: 7,
+  spell_keywords: [Cascade],
+)

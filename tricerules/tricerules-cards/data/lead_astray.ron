@@ -1,0 +1,12 @@
+// Oracle 9e8e5ad4-05a3-4757-8797-c37bf49506d5; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853. No card-specific rulings.
+// CR 115.1a/115.3 (up to two targets chosen at cast), 701.26 (tap) and 608.2b (stale targets).
+(
+  id: "lead_astray",
+  name: "Lead Astray",
+  face_id: "lead_astray",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  spell_effect: [Tap(subject: Chosen((kind: Creature)))],
+  targeting: Some((groups: [(min: 0, max: 2, effect_indices: [0])])),
+)

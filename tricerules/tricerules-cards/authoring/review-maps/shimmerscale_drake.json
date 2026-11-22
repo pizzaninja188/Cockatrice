@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "f3bd5ca1-9854-4bc0-b108-b555808e1d5f",
+  "spans": [
+    {
+      "face_id": "shimmerscale_drake",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "shimmerscale_drake",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilitySourceZone::Hand",
+      "typed_path": "/faces/0/activated_abilities/0/source_zone"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flying_cycling_two_batch::flying_cycling_two_batch_cards_have_flying_and_cycle_for_two",
+      "covers": "actual shimmerscale_drake clause coverage"
+    },
+    {
+      "test": "scenario flying_cycling_two_batch::flying_cycling_two_batch_cards_reject_cycling_without_the_printed_cost",
+      "covers": "actual shimmerscale_drake clause coverage"
+    },
+    {
+      "test": "scenario flying_cycling_two_batch::flying_cycling_two_batch_cards_reject_cycling_outside_the_hand",
+      "covers": "actual shimmerscale_drake clause coverage"
+    },
+    {
+      "test": "mechanic_registry::flying_cycling_two_batch::flying_cycling_two_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of shimmerscale_drake"
+    },
+    {
+      "test": "mechanic_registry::flying_cycling_two_batch::flying_cycling_two_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for shimmerscale_drake"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

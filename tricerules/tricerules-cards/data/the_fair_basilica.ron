@@ -1,0 +1,28 @@
+// Oracle 8618f8e8-fd86-47e3-905d-e6624b599b9b; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 614.1d/614.12 (enters tapped), 605.1a/605.3b (mana ability), 118.3/701.21a
+// (tap and sacrifice costs) and 121 (draw).
+(
+  id: "the_fair_basilica",
+  name: "The Fair Basilica",
+  face_id: "the_fair_basilica",
+  mana_cost: "",
+  types: ["Land", "Sphere"],
+  activated_abilities: [
+    (
+      ability_id: "mana",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [( w: 1 )])],
+    ),
+    (
+      ability_id: "sacrifice_draw",
+      presentation: OracleLines([3]),
+      costs: [Mana("{1}{W}"), Tap, SacrificeSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+  static_abilities: [
+    (ability_id: "enters_tapped", presentation: OracleLines([1]), definition: EntersTapped(affected: Self_)),
+  ],
+)

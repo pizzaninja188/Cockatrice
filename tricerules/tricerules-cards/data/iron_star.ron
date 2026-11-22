@@ -1,0 +1,31 @@
+// Oracle e9ec67e1-7064-44d4-a1ed-04b7893ffb15; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853. No card-specific rulings.
+// CR 601.2a, 603.1/603.2, 105.2 and 118.12: the red-spell cast trigger and its optional payment.
+(
+  id: "iron_star",
+  name: "Iron Star",
+  face_id: "iron_star",
+  mana_cost: "{1}",
+  types: ["Artifact"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPlayerCastsSpell(caster: AnyPlayer, filter: (is_color: Some(Red))),
+    program: Some((body: (steps: [
+      (id: "pay_or_pass", kind: Choose(
+        choice: "pay_or_pass",
+        chooser: Controller,
+        optional: true,
+        branches: [(
+          branch_id: "pay_one",
+          presentation: OracleLines([1]),
+          cost: Mana("{1}"),
+          body: (steps: [
+            (id: "gain_one", kind: Perform(GainLife(amount: 1))),
+          ]),
+        )],
+        otherwise: (),
+      )),
+    ]))),
+  )],
+)

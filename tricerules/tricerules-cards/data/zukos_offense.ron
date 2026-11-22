@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 90a2ec9c-2f1c-4ed4-820d-dfdb6b58c0db.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "zukos_offense",
+  name: "Zuko's Offense",
+  face_id: "zukos_offense",
+  mana_cost: "{R}",
+  types: ["Sorcery"],
+  spell_effect: [DamageTarget(amount: 2, target: (kind: AnyTarget))],
+)

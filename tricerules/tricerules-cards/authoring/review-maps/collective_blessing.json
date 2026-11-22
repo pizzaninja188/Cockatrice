@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "7f7049e8-49ed-46da-89f7-1e40aefb3b0c",
+  "spans": [
+    {
+      "face_id": "collective_blessing",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemPt",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario gaeas_anthem_batch::gaeas_anthem_batch_cards_buff_only_their_controllers_creatures",
+      "covers": "actual collective_blessing applies its printed pump only to its controller's creatures"
+    },
+    {
+      "test": "scenario gaeas_anthem_batch::gaeas_anthem_batch_cards_apply_dynamically_and_drain_with_the_source",
+      "covers": "actual collective_blessing buffs later creatures dynamically and drains when it leaves"
+    },
+    {
+      "test": "mechanic_registry::gaeas_anthem_batch::gaeas_anthem_batch_maps_definitions",
+      "covers": "reviewed identity, cost and exact anthem filter/pump of collective_blessing"
+    },
+    {
+      "test": "mechanic_registry::gaeas_anthem_batch::gaeas_anthem_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for collective_blessing"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

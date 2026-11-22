@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "3795fc31-2369-47d0-b9c9-120f44b8f114",
+  "spans": [
+    {
+      "face_id": "elderleaf_mentor",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "elf_warrior_g_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_cards_create_only_their_printed_token",
+      "covers": "actual elderleaf_mentor is exercised by the shared etb_vanilla_tokens_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_cards_cast_with_exact_cost_and_body",
+      "covers": "actual elderleaf_mentor is exercised by the shared etb_vanilla_tokens_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_cards_create_tokens_once_per_entry",
+      "covers": "actual elderleaf_mentor is exercised by the shared etb_vanilla_tokens_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_cards_source_effect_is_controller_scoped",
+      "covers": "actual elderleaf_mentor is exercised by the shared etb_vanilla_tokens_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of elderleaf_mentor"
+    },
+    {
+      "test": "mechanic_registry::etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for elderleaf_mentor"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

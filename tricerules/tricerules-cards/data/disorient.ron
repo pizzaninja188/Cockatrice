@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 33be346b-a232-4680-9b1b-a5eee57d2e75.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 613.4c: negative P/T applies in layer 7c until end of turn.
+(
+  id: "disorient",
+  name: "Disorient",
+  face_id: "disorient",
+  mana_cost: "{3}{U}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: -7, toughness: -0)],
+)

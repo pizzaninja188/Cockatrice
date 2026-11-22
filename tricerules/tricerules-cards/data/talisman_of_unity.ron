@@ -1,0 +1,30 @@
+// Oracle e5fcc5d7-6a60-4a5b-9d02-6c30041a95b9; source/rulings checked 2026-11-13.
+// CR 605.1a/605.3a-b (mana abilities and immediate resolution), 120.3a (damage to a
+// player), and 118.3 (tap cost must be payable).
+(
+  id: "talisman_of_unity",
+  name: "Talisman of Unity",
+  face_id: "talisman_of_unity",
+  mana_cost: "{2}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [
+        ProduceMana(options: [
+          (g: 1),
+          (w: 1),
+        ]),
+        DamagePlayer(amount: 1),
+      ],
+    ),
+  ],
+)

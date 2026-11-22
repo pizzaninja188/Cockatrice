@@ -1,0 +1,12 @@
+// Oracle 7471e445-4655-4336-9769-3debd197b77c; source/rulings checked 2026-11-13.
+// CR 508.1d: this creature must be declared as an attacker whenever it is able.
+(
+  id: "frontline_rebel",
+  name: "Frontline Rebel",
+  face_id: "frontline_rebel",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Human", "Warrior"],
+  power: 3,
+  toughness: 3,
+  must_attack_if_able: true,
+)

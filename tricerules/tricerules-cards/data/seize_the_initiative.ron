@@ -1,0 +1,14 @@
+// Oracle f6653d90-cd30-4b2b-9592-97d5769dc3d8; source/rulings checked 2026-11-13.
+// CR 115.1/608.2b (target), 611.2a (duration), 613.4c (layer 7c) and 613.1f
+// (layer 6 first strike grant); CR 514.2 ends both at cleanup.
+(
+  id: "seize_the_initiative",
+  name: "Seize the Initiative",
+  face_id: "seize_the_initiative",
+  mana_cost: "{W}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 1, toughness: 1),
+    GrantKeywords(keywords: [FirstStrike]),
+  ],
+)

@@ -1,0 +1,13 @@
+// Oracle 814a30dc-14e4-45cb-9320-b043e686b8ba; source/rulings checked 2026-11-13.
+// CR 702.16b-f: protection's five effects (no targeting, no Aura/Equipment
+// attachment, no damage, no blocking, no Fortify).
+(
+  id: "vedalken_outlander",
+  name: "Vedalken Outlander",
+  face_id: "vedalken_outlander",
+  mana_cost: "{W}{U}",
+  types: ["Artifact", "Creature", "Vedalken", "Scout"],
+  power: 2,
+  toughness: 2,
+  protections: [Color(Red)],
+)

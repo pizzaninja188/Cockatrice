@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "f4126dac-add4-4d5f-bf52-6f74c7c6aa67",
+  "spans": [
+    {
+      "face_id": "pounce",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Fight",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_c::q55_c_canary_simplest_pounce_makes_two_creatures_fight",
+      "covers": "actual Pounce makes the two chosen creatures deal damage equal to their power to each other"
+    },
+    {
+      "test": "scenario q55_batch_c::q55_c_fight_spells_do_no_damage_when_either_target_is_illegal",
+      "covers": "actual Pounce deals no damage when one fighter left before resolution"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_c::q55_c_fight_spells_map_definitions",
+      "covers": "shared registry identity for the fight spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_c::q55_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Pounce"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

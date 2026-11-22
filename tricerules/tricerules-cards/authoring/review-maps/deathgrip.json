@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "20ae75a7-14ca-4366-af0a-3f3f02159f3f",
+  "spans": [
+    {
+      "face_id": "deathgrip",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StackSpellFilter.is_color(Green)",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/CounterTargetSpell/spell_filter"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q44_cohorts_batch::q44_color_hate_canary_counters_its_color",
+      "covers": "actual card counters the printed color and prevents its effect"
+    },
+    {
+      "test": "scenario q44_cohorts_batch::q44_color_hate_cards_counter_only_their_printed_color",
+      "covers": "every actual card counters only its printed color and rejects another color"
+    },
+    {
+      "test": "scenario q44_cohorts_batch::q44_color_hate_cards_fizzle_when_the_spell_leaves_the_stack",
+      "covers": "a stale spell target leaves the counter fizzling without moving the enchantment"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_color_hate_counters_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of deathgrip"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for deathgrip"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

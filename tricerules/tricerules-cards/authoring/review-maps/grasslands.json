@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "e80bd454-8bc5-4921-90cf-6ad28a27a88b",
+  "spans": [
+    {
+      "face_id": "grasslands",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "grasslands",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SearchDestination::Battlefield",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/SearchLibrary/destination"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q44_cohorts_batch::q44_fetch_lands_search_their_printed_subtype_pairs",
+      "covers": "every actual card offers exactly its printed subtype pair"
+    },
+    {
+      "test": "scenario q44_cohorts_batch::q44_fetch_lands_enter_tapped_from_hand",
+      "covers": "the shared entered-tapped static is exercised by a real land drop"
+    },
+    {
+      "test": "scenario q44_cohorts_batch::q44_fetch_lands_allow_declining_the_search",
+      "covers": "the search fails to find and the library is still shuffled"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_mirage_fetch_lands_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of grasslands"
+    },
+    {
+      "test": "mechanic_registry::q44_cohorts_batch::q44_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for grasslands"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

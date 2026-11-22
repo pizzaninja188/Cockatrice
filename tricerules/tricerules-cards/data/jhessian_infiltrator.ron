@@ -1,0 +1,19 @@
+// Oracle 6ec8dc98-adc7-4fc3-94e5-31037235ceab; source/rulings checked 2026-11-13.
+// CR 509.1b (a declaration of blockers is illegal when a blocking restriction
+// is disobeyed); the restriction is source-only and unconditional.
+(
+  id: "jhessian_infiltrator",
+  name: "Jhessian Infiltrator",
+  face_id: "jhessian_infiltrator",
+  mana_cost: "{G}{U}",
+  types: ["Creature", "Human", "Rogue"],
+  power: 2,
+  toughness: 2,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: SelfCombatRestriction(restriction: (cant_be_blocked: true)),
+    ),
+  ],
+)

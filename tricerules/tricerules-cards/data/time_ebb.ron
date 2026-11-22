@@ -1,0 +1,23 @@
+// Oracle 30cc8f7b-3c28-40f5-8f8f-157e8212280b; source/rulings checked 2026-11-13.
+// CR 400.3 (owner's zone) and 608.2b (departed target).
+(
+  id: "time_ebb",
+  name: "Time Ebb",
+  face_id: "time_ebb",
+  mana_cost: "{2}{U}",
+  types: ["Sorcery"],
+  spell_program: Some(
+    (
+      body: (
+        steps: [
+          (id: "put_in_owners_library",
+            kind: Perform(PutInOwnersLibrary(
+              subject: Chosen((kind: Creature)), placement: Top,
+            ))),
+        ],
+      ),
+      target_bindings: [(instruction_id: "put_in_owners_library", role: Subject, target_group_index: 0)],
+    ),
+  ),
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [])])),
+)

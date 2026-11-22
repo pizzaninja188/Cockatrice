@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "633a0919-9ac3-4645-8f0b-3f00c198db79",
+  "spans": [
+    {
+      "face_id": "hellfire_mongrel",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::AtBeginningOfUpkeep",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "GameCondition::CardsInHand",
+      "typed_path": "/faces/0/triggered_abilities/0/intervening_if"
+    },
+    {
+      "symbol": "SpellEffectKind::DamagePlayer",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "PlayerRecipient::AffectedPlayer",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/DamagePlayer/who"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q45_cohorts_batch::q45_upkeep_hand_damage_canary_hardest_respects_the_intervening_if",
+      "covers": "the hardest canary suppresses the trigger with three cards in hand"
+    },
+    {
+      "test": "scenario q45_cohorts_batch::q45_upkeep_hand_damage_cards_hit_each_opponent_upkeep",
+      "covers": "every card deals its printed damage at the opponent's upkeep"
+    },
+    {
+      "test": "scenario q45_cohorts_batch::q45_upkeep_hand_damage_rechecks_hand_size_on_resolution",
+      "covers": "the intervening if is rechecked before resolution"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_upkeep_hand_damage_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of hellfire_mongrel"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for hellfire_mongrel"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

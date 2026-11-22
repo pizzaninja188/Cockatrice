@@ -1,0 +1,12 @@
+// Oracle 031cd561-d9b1-4a0e-bc38-bc09e80563c3; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "mountain_goat",
+  name: "Mountain Goat",
+  face_id: "mountain_goat",
+  mana_cost: "{R}",
+  types: ["Creature", "Goat"],
+  power: 1,
+  toughness: 1,
+  evasions: [Landwalk(land_subtype: "Mountain")],
+)

@@ -1,0 +1,21 @@
+// Oracle 3513d862-ef0d-4949-b33a-3fa9437cc444; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 120.3 (damage read on resolution), 115.1/601.2c (target creature), 608.2b
+// (stale target) and 205.3i (Mountain as a land subtype). Copy of Rumbling Rockslide's
+// live battlefield-subtype count with the printed Mountain subtype.
+(
+  id: "seismic_strike",
+  name: "Seismic Strike",
+  face_id: "seismic_strike",
+  mana_cost: "{2}{R}",
+  types: ["Instant"],
+  spell_effect: [DamageTarget(
+    amount: Count(BattlefieldPermanents(filter: (
+      controllers: Controller,
+      card_type: Some(Land),
+      required_subtypes: ["Mountain"],
+    ))),
+    target: (kind: Creature),
+  )],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+)

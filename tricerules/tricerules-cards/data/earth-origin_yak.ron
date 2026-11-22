@@ -1,0 +1,23 @@
+// Oracle c2b659ef-68f6-452c-94b5-2872f4e7b069; source/rulings checked 2026-11-13.
+// CR 603.6a (entry trigger), 611.2c (affected set at resolution), 613.4c and 514.2.
+(
+  id: "earth-origin_yak",
+  name: "Earth-Origin Yak",
+  face_id: "earth_origin_yak",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Ox"],
+  power: 2,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      PumpAll(
+        filter: (controller: YouControl),
+        power: 1,
+        toughness: 1,
+      ),
+    ],
+  )],
+)

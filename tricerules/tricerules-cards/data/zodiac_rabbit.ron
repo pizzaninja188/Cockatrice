@@ -1,0 +1,12 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 048cc868-1657-448d-9f2c-97973e73f477.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "zodiac_rabbit",
+  name: "Zodiac Rabbit",
+  face_id: "zodiac_rabbit",
+  mana_cost: "{G}",
+  types: ["Creature", "Rabbit"],
+  power: 1,
+  toughness: 1,
+  evasions: [Landwalk(land_subtype: "Forest")],
+)

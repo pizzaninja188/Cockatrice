@@ -1,0 +1,24 @@
+// Oracle 4754e9c6-1790-4c01-87c2-3a16ce7e65f5; source/rulings checked 2026-11-15.
+// CR 702.19a-e (trample), 603.6a (landfall enters trigger) and 613.4c
+// (until-end-of-turn pump).
+(
+  id: "makindi_sliderunner",
+  name: "Makindi Sliderunner",
+  face_id: "makindi_sliderunner",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Beast"],
+  power: 2,
+  toughness: 1,
+  keywords: [Trample],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WheneverPermanentEntersBattlefield(
+        controller: Controller,
+        filter: (permanent_type: Some(Land)),
+      ),
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    ),
+  ],
+)

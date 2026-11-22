@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 9e89db98-fc9f-4574-b5bc-ee421fa29428.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "path_of_angers_flame",
+  name: "Path of Anger's Flame",
+  face_id: "path_of_angers_flame",
+  mana_cost: "{2}{R}",
+  types: ["Instant", "Arcane"],
+  spell_effect: [PumpAll(filter: (controller: YouControl), power: 2, toughness: 0)],
+)

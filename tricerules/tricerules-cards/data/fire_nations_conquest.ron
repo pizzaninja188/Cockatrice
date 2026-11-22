@@ -1,0 +1,16 @@
+// Oracle 8893af49-2f90-4aed-bcaf-905bb9e8ed8f; source/rulings checked 2026-11-12.
+// CR 604.2/611.3b and 613.4c (layer 7c): static controller-wide +1/+0 while on the battlefield.
+(
+  id: "fire_nations_conquest",
+  name: "Fire Nation's Conquest",
+  face_id: "fire_nations_conquest",
+  mana_cost: "{2}{R}",
+  types: ["Enchantment"],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: AnthemPt(filter: (controller: YouControl), delta_power: 1, delta_toughness: 0),
+    ),
+  ],
+)

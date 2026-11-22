@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle bc5d5084-77de-4dc5-8769-300eafcbfee7.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 613.4c: negative P/T applies in layer 7c until end of turn.
+(
+  id: "flatten",
+  name: "Flatten",
+  face_id: "flatten",
+  mana_cost: "{3}{B}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: -4, toughness: -4)],
+)

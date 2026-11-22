@@ -1,0 +1,19 @@
+// Oracle e1abac67-ae07-4bb2-a048-7e41e0fc0371; source/rulings checked 2026-11-15.
+// CR 702.8a (Flash), 303.4a (Aura target and attach), 613.4c
+// (layer-7c attached P/T modifier) and 704.5m (unattached Aura cleanup).
+(
+  id: "gift_of_granite",
+  name: "Gift of Granite",
+  face_id: "gift_of_granite",
+  mana_cost: "{W}",
+  types: ["Enchantment", "Aura"],
+  keywords: [Flash],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([3]),
+      definition: AttachedModifier(delta_power: 0, delta_toughness: 2),
+    ),
+  ],
+)

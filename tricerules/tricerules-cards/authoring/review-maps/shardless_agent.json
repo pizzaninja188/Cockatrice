@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "2afbaa9a-c171-4a8b-90f3-5250d8498356",
+  "spans": [
+    {
+      "face_id": "shardless_agent",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_keywords/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellKeyword::Cascade",
+      "typed_path": "/faces/0/spell_keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q41_static_keyword_batch::q41_cascade_cards_exile_only_lower_mana_value_nonlands",
+      "covers": "actual card exiles through lands and finds only a cheaper nonland"
+    },
+    {
+      "test": "mechanic_registry::q41_cohorts_batch::q41_cascade_creatures_map_definitions",
+      "covers": "reviewed identity and printed cascade keyword"
+    },
+    {
+      "test": "scenario q41_static_keyword_batch::q41_cascade_canary_simplest_exiles_through_the_first_cheaper_card",
+      "covers": "simplest canary for this actual card"
+    },
+    {
+      "test": "scenario q41_static_keyword_batch::q41_cascade_canary_casts_the_found_card_without_paying",
+      "covers": "actual card accepts the free cascade cast"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

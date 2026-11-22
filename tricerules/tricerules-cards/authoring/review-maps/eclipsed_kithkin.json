@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "e6227840-6e3e-48c7-b4a4-42cfd8f14b68",
+  "spans": [
+    {
+      "face_id": "eclipsed_kithkin",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::LookChooseToHand",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q40_etb_look_choose_batch::q40_etb_look_choose_cards_apply_their_printed_filter_and_order_policy",
+      "covers": "actual card applies its printed filter and bottom-order policy"
+    },
+    {
+      "test": "scenario q40_etb_look_choose_batch::q40_etb_look_choose_cards_choose_nothing_and_keep_all_cards",
+      "covers": "declining the optional reveal keeps every looked card"
+    },
+    {
+      "test": "mechanic_registry::q40_cohorts_batch::q40_etb_look_choose_maps_definitions",
+      "covers": "reviewed identity, typed values and printed characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

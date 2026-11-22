@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "abbfbe50-4caf-48d0-b8f1-f2c9212bcd2f",
+  "spans": [
+    {
+      "face_id": "ionas_judgment",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_b::q54_white_exile_cards_reach_their_printed_targets",
+      "covers": "actual Iona's Judgment exiles a chosen creature or enchantment as printed"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_b::q54_white_exile_spells_map_definitions",
+      "covers": "shared registry identity for the four white exile definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_b::q54_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Iona's Judgment"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

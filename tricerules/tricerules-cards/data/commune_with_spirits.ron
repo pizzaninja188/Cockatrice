@@ -1,0 +1,15 @@
+// Oracle 68f8ed23-024e-414f-bbb2-ab73fbe21b69; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 121.5 (not a draw), 401.4 (private look), 601.2 (casting) and 609.3 (selection
+// clamps); the remainder is put on the bottom in a random order.
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "commune_with_spirits",
+  name: "Commune with Spirits",
+  face_id: "commune_with_spirits",
+  mana_cost: "{G}",
+  types: ["Sorcery"],
+  spell_effect: [
+    LookChooseToHand(count: 4, filter: Some((any_of: Some([(card_type: Some(Enchantment)), (card_type: Some(Land))]))), bottom_order: Random),
+  ],
+)

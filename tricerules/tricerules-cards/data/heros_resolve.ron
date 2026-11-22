@@ -1,0 +1,18 @@
+// Oracle 1854a99d-f8c7-45b3-83a2-98ae1c5b5b09; source/rulings checked 2026-11-13.
+// CR 303.4a (Aura target and attach), 613.4c (layer-7c attached P/T modifier), and
+// 704.5m (unattached Aura cleanup).
+(
+  id: "heros_resolve",
+  name: "Hero's Resolve",
+  face_id: "heros_resolve",
+  mana_cost: "{1}{W}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(delta_power: 1, delta_toughness: 5),
+    ),
+  ],
+)

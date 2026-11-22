@@ -1,0 +1,19 @@
+// Oracle 43d7fcf3-acc2-4e9b-a466-c73b1b6c58af; source/rulings checked 2026-11-13.
+// CR 603.6a (enters trigger) and 701.22a-b (scry two).
+(
+  id: "omenspeaker",
+  name: "Omenspeaker",
+  face_id: "omenspeaker",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Human", "Wizard"],
+  power: 1,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Scry(count: 2)],
+    ),
+  ],
+)

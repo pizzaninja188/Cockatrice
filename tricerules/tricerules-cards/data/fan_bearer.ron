@@ -1,0 +1,19 @@
+// Oracle d2e7198a-0eb5-4d30-973f-4b2d9617436f; source/rulings checked 2026-11-13.
+// CR 602.1/602.2 (activated ability), 118.3 (mana payment), 701.26 (tap) and 608.2b.
+(
+  id: "fan_bearer",
+  name: "Fan Bearer",
+  face_id: "fan_bearer",
+  mana_cost: "{W}",
+  types: ["Creature", "Zombie"],
+  power: 1,
+  toughness: 2,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{2}"), Tap],
+      effect: [Tap(subject: Chosen((kind: Creature)))],
+    ),
+  ],
+)

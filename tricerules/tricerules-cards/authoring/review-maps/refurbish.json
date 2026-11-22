@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "e4e61fe3-27a4-4149-bdfb-67dcfc8eb32c",
+  "spans": [
+    {
+      "face_id": "refurbish",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_c::q55_c_reanimation_uses_the_printed_graveyard_and_controller",
+      "covers": "actual Refurbish returns your artifact card to the battlefield"
+    },
+    {
+      "test": "scenario q55_batch_c::q55_c_reanimation_rejects_wrong_card_types_and_stale_targets",
+      "covers": "actual Refurbish fizzles when its graveyard target already left"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_c::q55_c_reanimation_map_definitions",
+      "covers": "shared registry identity for the reanimation spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_c::q55_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Refurbish"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

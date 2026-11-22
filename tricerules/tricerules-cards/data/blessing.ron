@@ -1,0 +1,19 @@
+// Oracle 5c84d8da-2bfb-4618-89a0-7d9ed604e854; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 303.4a (Aura attach), 602.1/602.2 (activation), 118.3 (paying the printed cost),
+// 611.2a/613.4c (until-end-of-turn pump on the attached creature) and 514.2 (cleanup expiry).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "blessing",
+  name: "Blessing",
+  face_id: "blessing",
+  mana_cost: "{W}{W}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Mana("{W}")],
+    effect: [PumpTarget(power: 1, toughness: 1, subject: AttachedObject)],
+  )],
+)

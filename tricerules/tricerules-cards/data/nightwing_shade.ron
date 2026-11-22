@@ -1,0 +1,21 @@
+// Oracle e679ef01-8d12-4246-850a-efed7f4316b2; source/rulings checked 2026-11-15.
+// CR 702.9a-b (flying), 602.1/602.2 (activation and printed cost),
+// 611.2a/613.4c (until-end-of-turn pump) and 514.2 (cleanup expiry).
+(
+  id: "nightwing_shade",
+  name: "Nightwing Shade",
+  face_id: "nightwing_shade",
+  mana_cost: "{4}{B}",
+  types: ["Creature", "Shade"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{1}{B}")],
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    ),
+  ],
+)

@@ -1,0 +1,18 @@
+// Oracle cfaa0d5d-d9f1-4586-a7b1-6576a58c0f1e; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853. No card-specific rulings.
+// CR 700.4, 603.6c, 111.1/111.10 and 603.10a: two Insects after the Elf dies.
+(
+  id: "symbiotic_elf",
+  name: "Symbiotic Elf",
+  face_id: "symbiotic_elf",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Elf"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfDies,
+    effect: [CreateTokens(token: "insect_g_1_1", count: 2)],
+  )],
+)

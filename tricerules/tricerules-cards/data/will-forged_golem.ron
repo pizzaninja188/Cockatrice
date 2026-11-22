@@ -1,0 +1,13 @@
+// Oracle 25fb0396-7355-4ff1-8ad3-d5a82adf6cc1; source/rulings checked 2026-11-15.
+// CR 702.51a-c (Convoke taps creatures to pay generic or a matching color),
+// 601.2h (payment order), and the printed keyword's normal rules.
+(
+  id: "will-forged_golem",
+  name: "Will-Forged Golem",
+  face_id: "will_forged_golem",
+  mana_cost: "{6}",
+  types: ["Artifact", "Creature", "Golem"],
+  power: 4,
+  toughness: 4,
+  keywords: [Convoke],
+)

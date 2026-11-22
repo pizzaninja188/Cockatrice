@@ -1,0 +1,28 @@
+// Oracle dc974eb4-72b9-4213-887b-8ee684b93420; source/rulings checked 2026-11-13.
+// CR 107.4e (hybrid mana symbols), 605.1a/605.3b (mana abilities), 106.1 (mana) and
+// 118.3 (every printed cost must be payable).
+(
+  id: "flooded_grove",
+  name: "Flooded Grove",
+  face_id: "flooded_grove",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Mana("{G/U}"), Tap],
+      effect: [ProduceMana(options: [
+        (g: 2),
+        (g: 1, u: 1),
+        (u: 2),
+      ])],
+    ),
+  ],
+)

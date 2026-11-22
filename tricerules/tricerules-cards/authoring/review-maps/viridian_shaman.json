@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "5aa6d553-a144-4c5b-83fa-65e931903899",
+  "spans": [
+    {
+      "face_id": "viridian_shaman",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_destroy_artifact_batch::etb_destroy_artifact_batch_cards_destroy_a_target_artifact_on_entry",
+      "covers": "actual viridian_shaman clause coverage"
+    },
+    {
+      "test": "scenario etb_destroy_artifact_batch::etb_destroy_artifact_batch_cards_allow_artifact_creature_targets",
+      "covers": "actual viridian_shaman clause coverage"
+    },
+    {
+      "test": "scenario etb_destroy_artifact_batch::etb_destroy_artifact_batch_cards_reject_nonartifact_targets",
+      "covers": "actual viridian_shaman clause coverage"
+    },
+    {
+      "test": "scenario etb_destroy_artifact_batch::etb_destroy_artifact_batch_cards_fizzle_stale_artifact_targets",
+      "covers": "actual viridian_shaman clause coverage"
+    },
+    {
+      "test": "scenario etb_destroy_artifact_batch::etb_destroy_artifact_batch_cards_require_a_target_when_only_the_controller_has_an_artifact",
+      "covers": "actual viridian_shaman clause coverage"
+    },
+    {
+      "test": "mechanic_registry::etb_destroy_artifact_batch::etb_destroy_artifact_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of viridian_shaman"
+    },
+    {
+      "test": "mechanic_registry::etb_destroy_artifact_batch::etb_destroy_artifact_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for viridian_shaman"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "5ddcc7a5-c869-49fd-baa1-ab5f5f456f90",
+  "spans": [
+    {
+      "face_id": "bloated_toad",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/protections"
+      ]
+    },
+    {
+      "face_id": "bloated_toad",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "ProtectionQuality::Color::Blue",
+      "typed_path": "/faces/0/protections"
+    },
+    {
+      "symbol": "AbilitySourceZone::Hand",
+      "typed_path": "/faces/0/activated_abilities/0/source_zone"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q42_cycling_keyword_batch::q42_cycling_keyword_cards_cycle_for_their_printed_cost_and_draw_one",
+      "covers": "actual card cycles for its printed cost, discards itself and draws exactly one card"
+    },
+    {
+      "test": "scenario q42_cycling_keyword_batch::q42_cycling_keyword_cards_publish_their_printed_static",
+      "covers": "actual card publishes its printed keyword or protection static"
+    },
+    {
+      "test": "scenario q42_cycling_keyword_batch::q42_cycling_keyword_cards_reject_activation_outside_the_hand",
+      "covers": "cycling is rejected outside the hand"
+    },
+    {
+      "test": "mechanic_registry::q42_cohorts_batch::q42_cycling_keyword_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of bloated_toad"
+    },
+    {
+      "test": "mechanic_registry::q42_cohorts_batch::q42_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for bloated_toad"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

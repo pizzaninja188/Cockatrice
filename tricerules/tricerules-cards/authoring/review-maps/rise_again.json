@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "4600e968-fe3a-446a-a306-bd10e6763e0d",
+  "spans": [
+    {
+      "face_id": "rise_again",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario breath_of_life_batch::breath_of_life_batch_cards_return_your_creature_untapped",
+      "covers": "actual rise_again returns the targeted creature card to the battlefield untapped under its owner's control"
+    },
+    {
+      "test": "scenario breath_of_life_batch::breath_of_life_batch_cards_reject_noncreature_and_opponent_graveyard_targets",
+      "covers": "actual rise_again rejects noncreature and opponent-graveyard targets without spending mana"
+    },
+    {
+      "test": "scenario breath_of_life_batch::breath_of_life_batch_cards_fizzle_when_the_target_already_left",
+      "covers": "actual rise_again fizzles when the targeted card already left the graveyard"
+    },
+    {
+      "test": "mechanic_registry::breath_of_life_batch::breath_of_life_batch_maps_definitions",
+      "covers": "reviewed identity, creature filter, destination and graveyard target of rise_again"
+    },
+    {
+      "test": "mechanic_registry::breath_of_life_batch::breath_of_life_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for rise_again"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

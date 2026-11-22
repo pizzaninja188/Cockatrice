@@ -1,0 +1,14 @@
+// Oracle aa7cd6e6-35a6-4c18-9d66-dc2a95206401; source/rulings checked 2026-11-15.
+// CR 702.16b-f (protection's targeting, attachment, damage and blocking
+// effects), plus the printed clause's normal rules.
+(
+  id: "silver_knight",
+  name: "Silver Knight",
+  face_id: "silver_knight",
+  mana_cost: "{W}{W}",
+  types: ["Creature", "Human", "Knight"],
+  power: 2,
+  toughness: 2,
+  keywords: [FirstStrike],
+  protections: [Color(Red)],
+)

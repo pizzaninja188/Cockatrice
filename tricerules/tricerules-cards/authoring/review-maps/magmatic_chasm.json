@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "6cfd2cd8-a86e-48fe-a85a-9a3444b5030c",
+  "spans": [
+    {
+      "face_id": "magmatic_chasm",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ApplyCombatRestriction",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CombatRestrictionScope::Matching",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q30_no_flying_block_batch::q30_no_flying_block_cards_cast_with_exact_cost_and_body",
+      "covers": "actual magmatic_chasm is exercised by the shared 06-no-flying-block evidence"
+    },
+    {
+      "test": "scenario q30_no_flying_block_batch::q30_no_flying_block_cards_restrict_only_nonfliers",
+      "covers": "actual magmatic_chasm is exercised by the shared 06-no-flying-block evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_no_flying_block_batch::q30_no_flying_block_batch_maps_definitions",
+      "covers": "actual magmatic_chasm is exercised by the shared 06-no-flying-block evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_no_flying_block_batch::q30_no_flying_block_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual magmatic_chasm is exercised by the shared 06-no-flying-block evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

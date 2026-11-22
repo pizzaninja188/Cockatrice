@@ -1,0 +1,23 @@
+// Oracle ae5b9251-2e2d-4e12-b4b4-da051683f970; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 604.1/611.3a (static continuous ability), 613.1f (layer 6), 702.19 (trample). The
+// printed ability word "Devastating Charge" has no rules meaning; the line presentation
+// retains it. The card has no pinned ruling.
+(
+  id: "bloodcrusher_of_khorne",
+  name: "Bloodcrusher of Khorne",
+  face_id: "bloodcrusher_of_khorne",
+  mana_cost: "{3}{R}",
+  types: ["Creature", "Demon", "Knight"],
+  power: 3,
+  toughness: 3,
+  keywords: [Trample],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: AnthemKeyword(
+      filter: (controller: Some(YouControl), name: None, exclude_self: true),
+      keyword: Trample,
+    ),
+  )],
+)

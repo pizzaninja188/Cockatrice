@@ -1,0 +1,14 @@
+// Oracle ff5a2bcf-efd0-4bdb-af52-21a93447c54c; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 401.2 (library order), 608.2c (follow the printed instruction in order) and 121.5
+// (moving a card to hand is not a draw). Strategic Planning's pinned ruling covers a
+// library with fewer than three cards: look at all, keep one, bin the rest.
+
+(
+  id: "glimpse_the_future",
+  name: "Glimpse the Future",
+  face_id: "glimpse_the_future",
+  mana_cost: "{2}{U}",
+  types: ["Sorcery"],
+  spell_effect: [LookChooseOneToHandRestToGraveyard(count: 3)],
+)

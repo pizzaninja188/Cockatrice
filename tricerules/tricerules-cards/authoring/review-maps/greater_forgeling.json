@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "c0d51f49-383b-40f1-9192-5925db1cdd1b",
+  "spans": [
+    {
+      "face_id": "greater_forgeling",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PumpTarget/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q43_activated_self_pump_batch::q43_activated_self_pump_canary_applies_the_printed_pump",
+      "covers": "actual card pays exactly and pumps itself"
+    },
+    {
+      "test": "scenario q43_activated_self_pump_batch::q43_activated_self_pump_cards_apply_their_printed_values_and_expire",
+      "covers": "every actual card applies its printed pump and expires at cleanup"
+    },
+    {
+      "test": "scenario q43_activated_self_pump_batch::q43_activated_self_pump_cards_require_the_printed_mana",
+      "covers": "missing mana is rejected without changing the body"
+    },
+    {
+      "test": "mechanic_registry::q43_cohorts_batch::q43_activated_self_pump_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of greater_forgeling"
+    },
+    {
+      "test": "mechanic_registry::q43_cohorts_batch::q43_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for greater_forgeling"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

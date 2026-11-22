@@ -1,0 +1,15 @@
+// Oracle 61daa88d-fca4-4019-97f3-568346157ba6; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 205.1/208.1 (type line and printed P/T) and the printed keyword's own CR rule.
+// The card has no pinned ruling.
+
+(
+  id: "alaborn_musketeer",
+  name: "Alaborn Musketeer",
+  face_id: "alaborn_musketeer",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 2,
+  toughness: 1,
+  keywords: [Reach],
+)

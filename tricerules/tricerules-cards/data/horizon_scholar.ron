@@ -1,0 +1,20 @@
+// Oracle 29933a32-3738-4ec5-aa6d-ce3684e2e5a3; source/rulings checked 2026-11-12.
+// CR 702.9 (Flying), 603.6a (enters trigger) and 701.22 (Scry).
+(
+  id: "horizon_scholar",
+  name: "Horizon Scholar",
+  face_id: "horizon_scholar",
+  mana_cost: "{5}{U}",
+  types: ["Creature", "Sphinx"],
+  power: 4,
+  toughness: 4,
+  keywords: [Flying],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Scry(count: 2)],
+    ),
+  ],
+)

@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "4f5eaf5a-dd52-4d48-91b5-d48763d13159",
+  "spans": [
+    {
+      "face_id": "vigilant_drake",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "vigilant_drake",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Untap",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q32_flying_untap_batch::q32_flying_untap_canary_simplest",
+      "covers": "actual vigilant_drake is exercised by the shared 08-flying-untap actual-card scenario"
+    },
+    {
+      "test": "scenario q32_flying_untap_batch::q32_flying_untap_canary_hardest",
+      "covers": "actual vigilant_drake is exercised by the shared 08-flying-untap actual-card scenario"
+    },
+    {
+      "test": "scenario q32_flying_untap_batch::q32_flying_untap_cards_cast_with_their_printed_cost_and_body",
+      "covers": "actual vigilant_drake is exercised by the shared 08-flying-untap actual-card scenario"
+    },
+    {
+      "test": "scenario q32_flying_untap_batch::q32_flying_untap_cards_require_the_printed_mana_and_reject_foreign_controllers",
+      "covers": "actual vigilant_drake is exercised by the shared 08-flying-untap actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::q32_flying_untap_batch::q32_flying_untap_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and pinned Oracle fingerprint of vigilant_drake"
+    },
+    {
+      "test": "mechanic_registry::q32_flying_untap_batch::q32_flying_untap_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "reviewed identity, typed shape and pinned Oracle fingerprint of vigilant_drake"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

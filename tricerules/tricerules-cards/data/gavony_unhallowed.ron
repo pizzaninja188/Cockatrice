@@ -1,0 +1,25 @@
+// Oracle 95ccb4a6-6e45-4c00-b7c6-25384022c02f; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 700.4 (dies), 603.6c/603.10a (a battlefield departure trigger uses the event and
+// last-known information) and 122.1 (a +1/+1 counter modifies the permanent). The pinned
+// Unruly Mob and Gavony Unhallowed rulings confirm that a simultaneous death does not save
+// this source and that the trigger uses the source only if it is still on the battlefield.
+
+(
+  id: "gavony_unhallowed",
+  name: "Gavony Unhallowed",
+  face_id: "gavony_unhallowed",
+  mana_cost: "{3}{B}",
+  types: ["Creature", "Zombie"],
+  power: 2,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverCreatureDies(
+      controller: Controller,
+      filter: (permanent_type: Some(Creature), exclude_source: true),
+    ),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+  )],
+)

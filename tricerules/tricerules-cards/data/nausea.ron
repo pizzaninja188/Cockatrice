@@ -1,0 +1,12 @@
+// Oracle 2b8abae2-dd15-41ee-81ae-6a463723b43e; source/rulings checked 2026-11-15 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 611.2c (the affected set is fixed at resolution), 613.4c (layer-7c modification) and
+// 514.2 (cleanup expiry).
+(
+  id: "nausea",
+  name: "Nausea",
+  face_id: "nausea",
+  mana_cost: "{1}{B}",
+  types: ["Sorcery"],
+  spell_effect: [PumpAll(filter: (), power: -1, toughness: -1)],
+)

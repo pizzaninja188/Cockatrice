@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 26074e44-cf2b-459f-9a5d-7eed231ed2b4.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "desperate_charge",
+  name: "Desperate Charge",
+  face_id: "desperate_charge",
+  mana_cost: "{2}{B}",
+  types: ["Sorcery"],
+  spell_effect: [PumpAll(filter: (controller: YouControl), power: 2, toughness: 0)],
+)

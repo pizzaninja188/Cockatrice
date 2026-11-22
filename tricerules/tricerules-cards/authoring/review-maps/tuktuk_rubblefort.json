@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "48dab180-4ffd-4b39-9f5a-6bdc017a1eae",
+  "spans": [
+    {
+      "face_id": "tuktuk_rubblefort",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords",
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemKeyword",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q36_team_haste_batch::q36_team_haste_canary_hardest",
+      "covers": "hardest canary for this actual card"
+    },
+    {
+      "test": "scenario q36_team_haste_batch::q36_team_haste_cards_grant_haste_to_each_creature_you_control",
+      "covers": "actual card is exercised by the shared 05-team-haste scenario"
+    },
+    {
+      "test": "scenario q36_team_haste_batch::q36_team_haste_cards_stop_granting_when_the_source_leaves",
+      "covers": "actual card is exercised by the shared 05-team-haste scenario"
+    },
+    {
+      "test": "mechanic_registry::q36_team_haste_batch::q36_team_haste_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q36_team_haste_batch::q36_team_haste_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

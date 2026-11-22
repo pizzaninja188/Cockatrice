@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle aafd44c1-74a9-4aa7-a4a2-67eb39a07478.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "searing_spear",
+  name: "Searing Spear",
+  face_id: "searing_spear",
+  mana_cost: "{1}{R}",
+  types: ["Instant"],
+  spell_effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
+)

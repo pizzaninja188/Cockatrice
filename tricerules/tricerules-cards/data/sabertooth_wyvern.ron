@@ -1,0 +1,14 @@
+// Oracle acaae632-3203-4867-ad03-32619c3fcfe6; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.9a-b (flying) and 702.7a-b (first strike). No card-specific ruling.
+
+(
+  id: "sabertooth_wyvern",
+  name: "Sabertooth Wyvern",
+  face_id: "sabertooth_wyvern",
+  mana_cost: "{4}{R}",
+  types: ["Creature", "Drake"],
+  power: 3,
+  toughness: 2,
+  keywords: [Flying, FirstStrike],
+)

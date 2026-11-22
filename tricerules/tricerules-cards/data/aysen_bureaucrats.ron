@@ -1,0 +1,23 @@
+// Oracle 786b2028-cf24-4f00-b1d6-05b94e78d617; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 and 118.3 (tap activation), 115.1 (target creature), 701.26
+// (tap) and 608.2b (the power check is repeated on resolution; Aysen/Kor rulings).
+// Copy of the reviewed tap-target activated shape with TargetFilter.power AtMost.
+(
+  id: "aysen_bureaucrats",
+  name: "Aysen Bureaucrats",
+  face_id: "aysen_bureaucrats",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Human", "Advisor"],
+  power: 1,
+  toughness: 1,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [Tap(subject: Chosen((kind: Creature, power: Some(AtMost(2)))))],
+      targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature with power 2 or less", effect_indices: [0])])),
+    ),
+  ],
+)

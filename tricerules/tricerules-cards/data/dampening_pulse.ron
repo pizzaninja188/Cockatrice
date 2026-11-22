@@ -1,0 +1,22 @@
+// Oracle fe3c81b8-9bca-4760-b677-02bfa7e6137b; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 604.2/611.3b and 613.1/613.4c (a static layer-7c power/toughness modifier applies while
+// the source is on the battlefield) and 102.2-102.3 (opponent relationship). Opponents are
+// evaluated relative to this source's current controller.
+
+(
+  id: "dampening_pulse",
+  name: "Dampening Pulse",
+  face_id: "dampening_pulse",
+  mana_cost: "{3}{U}",
+  types: ["Enchantment"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: AnthemPt(
+      filter: (controller: Opponents),
+      delta_power: -1,
+      delta_toughness: 0,
+    ),
+  )],
+)

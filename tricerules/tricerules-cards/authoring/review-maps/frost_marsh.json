@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "75a49bce-ab48-44d6-906d-6f51a30702ba",
+  "spans": [
+    {
+      "face_id": "frost_marsh",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "frost_marsh",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario tap_dual_remnants_batch::tap_dual_remnants_batch_cards_enter_tapped_and_reject_immediate_tap",
+      "covers": "actual frost_marsh enters tapped and rejects an immediate tap activation"
+    },
+    {
+      "test": "scenario tap_dual_remnants_batch::tap_dual_remnants_batch_cards_tap_for_each_printed_option_in_order",
+      "covers": "actual frost_marsh produces each printed color in order without using the stack"
+    },
+    {
+      "test": "mechanic_registry::tap_dual_remnants_batch::tap_dual_remnants_batch_maps_definitions",
+      "covers": "reviewed identity, snow supertype, entry replacement and ordered mana options of frost_marsh"
+    },
+    {
+      "test": "mechanic_registry::tap_dual_remnants_batch::tap_dual_remnants_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for frost_marsh"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

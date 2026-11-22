@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "b723fcec-f208-4397-a178-e1e47b729cf1",
+  "spans": [
+    {
+      "face_id": "metathran_soldier",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::SelfCombatRestriction",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario cant_be_blocked_batch::cant_be_blocked_batch_cards_have_the_printed_characteristics_and_cannot_be_blocked",
+      "covers": "actual metathran_soldier clause coverage"
+    },
+    {
+      "test": "scenario cant_be_blocked_batch::cant_be_blocked_batch_cards_are_never_offered_as_blockable",
+      "covers": "actual metathran_soldier clause coverage"
+    },
+    {
+      "test": "scenario cant_be_blocked_batch::cant_be_blocked_batch_cards_reject_declared_blockers",
+      "covers": "actual metathran_soldier clause coverage"
+    },
+    {
+      "test": "scenario cant_be_blocked_batch::cant_be_blocked_batch_cards_reject_a_mixed_block_declaration",
+      "covers": "actual metathran_soldier clause coverage"
+    },
+    {
+      "test": "mechanic_registry::cant_be_blocked_batch::cant_be_blocked_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of metathran_soldier"
+    },
+    {
+      "test": "mechanic_registry::cant_be_blocked_batch::cant_be_blocked_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for metathran_soldier"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

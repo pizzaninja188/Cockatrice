@@ -1,0 +1,19 @@
+// Oracle c615540b-bf85-4e16-8ac2-9d541cba732f; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 605.1a/605.3a-b (mana ability), 118.3/701.21a (sacrifice cost) and
+// 106.1a-b (one blue and one red mana). No pinned ruling.
+(
+  id: "morgue_toad",
+  name: "Morgue Toad",
+  face_id: "morgue_toad",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Frog"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [SacrificeSelf],
+    effect: [ProduceMana(options: [(u: 1, r: 1)])],
+  )],
+)

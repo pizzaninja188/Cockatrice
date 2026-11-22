@@ -1,0 +1,12 @@
+// Oracle 27e6de72-68c4-4154-807f-5944fe97c92b; source/rulings checked 2026-11-14.
+// CR 202.1: no rules text; the printed mana cost, type line, power and
+// toughness are the complete card.
+(
+  id: "meng_huos_horde",
+  name: "Meng Huo's Horde",
+  face_id: "meng_huos_horde",
+  mana_cost: "{4}{G}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 4,
+  toughness: 5,
+)

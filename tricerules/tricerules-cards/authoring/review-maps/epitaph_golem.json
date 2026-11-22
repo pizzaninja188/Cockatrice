@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "e3483dd4-0118-4143-9b55-51078a6f274a",
+  "spans": [
+    {
+      "face_id": "epitaph_golem",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_a::q54_canary_simplest_epitaph_golem_moves_own_graveyard_card_to_bottom",
+      "covers": "actual Epitaph Golem pays only {2}, moves a card from its controller's graveyard to the library bottom, and does not tap"
+    },
+    {
+      "test": "scenario q54_batch_a::q54_epitaph_golem_rejects_another_players_graveyard",
+      "covers": "actual Epitaph Golem rejects a target in another player's graveyard and keeps the mana unspent"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_a::q54_gy_archivist_cards_map_definitions",
+      "covers": "shared registry identity for the three graveyard-to-bottom definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_a::q54_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Epitaph Golem"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

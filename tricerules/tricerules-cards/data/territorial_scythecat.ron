@@ -1,0 +1,23 @@
+// Oracle 75d38954-6148-4d95-bf4b-cb82efcbe8df; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (landfall entry trigger), 122.1a (+1/+1 counter), 613.4c (counter P/T) and
+// 702.19 (trample). Pinned landfall rulings match the shared cohort.
+(
+  id: "territorial_scythecat",
+  name: "Territorial Scythecat",
+  face_id: "territorial_scythecat",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Cat"],
+  power: 2,
+  toughness: 1,
+  keywords: [Trample],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Land)),
+    ),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+  )],
+)

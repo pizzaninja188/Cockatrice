@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "d685799f-cc1a-40d6-9df6-d05b8b1f5b13",
+  "spans": [
+    {
+      "face_id": "dreadbore",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q47_cohorts_batch::q47_filtered_destroy_rechecks_the_filter_on_resolution",
+      "covers": "the printed filter is rechecked on resolution"
+    },
+    {
+      "test": "scenario q47_cohorts_batch::q47_filtered_destroy_canary_simplest_checks_power_at_cast",
+      "covers": "canary simplest actual card enforces its power bound at cast"
+    },
+    {
+      "test": "scenario q47_cohorts_batch::q47_filtered_destroy_canary_hardest_requires_combat_role",
+      "covers": "canary hardest requires the attacking or blocking combat role"
+    },
+    {
+      "test": "scenario q47_cohorts_batch::q47_filtered_destroy_cards_enforce_their_printed_filters",
+      "covers": "every actual card enforces its printed target filter"
+    },
+    {
+      "test": "mechanic_registry::q47_cohorts_batch::q47_filtered_destruction_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q47_cohorts_batch::q47_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

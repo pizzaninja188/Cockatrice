@@ -1,0 +1,20 @@
+// Oracle b2e65e8b-5f08-4cc2-ab1d-00f8903dbea2; source/rulings checked 2026-11-12.
+// CR 702.9 (Flying), 603.6a (enters trigger) and 701.22 (Scry).
+(
+  id: "faerie_seer",
+  name: "Faerie Seer",
+  face_id: "faerie_seer",
+  mana_cost: "{U}",
+  types: ["Creature", "Faerie", "Wizard"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Scry(count: 2)],
+    ),
+  ],
+)

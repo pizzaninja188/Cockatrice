@@ -1,0 +1,19 @@
+// Oracle a1a7757f-7e9b-4b5b-b9df-e98d8918caac; source/rulings checked 2026-11-15.
+// CR 702.8a (Flash), 303.4a (Aura target and attach), 613.4c
+// (layer-7c attached P/T modifier) and 704.5m (unattached Aura cleanup).
+(
+  id: "feebleness",
+  name: "Feebleness",
+  face_id: "feebleness",
+  mana_cost: "{1}{B}",
+  types: ["Enchantment", "Aura"],
+  keywords: [Flash],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([3]),
+      definition: AttachedModifier(delta_power: -2, delta_toughness: -1),
+    ),
+  ],
+)

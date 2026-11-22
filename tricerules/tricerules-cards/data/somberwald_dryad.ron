@@ -1,0 +1,12 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle b3e9ae89-3507-4429-ab37-7175f4db4710.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "somberwald_dryad",
+  name: "Somberwald Dryad",
+  face_id: "somberwald_dryad",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Dryad"],
+  power: 2,
+  toughness: 2,
+  evasions: [Landwalk(land_subtype: "Forest")],
+)

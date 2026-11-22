@@ -1,0 +1,26 @@
+// Oracle 46027ca0-9d06-42b3-8012-124861c6b558; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters-the-battlefield trigger), 115.1 (target), 611.2a/514.2 and 613.4c
+// (until-end-of-turn -N/-N).
+// Pinned ruling: the ability is mandatory; if it is the only creature on the battlefield,
+// it must choose itself and gets -2/-2 until end of turn.
+(
+  id: "farbog_boneflinger",
+  name: "Farbog Boneflinger",
+  face_id: "farbog_boneflinger",
+  mana_cost: "{4}{B}",
+  types: ["Creature", "Zombie"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [PumpTarget(power: -2, toughness: -2, subject: Chosen((kind: Creature)))],
+    targeting: Some((groups: [(
+      min: 1, max: 1,
+      prompt: "Choose target creature",
+      effect_indices: [0],
+    )])),
+  )],
+)

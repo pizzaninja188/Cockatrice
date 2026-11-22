@@ -1,0 +1,14 @@
+// Oracle b9be76a3-e14f-48dd-8824-17d5708ac7e0; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying) and 702.16b-f (protection from a color: no targeting, damage,
+// attachment, or blocking by red sources).
+(
+  id: "hazerider_drake",
+  name: "Hazerider Drake",
+  face_id: "hazerider_drake",
+  mana_cost: "{2}{W}{U}",
+  types: ["Creature", "Drake"],
+  power: 2,
+  toughness: 3,
+  keywords: [Flying],
+  protections: [Color(Red)],
+)

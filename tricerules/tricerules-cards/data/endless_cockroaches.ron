@@ -1,0 +1,20 @@
+// Oracle 9f31dbb1-c350-46f8-bd1d-9f23a073d2f1; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 700.4/603.6c (dies trigger), 400.7 (zone-change identity) and 608.2b (stale source;
+// the return happens only if the card is still in the graveyard on resolution).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "endless_cockroaches",
+  name: "Endless Cockroaches",
+  face_id: "endless_cockroaches",
+  mana_cost: "{1}{B}{B}",
+  types: ["Creature", "Insect"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfDies,
+    effect: [ReturnTriggeredCard(from: [Graveyard], reference: AbilitySource, destination: Hand)],
+  )],
+)

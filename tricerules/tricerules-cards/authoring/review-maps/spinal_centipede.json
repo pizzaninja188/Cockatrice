@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "43d44a7f-829a-4f4d-9f71-2f4384ddd803",
+  "spans": [
+    {
+      "face_id": "spinal_centipede",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario dies_counter_target_batch::dies_counter_target_batch_cards_place_exactly_one_counter",
+      "covers": "actual spinal_centipede is exercised by the shared dies_counter_target_batch actual-card scenario"
+    },
+    {
+      "test": "scenario dies_counter_target_batch::dies_counter_target_batch_cards_do_not_trigger_when_exiled",
+      "covers": "actual spinal_centipede is exercised by the shared dies_counter_target_batch actual-card scenario"
+    },
+    {
+      "test": "scenario dies_counter_target_batch::dies_counter_target_batch_cards_without_a_legal_target_do_not_prompt",
+      "covers": "actual spinal_centipede is exercised by the shared dies_counter_target_batch actual-card scenario"
+    },
+    {
+      "test": "scenario dies_counter_target_batch::dies_counter_target_batch_cards_do_not_counter_a_departed_target",
+      "covers": "actual spinal_centipede is exercised by the shared dies_counter_target_batch actual-card scenario"
+    },
+    {
+      "test": "scenario dies_counter_target_batch::dies_counter_target_batch_cards_scope_the_target_to_their_controller",
+      "covers": "actual spinal_centipede is exercised by the shared dies_counter_target_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::dies_counter_target_batch::dies_counter_target_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of spinal_centipede"
+    },
+    {
+      "test": "mechanic_registry::dies_counter_target_batch::dies_counter_target_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for spinal_centipede"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

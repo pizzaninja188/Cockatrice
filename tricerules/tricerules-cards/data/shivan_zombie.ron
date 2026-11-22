@@ -1,0 +1,13 @@
+// Oracle fb3d438e-5e04-45a0-8d16-db63f0faff75; source/rulings checked 2026-11-13.
+// CR 702.16b-f: protection's five effects (no targeting, no Aura/Equipment
+// attachment, no damage, no blocking, no Fortify).
+(
+  id: "shivan_zombie",
+  name: "Shivan Zombie",
+  face_id: "shivan_zombie",
+  mana_cost: "{B}{R}",
+  types: ["Creature", "Phyrexian", "Barbarian", "Zombie"],
+  power: 2,
+  toughness: 2,
+  protections: [Color(White)],
+)

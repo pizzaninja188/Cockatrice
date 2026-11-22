@@ -1,0 +1,19 @@
+// Oracle 565922d6-8152-411f-8d4d-dc7c8523a49b; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1 (one graveyard-card target), 400.7 (the returned card is a new object),
+// 404.1 (graveyard ownership) and 608.2b (a stale sole target fizzles). "Permanent card" is every card type except instant and sorcery; lands and
+// nonland permanents are one disjunction.
+(
+  id: "natures_spiral",
+  name: "Nature's Spiral",
+  face_id: "natures_spiral",
+  mana_cost: "{1}{G}",
+  types: ["Sorcery"],
+  spell_effect: [MoveGraveyardCards(
+    filter: (card: Some((any_of: Some([
+      (card_type: Some(Land)),
+      (card_type: Some(NonlandPermanent)),
+    ])))),
+    destination: Hand,
+  )],
+)

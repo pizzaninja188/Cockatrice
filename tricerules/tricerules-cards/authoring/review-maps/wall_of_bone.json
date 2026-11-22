@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "8ffe4986-9e09-4421-ad26-296a4c0df9e4",
+  "spans": [
+    {
+      "face_id": "wall_of_bone",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "wall_of_bone",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Defender",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Regenerate",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario wall_regenerate_batch::wall_regenerate_batch_cards_cast_with_exact_characteristics",
+      "covers": "actual wall_of_bone is exercised by the shared wall_regenerate_batch actual-card scenario: printed mana, body, owner, controller and defender"
+    },
+    {
+      "test": "scenario wall_regenerate_batch::wall_regenerate_batch_cards_place_a_shield_with_the_exact_cost",
+      "covers": "actual wall_of_bone is exercised by the shared wall_regenerate_batch actual-card scenario: one regeneration shield from the printed mana cost"
+    },
+    {
+      "test": "scenario wall_regenerate_batch::wall_regenerate_batch_cards_survive_lethal_damage_by_consuming_the_shield",
+      "covers": "actual wall_of_bone is exercised by the shared wall_regenerate_batch actual-card scenario: lethal damage is replaced and the shield is consumed"
+    },
+    {
+      "test": "scenario wall_regenerate_batch::wall_regenerate_batch_cards_reject_activation_when_the_cost_cannot_be_paid",
+      "covers": "actual wall_of_bone is exercised by the shared wall_regenerate_batch actual-card scenario: an unpaid activation spends no mana and creates no shield"
+    },
+    {
+      "test": "scenario wall_regenerate_batch::wall_regenerate_batch_cards_cannot_attack",
+      "covers": "actual wall_of_bone is exercised by the shared wall_regenerate_batch actual-card scenario: defender refuses an attack declaration"
+    },
+    {
+      "test": "mechanic_registry::wall_regenerate_batch::wall_regenerate_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of wall_of_bone (defender + {M} regenerate)"
+    },
+    {
+      "test": "mechanic_registry::wall_regenerate_batch::wall_regenerate_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for wall_of_bone"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

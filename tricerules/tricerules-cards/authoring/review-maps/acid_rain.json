@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "6ae3c3a2-bd17-4fea-ae27-9d2d1eaf8cc0",
+  "spans": [
+    {
+      "face_id": "acid_rain",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DestroyAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q48_cohorts_batch::q48_mass_destroy_canary_simplest_hits_all_green_creatures",
+      "covers": "canary simplest destroys every green creature"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_mass_destroy_canary_hardest_hits_white_permanents",
+      "covers": "canary hardest destroys every white permanent"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_mass_destroy_cards_apply_their_printed_filter",
+      "covers": "every actual card applies its printed color, type, or land subtype filter"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_mass_destroy_maps_definitions",
+      "covers": "reviewed identity and untargeted DestroyAll filter"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Acid Rain"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

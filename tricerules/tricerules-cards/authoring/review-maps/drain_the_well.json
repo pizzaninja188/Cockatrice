@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "84e89aac-439c-4e09-b7d9-2ee047c224c5",
+  "spans": [
+    {
+      "face_id": "drain_the_well",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_a::q56_a_land_destruction_life_riders_apply_the_printed_values",
+      "covers": "actual drain_the_well applies its printed effects to the chosen target"
+    },
+    {
+      "test": "scenario q56_batch_a::q56_a_canary_hardest_drain_the_well_pays_hybrid_and_gains_two",
+      "covers": "actual drain_the_well canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_a::q56_a_land_destruction_life_map_definitions",
+      "covers": "shared registry identity for drain_the_well"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

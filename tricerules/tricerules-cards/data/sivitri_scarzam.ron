@@ -1,0 +1,13 @@
+// Oracle 333cc91b-01ab-4491-a993-d8304fc382c6; source/rulings checked 2026-11-14.
+// CR 202.1 and 205.4a: no rules text; the printed mana cost, legendary
+// supertype, type line, power and toughness are the complete card.
+(
+  id: "sivitri_scarzam",
+  name: "Sivitri Scarzam",
+  face_id: "sivitri_scarzam",
+  mana_cost: "{5}{U}{B}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Human"],
+  power: 6,
+  toughness: 4,
+)

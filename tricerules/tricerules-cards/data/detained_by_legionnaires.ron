@@ -1,0 +1,15 @@
+// Oracle d59488b5-1118-4276-b862-11e860c7c32a; source/rulings checked 2026-11-13.
+// CR 303.4 (Auras), 508.1 (attack restrictions) and 509.1 (block restrictions).
+(
+  id: "detained_by_legionnaires",
+  name: "Detained by Legionnaires",
+  face_id: "detained_by_legionnaires",
+  mana_cost: "{1}{W}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: AttachedModifier(restriction: (cant_attack: true, cant_block: true)),
+  )],
+)

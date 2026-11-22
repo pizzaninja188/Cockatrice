@@ -1,0 +1,27 @@
+// Oracle 1d41aacf-e15d-4457-b12a-c71bcdb7b5de; source/rulings checked 2026-11-11.
+// CR 702.8a (Flash), 303.4 (Aura attach), 603.6a (entry trigger), 611.2a (until-end-of-turn grant),
+// 613.4c (attached P/T modifier), 704.5m (unattached Aura cleanup), and 514.2 (cleanup).
+(
+  id: "captains_tutelage",
+  name: "Captain's Tutelage",
+  face_id: "captains_tutelage",
+  mana_cost: "{1}{R}",
+  types: ["Enchantment", "Aura"],
+  keywords: [Flash],
+  spell_effect: [AuraAttach()],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([3]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [GrantKeywords(subject: AttachedObject, keywords: [FirstStrike])],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([4]),
+      definition: AttachedModifier(delta_power: 2),
+    ),
+  ],
+)

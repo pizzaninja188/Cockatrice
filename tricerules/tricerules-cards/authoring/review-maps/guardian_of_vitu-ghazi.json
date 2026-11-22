@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "a7d5a9ca-27ec-4843-a9fd-0de0d67def39",
+  "spans": [
+    {
+      "face_id": "guardian_of_vitu_ghazi",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "guardian_of_vitu_ghazi",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Convoke",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "Keyword::Vigilance",
+      "typed_path": "/faces/0/keywords/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario convoke_batch::convoke_batch_cards_cast_with_convoke_and_exact_printed_characteristics",
+      "covers": "actual guardian_of_vitu-ghazi clause coverage"
+    },
+    {
+      "test": "scenario convoke_batch::convoke_batch_cards_require_colored_mana_and_keep_printed_keywords",
+      "covers": "actual guardian_of_vitu-ghazi clause coverage"
+    },
+    {
+      "test": "mechanic_registry::convoke_batch::convoke_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of guardian_of_vitu-ghazi"
+    },
+    {
+      "test": "mechanic_registry::convoke_batch::convoke_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for guardian_of_vitu-ghazi"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

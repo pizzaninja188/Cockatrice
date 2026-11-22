@@ -1,0 +1,19 @@
+// Oracle c44f1a81-269b-4f05-8ff2-e7ce19a93937; source/rulings checked 2026-11-15.
+// CR 115.1a/601.2c (target at cast), 608.2b (stale target), 400.3
+// (a card moves to its owner's hand), and 121.1 (draw).
+(
+  id: "symbol_of_unsummoning",
+  name: "Symbol of Unsummoning",
+  face_id: "symbol_of_unsummoning",
+  mana_cost: "{2}{U}",
+  types: ["Sorcery"],
+  spell_effect: [
+    ReturnToOwnersHand(subject: Chosen((kind: Creature))),
+    Draw(count: 1),
+  ],
+  targeting: Some((groups: [(
+    min: 1, max: 1,
+    prompt: "Choose target creature",
+    effect_indices: [0],
+  )])),
+)

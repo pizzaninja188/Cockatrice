@@ -1,0 +1,29 @@
+// Oracle e0b3cfc1-68d4-46a8-9ae4-71bdb9c87889; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.16 (protection), 602.1/602.2 (activation), 118.3 (paying the printed costs),
+// 613.1f (first strike) and 611.2a/613.4c (until-end-of-turn pump).
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "order_of_the_white_shield",
+  name: "Order of the White Shield",
+  face_id: "order_of_the_white_shield",
+  mana_cost: "{W}{W}",
+  types: ["Creature", "Human", "Knight"],
+  power: 2,
+  toughness: 1,
+  protections: [Color(Black)],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{W}")],
+      effect: [GrantKeywords(subject: Source, keywords: [FirstStrike])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
+      costs: [Mana("{W}{W}")],
+      effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
+    ),
+  ],
+)

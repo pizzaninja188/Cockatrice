@@ -1,0 +1,27 @@
+// Oracle c90ea9d5-82f7-4b92-8cb1-10d0a7378e8c; source/rulings checked 2026-11-13.
+// CR 702.9a-b (flying), 603.6a (entry trigger), 121 (draw) and 701.9 (discard).
+(
+  id: "sky-eel_school",
+  name: "Sky-Eel School",
+  face_id: "sky_eel_school",
+  mana_cost: "{3}{U}{U}",
+  types: ["Creature", "Fish"],
+  power: 3,
+  toughness: 3,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    program: Some(
+      (
+        body: (
+          steps: [
+            (id: "draw_cards", kind: Perform(Draw(count: 1))),
+            (id: "discard_cards", kind: Perform(Discard(quantity: Exact(1)))),
+          ],
+        ),
+      ),
+    ),
+  )],
+)

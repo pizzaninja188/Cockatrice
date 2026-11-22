@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "ed1a1c04-1b2b-4616-abb2-8bd19c47b589",
+  "spans": [
+    {
+      "face_id": "rites_of_reaping",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q35_double_pump_shrink_batch::q35_double_pump_shrink_canary_hardest",
+      "covers": "hardest canary for this actual card"
+    },
+    {
+      "test": "scenario q35_double_pump_shrink_batch::q35_double_pump_shrink_cards_apply_the_printed_pump_and_shrink",
+      "covers": "actual card is exercised by the shared 09-double-pump-shrink scenario"
+    },
+    {
+      "test": "scenario q35_double_pump_shrink_batch::q35_double_pump_shrink_cards_require_two_distinct_targets",
+      "covers": "actual card is exercised by the shared 09-double-pump-shrink scenario"
+    },
+    {
+      "test": "scenario q35_double_pump_shrink_batch::q35_double_pump_shrink_cards_keep_the_legal_target_when_the_other_leaves",
+      "covers": "actual card is exercised by the shared 09-double-pump-shrink scenario"
+    },
+    {
+      "test": "mechanic_registry::q35_double_pump_shrink_batch::q35_double_pump_shrink_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q35_double_pump_shrink_batch::q35_double_pump_shrink_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

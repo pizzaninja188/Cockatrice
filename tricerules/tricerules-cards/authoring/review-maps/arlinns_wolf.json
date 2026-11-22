@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "fe4c0f02-c5fd-4cd5-9f80-0936e3875f1c",
+  "spans": [
+    {
+      "face_id": "arlinns_wolf",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::SelfCombatRestriction",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "CombatRestriction::cant_be_blocked_by",
+      "typed_path": "/faces/0/static_abilities/0/definition/SelfCombatRestriction/restriction"
+    },
+    {
+      "symbol": "PowerComparison::AtMost",
+      "typed_path": "/faces/0/static_abilities/0/definition/SelfCombatRestriction/restriction/cant_be_blocked_by/0/power"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario blocked_by_power_two_batch::blocked_by_power_two_batch_cards_reject_weak_blockers_and_allow_power_three",
+      "covers": "actual arlinns_wolf is exercised by the shared blocked_by_power_two_batch actual-card scenario"
+    },
+    {
+      "test": "scenario blocked_by_power_two_batch::blocked_by_power_two_batch_cards_do_not_undo_a_legal_block_after_a_power_change",
+      "covers": "actual arlinns_wolf is exercised by the shared blocked_by_power_two_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::blocked_by_power_two_batch::blocked_by_power_two_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of arlinns_wolf"
+    },
+    {
+      "test": "mechanic_registry::blocked_by_power_two_batch::blocked_by_power_two_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for arlinns_wolf"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

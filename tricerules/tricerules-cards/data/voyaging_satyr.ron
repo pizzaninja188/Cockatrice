@@ -1,0 +1,25 @@
+// Oracle bce18f34-848e-4dd2-9a38-6084c0695f78; source/rulings checked 2026-11-14.
+// CR 107.5 and 118.3 (tap cost), 602.2b and 115.1c (targeted activated
+// ability), and 701.26b (untap).
+(
+  id: "voyaging_satyr",
+  name: "Voyaging Satyr",
+  face_id: "voyaging_satyr",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Satyr", "Druid"],
+  power: 1,
+  toughness: 2,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [Untap(subject: Chosen((kind: AnyPermanent, permanent_types: [Land])))],
+      targeting: Some((groups: [(
+        min: 1, max: 1,
+        prompt: "Choose target land",
+        effect_indices: [0],
+      )])),
+    ),
+  ],
+)

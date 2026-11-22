@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "caa0c20c-594b-4ffd-87de-60bf15d8c3be",
+  "spans": [
+    {
+      "face_id": "depths_of_desire",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_a::q55_a_bounce_riders_resolve_in_printed_order",
+      "covers": "actual Depths of Desire returns the target and creates one Treasure under the caster's control"
+    },
+    {
+      "test": "scenario q55_batch_a::q55_a_bounce_riders_fizzle_with_the_stale_target",
+      "covers": "actual Depths of Desire fizzles without creating a Treasure when its only target left"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_bounce_riders_map_definitions",
+      "covers": "shared registry identity for the bounce-with-rider spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Depths of Desire"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

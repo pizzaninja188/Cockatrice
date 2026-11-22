@@ -1,0 +1,69 @@
+{
+  "format_version": 1,
+  "oracle_id": "05baf38c-677a-42e3-bb8c-a52a0a478984",
+  "spans": [
+    {
+      "face_id": "ramosian_commander",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SearchDestination::Battlefield",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/SearchLibrary/destination"
+    },
+    {
+      "symbol": "CardTypeFilter::NonlandPermanent",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/SearchLibrary/filter/card_type"
+    },
+    {
+      "symbol": "ZoneCardFilter.required_subtypes: [\"Rebel\"]",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/SearchLibrary/filter/required_subtypes"
+    },
+    {
+      "symbol": "ZoneCardFilter.max_mana_value",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/SearchLibrary/filter/max_mana_value"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q41_tutor_batch::q41_tutor_cards_apply_their_printed_subtype_and_cap",
+      "covers": "actual card searches only its printed subtype under its printed mana-value cap"
+    },
+    {
+      "test": "scenario q41_tutor_batch::q41_tutor_can_fail_to_find_and_still_shuffles",
+      "covers": "a search with a stated quality may fail to find and still shuffles"
+    },
+    {
+      "test": "scenario q41_tutor_batch::q41_tutor_cards_offer_noncreature_rebel_permanents",
+      "covers": "a Rebel permanent card need not be a creature (Bound in Silence at the applicable cap)"
+    },
+    {
+      "test": "mechanic_registry::q41_cohorts_batch::q41_subtype_tutor_maps_definitions",
+      "covers": "reviewed identity, activation cost and search filter"
+    },
+    {
+      "test": "scenario q41_tutor_batch::q41_tutor_canary_hardest_respects_the_printed_mana_value_cap",
+      "covers": "hardest canary for this actual card"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

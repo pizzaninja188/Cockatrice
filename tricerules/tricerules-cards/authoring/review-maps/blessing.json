@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "5c84d8da-2bfb-4618-89a0-7d9ed604e854",
+  "spans": [
+    {
+      "face_id": "blessing",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "blessing",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::AttachedObject",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PumpTarget/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q43_aura_pump_batch::q43_aura_pump_canary_applies_the_printed_pump_to_the_enchanted_creature",
+      "covers": "actual card enchants a creature, pays exactly, pumps only that creature and expires"
+    },
+    {
+      "test": "scenario q43_aura_pump_batch::q43_aura_pump_cards_apply_their_printed_values_and_expire_at_cleanup",
+      "covers": "every actual card applies its printed values and expires"
+    },
+    {
+      "test": "scenario q43_aura_pump_batch::q43_aura_pump_cards_require_the_printed_activation_mana_and_a_creature_target",
+      "covers": "missing mana is rejected and a player is not an Aura target"
+    },
+    {
+      "test": "scenario q43_aura_pump_batch::q43_aura_pump_cards_follow_the_attachment_at_resolution_and_keep_an_applied_bonus",
+      "covers": "the pump follows the creature enchanted at resolution and survives the Aura leaving"
+    },
+    {
+      "test": "mechanic_registry::q43_cohorts_batch::q43_aura_pump_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of blessing"
+    },
+    {
+      "test": "mechanic_registry::q43_cohorts_batch::q43_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for blessing"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

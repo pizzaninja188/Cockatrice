@@ -1,0 +1,26 @@
+{
+  "format_version": 1,
+  "oracle_id": "50fa6a63-e031-47cb-8fd5-a6c235203722",
+  "spans": [],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario vanilla_green_batch::vanilla_green_batch_cards_cast_with_printed_characteristics",
+      "covers": "actual whiptail_wurm clause coverage"
+    },
+    {
+      "test": "scenario vanilla_green_batch::vanilla_green_batch_cards_attack_and_block_with_printed_stats",
+      "covers": "actual whiptail_wurm clause coverage"
+    },
+    {
+      "test": "mechanic_registry::vanilla_green_batch::vanilla_green_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of whiptail_wurm"
+    },
+    {
+      "test": "mechanic_registry::vanilla_green_batch::vanilla_green_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for whiptail_wurm"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

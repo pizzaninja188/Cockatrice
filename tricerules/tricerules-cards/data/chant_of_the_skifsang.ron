@@ -1,0 +1,19 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 5c902588-b16e-4679-b89e-7b11c928061f.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 303.4: Aura attach; CR 613.4c: layer-7c P/T modifier while attached. The saved 2011-01-22
+// ruling confirms power 0 or less assigns no combat damage; the engine floors effective power at 0.
+(
+  id: "chant_of_the_skifsang",
+  name: "Chant of the Skifsang",
+  face_id: "chant_of_the_skifsang",
+  mana_cost: "{2}{U}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(delta_power: -13, delta_toughness: 0),
+    ),
+  ],
+)

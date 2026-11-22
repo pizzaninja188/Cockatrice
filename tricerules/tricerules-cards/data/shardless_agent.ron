@@ -1,0 +1,15 @@
+// Oracle 2afbaa9a-c171-4a8b-90f3-5250d8498356; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.85a-c (cascade): when the spell is cast, exile through the first nonland card
+// with a lower mana value, may cast it without paying its cost, and bottom the rest.
+// Pinned rulings, where any, are recorded in the family record; none changes the printed behavior.
+(
+  id: "shardless_agent",
+  name: "Shardless Agent",
+  face_id: "shardless_agent",
+  mana_cost: "{1}{G}{U}",
+  types: ["Artifact", "Creature", "Human", "Rogue"],
+  power: 2,
+  toughness: 2,
+  spell_keywords: [Cascade],
+)

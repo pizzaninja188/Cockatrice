@@ -1,0 +1,19 @@
+// Oracle e018773f-95b3-49a3-9674-6f04ddef2092; source/rulings checked 2026-11-13.
+// CR 605.1a/605.3a-b (mana ability and immediate resolution) and 118.3 (tap cost).
+(
+  id: "azorius_signet",
+  name: "Azorius Signet",
+  face_id: "azorius_signet",
+  mana_cost: "{2}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{1}"), Tap],
+      effect: [ProduceMana(options: [
+        (w: 1, u: 1),
+      ])],
+    ),
+  ],
+)

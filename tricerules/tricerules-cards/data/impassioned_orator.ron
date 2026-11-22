@@ -1,0 +1,22 @@
+// Oracle c7107a2d-2dcf-42e9-9ea9-d0fc0d6d2ec6; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.2 (triggered ability), 603.6a (enters-the-battlefield event) and 119.3 (life gain).
+// The card has no pinned ruling.
+
+(
+  id: "impassioned_orator",
+  name: "Impassioned Orator",
+  face_id: "impassioned_orator",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Human", "Cleric"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "another_creature_life",
+      presentation: OracleLines([1]),
+      trigger: WheneverPermanentEntersBattlefield(controller: Controller, filter: (permanent_type: Some(Creature), exclude_source: true)),
+      effect: [GainLife(amount: 1)],
+    ),
+  ],
+)

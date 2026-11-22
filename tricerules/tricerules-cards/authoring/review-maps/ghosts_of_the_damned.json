@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "1b3bbd3c-f5ef-4940-82a2-d36f4d148b9a",
+  "spans": [
+    {
+      "face_id": "ghosts_of_the_damned",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q41_activated_batch::q41_activated_shrink_cards_apply_their_printed_values",
+      "covers": "actual card applies its printed penalty and printed cost"
+    },
+    {
+      "test": "scenario q41_activated_batch::q41_activated_shrink_cards_expire_at_cleanup",
+      "covers": "the penalty expires at cleanup"
+    },
+    {
+      "test": "mechanic_registry::q41_cohorts_batch::q41_activated_shrink_maps_definitions",
+      "covers": "reviewed identity, costs and printed penalty"
+    },
+    {
+      "test": "scenario q41_activated_batch::q41_activated_shrink_canary_simplest_leaves_toughness_alone",
+      "covers": "simplest canary: -1/-0 does not reduce toughness"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

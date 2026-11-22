@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "7c9d8065-9ab0-4468-a11c-383bd036029f",
+  "spans": [
+    {
+      "face_id": "ritual_of_rejuvenation",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "ritual_of_rejuvenation",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario gain_life_draw_batch::gain_life_draw_batch_cards_resolve_for_exact_life_and_one_card",
+      "covers": "actual ritual_of_rejuvenation is exercised by the shared gain_life_draw_batch actual-card scenario"
+    },
+    {
+      "test": "scenario gain_life_draw_batch::gain_life_draw_batch_cards_reject_cast_without_exact_mana",
+      "covers": "actual ritual_of_rejuvenation is exercised by the shared gain_life_draw_batch actual-card scenario"
+    },
+    {
+      "test": "scenario gain_life_draw_batch::gain_life_draw_batch_instants_resolve_on_the_opponents_turn",
+      "covers": "actual ritual_of_rejuvenation is exercised by the shared gain_life_draw_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::gain_life_draw_batch::gain_life_draw_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of ritual_of_rejuvenation"
+    },
+    {
+      "test": "mechanic_registry::gain_life_draw_batch::gain_life_draw_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for ritual_of_rejuvenation"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

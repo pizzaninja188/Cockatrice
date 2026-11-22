@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "120a0bcd-eca2-44eb-ad8d-5e4077f7e21c",
+  "spans": [
+    {
+      "face_id": "sandstone_warrior",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords",
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::FirstStrike",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q53_batch_c::q53_c_self_pump_cards_apply_their_printed_values",
+      "covers": "actual sandstone_warrior printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_c::q53_self_pump_cards_map_definitions",
+      "covers": "actual sandstone_warrior printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_c::q53_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    },
+    {
+      "test": "scenario q53_batch_c::q53_c_self_pump_cards_expire_at_cleanup",
+      "covers": "actual pump expires at cleanup"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

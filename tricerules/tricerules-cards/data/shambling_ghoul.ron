@@ -1,0 +1,18 @@
+// Oracle 2acc1657-d716-41d7-aedf-9b080a58ec83; source/rulings checked 2026-11-12.
+// CR 614.1d/614.12 (enters-tapped replacement effect).
+(
+  id: "shambling_ghoul",
+  name: "Shambling Ghoul",
+  face_id: "shambling_ghoul",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Zombie"],
+  power: 2,
+  toughness: 3,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: EntersTapped(affected: Self_),
+    ),
+  ],
+)

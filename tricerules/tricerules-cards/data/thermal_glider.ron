@@ -1,0 +1,14 @@
+// Oracle cbe5c74b-1006-4c63-8b46-e06b61e6fe02; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying) and 702.16b-f (protection from a color: no targeting, damage,
+// attachment, or blocking by red sources).
+(
+  id: "thermal_glider",
+  name: "Thermal Glider",
+  face_id: "thermal_glider",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Human", "Rebel"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flying],
+  protections: [Color(Red)],
+)

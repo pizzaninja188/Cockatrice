@@ -1,0 +1,22 @@
+// Oracle a8287efd-23ca-498b-90f1-c76099919fa4; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying) and 509.1b (blocking restrictions); reach does not
+// make a creature a legal blocker for this restriction.
+(
+  id: "long-finned_skywhale",
+  name: "Long-Finned Skywhale",
+  face_id: "long_finned_skywhale",
+  mana_cost: "{2}{U}{U}",
+  types: ["Creature", "Whale"],
+  power: 4,
+  toughness: 3,
+  keywords: [Flying],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: SelfCombatRestriction(restriction: (
+        cant_block_creatures_matching: [(kind: Creature, excluded_keywords: [Flying])],
+      )),
+    ),
+  ],
+)

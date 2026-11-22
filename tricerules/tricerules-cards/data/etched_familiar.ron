@@ -1,0 +1,24 @@
+// Oracle e2bc064e-4739-4eb1-ba44-1fd92b2829d7; source/rulings checked 2026-11-16 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 700.4 (dies), 603.6c (leaves-the-battlefield trigger), 119.3 (life loss/gain) and
+// 608.2c (the source controller follows the instruction).
+(
+  id: "etched_familiar",
+  name: "Etched Familiar",
+  face_id: "etched_familiar",
+  mana_cost: "{2}{B}",
+  types: ["Artifact", "Creature", "Phyrexian", "Fox"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfDies,
+      effect: [
+        LoseLife(amount: Fixed(2), who: EachOpponent),
+        GainLife(amount: 2),
+      ],
+    ),
+  ],
+)

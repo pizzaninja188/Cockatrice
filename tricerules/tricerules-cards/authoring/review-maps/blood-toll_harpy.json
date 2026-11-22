@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "98f9619e-585f-486f-b143-fb42085eb583",
+  "spans": [
+    {
+      "face_id": "blood_toll_harpy",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "blood_toll_harpy",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q41_etb_spell_batch::q41_etb_each_loses_life_cards_apply_their_printed_amount",
+      "covers": "actual card applies its printed life loss to both players"
+    },
+    {
+      "test": "scenario q41_etb_spell_batch::q41_etb_each_loses_life_has_no_target_and_does_not_draw",
+      "covers": "the untargeted trigger asks for no target"
+    },
+    {
+      "test": "mechanic_registry::q41_cohorts_batch::q41_etb_each_loses_life_maps_definitions",
+      "covers": "reviewed identity and printed amount"
+    },
+    {
+      "test": "scenario q41_etb_spell_batch::q41_etb_each_loses_life_canary_simplest_hits_both_players",
+      "covers": "simplest canary for this actual card"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

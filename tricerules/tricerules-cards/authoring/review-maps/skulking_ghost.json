@@ -1,0 +1,69 @@
+{
+  "format_version": 1,
+  "oracle_id": "cd97f8b4-e751-4b52-987b-a442aef57809",
+  "spans": [
+    {
+      "face_id": "skulking_ghost",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords",
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfBecomesTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "TargetingSourceFilter::SpellOrAbility",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "CastTriggerPlayer::AnyPlayer",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Sacrifice",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q29_target_sacrifice_batch::q29_target_sacrifice_cards_cast_with_exact_cost_body_and_keyword",
+      "covers": "actual skulking_ghost is exercised by the shared 04-target-sacrifice evidence"
+    },
+    {
+      "test": "scenario q29_target_sacrifice_batch::q29_target_sacrifice_cards_trigger_for_an_ability_target",
+      "covers": "actual skulking_ghost is exercised by the shared 04-target-sacrifice evidence"
+    },
+    {
+      "test": "scenario q29_target_sacrifice_batch::q29_target_sacrifice_cards_trigger_for_their_own_controller",
+      "covers": "actual skulking_ghost is exercised by the shared 04-target-sacrifice evidence"
+    },
+    {
+      "test": "scenario q29_target_sacrifice_batch::q29_target_sacrifice_cards_ignore_non_targeting_spells",
+      "covers": "actual skulking_ghost is exercised by the shared 04-target-sacrifice evidence"
+    },
+    {
+      "test": "scenario q29_target_sacrifice_batch::q29_target_sacrifice_cards_still_sacrifice_when_the_targeting_spell_is_countered",
+      "covers": "actual skulking_ghost is exercised by the shared 04-target-sacrifice evidence"
+    },
+    {
+      "test": "mechanic_registry::q29_target_sacrifice_batch::q29_target_sacrifice_batch_maps_definitions",
+      "covers": "actual skulking_ghost is exercised by the shared 04-target-sacrifice evidence"
+    },
+    {
+      "test": "mechanic_registry::q29_target_sacrifice_batch::q29_target_sacrifice_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual skulking_ghost is exercised by the shared 04-target-sacrifice evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

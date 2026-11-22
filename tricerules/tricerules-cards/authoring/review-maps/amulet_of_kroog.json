@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "8eca999e-f7f8-4354-b419-2df4249c4361",
+  "spans": [
+    {
+      "face_id": "amulet_of_kroog",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::PreventNextDamage",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q37_prevention_activated_batch::q37_prevention_activated_cards_absorb_their_printed_amount",
+      "covers": "actual card is exercised by the shared 03-prevention-activated scenario"
+    },
+    {
+      "test": "scenario q37_prevention_activated_batch::q37_prevention_activated_cards_protect_only_the_chosen_target",
+      "covers": "actual card is exercised by the shared 03-prevention-activated scenario"
+    },
+    {
+      "test": "scenario q37_prevention_activated_batch::q37_prevention_activated_cards_require_a_target_and_the_tap_cost",
+      "covers": "actual card is exercised by the shared 03-prevention-activated scenario"
+    },
+    {
+      "test": "scenario q37_prevention_activated_batch::q37_prevention_activated_cards_expire_at_cleanup",
+      "covers": "actual card is exercised by the shared 03-prevention-activated scenario"
+    },
+    {
+      "test": "mechanic_registry::q37_prevention_activated_batch::q37_prevention_activated_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q37_prevention_activated_batch::q37_prevention_activated_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

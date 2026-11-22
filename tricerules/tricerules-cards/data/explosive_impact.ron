@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 5eae77d0-7653-4b07-a701-aabea13991bf.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "explosive_impact",
+  name: "Explosive Impact",
+  face_id: "explosive_impact",
+  mana_cost: "{5}{R}",
+  types: ["Instant"],
+  spell_effect: [DamageTarget(amount: 5, target: (kind: AnyTarget))],
+)

@@ -1,0 +1,25 @@
+// Oracle 18b09c2d-20cb-40e9-8209-8a1ec2edde97; source/rulings checked 2026-11-11.
+// CR 603.6a/603.3 (entry trigger and stack), 701.9a (discard to owner's graveyard),
+// 608.2c (ordered optional instruction), and 121.1 (draw).
+(
+  id: "viashino_racketeer",
+  name: "Viashino Racketeer",
+  face_id: "viashino_racketeer",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Lizard", "Rogue"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      program: Some((body: (steps: [
+        (id: "discard_one", bind: ["discarded"], kind: Perform(Discard( quantity: OptionalExact(1)))),
+        (id: "draw_if_discarded", kind: IfResult(condition: DiscardOutcome(result: "discarded", outcome: ChosenToPay),
+          yes: (steps: [(id: "draw_one", kind: Perform(Draw( count: 1)))]),
+          no: ())),
+      ]))),
+    ),
+  ],
+)

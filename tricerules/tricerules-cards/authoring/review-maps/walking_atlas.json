@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "855a4837-7fc8-4b97-afbd-daa88e322c89",
+  "spans": [
+    {
+      "face_id": "walking_atlas",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PutPermanentFromHand",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario put_land_from_hand_batch::put_land_from_hand_batch_cards_offer_no_nonland_and_reject_a_forced_nonland",
+      "covers": "actual walking_atlas is exercised by the shared put_land_from_hand_batch actual-card scenario"
+    },
+    {
+      "test": "scenario put_land_from_hand_batch::put_land_from_hand_batch_cards_allow_declining_and_bound_a_no_land_choice",
+      "covers": "actual walking_atlas is exercised by the shared put_land_from_hand_batch actual-card scenario"
+    },
+    {
+      "test": "scenario put_land_from_hand_batch::put_land_from_hand_batch_cards_keep_the_choice_private_and_reject_a_tapped_source",
+      "covers": "actual walking_atlas is exercised by the shared put_land_from_hand_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::put_land_from_hand_batch::put_land_from_hand_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of walking_atlas"
+    },
+    {
+      "test": "mechanic_registry::put_land_from_hand_batch::put_land_from_hand_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for walking_atlas"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

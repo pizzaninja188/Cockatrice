@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "918d6cd4-76d5-4e21-b92b-1ecf35eb6cff",
+  "spans": [
+    {
+      "face_id": "wall_of_faith",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "wall_of_faith",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Defender",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario wall_pump_batch::wall_pump_batch_cards_cast_with_exact_characteristics",
+      "covers": "actual wall_of_faith is exercised by the shared wall_pump_batch actual-card scenario: printed mana, body, owner, controller and defender"
+    },
+    {
+      "test": "scenario wall_pump_batch::wall_pump_batch_cards_pump_with_the_exact_cost_and_printed_delta",
+      "covers": "actual wall_of_faith is exercised by the shared wall_pump_batch actual-card scenario: exact mana cost and printed power/toughness delta"
+    },
+    {
+      "test": "scenario wall_pump_batch::wall_pump_batch_cards_pump_expires_at_end_of_turn",
+      "covers": "actual wall_of_faith is exercised by the shared wall_pump_batch actual-card scenario: the pump ends during cleanup"
+    },
+    {
+      "test": "scenario wall_pump_batch::wall_pump_batch_cards_reject_activation_when_the_cost_cannot_be_paid",
+      "covers": "actual wall_of_faith is exercised by the shared wall_pump_batch actual-card scenario: an unpaid activation spends no mana and changes no body"
+    },
+    {
+      "test": "scenario wall_pump_batch::wall_pump_batch_cards_cannot_attack",
+      "covers": "actual wall_of_faith is exercised by the shared wall_pump_batch actual-card scenario: defender refuses an attack declaration"
+    },
+    {
+      "test": "mechanic_registry::wall_pump_batch::wall_pump_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of wall_of_faith (defender + {M} self-pump)"
+    },
+    {
+      "test": "mechanic_registry::wall_pump_batch::wall_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for wall_of_faith"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

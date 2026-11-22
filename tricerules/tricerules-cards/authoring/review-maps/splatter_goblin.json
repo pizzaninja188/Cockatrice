@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "a7cf5b74-123c-4def-a4aa-771ecd3be260",
+  "spans": [
+    {
+      "face_id": "splatter_goblin",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetController::Opponent",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/PumpTarget/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario dies_shrink_opponent_batch::dies_shrink_opponent_batch_cards_shrink_an_opponent_creature_when_they_die",
+      "covers": "actual splatter_goblin clause coverage"
+    },
+    {
+      "test": "scenario dies_shrink_opponent_batch::dies_shrink_opponent_batch_cards_cannot_target_their_controllers_creature",
+      "covers": "actual splatter_goblin clause coverage"
+    },
+    {
+      "test": "scenario dies_shrink_opponent_batch::dies_shrink_opponent_batch_cards_do_not_trigger_when_exiled",
+      "covers": "actual splatter_goblin clause coverage"
+    },
+    {
+      "test": "mechanic_registry::dies_shrink_opponent_batch::dies_shrink_opponent_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of splatter_goblin"
+    },
+    {
+      "test": "mechanic_registry::dies_shrink_opponent_batch::dies_shrink_opponent_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for splatter_goblin"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

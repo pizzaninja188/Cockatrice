@@ -1,0 +1,11 @@
+// Oracle 8df51012-b334-475f-b70d-af4f2b3840a0; source/rulings checked 2026-11-12.
+// CR 611.2a/514.2 (until-end-of-turn pump), 121.1 (draw) and 608.2b (illegal target
+// fizzles the whole spell).
+(
+  id: "sudden_strength",
+  name: "Sudden Strength",
+  face_id: "sudden_strength",
+  mana_cost: "{3}{G}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: 3, toughness: 3), Draw(count: 1)],
+)

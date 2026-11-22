@@ -1,0 +1,65 @@
+{
+  "format_version": 1,
+  "oracle_id": "4a3cc4f6-037f-461d-a3b7-9f9e24c4b8cf",
+  "spans": [
+    {
+      "face_id": "vanquish_the_weak",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetKind::Creature",
+      "typed_path": "/faces/0/targeting/groups/0"
+    },
+    {
+      "symbol": "PowerComparison::AtMost",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q30_destroy_creature_filtered_batch::q30_destroy_creature_filtered_cards_cast_with_exact_cost_and_body",
+      "covers": "actual vanquish_the_weak is exercised by the shared 02-destroy-creature-filtered evidence"
+    },
+    {
+      "test": "scenario q30_destroy_creature_filtered_batch::q30_destroy_creature_filtered_cards_destroy_only_matching_creatures",
+      "covers": "actual vanquish_the_weak is exercised by the shared 02-destroy-creature-filtered evidence"
+    },
+    {
+      "test": "scenario q30_destroy_creature_filtered_batch::q30_destroy_creature_filtered_cards_reject_illegal_targets_without_spending_mana",
+      "covers": "actual vanquish_the_weak is exercised by the shared 02-destroy-creature-filtered evidence"
+    },
+    {
+      "test": "scenario q30_destroy_creature_filtered_batch::q30_destroy_creature_filtered_cards_recheck_filters_on_resolution",
+      "covers": "resolution-time filter recheck"
+    },
+    {
+      "test": "scenario q30_destroy_creature_filtered_batch::q30_destroy_creature_filtered_cards_fizzle_on_stale_target",
+      "covers": "actual vanquish_the_weak is exercised by the shared 02-destroy-creature-filtered evidence"
+    },
+    {
+      "test": "scenario q30_destroy_creature_filtered_batch::q30_destroy_creature_filtered_cards_prevent_regeneration_where_printed",
+      "covers": "actual vanquish_the_weak is exercised by the shared 02-destroy-creature-filtered evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_destroy_creature_filtered_batch::q30_destroy_creature_filtered_batch_maps_definitions",
+      "covers": "actual vanquish_the_weak is exercised by the shared 02-destroy-creature-filtered evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_destroy_creature_filtered_batch::q30_destroy_creature_filtered_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual vanquish_the_weak is exercised by the shared 02-destroy-creature-filtered evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

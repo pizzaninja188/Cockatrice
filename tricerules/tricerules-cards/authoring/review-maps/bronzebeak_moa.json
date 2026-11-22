@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "16f03175-9c57-4058-9c9d-9c4936e4c324",
+  "spans": [
+    {
+      "face_id": "bronzebeak_moa",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario team_pump_on_enter_batch::team_pump_on_enter_batch_cards_pump_only_their_own_source_when_another_creature_enters",
+      "covers": "actual bronzebeak_moa pumps only the source when another creature enters"
+    },
+    {
+      "test": "scenario team_pump_on_enter_batch::team_pump_on_enter_batch_cards_exclude_their_own_entry",
+      "covers": "actual bronzebeak_moa does not trigger for the source's own entry"
+    },
+    {
+      "test": "scenario team_pump_on_enter_batch::team_pump_on_enter_batch_cards_ignore_opponents_creatures",
+      "covers": "actual bronzebeak_moa does not trigger for an opponent's creature"
+    },
+    {
+      "test": "scenario team_pump_on_enter_batch::team_pump_on_enter_batch_cards_stack_one_trigger_per_creature_and_expire",
+      "covers": "actual bronzebeak_moa stacks one trigger per entering creature and expires at cleanup"
+    },
+    {
+      "test": "mechanic_registry::team_pump_on_enter_batch::team_pump_on_enter_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of bronzebeak_moa"
+    },
+    {
+      "test": "mechanic_registry::team_pump_on_enter_batch::team_pump_on_enter_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for bronzebeak_moa"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

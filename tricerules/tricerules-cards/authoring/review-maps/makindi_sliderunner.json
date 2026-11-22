@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "4754e9c6-1790-4c01-87c2-3a16ce7e65f5",
+  "spans": [
+    {
+      "face_id": "makindi_sliderunner",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "makindi_sliderunner",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario landfall_trample_batch::landfall_trample_batch_cards_apply_the_printed_landfall_pump",
+      "covers": "actual makindi_sliderunner applies the printed landfall pump when a land enters under its controller"
+    },
+    {
+      "test": "scenario landfall_trample_batch::landfall_trample_batch_cards_scope_landfall_to_their_controller",
+      "covers": "actual makindi_sliderunner does not trigger for an opponent's land"
+    },
+    {
+      "test": "scenario landfall_trample_batch::landfall_trample_batch_cards_stack_multiple_landfall_triggers_and_expire",
+      "covers": "actual makindi_sliderunner stacks one trigger per land and expires at cleanup"
+    },
+    {
+      "test": "scenario landfall_trample_batch::landfall_trample_batch_cards_trample_excess_damage_over_a_blocker",
+      "covers": "actual makindi_sliderunner assigns excess combat damage to the defending player"
+    },
+    {
+      "test": "mechanic_registry::landfall_trample_batch::landfall_trample_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of makindi_sliderunner"
+    },
+    {
+      "test": "mechanic_registry::landfall_trample_batch::landfall_trample_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for makindi_sliderunner"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

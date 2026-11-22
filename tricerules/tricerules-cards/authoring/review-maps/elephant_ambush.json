@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "09386931-59bd-481f-bccc-32e8a8abc0f9",
+  "spans": [
+    {
+      "face_id": "elephant_ambush",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "elephant_ambush",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardFace::flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [
+    "elephant_g_3_3"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_b::q56_b_flashback_token_cards_make_the_printed_tokens_and_exile_after_flashback",
+      "covers": "actual elephant_ambush applies its printed effects"
+    },
+    {
+      "test": "scenario q56_batch_b::q56_b_flashback_token_cards_make_the_printed_tokens_and_exile_after_flashback",
+      "covers": "actual elephant_ambush canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_b::q56_b_flashback_token_map_definitions",
+      "covers": "shared registry identity for elephant_ambush"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_b::q56_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for elephant_ambush"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

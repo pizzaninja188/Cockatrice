@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "3bb1536f-06cc-433f-aeeb-afd528f9af03",
+  "spans": [
+    {
+      "face_id": "scalding_devil",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q53_batch_a::q53_activated_damage_cards_deal_their_printed_damage",
+      "covers": "actual scalding_devil printed behavior and shape"
+    },
+    {
+      "test": "scenario q53_batch_a::q53_activated_damage_rejects_creature_targets",
+      "covers": "actual scalding_devil printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_a::q53_activated_damage_cards_map_definitions",
+      "covers": "actual scalding_devil printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_a::q53_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

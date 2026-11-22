@@ -1,0 +1,10 @@
+// Oracle 98423a34-f044-4811-b288-56981d604b6e; source/rulings checked 2026-11-12.
+// CR 614.1a and 615.1a (prevention), 611.2a/514.2 (until-end-of-turn duration).
+(
+  id: "holy_day",
+  name: "Holy Day",
+  face_id: "holy_day",
+  mana_cost: "{W}",
+  types: ["Instant"],
+  spell_effect: [PreventAllCombatDamageTurn],
+)

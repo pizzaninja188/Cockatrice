@@ -1,0 +1,12 @@
+// Oracle e1635acd-ed1e-4038-a11a-6518df285253; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 111.1-111.2 (creation and ownership), 111.4 (naming) and 608.2c (resolution
+// order). No pinned ruling changes the printed behavior.
+(
+  id: "call_of_the_conclave",
+  name: "Call of the Conclave",
+  face_id: "call_of_the_conclave",
+  mana_cost: "{G}{W}",
+  types: ["Sorcery"],
+  spell_effect: [CreateTokens(token: "centaur_g_3_3", count: 1)],
+)

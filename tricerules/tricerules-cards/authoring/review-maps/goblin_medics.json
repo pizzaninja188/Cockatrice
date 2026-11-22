@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "457bee4c-2332-440c-9336-36f6a69614f9",
+  "spans": [
+    {
+      "face_id": "goblin_medics",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfBecomesTapped",
+      "typed_path": "/faces/0/triggered_abilities/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q49_batch_b::q49_becomes_tapped_canary_hardest_goblin_medics_targets_damage",
+      "covers": "canary hardest targets 1 damage on becoming tapped"
+    },
+    {
+      "test": "scenario q49_batch_b::q49_becomes_tapped_cards_apply_their_printed_effect",
+      "covers": "every actual card applies its printed becomes-tapped effect to the printed scope"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_b::q49_becomes_tapped_maps_definitions",
+      "covers": "reviewed identity, becomes-tapped trigger and printed effect"
+    },
+    {
+      "test": "mechanic_registry::q49_batch_b::q49_batch_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Goblin Medics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

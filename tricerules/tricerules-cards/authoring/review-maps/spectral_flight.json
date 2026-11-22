@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "d127d1e6-f3a6-4f68-bea5-d7b4123476e5",
+  "spans": [
+    {
+      "face_id": "spectral_flight",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "spectral_flight",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario aura_flying_pump_batch::aura_flying_pump_batch_cards_attach_and_apply_the_printed_pump_and_flying",
+      "covers": "actual spectral_flight is exercised by the shared 02-aura-flying-pump actual-card scenario"
+    },
+    {
+      "test": "scenario aura_flying_pump_batch::aura_flying_pump_batch_cards_may_enchant_an_opponents_creature",
+      "covers": "actual spectral_flight is exercised by the shared 02-aura-flying-pump actual-card scenario"
+    },
+    {
+      "test": "scenario aura_flying_pump_batch::aura_flying_pump_batch_cards_reject_a_noncreature_and_fizzle_a_stale_target",
+      "covers": "actual spectral_flight is exercised by the shared 02-aura-flying-pump actual-card scenario"
+    },
+    {
+      "test": "scenario aura_flying_pump_batch::aura_flying_pump_batch_cards_remove_the_pump_and_flying_when_the_aura_leaves",
+      "covers": "actual spectral_flight is exercised by the shared 02-aura-flying-pump actual-card scenario"
+    },
+    {
+      "test": "scenario aura_flying_pump_batch::aura_flying_pump_batch_cards_keep_the_static_modifier_after_cleanup",
+      "covers": "actual spectral_flight is exercised by the shared 02-aura-flying-pump actual-card scenario"
+    },
+    {
+      "test": "scenario aura_flying_pump_batch::aura_flying_pump_batch_cards_follow_the_creature_to_the_graveyard",
+      "covers": "actual spectral_flight is exercised by the shared 02-aura-flying-pump actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::aura_flying_pump_batch::aura_flying_pump_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of spectral_flight"
+    },
+    {
+      "test": "mechanic_registry::aura_flying_pump_batch::aura_flying_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for spectral_flight"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,15 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 341f75a5-df02-48e9-8997-1938148ad89a.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 611.2a/514.2: pump and trample last until end of turn; CR 613.4c/613.1f: layer-7c pump,
+// layer-6 trample.
+(
+  id: "confidence_from_strength",
+  name: "Confidence from Strength",
+  face_id: "confidence_from_strength",
+  mana_cost: "{2}{G}",
+  types: ["Sorcery"],
+  spell_effect: [
+    PumpTarget(power: 4, toughness: 4),
+    GrantKeywords(keywords: [Trample]),
+  ],
+)

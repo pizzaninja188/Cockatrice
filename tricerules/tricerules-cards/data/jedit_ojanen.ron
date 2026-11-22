@@ -1,0 +1,13 @@
+// Oracle 523cca7d-7d21-45de-b82d-58e777bf7f72; source/rulings checked 2026-11-14.
+// CR 202.1 and 205.4a: no rules text; the printed mana cost, legendary
+// supertype, type line, power and toughness are the complete card.
+(
+  id: "jedit_ojanen",
+  name: "Jedit Ojanen",
+  face_id: "jedit_ojanen",
+  mana_cost: "{4}{W}{W}{U}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Cat", "Warrior"],
+  power: 5,
+  toughness: 5,
+)

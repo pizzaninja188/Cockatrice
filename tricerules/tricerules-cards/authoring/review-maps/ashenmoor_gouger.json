@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "eaedc09f-43b8-42db-a645-0ac3baf1de12",
+  "spans": [
+    {
+      "face_id": "ashenmoor_gouger",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::SelfCombatRestriction",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario cant_block_batch::cant_block_batch_cards_have_the_printed_characteristics_and_cannot_block",
+      "covers": "actual ashenmoor_gouger clause coverage"
+    },
+    {
+      "test": "scenario cant_block_batch::cant_block_batch_cards_are_rejected_as_blockers",
+      "covers": "actual ashenmoor_gouger clause coverage"
+    },
+    {
+      "test": "scenario cant_block_batch::cant_block_batch_cards_allow_other_creatures_to_block",
+      "covers": "actual ashenmoor_gouger clause coverage"
+    },
+    {
+      "test": "mechanic_registry::cant_block_batch::cant_block_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of ashenmoor_gouger"
+    },
+    {
+      "test": "mechanic_registry::cant_block_batch::cant_block_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for ashenmoor_gouger"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

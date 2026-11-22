@@ -1,0 +1,50 @@
+{
+  "format_version": 1,
+  "oracle_id": "95650a60-6f1d-4594-8b53-7fd406212207",
+  "spans": [
+    {
+      "face_id": "dark_nourishment",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_a::q55_a_damage_any_target_riders_apply_their_printed_effects",
+      "covers": "actual Dark Nourishment deals 3 damage and gains exactly 3 life"
+    },
+    {
+      "test": "scenario q55_batch_a::q55_a_volt_charge_and_dark_nourishment_fizzle_stale_targets_without_riders",
+      "covers": "actual Dark Nourishment fizzles without gaining life when its only target left"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_damage_any_target_riders_map_definitions",
+      "covers": "shared registry identity for the any-target damage-with-rider spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Dark Nourishment"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

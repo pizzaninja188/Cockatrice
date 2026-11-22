@@ -1,0 +1,27 @@
+// Oracle 3402aa73-5e63-4158-b114-6f1d42ec8992; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 508.3a/603.2c (attack trigger), 115.1 (target) and 701.26 (tap).
+// The pinned rulings confirm that in multiplayer only a creature controlled by the defending
+// player is legal and that the tap resolves before blockers are declared.
+
+(
+  id: "master_of_diversion",
+  name: "Master of Diversion",
+  face_id: "master_of_diversion",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Human", "Scout"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [Tap(subject: Chosen((kind: Creature, controller: DefendingPlayer)))],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature defending player controls",
+      effect_indices: [0],
+    )])),
+  )],
+)

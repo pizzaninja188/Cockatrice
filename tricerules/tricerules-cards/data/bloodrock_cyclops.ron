@@ -1,0 +1,12 @@
+// Oracle 06a3fe24-7e1f-4f98-ba2f-dbb5d38f4b9d; source/rulings checked 2026-11-13.
+// CR 508.1d: this creature must be declared as an attacker whenever it is able.
+(
+  id: "bloodrock_cyclops",
+  name: "Bloodrock Cyclops",
+  face_id: "bloodrock_cyclops",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Cyclops"],
+  power: 3,
+  toughness: 3,
+  must_attack_if_able: true,
+)

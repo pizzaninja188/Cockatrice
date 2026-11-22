@@ -1,0 +1,50 @@
+{
+  "format_version": 1,
+  "oracle_id": "1c2829b7-f73f-4023-95f3-9cd40b4125d7",
+  "spans": [
+    {
+      "face_id": "voyages_end",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_a::q55_a_bounce_riders_resolve_in_printed_order",
+      "covers": "actual Voyage's End returns the target then parks for the scry-1 choice"
+    },
+    {
+      "test": "scenario q55_batch_a::q55_a_bounce_riders_fizzle_with_the_stale_target",
+      "covers": "actual Voyage's End fizzles without scrying when its only target left"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_bounce_riders_map_definitions",
+      "covers": "shared registry identity for the bounce-with-rider spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Voyage's End"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

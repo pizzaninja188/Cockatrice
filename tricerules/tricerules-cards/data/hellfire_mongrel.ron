@@ -1,0 +1,21 @@
+// Oracle 633a0919-9ac3-4645-8f0b-3f00c198db79; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// Rulings: the trigger checks the opponent's hand at upkeep and again on resolution; in a
+// multiplayer game each opponent's upkeep triggers separately.
+// CR 503.1, 603.4 and 120.3.
+(
+  id: "hellfire_mongrel",
+  name: "Hellfire Mongrel",
+  face_id: "hellfire_mongrel",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Elemental", "Dog"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: AtBeginningOfUpkeep(player: Opponent),
+    intervening_if: Some(CardsInHand(players: AffectedPlayer, max: Some(2))),
+    effect: [DamagePlayer(amount: 2, who: AffectedPlayer)],
+  )],
+)

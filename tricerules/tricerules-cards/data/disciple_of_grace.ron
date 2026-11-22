@@ -1,0 +1,23 @@
+// Oracle 7f4ceca9-0f55-4fa6-8e64-befbc4303d4e; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.16b-f (protection's five effects), 702.9a-b (flying), 702.3 (defender) and 702.29a (cycling).
+
+(
+  id: "disciple_of_grace",
+  name: "Disciple of Grace",
+  face_id: "disciple_of_grace",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Human", "Cleric"],
+  power: 1,
+  toughness: 2,
+  protections: [Color(Black)],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      source_zone: Hand,
+      costs: [Mana("{2}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

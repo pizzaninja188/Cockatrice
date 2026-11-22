@@ -1,0 +1,22 @@
+// Oracle f4d17f41-efd6-4173-ab6e-28b6fbcee10d; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 509.3d (one occurrence per blocking creature), 611.2a/514.2 (until end of turn) and 613.4c (layer 7c self pump).
+// The card has no pinned ruling.
+
+(
+  id: "viashino_weaponsmith",
+  name: "Viashino Weaponsmith",
+  face_id: "viashino_weaponsmith",
+  mana_cost: "{3}{R}",
+  types: ["Creature", "Lizard"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WheneverSelfBecomesBlockedByCreature(blocker: ()),
+      effect: [PumpTarget(power: 2, toughness: 2, subject: Source)],
+    ),
+  ],
+)

@@ -1,0 +1,14 @@
+// Oracle 441de890-7b9f-42f7-859a-a154b8ed74ac; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.22a-b (scry) and 121.2 (draw two cards as separate events). No pinned ruling.
+(
+  id: "foresee",
+  name: "Foresee",
+  face_id: "foresee",
+  mana_cost: "{3}{U}",
+  types: ["Sorcery"],
+  spell_program: Some((body: (steps: [
+    (id: "scry", kind: Perform(Scry(count: 4))),
+    (id: "draw", kind: Perform(Draw(count: 2))),
+  ]))),
+)

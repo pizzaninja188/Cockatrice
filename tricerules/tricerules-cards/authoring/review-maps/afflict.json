@@ -1,0 +1,58 @@
+{
+  "format_version": 1,
+  "oracle_id": "471f6ad3-cf01-42dd-a519-ea8e13039fea",
+  "spans": [
+    {
+      "face_id": "afflict",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario shrink_draw_batch::shrink_draw_batch_cards_shrink_the_target_and_draw_exactly_one",
+      "covers": "actual afflict applies the printed shrink and draws exactly one card"
+    },
+    {
+      "test": "scenario shrink_draw_batch::shrink_draw_batch_cards_kill_a_creature_with_lethal_negative_toughness",
+      "covers": "actual afflict puts a creature with zero or less toughness into its owner's graveyard"
+    },
+    {
+      "test": "scenario shrink_draw_batch::shrink_draw_batch_cards_fizzle_a_stale_target_without_drawing",
+      "covers": "actual afflict does not draw when the only target is illegal"
+    },
+    {
+      "test": "scenario shrink_draw_batch::shrink_draw_batch_cards_reject_a_noncreature_target_without_paying",
+      "covers": "actual afflict rejects a noncreature target without spending mana"
+    },
+    {
+      "test": "mechanic_registry::shrink_draw_batch::shrink_draw_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of afflict"
+    },
+    {
+      "test": "mechanic_registry::shrink_draw_batch::shrink_draw_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for afflict"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

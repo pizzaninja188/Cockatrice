@@ -1,0 +1,14 @@
+// Oracle 1a0770e6-b093-4439-baff-6889a50ba12e; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.6 (counter), 202.3 (mana value), 107.4f (Phyrexian symbols count 1) and
+// 601.2c/608.2b (spell target and stale target).
+(
+  id: "mental_misstep",
+  name: "Mental Misstep",
+  face_id: "mental_misstep",
+  mana_cost: "{U/P}",
+  types: ["Instant"],
+  spell_effect: [CounterTargetSpell(
+    spell_filter: (min_mana_value: Some(1), max_mana_value: Some(1)),
+  )],
+)

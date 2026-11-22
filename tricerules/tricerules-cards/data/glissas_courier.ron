@@ -1,0 +1,12 @@
+// Oracle 25fb2a67-fd7f-4a06-bd59-118d82c86d6e; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "glissas_courier",
+  name: "Glissa's Courier",
+  face_id: "glissas_courier",
+  mana_cost: "{1}{G}{G}",
+  types: ["Creature", "Phyrexian", "Horror"],
+  power: 2,
+  toughness: 3,
+  evasions: [Landwalk(land_subtype: "Mountain")],
+)

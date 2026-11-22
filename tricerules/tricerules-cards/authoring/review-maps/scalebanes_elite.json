@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "c04dc6fe-06fc-4e5b-87da-6b8b262a214f",
+  "spans": [
+    {
+      "face_id": "scalebanes_elite",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/protections"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Protection::Color",
+      "typed_path": "/faces/0/protections"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario protection_cycle_batch::protection_cycle_batch_cards_cast_with_exact_printed_characteristics_and_protection_quality",
+      "covers": "actual scalebanes_elite clause coverage"
+    },
+    {
+      "test": "scenario protection_cycle_batch::protection_cycle_batch_cards_reject_targeting_by_the_protected_quality",
+      "covers": "actual scalebanes_elite clause coverage"
+    },
+    {
+      "test": "scenario protection_cycle_batch::protection_cycle_batch_cards_prevent_damage_from_the_protected_quality",
+      "covers": "actual scalebanes_elite clause coverage"
+    },
+    {
+      "test": "scenario protection_cycle_batch::protection_cycle_batch_cards_cannot_be_blocked_by_the_protected_quality",
+      "covers": "actual scalebanes_elite clause coverage"
+    },
+    {
+      "test": "mechanic_registry::protection_cycle_batch::protection_cycle_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of scalebanes_elite"
+    },
+    {
+      "test": "mechanic_registry::protection_cycle_batch::protection_cycle_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for scalebanes_elite"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

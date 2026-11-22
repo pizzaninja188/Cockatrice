@@ -1,0 +1,18 @@
+// Oracle 274d89b8-1e59-4992-9299-dc793b7f6752; source/rulings checked 2026-11-13.
+// CR 303.4a (Aura target and attach), 613.4c (layer-7c attached P/T modifier), and
+// 704.5m (unattached Aura cleanup).
+(
+  id: "feast_of_the_unicorn",
+  name: "Feast of the Unicorn",
+  face_id: "feast_of_the_unicorn",
+  mana_cost: "{3}{B}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(delta_power: 4, delta_toughness: 0),
+    ),
+  ],
+)

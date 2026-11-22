@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "5863c67b-a47c-4466-8bd1-210ab26e0d3f",
+  "spans": [
+    {
+      "face_id": "inspired_insurgent",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_b::q54_canary_simplest_inspired_insurgent_sacrifices_itself_for_an_artifact",
+      "covers": "actual Inspired Insurgent pays {1} and sacrifices itself to destroy a chosen artifact"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_b::q54_artifact_enchantment_destruction_cards_map_definitions",
+      "covers": "shared registry identity for the three artifact/enchantment destruction definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_b::q54_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Inspired Insurgent"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

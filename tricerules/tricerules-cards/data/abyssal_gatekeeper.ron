@@ -1,0 +1,19 @@
+// Oracle 4954181c-cb46-4cac-adc3-2c8b7693a211; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6c/603.10a (dies trigger), 101.4/101.4b (each player chooses) and 701.21a
+// (simultaneous sacrifice). The source is already in the graveyard when the trigger resolves.
+(
+  id: "abyssal_gatekeeper",
+  name: "Abyssal Gatekeeper",
+  face_id: "abyssal_gatekeeper",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Horror"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfDies,
+    effect: [ChooseAndSacrifice(players: EachPlayer, count: 1, filter: (kind: Creature))],
+  )],
+)

@@ -1,0 +1,18 @@
+// Oracle 874b944a-8d08-4143-b477-685087396a88; source/rulings checked 2026-11-12.
+// CR 614.1d/614.12 (enters-tapped replacement effect).
+(
+  id: "scarwood_treefolk",
+  name: "Scarwood Treefolk",
+  face_id: "scarwood_treefolk",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Treefolk"],
+  power: 3,
+  toughness: 5,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: EntersTapped(affected: Self_),
+    ),
+  ],
+)

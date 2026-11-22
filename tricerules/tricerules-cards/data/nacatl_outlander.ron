@@ -1,0 +1,13 @@
+// Oracle 333555d6-3fcc-4021-ab60-afc36d723877; source/rulings checked 2026-11-13.
+// CR 702.16b-f: protection's five effects (no targeting, no Aura/Equipment
+// attachment, no damage, no blocking, no Fortify).
+(
+  id: "nacatl_outlander",
+  name: "Nacatl Outlander",
+  face_id: "nacatl_outlander",
+  mana_cost: "{R}{G}",
+  types: ["Creature", "Cat", "Scout"],
+  power: 2,
+  toughness: 2,
+  protections: [Color(Blue)],
+)

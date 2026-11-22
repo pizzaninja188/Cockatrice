@@ -1,0 +1,12 @@
+// Oracle ac41171e-c454-49e9-9004-c082ae099630; source/rulings checked 2026-11-14.
+// CR 202.1: no rules text; the printed mana cost, type line, power and
+// toughness are the complete card.
+(
+  id: "obsianus_golem",
+  name: "Obsianus Golem",
+  face_id: "obsianus_golem",
+  mana_cost: "{6}",
+  types: ["Artifact", "Creature", "Golem"],
+  power: 4,
+  toughness: 6,
+)

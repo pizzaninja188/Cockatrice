@@ -1,0 +1,10 @@
+// Oracle 5372445b-5f67-435e-a736-61c6cb4f9c6e; source/rulings checked 2026-11-11.
+// CR 601.2a/601.2h (cast and payment), 611.2a (until-end-of-turn pump), 701.26 (untap), and 514.2 (cleanup).
+(
+  id: "vines_of_the_recluse",
+  name: "Vines of the Recluse",
+  face_id: "vines_of_the_recluse",
+  mana_cost: "{G}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: 1, toughness: 2), GrantKeywords(keywords: [Reach]), Untap()],
+)

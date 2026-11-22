@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "8e42ed82-8b56-46ad-a1ca-e29689a9d030",
+  "spans": [
+    {
+      "face_id": "rootwater_hunter",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario pinger_batch::pinger_batch_cards_deal_one_damage_to_any_target",
+      "covers": "actual rootwater_hunter clause coverage"
+    },
+    {
+      "test": "scenario pinger_batch::pinger_batch_cards_stop_when_the_target_is_gone",
+      "covers": "actual rootwater_hunter clause coverage"
+    },
+    {
+      "test": "scenario pinger_batch::pinger_batch_cards_require_tap_and_untapped_source",
+      "covers": "actual rootwater_hunter clause coverage"
+    },
+    {
+      "test": "mechanic_registry::pinger_batch::pinger_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of rootwater_hunter"
+    },
+    {
+      "test": "mechanic_registry::pinger_batch::pinger_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for rootwater_hunter"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

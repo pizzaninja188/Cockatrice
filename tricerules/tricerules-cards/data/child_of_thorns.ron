@@ -1,0 +1,18 @@
+// Oracle f94002a1-582f-4b9d-a4f7-dae816f21c1d; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853. No card-specific rulings.
+// CR 602.1/602.2, 701.21a, 611.2a, 514.2 and 613.4c: sacrifice the Spirit for +1/+1 until end of turn.
+(
+  id: "child_of_thorns",
+  name: "Child of Thorns",
+  face_id: "child_of_thorns",
+  mana_cost: "{G}",
+  types: ["Creature", "Spirit"],
+  power: 1,
+  toughness: 1,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [SacrificeSelf],
+    effect: [PumpTarget(power: 1, toughness: 1, subject: Chosen((kind: Creature)))],
+  )],
+)

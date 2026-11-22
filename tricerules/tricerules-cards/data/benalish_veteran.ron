@@ -1,0 +1,20 @@
+// Oracle 5da2e5c7-ec04-4f1f-bb2f-7572f877393c; source/rulings checked 2026-11-13.
+// CR 508.1m/603.2c (attack trigger), 611.2c/613.4c (until-end-of-turn pump), and
+// 514.2 (cleanup).
+(
+  id: "benalish_veteran",
+  name: "Benalish Veteran",
+  face_id: "benalish_veteran",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    ),
+  ],
+)

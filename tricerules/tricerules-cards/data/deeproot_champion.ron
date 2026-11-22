@@ -1,0 +1,22 @@
+// Oracle 507c2921-7070-482d-8754-dc667e3315bd; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 601.2a (casting), 603.2 (cast trigger) and 122.1a (+1/+1 counter). Pinned ruling:
+// the counter trigger resolves before the spell that caused it.
+(
+  id: "deeproot_champion",
+  name: "Deeproot Champion",
+  face_id: "deeproot_champion",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Merfolk", "Shaman"],
+  power: 1,
+  toughness: 1,
+  keywords: [],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPlayerCastsSpell(
+      filter: (card_type: Some(Noncreature)),
+    ),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+  )],
+)

@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "7f591bfb-a241-4980-9cb3-fb5af3355f6b",
+  "spans": [
+    {
+      "face_id": "fate_forgotten",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter.permanent_types",
+      "typed_path": "/faces/0/spell_effect/0/Exile/subject/Chosen/permanent_types"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario exile_artifact_enchantment_batch::exile_artifact_enchantment_batch_cards_apply_the_printed_effect",
+      "covers": "actual fate_forgotten clause coverage"
+    },
+    {
+      "test": "scenario exile_artifact_enchantment_batch::exile_artifact_enchantment_batch_cards_reject_illegal_targets",
+      "covers": "actual fate_forgotten clause coverage"
+    },
+    {
+      "test": "scenario exile_artifact_enchantment_batch::exile_artifact_enchantment_batch_cards_handle_stale_or_expired_state",
+      "covers": "actual fate_forgotten clause coverage"
+    },
+    {
+      "test": "mechanic_registry::exile_artifact_enchantment_batch::exile_artifact_enchantment_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of fate_forgotten"
+    },
+    {
+      "test": "mechanic_registry::exile_artifact_enchantment_batch::exile_artifact_enchantment_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for fate_forgotten"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

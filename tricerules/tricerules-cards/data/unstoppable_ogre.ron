@@ -1,0 +1,24 @@
+// Oracle 1733777d-87fe-4975-b099-1ff803a721e8; source/rulings checked 2026-11-16 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (entry trigger), 509.1b (an already-declared block is unaffected),
+// 611.2a (until-end-of-turn restriction) and 514.2 (cleanup expiry).
+(
+  id: "unstoppable_ogre",
+  name: "Unstoppable Ogre",
+  face_id: "unstoppable_ogre",
+  mana_cost: "{2}{R}",
+  types: ["Artifact", "Creature", "Ogre", "Warrior"],
+  power: 4,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [ApplyCombatRestriction(
+        scope: Chosen((kind: Creature)),
+        restriction: (cant_block: true),
+      )],
+    ),
+  ],
+)

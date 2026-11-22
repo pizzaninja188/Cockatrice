@@ -1,0 +1,17 @@
+// Oracle be2ae8dc-afae-4bcf-8a97-08a2764d1148; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 120.3 (damage), 508.1 (attacking designation), 704.5g (lethal damage) and
+// 514.2 (damage lasts until cleanup). Maze of Ith supplies the reviewed combat-role
+// filter; DamageAll supplies the reviewed sweep. Marrow Shards' {W/P} uses the
+// reviewed Phyrexian payment path (CR 107.4f).
+(
+  id: "marrow_shards",
+  name: "Marrow Shards",
+  face_id: "marrow_shards",
+  mana_cost: "{W/P}",
+  types: ["Instant"],
+  spell_effect: [DamageAll(
+    amount: 1,
+    kind: (kind: Creature, combat_role: Some(Attacking)),
+  )],
+)

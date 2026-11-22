@@ -1,0 +1,20 @@
+// Oracle cef11518-ecb2-4250-996c-a03fa9dfb09e; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying), 603.6c and 700.4 (dies trigger), and 121.1 (draw).
+(
+  id: "darkslick_drake",
+  name: "Darkslick Drake",
+  face_id: "darkslick_drake",
+  mana_cost: "{2}{U}{U}",
+  types: ["Creature", "Phyrexian", "Drake"],
+  power: 2,
+  toughness: 4,
+  keywords: [Flying],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfDies,
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

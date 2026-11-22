@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "98e7bfd4-fcb6-47b1-ad0b-c54b85dc2a79",
+  "spans": [
+    {
+      "face_id": "shield_mate",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PumpTarget/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q45_cohorts_batch::q45_sacrifice_pump_canary_simplest_pumps_toughness",
+      "covers": "canary sacrifices itself for +0/+4"
+    },
+    {
+      "test": "scenario q45_cohorts_batch::q45_sacrifice_pump_cards_apply_their_printed_pump",
+      "covers": "every card applies its printed pump"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_sacrifice_pump_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of shield_mate"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for shield_mate"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,14 @@
+// Oracle 6efad3d6-4886-4b62-a4ff-bc0622f9672a; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.9a-b (flying) and 702.7a-b (first strike). No card-specific ruling.
+
+(
+  id: "thunder_spirit",
+  name: "Thunder Spirit",
+  face_id: "thunder_spirit",
+  mana_cost: "{1}{W}{W}",
+  types: ["Creature", "Elemental", "Spirit"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying, FirstStrike],
+)

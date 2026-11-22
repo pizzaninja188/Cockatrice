@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "250f8642-9754-48fd-8f09-70ed13d7a42c",
+  "spans": [
+    {
+      "face_id": "preemptive_strike",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardTypeFilter::Creature",
+      "typed_path": "/faces/0/spell_effect/0/CounterTargetSpell/spell_filter/card_type"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario counter_creature_spell_batch::counter_creature_spell_batch_cards_apply_the_printed_effect",
+      "covers": "actual preemptive_strike clause coverage"
+    },
+    {
+      "test": "scenario counter_creature_spell_batch::counter_creature_spell_batch_cards_reject_illegal_targets",
+      "covers": "actual preemptive_strike clause coverage"
+    },
+    {
+      "test": "scenario counter_creature_spell_batch::counter_creature_spell_batch_cards_handle_stale_or_expired_state",
+      "covers": "actual preemptive_strike clause coverage"
+    },
+    {
+      "test": "mechanic_registry::counter_creature_spell_batch::counter_creature_spell_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of preemptive_strike"
+    },
+    {
+      "test": "mechanic_registry::counter_creature_spell_batch::counter_creature_spell_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for preemptive_strike"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,55 @@
+{
+  "format_version": 1,
+  "oracle_id": "20b60c93-124b-42c8-93fb-63bbd1888658",
+  "spans": [
+    {
+      "face_id": "slagwurm_armor",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "slagwurm_armor",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario equipment_batch::equipment_batch_cards_grant_exact_printed_bonus_and_follow_reattachment",
+      "covers": "actual slagwurm_armor casts, attaches, grants exactly +0/+6, and moves its bonus on re-equip"
+    },
+    {
+      "test": "scenario equipment_batch::equipment_batch_cards_reject_opponent_creature_targets",
+      "covers": "actual slagwurm_armor rejects an opponent-controlled equip target without changing attachment"
+    },
+    {
+      "test": "scenario equipment_batch::equipment_batch_cards_fizzle_when_equip_target_leaves",
+      "covers": "actual slagwurm_armor equipment ability fizzles without attaching when its chosen creature target leaves before resolution"
+    },
+    {
+      "test": "scenario equipment_batch::equipment_batch_cards_equip_only_at_sorcery_speed",
+      "covers": "actual slagwurm_armor rejects an equip activation outside a sorcery-speed window without attaching"
+    },
+    {
+      "test": "scenario equipment_batch::equipment_batch_slagwurm_host_departure_keeps_equipment_unattached",
+      "covers": "actual slagwurm_armor stays on the battlefield unattached when its host dies"
+    },
+    {
+      "test": "mechanic_registry::equipment_batch::equipment_batch_maps_definitions",
+      "covers": "reviewed identity, static modifier and equip cost/effect of slagwurm_armor"
+    },
+    {
+      "test": "mechanic_registry::equipment_batch::equipment_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for slagwurm_armor"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

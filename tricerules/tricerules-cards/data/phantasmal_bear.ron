@@ -1,0 +1,24 @@
+// Oracle 780da643-8d14-4f1a-a298-5b7454e9c4df; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.2 (the trigger fires on becoming a target), CR 603.3 and 608.1 (the trigger becomes
+// the topmost stack object and resolves before the targeting spell or ability), CR 701.21a
+// (sacrifice) and CR 608.2b (a spell or ability whose only target has left is countered on
+// resolution). The pinned Frost Walker and Phantasmal Bear rulings restate it.
+
+(
+  id: "phantasmal_bear",
+  name: "Phantasmal Bear",
+  face_id: "phantasmal_bear",
+  mana_cost: "{U}",
+  types: ["Creature", "Bear", "Illusion"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: AnyPlayer),
+      effect: [Sacrifice(subject: Source)],
+    ),
+  ],
+)

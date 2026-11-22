@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "43f5a93b-0f8d-48d2-ab9d-275d44cf88b5",
+  "spans": [
+    {
+      "face_id": "aggressive_urge",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "aggressive_urge",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario aggressive_urge_batch::aggressive_urge_batch_cards_pump_then_draw_one_and_expire",
+      "covers": "actual aggressive_urge pumps any chosen creature, draws one and expires at cleanup"
+    },
+    {
+      "test": "scenario aggressive_urge_batch::aggressive_urge_batch_cards_fizzle_without_drawing_when_the_target_leaves",
+      "covers": "actual aggressive_urge fizzles without drawing when its target leaves before resolution"
+    },
+    {
+      "test": "scenario aggressive_urge_batch::aggressive_urge_batch_cards_require_a_target",
+      "covers": "actual aggressive_urge rejects a cast with no creature target without spending mana"
+    },
+    {
+      "test": "mechanic_registry::aggressive_urge_batch::aggressive_urge_batch_maps_definitions",
+      "covers": "reviewed identity, cost, type, exact pump and draw of aggressive_urge"
+    },
+    {
+      "test": "mechanic_registry::aggressive_urge_batch::aggressive_urge_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for aggressive_urge"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle b60d83ea-18bf-4c64-b4ee-981d54629362.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "banners_raised",
+  name: "Banners Raised",
+  face_id: "banners_raised",
+  mana_cost: "{R}",
+  types: ["Instant"],
+  spell_effect: [PumpAll(filter: (controller: YouControl), power: 1, toughness: 0)],
+)

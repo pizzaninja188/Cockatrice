@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "d8838e16-96ca-4f73-ad61-7e98a76c4baf",
+  "spans": [
+    {
+      "face_id": "blade_banish",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetKind::Creature",
+      "typed_path": "/faces/0/targeting/groups/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q30_exile_creature_filtered_batch::q30_exile_creature_filtered_cards_cast_with_exact_cost_and_body",
+      "covers": "actual blade_banish is exercised by the shared 09-exile-creature-filtered evidence"
+    },
+    {
+      "test": "scenario q30_exile_creature_filtered_batch::q30_exile_creature_filtered_cards_exile_only_matching_creatures",
+      "covers": "actual blade_banish is exercised by the shared 09-exile-creature-filtered evidence"
+    },
+    {
+      "test": "scenario q30_exile_creature_filtered_batch::q30_exile_creature_filtered_cards_reject_illegal_targets_without_spending_mana",
+      "covers": "actual blade_banish is exercised by the shared 09-exile-creature-filtered evidence"
+    },
+    {
+      "test": "scenario q30_exile_creature_filtered_batch::q30_exile_creature_filtered_cards_fizzle_on_stale_target",
+      "covers": "actual blade_banish is exercised by the shared 09-exile-creature-filtered evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_exile_creature_filtered_batch::q30_exile_creature_filtered_batch_maps_definitions",
+      "covers": "actual blade_banish is exercised by the shared 09-exile-creature-filtered evidence"
+    },
+    {
+      "test": "mechanic_registry::q30_exile_creature_filtered_batch::q30_exile_creature_filtered_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual blade_banish is exercised by the shared 09-exile-creature-filtered evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,25 @@
+// Oracle 04cc5292-a485-4bb8-a143-9364229d480f; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.17a-b (mill), 602.1a/602.2 (activated ability and printed cost), 115.1/608.2b
+// (target player), 118.3 (tap cost) and 121.1 (mill is not a draw). Millstone's pinned
+// ruling confirms that a short library is milled as far as possible. The supported engine
+// puts multiple milled cards into the graveyard in library order; no in-scope card observes
+// graveyard order, so the owner's CR 404.3 order choice is deferred.
+
+(
+  id: "vedalken_entrancer",
+  name: "Vedalken Entrancer",
+  face_id: "vedalken_entrancer",
+  mana_cost: "{3}{U}",
+  types: ["Creature", "Vedalken", "Wizard"],
+  power: 1,
+  toughness: 4,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{U}"), Tap],
+      effect: [MillTargetPlayer(count: 2, target: (kind: AnyPlayer))],
+    ),
+  ],
+)

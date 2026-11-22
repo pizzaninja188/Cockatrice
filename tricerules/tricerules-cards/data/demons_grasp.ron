@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 13228a22-d63a-4952-a482-4f84da696e88.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 613.4c: negative P/T applies in layer 7c until end of turn.
+(
+  id: "demons_grasp",
+  name: "Demon's Grasp",
+  face_id: "demons_grasp",
+  mana_cost: "{4}{B}",
+  types: ["Sorcery"],
+  spell_effect: [PumpTarget(power: -5, toughness: -5)],
+)

@@ -1,0 +1,19 @@
+// Oracle 8d2b2675-19df-4f40-9e8e-196ec097b91c; source/rulings checked 2026-11-13.
+// CR 305.6 (land types), 605.1a/605.3a-b (mana ability) and 118.3 (tap cost).
+(
+  id: "sunscorched_divide",
+  name: "Sunscorched Divide",
+  face_id: "sunscorched_divide",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{1}"), Tap],
+      effect: [ProduceMana(options: [
+        (r: 1, w: 1),
+      ])],
+    ),
+  ],
+)

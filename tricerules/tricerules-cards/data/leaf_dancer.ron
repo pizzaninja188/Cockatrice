@@ -1,0 +1,12 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle b2f92310-3725-44c2-8953-8b280437217e.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "leaf_dancer",
+  name: "Leaf Dancer",
+  face_id: "leaf_dancer",
+  mana_cost: "{1}{G}{G}",
+  types: ["Creature", "Centaur"],
+  power: 2,
+  toughness: 2,
+  evasions: [Landwalk(land_subtype: "Forest")],
+)

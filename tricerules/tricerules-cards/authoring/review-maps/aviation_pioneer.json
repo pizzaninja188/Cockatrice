@@ -1,0 +1,58 @@
+{
+  "format_version": 1,
+  "oracle_id": "ad11ff81-acaa-4529-ba15-718dadbea259",
+  "spans": [
+    {
+      "face_id": "aviation_pioneer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "thopter_c_1_1_flying"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_canary_cards_create_the_printed_token",
+      "covers": "actual aviation_pioneer is exercised by the shared etb_vanilla_tokens_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_cards_create_only_their_printed_token",
+      "covers": "actual aviation_pioneer is exercised by the shared etb_vanilla_tokens_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_cards_cast_with_exact_cost_and_body",
+      "covers": "actual aviation_pioneer is exercised by the shared etb_vanilla_tokens_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_cards_create_tokens_once_per_entry",
+      "covers": "actual aviation_pioneer is exercised by the shared etb_vanilla_tokens_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_cards_source_effect_is_controller_scoped",
+      "covers": "actual aviation_pioneer is exercised by the shared etb_vanilla_tokens_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of aviation_pioneer"
+    },
+    {
+      "test": "mechanic_registry::etb_vanilla_tokens_batch::etb_vanilla_tokens_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for aviation_pioneer"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,23 @@
+// Oracle 1e25c9bd-2a6a-4856-80e6-775847a2c89f; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 (activation and printed cost), 115.1 (target creature), 611.2a/514.2
+// (until-end-of-turn grant) and the granted keyword's rule.
+// Copy of the reviewed Akki Drillmaster target-keyword grant with a mana-only activation.
+(
+  id: "whip_sergeant",
+  name: "Whip Sergeant",
+  face_id: "whip_sergeant",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 2,
+  toughness: 1,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{R}")],
+      effect: [GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Haste])],
+      targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+    ),
+  ],
+)

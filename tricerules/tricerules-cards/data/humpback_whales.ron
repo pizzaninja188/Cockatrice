@@ -1,0 +1,29 @@
+// Oracle a7285536-6cc1-448e-839a-606d585fbd9d; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.20 (vigilance), 702.21 (ward), 702.29a-b (basic landcycling), 701.23a-b
+// (search) and 701.24 (shuffle). The card has no pinned ruling.
+(
+  id: "humpback_whales",
+  name: "Humpback Whales",
+  face_id: "humpback_whales",
+  mana_cost: "{4}{U}{U}",
+  types: ["Creature", "Whale"],
+  power: 5,
+  toughness: 6,
+  keywords: [Vigilance],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
+    trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
+    program: Some((body: (steps: [
+      (id: "ward", kind: Perform(CounterTriggeringStackObjectUnlessPays(cost: Mana("{2}")))),
+    ]))),
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    source_zone: Hand,
+    costs: [Mana("{2}"), DiscardSelf],
+    effect: [SearchLibrary(filter: Some((card_type: Some(BasicLand))), reveal: true)],
+  )],
+)

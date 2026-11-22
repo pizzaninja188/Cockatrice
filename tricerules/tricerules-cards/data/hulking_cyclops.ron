@@ -1,0 +1,19 @@
+// Oracle 04936918-7ef3-42fa-b0cd-87d18cb69d2c; source/rulings checked 2026-11-13.
+// CR 509.1b (a declaration of blockers is illegal when a blocking restriction
+// is disobeyed); the restriction is source-only and unconditional.
+(
+  id: "hulking_cyclops",
+  name: "Hulking Cyclops",
+  face_id: "hulking_cyclops",
+  mana_cost: "{3}{R}{R}",
+  types: ["Creature", "Cyclops"],
+  power: 5,
+  toughness: 5,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: SelfCombatRestriction(restriction: (cant_block: true)),
+    ),
+  ],
+)

@@ -1,0 +1,21 @@
+// Oracle caa0c20c-594b-4ffd-87de-60bf15d8c3be; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1/601.2c (one creature target), 400.3 (the card moves to its owner's hand),
+// 111/701.6 (Treasure token) and 608.2b (stale target). No pinned ruling.
+(
+  id: "depths_of_desire",
+  name: "Depths of Desire",
+  face_id: "depths_of_desire",
+  mana_cost: "{2}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    ReturnToOwnersHand(subject: Chosen((kind: Creature))),
+    CreateTokens(token: "treasure", count: 1),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature",
+    effect_indices: [0],
+  )])),
+)

@@ -1,0 +1,16 @@
+// Oracle 471f6ad3-cf01-42dd-a519-ea8e13039fea; source/rulings checked 2026-11-15.
+// CR 115.1a/601.2c (target at cast), 613.4c (-X/-Y until end of turn),
+// 121.1 (draw) and 608.2b (an illegal target makes the spell not resolve,
+// so no card is drawn).
+(
+  id: "afflict",
+  name: "Afflict",
+  face_id: "afflict",
+  mana_cost: "{2}{B}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: -1, toughness: -1),
+    Draw(count: 1),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+)

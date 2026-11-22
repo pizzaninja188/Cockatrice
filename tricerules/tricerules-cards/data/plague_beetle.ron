@@ -1,0 +1,12 @@
+// Oracle 96415c51-2d44-4a96-9caa-9c4fbde59fca; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "plague_beetle",
+  name: "Plague Beetle",
+  face_id: "plague_beetle",
+  mana_cost: "{B}",
+  types: ["Creature", "Insect"],
+  power: 1,
+  toughness: 1,
+  evasions: [Landwalk(land_subtype: "Swamp")],
+)

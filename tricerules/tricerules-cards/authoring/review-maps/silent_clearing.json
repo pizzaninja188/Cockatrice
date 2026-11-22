@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "fd45063f-c83c-431c-9104-f139c497ec0d",
+  "spans": [
+    {
+      "face_id": "silent_clearing",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "silent_clearing",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::PayLife",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/1/costs/2"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario horizon_canopy_cycle_batch::horizon_canopy_cycle_batch_cards_pay_one_life_for_each_printed_color",
+      "covers": "actual silent_clearing is exercised by the shared horizon_canopy_cycle_batch actual-card scenario"
+    },
+    {
+      "test": "scenario horizon_canopy_cycle_batch::horizon_canopy_cycle_batch_cards_reject_the_life_payment_at_zero_life",
+      "covers": "actual silent_clearing is exercised by the shared horizon_canopy_cycle_batch actual-card scenario"
+    },
+    {
+      "test": "scenario horizon_canopy_cycle_batch::horizon_canopy_cycle_batch_cards_draw_after_sacrificing_the_source",
+      "covers": "actual silent_clearing is exercised by the shared horizon_canopy_cycle_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::horizon_canopy_cycle_batch::horizon_canopy_cycle_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of silent_clearing"
+    },
+    {
+      "test": "mechanic_registry::horizon_canopy_cycle_batch::horizon_canopy_cycle_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for silent_clearing"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

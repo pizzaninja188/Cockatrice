@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "7278f382-8249-4981-9d87-47cef7dc13dd",
+  "spans": [
+    {
+      "face_id": "dusk_legion_dreadnought",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "dusk_legion_dreadnought",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Vigilance",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::TapPermanents",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::AddTypes",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario vigilance_crew_batch::vigilance_crew_batch_cards_cast_as_noncreature_artifacts_with_vigilance",
+      "covers": "actual dusk_legion_dreadnought is exercised by the shared vigilance_crew_batch actual-card scenario"
+    },
+    {
+      "test": "scenario vigilance_crew_batch::vigilance_crew_batch_cards_crew_makes_a_printed_artifact_creature",
+      "covers": "actual dusk_legion_dreadnought is exercised by the shared vigilance_crew_batch actual-card scenario"
+    },
+    {
+      "test": "scenario vigilance_crew_batch::vigilance_crew_batch_cards_reject_crew_with_insufficient_power",
+      "covers": "actual dusk_legion_dreadnought is exercised by the shared vigilance_crew_batch actual-card scenario"
+    },
+    {
+      "test": "scenario vigilance_crew_batch::vigilance_crew_batch_cards_vigilance_vehicle_stays_untapped_when_attacking",
+      "covers": "actual dusk_legion_dreadnought is exercised by the shared vigilance_crew_batch actual-card scenario"
+    },
+    {
+      "test": "scenario vigilance_crew_batch::vigilance_crew_batch_cards_crew_ends_at_end_of_turn",
+      "covers": "actual dusk_legion_dreadnought is exercised by the shared vigilance_crew_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::vigilance_crew_batch::vigilance_crew_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of dusk_legion_dreadnought"
+    },
+    {
+      "test": "mechanic_registry::vigilance_crew_batch::vigilance_crew_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for dusk_legion_dreadnought"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

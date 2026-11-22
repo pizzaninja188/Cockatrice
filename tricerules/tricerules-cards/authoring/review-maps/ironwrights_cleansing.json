@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "599faf5b-88fd-4373-b6ce-6047a67b30ea",
+  "spans": [
+    {
+      "face_id": "ironwrights_cleansing",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter.permanent_types",
+      "typed_path": "/faces/0/spell_effect/0/Exile/subject/Chosen/permanent_types"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario exile_artifact_enchantment_batch::exile_artifact_enchantment_batch_cards_apply_the_printed_effect",
+      "covers": "actual ironwrights_cleansing clause coverage"
+    },
+    {
+      "test": "scenario exile_artifact_enchantment_batch::exile_artifact_enchantment_batch_cards_reject_illegal_targets",
+      "covers": "actual ironwrights_cleansing clause coverage"
+    },
+    {
+      "test": "scenario exile_artifact_enchantment_batch::exile_artifact_enchantment_batch_cards_handle_stale_or_expired_state",
+      "covers": "actual ironwrights_cleansing clause coverage"
+    },
+    {
+      "test": "mechanic_registry::exile_artifact_enchantment_batch::exile_artifact_enchantment_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of ironwrights_cleansing"
+    },
+    {
+      "test": "mechanic_registry::exile_artifact_enchantment_batch::exile_artifact_enchantment_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for ironwrights_cleansing"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,20 @@
+// Oracle e193ae18-91a0-4870-b8a1-f8dedf744708; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 605.1a and 605.3a-b (targetless activated mana abilities resolve immediately), CR 106.1a-b (one mana of the chosen
+// printed color) and CR 202.1 (printed mana cost). No card-specific rulings.
+
+(
+  id: "obelisk_of_grixis",
+  name: "Obelisk of Grixis",
+  face_id: "obelisk_of_grixis",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(u: 1), (b: 1), (r: 1)])],
+    ),
+  ],
+)

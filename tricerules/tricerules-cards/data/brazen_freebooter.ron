@@ -1,0 +1,19 @@
+// Oracle 13e8d063-eece-4f38-83f6-02403130defa; source/rulings checked 2026-11-12.
+// CR 603.6a (enters-the-battlefield trigger) and 111.1 (Treasure token creation).
+(
+  id: "brazen_freebooter",
+  name: "Brazen Freebooter",
+  face_id: "brazen_freebooter",
+  mana_cost: "{3}{R}",
+  types: ["Creature", "Human", "Pirate"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [CreateTokens(token: "treasure", count: 1)],
+    ),
+  ],
+)

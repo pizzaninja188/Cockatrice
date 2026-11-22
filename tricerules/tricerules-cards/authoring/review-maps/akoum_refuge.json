@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "354fecd1-2371-49e3-81c6-7e47728dbb1f",
+  "spans": [
+    {
+      "face_id": "akoum_refuge",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "akoum_refuge",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "akoum_refuge",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario refuge_lands_batch::refuge_lands_batch_cards_enter_tapped_gain_one_life_and_tap_for_each_printed_color",
+      "covers": "actual akoum_refuge clause coverage"
+    },
+    {
+      "test": "scenario refuge_lands_batch::refuge_lands_batch_cards_require_tap_and_untapped_source",
+      "covers": "actual akoum_refuge clause coverage"
+    },
+    {
+      "test": "scenario refuge_lands_batch::refuge_lands_batch_cards_do_not_gain_life_when_they_do_not_enter",
+      "covers": "actual akoum_refuge clause coverage"
+    },
+    {
+      "test": "mechanic_registry::refuge_lands_batch::refuge_lands_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of akoum_refuge"
+    },
+    {
+      "test": "mechanic_registry::refuge_lands_batch::refuge_lands_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for akoum_refuge"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

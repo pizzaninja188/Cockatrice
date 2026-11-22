@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "9f914186-082e-4a85-a1cc-e9788074637b",
+  "spans": [
+    {
+      "face_id": "shredding_winds",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q38_flyer_damage_batch::q38_flyer_damage_cards_deal_their_printed_damage_only_to_flying_creatures",
+      "covers": "actual card is exercised by the shared 03-flyer-damage scenario"
+    },
+    {
+      "test": "scenario q38_flyer_damage_batch::q38_flyer_damage_cards_reject_player_targets_and_fizzle_on_stale_targets",
+      "covers": "actual card is exercised by the shared 03-flyer-damage scenario"
+    },
+    {
+      "test": "mechanic_registry::q38_flyer_damage_batch::q38_flyer_damage_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q38_flyer_damage_batch::q38_flyer_damage_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

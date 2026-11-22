@@ -1,0 +1,14 @@
+// Oracle 58e4f299-bb32-4727-8498-a364166adc38; source/rulings checked 2026-11-17 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.16b-f (protection's five effects), 702.9a-b (flying), 702.3 (defender) and 702.29a (cycling).
+
+(
+  id: "vodalian_zombie",
+  name: "Vodalian Zombie",
+  face_id: "vodalian_zombie",
+  mana_cost: "{U}{B}",
+  types: ["Creature", "Merfolk", "Zombie"],
+  power: 2,
+  toughness: 2,
+  protections: [Color(Green)],
+)

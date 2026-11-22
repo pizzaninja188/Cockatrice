@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "84dc0aae-029b-48dc-b8d0-e93c227e32e5",
+  "spans": [
+    {
+      "face_id": "lotus_path_djinn",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "lotus_path_djinn",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPlayerCastsSpell",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flying_prowess_batch::flying_prowess_batch_cards_pump_on_noncreature_casts_and_expire",
+      "covers": "actual lotus_path_djinn clause coverage"
+    },
+    {
+      "test": "scenario flying_prowess_batch::flying_prowess_batch_cards_ignore_creature_and_opponent_casts",
+      "covers": "actual lotus_path_djinn clause coverage"
+    },
+    {
+      "test": "scenario flying_prowess_batch::flying_prowess_batch_cards_stack_one_trigger_per_noncreature_spell",
+      "covers": "actual lotus_path_djinn clause coverage"
+    },
+    {
+      "test": "mechanic_registry::flying_prowess_batch::flying_prowess_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of lotus_path_djinn"
+    },
+    {
+      "test": "mechanic_registry::flying_prowess_batch::flying_prowess_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for lotus_path_djinn"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

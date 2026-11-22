@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "05d0b904-a680-4f2f-aaa1-e227a7fe7e79",
+  "spans": [
+    {
+      "face_id": "unruly_mob",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverCreatureDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Creature",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "CounterKind::PlusOnePlusOne",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q29_dies_another_counter_batch::q29_dies_another_counter_cards_cast_with_exact_cost_and_body",
+      "covers": "actual unruly_mob is exercised by the shared 02-dies-another-counter evidence"
+    },
+    {
+      "test": "scenario q29_dies_another_counter_batch::q29_dies_another_counter_cards_ignore_opposing_deaths",
+      "covers": "actual unruly_mob is exercised by the shared 02-dies-another-counter evidence"
+    },
+    {
+      "test": "scenario q29_dies_another_counter_batch::q29_dies_another_counter_cards_count_each_other_death",
+      "covers": "actual unruly_mob is exercised by the shared 02-dies-another-counter evidence"
+    },
+    {
+      "test": "scenario q29_dies_another_counter_batch::q29_dies_another_counter_cards_do_not_trigger_for_their_own_death",
+      "covers": "actual unruly_mob is exercised by the shared 02-dies-another-counter evidence"
+    },
+    {
+      "test": "scenario q29_dies_another_counter_batch::q29_dies_another_counter_simultaneous_death_does_not_save_the_source",
+      "covers": "actual unruly_mob is exercised by the shared 02-dies-another-counter evidence"
+    },
+    {
+      "test": "mechanic_registry::q29_dies_another_counter_batch::q29_dies_another_counter_batch_maps_definitions",
+      "covers": "actual unruly_mob is exercised by the shared 02-dies-another-counter evidence"
+    },
+    {
+      "test": "mechanic_registry::q29_dies_another_counter_batch::q29_dies_another_counter_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual unruly_mob is exercised by the shared 02-dies-another-counter evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

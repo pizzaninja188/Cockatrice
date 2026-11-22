@@ -1,0 +1,17 @@
+// Oracle 1f544a9f-c238-4858-be19-d6cd7d023dcc; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853. Pinned rulings: recorded in the family packet
+// CR 107.3 (X is announced and paid while casting), 115.1 (target player),
+// 121.2/121.3 (draw) and 608.2b (the target must still be legal on resolution).
+(
+  id: "opportunity",
+  name: "Opportunity",
+  face_id: "opportunity",
+  mana_cost: "{4}{U}{U}",
+  types: ["Instant"],
+  spell_effect: [TargetPlayerDraws(count: 4, target: (kind: AnyPlayer))],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    effect_indices: [0],
+  )])),
+)

@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "c0856fea-cbdc-427b-ae00-bfd9311f284f",
+  "spans": [
+    {
+      "face_id": "blessed_orator",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemPt",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario other_anthems_batch::other_anthems_batch_cards_pump_only_other_creatures_you_control",
+      "covers": "actual blessed_orator is exercised by the shared other_anthems_batch actual-card scenario"
+    },
+    {
+      "test": "scenario other_anthems_batch::other_anthems_batch_cards_apply_to_later_entries_and_stop_when_the_source_leaves",
+      "covers": "actual blessed_orator is exercised by the shared other_anthems_batch actual-card scenario"
+    },
+    {
+      "test": "scenario other_anthems_batch::other_anthems_batch_cards_stack_with_a_second_copy",
+      "covers": "actual blessed_orator is exercised by the shared other_anthems_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::other_anthems_batch::other_anthems_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of blessed_orator"
+    },
+    {
+      "test": "mechanic_registry::other_anthems_batch::other_anthems_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for blessed_orator"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

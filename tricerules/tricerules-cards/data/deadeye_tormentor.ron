@@ -1,0 +1,21 @@
+// Oracle ab735456-f831-4988-84c6-50ca14351990; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.4 (raid intervening-if), 508.1 (attacked this turn) and the printed effect.
+// Pinned rulings: raid cares only that a creature attacked during the turn, and the
+// attacked player/permanent need not remain. CR 115.1d (one opponent target) and 701.9a-b (discard).
+(
+  id: "deadeye_tormentor",
+  name: "Deadeye Tormentor",
+  face_id: "deadeye_tormentor",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Human", "Pirate"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [ChooseHandCards(action: Discard, count: 1, target: (kind: OpponentPlayer))],
+    intervening_if: Some(AttackedThisTurn(players: Controller)),
+  )],
+)

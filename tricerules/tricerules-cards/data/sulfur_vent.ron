@@ -1,0 +1,34 @@
+// Oracle bc2906cd-9e0c-4aa8-b656-fb1045d810ac; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 614.1d and 614.12 (the enters-tapped clause is a replacement effect), CR 605.1a and 605.3a-b
+// (targetless activated mana abilities resolve immediately), CR 118.3 and 701.21a (sacrifice as a
+// cost) and CR 106.1a-b (the produced mana's colors and types). No card-specific rulings.
+
+(
+  id: "sulfur_vent",
+  name: "Sulfur Vent",
+  face_id: "sulfur_vent",
+  mana_cost: "",
+  types: ["Land"],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: EntersTapped(affected: Self_),
+    ),
+  ],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(b: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
+      costs: [Tap, SacrificeSelf],
+      effect: [ProduceMana(options: [(u: 1, r: 1)])],
+    ),
+  ],
+)

@@ -1,0 +1,10 @@
+// Oracle e654242f-c7c5-4713-bbd0-26d41de8e2e7; source/rulings checked 2026-11-13.
+// CR 701.13 (exile) and 608.2b (illegal or departed target).
+(
+  id: "final_reward",
+  name: "Final Reward",
+  face_id: "final_reward",
+  mana_cost: "{4}{B}",
+  types: ["Instant"],
+  spell_effect: [Exile(linked_exile_id: None)],
+)

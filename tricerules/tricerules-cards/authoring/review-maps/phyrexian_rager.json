@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "e409c9be-0c9a-43c3-adb4-8c47afc1d551",
+  "spans": [
+    {
+      "face_id": "phyrexian_rager",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_draw_lose_life_batch::etb_draw_lose_life_batch_cards_scope_the_draw_and_loss_to_their_controller",
+      "covers": "actual phyrexian_rager is exercised by the shared etb_draw_lose_life_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_draw_lose_life_batch::etb_draw_lose_life_batch_cards_draw_exactly_one",
+      "covers": "actual phyrexian_rager is exercised by the shared etb_draw_lose_life_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_draw_lose_life_batch::etb_draw_lose_life_batch_cards_enter_the_battlefield",
+      "covers": "actual phyrexian_rager is exercised by the shared etb_draw_lose_life_batch actual-card scenario"
+    },
+    {
+      "test": "scenario etb_draw_lose_life_batch::etb_draw_lose_life_batch_cards_lose_the_game_at_one_life",
+      "covers": "actual phyrexian_rager is exercised by the shared etb_draw_lose_life_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::etb_draw_lose_life_batch::etb_draw_lose_life_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of phyrexian_rager"
+    },
+    {
+      "test": "mechanic_registry::etb_draw_lose_life_batch::etb_draw_lose_life_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for phyrexian_rager"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,19 @@
+// Oracle 8e0cea9c-3110-4728-9378-76849e33bb90; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 604.1/611.3a (continuous static ability), 613.1f layer 6 and 702.10a-b (haste); the source's controller owns the affected creatures (CR 109.5).
+// Pinned ruling: a creature that loses haste after attackers are declared is not removed from combat; Fervor grants haste continuously while it remains on the battlefield.
+
+(
+  id: "fervor",
+  name: "Fervor",
+  face_id: "fervor",
+  mana_cost: "{2}{R}",
+  types: ["Enchantment"],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: AnthemKeyword(filter: (controller: YouControl), keyword: Haste),
+    ),
+  ],
+)

@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "5e19aa52-5b76-40d7-ba9c-0e5d64f2b773",
+  "spans": [
+    {
+      "face_id": "twilight_panther",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q36_self_deathtouch_batch::q36_self_deathtouch_cards_grant_the_keyword_only_to_the_source",
+      "covers": "actual card is exercised by the shared 06-self-deathtouch scenario"
+    },
+    {
+      "test": "scenario q36_self_deathtouch_batch::q36_self_deathtouch_cards_require_mana_and_the_source_controller",
+      "covers": "actual card is exercised by the shared 06-self-deathtouch scenario"
+    },
+    {
+      "test": "mechanic_registry::q36_self_deathtouch_batch::q36_self_deathtouch_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q36_self_deathtouch_batch::q36_self_deathtouch_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

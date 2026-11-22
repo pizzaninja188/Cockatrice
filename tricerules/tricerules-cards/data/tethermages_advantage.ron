@@ -1,0 +1,10 @@
+// Oracle b4f89885-eeb9-46c7-9820-9758b624ca24; source/rulings checked 2026-11-11.
+// CR 601.2a/601.2h (cast and payment), 611.2a (until-end-of-turn pump), 701.26 (untap), and 514.2 (cleanup).
+(
+  id: "tethermages_advantage",
+  name: "Tethermage's Advantage",
+  face_id: "tethermages_advantage",
+  mana_cost: "{G}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: 2, toughness: 2), GrantKeywords(keywords: [Reach]), Untap()],
+)

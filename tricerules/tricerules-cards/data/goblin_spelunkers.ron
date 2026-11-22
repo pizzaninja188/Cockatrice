@@ -1,0 +1,12 @@
+// Oracle 0534a514-2847-4dbc-8178-6a2886c75bf6; source/rulings checked 2026-11-13.
+// CR 702.14a-c (landwalk evasion) and 509.1b (blocking restriction).
+(
+  id: "goblin_spelunkers",
+  name: "Goblin Spelunkers",
+  face_id: "goblin_spelunkers",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Goblin", "Warrior"],
+  power: 2,
+  toughness: 2,
+  evasions: [Landwalk(land_subtype: "Mountain")],
+)

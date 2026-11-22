@@ -1,0 +1,11 @@
+// Oracle 4d628f52-183a-4a89-b05f-50463a82513d; source/rulings checked 2026-11-13.
+// CR 115.1a/601.2c (target at cast), CR 608.2b (stale target), CR 701.8 (destroy).
+(
+  id: "volcanic_upheaval",
+  name: "Volcanic Upheaval",
+  face_id: "volcanic_upheaval",
+  mana_cost: "{3}{R}",
+  types: ["Instant"],
+  spell_effect: [Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Land])))],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target land", effect_indices: [0])])),
+)

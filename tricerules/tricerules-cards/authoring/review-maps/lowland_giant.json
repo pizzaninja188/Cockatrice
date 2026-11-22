@@ -1,0 +1,26 @@
+{
+  "format_version": 1,
+  "oracle_id": "041cc2d0-eb67-484e-8da1-e91ddb2b3f70",
+  "spans": [],
+  "primitive_references": [],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario vanilla_red_batch::vanilla_red_batch_cards_cast_with_printed_characteristics",
+      "covers": "actual lowland_giant clause coverage"
+    },
+    {
+      "test": "scenario vanilla_red_batch::vanilla_red_batch_cards_attack_and_block_with_printed_stats",
+      "covers": "actual lowland_giant clause coverage"
+    },
+    {
+      "test": "mechanic_registry::vanilla_red_batch::vanilla_red_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of lowland_giant"
+    },
+    {
+      "test": "mechanic_registry::vanilla_red_batch::vanilla_red_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for lowland_giant"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "c2b659ef-68f6-452c-94b5-2872f4e7b069",
+  "spans": [
+    {
+      "face_id": "earth_origin_yak",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario etb_team_pump_batch::etb_team_pump_batch_cards_pump_team_on_entry",
+      "covers": "actual earth-origin_yak clause coverage"
+    },
+    {
+      "test": "scenario etb_team_pump_batch::etb_team_pump_batch_cards_scope_pump_to_the_resolving_board",
+      "covers": "actual earth-origin_yak clause coverage"
+    },
+    {
+      "test": "scenario etb_team_pump_batch::etb_team_pump_batch_cards_expire_at_end_of_turn",
+      "covers": "actual earth-origin_yak clause coverage"
+    },
+    {
+      "test": "mechanic_registry::etb_team_pump_batch::etb_team_pump_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of earth-origin_yak"
+    },
+    {
+      "test": "mechanic_registry::etb_team_pump_batch::etb_team_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for earth-origin_yak"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

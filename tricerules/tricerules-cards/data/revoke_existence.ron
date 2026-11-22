@@ -1,0 +1,11 @@
+// Oracle 289e1a7c-b301-4395-baf8-e9a1c6d38aab; source/rulings checked 2026-11-13.
+// CR 115.1a/601.2c (target at cast), CR 608.2b (stale target), CR 701.13 (exile).
+(
+  id: "revoke_existence",
+  name: "Revoke Existence",
+  face_id: "revoke_existence",
+  mana_cost: "{1}{W}",
+  types: ["Sorcery"],
+  spell_effect: [Exile(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact, Enchantment])))],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target artifact or enchantment", effect_indices: [0])])),
+)

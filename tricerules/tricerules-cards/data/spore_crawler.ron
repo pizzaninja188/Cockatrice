@@ -1,0 +1,17 @@
+// Oracle fa7c13c0-350b-4ed6-8c16-590d2b988184; source/rulings checked 2026-11-13.
+// CR 603.6c and 700.4 (dies trigger).
+(
+  id: "spore_crawler",
+  name: "Spore Crawler",
+  face_id: "spore_crawler",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Fungus"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfDies,
+    effect: [Draw(count: 1)],
+  )],
+)

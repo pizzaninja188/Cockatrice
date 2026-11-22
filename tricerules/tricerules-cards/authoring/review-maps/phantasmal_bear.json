@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "780da643-8d14-4f1a-a298-5b7454e9c4df",
+  "spans": [
+    {
+      "face_id": "phantasmal_bear",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfBecomesTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Sacrifice",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario becomes_target_sacrifice_batch::becomes_target_sacrifice_batch_cards_sacrifice_to_a_targeting_ability",
+      "covers": "actual phantasmal_bear is exercised by the shared becomes_target_sacrifice_batch actual-card scenario"
+    },
+    {
+      "test": "scenario becomes_target_sacrifice_batch::becomes_target_sacrifice_batch_cards_trigger_for_their_own_controller",
+      "covers": "actual phantasmal_bear is exercised by the shared becomes_target_sacrifice_batch actual-card scenario"
+    },
+    {
+      "test": "scenario becomes_target_sacrifice_batch::becomes_target_sacrifice_batch_cards_do_not_trigger_without_a_target",
+      "covers": "actual phantasmal_bear is exercised by the shared becomes_target_sacrifice_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::becomes_target_sacrifice_batch::becomes_target_sacrifice_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of phantasmal_bear"
+    },
+    {
+      "test": "mechanic_registry::becomes_target_sacrifice_batch::becomes_target_sacrifice_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for phantasmal_bear"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

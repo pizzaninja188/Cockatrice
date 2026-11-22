@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "250f804f-b5d5-414c-bb25-476d1fe1f85a",
+  "spans": [
+    {
+      "face_id": "jayas_firenado",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_a::q55_a_jayas_firenado_damages_then_scries",
+      "covers": "actual Jaya's Firenado deals 5 damage then parks for the scry-1 choice"
+    },
+    {
+      "test": "scenario q55_batch_a::q55_a_jayas_firenado_stale_target_does_not_scry",
+      "covers": "actual Jaya's Firenado fizzles without scrying when its target is illegal"
+    },
+    {
+      "test": "scenario q55_batch_a::q55_a_creature_or_planeswalker_burn_deals_exact_damage",
+      "covers": "actual Jaya's Firenado deals exactly 5 damage to a creature"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_damage_creature_or_planeswalker_map_definitions",
+      "covers": "shared registry identity for the creature-or-planeswalker burn spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Jaya's Firenado"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

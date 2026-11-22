@@ -1,0 +1,22 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle dc2d67bb-29b3-43d7-8ebf-2100c5287bbf.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+// CR 107.4f/119.4: each {R/P} is paid with red mana or 2 life; CR 702.9a: flying;
+// CR 602.2: activated ability; CR 611.2a/514.2: pump until end of turn.
+(
+  id: "moltensteel_dragon",
+  name: "Moltensteel Dragon",
+  face_id: "moltensteel_dragon",
+  mana_cost: "{4}{R/P}{R/P}",
+  types: ["Artifact", "Creature", "Phyrexian", "Dragon"],
+  power: 4,
+  toughness: 4,
+  keywords: [Flying],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([3]),
+      costs: [Mana("{R/P}")],
+      effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
+    ),
+  ],
+)

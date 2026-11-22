@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "fdb109f6-d185-4d1e-92b9-768e77562f55",
+  "spans": [
+    {
+      "face_id": "outland_boar",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::SelfCombatRestriction",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "CombatRestriction::cant_be_blocked_by",
+      "typed_path": "/faces/0/static_abilities/0/definition/SelfCombatRestriction/restriction"
+    },
+    {
+      "symbol": "PowerComparison::AtMost",
+      "typed_path": "/faces/0/static_abilities/0/definition/SelfCombatRestriction/restriction/cant_be_blocked_by/0/power"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario blocked_by_power_two_batch::blocked_by_power_two_batch_cards_reject_weak_blockers_and_allow_power_three",
+      "covers": "actual outland_boar is exercised by the shared blocked_by_power_two_batch actual-card scenario"
+    },
+    {
+      "test": "scenario blocked_by_power_two_batch::blocked_by_power_two_batch_cards_do_not_undo_a_legal_block_after_a_power_change",
+      "covers": "actual outland_boar is exercised by the shared blocked_by_power_two_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::blocked_by_power_two_batch::blocked_by_power_two_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of outland_boar"
+    },
+    {
+      "test": "mechanic_registry::blocked_by_power_two_batch::blocked_by_power_two_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for outland_boar"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

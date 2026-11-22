@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "5eae77d0-7653-4b07-a701-aabea13991bf",
+  "spans": [
+    {
+      "face_id": "explosive_impact",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario damage_any_target_batch::damage_any_target_cards_deal_exact_damage_and_use_exact_costs",
+      "covers": "actual explosive_impact deals exactly 5 damage to a chosen player, consumes its exact printed mana cost, leaves the opponent's hidden zones unchanged, and puts the spell card in its owner's graveyard"
+    },
+    {
+      "test": "scenario damage_any_target_batch::damage_any_target_cards_mark_exact_nonlethal_damage_on_creatures",
+      "covers": "actual explosive_impact marks its exact nonlethal damage on a creature without damaging the controller"
+    },
+    {
+      "test": "scenario damage_any_target_batch::damage_any_target_cards_reject_non_damageable_targets_without_paying",
+      "covers": "actual explosive_impact rejects a noncreature artifact target without spending mana or moving the card"
+    },
+    {
+      "test": "scenario damage_any_target_batch::damage_any_target_cards_fizzle_when_the_chosen_creature_left",
+      "covers": "actual explosive_impact fizzles when its chosen creature target has left the battlefield"
+    },
+    {
+      "test": "mechanic_registry::damage_any_target_batch::damage_any_target_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and AnyTarget damage effect of explosive_impact"
+    },
+    {
+      "test": "mechanic_registry::damage_any_target_batch::damage_any_target_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for explosive_impact"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

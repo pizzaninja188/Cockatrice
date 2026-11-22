@@ -1,0 +1,92 @@
+{
+  "format_version": 1,
+  "oracle_id": "e0717287-9bff-446b-838d-6fc0adccc768",
+  "spans": [
+    {
+      "face_id": "cradle_of_safety",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "cradle_of_safety",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "cradle_of_safety",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "cradle_of_safety",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flash_hexproof_aura_batch::flash_hexproof_aura_batch_cards_attach_grant_hexproof_and_keep_the_static_pump",
+      "covers": "actual cradle_of_safety attaches, grants hexproof and applies the static pump"
+    },
+    {
+      "test": "scenario flash_hexproof_aura_batch::flash_hexproof_aura_batch_cards_use_flash_timing_on_an_opponent_turn",
+      "covers": "actual cradle_of_safety is cast at instant timing on an opponent's turn"
+    },
+    {
+      "test": "scenario flash_hexproof_aura_batch::flash_hexproof_aura_batch_cards_require_a_creature_you_control_as_the_target",
+      "covers": "actual cradle_of_safety rejects an opponent's creature as the Aura target"
+    },
+    {
+      "test": "scenario flash_hexproof_aura_batch::flash_hexproof_aura_batch_cards_keep_hexproof_on_the_last_enchanted_creature_when_the_aura_leaves",
+      "covers": "actual cradle_of_safety grants hexproof to the last-enchanted creature when it leaves before the trigger"
+    },
+    {
+      "test": "scenario flash_hexproof_aura_batch::flash_hexproof_aura_batch_cards_fizzle_when_the_creature_left_before_the_aura_resolves",
+      "covers": "actual cradle_of_safety fizzles when the only target left before the Aura resolved"
+    },
+    {
+      "test": "mechanic_registry::flash_hexproof_aura_batch::flash_hexproof_aura_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of cradle_of_safety"
+    },
+    {
+      "test": "mechanic_registry::flash_hexproof_aura_batch::flash_hexproof_aura_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for cradle_of_safety"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

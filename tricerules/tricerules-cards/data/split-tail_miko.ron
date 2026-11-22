@@ -1,0 +1,22 @@
+// Oracle 82732de2-b98d-4534-967f-2cf4c9e6bfbe; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.1/602.2 and 118.3 (mana and tap costs), 614.1a/615.1 (prevention shield),
+// 115.1 (any target) and 514.2 (the shield lasts until end of turn).
+// Copy of the reviewed Samite Healer / Clergy en-Vec prevention shape.
+(
+  id: "split-tail_miko",
+  name: "Split-Tail Miko",
+  face_id: "split_tail_miko",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Fox", "Cleric"],
+  power: 1,
+  toughness: 1,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{W}"), Tap],
+      effect: [PreventNextDamage(amount: 2, target: (kind: AnyTarget))],
+    ),
+  ],
+)

@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "87aa2cbe-841c-40ff-9b1c-b259b4cc631e",
+  "spans": [
+    {
+      "face_id": "slimebind",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "slimebind",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "slimebind",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario flash_aura_shrink_batch::flash_aura_shrink_batch_cards_attach_and_apply_the_printed_shrink",
+      "covers": "actual slimebind is exercised by the shared 05-flash-aura-shrink actual-card scenario"
+    },
+    {
+      "test": "scenario flash_aura_shrink_batch::flash_aura_shrink_batch_cards_apply_lethal_toughness_reduction_only_when_printed",
+      "covers": "actual slimebind is exercised by the shared 05-flash-aura-shrink actual-card scenario"
+    },
+    {
+      "test": "scenario flash_aura_shrink_batch::flash_aura_shrink_batch_cards_use_flash_timing_on_an_opponent_turn",
+      "covers": "actual slimebind is exercised by the shared 05-flash-aura-shrink actual-card scenario"
+    },
+    {
+      "test": "scenario flash_aura_shrink_batch::flash_aura_shrink_batch_cards_reject_a_noncreature_and_fizzle_a_stale_target",
+      "covers": "actual slimebind is exercised by the shared 05-flash-aura-shrink actual-card scenario"
+    },
+    {
+      "test": "scenario flash_aura_shrink_batch::flash_aura_shrink_batch_cards_remove_the_shrink_when_the_aura_leaves",
+      "covers": "actual slimebind is exercised by the shared 05-flash-aura-shrink actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::flash_aura_shrink_batch::flash_aura_shrink_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of slimebind"
+    },
+    {
+      "test": "mechanic_registry::flash_aura_shrink_batch::flash_aura_shrink_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for slimebind"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,14 @@
+// Oracle 535007c5-03a8-495f-a132-37960f179f96; source/rulings checked 2026-11-13.
+// CR 702.9a-b (Flying) and 702.16b-f (protection from a color: no targeting, damage,
+// attachment, or blocking by red sources).
+(
+  id: "voice_of_law",
+  name: "Voice of Law",
+  face_id: "voice_of_law",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Angel"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+  protections: [Color(Red)],
+)

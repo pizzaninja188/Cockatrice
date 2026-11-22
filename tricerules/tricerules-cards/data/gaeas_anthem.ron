@@ -1,0 +1,16 @@
+// Oracle 3754dce0-3e97-406f-8807-a4942a222c41; source/rulings checked 2026-11-12.
+// CR 604.2/611.3b and 613.4c (layer 7c): static controller-wide +1/+1 while on the battlefield.
+(
+  id: "gaeas_anthem",
+  name: "Gaea's Anthem",
+  face_id: "gaeas_anthem",
+  mana_cost: "{1}{G}{G}",
+  types: ["Enchantment"],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: AnthemPt(filter: (controller: YouControl), delta_power: 1, delta_toughness: 1),
+    ),
+  ],
+)

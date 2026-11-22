@@ -1,0 +1,19 @@
+// Oracle 6bd6d259-1af7-4dff-a79c-48a616d2a36e; source/rulings checked 2026-11-13.
+// CR 305.6 (land types), 605.1a/605.3a-b (mana ability) and 118.3 (tap cost).
+(
+  id: "viridescent_bog",
+  name: "Viridescent Bog",
+  face_id: "viridescent_bog",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{1}"), Tap],
+      effect: [ProduceMana(options: [
+        (b: 1, g: 1),
+      ])],
+    ),
+  ],
+)

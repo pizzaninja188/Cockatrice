@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "668a6a9d-80fc-437b-99b8-6807e92eabca",
+  "spans": [
+    {
+      "face_id": "agent_of_horizons",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ApplyCombatRestriction",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q36_self_unblockable_batch::q36_self_unblockable_cards_restrict_only_the_source",
+      "covers": "actual card is exercised by the shared 09-self-unblockable scenario"
+    },
+    {
+      "test": "scenario q36_self_unblockable_batch::q36_self_unblockable_cards_reject_declared_blocks",
+      "covers": "actual card is exercised by the shared 09-self-unblockable scenario"
+    },
+    {
+      "test": "scenario q36_self_unblockable_batch::q36_self_unblockable_cards_reject_foreign_activation",
+      "covers": "actual card is exercised by the shared 09-self-unblockable scenario"
+    },
+    {
+      "test": "scenario q36_self_unblockable_batch::q36_self_unblockable_cards_expire_at_cleanup",
+      "covers": "actual card is exercised by the shared 09-self-unblockable scenario"
+    },
+    {
+      "test": "mechanic_registry::q36_self_unblockable_batch::q36_self_unblockable_batch_maps_definitions",
+      "covers": "reviewed identity, typed shape and printed characteristics"
+    },
+    {
+      "test": "mechanic_registry::q36_self_unblockable_batch::q36_self_unblockable_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

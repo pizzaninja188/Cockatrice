@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-11-11 against pinned Scryfall oracle 8b218023-50b8-4d9d-b17b-9647479d3675.
+// Handwritten typed definition promoted through the reviewed direct-RON path.
+(
+  id: "open_fire",
+  name: "Open Fire",
+  face_id: "open_fire",
+  mana_cost: "{2}{R}",
+  types: ["Instant"],
+  spell_effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
+)

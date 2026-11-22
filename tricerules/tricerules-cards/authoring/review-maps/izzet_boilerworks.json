@@ -1,0 +1,89 @@
+{
+  "format_version": 1,
+  "oracle_id": "1cb9d94a-3039-4f2e-8fcc-6996f9a45f74",
+  "spans": [
+    {
+      "face_id": "izzet_boilerworks",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "izzet_boilerworks",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/program"
+      ]
+    },
+    {
+      "face_id": "izzet_boilerworks",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "ProgramInstructionKind::ChoosePermanents",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/1"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Land",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q31_bounce_lands_batch::q31_bounce_lands_enter_tapped_and_return_a_land_you_control",
+      "covers": "actual izzet_boilerworks is exercised by the shared 02-bounce-lands evidence"
+    },
+    {
+      "test": "scenario q31_bounce_lands_batch::q31_bounce_lands_accept_the_entering_land_itself",
+      "covers": "actual izzet_boilerworks is exercised by the shared 02-bounce-lands evidence"
+    },
+    {
+      "test": "scenario q31_bounce_lands_batch::q31_bounce_lands_candidate_list_excludes_opponents_lands",
+      "covers": "actual izzet_boilerworks is exercised by the shared 02-bounce-lands evidence"
+    },
+    {
+      "test": "scenario q31_bounce_lands_batch::q31_bounce_lands_return_a_foreign_owned_land_to_its_owners_hand",
+      "covers": "actual izzet_boilerworks is exercised by the shared 02-bounce-lands evidence"
+    },
+    {
+      "test": "scenario q31_bounce_lands_batch::q31_bounce_lands_produce_the_printed_two_mana",
+      "covers": "actual izzet_boilerworks is exercised by the shared 02-bounce-lands evidence"
+    },
+    {
+      "test": "mechanic_registry::q31_bounce_lands_batch::q31_bounce_lands_batch_maps_definitions",
+      "covers": "actual izzet_boilerworks is exercised by the shared 02-bounce-lands evidence"
+    },
+    {
+      "test": "mechanic_registry::q31_bounce_lands_batch::q31_bounce_lands_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "actual izzet_boilerworks is exercised by the shared 02-bounce-lands evidence"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

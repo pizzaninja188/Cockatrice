@@ -1,0 +1,17 @@
+// Oracle b4540f6a-bec8-4942-aebe-d3285b8a8134; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a/601.2c (target at cast), 611.2a/514.2 (until end of turn), 613.4c (layer 7c)
+// and 701.22a-b (scry). A target that is illegal at resolution fizzles the spell (CR 608.2b).
+//
+(
+  id: "battlewise_valor",
+  name: "Battlewise Valor",
+  face_id: "battlewise_valor",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 2, toughness: 2, subject: Chosen((kind: Creature))),
+    Scry(count: 1),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+)

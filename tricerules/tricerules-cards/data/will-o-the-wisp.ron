@@ -1,0 +1,22 @@
+// Oracle 8b60fcfe-fb90-4a00-a708-25b59bfc9b5a; source/rulings checked 2026-11-15 against pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.9a-b (flying), 701.19a/b (regenerate), and 602.1a/602.2
+// (activated ability and cost).
+(
+  id: "will-o-the-wisp",
+  name: "Will-o'-the-Wisp",
+  face_id: "will_o_the_wisp",
+  mana_cost: "{B}",
+  types: ["Creature", "Spirit"],
+  power: 0,
+  toughness: 1,
+  keywords: [Flying],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{B}")],
+      effect: [Regenerate(subject: Source)],
+    ),
+  ],
+)

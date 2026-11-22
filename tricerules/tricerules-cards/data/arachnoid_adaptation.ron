@@ -1,0 +1,10 @@
+// Oracle 042cc9d9-ad13-401f-b2f5-c2f1558d7e44; source/rulings checked 2026-11-11.
+// CR 601.2a/601.2h (cast and payment), 611.2a (until-end-of-turn pump), 701.26 (untap), and 514.2 (cleanup).
+(
+  id: "arachnoid_adaptation",
+  name: "Arachnoid Adaptation",
+  face_id: "arachnoid_adaptation",
+  mana_cost: "{G}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: 2, toughness: 2), GrantKeywords(keywords: [Reach]), Untap()],
+)

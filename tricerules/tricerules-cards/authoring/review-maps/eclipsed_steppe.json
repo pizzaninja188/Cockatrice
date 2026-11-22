@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "6216635f-8e6e-40a3-9659-ef6352ab92ce",
+  "spans": [
+    {
+      "face_id": "eclipsed_steppe",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "eclipsed_steppe",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario battle_land_cycle_batch::battle_land_cycle_batch_cards_enter_tapped_unless_two_basic_lands_are_controlled",
+      "covers": "actual eclipsed_steppe clause coverage"
+    },
+    {
+      "test": "scenario battle_land_cycle_batch::battle_land_cycle_batch_cards_count_only_basic_lands_controlled_by_their_controller",
+      "covers": "actual eclipsed_steppe clause coverage"
+    },
+    {
+      "test": "scenario battle_land_cycle_batch::battle_land_cycle_batch_cards_produce_each_printed_color_when_untapped",
+      "covers": "actual eclipsed_steppe clause coverage"
+    },
+    {
+      "test": "mechanic_registry::battle_land_cycle_batch::battle_land_cycle_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of eclipsed_steppe"
+    },
+    {
+      "test": "mechanic_registry::battle_land_cycle_batch::battle_land_cycle_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for eclipsed_steppe"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

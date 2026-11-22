@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "102356a9-0de5-4034-b121-034da5deb4f2",
+  "spans": [
+    {
+      "face_id": "dark_offering",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q39_destroy_gain_life_batch::q39_destroy_gain_life_cards_destroy_the_target_and_gain_the_printed_life",
+      "covers": "actual card destroys its target and gains its printed life"
+    },
+    {
+      "test": "scenario q39_destroy_gain_life_batch::q39_destroy_gain_life_cards_reject_an_illegal_target",
+      "covers": "actual card rejects an illegal target"
+    },
+    {
+      "test": "scenario q39_destroy_gain_life_batch::q39_destroy_gain_life_cards_fizzle_when_the_target_left",
+      "covers": "actual card fizzles on a stale target without gaining life"
+    },
+    {
+      "test": "mechanic_registry::q39_destroy_gain_life_batch::q39_destroy_gain_life_maps_definitions",
+      "covers": "reviewed identity, target filter and printed values"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

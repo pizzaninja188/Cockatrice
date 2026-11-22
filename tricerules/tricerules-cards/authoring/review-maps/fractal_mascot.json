@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "cca3f3e8-15a7-4ad8-893a-d3570178a800",
+  "spans": [
+    {
+      "face_id": "fractal_mascot",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "fractal_mascot",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q48_cohorts_batch::q48_etb_tap_canary_simplest_taps_an_opponents_creature",
+      "covers": "canary simplest taps an opponent's creature"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_etb_tap_canary_hardest_adds_a_stun_counter",
+      "covers": "canary hardest taps and adds a stun counter"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_etb_tap_cards_apply_their_printed_tap_and_stun",
+      "covers": "every actual card applies its printed tap and stun"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_etb_tap_maps_definitions",
+      "covers": "reviewed identity, enters trigger, tap, and stun"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Fractal Mascot"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

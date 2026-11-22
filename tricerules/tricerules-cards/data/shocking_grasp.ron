@@ -1,0 +1,16 @@
+// Oracle 2ebe4c68-87eb-474d-a4c4-0468835b4900; source/rulings checked 2026-11-15.
+// CR 115.1a/601.2c (target at cast), 613.4c (-X/-Y until end of turn),
+// 121.1 (draw) and 608.2b (an illegal target makes the spell not resolve,
+// so no card is drawn).
+(
+  id: "shocking_grasp",
+  name: "Shocking Grasp",
+  face_id: "shocking_grasp",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: -2, toughness: 0),
+    Draw(count: 1),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+)

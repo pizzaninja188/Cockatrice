@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "1ee811fb-c25d-4cf5-b396-539c36e8f90f",
+  "spans": [
+    {
+      "face_id": "emrakuls_hatcher",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "eldrazi_spawn_c_0_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q45_cohorts_batch::q45_etb_eldrazi_spawn_canary_simplest_creates_three",
+      "covers": "canary creates three 0/1 Eldrazi Spawn"
+    },
+    {
+      "test": "scenario q45_cohorts_batch::q45_etb_eldrazi_spawn_cards_create_their_printed_counts_and_mana_tokens",
+      "covers": "every card creates its printed Spawn count and the token's mana ability works"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_etb_eldrazi_spawn_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of emrakuls_hatcher"
+    },
+    {
+      "test": "mechanic_registry::q45_cohorts_batch::q45_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for emrakuls_hatcher"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

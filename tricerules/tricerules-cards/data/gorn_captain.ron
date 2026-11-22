@@ -1,0 +1,13 @@
+// Oracle 60ff591d-170d-410a-9710-510e811f9827; source/rulings checked 2026-11-15.
+// CR 702.19a-c: trample assigns lethal damage to blockers and lets excess
+// combat damage be assigned to the player or planeswalker being attacked.
+(
+  id: "gorn_captain",
+  name: "Gorn Captain",
+  face_id: "gorn_captain",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Gorn", "Soldier"],
+  power: 4,
+  toughness: 3,
+  keywords: [Trample],
+)

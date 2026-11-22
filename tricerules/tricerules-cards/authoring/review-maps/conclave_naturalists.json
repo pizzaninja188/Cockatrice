@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "cb5de977-d420-41cc-85f0-6ffee8bbeff1",
+  "spans": [
+    {
+      "face_id": "conclave_naturalists",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q54_batch_b::q54_canary_hardest_conclave_naturalists_may_destroy_and_may_decline",
+      "covers": "actual Conclave Naturalists destroys a chosen artifact on entry, can decline, and rejects a creature target"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_b::q54_artifact_enchantment_destruction_cards_map_definitions",
+      "covers": "shared registry identity for the three artifact/enchantment destruction definitions"
+    },
+    {
+      "test": "mechanic_registry::q54_batch_b::q54_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Conclave Naturalists"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

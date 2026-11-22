@@ -1,0 +1,19 @@
+// Oracle 6d1d53e3-60ee-40a1-89a5-0648760cd83f; source/rulings checked 2026-11-15.
+// CR 702.8a (Flash), 303.4a (Aura target and attach), 613.4c
+// (layer-7c attached P/T modifier) and 704.5m (unattached Aura cleanup).
+(
+  id: "stoneskin",
+  name: "Stoneskin",
+  face_id: "stoneskin",
+  mana_cost: "{2}{W}",
+  types: ["Enchantment", "Aura"],
+  keywords: [Flash],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([3]),
+      definition: AttachedModifier(delta_power: 0, delta_toughness: 10),
+    ),
+  ],
+)

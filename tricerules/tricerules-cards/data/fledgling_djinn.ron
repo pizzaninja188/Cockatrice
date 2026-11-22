@@ -1,0 +1,23 @@
+// Oracle 2c73ef77-ae58-401f-8747-538c4cd075d0; source/rulings checked 2026-11-18 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 503.1 (upkeep step), 603.2 (triggered ability) and 120.3 (damage to the controller).
+// The card has no pinned ruling.
+
+(
+  id: "fledgling_djinn",
+  name: "Fledgling Djinn",
+  face_id: "fledgling_djinn",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Djinn"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+  triggered_abilities: [
+    (
+      ability_id: "upkeep_damage",
+      presentation: OracleLines([2]),
+      trigger: AtBeginningOfUpkeep(),
+      effect: [DamagePlayer(amount: 1)],
+    ),
+  ],
+)

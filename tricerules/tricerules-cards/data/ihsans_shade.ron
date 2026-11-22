@@ -1,0 +1,14 @@
+// Oracle 5eb29367-4ec3-4bd2-887e-13eeeecae8fa; source/rulings checked 2026-11-13.
+// CR 702.16b-f: protection's five effects (no targeting, no Aura/Equipment
+// attachment, no damage, no blocking, no Fortify).
+(
+  id: "ihsans_shade",
+  name: "Ihsan's Shade",
+  face_id: "ihsans_shade",
+  mana_cost: "{3}{B}{B}{B}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Shade", "Knight"],
+  power: 5,
+  toughness: 5,
+  protections: [Color(White)],
+)

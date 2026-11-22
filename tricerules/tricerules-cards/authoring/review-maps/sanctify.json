@@ -1,0 +1,62 @@
+{
+  "format_version": 1,
+  "oracle_id": "c804ac8e-7427-43c6-b496-3ee6de192f03",
+  "spans": [
+    {
+      "face_id": "sanctify",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario naturalize_lifegain_batch::naturalize_lifegain_batch_cards_destroy_an_enchantment_and_gain_exact_life",
+      "covers": "actual sanctify is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario naturalize_lifegain_batch::naturalize_lifegain_batch_cards_gain_life_when_an_indestructible_target_survives",
+      "covers": "actual sanctify is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario naturalize_lifegain_batch::naturalize_lifegain_batch_cards_fizzle_a_stale_target_without_gaining_life",
+      "covers": "actual sanctify is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario naturalize_lifegain_batch::naturalize_lifegain_batch_cards_reject_a_creature_target_without_paying",
+      "covers": "actual sanctify is exercised by the shared batch actual-card scenario"
+    },
+    {
+      "test": "scenario naturalize_lifegain_batch::naturalize_lifegain_batch_cards_respect_instant_and_sorcery_timing",
+      "covers": "actual sanctify is exercised by the shared naturalize_lifegain_batch actual-card timing scenario"
+    },
+    {
+      "test": "mechanic_registry::naturalize_lifegain_batch::naturalize_lifegain_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of sanctify"
+    },
+    {
+      "test": "mechanic_registry::naturalize_lifegain_batch::naturalize_lifegain_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for sanctify"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

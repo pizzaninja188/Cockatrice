@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "84d32e68-72b9-432d-a023-7bc6a26b8ad0",
+  "spans": [
+    {
+      "face_id": "shatter",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting/groups/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter.permanent_types",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen/permanent_types"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario destroy_artifact_batch::destroy_artifact_batch_cards_destroy_an_artifact",
+      "covers": "actual shatter destroys the targeted artifact"
+    },
+    {
+      "test": "scenario destroy_artifact_batch::destroy_artifact_batch_cards_reject_nonartifact_targets_without_spending_mana",
+      "covers": "actual shatter rejects a nonartifact target without spending mana"
+    },
+    {
+      "test": "scenario destroy_artifact_batch::destroy_artifact_batch_cards_fizzle_stale_targets",
+      "covers": "actual shatter does not destroy a stale artifact target"
+    },
+    {
+      "test": "mechanic_registry::destroy_artifact_batch::destroy_artifact_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of shatter"
+    },
+    {
+      "test": "mechanic_registry::destroy_artifact_batch::destroy_artifact_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for shatter"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

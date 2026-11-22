@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "3517abe3-eb18-49af-9f1c-b372d2039d99",
+  "spans": [
+    {
+      "face_id": "aquus_steed",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q53_batch_b::q53_b_shrink_cards_apply_their_printed_values_and_costs",
+      "covers": "actual aquus_steed printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_b::q53_shrink_cards_map_definitions",
+      "covers": "actual aquus_steed printed behavior and shape"
+    },
+    {
+      "test": "scenario q53_batch_b::q53_b_canary_simplest_aquus_steed_leaves_toughness_alone",
+      "covers": "actual aquus_steed printed behavior and shape"
+    },
+    {
+      "test": "mechanic_registry::q53_batch_b::q53_b_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    },
+    {
+      "test": "scenario q53_batch_b::q53_b_activated_shrink_rejects_invalid_targets_and_cost_sources",
+      "covers": "actual activated shrink cost, target and rejection behavior"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

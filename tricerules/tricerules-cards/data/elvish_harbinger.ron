@@ -1,0 +1,32 @@
+// Oracle 28ddc23c-5b0b-4747-9a33-6845acf27bec; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (enters trigger), 701.23a-b (search and failing to find),
+// 701.20a/701.23e (reveal), 701.24b (shuffle then put the found card on top) and
+// 608.2 (resolution). No pinned ruling changes the printed behavior.
+(
+  id: "elvish_harbinger",
+  name: "Elvish Harbinger",
+  face_id: "elvish_harbinger",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Elf", "Druid"] ,
+  power: 1,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [SearchLibrary(
+      filter: Some((required_subtypes: ["Elf"])),
+      optional: true,
+      reveal: true,
+      destination: TopOfLibrary,
+    )],
+  )],
+
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Tap],
+    effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+  )],
+)

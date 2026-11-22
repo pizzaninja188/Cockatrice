@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "249e18a4-12c5-4836-a172-cb4e9b9cb7d7",
+  "spans": [
+    {
+      "face_id": "naga_oracle",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::LibraryPartition",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q40_etb_surveil_batch::q40_etb_surveil_canary_hardest",
+      "covers": "hardest canary: surveil three and keep one on top"
+    },
+    {
+      "test": "scenario q40_etb_surveil_batch::q40_etb_surveil_cards_apply_their_printed_count_and_keep_cards_private",
+      "covers": "actual card applies its printed count without revealing looked cards"
+    },
+    {
+      "test": "scenario q40_etb_surveil_batch::q40_etb_surveil_cards_keep_every_card_on_top",
+      "covers": "actual card may keep every looked card on top"
+    },
+    {
+      "test": "mechanic_registry::q40_cohorts_batch::q40_etb_surveil_maps_definitions",
+      "covers": "reviewed identity, typed values and printed characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

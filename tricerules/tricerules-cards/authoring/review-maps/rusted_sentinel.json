@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "bab28608-b388-4c48-92a4-689943bbbf4a",
+  "spans": [
+    {
+      "face_id": "rusted_sentinel",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario enters_tapped_creatures_batch::enters_tapped_creatures_batch_cards_enter_tapped_from_hand",
+      "covers": "actual rusted_sentinel enters tapped when cast and has its printed body"
+    },
+    {
+      "test": "scenario enters_tapped_creatures_batch::enters_tapped_creatures_batch_cards_untap_on_their_controllers_next_turn",
+      "covers": "actual rusted_sentinel untaps during its controller next untap step"
+    },
+    {
+      "test": "mechanic_registry::enters_tapped_creatures_batch::enters_tapped_creatures_batch_maps_definitions",
+      "covers": "reviewed identity, printed body and entry replacement of rusted_sentinel"
+    },
+    {
+      "test": "mechanic_registry::enters_tapped_creatures_batch::enters_tapped_creatures_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for rusted_sentinel"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

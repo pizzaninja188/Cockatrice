@@ -1,0 +1,14 @@
+// Oracle 02eef375-5166-4b6b-bb17-b38074a6ba53; source/rulings checked 2026-11-14.
+// CR 702.9a-b (Flying) and 702.16b-f (protection's five effects: no
+// targeting, Aura/Equipment attachment, damage, blocking, or Fortify).
+(
+  id: "coast_watcher",
+  name: "Coast Watcher",
+  face_id: "coast_watcher",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Bird", "Soldier"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+  protections: [Color(Green)],
+)

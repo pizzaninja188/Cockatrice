@@ -1,0 +1,34 @@
+// Oracle 7ffadb3f-0b88-416f-b1a1-876383c22720; source/rulings checked 2026-11-16 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 614.1d and 614.12 (the enters-tapped clause is a replacement effect), CR 605.1a and 605.3a-b
+// (the dual mana ability resolves immediately), CR 701.16a (investigate creates one Clue token) and
+// CR 111.10f (colorless Clue artifact token). The pinned cycle rulings restate Clue artifact facts.
+
+(
+  id: "study",
+  name: "Study",
+  face_id: "study",
+  mana_cost: "",
+  types: ["Land"],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: EntersTapped(affected: Self_),
+    ),
+  ],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(w: 1), (u: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
+      costs: [Mana("{4}"), Tap],
+      effect: [CreateTokens(token: "clue", count: 1)],
+    ),
+  ],
+)

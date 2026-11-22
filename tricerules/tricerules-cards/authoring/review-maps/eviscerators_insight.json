@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "81a398ee-e534-43b7-88fe-45155d6aba3a",
+  "spans": [
+    {
+      "face_id": "eviscerators_insight",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0"
+      ]
+    },
+    {
+      "face_id": "eviscerators_insight",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "eviscerators_insight",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostGroupDef",
+      "typed_path": "/faces/0/cast_cost_groups/0"
+    },
+    {
+      "symbol": "CastCostOptionDef::SacrificePermanent",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardFace::flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_c::q56_c_sac_draw_cards_sacrifice_an_artifact_or_creature_and_draw_exactly_two",
+      "covers": "actual eviscerators_insight applies its printed effects"
+    },
+    {
+      "test": "scenario q56_batch_c::q56_c_canary_hardest_eviscerators_insight_flashes_back_with_its_sacrifice_cost",
+      "covers": "actual eviscerators_insight canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_c::q56_c_sac_draw_map_definitions",
+      "covers": "shared registry identity for eviscerators_insight"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_c::q56_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for eviscerators_insight"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

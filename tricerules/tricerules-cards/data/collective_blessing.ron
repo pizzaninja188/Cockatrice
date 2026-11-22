@@ -1,0 +1,16 @@
+// Oracle 7f7049e8-49ed-46da-89f7-1e40aefb3b0c; source/rulings checked 2026-11-12.
+// CR 604.2/611.3b and 613.4c (layer 7c): static controller-wide +3/+3 while on the battlefield.
+(
+  id: "collective_blessing",
+  name: "Collective Blessing",
+  face_id: "collective_blessing",
+  mana_cost: "{3}{G}{G}{W}",
+  types: ["Enchantment"],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: AnthemPt(filter: (controller: YouControl), delta_power: 3, delta_toughness: 3),
+    ),
+  ],
+)

@@ -1,0 +1,22 @@
+// Oracle 3a940dfa-a026-4969-8981-ef90cdfbe9ef; source/rulings checked 2026-11-16 against pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.9 (flying), 605.1a/605.3b (tap mana ability) and 106.1a (five colors).
+// Copy of the reviewed Lifespring Druid mana ability with the printed Flying keyword.
+(
+  id: "ornithopter_of_paradise",
+  name: "Ornithopter of Paradise",
+  face_id: "ornithopter_of_paradise",
+  mana_cost: "{2}",
+  types: ["Artifact", "Creature", "Thopter"],
+  power: 0,
+  toughness: 2,
+  keywords: [Flying],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+    ),
+  ],
+)

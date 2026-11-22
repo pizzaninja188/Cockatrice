@@ -1,0 +1,28 @@
+// Oracle 42bf259d-4bb9-49c3-b4ec-223dca62f4d6; source/rulings checked 2026-11-13.
+// CR 107.4e (hybrid mana symbols), 605.1a/605.3b (mana abilities), 106.1 (mana) and
+// 118.3 (every printed cost must be payable).
+(
+  id: "fetid_heath",
+  name: "Fetid Heath",
+  face_id: "fetid_heath",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Mana("{W/B}"), Tap],
+      effect: [ProduceMana(options: [
+        (w: 2),
+        (w: 1, b: 1),
+        (b: 2),
+      ])],
+    ),
+  ],
+)

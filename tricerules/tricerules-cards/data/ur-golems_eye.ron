@@ -1,0 +1,17 @@
+// Oracle fb34fc00-e60d-41fc-9393-ca4248ec0a1c; source/rulings checked 2026-11-12.
+// CR 605.1a/605.3b (tap mana ability) and 106.1a-b (colorless mana).
+(
+  id: "ur-golems_eye",
+  name: "Ur-Golem's Eye",
+  face_id: "ur_golems_eye",
+  mana_cost: "{4}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 2)])],
+    ),
+  ],
+)

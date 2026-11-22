@@ -1,0 +1,50 @@
+{
+  "format_version": 1,
+  "oracle_id": "d48e1545-7997-45ed-83a1-aee45b3d3d20",
+  "spans": [
+    {
+      "face_id": "unburial_rites",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting",
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "CardFace::flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_c::q55_c_reanimation_uses_the_printed_graveyard_and_controller",
+      "covers": "actual Unburial Rites returns a creature card from the caster's graveyard"
+    },
+    {
+      "test": "scenario q55_batch_c::q55_c_unburial_rites_flashes_back_then_exiles",
+      "covers": "actual Unburial Rites returns a second creature via flashback and is then exiled"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_c::q55_c_reanimation_map_definitions",
+      "covers": "shared registry identity for the reanimation spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_c::q55_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Unburial Rites"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

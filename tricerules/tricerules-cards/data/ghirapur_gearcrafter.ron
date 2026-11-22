@@ -1,0 +1,20 @@
+// Oracle 710dc9b1-7d32-4330-95a8-3e91a668202a; source/rulings checked 2026-11-16 against pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (entry trigger), 111.1 (tokens) and 608.2c (the controller follows the instruction).
+// Copy of the reviewed Elder Auntie entry-token shape with the printed token and count.
+(
+  id: "ghirapur_gearcrafter",
+  name: "Ghirapur Gearcrafter",
+  face_id: "ghirapur_gearcrafter",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Human", "Artificer"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [CreateTokens(token: "thopter_c_1_1_flying", count: 1)],
+    ),
+  ],
+)

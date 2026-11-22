@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "030e9e3e-ce78-4c3b-bd83-969c07c70459",
+  "spans": [
+    {
+      "face_id": "boggart_birth_rite",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q50_cohorts_batch::q50_graveyard_to_hand_canary_simplest_boggart_birth_rite_returns_a_goblin",
+      "covers": "canary simplest returns a Goblin card"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_graveyard_to_hand_cards_return_only_their_filtered_cards",
+      "covers": "actual card returns only a matching card from its controller's graveyard"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_graveyard_to_hand_cards_reject_opponent_graveyards_and_fizzle_stale_targets",
+      "covers": "actual card rejects another graveyard and fizzles a stale target"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_graveyard_to_hand_cards_reject_nonmatching_cards",
+      "covers": "actual card rejects a nonmatching card in the controller's graveyard"
+    },
+    {
+      "test": "scenario q50_cohorts_batch::q50_graveyard_to_hand_boggart_returns_a_noncreature_goblin_card",
+      "covers": "actual Boggart Birth Rite returns a noncreature Goblin card"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_graveyard_to_hand_maps_definitions",
+      "covers": "reviewed graveyard return identity and filter"
+    },
+    {
+      "test": "mechanic_registry::q50_cohorts_batch::q50_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Boggart Birth Rite"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

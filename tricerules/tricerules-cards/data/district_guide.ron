@@ -1,0 +1,39 @@
+// Oracle 1eb4c001-1115-4b99-bbbf-703eb551a381; source/rulings checked 2026-11-20 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.1 (entry trigger), 701.20a/701.23e (reveal the found card), 701.23
+// (search) and 701.24 (shuffle). No pinned ruling.
+(
+  id: "district_guide",
+  name: "District Guide",
+  face_id: "district_guide",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Elf", "Scout"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    program: Some((body: (steps: [
+      (id: "search_choice", kind: Choose(
+        choice: "search",
+        chooser: Controller,
+        optional: true,
+        branches: [(
+          branch_id: "search_for_a_land",
+          presentation: Fallback,
+          cost: None,
+          body: (steps: [
+            (id: "search_hand", kind: Perform(SearchLibrary(
+              filter: Some((any_of: Some([(card_type: Some(BasicLand)), (required_subtypes: ["Gate"])]))),
+              zones: Fixed([Library]),
+              reveal: true,
+              selection_bounds: Some((min: 0, max: 1)),
+            )))
+          ]),
+        )],
+        otherwise: (),
+      )),
+    ]))),
+  )],
+)

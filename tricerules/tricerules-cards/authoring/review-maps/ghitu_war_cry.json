@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "0439df39-0324-4110-b3f4-4a32393021de",
+  "spans": [
+    {
+      "face_id": "ghitu_war_cry",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario mana_target_pump_batch::mana_target_pump_batch_cards_activate_through_the_stack",
+      "covers": "actual ghitu_war_cry is exercised by the shared mana_target_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario mana_target_pump_batch::mana_target_pump_batch_cards_fizzle_a_target_that_left_before_resolution",
+      "covers": "actual ghitu_war_cry is exercised by the shared mana_target_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario mana_target_pump_batch::mana_target_pump_batch_cards_target_any_creature_and_leave_others_unchanged",
+      "covers": "actual ghitu_war_cry is exercised by the shared mana_target_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario mana_target_pump_batch::mana_target_pump_batch_cards_stack_repeated_activations",
+      "covers": "actual ghitu_war_cry is exercised by the shared mana_target_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario mana_target_pump_batch::mana_target_pump_batch_cards_reject_illegal_targets_without_paying",
+      "covers": "actual ghitu_war_cry is exercised by the shared mana_target_pump_batch actual-card scenario"
+    },
+    {
+      "test": "scenario mana_target_pump_batch::mana_target_pump_batch_cards_expire_the_pump_at_cleanup",
+      "covers": "actual ghitu_war_cry is exercised by the shared mana_target_pump_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::mana_target_pump_batch::mana_target_pump_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of ghitu_war_cry"
+    },
+    {
+      "test": "mechanic_registry::mana_target_pump_batch::mana_target_pump_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for ghitu_war_cry"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

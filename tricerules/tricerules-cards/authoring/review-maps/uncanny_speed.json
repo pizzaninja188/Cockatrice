@@ -1,0 +1,58 @@
+{
+  "format_version": 1,
+  "oracle_id": "85b0a2ea-dbdc-456e-9ce1-faa8c13f84d0",
+  "spans": [
+    {
+      "face_id": "uncanny_speed",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "Keyword::Haste",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q48_cohorts_batch::q48_pump_keyword_canary_simplest_pumps_and_grants_deathtouch",
+      "covers": "canary simplest applies the pump and deathtouch"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_pump_keyword_canary_hardest_grants_flying_and_expires",
+      "covers": "canary hardest grants flying and expires at cleanup"
+    },
+    {
+      "test": "scenario q48_cohorts_batch::q48_pump_keyword_cards_apply_their_printed_numbers",
+      "covers": "every actual card applies its printed pump and keyword"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_pump_keyword_maps_definitions",
+      "covers": "reviewed identity, pump, keyword, and single target"
+    },
+    {
+      "test": "mechanic_registry::q48_cohorts_batch::q48_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Uncanny Speed"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

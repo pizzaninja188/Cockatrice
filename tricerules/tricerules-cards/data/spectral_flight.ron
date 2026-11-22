@@ -1,0 +1,18 @@
+// Oracle d127d1e6-f3a6-4f68-bea5-d7b4123476e5; source/rulings checked 2026-11-15.
+// CR 303.4a (Aura target and attach), 613.4c (layer-7c attached P/T
+// modifier), 702.9a-b (flying) and 704.5m (unattached Aura cleanup).
+(
+  id: "spectral_flight",
+  name: "Spectral Flight",
+  face_id: "spectral_flight",
+  mana_cost: "{1}{U}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(delta_power: 2, delta_toughness: 2, keywords: [Flying]),
+    ),
+  ],
+)

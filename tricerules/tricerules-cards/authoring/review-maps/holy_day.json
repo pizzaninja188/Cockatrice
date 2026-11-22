@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "98423a34-f044-4811-b288-56981d604b6e",
+  "spans": [
+    {
+      "face_id": "holy_day",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PreventAllCombatDamageTurn",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario darkness_batch::darkness_batch_cards_prevent_all_combat_damage_this_turn",
+      "covers": "actual holy_day prevents all combat damage for the turn"
+    },
+    {
+      "test": "scenario darkness_batch::darkness_batch_cards_do_not_prevent_noncombat_damage",
+      "covers": "actual holy_day does not prevent noncombat damage"
+    },
+    {
+      "test": "scenario darkness_batch::darkness_batch_cards_prevention_expires_at_end_of_turn",
+      "covers": "actual holy_day prevention is active this turn and ends with the turn"
+    },
+    {
+      "test": "mechanic_registry::darkness_batch::darkness_batch_maps_definitions",
+      "covers": "reviewed identity, cost, type and prevention effect of holy_day"
+    },
+    {
+      "test": "mechanic_registry::darkness_batch::darkness_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for holy_day"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

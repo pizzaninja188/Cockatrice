@@ -1,0 +1,19 @@
+// Oracle d6912f52-e478-4cc6-a34c-67e372abc4fa; source/rulings checked 2026-11-21 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.2 (activate), 115.1 (one creature target), 701.21a (sacrifice cost) and 611.2c/613.4c (until-end-of-turn penalty).
+(
+  id: "plagued_rusalka",
+  name: "Plagued Rusalka",
+  face_id: "plagued_rusalka",
+  mana_cost: "{B}",
+  types: ["Creature", "Spirit"],
+  power: 1,
+  toughness: 1,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{B}"), SacrificePermanent(filter: (kind: Creature, controller: You))],
+    effect: [PumpTarget(power: -1, toughness: -1, subject: Chosen((kind: Creature)))],
+    targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+  )],
+)

@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "1f570526-7fb0-4fe5-8014-b5793eb65f87",
+  "spans": [
+    {
+      "face_id": "strangle",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q55_batch_a::q55_a_canary_simplest_strangle_damages_a_creature_exactly",
+      "covers": "actual Strangle deals exactly 3 damage to a chosen creature for {R}"
+    },
+    {
+      "test": "scenario q55_batch_a::q55_a_creature_or_planeswalker_burn_rejects_players_and_fizzles_stale_targets",
+      "covers": "actual Strangle rejects a player target and Thundering Rebuke fizzles when its creature left"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_damage_creature_or_planeswalker_map_definitions",
+      "covers": "shared registry identity for the three creature-or-planeswalker burn spells"
+    },
+    {
+      "test": "mechanic_registry::q55_batch_a::q55_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for Strangle"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

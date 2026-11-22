@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "6cd8cf2a-972f-41b7-ab0c-b4953accc2fe",
+  "spans": [
+    {
+      "face_id": "folk_of_the_pines",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario self_pump_activated_batch::self_pump_activated_batch_cards_cast_with_exact_characteristics",
+      "covers": "actual folk_of_the_pines is exercised by the shared self_pump_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario self_pump_activated_batch::self_pump_activated_batch_cards_activate_for_the_exact_printed_pump",
+      "covers": "actual folk_of_the_pines is exercised by the shared self_pump_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario self_pump_activated_batch::self_pump_activated_batch_cards_stack_two_activations",
+      "covers": "actual folk_of_the_pines is exercised by the shared self_pump_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario self_pump_activated_batch::self_pump_activated_batch_cards_reject_activation_when_the_cost_cannot_be_paid",
+      "covers": "actual folk_of_the_pines is exercised by the shared self_pump_activated_batch actual-card scenario"
+    },
+    {
+      "test": "scenario self_pump_activated_batch::self_pump_activated_batch_cards_expire_the_pump_at_cleanup",
+      "covers": "actual folk_of_the_pines is exercised by the shared self_pump_activated_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::self_pump_activated_batch::self_pump_activated_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of folk_of_the_pines"
+    },
+    {
+      "test": "mechanic_registry::self_pump_activated_batch::self_pump_activated_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for folk_of_the_pines"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

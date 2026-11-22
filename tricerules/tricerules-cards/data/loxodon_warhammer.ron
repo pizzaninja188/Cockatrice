@@ -1,0 +1,26 @@
+// Oracle dba35ac5-7ad3-488a-a006-6b9a1d54eea5; source/rulings checked 2026-11-19 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 301.5/702.6 (Equipment and equip), 613.4c (layer-7c attached modifier),
+// 613.1f (layer 6 keywords) and 702.6a (equip timing and target).
+(
+  id: "loxodon_warhammer",
+  name: "Loxodon Warhammer",
+  face_id: "loxodon_warhammer",
+  mana_cost: "{3}",
+  types: ["Artifact", "Equipment"],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: AttachedModifier(delta_power: 3, keywords: [Trample, Lifelink]),
+    ),
+  ],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{3}")],
+      effect: [Equip(target: (kind: Creature, controller: You))],
+    ),
+  ],
+)
