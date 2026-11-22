@@ -1497,23 +1497,14 @@ impl CharacteristicsEvaluator<'_> {
                 false,
             )),
             GameCondition::SpellsCastLastTurn {
-                players, filter, ..
+                players,
+                aggregate,
+                filter,
+                ..
             } => {
-                let count = if *players == RelativePlayerSet::All
-                    && *filter == SpellCastFilter::default()
-                {
-                    self.state.turn_history.previous.spells_cast
-                } else {
-                    super::history::spell_cast_count_in_record(
-                        self.state,
-                        &self.state.turn_history.previous,
-                        ConditionPlayerSet::Relative(*players),
-                        filter,
-                        controller,
-                        None,
-                        false,
-                    )
-                };
+                let count = super::history::spells_cast_last_turn_count(
+                    self.state, *players, filter, *aggregate, controller,
+                );
                 condition.matches_value(count)
             }
             GameCondition::CardsDrawnThisTurn { players, .. } => {

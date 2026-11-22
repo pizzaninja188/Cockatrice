@@ -1,0 +1,39 @@
+// Solitary Hunter // One of the Pack (Innistrad) — transforming DFC (CR 701.27/712).
+(
+    id: "solitary_hunter_one_of_the_pack",
+    name: "Solitary Hunter // One of the Pack",
+    layout: Transform,
+    faces: [
+        (
+            name: "Solitary Hunter",
+            face_id: "solitary_hunter",
+            mana_cost: "{3}{G}",
+            types: ["Creature", "Human", "Warrior", "Werewolf"],
+            power: Some(3),
+            toughness: Some(4),
+            triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: OracleLines([1]),
+                trigger: AtBeginningOfUpkeep(player: AnyPlayer),
+                intervening_if: Some(SpellsCastLastTurn(players: All, aggregate: Sum, min: Some(0), max: Some(0))),
+                effect: [ChangeSourceFace(action: Transform)],
+            )],
+        ),
+        (
+            name: "One of the Pack",
+            face_id: "one_of_the_pack",
+            mana_cost: "",
+            color_indicator: Some([Green]),
+            types: ["Creature", "Werewolf"],
+            power: Some(5),
+            toughness: Some(6),
+            triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: OracleLines([1]),
+                trigger: AtBeginningOfUpkeep(player: AnyPlayer),
+                intervening_if: Some(SpellsCastLastTurn(players: All, aggregate: Maximum, min: Some(2))),
+                effect: [ChangeSourceFace(action: Transform)],
+            )],
+        ),
+    ],
+)

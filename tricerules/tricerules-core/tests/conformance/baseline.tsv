@@ -621,6 +621,8 @@ confusticate_and_bebother	0	cast	exercised
 conifer_strider	0	cast	exercised
 consecrated_sphinx	0	cast	exercised
 consulate_skygate	0	cast	exercised
+convicted_killer_branded_howler	0	cast	exercised
+convicted_killer_branded_howler	1	cast	intentional: face unavailable from hand
 convolute	0	cast	unsupported: target group 0 needs a richer fixture
 coordinated_maneuver	0	cast	exercised
 copper_host_crusher	0	cast	exercised
@@ -1395,6 +1397,8 @@ griptide	0	cast	exercised
 gristle_glutton	0	ability:0	exercised
 gristle_glutton	0	cast	exercised
 grizzled_leotau	0	cast	exercised
+grizzled_outcasts_krallenhorde_wantons	0	cast	exercised
+grizzled_outcasts_krallenhorde_wantons	1	cast	intentional: face unavailable from hand
 grizzled_outrider	0	cast	exercised
 grizzly_bears	0	cast	exercised
 grounded_for_life	0	cast	exercised
@@ -2882,6 +2886,8 @@ sol_ring	0	ability:0	exercised
 sol_ring	0	cast	exercised
 sold_out	0	cast	exercised
 solemn_simulacrum	0	cast	exercised
+solitary_hunter_one_of_the_pack	0	cast	exercised
+solitary_hunter_one_of_the_pack	1	cast	intentional: face unavailable from hand
 solitary_sanctuary	0	cast	exercised
 song_of_stupefaction	0	cast	exercised
 sorcerer_of_the_fang	0	ability:0	exercised
@@ -3292,6 +3298,8 @@ topiary_panther	0	ability:0	unsupported: ability not offered by generic battlefi
 topiary_panther	0	cast	exercised
 tor_giant	0	cast	exercised
 tormented_angel	0	cast	exercised
+tormented_pariah_rampaging_werewolf	0	cast	exercised
+tormented_pariah_rampaging_werewolf	1	cast	intentional: face unavailable from hand
 tormenting_voice	0	cast	exercised
 totally_lost	0	cast	exercised
 touch_of_brilliance	0	cast	exercised
@@ -3473,6 +3481,8 @@ vigilant_baloth	0	cast	exercised
 village_ironsmith_ironfang	0	cast	exercised
 village_ironsmith_ironfang	1	cast	intentional: face unavailable from hand
 village_rites	0	cast	exercised
+villagers_of_estwald_howlpack_of_estwald	0	cast	exercised
+villagers_of_estwald_howlpack_of_estwald	1	cast	intentional: face unavailable from hand
 vincents_limit_break	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
 vindictive_warden	0	ability:0	exercised
 vindictive_warden	0	cast	exercised

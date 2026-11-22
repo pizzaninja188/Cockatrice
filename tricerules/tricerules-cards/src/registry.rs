@@ -4470,4 +4470,57 @@ mod tests {
                 .unwrap_or_else(|error| panic!("{error}: {chunk}"));
         }
     }
+
+    #[test]
+    fn spells_cast_last_turn_requires_an_explicit_aggregate() {
+        use crate::primitives::{GameCondition, PlayerCountAggregate, RelativePlayerSet};
+
+        assert!(
+            RON_OPTS
+                .from_str::<GameCondition>("SpellsCastLastTurn(players: All, min: Some(2))")
+                .is_err(),
+            "a missing aggregate must not silently default to a sum"
+        );
+        let explicit = RON_OPTS
+            .from_str::<GameCondition>(
+                "SpellsCastLastTurn(players: All, aggregate: Maximum, min: Some(2))",
+            )
+            .expect("explicit aggregate parses");
+        assert_eq!(
+            explicit,
+            GameCondition::SpellsCastLastTurn {
+                players: RelativePlayerSet::All,
+                aggregate: PlayerCountAggregate::Maximum,
+                filter: Default::default(),
+                min: Some(2),
+                max: None,
+            }
+        );
+
+        let registry = crate::registry::from_embedded().unwrap();
+        for card_id in [
+            "reckless_waif_merciless_predator",
+            "village_ironsmith_ironfang",
+            "convicted_killer_branded_howler",
+            "grizzled_outcasts_krallenhorde_wantons",
+            "solitary_hunter_one_of_the_pack",
+            "tormented_pariah_rampaging_werewolf",
+            "villagers_of_estwald_howlpack_of_estwald",
+        ] {
+            let definition = registry.get(card_id).expect("werewolf DFC is registered");
+            let back = &definition.faces[1].triggered_abilities[0];
+            assert!(
+                matches!(
+                    back.intervening_if,
+                    Some(GameCondition::SpellsCastLastTurn {
+                        aggregate: PlayerCountAggregate::Maximum,
+                        min: Some(2),
+                        ..
+                    })
+                ),
+                "{card_id} back face uses the per-player maximum: {:?}",
+                back.intervening_if
+            );
+        }
+    }
 }

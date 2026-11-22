@@ -1,0 +1,39 @@
+// Grizzled Outcasts // Krallenhorde Wantons (Innistrad) — transforming DFC (CR 701.27/712).
+(
+    id: "grizzled_outcasts_krallenhorde_wantons",
+    name: "Grizzled Outcasts // Krallenhorde Wantons",
+    layout: Transform,
+    faces: [
+        (
+            name: "Grizzled Outcasts",
+            face_id: "grizzled_outcasts",
+            mana_cost: "{4}{G}",
+            types: ["Creature", "Human", "Werewolf"],
+            power: Some(4),
+            toughness: Some(4),
+            triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: OracleLines([1]),
+                trigger: AtBeginningOfUpkeep(player: AnyPlayer),
+                intervening_if: Some(SpellsCastLastTurn(players: All, aggregate: Sum, min: Some(0), max: Some(0))),
+                effect: [ChangeSourceFace(action: Transform)],
+            )],
+        ),
+        (
+            name: "Krallenhorde Wantons",
+            face_id: "krallenhorde_wantons",
+            mana_cost: "",
+            color_indicator: Some([Green]),
+            types: ["Creature", "Werewolf"],
+            power: Some(7),
+            toughness: Some(7),
+            triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: OracleLines([1]),
+                trigger: AtBeginningOfUpkeep(player: AnyPlayer),
+                intervening_if: Some(SpellsCastLastTurn(players: All, aggregate: Maximum, min: Some(2))),
+                effect: [ChangeSourceFace(action: Transform)],
+            )],
+        ),
+    ],
+)

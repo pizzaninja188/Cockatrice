@@ -1193,11 +1193,108 @@ fn advance_to_next_upkeep_trigger(e: &mut GameEngine) {
     panic!("did not reach next upkeep");
 }
 
+/// Records one committed spell in a turn record the way a real cast does: the aggregate counter,
+/// the caster's own counter and the public fact all advance together.
+fn record_spell_cast(
+    record: &mut tricerules_core::state::TurnRecord,
+    caster: tricerules_core::state::PlayerId,
+) {
+    let index = record.spell_casts.len();
+    record.spells_cast += 1;
+    let player = record.player_mut(caster);
+    player.spells_cast += 1;
+    let ordinal = player.spells_cast;
+    record
+        .spell_casts
+        .push(tricerules_core::state::SpellCastFact {
+            cast_method: tricerules_core::state::SpellCastMethod::Normal,
+            occurrence: tricerules_core::state::StackObjectRef {
+                object_id: (60_000 + index) as _,
+                zone_change_generation: Some(1),
+            },
+            caster,
+            origin: tricerules_core::Zone::Hand,
+            face_index: 0,
+            types: vec!["Instant".into()],
+            colors: vec![],
+            all_creature_types: false,
+            mana_value: 1,
+            mana_spent: 1,
+            matched_card_types: vec![],
+            targeted_permanent_types: vec![],
+            ordinal,
+        });
+}
+
+/// CR 603.4 / Oracle: "if a player cast two or more spells last turn". Casts are counted per
+/// caster, so one spell each from two players does not satisfy the back-face trigger.
+#[test]
+fn werewolf_back_face_requires_one_player_to_cast_two_spells() {
+    let card_id = "reckless_waif_merciless_predator";
+
+    let mut split = GameEngine::new(
+        tricerules_cards::registry::global(),
+        93,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
+    let split_oid = inject_permanent_on_battlefield(&mut split, 0, card_id);
+    split
+        .state
+        .objects
+        .get_mut(&split_oid)
+        .unwrap()
+        .face_up_index = 1;
+    record_spell_cast(&mut split.state.turn_history.current, 0);
+    record_spell_cast(&mut split.state.turn_history.current, 1);
+    advance_to_next_upkeep_trigger(&mut split);
+    assert!(
+        split.state.stack.is_empty(),
+        "one spell each from two players does not fire the back face"
+    );
+    assert_eq!(split.state.objects[&split_oid].face_up_index, 1);
+
+    let mut single = GameEngine::new(
+        tricerules_cards::registry::global(),
+        94,
+        &[0, 1],
+        20,
+        None,
+        true,
+    )
+    .expect("new");
+    let single_oid = inject_permanent_on_battlefield(&mut single, 0, card_id);
+    single
+        .state
+        .objects
+        .get_mut(&single_oid)
+        .unwrap()
+        .face_up_index = 1;
+    record_spell_cast(&mut single.state.turn_history.current, 0);
+    record_spell_cast(&mut single.state.turn_history.current, 0);
+    advance_to_next_upkeep_trigger(&mut single);
+    assert!(
+        !single.state.stack.is_empty(),
+        "two spells by one player fire the back face"
+    );
+    resolve_entire_stack_two_player(&mut single);
+    assert_eq!(single.state.objects[&single_oid].face_up_index, 0);
+}
+
 #[test]
 fn classic_werewolf_spell_count_thresholds_are_face_aware() {
-    for card_id in [
-        "reckless_waif_merciless_predator",
-        "village_ironsmith_ironfang",
+    // (card, back-face power). Each card's back face needs one player to cast two spells.
+    for (card_id, back_power) in [
+        ("reckless_waif_merciless_predator", 3),
+        ("village_ironsmith_ironfang", 3),
+        ("convicted_killer_branded_howler", 4),
+        ("grizzled_outcasts_krallenhorde_wantons", 7),
+        ("solitary_hunter_one_of_the_pack", 5),
+        ("tormented_pariah_rampaging_werewolf", 6),
+        ("villagers_of_estwald_howlpack_of_estwald", 4),
     ] {
         let mut e = GameEngine::new(
             tricerules_cards::registry::global(),
@@ -1210,19 +1307,22 @@ fn classic_werewolf_spell_count_thresholds_are_face_aware() {
         .expect("new");
         let oid = inject_permanent_on_battlefield(&mut e, 0, card_id);
 
-        e.state.turn_history.current.spells_cast = 1;
+        let caster = e.state.active_player_id();
+        record_spell_cast(&mut e.state.turn_history.current, caster);
         advance_to_next_upkeep_trigger(&mut e);
         assert!(e.state.stack.is_empty(), "one spell fires neither face");
         assert_eq!(e.state.objects[&oid].face_up_index, 0);
 
         e.state.objects.get_mut(&oid).unwrap().face_up_index = 1;
         let back = e.characteristics(oid).expect("back-face characteristics");
-        assert_eq!(back.power, Some(3));
+        assert_eq!(back.power, Some(back_power));
         assert!(
             card_id != "village_ironsmith_ironfang"
                 || back.has_keyword(tricerules_cards::Keyword::FirstStrike)
         );
-        e.state.turn_history.current.spells_cast = 2;
+        let caster = e.state.active_player_id();
+        record_spell_cast(&mut e.state.turn_history.current, caster);
+        record_spell_cast(&mut e.state.turn_history.current, caster);
         advance_to_next_upkeep_trigger(&mut e);
         assert!(!e.state.stack.is_empty(), "two spells fire the back face");
         resolve_entire_stack_two_player(&mut e);
@@ -1247,7 +1347,7 @@ fn werewolf_intervening_if_is_rechecked_at_resolution() {
 
     // A state mutation stands in for a future spell-count-changing effect and proves the generic
     // CR 603.4 resolution check reads live predicate state, not the trigger-time result.
-    e.state.turn_history.previous.spells_cast = 1;
+    record_spell_cast(&mut e.state.turn_history.previous, 0);
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.objects[&oid].face_up_index, 0);
 }

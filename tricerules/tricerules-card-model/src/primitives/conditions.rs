@@ -138,8 +138,11 @@ pub enum GameCondition {
     },
     /// Compare spells successfully cast during the immediately preceding turn. The history is
     /// retained as event facts so player-set and printed-characteristic filters remain reusable.
+    /// `aggregate` is required: `Sum` counts every selected player's casts together, while
+    /// `Maximum` compares the largest single player's count ("if a player cast two or more").
     SpellsCastLastTurn {
         players: RelativePlayerSet,
+        aggregate: PlayerCountAggregate,
         #[serde(default)]
         filter: SpellCastFilter,
         #[serde(default)]
@@ -674,6 +677,16 @@ pub enum SpellManaSpentComparison {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PlayerLifeAggregate {
     Minimum,
+    Maximum,
+}
+
+/// How selected players' per-player counts collapse to one condition value. There is deliberately
+/// no `Default`: every author must choose between a combined total and the largest single player.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PlayerCountAggregate {
+    /// Combined total across the selected players ("spells were cast" in total).
+    Sum,
+    /// Largest single selected player's count ("a player cast two or more spells").
     Maximum,
 }
 
