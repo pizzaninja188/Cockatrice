@@ -960,3 +960,25 @@ untap-reach and self-unblockable. Implemented 38 cards in nine families:
 - No engine, protobuf, relay or client change. Manual GUI acceptance: N/A (card data plus
   actual-card tests). No context compaction.
 
+## Phase 25: queue-v56 batch C delivery
+
+- Queue-v56 (`build/campaign/queue-v56/selection.md`) re-scanned the pinned Commander-legal bulk
+  and admitted 34 cards across nine families. Batch C delivered `07-flashback-graveyard`
+  (Dryad's Revival, Morgue Theft, Mystic Retrieval), `08-destroy-investigate` (Foul Play,
+  Humble the Brute, Root Out) and `09-sac-draw` (Costly Plunder, Deadly Dispute,
+  Eviscerator's Insight) — 9 cards.
+- Each family has a reviewed RON definition, complete map, actual-card scenarios with independent
+  expectations, intended red, focused green and a frozen review bundle. The initial batch C
+  review found one blocking Root Out canary defect; the corrected evidence passed the delta
+  review (`build/campaign/review/q56-batch-c/manifest.json`).
+- Batch C full gate `verify-f7728983-7602-4447-a06f-36bc8ecef779` passed exit 0 (`Side Rust`,
+  `-CardData`, `-CardsXml build/campaign/source/cards-validation.xml`).
+- `CARDS.md`: 5454 full + 8 partial / 35533 cards. `status.tsv`: 488 rows / 485 verified families /
+  2373 cards plus 2 blocked families / 15 cards.
+- Batch C commit `c7e1f19b8`; pushed to `origin/card-campaign`; remote SHA
+  `c7e1f19b889f6180f1537a45d7e851bdc14184ab` verified.
+- Five conformance-baseline classifications (`costly_plunder`, `deadly_dispute`,
+  `eviscerators_insight`, `humble_the_brute`, `mystic_retrieval`) match their shipped analogues.
+  `blocked.tsv` unchanged (#515–#525 not retried). No engine, protobuf, relay or client change.
+  Manual GUI acceptance: N/A (card data plus actual-card tests).
+
