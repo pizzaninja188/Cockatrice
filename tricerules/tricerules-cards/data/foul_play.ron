@@ -1,0 +1,20 @@
+// Oracle 773c7a1e-0f59-4606-a2fc-c47bda760ecd; source/rulings checked 2026-11-21 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 115.1/601.2c (power-filtered target at cast), 202.3 (power), 701.16
+// (investigate creates a Clue) and 608.2b. Pinned ruling: an illegal sole target means the spell
+// does not resolve and its controller does not investigate.
+// Copy of Defeat's power filter plus Auspicious Arrival's Clue token.
+(
+  id: "foul_play",
+  name: "Foul Play",
+  face_id: "foul_play",
+  mana_cost: "{1}{B}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Destroy(subject: Chosen((kind: Creature, power: Some(AtMost(2))))),
+    CreateTokens(token: "clue", count: 1),
+  ],
+  targeting: Some((groups: [
+    (min: 1, max: 1, prompt: "Choose target creature with power 2 or less", effect_indices: [0]),
+  ])),
+)

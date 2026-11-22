@@ -1,0 +1,31 @@
+// Oracle 81a398ee-e534-43b7-88fe-45155d6aba3a; source/rulings checked 2026-11-21 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 118.8 and 601.2f-h (the sacrifice is an additional cost paid before casting), 701.21
+// (sacrifice), 121.1 (draw), 702.34a-d (flashback and its additional costs) and 702.34a exile.
+// Copy of Fanatical Offering's additional-cost shape, Altar's Reap's draw and Firebolt's
+// flashback cost.
+(
+  id: "eviscerators_insight",
+  name: "Eviscerator's Insight",
+  face_id: "eviscerators_insight",
+  mana_cost: "{1}{B}",
+  flashback_cost: Some("{4}{B}"),
+  types: ["Instant"],
+  cast_cost_groups: [(
+    group_id: "additional_cost",
+    presentation: OracleLines([1]),
+    min: 1,
+    options: [
+      SacrificePermanent(
+        option_id: "sacrifice_artifact_or_creature",
+        presentation: OracleLines([1]),
+        kind: AdditionalPayment,
+        filter: (any_of: Some([
+          (kind: AnyPermanent, controller: You, permanent_types: [Artifact]),
+          (kind: Creature, controller: You),
+        ])),
+      ),
+    ],
+  )],
+  spell_effect: [Draw(count: 2)],
+)

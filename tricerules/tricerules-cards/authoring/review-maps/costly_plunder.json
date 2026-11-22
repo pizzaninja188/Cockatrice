@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "8cdfd9df-4783-4138-a286-828a97f516aa",
+  "spans": [
+    {
+      "face_id": "costly_plunder",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0"
+      ]
+    },
+    {
+      "face_id": "costly_plunder",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostGroupDef",
+      "typed_path": "/faces/0/cast_cost_groups/0"
+    },
+    {
+      "symbol": "CastCostOptionDef::SacrificePermanent",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_c::q56_c_sac_draw_cards_sacrifice_an_artifact_or_creature_and_draw_exactly_two",
+      "covers": "actual costly_plunder applies its printed effects"
+    },
+    {
+      "test": "scenario q56_batch_c::q56_c_canary_simplest_costly_plunder_sacrifices_an_artifact_and_draws_two",
+      "covers": "actual costly_plunder canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_c::q56_c_sac_draw_map_definitions",
+      "covers": "shared registry identity for costly_plunder"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_c::q56_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for costly_plunder"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

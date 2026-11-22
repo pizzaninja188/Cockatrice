@@ -1,0 +1,30 @@
+// Oracle 8cdfd9df-4783-4138-a286-828a97f516aa; source/rulings checked 2026-11-21 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 118.8 and 601.2f-h (the sacrifice is an additional cost paid before casting), 701.21
+// (sacrifice) and 121.1 (draw). Pinned rulings: the sacrifice is mandatory, exactly one permanent
+// is sacrificed, and mana from the same artifact cannot also pay the sacrifice.
+// Copy of the reviewed Fanatical Offering additional-cost shape plus Altar's Reap's draw.
+(
+  id: "costly_plunder",
+  name: "Costly Plunder",
+  face_id: "costly_plunder",
+  mana_cost: "{1}{B}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    group_id: "additional_cost",
+    presentation: OracleLines([1]),
+    min: 1,
+    options: [
+      SacrificePermanent(
+        option_id: "sacrifice_artifact_or_creature",
+        presentation: OracleLines([1]),
+        kind: AdditionalPayment,
+        filter: (any_of: Some([
+          (kind: AnyPermanent, controller: You, permanent_types: [Artifact]),
+          (kind: Creature, controller: You),
+        ])),
+      ),
+    ],
+  )],
+  spell_effect: [Draw(count: 2)],
+)

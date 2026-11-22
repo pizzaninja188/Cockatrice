@@ -1,0 +1,59 @@
+{
+  "format_version": 1,
+  "oracle_id": "bec03edc-261a-4b02-be37-2006f657e905",
+  "spans": [
+    {
+      "face_id": "root_out",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "root_out",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q56_batch_c::q56_c_destroy_investigate_cards_apply_their_power_filters",
+      "covers": "actual root_out applies its printed effects"
+    },
+    {
+      "test": "scenario q56_batch_c::q56_c_canary_hardest_root_out_destroys_an_artifact_or_enchantment_and_investigates",
+      "covers": "actual root_out canary scenario"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_c::q56_c_destroy_investigate_map_definitions",
+      "covers": "shared registry identity for root_out"
+    },
+    {
+      "test": "mechanic_registry::q56_batch_c::q56_c_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle fingerprint for root_out"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

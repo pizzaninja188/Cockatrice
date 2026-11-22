@@ -1342,3 +1342,6 @@ mod q56_batch_a;
 
 #[path = "../q56_batch_b.rs"]
 mod q56_batch_b;
+
+#[path = "../q56_batch_c.rs"]
+mod q56_batch_c;

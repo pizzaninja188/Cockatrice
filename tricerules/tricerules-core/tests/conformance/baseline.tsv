@@ -690,6 +690,7 @@ corrupted_conviction	0	cast	unsupported: required cast-cost group needs a specia
 corsair_captain	0	cast	exercised
 cosmium_blast	0	cast	unsupported: target group 0 needs a richer fixture
 cost_of_brilliance	0	cast	exercised
+costly_plunder	0	cast	unsupported: required cast-cost group needs a specialized fixture
 council_of_advisors	0	cast	exercised
 council_of_echoes	0	cast	exercised
 counsel_of_the_soratami	0	cast	exercised
@@ -799,6 +800,7 @@ daybreak_chaplain	0	cast	exercised
 daybreak_charger	0	cast	exercised
 dazzling_angel	0	cast	exercised
 dead_weight	0	cast	exercised
+deadly_dispute	0	cast	unsupported: required cast-cost group needs a specialized fixture
 deadly_insect	0	cast	exercised
 deadly_plot	0	cast	exercised
 deadly_precision	0	cast	unsupported: required cast-cost group needs a specialized fixture
@@ -1061,6 +1063,7 @@ eternal_student	0	cast	exercised
 eumidian_terrabotanist	0	cast	exercised
 evils_thrall	0	cast	exercised
 eviscerate	0	cast	exercised
+eviscerators_insight	0	cast	unsupported: required cast-cost group needs a specialized fixture
 evolution_sage	0	cast	exercised
 evolving_wilds	0	ability:0	exercised
 evolving_wilds	0	land	exercised
@@ -1668,6 +1671,7 @@ hullcarver	0	cast	exercised
 hulldrifter	0	ability:0	unsupported: nonmana costs need additional fixture resources
 hulldrifter	0	cast	exercised
 humble_budoka	0	cast	exercised
+humble_the_brute	0	cast	unsupported: target group 0 needs a richer fixture
 humbling_elder	0	cast	exercised
 humongulus	0	cast	exercised
 humpback_whales	0	ability:0	unsupported: ability not offered by generic battlefield fixture
@@ -2263,6 +2267,7 @@ mystic_archaeologist	0	cast	exercised
 mystic_denial	0	cast	unsupported: target group 0 needs a richer fixture
 mystic_monastery	0	ability:0	exercised
 mystic_monastery	0	land	exercised
+mystic_retrieval	0	cast	unsupported: target group 0 needs a richer fixture
 mystical_tutor	0	cast	exercised
 naga_eternal	0	cast	exercised
 narsets_rebuke	0	cast	exercised
