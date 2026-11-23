@@ -1,0 +1,58 @@
+{
+  "format_version": 1,
+  "oracle_id": "acdf9fb0-96eb-4520-bd4b-b6480c7c9b29",
+  "spans": [
+    {
+      "face_id": "smother",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/0/DestroyPreventingRegeneration/subject",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DestroyPreventingRegeneration",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/spell_effect/0/DestroyPreventingRegeneration/subject/Chosen"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q62_batch_a::q62_destroy_filtered_canary_hardest_smother_filters_mana_value",
+      "covers": "q62 destroy filtered canary hardest smother filters mana value"
+    },
+    {
+      "test": "scenario q62_batch_a::q62_destroy_filtered_cards_enforce_their_printed_filters",
+      "covers": "q62 destroy filtered cards enforce their printed filters"
+    },
+    {
+      "test": "scenario q62_batch_a::q62_destroy_filtered_cards_handle_regeneration_where_printed",
+      "covers": "q62 destroy filtered cards handle regeneration where printed"
+    },
+    {
+      "test": "scenario q62_batch_a::q62_destroy_filtered_cards_recheck_filters_on_resolution",
+      "covers": "the printed filter is rechecked on resolution"
+    },
+    {
+      "test": "mechanic_registry::q62_batch_a::q62_destroy_filtered_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q62_batch_a::q62_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

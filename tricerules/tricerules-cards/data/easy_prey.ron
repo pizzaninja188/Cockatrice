@@ -1,0 +1,31 @@
+// Oracle b783246a-e00b-4cdf-9111-fe0afb896a8e; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 202.3 (mana value), 115.1/601.2c (target at cast), 702.29a-b (cycling is
+// a hand-zone activated ability) and 608.2b (the mana-value filter is rechecked on resolution).
+// The card has no pinned ruling. Copy of Feed the Cauldron's mana-value filter plus Lay Waste's
+// cycling.
+(
+  id: "easy_prey",
+  name: "Easy Prey",
+  face_id: "easy_prey",
+  mana_cost: "{1}{B}",
+  types: ["Instant"],
+  spell_effect: [Destroy(
+    subject: Chosen((kind: Creature, max_mana_value: Some(2))),
+  )],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature with mana value 2 or less",
+    effect_indices: [0],
+  )])),
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      source_zone: Hand,
+      costs: [Mana("{2}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

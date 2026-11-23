@@ -1,0 +1,65 @@
+{
+  "format_version": 1,
+  "oracle_id": "394709f0-2d29-4a2d-be05-7b22fec57763",
+  "spans": [
+    {
+      "face_id": "dazzling_lights",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "dazzling_lights",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/spell_effect/0/PumpTarget/subject/Chosen"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::LibraryPartition",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q62_batch_a::q62_shrink_cards_apply_their_exact_printed_pump",
+      "covers": "q62 shrink cards apply their exact printed pump"
+    },
+    {
+      "test": "scenario q62_batch_a::q62_shrink_riders_apply_only_after_a_legal_resolution",
+      "covers": "q62 shrink riders apply only after a legal resolution"
+    },
+    {
+      "test": "scenario q62_batch_a::q62_shrink_cards_reject_noncreatures_and_fizzle_stale_targets",
+      "covers": "q62 shrink cards reject noncreatures and fizzle stale targets"
+    },
+    {
+      "test": "mechanic_registry::q62_batch_a::q62_shrink_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q62_batch_a::q62_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

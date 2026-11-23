@@ -1,0 +1,18 @@
+// Oracle 04a3bb42-0464-4638-a6ac-d5f412c222cc; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 701.25a-b (surveil), 115.1/601.2c (target at cast) and 608.2b (an illegal
+// sole target stops the whole spell, so no surveil). Pinned 2018-10-05 rulings: surveil happens
+// before death triggers resolve, and an indestructible target survives but still surveils. Copy
+// of Hour of Defeat with count 2.
+(
+  id: "deadly_visit",
+  name: "Deadly Visit",
+  face_id: "deadly_visit",
+  mana_cost: "{3}{B}{B}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Destroy(subject: Chosen((kind: Creature))),
+    LibraryPartition(count: 2, top_min: 0, top_max: None, kind: Surveil),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+)
