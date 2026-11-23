@@ -153,7 +153,8 @@ TEST_F(RuledDevConsoleTest, LoadingPreviewsWithoutSendingAndRunLocksDuplicateCli
     run->click();
     run->click();
     EXPECT_EQ(spy.count(), 1);
-    EXPECT_FALSE(input->isEnabled());
+    EXPECT_TRUE(input->isReadOnly());
+    EXPECT_TRUE(input->isEnabled()) << "busy must not disable the input; that drops its focus";
     EXPECT_FALSE(widget->loadPreset(file.fileName()));
     widget->setBusy(false);
     run->click();
@@ -199,7 +200,7 @@ TEST_F(RuledDevConsoleTest, Utf8BomLoadsAndRunsThroughTheRealRunner)
     widget->findChild<QPushButton *>(QStringLiteral("devPresetRun"))->click();
     EXPECT_EQ(sent, 1);
     QApplication::processEvents();
-    EXPECT_TRUE(input->isEnabled());
+    EXPECT_FALSE(input->isReadOnly());
 }
 
 TEST_F(RuledDevConsoleTest, RealRunnerUnlocksAfterHelpParseFailureAndEngineRejection)
@@ -212,16 +213,17 @@ TEST_F(RuledDevConsoleTest, RealRunnerUnlocksAfterHelpParseFailureAndEngineRejec
     QObject::connect(widget.get(), &RuledDevConsoleWidget::commandSubmitted, &runner,
                      [&runner](const QString &line) { runner.submit(line, 0, {0, 1}); });
     submit(QStringLiteral("help"), false);
-    EXPECT_TRUE(input->isEnabled());
+    EXPECT_FALSE(input->isReadOnly());
     EXPECT_FALSE(status->isHidden());
     submit(QStringLiteral("invalid"), false);
-    EXPECT_TRUE(input->isEnabled());
+    EXPECT_FALSE(input->isReadOnly());
     EXPECT_TRUE(status->text().contains(QStringLiteral("Unknown command")));
     submit(QStringLiteral("mana R"), false);
-    EXPECT_FALSE(input->isEnabled());
+    EXPECT_TRUE(input->isReadOnly());
+    EXPECT_TRUE(input->isEnabled());
     ASSERT_TRUE(pending);
     pending(false);
-    EXPECT_TRUE(input->isEnabled());
+    EXPECT_FALSE(input->isReadOnly());
     EXPECT_TRUE(status->text().contains(QStringLiteral("rejected")));
 }
 

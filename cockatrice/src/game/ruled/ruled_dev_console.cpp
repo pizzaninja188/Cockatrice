@@ -104,7 +104,9 @@ void RuledDevConsoleWidget::retranslateUi()
 void RuledDevConsoleWidget::setBusy(bool value)
 {
     busy = value;
-    input->setEnabled(!busy);
+    // Read-only rather than disabled: disabling the focused input drops keyboard focus, so the
+    // next command would need a click back into the box once the ack arrives.
+    input->setReadOnly(busy);
     loadButton->setEnabled(!busy);
     runButton->setEnabled(!busy && !presetName.isEmpty());
     cancelButton->setEnabled(busy);
@@ -171,7 +173,7 @@ void RuledDevConsoleWidget::submit()
 
 void RuledDevConsoleWidget::recallHistory(int delta)
 {
-    if (history.isEmpty()) {
+    if (busy || history.isEmpty()) {
         return;
     }
     const int next = qBound(0, historyPos + delta, history.size());
