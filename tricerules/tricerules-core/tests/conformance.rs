@@ -562,6 +562,8 @@ fn evaluate(case: &Case) -> Result<Outcome, String> {
             if offer.kind == HandActionKind::HandActionPlayLand as i32 {
                 helpers::play_land_face(slot as usize, case.face)
             } else {
+                let (selected_modes, linked_costs) =
+                    offers::spell_modes(&e, actor, offer.min_modes, &offer.modes)?;
                 RuledCommand {
                     cmd: Some(Cmd::CastSpell(CastSpell {
                         source: Some(helpers::hand_cast_source(slot as usize)),
@@ -575,8 +577,12 @@ fn evaluate(case: &Case) -> Result<Outcome, String> {
                                 .valid_targets_by_hand_slot
                                 .get(&((slot << 8) | case.face as u32)),
                         )?,
-                        selected_modes: offers::modes(&e, actor, offer.min_modes, &offer.modes)?,
+                        selected_modes,
                         cost_selections: offers::costs(offer.cost_choices.as_ref())?,
+                        cast_cost_group_selections: offers::cast_cost_groups(
+                            offer.cost_choices.as_ref(),
+                            &linked_costs,
+                        )?,
                         ..Default::default()
                     })),
                 }

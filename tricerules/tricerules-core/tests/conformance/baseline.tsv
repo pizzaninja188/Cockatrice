@@ -127,7 +127,7 @@ arachnoid	0	cast	exercised
 arashin_cleric	0	cast	exercised
 arashin_sunshield	0	ability:0	exercised
 arashin_sunshield	0	cast	exercised
-arbiter_of_woe	0	cast	unsupported: required cast-cost group needs a specialized fixture
+arbiter_of_woe	0	cast	exercised
 arborback_stomper	0	cast	exercised
 arcane_epiphany	0	cast	exercised
 arcane_sanctum	0	ability:0	exercised
@@ -296,11 +296,11 @@ bestial_bloodline	0	ability:0	exercised
 bestial_bloodline	0	cast	exercised
 bestial_menace	0	cast	exercised
 bestow_greatness	0	cast	exercised
-betrayers_bargain	0	cast	unsupported: required cast-cost group needs a specialized fixture
+betrayers_bargain	0	cast	exercised
 bewildering_blizzard	0	cast	exercised
 beza,_the_bounding_spring	0	cast	exercised
 bifur,_melodic_rider	0	cast	exercised
-big_score	0	cast	unsupported: required cast-cost group needs a specialized fixture
+big_score	0	cast	exercised
 bigfin_bouncer	0	cast	exercised
 bilbos_deadly_slice	0	cast	exercised
 bile-vial_boggart	0	cast	exercised
@@ -313,7 +313,7 @@ birnin_zana_plaza	0	ability:0	exercised
 birnin_zana_plaza	0	land	exercised
 bishops_soldier	0	cast	exercised
 bite_down	0	cast	exercised
-bitter_triumph	0	cast	unsupported: required cast-cost group needs a specialized fixture
+bitter_triumph	0	cast	exercised
 bitterbow_sharpshooters	0	cast	exercised
 black_knight	0	cast	exercised
 black_widow,_natasha_romanoff	0	cast	exercised
@@ -362,7 +362,7 @@ boggart_birth_rite	0	cast	unsupported: target group 0 needs a richer fixture
 boggart_brute	0	cast	exercised
 boggart_cursecrafter	0	cast	exercised
 boggart_prankster	0	cast	exercised
-bogslithers_embrace	0	cast	unsupported: required cast-cost group needs a specialized fixture
+bogslithers_embrace	0	cast	exercised
 bogstomper	0	cast	exercised
 bogwater_lumaret	0	cast	exercised
 boiling_rock_prison	0	ability:0	exercised
@@ -536,8 +536,8 @@ catacomb_slug	0	cast	exercised
 cathar_commando	0	ability:0	exercised
 cathar_commando	0	cast	exercised
 cathedral_sanctifier	0	cast	exercised
-caught_in_the_crossfire	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
-caustic_exhale	0	cast	unsupported: required cast-cost group needs a specialized fixture
+caught_in_the_crossfire	0	cast	exercised
+caustic_exhale	0	cast	exercised
 cavalry_drillmaster	0	cast	exercised
 cavern_stomper	0	ability:0	exercised
 cavern_stomper	0	cast	exercised
@@ -688,11 +688,11 @@ coral_sword	0	ability:0	exercised
 coral_sword	0	cast	exercised
 corroding_dragonstorm	0	cast	exercised
 corrupt_court_official	0	cast	exercised
-corrupted_conviction	0	cast	unsupported: required cast-cost group needs a specialized fixture
+corrupted_conviction	0	cast	exercised
 corsair_captain	0	cast	exercised
 cosmium_blast	0	cast	unsupported: target group 0 needs a richer fixture
 cost_of_brilliance	0	cast	exercised
-costly_plunder	0	cast	unsupported: required cast-cost group needs a specialized fixture
+costly_plunder	0	cast	exercised
 council_of_advisors	0	cast	exercised
 council_of_echoes	0	cast	exercised
 counsel_of_the_soratami	0	cast	exercised
@@ -802,10 +802,10 @@ daybreak_chaplain	0	cast	exercised
 daybreak_charger	0	cast	exercised
 dazzling_angel	0	cast	exercised
 dead_weight	0	cast	exercised
-deadly_dispute	0	cast	unsupported: required cast-cost group needs a specialized fixture
+deadly_dispute	0	cast	exercised
 deadly_insect	0	cast	exercised
 deadly_plot	0	cast	exercised
-deadly_precision	0	cast	unsupported: required cast-cost group needs a specialized fixture
+deadly_precision	0	cast	exercised
 deadly_recluse	0	cast	exercised
 deadly_riposte	0	cast	unsupported: target group 0 needs a richer fixture
 death_in_the_family	0	cast	exercised
@@ -836,7 +836,7 @@ deft_duelist	0	cast	exercised
 deglamer	0	cast	exercised
 deja_vu	0	cast	unsupported: target group 0 needs a richer fixture
 delta_bloodflies	0	cast	exercised
-demand_answers	0	cast	unsupported: required cast-cost group needs a specialized fixture
+demand_answers	0	cast	exercised
 demolition_field	0	ability:0	exercised
 demolition_field	0	ability:1	unsupported: target group 0 needs a richer fixture
 demolition_field	0	land	exercised
@@ -967,12 +967,12 @@ durable_coilbug	0	ability:0	exercised
 durkwood_boars	0	cast	exercised
 dusk_imp	0	cast	exercised
 dusk_legion_dreadnought	0	ability:0	exercised
-dusk_rose_reliquary	0	cast	unsupported: required cast-cost group needs a specialized fixture
+dusk_rose_reliquary	0	cast	exercised
 duskdale_wurm	0	cast	exercised
 dusyut_earthcarver	0	cast	exercised
 dutiful_return	0	cast	exercised
 dutiful_servants	0	cast	exercised
-duty_beyond_death	0	cast	unsupported: required cast-cost group needs a specialized fixture
+duty_beyond_death	0	cast	exercised
 dwarven_castle_guard	0	cast	exercised
 dwarven_priest	0	cast	exercised
 dwarven_provisioner	0	ability:0	exercised
@@ -987,7 +987,7 @@ earth_elemental	0	cast	exercised
 earthbender_ascension	0	cast	exercised
 earthshaking_si	0	cast	exercised
 east_wind_avatar	0	cast	exercised
-eaten_alive	0	cast	unsupported: required cast-cost group needs a specialized fixture
+eaten_alive	0	cast	exercised
 echo_of_dusk	0	cast	exercised
 eclipsed_boggart	0	cast	exercised
 eclipsed_elf	0	cast	exercised
@@ -1065,7 +1065,7 @@ eternal_student	0	cast	exercised
 eumidian_terrabotanist	0	cast	exercised
 evils_thrall	0	cast	exercised
 eviscerate	0	cast	exercised
-eviscerators_insight	0	cast	unsupported: required cast-cost group needs a specialized fixture
+eviscerators_insight	0	cast	exercised
 evolution_sage	0	cast	exercised
 evolving_wilds	0	ability:0	exercised
 evolving_wilds	0	land	exercised
@@ -1083,7 +1083,7 @@ experimental_confectioner	0	cast	exercised
 exploration	0	cast	exercised
 explosive_apparatus	0	ability:0	exercised
 explosive_apparatus	0	cast	exercised
-explosive_derailment	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
+explosive_derailment	0	cast	exercised
 extinguish	0	cast	unsupported: target group 0 needs a richer fixture
 extinguisher_battleship	0	ability:0	exercised
 extinguisher_battleship	0	cast	exercised
@@ -1109,7 +1109,7 @@ false_defeat	0	cast	exercised
 false_summoning	0	cast	unsupported: target group 0 needs a richer fixture
 family_reunion	0	cast	exercised
 fanatic_of_the_harrowing	0	cast	exercised
-fanatical_offering	0	cast	unsupported: required cast-cost group needs a specialized fixture
+fanatical_offering	0	cast	exercised
 fanatical_strength	0	cast	exercised
 fancy_footwork	0	cast	exercised
 fang_guardian	0	cast	exercised
@@ -1119,7 +1119,7 @@ fangren_hunter	0	cast	exercised
 farseek	0	cast	exercised
 fate_of_the_sun-cryst	0	cast	exercised
 fateful_discovery	0	cast	exercised
-fear_of_exposure	0	cast	unsupported: required cast-cost group needs a specialized fixture
+fear_of_exposure	0	cast	exercised
 fear_of_lost_teeth	0	cast	exercised
 fear_of_surveillance	0	cast	exercised
 fearless_halberdier	0	cast	exercised
@@ -1163,8 +1163,8 @@ fiery_hellhound	0	cast	exercised
 fiery_temper	0	cast	exercised
 fight_on!	0	cast	exercised
 fighting_drake	0	cast	exercised
-final_showdown	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
-final_vengeance	0	cast	unsupported: required cast-cost group needs a specialized fixture
+final_showdown	0	cast	exercised
+final_vengeance	0	cast	exercised
 finishing_blow	0	cast	exercised
 firdoch_core	0	ability:0	exercised
 firdoch_core	0	ability:1	exercised
@@ -1176,7 +1176,7 @@ fire-rim_form	0	cast	exercised
 fire_elemental	0	cast	exercised
 fire_ice	0	cast	exercised
 fire_ice	1	cast	exercised
-fire_magic	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
+fire_magic	0	cast	exercised
 fire_nation_ambushers	0	cast	exercised
 fire_nation_cadets	0	ability:0	exercised
 fire_nation_cadets	0	cast	exercised
@@ -1530,7 +1530,7 @@ guadosalam,_farplane_gateway	0	land	exercised
 guard_duty	0	cast	exercised
 guarded_heir	0	cast	exercised
 guardian_lions	0	cast	exercised
-guardian_of_the_great_door	0	cast	unsupported: required cast-cost group needs a specialized fixture
+guardian_of_the_great_door	0	cast	exercised
 guardians_of_meletis	0	cast	exercised
 guidelight_synergist	0	cast	exercised
 guiding_bolt	0	cast	unsupported: target group 0 needs a richer fixture
@@ -1694,7 +1694,7 @@ hymn_to_tourach	0	cast	exercised
 ice_cream_kitty	0	ability:0	exercised
 ice_cream_kitty	0	ability:1	exercised
 ice_cream_kitty	0	cast	exercised
-ice_magic	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
+ice_magic	0	cast	exercised
 icecave_crasher	0	cast	exercised
 iceridge_serpent	0	cast	exercised
 icetill_explorer	0	cast	exercised
@@ -1737,7 +1737,7 @@ infirmary_healer_stream_of_life	0	cast	exercised
 infirmary_healer_stream_of_life	1	cast	intentional: face unavailable from hand
 infuriate	0	cast	exercised
 innocuous_rat	0	cast	exercised
-insatiable_avarice	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
+insatiable_avarice	0	cast	exercised
 insatiable_harpy	0	cast	exercised
 insatiable_skittermaw	0	cast	exercised
 insectoid_exterminator	0	cast	exercised
@@ -1797,7 +1797,7 @@ jade-cast_sentinel	0	cast	exercised
 jagged_barrens	0	ability:0	exercised
 jagged_barrens	0	land	exercised
 jagwasp_swarm	0	cast	exercised
-jailbreak_scheme	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
+jailbreak_scheme	0	cast	exercised
 jasmine_boreal	0	cast	exercised
 jayemdae_tome	0	ability:0	exercised
 jayemdae_tome	0	cast	exercised
@@ -1881,7 +1881,7 @@ kindled_heroism	0	cast	exercised
 kindly_customer	0	cast	exercised
 king_cheetah	0	cast	exercised
 kinjallis_dawnrunner	0	cast	exercised
-kinsbaile_aspirant	0	cast	unsupported: required cast-cost group needs a specialized fixture
+kinsbaile_aspirant	0	cast	exercised
 kiora,_the_rising_tide	0	cast	exercised
 kitesail_scout	0	cast	exercised
 kithkin_billyrider	0	cast	exercised
@@ -1940,7 +1940,7 @@ last_gasp	0	cast	exercised
 lasyd_prowler	0	ability:0	exercised
 lasyd_prowler	0	cast	exercised
 lathnu_sailback	0	cast	exercised
-laughing_mad	0	cast	unsupported: required cast-cost group needs a specialized fixture
+laughing_mad	0	cast	exercised
 lava_coil	0	cast	exercised
 lava_serpent	0	ability:0	exercised
 lavakin_brawler	0	cast	exercised
@@ -2046,7 +2046,7 @@ lush_oasis	0	ability:0	exercised
 lush_oasis	0	land	exercised
 lush_portico	0	land	exercised
 lys_alana_dignitary	0	ability:0	unsupported: nonmana costs need additional fixture resources
-lys_alana_dignitary	0	cast	unsupported: required cast-cost group needs a specialized fixture
+lys_alana_dignitary	0	cast	exercised
 lys_alana_informant	0	cast	exercised
 maalfeld_twins	0	cast	exercised
 mabels_mettle	0	cast	exercised
@@ -2248,7 +2248,7 @@ mountain_bandit	0	cast	exercised
 mourners_surprise	0	cast	exercised
 mouser_attack!	0	cast	exercised
 muck_rats	0	cast	exercised
-mudbutton_cursetosser	0	cast	unsupported: required cast-cost group needs a specialized fixture
+mudbutton_cursetosser	0	cast	exercised
 multiversal_passage	0	land	exercised
 murasa_brute	0	cast	exercised
 murder	0	cast	exercised
@@ -2263,7 +2263,7 @@ mutant_town	0	land	exercised
 mutant_town_musicians	0	cast	exercised
 my_precious_allure_of_power	0	ability:0	exercised
 my_precious_allure_of_power	0	cast	exercised
-my_precious_allure_of_power	1	cast	unsupported: required cast-cost group needs a specialized fixture
+my_precious_allure_of_power	1	cast	exercised
 myr_retriever	0	cast	exercised
 mysterios_phantasm	0	cast	exercised
 mystic_archaeologist	0	ability:0	exercised
@@ -2453,7 +2453,7 @@ perilous_landscape	0	ability:2	exercised
 perish	0	cast	exercised
 pest_mascot	0	cast	exercised
 petrify	0	cast	exercised
-phantom_interference	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
+phantom_interference	0	cast	exercised
 phantom_monster	0	cast	exercised
 pharikas_chosen	0	cast	exercised
 pheres-band_centaurs	0	cast	exercised
@@ -2475,7 +2475,7 @@ pinnacle_kill-ship	0	ability:0	exercised
 pinnacle_kill-ship	0	cast	exercised
 piranha_fly	0	cast	exercised
 pirate_peddlers	0	cast	exercised
-pirates_pillage	0	cast	unsupported: required cast-cost group needs a specialized fixture
+pirates_pillage	0	cast	exercised
 pitchburn_devils	0	cast	exercised
 pitiless_fists	0	cast	exercised
 pitiless_gorgon	0	cast	exercised
@@ -2559,7 +2559,7 @@ pterafractyl	0	cast	exercised
 pull_from_the_grave	0	cast	exercised
 pull_through_the_weft	0	cast	exercised
 pulse_tracker	0	cast	exercised
-pumpkin_bombardment	0	cast	unsupported: required cast-cost group needs a specialized fixture
+pumpkin_bombardment	0	cast	exercised
 punk_frogs	0	cast	exercised
 purple_dragon_punks	0	ability:0	exercised
 purple_dragon_punks	0	cast	exercised
@@ -2698,7 +2698,7 @@ renegade_troops	0	cast	exercised
 repel_calamity	0	cast	unsupported: target group 0 needs a richer fixture
 repulsor_rays	0	cast	exercised
 reputable_merchant	0	cast	exercised
-requisition_raid	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
+requisition_raid	0	cast	exercised
 requiting_hex	0	cast	exercised
 reroute_systems	0	cast	exercised
 rescue_leopard	0	cast	exercised
@@ -2707,7 +2707,7 @@ resolute_reinforcements	0	cast	exercised
 restless_reef	0	ability:0	exercised
 restless_reef	0	ability:1	exercised
 restless_reef	0	land	exercised
-restoration_magic	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
+restoration_magic	0	cast	exercised
 resurrection	0	cast	exercised
 return_from_the_wilds	0	cast	exercised
 return_to_the_sewers	0	cast	exercised
@@ -2814,7 +2814,7 @@ runeboggle	0	cast	unsupported: target group 0 needs a richer fixture
 runeclaw_bear	0	cast	exercised
 russet_wolves	0	cast	exercised
 rusted_sentinel	0	cast	exercised
-rustler_rampage	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
+rustler_rampage	0	cast	exercised
 rustwing_falcon	0	cast	exercised
 rydias_return	0	cast	exercised
 s.h.i.e.l.d._deployment_drone	0	cast	exercised
@@ -2944,7 +2944,7 @@ seismic_monstrosaur	0	ability:0	exercised
 seismic_monstrosaur	0	ability:1	exercised
 seismic_monstrosaur	0	cast	exercised
 seismic_rupture	0	cast	exercised
-seize_the_spoils	0	cast	unsupported: required cast-cost group needs a specialized fixture
+seize_the_spoils	0	cast	exercised
 seized_from_slumber	0	cast	exercised
 selesnya_guildgate	0	ability:0	exercised
 selesnya_guildgate	0	land	exercised
@@ -3037,7 +3037,7 @@ silverback_ape	0	cast	exercised
 silverbeak_griffin	0	cast	exercised
 silverclaw_griffin	0	cast	exercised
 silvercoat_lion	0	cast	exercised
-silvergill_mentor	0	cast	unsupported: required cast-cost group needs a specialized fixture
+silvergill_mentor	0	cast	exercised
 silvergill_peddler	0	cast	exercised
 silverquill_charm	0	cast	exercised
 simic_guildgate	0	ability:0	exercised
@@ -3259,7 +3259,7 @@ sting-slinger	0	ability:0	exercised
 sting-slinger	0	cast	exercised
 stingblade_assassin	0	cast	exercised
 stinging_cave_crawler	0	cast	exercised
-stir_up_trouble	0	cast	unsupported: required cast-cost group needs a specialized fixture
+stir_up_trouble	0	cast	exercised
 stomped_by_the_foot	0	cast	exercised
 stomper_cub	0	cast	exercised
 stomping_ground	0	ability:0	exercised
@@ -3521,7 +3521,7 @@ thrashing_brontodon	0	cast	exercised
 threadbind_clique_rip_the_seams	0	cast	exercised
 threadbind_clique_rip_the_seams	1	cast	unsupported: target group 0 needs a richer fixture
 threaten	0	cast	exercised
-three_steps_ahead	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
+three_steps_ahead	0	cast	exercised
 three_tree_mascot	0	ability:0	exercised
 three_tree_mascot	0	cast	exercised
 three_tree_rootweaver	0	ability:0	exercised
@@ -3531,7 +3531,7 @@ three_visits	0	cast	exercised
 thrill_of_possibility	0	cast	exercised
 thunder_lasso	0	ability:0	exercised
 thunder_lasso	0	cast	exercised
-thunder_magic	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
+thunder_magic	0	cast	exercised
 thunder_salvo	0	cast	exercised
 thundering_falls	0	land	exercised
 thundering_giant	0	cast	exercised
@@ -3543,7 +3543,7 @@ ticket_tortoise	0	cast	exercised
 tidecaller_mentor	0	cast	exercised
 tidehollow_strix	0	cast	exercised
 tidings	0	cast	exercised
-tifas_limit_break	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
+tifas_limit_break	0	cast	exercised
 timid_shieldbearer	0	ability:0	exercised
 timid_shieldbearer	0	cast	exercised
 tinkers_tote	0	ability:0	exercised
@@ -3598,7 +3598,7 @@ tranquility	0	cast	exercised
 transdimensional_bovine	0	ability:0	exercised
 transdimensional_bovine	0	cast	exercised
 trapped_in_the_screen	0	cast	exercised
-trash_the_town	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
+trash_the_town	0	cast	exercised
 traumatic_critique	0	cast	exercised
 traveling_philosopher	0	cast	exercised
 treasure_dredger	0	ability:0	exercised
@@ -3675,10 +3675,10 @@ undergrowth_leopard	0	ability:0	exercised
 undergrowth_leopard	0	cast	exercised
 unending_whisper	0	cast	exercised
 unexpected_assistance	0	cast	exercised
-unexpected_windfall	0	cast	unsupported: required cast-cost group needs a specialized fixture
+unexpected_windfall	0	cast	exercised
 unflinching_courage	0	cast	exercised
 unforgiving_aim	0	cast	exercised
-unfortunate_accident	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
+unfortunate_accident	0	cast	exercised
 unhallowed_phalanx	0	cast	exercised
 unholy_indenture	0	cast	exercised
 unholy_strength	0	cast	exercised
@@ -3768,7 +3768,7 @@ village_ironsmith_ironfang	1	cast	intentional: face unavailable from hand
 village_rites	0	cast	exercised
 villagers_of_estwald_howlpack_of_estwald	0	cast	exercised
 villagers_of_estwald_howlpack_of_estwald	1	cast	intentional: face unavailable from hand
-vincents_limit_break	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
+vincents_limit_break	0	cast	exercised
 vindictive_warden	0	ability:0	exercised
 vindictive_warden	0	cast	exercised
 vine_trellis	0	ability:0	exercised
@@ -3958,7 +3958,7 @@ woodland_stream	0	ability:0	exercised
 woodland_stream	0	land	exercised
 woolly_thoctar	0	cast	exercised
 words_of_wisdom	0	cast	exercised
-worthy_cost	0	cast	unsupported: required cast-cost group needs a specialized fixture
+worthy_cost	0	cast	exercised
 wrath_of_god	0	cast	exercised
 wreckage_wickerfolk	0	cast	exercised
 wrecking_crew	0	cast	exercised

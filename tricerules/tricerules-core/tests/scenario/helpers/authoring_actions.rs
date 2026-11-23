@@ -317,31 +317,150 @@ pub(crate) fn hybrid_phyrexian_choices(cost: &str) -> Result<Vec<FlexPipPayment>
         .collect())
 }
 
+/// Modes for triggers and activated abilities, which never carry linked cast costs.
 pub(crate) fn modes(
     e: &GameEngine,
     actor: i32,
     min: u32,
     offers: &[LegalSpellMode],
 ) -> Result<Vec<SelectedSpellMode>, String> {
+    let (modes, linked) = spell_modes(e, actor, min, offers)?;
+    if !linked.is_empty() {
+        return Err("linked cast cost offered outside a spell cast".into());
+    }
+    Ok(modes)
+}
+
+/// Spell modes plus the Spree/Tiered cast-cost options linked to the chosen modes. The linked
+/// coordinates are copied verbatim into `cast_cost_groups`.
+pub(crate) fn spell_modes(
+    e: &GameEngine,
+    actor: i32,
+    min: u32,
+    offers: &[LegalSpellMode],
+) -> Result<(Vec<SelectedSpellMode>, Vec<LinkedCastCostOption>), String> {
     let mut result = vec![];
+    let mut linked = vec![];
     for mode in offers.iter().filter(|m| m.selectable) {
         if result.len() == min as usize {
             break;
-        }
-        if mode.linked_cast_cost.is_some() {
-            continue;
         }
         if let Ok(targets) = targets(e, actor, mode.targets.as_ref()) {
             result.push(SelectedSpellMode {
                 mode_index: mode.mode_index,
                 targets,
             });
+            linked.extend(mode.linked_cast_cost);
         }
     }
     if result.len() != min as usize {
         return Err("modal fixture cannot satisfy required selectable modes".into());
     }
+    Ok((result, linked))
+}
+
+/// Required cast-cost groups and mode-linked options, each filled from that option's own
+/// engine-published candidates. Additional mana is funded later by `pay`'s preview.
+pub(crate) fn cast_cost_groups(
+    offer: Option<&LegalCostChoices>,
+    linked: &[LinkedCastCostOption],
+) -> Result<Vec<CastCostGroupSelection>, String> {
+    let Some(offer) = offer else {
+        if linked.is_empty() {
+            return Ok(vec![]);
+        }
+        return Err("linked cast cost without published cast-cost groups".into());
+    };
+    let mut result = vec![];
+    for group in &offer.cast_cost_groups {
+        let chosen: Vec<_> = linked
+            .iter()
+            .filter(|option| option.group_index == group.group_index)
+            .collect();
+        if !chosen.is_empty() {
+            for link in chosen {
+                let option = group
+                    .options
+                    .iter()
+                    .find(|option| option.option_index == link.option_index)
+                    .ok_or("linked cast cost names an unpublished option")?;
+                result.push(cast_cost_option_selection(group.group_index, option)?);
+            }
+            continue;
+        }
+        let mut picked = 0;
+        for option in group.options.iter().filter(|option| option.selectable) {
+            if picked == group.min {
+                break;
+            }
+            if let Ok(selection) = cast_cost_option_selection(group.group_index, option) {
+                result.push(selection);
+                picked += 1;
+            }
+        }
+        if picked < group.min {
+            return Err("required cast-cost group has no satisfiable option".into());
+        }
+    }
+    if linked
+        .iter()
+        .any(|link| !offer.cast_cost_groups.iter().any(|g| g.group_index == link.group_index))
+    {
+        return Err("linked cast cost names an unpublished group".into());
+    }
     Ok(result)
+}
+
+fn cast_cost_option_selection(
+    group_index: u32,
+    option: &LegalCastCostOption,
+) -> Result<CastCostGroupSelection, String> {
+    use cast_cost_group_selection::SelectedObject;
+    let mut selection = CastCostGroupSelection {
+        group_index,
+        option_index: option.option_index,
+        ..Default::default()
+    };
+    if !option.candidate_objects.is_empty() || option.object_min > 0 {
+        let minimum = option.aggregate_minimum.map_or(0, |a| i64::from(a.minimum));
+        let mut objects = vec![];
+        let mut contribution = 0i64;
+        for candidate in &option.candidate_objects {
+            if contribution >= minimum && objects.len() >= option.object_min as usize {
+                break;
+            }
+            if option.object_max > 0 && objects.len() == option.object_max as usize {
+                break;
+            }
+            let Some(object) = candidate.object else {
+                continue;
+            };
+            if minimum > 0 && candidate.contribution <= 0 {
+                continue;
+            }
+            objects.push(object);
+            contribution += candidate.contribution;
+        }
+        if contribution < minimum || objects.len() < option.object_min as usize {
+            return Err("cast-cost cohort lacks offered candidates".into());
+        }
+        selection.battlefield_objects = Some(CostObjectRefs { objects });
+    } else if let Some(&id) = option.valid_permanent_ids.first() {
+        selection.selected_object = Some(SelectedObject::PermanentId(id));
+        selection.expected_zone_change_generation = option
+            .valid_permanent_generations
+            .first()
+            .copied()
+            .ok_or("cast-cost permanent omitted its generation")?;
+    } else if let Some(&slot) = option.valid_hand_indices.first() {
+        selection.selected_object = Some(SelectedObject::HandIndex(slot));
+    } else if !matches!(
+        option.kind(),
+        CastCostOptionKind::Mana | CastCostOptionKind::PayLife
+    ) {
+        return Err("cast-cost option offered no object candidate".into());
+    }
+    Ok(selection)
 }
 
 pub(crate) fn costs(offer: Option<&LegalCostChoices>) -> Result<Vec<CostSelection>, String> {
@@ -350,9 +469,6 @@ pub(crate) fn costs(offer: Option<&LegalCostChoices>) -> Result<Vec<CostSelectio
     };
     if !offer.non_mana_costs_payable {
         return Err("nonmana costs need additional fixture resources".into());
-    }
-    if offer.cast_cost_groups.iter().any(|g| g.min > 0) {
-        return Err("required cast-cost group needs a specialized fixture".into());
     }
     let mut used = std::collections::BTreeSet::new();
     let mut result = vec![];
