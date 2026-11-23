@@ -4100,11 +4100,10 @@ impl GameEngine {
                     .get(&item.card_id)
                     .map(|definition| definition.name.clone())
                     .unwrap_or_else(|| item.card_id.clone());
-                let (matcher, trigger, _text) = match delayed_sacrifice {
+                let (matcher, trigger) = match delayed_sacrifice {
                     DelayedTokenSacrificeTiming::NextEndStep => (
                         EventObserverMatcher::AtBeginningOfNextEndStep,
                         TriggerCondition::AtBeginningOfNextEndStep,
-                        "At the beginning of the next end step, sacrifice those tokens.",
                     ),
                     DelayedTokenSacrificeTiming::ControllerNextTurnEndStep => (
                         EventObserverMatcher::AtBeginningOfControllerNextTurnEndStep {
@@ -4113,7 +4112,6 @@ impl GameEngine {
                             target_turn_instance: None,
                         },
                         TriggerCondition::AtBeginningOfControllerNextTurnEndStep,
-                        "At the beginning of the end step on your next turn, sacrifice those tokens.",
                     ),
                 };
                 let ability = TriggeredAbilityDef {
@@ -4130,7 +4128,11 @@ impl GameEngine {
                     max_triggers_per_turn: None,
                     triggers_only_once: false,
                 };
-                let ability_text = ability.fallback_text(&card_name);
+                let mut ability_text = ability.fallback_text(&card_name);
+                if observed_objects.len() == 1 {
+                    // A one-token cohort (Mobilize 1, Kav Landseeker) reads as printed.
+                    ability_text = ability_text.replace("those tokens", "that token");
+                }
                 let parent = self
                     .state
                     .stack_presentations

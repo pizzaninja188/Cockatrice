@@ -238,7 +238,11 @@ impl GameEngine {
 
             let total_instances = units;
             let ability = scry_trigger_ability();
-            let ability_text = format!("{} — scry 1", origin.source_label);
+            // The printed rider sits inside the mana ability's Oracle line, so a mapped parent
+            // line remains the exact display; this text is the engine's own description.
+            let ability_text = "When that mana is spent to cast a creature spell that shares a \
+                                creature type with your commander, scry 1."
+                .to_owned();
             let presentation = origin.ability_presentation.as_ref().map(|reference| {
                 let mut reference = reference.clone();
                 reference.fallback_text = ability_text.clone();

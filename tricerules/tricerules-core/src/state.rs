@@ -4159,6 +4159,19 @@ pub struct DelayedTriggerPayload {
     pub ability: TriggeredAbilityDef,
 }
 
+impl DelayedTriggerPayload {
+    /// The stack annotation for this delayed trigger. Engine text captured with the
+    /// presentation at creation wins, so the legacy annotation always matches what clients
+    /// display; a concealed or absent presentation falls back to the definition's text.
+    pub(crate) fn ability_text(&self) -> String {
+        self.presentation
+            .as_ref()
+            .map(|presentation| presentation.fallback_text.clone())
+            .filter(|text| !text.is_empty())
+            .unwrap_or_else(|| self.ability.fallback_text(&self.card_name))
+    }
+}
+
 /// One scheduled Rebound opportunity retained after its successful resolving spell is exiled.
 /// The source and exiled card are separate exact incarnations under CR 400.7; controller and
 /// printed-face display data are frozen while the resolving spell still exists.
@@ -5170,7 +5183,7 @@ impl GameState {
             .map(|(watched, delayed)| {
                 let object_id = self.next_object_id;
                 self.next_object_id += 1;
-                let ability_text = delayed.ability.fallback_text(&delayed.card_name);
+                let ability_text = delayed.ability_text();
                 let ability_origin = delayed.program_definition.clone().map(|definition| {
                     self.allocate_trigger_grant_origin_with_definition(Some(definition))
                 });

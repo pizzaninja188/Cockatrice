@@ -1903,3 +1903,18 @@ pub(crate) fn zone_view_effective_display_name(
         .map(|object| object.effective_display_name.clone())
         .filter(|name| !name.is_empty())
 }
+
+/// Asserts the newest stack item's engine-owned text (#528): the legacy annotation and the
+/// primary presentation's fallback both carry `expected`, with no Oracle line mapped.
+pub(crate) fn assert_top_stack_engine_text(e: &GameEngine, expected: &str) {
+    let item = e.state.stack.last().expect("a stack item");
+    assert_eq!(item.ability_text.as_deref(), Some(expected));
+    let presentation = e
+        .state
+        .stack_presentations
+        .get(&item.id)
+        .and_then(|stack| stack.primary.as_ref())
+        .expect("primary presentation");
+    assert_eq!(presentation.fallback_text, expected);
+    assert!(presentation.oracle_line_indices.is_empty());
+}

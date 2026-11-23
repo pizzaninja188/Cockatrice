@@ -51,6 +51,10 @@ fn issue_148_knight_warp_creates_human_soldier_and_normal_recast_stays() {
     assert!(ch.types.iter().any(|t| t == "Soldier"));
     e.state.turn_step = TurnStep::Main2;
     pass_both_players(&mut e);
+    assert_top_stack_engine_text(
+        &e,
+        "At the beginning of the next end step, exile Knight Luminary. Its owner may cast it from exile on a later turn.",
+    );
     resolve_entire_stack_two_player(&mut e);
     assert_eq!(e.state.objects[&knight].zone, Zone::Exile);
     assert!(e.initial_response_batch().legal_by_player[&0]

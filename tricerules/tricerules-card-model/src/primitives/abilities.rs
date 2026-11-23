@@ -1936,6 +1936,9 @@ impl TriggeredAbilityDef {
                 // of the earthbending card describes it.
                 return "When it dies or is exiled, return it to the battlefield tapped.".into();
             }
+            if let Some(text) = self.engine_keyword_text(face_name) {
+                return text;
+            }
             let trigger = match self.trigger {
                 TriggerCondition::WhenSelfEntersBattlefield => {
                     Some(format!("When {face_name} enters"))
@@ -1993,6 +1996,39 @@ impl TriggeredAbilityDef {
             }] if from.as_slice() == [EventZone::Graveyard, EventZone::Exile]
                 && entry_counters.is_empty()
         )
+    }
+
+    /// Rules text for the other engine-synthesized keyword triggers, whose single runtime effect
+    /// no card's Oracle line describes. Each is matched with its exact engine trigger condition.
+    fn engine_keyword_text(&self, face_name: &str) -> Option<String> {
+        match (&self.trigger, self.effect.as_slice()) {
+            // CR 310.12b: the intrinsic Siege ability.
+            (TriggerCondition::WhenSelfDies, [SpellEffectKind::SiegeDefeat]) => Some(format!(
+                "When the last defense counter is removed from {face_name}, exile it, then you \
+                 may cast it transformed without paying its mana cost."
+            )),
+            // CR 702.185a: Warp's delayed exile and its owner's later-turn cast permission.
+            (TriggerCondition::AtBeginningOfNextEndStep, [SpellEffectKind::ExileWarpedObject]) => {
+                Some(format!(
+                    "At the beginning of the next end step, exile {face_name}. Its owner may \
+                     cast it from exile on a later turn."
+                ))
+            }
+            // CR 702.181a (Mobilize) and created-token riders. The creating site knows the cohort
+            // size and supplies singular wording; this definition-only text stays plural.
+            (
+                TriggerCondition::AtBeginningOfNextEndStep,
+                [SpellEffectKind::SacrificeObservedObjects],
+            ) => Some("At the beginning of the next end step, sacrifice those tokens.".into()),
+            (
+                TriggerCondition::AtBeginningOfControllerNextTurnEndStep,
+                [SpellEffectKind::SacrificeObservedObjects],
+            ) => Some(
+                "At the beginning of the end step on your next turn, sacrifice those tokens."
+                    .into(),
+            ),
+            _ => None,
+        }
     }
 
     pub(crate) fn validate_trigger_limit(&self) -> Result<(), String> {

@@ -398,6 +398,10 @@ fn siege_ready_to_choose(seed: u64) -> (GameEngine, u32, u64) {
         1,
         "defeat is an intrinsic trigger"
     );
+    assert_top_stack_engine_text(
+        &engine,
+        "When the last defense counter is removed from Invasion of Ulgrotha, exile it, then you may cast it transformed without paying its mana cost.",
+    );
 
     pass_both_players(&mut engine);
     assert_eq!(

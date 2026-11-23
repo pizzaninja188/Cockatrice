@@ -446,6 +446,17 @@ fn path_of_ancestry_triggers_once_for_each_mana_spent_to_cast_the_commander() {
     let trigger = triggers[0];
     assert_eq!(trigger.source_permanent_id, Some(path));
     assert_eq!(trigger.controller, 0);
+    // The rider is printed inside the mana ability's line, so that exact line stays mapped; the
+    // engine fallback describes the trigger itself rather than a terse "— scry 1" label.
+    const RIDER: &str = "When that mana is spent to cast a creature spell that shares a creature \
+                         type with your commander, scry 1.";
+    assert_eq!(trigger.ability_text.as_deref(), Some(RIDER));
+    let presentation = engine.state.stack_presentations[&trigger.id]
+        .primary
+        .as_ref()
+        .expect("Path of Ancestry rider presentation");
+    assert_eq!(presentation.fallback_text, RIDER);
+    assert_eq!(presentation.oracle_line_indices, vec![2]);
     assert_eq!(
         engine.state.objects[&commander].zone,
         tricerules_core::Zone::Stack

@@ -7353,6 +7353,51 @@ fn earthbend_return_fallback_uses_the_reminder_text_for_its_exact_shape() {
     }
 }
 
+/// The other engine-synthesized keyword triggers describe themselves (CR 310.12b, 702.185a,
+/// 702.181a); the same effects under any other trigger keep the generic fallback.
+#[test]
+fn engine_keyword_trigger_fallbacks_use_rules_text_for_their_exact_shapes() {
+    let ability = |trigger: &str, effect: &str| {
+        ron::from_str::<super::TriggeredAbilityDef>(&format!(
+            r#"(ability_id: "engine", presentation: Fallback, trigger: {trigger}, effect: [{effect}])"#
+        ))
+        .unwrap()
+        .fallback_text("Source")
+    };
+    assert_eq!(
+        ability("WhenSelfDies", "SiegeDefeat"),
+        "When the last defense counter is removed from Source, exile it, then you may cast it \
+         transformed without paying its mana cost."
+    );
+    assert_eq!(
+        ability("AtBeginningOfNextEndStep", "ExileWarpedObject"),
+        "At the beginning of the next end step, exile Source. Its owner may cast it from exile \
+         on a later turn."
+    );
+    assert_eq!(
+        ability("AtBeginningOfNextEndStep", "SacrificeObservedObjects"),
+        "At the beginning of the next end step, sacrifice those tokens."
+    );
+    assert_eq!(
+        ability(
+            "AtBeginningOfControllerNextTurnEndStep",
+            "SacrificeObservedObjects"
+        ),
+        "At the beginning of the end step on your next turn, sacrifice those tokens."
+    );
+    for (trigger, effect) in [
+        ("WhenSelfLeavesBattlefield", "SiegeDefeat"),
+        ("WhenSelfDies", "ExileWarpedObject"),
+        ("WhenSelfDies", "SacrificeObservedObjects"),
+    ] {
+        assert_eq!(
+            ability(trigger, effect),
+            "Source — triggered ability (engine)",
+            "{trigger} + {effect}"
+        );
+    }
+}
+
 #[test]
 fn issue_197_hand_choice_requires_an_explicit_typed_action() {
     for action in ["Discard", "Exile"] {

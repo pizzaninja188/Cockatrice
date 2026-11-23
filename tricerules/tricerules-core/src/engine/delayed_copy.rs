@@ -127,7 +127,7 @@ impl GameEngine {
                         delayed.card_name
                     )
                 } else {
-                    delayed.ability.fallback_text(&delayed.card_name)
+                    delayed.ability_text()
                 };
                 let trigger_context = if rebound_payload {
                     TriggerContext {

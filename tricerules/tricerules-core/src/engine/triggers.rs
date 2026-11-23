@@ -669,7 +669,7 @@ impl GameEngine {
         delayed.extend(self.collect_repeating_combat_damage_observers(events));
         let mut collected = self.collect_event_triggers(events);
         collected.extend(delayed.into_iter().map(|(watched, delayed)| {
-            let ability_text = delayed.ability.fallback_text(&delayed.card_name);
+            let ability_text = delayed.ability_text();
             let ability_origin = delayed.program_definition.clone().map(|definition| {
                 self.state
                     .allocate_trigger_grant_origin_with_definition(Some(definition))

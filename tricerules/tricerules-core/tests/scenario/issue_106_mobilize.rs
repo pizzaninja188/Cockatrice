@@ -160,6 +160,10 @@ fn mobilize_enters_tapped_attacking_chosen_planeswalker_and_sacrifices_next_end_
     }
     assert_eq!(engine.state.turn_step, tricerules_core::TurnStep::EndStep);
     assert_eq!(engine.state.stack.len(), 1, "one delayed cohort trigger");
+    assert_top_stack_engine_text(
+        &engine,
+        "At the beginning of the next end step, sacrifice that token.",
+    );
     resolve_entire_stack_two_player(&mut engine);
     assert!(
         !engine.state.objects.contains_key(&token),
@@ -238,6 +242,21 @@ fn doubling_season_doubles_mobilize_tokens_with_their_chosen_attacker_properties
             .as_ref()
             .is_some_and(|defender| defender.object_id == jace)
     }));
+
+    // CR 702.181a: one delayed trigger sacrifices the whole cohort, worded for both tokens.
+    for _ in 0..8 {
+        if engine.state.turn_step == tricerules_core::TurnStep::EndStep {
+            break;
+        }
+        engine
+            .apply_scenario_command(0, &primitive_yield())
+            .expect("advance toward end step");
+    }
+    assert_eq!(engine.state.stack.len(), 1, "one delayed cohort trigger");
+    assert_top_stack_engine_text(
+        &engine,
+        "At the beginning of the next end step, sacrifice those tokens.",
+    );
 }
 
 #[test]
