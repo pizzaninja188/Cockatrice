@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "1602f8c7-fe00-4bc9-b4fc-b26b7223ac75",
+  "spans": [
+    {
+      "face_id": "smash",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "smash",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q63_batch_a::q63_artifact_cards_apply_their_exact_printed_riders",
+      "covers": "the actual card destroys one artifact and draws exactly one card"
+    },
+    {
+      "test": "scenario q63_batch_a::q63_artifact_cards_reject_nonartifacts_and_fizzle_stale_targets",
+      "covers": "illegal nonartifact targets are rejected without spending mana and a stale sole target fizzles without the rider"
+    },
+    {
+      "test": "mechanic_registry::q63_batch_a::q63_artifact_riders_map_definitions",
+      "covers": "reviewed identity, printed characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q63_batch_a::q63_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,33 @@
+// Oracle a6a43190-cca2-4f07-afe9-8af681d777da; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 611.3/613.4c (the layer-7c self modifier and the live Swamp check; the bonus is binary, not
+// per land) and 701.19a-c (regeneration shield). No pinned ruling. Copy of Mire Kavu's Swamp
+// condition plus Drudge Skeletons' regenerate ability.
+(
+  id: "sedge_troll",
+  name: "Sedge Troll",
+  face_id: "sedge_troll",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Troll"],
+  power: 2,
+  toughness: 2,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: ConditionalSelfModifier(
+      condition: BattlefieldAggregate(
+        filter: (controllers: Controller, required_subtypes: ["Swamp"]),
+        aggregate: Count,
+        min: Some(1),
+      ),
+      delta_power: 1,
+      delta_toughness: 1,
+    ),
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Mana("{B}")],
+    effect: [Regenerate(subject: Source)],
+  )],
+)

@@ -1,0 +1,21 @@
+// Oracle 0ff78353-a26e-4b5a-948d-1c3b41d2dd1f; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a/601.2c (artifact target at cast), 701.8/701.19c (destroy; regeneration cannot
+// replace it) and 608.2b (stale target). No pinned ruling.
+// Copy of Flesh to Dust's destruction that regeneration cannot replace, restricted to artifacts.
+(
+  id: "oxidize",
+  name: "Oxidize",
+  face_id: "oxidize",
+  mana_cost: "{G}",
+  types: ["Instant"],
+  spell_effect: [DestroyPreventingRegeneration(
+    subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact])),
+  )],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target artifact",
+    effect_indices: [0],
+  )])),
+)

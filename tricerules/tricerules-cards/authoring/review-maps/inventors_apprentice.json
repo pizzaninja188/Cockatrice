@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "ed8d54fa-ec02-45d6-b70e-4c7e1c66efd6",
+  "spans": [
+    {
+      "face_id": "inventors_apprentice",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::ConditionalSelfModifier",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "GameCondition::BattlefieldAggregate",
+      "typed_path": "/faces/0/static_abilities/0/definition/ConditionalSelfModifier/condition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q63_batch_a::q63_pump_canary_inventors_apprentice_counts_an_artifact_live",
+      "covers": "the actual card gains exactly +1/+1 only while its controller has an artifact, with a live recheck"
+    },
+    {
+      "test": "mechanic_registry::q63_batch_a::q63_conditional_pump_map_definitions",
+      "covers": "reviewed identity, printed characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q63_batch_a::q63_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

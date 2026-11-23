@@ -1,0 +1,50 @@
+{
+  "format_version": 1,
+  "oracle_id": "861096be-dbb3-429e-820f-d82f6ed2aa24",
+  "spans": [
+    {
+      "face_id": "sip_of_hemlock",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q63_batch_a::q63_drain_canary_sip_of_hemlock_loses_exactly_two",
+      "covers": "the actual card destroys one creature and only its controller loses exactly 2 life"
+    },
+    {
+      "test": "scenario q63_batch_a::q63_drain_cards_reject_illegal_targets_and_fizzle_stale_targets",
+      "covers": "an artifact target is rejected without spending and a stale sole target fizzles with no life loss"
+    },
+    {
+      "test": "mechanic_registry::q63_batch_a::q63_destroy_drain_map_definitions",
+      "covers": "reviewed identity, printed characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q63_batch_a::q63_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

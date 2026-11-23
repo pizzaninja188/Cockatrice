@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "e025c802-9862-4dee-8c2a-b875eb001714",
+  "spans": [
+    {
+      "face_id": "dhund_operative",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::ConditionalSelfModifier",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "GameCondition::BattlefieldAggregate",
+      "typed_path": "/faces/0/static_abilities/0/definition/ConditionalSelfModifier/condition"
+    },
+    {
+      "symbol": "Keyword::Deathtouch",
+      "typed_path": "/faces/0/static_abilities/0/definition/ConditionalSelfModifier/keywords"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q63_batch_a::q63_pump_canary_hardest_dhund_operative_grants_deathtouch",
+      "covers": "the actual card gains +1/+0 and deathtouch only while its controller has an artifact, with a live recheck"
+    },
+    {
+      "test": "mechanic_registry::q63_batch_a::q63_conditional_pump_map_definitions",
+      "covers": "reviewed identity, printed characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q63_batch_a::q63_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

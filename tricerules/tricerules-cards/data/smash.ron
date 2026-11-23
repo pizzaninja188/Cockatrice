@@ -1,0 +1,22 @@
+// Oracle 1602f8c7-fe00-4bc9-b4fc-b26b7223ac75; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a/601.2c (artifact target at cast), 701.8 (destroy), 121.1 (draw) and 608.2b (a stale
+// sole target fizzles, so no draw). No pinned ruling. Copy of Shatter's artifact destruction
+// plus Slice in Twain's card draw.
+(
+  id: "smash",
+  name: "Smash",
+  face_id: "smash",
+  mana_cost: "{2}{R}",
+  types: ["Instant"],
+  spell_effect: [
+    Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact]))),
+    Draw(count: 1),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target artifact",
+    effect_indices: [0],
+  )])),
+)

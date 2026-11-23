@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "f1eafb69-e7c0-4a22-9e73-6bc32168a7c5",
+  "spans": [
+    {
+      "face_id": "hideous_end",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter.not_color",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q63_batch_a::q63_drain_canary_hardest_hideous_end_rejects_black_creatures",
+      "covers": "a black creature is rejected without spending and a legal nonblack creature is destroyed with exactly 2 life lost"
+    },
+    {
+      "test": "scenario q63_batch_a::q63_drain_cards_reject_illegal_targets_and_fizzle_stale_targets",
+      "covers": "an artifact target is rejected without spending and a stale sole target fizzles with no life loss"
+    },
+    {
+      "test": "mechanic_registry::q63_batch_a::q63_destroy_drain_map_definitions",
+      "covers": "reviewed identity, printed characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q63_batch_a::q63_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
