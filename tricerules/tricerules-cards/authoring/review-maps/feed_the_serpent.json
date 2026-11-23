@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "ad404b46-dee7-41bb-969d-35b4cbaadece",
+  "spans": [
+    {
+      "face_id": "feed_the_serpent",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/spell_effect/0/Exile/subject/Chosen"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q60_batch_a::q60_exile_cards_hit_creatures_and_planeswalkers",
+      "covers": "both printed target types are exiled"
+    },
+    {
+      "test": "scenario q60_batch_a::q60_exile_canary_feed_the_serpent",
+      "covers": "plain exile resolves and rejects an artifact"
+    },
+    {
+      "test": "scenario q60_batch_a::q60_exile_canary_eat_to_extinction",
+      "covers": "exile then private surveil"
+    },
+    {
+      "test": "scenario q60_batch_a::q60_exile_riders_surveil_and_gain_life",
+      "covers": "surveil and life-gain riders"
+    },
+    {
+      "test": "scenario q60_batch_a::q60_exile_stale_target_fizzles_without_the_rider",
+      "covers": "a stale sole target prevents the rider"
+    },
+    {
+      "test": "mechanic_registry::q60_batch_a::q60_exile_creature_planeswalker_map_definitions",
+      "covers": "typed identity and effects"
+    },
+    {
+      "test": "mechanic_registry::q60_batch_a::q60_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,22 @@
+// Oracle ad404b46-dee7-41bb-969d-35b4cbaadece; source checked 2026-11-23 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// No pinned ruling. CR 701.13 (exile), 115.1/601.2c (target at cast) and 608.2b (a stale sole
+// target fizzles the spell). Copy of the reviewed worthy_cost exile with a creature-or-planeswalker
+// target filter and no additional cost.
+(
+  id: "feed_the_serpent",
+  name: "Feed the Serpent",
+  face_id: "feed_the_serpent",
+  mana_cost: "{2}{B}{B}",
+  types: ["Instant"],
+  spell_effect: [Exile(subject: Chosen((
+    kind: AnyPermanent,
+    permanent_types: [Creature, Planeswalker],
+  )))],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature or planeswalker",
+    effect_indices: [0],
+  )])),
+)

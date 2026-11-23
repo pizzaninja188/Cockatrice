@@ -1,0 +1,65 @@
+{
+  "format_version": 1,
+  "oracle_id": "1c838441-4713-49dd-97e6-4fb7155c36c8",
+  "spans": [
+    {
+      "face_id": "ray_of_distortion",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "ray_of_distortion",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "CardFaceDef.flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q60_batch_a::q60_artifact_enchantment_cards_hit_both_printed_types",
+      "covers": "destroys either printed type and rejects a creature target"
+    },
+    {
+      "test": "scenario q60_batch_a::q60_artifact_enchantment_riders_scry_treasure_draw_and_flashback",
+      "covers": "applies the printed scry, Treasure, draw and flashback riders"
+    },
+    {
+      "test": "scenario q60_batch_a::q60_artifact_enchantment_ray_flashback_fizzle_exiles",
+      "covers": "a fizzled flashback still exiles Ray of Distortion"
+    },
+    {
+      "test": "mechanic_registry::q60_batch_a::q60_artifact_enchantment_map_definitions",
+      "covers": "typed identity and effects"
+    },
+    {
+      "test": "mechanic_registry::q60_batch_a::q60_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

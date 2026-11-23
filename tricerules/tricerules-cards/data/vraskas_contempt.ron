@@ -1,0 +1,26 @@
+// Oracle 38ddbe0b-07ef-4cdf-ad6c-cd8b8ba6d206; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.13 (exile), 119.3 (gain life), 115.1/601.2c (target at cast) and 608.2b (a stale sole
+// target fizzles the whole spell, so no life is gained). The pinned 2017-09-29 ruling fixes the
+// no-life-gain fizzle. Copy of the reviewed worthy_cost exile with a creature-or-planeswalker
+// target filter plus warleaders_helix's life gain.
+(
+  id: "vraskas_contempt",
+  name: "Vraska's Contempt",
+  face_id: "vraskas_contempt",
+  mana_cost: "{2}{B}{B}",
+  types: ["Instant"],
+  spell_effect: [
+    Exile(subject: Chosen((
+      kind: AnyPermanent,
+      permanent_types: [Creature, Planeswalker],
+    ))),
+    GainLife(amount: 2),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature or planeswalker",
+    effect_indices: [0],
+  )])),
+)

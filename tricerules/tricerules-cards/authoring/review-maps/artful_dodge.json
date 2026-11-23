@@ -1,0 +1,69 @@
+{
+  "format_version": 1,
+  "oracle_id": "c174dcbb-03a0-439c-b3d8-ed61bd46dc67",
+  "spans": [
+    {
+      "face_id": "artful_dodge",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "artful_dodge",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ApplyCombatRestriction",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/spell_effect/0/ApplyCombatRestriction/scope/Chosen"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "CardFaceDef.flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q60_batch_a::q60_unblockable_cards_apply_the_restriction_and_draw_only_when_printed",
+      "covers": "applies the restriction to the target and only Touch of Invisibility draws"
+    },
+    {
+      "test": "scenario q60_batch_a::q60_unblockable_canary_infiltrate",
+      "covers": "the resolved restriction rejects every declared block"
+    },
+    {
+      "test": "scenario q60_batch_a::q60_unblockable_artful_dodge_flashbacks_and_exiles",
+      "covers": "flashback applies the restriction again then exiles"
+    },
+    {
+      "test": "scenario q60_batch_a::q60_unblockable_restriction_expires_at_end_of_turn",
+      "covers": "the restriction expires at cleanup"
+    },
+    {
+      "test": "mechanic_registry::q60_batch_a::q60_unblockable_map_definitions",
+      "covers": "typed identity and restriction"
+    },
+    {
+      "test": "mechanic_registry::q60_batch_a::q60_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
