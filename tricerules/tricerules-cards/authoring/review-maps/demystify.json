@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "fd591199-9f7a-4147-a150-13279dbb4498",
+  "spans": [
+    {
+      "face_id": "demystify",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q58_batch_a::q58_destroy_enchantment_canary_demystify",
+      "covers": "destroys an enchantment and rejects a creature target"
+    },
+    {
+      "test": "scenario q58_batch_a::q58_destroy_enchantment_cards_destroy_only_enchantments",
+      "covers": "destroys an enchantment and rejects a creature target"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_destroy_enchantment_map_definitions",
+      "covers": "typed identity and destruction for demystify"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

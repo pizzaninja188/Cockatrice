@@ -2546,3 +2546,6 @@ mod q56_batch_c;
 
 #[path = "scenario/q57_batch_a.rs"]
 mod q57_batch_a;
+
+#[path = "scenario/q58_batch_a.rs"]
+mod q58_batch_a;

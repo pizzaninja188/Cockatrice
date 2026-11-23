@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "1b388371-f9ef-45b4-82a3-ca20a8cd7807",
+  "spans": [
+    {
+      "face_id": "dovins_veto",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "dovins_veto",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::SpellCannotBeCountered",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StackSpellFilter.card_type",
+      "typed_path": "/faces/0/spell_effect/0/CounterTargetSpell/spell_filter/card_type"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q58_batch_a::q58_uncounterable_dovins_veto_restricts_targets_and_resists_counters",
+      "covers": "rejects a creature spell, counters a noncreature spell and resolves through a counter attempt"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_uncounterable_map_definitions",
+      "covers": "typed identity, noncreature filter and static for dovins_veto"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

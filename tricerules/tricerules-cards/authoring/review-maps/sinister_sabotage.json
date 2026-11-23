@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "973fd4d4-9255-4825-85b7-503606c4e932",
+  "spans": [
+    {
+      "face_id": "sinister_sabotage",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "sinister_sabotage",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "LibraryPartitionKind::Surveil",
+      "typed_path": "/faces/0/spell_effect/1/LibraryPartition/kind"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q58_batch_a::q58_counter_riders_canary_sinister_sabotage",
+      "covers": "counters the target then performs the private surveil 1"
+    },
+    {
+      "test": "scenario q58_batch_a::q58_counter_riders_counter_the_target_and_apply_their_printed_rider",
+      "covers": "counters and applies the surveil rider"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_counter_rider_map_definitions",
+      "covers": "typed identity, counter-then-surveil order for sinister_sabotage"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    },
+    {
+      "test": "scenario q58_batch_a::q58_counter_riders_surveil_applies_to_an_uncounterable_target",
+      "covers": "an uncounterable target spell is still a legal target and the private surveil still happens"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,23 @@
+// Oracle 4e3c3bdc-667d-42ec-b960-159a39c53cb3; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 115.1/601.2c (target at cast), 608.2b (a stale sole target makes the whole
+// spell not resolve, so the draw does not happen) and 121.1 (draw). Pinned 2004-10-04 rulings:
+// no draw if it is countered or the target is illegal; the draw still happens if the enchantment
+// regenerates. Copy of the reviewed cursebreak destruction plus a draw.
+(
+  id: "aura_blast",
+  name: "Aura Blast",
+  face_id: "aura_blast",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Enchantment]))),
+    Draw(count: 1),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target enchantment",
+    effect_indices: [0],
+  )])),
+)

@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "33d6a17a-0112-4d4f-a24a-0769360408a8",
+  "spans": [
+    {
+      "face_id": "last_word",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "last_word",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::SpellCannotBeCountered",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q58_batch_a::q58_uncounterable_canary_last_word",
+      "covers": "prints the uncounterable static, counters the targeted spell, and resolves through a counter attempt"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_uncounterable_map_definitions",
+      "covers": "typed identity, static, effect and target wiring for last_word"
+    },
+    {
+      "test": "mechanic_registry::q58_batch_a::q58_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
