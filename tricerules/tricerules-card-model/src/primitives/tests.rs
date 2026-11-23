@@ -7316,6 +7316,43 @@ fn simple_fallbacks_cover_synthetic_choices_and_keep_unknown_instructions_whole(
     );
 }
 
+/// #528: the engine-created Earthbend return trigger (CR 701.66) shows its reminder text, and only
+/// that exact shape does; every near miss keeps the generic engine fallback.
+#[test]
+fn earthbend_return_fallback_uses_the_reminder_text_for_its_exact_shape() {
+    const EARTHBEND_RETURN: &str = r#"(ability_id: "earthbend_return", presentation: Fallback,
+        trigger: WhenWatchedObjectDiesOrIsExiled,
+        effect: [ReturnTriggeredCard(reference: TriggerObject, from: [Graveyard, Exile],
+            tapped: true, controller: AbilityController)])"#;
+    let parse = |ron: &str| ron::from_str::<super::TriggeredAbilityDef>(ron).unwrap();
+    assert_eq!(
+        parse(EARTHBEND_RETURN).fallback_text("Earthbending Lesson"),
+        "When it dies or is exiled, return it to the battlefield tapped."
+    );
+    let generic = "Earthbending Lesson — triggered ability (earthbend_return)";
+    for near_miss in [
+        EARTHBEND_RETURN.replace("tapped: true", "tapped: false"),
+        EARTHBEND_RETURN.replace("[Graveyard, Exile]", "[Graveyard]"),
+        EARTHBEND_RETURN.replace("AbilityController", "Owner"),
+        EARTHBEND_RETURN.replace("reference: TriggerObject", "reference: AbilitySource"),
+        EARTHBEND_RETURN.replace("tapped: true,", "tapped: true, destination: Hand,"),
+        EARTHBEND_RETURN.replace(
+            "presentation: Fallback,",
+            "presentation: Fallback, may: true,",
+        ),
+        EARTHBEND_RETURN.replace(
+            "WhenWatchedObjectDiesOrIsExiled",
+            "WhenSelfLeavesBattlefield",
+        ),
+    ] {
+        assert_eq!(
+            parse(&near_miss).fallback_text("Earthbending Lesson"),
+            generic,
+            "{near_miss}"
+        );
+    }
+}
+
 #[test]
 fn issue_197_hand_choice_requires_an_explicit_typed_action() {
     for action in ["Discard", "Exile"] {

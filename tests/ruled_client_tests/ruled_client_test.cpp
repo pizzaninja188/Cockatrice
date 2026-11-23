@@ -2745,6 +2745,29 @@ TEST(RuledPresentationResolverTest, EmptyMappingAlwaysUsesEngineFallback)
     EXPECT_TRUE(resolver.inspect(presentation).diagnostic.isEmpty());
 }
 
+// #528: Earthbend's engine-created return trigger names its source card but maps no Oracle line,
+// so the stack shows the engine's reminder-text sentence even though the card's Oracle is loaded.
+TEST(RuledPresentationResolverTest, EngineCreatedTriggerUsesEngineTextBesideLoadedOracle)
+{
+    const QString oracleText = QStringLiteral(
+        "When this creature enters, earthbend 2. (Target land you control becomes a 0/0 creature with haste "
+        "that's still a land. Put two +1/+1 counters on it. When it dies or is exiled, return it to the "
+        "battlefield tapped.)\nCreatures you control with +1/+1 counters on them have trample.");
+    CardNameMap cards;
+    auto card = CardInfo::newInstance("Badgermole");
+    card->ruled().addFace("Badgermole", "Badgermole", oracleText);
+    cards.insert("Badgermole", card);
+    RuledPresentationResolver resolver([&cards](const QString &name) { return cards.value(name); });
+    ruled::v1::PresentationRef presentation;
+    presentation.set_external_card_name("Badgermole");
+    presentation.set_external_face_name("Badgermole");
+    presentation.set_oracle_text_sha256(RuledOracleText::textSha256(oracleText).toStdString());
+    presentation.set_fallback_text("When it dies or is exiled, return it to the battlefield tapped.");
+    EXPECT_EQ(resolver.resolve(presentation),
+              QStringLiteral("When it dies or is exiled, return it to the battlefield tapped."));
+    EXPECT_TRUE(resolver.inspect(presentation).diagnostic.isEmpty());
+}
+
 TEST(RuledPresentationResolverTest, RejectsDuplicateAndDescendingMappings)
 {
     CardNameMap cards;

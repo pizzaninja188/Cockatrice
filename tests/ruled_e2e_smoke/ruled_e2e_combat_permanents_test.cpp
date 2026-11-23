@@ -1616,6 +1616,19 @@ TEST_F(RuledE2ESmokeTest, TokenCopiesAndPopulatePreserveBothClientsPhysicalIdent
     }
 }
 
+class EarthbendDriver : public OpeningDriver
+{
+public:
+    using OpeningDriver::OpeningDriver;
+    std::optional<ruled::v1::StackPushed> latestTrigger;
+    void onRuledEvent(const ruled::v1::RuledEvent &ev) override
+    {
+        OpeningDriver::onRuledEvent(ev);
+        if (ev.has_stack_pushed() && ev.stack_pushed().is_triggered())
+            latestTrigger = ev.stack_pushed();
+    }
+};
+
 TEST_F(RuledE2ESmokeTest, EarthbendBadgeRowsAndGenerationBoundReturnReachBothClients)
 {
     const auto started = startServers();
@@ -1626,8 +1639,8 @@ TEST_F(RuledE2ESmokeTest, EarthbendBadgeRowsAndGenerationBoundReturnReachBothCli
         GTEST_SKIP() << std::string(started.message()).substr(5);
     }
 
-    OpeningDriver p1(true, QStringLiteral("earthbendp1"), &transcript);
-    OpeningDriver p2(false, QStringLiteral("earthbendp2"), &transcript);
+    EarthbendDriver p1(true, QStringLiteral("earthbendp1"), &transcript);
+    EarthbendDriver p2(false, QStringLiteral("earthbendp2"), &transcript);
     ASSERT_TRUE(p1.loginAndJoinRoom());
     ASSERT_TRUE(p2.loginAndJoinRoom());
     ASSERT_TRUE(p1.createRuledGame());
@@ -1763,6 +1776,18 @@ TEST_F(RuledE2ESmokeTest, EarthbendBadgeRowsAndGenerationBoundReturnReachBothCli
         ASSERT_TRUE(pass(p2));
         EXPECT_EQ(p1.stackDepth, 1);
         EXPECT_EQ(p2.stackDepth, 1);
+        // #528: the engine-created return trigger shows its CR 701.66 reminder text on both seats.
+        for (EarthbendDriver *client : {&p1, &p2}) {
+            ASSERT_TRUE(client->latestTrigger.has_value());
+            EXPECT_EQ(client->latestTrigger->ability_annotation(),
+                      "When it dies or is exiled, return it to the battlefield tapped.");
+            ASSERT_TRUE(client->latestTrigger->has_primary_presentation());
+            const auto &presentation = client->latestTrigger->primary_presentation();
+            EXPECT_EQ(presentation.fallback_text(), "When it dies or is exiled, return it to the battlefield tapped.");
+            EXPECT_EQ(presentation.oracle_line_indices_size(), 0);
+            EXPECT_EQ(presentation.external_card_name(), "Rebellious Captives");
+            client->latestTrigger.reset();
+        }
         EXPECT_FALSE(find(p1, "forest").has_value());
         EXPECT_FALSE(find(p2, "forest").has_value());
         ASSERT_TRUE(pass(p1));

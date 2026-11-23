@@ -1931,6 +1931,11 @@ impl TriggeredAbilityDef {
             && !self.triggers_only_once
             && self.max_triggers_per_turn.is_none()
         {
+            if self.is_earthbend_return() {
+                // CR 701.66 reminder text; the engine creates this trigger, so no Oracle line
+                // of the earthbending card describes it.
+                return "When it dies or is exiled, return it to the battlefield tapped.".into();
+            }
             let trigger = match self.trigger {
                 TriggerCondition::WhenSelfEntersBattlefield => {
                     Some(format!("When {face_name} enters"))
@@ -1968,6 +1973,28 @@ impl TriggeredAbilityDef {
         }
         crate::ability_fallback(face_name, "triggered ability", ability_path)
     }
+
+    /// The exact delayed trigger Earthbend creates: return the watched land tapped under the
+    /// ability controller's control when it dies or is exiled.
+    fn is_earthbend_return(&self) -> bool {
+        matches!(
+            self.trigger,
+            TriggerCondition::WhenWatchedObjectDiesOrIsExiled
+        ) && matches!(
+            self.effect.as_slice(),
+            [SpellEffectKind::ReturnTriggeredCard {
+                reference: super::TriggeredCardReference::TriggerObject,
+                from,
+                destination: super::TriggeredCardDestination::Battlefield,
+                tapped: true,
+                controller: super::ReturnController::AbilityController,
+                entry_counters,
+                set_types: None,
+            }] if from.as_slice() == [EventZone::Graveyard, EventZone::Exile]
+                && entry_counters.is_empty()
+        )
+    }
+
     pub(crate) fn validate_trigger_limit(&self) -> Result<(), String> {
         if self.max_triggers_per_turn == Some(0) {
             return Err("max_triggers_per_turn must be positive".into());

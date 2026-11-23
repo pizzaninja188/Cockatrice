@@ -11,7 +11,7 @@ use super::helpers::*;
 use tricerules_cards::primitives::CounterKind;
 use tricerules_cards::Keyword;
 use tricerules_core::{TurnStep, Zone};
-use tricerules_proto::ruled::v1::{ChooseTriggerTarget, TargetRef};
+use tricerules_proto::ruled::v1::{ChooseTriggerTarget, StackPushed, TargetRef};
 
 fn engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("forest", &[]), deck_with("island", &[])]);
@@ -73,6 +73,52 @@ fn kill(e: &mut GameEngine, creature: u32) {
     resolve_entire_stack_two_player(e);
 }
 
+/// CR 701.66 reminder text, which the engine owns because the return trigger is engine-created.
+const EARTHBEND_RETURN_TEXT: &str =
+    "When it dies or is exiled, return it to the battlefield tapped.";
+
+/// Kills the earthbent land and returns the public stack push of its return trigger (#528).
+fn kill_and_capture_return_trigger(e: &mut GameEngine, land: u32) -> StackPushed {
+    cast(e, "murder", target_object(land));
+    let mut pushed = Vec::new();
+    loop {
+        answer_trigger_order_in_engine_order(e);
+        if e.state.stack.is_empty() {
+            break;
+        }
+        pushed.extend(
+            pass_both_players_with_batch(e)
+                .events
+                .into_iter()
+                .filter_map(|event| match event.ev {
+                    Some(Ev::StackPushed(push)) if push.is_triggered => Some(push),
+                    _ => None,
+                }),
+        );
+    }
+    assert_eq!(pushed.len(), 1, "exactly the return trigger: {pushed:?}");
+    pushed.remove(0)
+}
+
+/// The return trigger shows its rules text, never an Oracle line of the earthbending source.
+fn assert_return_trigger_text(push: &StackPushed, source_name: &str) {
+    assert_eq!(push.ability_annotation, EARTHBEND_RETURN_TEXT);
+    let presentation = push
+        .primary_presentation
+        .as_ref()
+        .expect("return trigger presentation");
+    assert_eq!(presentation.fallback_text, EARTHBEND_RETURN_TEXT);
+    assert!(presentation.oracle_line_indices.is_empty());
+    assert_eq!(presentation.external_card_name, source_name);
+    assert_eq!(
+        presentation
+            .path
+            .last()
+            .map(|component| component.id.as_str()),
+        Some("earthbend_return")
+    );
+}
+
 #[test]
 fn earthbending_lesson_earthbends_four_and_the_land_returns_tapped() {
     let mut e = engine(431_101);
@@ -82,8 +128,8 @@ fn earthbending_lesson_earthbends_four_and_the_land_returns_tapped() {
     assert_earthbent(&e, forest, 4);
     assert_eq!(e.state.objects[&lesson].zone, Zone::Graveyard);
 
-    cast(&mut e, "murder", target_object(forest));
-    resolve_entire_stack_two_player(&mut e);
+    let push = kill_and_capture_return_trigger(&mut e, forest);
+    assert_return_trigger_text(&push, "Earthbending Lesson");
     assert_eq!(e.state.objects[&forest].zone, Zone::Battlefield);
     assert!(e.state.objects[&forest].tapped, "returns tapped");
     assert_unbent(&e, forest);
@@ -138,6 +184,11 @@ fn earth_village_ruffians_earthbends_two_when_it_dies() {
         .expect("choose the land");
     resolve_entire_stack_two_player(&mut e);
     assert_earthbent(&e, forest, 2);
+
+    // A permanent's trigger is the parent presentation; the return child keeps its own text.
+    let push = kill_and_capture_return_trigger(&mut e, forest);
+    assert_return_trigger_text(&push, "Earth Village Ruffians");
+    assert!(e.state.objects[&forest].tapped, "returns tapped");
 }
 
 #[test]
