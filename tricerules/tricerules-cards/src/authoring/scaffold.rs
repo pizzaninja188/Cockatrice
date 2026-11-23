@@ -7,7 +7,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use super::{canonical_face_id, normalize_name, parse_type_line, str_field};
-use crate::{external_oracle_lines, slugify};
+use crate::{external_oracle_lines, portable_file_stem, slugify};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Selection<'a> {
@@ -464,7 +464,7 @@ fn render(card: &Value, provenance: &str) -> Result<ScaffoldFile, String> {
         "  __mechanics_unresolved: true,\n  __presentation_review_unresolved: true,\n)\n\n// Per-card completion checklist:\n// [ ] Re-fetch and review exact Oracle card and every ruling.\n// [ ] Identify governing Comprehensive Rules concepts and verify current CR text.\n// [ ] Choose and record the lowest complete implementation tier.\n// [ ] Confirm token, emblem, linked-state, delayed-effect, and other state prerequisites.\n// [ ] Replace candidate IDs with confirmed stable IDs; preserve them through later edits.\n// [ ] Resolve every mechanics and presentation TODO without copying Oracle prose into rules fields.\n// [ ] Record and track any intentional partial support; otherwise prove complete support.\n// [ ] Remove both unresolved sentinels, rename to .ron under data/, and run all mandatory checks.\n",
     );
     Ok(ScaffoldFile {
-        file_name: format!("{id}.ron.scaffold"),
+        file_name: format!("{}.ron.scaffold", portable_file_stem(&id)),
         contents: output,
     })
 }
@@ -852,6 +852,36 @@ mod tests {
             output.manifest_json.find("\"Alpha\"").unwrap()
                 < output.manifest_json.find("\"Zebra\"").unwrap()
         );
+    }
+
+    #[test]
+    fn quoted_name_keeps_its_id_but_gets_a_portable_file_name() {
+        let name = "Kongming, \"Sleeping Dragon\"";
+        let source = card(
+            "normal",
+            "oracle-kongming",
+            name,
+            vec![face(
+                name,
+                "Legendary Creature — Human Advisor",
+                "Vigilance",
+            )],
+        );
+        let output = build(
+            vec![source],
+            Selection::Single(name),
+            &ExistingCards::default(),
+            "fixture",
+            false,
+        )
+        .unwrap();
+        assert_eq!(
+            output.files[0].file_name,
+            "kongming,_sleeping_dragon.ron.scaffold"
+        );
+        assert!(output.files[0]
+            .contents
+            .contains("id: \"kongming,_\\\"sleeping_dragon\\\"\""));
     }
 
     #[test]

@@ -213,9 +213,10 @@ pub fn prepare(
             .collect();
         for analogue in &analogues {
             dependencies.push(PathBuf::from(analogue["path"].as_str().unwrap()));
-            let map = package
-                .join("authoring/review-maps")
-                .join(format!("{}.json", analogue["id"].as_str().unwrap()));
+            let map = package.join("authoring/review-maps").join(format!(
+                "{}.json",
+                crate::portable_file_stem(analogue["id"].as_str().unwrap())
+            ));
             if map.exists() {
                 dependencies.push(map);
             }
@@ -289,7 +290,7 @@ fn differences(from: &Value, to: &Value) -> Vec<Value> {
 fn read_map(package: &Path, id: &str) -> Result<Value, String> {
     let path = package
         .join("authoring/review-maps")
-        .join(format!("{id}.json"));
+        .join(format!("{}.json", crate::portable_file_stem(id)));
     if !path.exists() {
         return Ok(Value::Null);
     }

@@ -2473,6 +2473,25 @@ mod tests {
         assert_eq!(reg.id_for_name("Black Lotus"), None);
     }
 
+    /// #526: a printed name with `"` keeps the quotes in its id (`id == slugify(name)`) and is
+    /// embedded from the portable file stem `kongming,_sleeping_dragon.ron`.
+    #[test]
+    fn quoted_name_resolves_to_its_quoted_id() {
+        let reg = crate::registry::from_embedded().unwrap();
+        let name = "Kongming, \"Sleeping Dragon\"";
+        let id = "kongming,_\"sleeping_dragon\"";
+        assert_eq!(crate::slug::slugify(name), id);
+        assert_eq!(reg.id_for_name(name), Some(id));
+        assert_eq!(reg.get(id).map(|def| def.name.as_str()), Some(name));
+        assert_eq!(
+            crate::slug::portable_file_stem(id),
+            "kongming,_sleeping_dragon"
+        );
+        assert!(std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("data/kongming,_sleeping_dragon.ron")
+            .is_file());
+    }
+
     #[test]
     fn load_rejects_duplicate_name() {
         let a = r#"(

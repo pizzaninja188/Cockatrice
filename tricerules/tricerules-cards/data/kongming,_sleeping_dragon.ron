@@ -1,0 +1,27 @@
+// Oracle 21e9e1a9-5d6d-473e-adab-6a1e8e2b0ebd; source checked 2026-11-23 against the pinned Scryfall bulk
+// SHA-256 0516f05397c02e093ec03c9cd02bcf4d8d629f1678e7ec8f4b016df7a01d86de; Scryfall lists no rulings.
+// CR 604.2/611.3a (the static ability's continuous effect applies while the source is on the
+// battlefield), 613.4c (layer 7c) and 109.5 ("you" is the source's controller); the printed
+// "other" excludes the source.
+// #526: the id keeps the printed quotes (`slugify`); this file uses `portable_file_stem(id)`.
+(
+  id: "kongming,_\"sleeping_dragon\"",
+  name: "Kongming, \"Sleeping Dragon\"",
+  face_id: "kongming_sleeping_dragon",
+  mana_cost: "{2}{W}{W}",
+  types: ["Creature", "Human", "Advisor"],
+  supertypes: ["Legendary"],
+  power: 2,
+  toughness: 2,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: AnthemPt(
+        filter: (controller: YouControl, exclude_self: true),
+        delta_power: 1,
+        delta_toughness: 1,
+      ),
+    ),
+  ],
+)

@@ -10,6 +10,8 @@ use tricerules_cards::{AbilityPresentation, Layout};
 struct Card {
     id: &'static str,
     name: &'static str,
+    face_id: &'static str,
+    supertypes: &'static [&'static str],
     mana_cost: &'static str,
     types: &'static [&'static str],
     power: u32,
@@ -23,6 +25,8 @@ const CARDS: &[Card] = &[
     Card {
         id: "veteran_armorer",
         name: "Veteran Armorer",
+        face_id: "veteran_armorer",
+        supertypes: &[],
         mana_cost: "{1}{W}",
         types: &["Creature", "Human", "Soldier"],
         power: 2,
@@ -34,6 +38,8 @@ const CARDS: &[Card] = &[
     Card {
         id: "benalish_marshal",
         name: "Benalish Marshal",
+        face_id: "benalish_marshal",
+        supertypes: &[],
         mana_cost: "{W}{W}{W}",
         types: &["Creature", "Human", "Knight"],
         power: 3,
@@ -45,6 +51,8 @@ const CARDS: &[Card] = &[
     Card {
         id: "blessed_orator",
         name: "Blessed Orator",
+        face_id: "blessed_orator",
+        supertypes: &[],
         mana_cost: "{3}{W}",
         types: &["Creature", "Human", "Cleric"],
         power: 1,
@@ -52,6 +60,21 @@ const CARDS: &[Card] = &[
         delta_power: 0,
         delta_toughness: 1,
         fingerprint: "5b231542b4eb00cf248c8c2b66f5477518da8231b5d43a408bdf505dc531ab46",
+    },
+    // #526: the id keeps the printed quotes (`slugify`); the face id does not.
+    Card {
+        id: "kongming,_\"sleeping_dragon\"",
+        name: "Kongming, \"Sleeping Dragon\"",
+        face_id: "kongming_sleeping_dragon",
+        supertypes: &["Legendary"],
+        mana_cost: "{2}{W}{W}",
+        types: &["Creature", "Human", "Advisor"],
+        power: 2,
+        toughness: 2,
+        delta_power: 1,
+        delta_toughness: 1,
+        // Same printed text as Benalish Marshal.
+        fingerprint: "51a409183459ccfb4d2671d3bcf939a1266a125ddbf46a7ea601b8f0bccb5821",
     },
 ];
 
@@ -80,7 +103,7 @@ fn other_anthems_batch_maps_definitions() {
             card.id
         );
         let f = face(registry, card.id);
-        assert_eq!(f.face_id.as_str(), card.id, "{} face id", card.id);
+        assert_eq!(f.face_id.as_str(), card.face_id, "{} face id", card.id);
         assert_eq!(f.name, card.name, "{} name", card.id);
         assert_eq!(
             f.mana_cost.to_string(),
@@ -89,7 +112,7 @@ fn other_anthems_batch_maps_definitions() {
             card.id
         );
         assert_eq!(f.types, card.types, "{} types", card.id);
-        assert!(f.supertypes.is_empty(), "{}", card.id);
+        assert_eq!(f.supertypes, card.supertypes, "{} supertypes", card.id);
         assert_eq!(
             (f.power, f.toughness),
             (Some(card.power), Some(card.toughness)),
@@ -152,7 +175,7 @@ fn other_anthems_batch_fingerprints_match_the_pinned_oracle_text() {
         assert_eq!(fields.len(), 5, "fingerprint row shape: {row}");
         assert_eq!(fields[0], card.id);
         assert_eq!(fields[1], card.name);
-        assert_eq!(fields[2], card.id);
+        assert_eq!(fields[2], card.face_id);
         assert_eq!(
             fields[4], card.fingerprint,
             "fingerprint drift for {}",

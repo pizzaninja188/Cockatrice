@@ -51,5 +51,5 @@ pub use primitives::{
     TypeLineReplacement, ZoneCardFilter,
 };
 pub use registry::CardRegistry;
-pub use slug::slugify;
+pub use slug::{portable_file_stem, slugify};
 pub use token_def::TokenDefinition;
