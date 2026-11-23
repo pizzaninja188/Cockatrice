@@ -737,6 +737,7 @@ pub(crate) fn pay(e: &GameEngine, actor: i32, command: &mut RuledCommand) -> Res
     )
     .map_err(|err| format!("payment cost: {err:?}"))?;
     let mut mana = selection.mana.unwrap_or_default();
+    let mut generic = 0;
     for pip in cost.pips {
         match pip {
             ManaSymbol::W => mana.w += 1,
@@ -745,7 +746,7 @@ pub(crate) fn pay(e: &GameEngine, actor: i32, command: &mut RuledCommand) -> Res
             ManaSymbol::R => mana.r += 1,
             ManaSymbol::G => mana.g += 1,
             ManaSymbol::C => mana.c += 1,
-            ManaSymbol::Generic(n) | ManaSymbol::MonoHybrid(n, _) => mana.c += n,
+            ManaSymbol::Generic(n) | ManaSymbol::MonoHybrid(n, _) => generic += n,
             ManaSymbol::Hybrid(c, _) | ManaSymbol::Phyrexian(c) => match c {
                 tricerules_cards::mana::ColorPip::W => mana.w += 1,
                 tricerules_cards::mana::ColorPip::U => mana.u += 1,
@@ -759,6 +760,26 @@ pub(crate) fn pay(e: &GameEngine, actor: i32, command: &mut RuledCommand) -> Res
             ManaSymbol::X => return Err("unresolved X payment".into()),
         }
     }
+    // Generic mana comes from colorless first, then from whatever colored mana remains in the
+    // payer's pool after the colored pips above.
+    let pool = e
+        .state
+        .player_idx(actor)
+        .map(|index| e.state.players[index].mana_pool)
+        .unwrap_or_default();
+    for (spent, available) in [
+        (&mut mana.c, pool.colorless),
+        (&mut mana.w, pool.white),
+        (&mut mana.u, pool.blue),
+        (&mut mana.b, pool.black),
+        (&mut mana.r, pool.red),
+        (&mut mana.g, pool.green),
+    ] {
+        let take = generic.min(available.saturating_sub(*spent));
+        *spent += take;
+        generic -= take;
+    }
+    mana.c += generic;
     selection.mana = Some(mana);
     match command.cmd.as_mut().unwrap() {
         Cmd::CastSpell(c) => c.payment = Some(selection),

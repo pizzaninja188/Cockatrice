@@ -482,8 +482,22 @@ enum Profile {
     Base,
     /// Base plus typed permanents, graveyard cards, tokens, counters and turn history.
     Rich,
+    /// Rich, then spells left on the stack. Each variant starts with a sorcery-speed spell on an
+    /// empty stack, with any instants cast on top while the caster holds priority.
+    Stack(&'static [&'static str]),
+    /// Rich, then the declare blockers step: two attackers, one of them blocked.
+    Combat,
 }
-const PROFILES: &[Profile] = &[Profile::Base, Profile::Rich];
+/// Stack spells: a green creature and a blue one-mana instant; a black four-mana sorcery and a
+/// red instant; a colorless artifact.
+const PROFILES: &[Profile] = &[
+    Profile::Base,
+    Profile::Rich,
+    Profile::Stack(&["grizzly_bears", "opt"]),
+    Profile::Stack(&["agonizing_syphon", "lightning_bolt"]),
+    Profile::Stack(&["sol_ring"]),
+    Profile::Combat,
+];
 
 fn fixture(case: &Case) -> GameEngine {
     fixture_with(case, Profile::Base)
@@ -517,6 +531,17 @@ fn fixture_with(case: &Case, profile: Profile) -> GameEngine {
     }
     if profile != Profile::Base {
         rich_board(&mut e, case);
+    }
+    if let Profile::Stack(spells) = profile {
+        for &spell in spells {
+            let oid = helpers::inject_card_into_hand(&mut e, 0, spell);
+            let command = hand_play(&mut e, 0, oid, 0)
+                .unwrap_or_else(|err| panic!("stack fixture {spell}: {err}"));
+            apply(&mut e, 0, &command).expect("cast stack fixture");
+        }
+    }
+    if profile == Profile::Combat {
+        combat_board(&mut e);
     }
     if let Some(card) = stack_fixture {
         helpers::relocate_to_hand(&mut e, 0, card);
@@ -595,6 +620,55 @@ fn rich_board(e: &mut GameEngine, case: &Case) {
     offers::pay(e, 0, &mut command).expect("fund rich board instant");
     let batch = apply(e, 0, &command).expect("rich board instant");
     drain(e, batch, COMMAND_BUDGET).expect("rich board instant resolves");
+    top_up_pools(e);
+    e.initial_response_batch();
+}
+
+/// Advance a settled main-phase board to declare blockers with two attackers, one blocked,
+/// choosing only engine-published attack assignments and block pairs.
+fn combat_board(e: &mut GameEngine) {
+    let actor = e.state.active_player_id();
+    apply(e, actor, &helpers::primitive_yield()).expect("main phase to combat");
+    helpers::pass_priority_round(e);
+    let mut assignments: Vec<AttackAssignment> = vec![];
+    for assignment in e.initial_response_batch().legal_by_player[&actor]
+        .legal_attack_assignments
+        .clone()
+    {
+        if assignments.len() == 2 {
+            break;
+        }
+        if assignments
+            .iter()
+            .all(|chosen| chosen.attacker_object_id != assignment.attacker_object_id)
+        {
+            assignments.push(assignment);
+        }
+    }
+    assert_eq!(assignments.len(), 2, "combat fixture needs two attackers");
+    let blocked = assignments[0].attacker_object_id;
+    apply(
+        e,
+        actor,
+        &RuledCommand {
+            cmd: Some(Cmd::DeclareAttackers(DeclareAttackers { assignments })),
+        },
+    )
+    .expect("declare fixture attackers");
+    helpers::pass_priority_round(e);
+    let defender = e.state.players[1].id;
+    let pair = e.initial_response_batch().legal_by_player[&defender]
+        .legal_block_pairs
+        .iter()
+        .copied()
+        .find(|pair| pair.attacker_id == blocked)
+        .expect("combat fixture block pair");
+    apply(e, defender, &helpers::declare_blockers(vec![pair])).expect("declare fixture blocker");
+    top_up_pools(e);
+    e.initial_response_batch();
+}
+
+fn top_up_pools(e: &mut GameEngine) {
     for player in 0..e.state.players.len() {
         let pool = &mut e.state.players[player].mana_pool;
         for amount in [
@@ -608,7 +682,6 @@ fn rich_board(e: &mut GameEngine, case: &Case) {
             *amount = (*amount).max(9);
         }
     }
-    e.initial_response_batch();
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -665,11 +738,24 @@ fn evaluate(case: &Case) -> Result<Outcome, String> {
 
 /// Build the case's initial command from engine offers, or say why this board can't.
 fn prepare(e: &mut GameEngine, case: &Case, actor: i32) -> Result<RuledCommand, String> {
-    let mut command = if let Some(index) = case.ability {
+    if let Some(index) = case.ability {
         let oid = helpers::authoring_fixture::ability_source(e, 0, &case.card, case.face, index);
-        offers::activation(e, actor, oid, index as u32)?
+        offers::activation(e, actor, oid, index as u32)
     } else {
         let oid = helpers::relocate_to_hand(e, 0, &case.card);
+        hand_play(e, actor, oid, case.face)
+    }
+}
+
+/// The engine-offered normal hand play of one face: a land play, or a funded cast with targets,
+/// modes and costs chosen from the offer.
+fn hand_play(
+    e: &mut GameEngine,
+    actor: i32,
+    oid: u32,
+    face: usize,
+) -> Result<RuledCommand, String> {
+    let mut command = {
         let slot = e.state.players[0]
             .hand
             .iter()
@@ -682,27 +768,27 @@ fn prepare(e: &mut GameEngine, case: &Case, actor: i32) -> Result<RuledCommand, 
             .iter()
             .find(|a| {
                 a.hand_index == slot
-                    && a.face_index == case.face as u32
+                    && a.face_index == face as u32
                     && a.cast_method == CastMethod::Normal as i32
             })
             .ok_or("face not offered by generic hand fixture")?;
         if offer.kind == HandActionKind::HandActionPlayLand as i32 {
-            helpers::play_land_face(slot as usize, case.face)
+            helpers::play_land_face(slot as usize, face)
         } else {
             let (selected_modes, linked_costs) =
                 offers::spell_modes(e, actor, offer.min_modes, &offer.modes)?;
             RuledCommand {
                 cmd: Some(Cmd::CastSpell(CastSpell {
                     source: Some(helpers::hand_cast_source(slot as usize)),
-                    face_index: case.face as u32,
+                    face_index: face as u32,
                     cast_method: offer.cast_method,
                     flex_payments: offers::hybrid_phyrexian_choices(&offer.cost)?,
                     targets: offers::targets(
-                        &e,
+                        e,
                         actor,
                         legal
                             .valid_targets_by_hand_slot
-                            .get(&((slot << 8) | case.face as u32)),
+                            .get(&((slot << 8) | face as u32)),
                     )?,
                     selected_modes,
                     cost_selections: offers::costs(offer.cost_choices.as_ref())?,
@@ -715,10 +801,7 @@ fn prepare(e: &mut GameEngine, case: &Case, actor: i32) -> Result<RuledCommand, 
             }
         }
     };
-    if !matches!(
-        command.cmd,
-        Some(Cmd::PlayLand(_) | Cmd::ActivateAbility(_) | Cmd::BeginAbilityActivation(_))
-    ) {
+    if !matches!(command.cmd, Some(Cmd::PlayLand(_))) {
         offers::pay(e, actor, &mut command)?;
     }
     Ok(command)
