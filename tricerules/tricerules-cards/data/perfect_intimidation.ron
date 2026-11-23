@@ -1,0 +1,29 @@
+// Pinned Oracle da099c34-74b2-4db8-8583-09bf2c56606f; Scryfall rulings checked 2026-11-23 (none).
+// CR 700.2 (choose one or both), 701.13a and 406 (the opponent chooses and exiles; this is not a
+// discard under 701.9a), 122.1 (every counter of every kind leaves the target creature) and
+// 608.2b (an illegal target).
+(
+  id: "perfect_intimidation",
+  name: "Perfect Intimidation",
+  face_id: "perfect_intimidation",
+  mana_cost: "{3}{B}",
+  types: ["Sorcery"],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 2,
+    modes: [
+      (
+        mode_id: "mode_01",
+        presentation: OracleLines([2]),
+        effects: [ChooseHandCards(action: Exile, count: 2, target: (kind: OpponentPlayer))],
+        targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+      ),
+      (
+        mode_id: "mode_02",
+        presentation: OracleLines([3]),
+        effects: [RemoveAllCounters(subject: Chosen((kind: Creature)))],
+        targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+      ),
+    ],
+  ),
+)

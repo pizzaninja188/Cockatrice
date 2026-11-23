@@ -2,8 +2,8 @@
 //!
 //! Every generated identity must expose its exact printed mana cost, types, and two-mode
 //! `Choose one or both —` structure (CR 700.2). Modal-only bullets never leak into ordinary
-//! `spell_effect` slots, and the four cohort cards whose printed modes lack shipped vocabulary
-//! stay unregistered.
+//! `spell_effect` slots, and the three cohort cards whose printed modes lack shipped vocabulary
+//! stay unregistered. Perfect Intimidation shipped later with #440.
 
 use tricerules_cards::primitives::{
     Amount, CardTypeFilter, EffectSubject, GraveyardDestination, GraveyardFilter,
@@ -96,12 +96,7 @@ fn issue_425_registers_the_six_choose_both_identities() {
         );
     }
 
-    for excluded in [
-        "choreographed_sparks",
-        "expose_the_culprit",
-        "go_ninja_go",
-        "perfect_intimidation",
-    ] {
+    for excluded in ["choreographed_sparks", "expose_the_culprit", "go_ninja_go"] {
         assert!(
             registry.get(excluded).is_none(),
             "{excluded} must stay unregistered while a printed mode lacks shipped vocabulary"

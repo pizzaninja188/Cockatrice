@@ -2320,8 +2320,11 @@ pub enum SpellEffectKind {
         subject: EffectSubject,
     },
     /// Replicating Ring and Lightning Coils remove the entire live count of one named kind.
+    /// `None` removes every counter of every kind (CR 122.1), as in Perfect Intimidation's
+    /// "Remove all counters from target creature" and Vampire Hexmage's target permanent.
     RemoveAllCounters {
-        counter: CounterKind,
+        #[serde(default)]
+        counter: Option<CounterKind>,
         #[serde(default)]
         subject: EffectSubject,
     },
@@ -5914,7 +5917,10 @@ impl SpellEffectKind {
         }
         if let SpellEffectKind::PutCounters { counter, .. }
         | SpellEffectKind::RemoveCounters { counter, .. }
-        | SpellEffectKind::RemoveAllCounters { counter, .. } = self
+        | SpellEffectKind::RemoveAllCounters {
+            counter: Some(counter),
+            ..
+        } = self
         {
             counter.validate()?;
         }

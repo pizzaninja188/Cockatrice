@@ -19573,7 +19573,7 @@ fn replicating_ring_program_admits_source_night_threshold_remove_and_tokens() {
             condition: SourceCounterCount(counter: Night, min: Some(8)),
             yes: (steps: [
                 (id: "remove_night", kind: Perform(RemoveAllCounters(
-                    counter: Night, subject: Source,
+                    counter: Some(Night), subject: Source,
                 ))),
                 (id: "make_rings", kind: Perform(CreateTokens(
                     token: "replicated_ring", count: 8, who: Controller,
@@ -19619,7 +19619,7 @@ fn replicating_ring_program_admits_source_night_threshold_remove_and_tokens() {
                 &remove_night.kind,
                 CompiledInstructionKind::Perform(effect)
                     if matches!(effect.as_ref(), SpellEffectKind::RemoveAllCounters {
-                        counter: crate::primitives::CounterKind::Night,
+                        counter: Some(crate::primitives::CounterKind::Night),
                         subject: crate::primitives::EffectSubject::Source,
                     })
             ) && matches!(
@@ -19658,7 +19658,7 @@ fn source_counter_program_support_is_typed_and_rejects_unsupported_contexts() {
     };
 
     let charge_removal = r#"(steps: [(id: "remove_charge", kind: Perform(RemoveAllCounters(
-        counter: Charge, subject: Source,
+        counter: Some(Charge), subject: Source,
     )))], yields: [])"#;
     compile(
         "charge_removal_fixture",
@@ -19674,7 +19674,7 @@ fn source_counter_program_support_is_typed_and_rejects_unsupported_contexts() {
         (id: "threshold", kind: If(
             condition: SourceCounterCount(counter: Night, min: Some(8)),
             yes: (steps: [(id: "remove_night", kind: Perform(RemoveAllCounters(
-                counter: Night, subject: Source,
+                counter: Some(Night), subject: Source,
             )))], yields: []),
             no: (steps: [], yields: []),
         )),
@@ -19748,7 +19748,7 @@ fn source_counter_program_support_is_typed_and_rejects_unsupported_contexts() {
         (
             "non-source all-counter removal",
             r#"(steps: [(id: "remove", kind: Perform(RemoveAllCounters(
-                counter: Charge, subject: Chosen((kind: Creature)),
+                counter: Some(Charge), subject: Chosen((kind: Creature)),
             )))], yields: [])"#,
         ),
         (
@@ -19780,6 +19780,64 @@ fn source_counter_program_support_is_typed_and_rejects_unsupported_contexts() {
         )))], yields: [])"#,
     )
     .expect("a validated zero-count Source placement remains a valid no-op effect");
+}
+
+/// Issue #440: an omitted kind removes every counter (Perfect Intimidation, Vampire Hexmage),
+/// while the named-kind form used by Replicating Ring still parses bare under `IMPLICIT_SOME`.
+#[test]
+fn remove_all_counters_omitted_kind_means_every_kind_on_a_permanent_target() {
+    use crate::primitives::{CounterKind, EffectContext, EffectSubject, TargetFilter, TargetKind};
+    let options =
+        ron::Options::default().with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME);
+    let parse = |ron: &str| {
+        options
+            .from_str::<SpellEffectKind>(ron)
+            .unwrap_or_else(|error| panic!("{ron}: {error}"))
+    };
+
+    let every = parse("RemoveAllCounters(subject: Chosen((kind: Creature)))");
+    assert_eq!(
+        every,
+        SpellEffectKind::RemoveAllCounters {
+            counter: None,
+            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                kind: TargetKind::Creature,
+                ..TargetFilter::default()
+            })),
+        }
+    );
+    every
+        .validate(EffectContext::Spell)
+        .expect("a spell may target a creature");
+    parse("RemoveAllCounters(subject: Chosen((kind: AnyPermanent)))")
+        .validate(EffectContext::Ability)
+        .expect("an ability may target any permanent");
+
+    assert!(matches!(
+        parse("RemoveAllCounters(counter: Night, subject: Source)"),
+        SpellEffectKind::RemoveAllCounters {
+            counter: Some(CounterKind::Night),
+            ..
+        }
+    ));
+    assert!(
+        parse("RemoveAllCounters(subject: Chosen((kind: AnyPlayer)))")
+            .validate(EffectContext::Spell)
+            .is_err(),
+        "counter removal never targets a player"
+    );
+    assert!(
+        parse("RemoveAllCounters(counter: Keyword(Defender), subject: Chosen((kind: Creature)))")
+            .validate(EffectContext::Spell)
+            .is_err(),
+        "a named kind is still validated"
+    );
+    assert!(
+        parse("RemoveAllCounters(subject: Source)")
+            .validate(EffectContext::Spell)
+            .is_err(),
+        "a source subject still requires a permanent ability"
+    );
 }
 
 #[test]

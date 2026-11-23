@@ -7,6 +7,8 @@ mod common;
 mod issue_339_investigate_cohort;
 #[path = "../issue_431_earthbend_cohort.rs"]
 mod issue_431_earthbend_cohort;
+#[path = "../issue_440_remove_all_counters.rs"]
+mod issue_440_remove_all_counters;
 #[path = "../issue_combat_tricks_batch.rs"]
 mod issue_combat_tricks_batch;
 #[path = "../issue_dies_batch.rs"]

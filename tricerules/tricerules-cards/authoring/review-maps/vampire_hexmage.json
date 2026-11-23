@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "fcb2a95b-cef0-4b29-8b2b-538f380aff2b",
+  "spans": [
+    {
+      "face_id": "vampire_hexmage",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "vampire_hexmage",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::FirstStrike",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::RemoveAllCounters",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_440_remove_all_counters::issue_440_vampire_hexmage_removes_all_loyalty_and_the_planeswalker_dies",
+      "covers": "sacrifice is paid on activation; removing every loyalty counter puts the planeswalker into the graveyard"
+    },
+    {
+      "test": "scenario issue_440_remove_all_counters::issue_440_vampire_hexmage_clears_a_noncreature_permanent_and_a_counterless_one",
+      "covers": "a Saga loses its lore counters and stays; a permanent without counters is a legal target"
+    },
+    {
+      "test": "scenario issue_440_remove_all_counters::issue_440_vampire_hexmage_rejects_a_player_target",
+      "covers": "players are not legal targets and no cost is paid"
+    },
+    {
+      "test": "scenario issue_440_remove_all_counters::issue_440_vampire_hexmage_does_nothing_to_a_target_that_left_the_battlefield",
+      "covers": "an exiled target makes the ability do nothing"
+    },
+    {
+      "test": "batch_registry::issue_440_remove_all_counters::issue_440_vampire_hexmage_sacrifices_to_clear_a_target_permanent",
+      "covers": "printed identity, first strike, body and sacrifice ability shape"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

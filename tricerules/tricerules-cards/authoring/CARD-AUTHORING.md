@@ -480,7 +480,9 @@ effect resolves, so a later source control change can make that recipient differ
 chooser. Ability Programs also admit fixed-positive `PutCounters` and `RemoveCounters` on `Source`
 as ordinary effects, plus the existing resultless `RemoveAllCounters` shape, for validated counter
 kinds. Replicating Ring and Lavabrink Floodgates use source-counter placement and threshold checks;
-Replicating Ring and Lightning Coils use removal of all counters of one kind. `EffectsApplicable`
+Replicating Ring and Lightning Coils use removal of all counters of one kind. Omitting
+`RemoveAllCounters`'s `counter` removes every kind; Perfect Intimidation and Vampire Hexmage use
+that form on an ordinary `Chosen` permanent target. `EffectsApplicable`
 is still admitted only on an ability `Choose` branch whose complete body is one resultless,
 positive fixed `PutCounters(counter, Source)` operation for a validated counter kind. The engine
 checks whether that exact source incarnation can receive the counters both when the menu is offered

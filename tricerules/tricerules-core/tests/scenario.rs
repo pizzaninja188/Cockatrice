@@ -1032,6 +1032,8 @@ mod issue_339_investigate;
 mod issue_339_investigate_cohort;
 #[path = "scenario/issue_431_earthbend_cohort.rs"]
 mod issue_431_earthbend_cohort;
+#[path = "scenario/issue_440_remove_all_counters.rs"]
+mod issue_440_remove_all_counters;
 
 #[path = "scenario/issue_322_bargain.rs"]
 mod issue_322_bargain;

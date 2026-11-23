@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "da099c34-74b2-4db8-8583-09bf2c56606f",
+  "spans": [
+    {
+      "face_id": "perfect_intimidation",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/modal_spell"
+      ]
+    },
+    {
+      "face_id": "perfect_intimidation",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/0"
+      ]
+    },
+    {
+      "face_id": "perfect_intimidation",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "ModalDef",
+      "typed_path": "/faces/0/modal_spell"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseHandCards",
+      "typed_path": "/faces/0/modal_spell/modes/0/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::RemoveAllCounters",
+      "typed_path": "/faces/0/modal_spell/modes/1/effects/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_440_remove_all_counters::issue_440_perfect_intimidation_removes_every_counter_kind_from_the_target_creature",
+      "covers": "+1/+1, keyword and stun counters all leave the target; P/T and keyword revert; other creatures keep theirs"
+    },
+    {
+      "test": "scenario issue_440_remove_all_counters::issue_440_perfect_intimidation_counter_mode_is_a_no_op_on_a_counterless_creature",
+      "covers": "a creature without counters is a legal target and is unchanged"
+    },
+    {
+      "test": "scenario issue_440_remove_all_counters::issue_440_perfect_intimidation_counter_mode_rejects_a_noncreature_target",
+      "covers": "the counter mode targets creatures only"
+    },
+    {
+      "test": "scenario issue_440_remove_all_counters::issue_440_perfect_intimidation_opponent_privately_exiles_two_cards_of_their_choice",
+      "covers": "target opponent privately chooses exactly two hand cards, which are exiled rather than discarded"
+    },
+    {
+      "test": "scenario issue_440_remove_all_counters::issue_440_perfect_intimidation_exiles_the_only_card_of_a_one_card_hand",
+      "covers": "a one-card hand exiles its only card"
+    },
+    {
+      "test": "scenario issue_440_remove_all_counters::issue_440_perfect_intimidation_resolves_both_modes_in_printed_order",
+      "covers": "choosing both modes resolves the hand exile before the counter removal"
+    },
+    {
+      "test": "batch_registry::issue_440_remove_all_counters::issue_440_perfect_intimidation_has_the_printed_two_modes",
+      "covers": "printed identity, mana cost, type line and choose-one-or-both mode structure"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

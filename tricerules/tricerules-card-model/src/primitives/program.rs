@@ -5545,7 +5545,9 @@ fn compile_operation(
                 subject: EffectSubject::Source,
             } if context == EffectContext::Ability => {
                 effect.validate(context)?;
-                counter.validate()?;
+                if let Some(counter) = counter {
+                    counter.validate()?;
+                }
                 Ok(Vec::new())
             }
             SpellEffectKind::RemoveCounters {

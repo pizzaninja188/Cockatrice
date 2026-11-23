@@ -1792,20 +1792,29 @@ pub(super) fn change_counters(
     let (subject, counters, removing) = match effect {
         SpellEffectKind::RemoveAllCounters { counter, subject } => {
             for oid in cx.resolve_battlefield_subjects(&subject) {
-                let count = cx
-                    .engine
-                    .state
-                    .objects
-                    .get(&oid)
-                    .map_or(0, |object| object.counter_count(counter));
-                let changed = cx.engine.remove_counters(oid, counter, count);
-                if changed > 0 {
-                    cx.events.push(ev_log(format!(
-                        "{} removes {changed} {} counter(s) from {}",
-                        cx.spell_label,
-                        counter.label(),
-                        object_display_name(&cx.engine.state, cx.engine.registry, oid)
-                    )));
+                // CR 122.1: snapshot the live counts first, so an every-kind removal takes all
+                // kinds in this one instruction before any state-based action is checked.
+                let live: Vec<(CounterKind, u32)> = cx.engine.state.objects.get(&oid).map_or_else(
+                    Vec::new,
+                    |object| match counter {
+                        Some(kind) => vec![(kind, object.counter_count(kind))],
+                        None => object
+                            .counters
+                            .iter()
+                            .map(|(&kind, &count)| (kind, count))
+                            .collect(),
+                    },
+                );
+                for (kind, count) in live {
+                    let changed = cx.engine.remove_counters(oid, kind, count);
+                    if changed > 0 {
+                        cx.events.push(ev_log(format!(
+                            "{} removes {changed} {} counter(s) from {}",
+                            cx.spell_label,
+                            kind.label(),
+                            object_display_name(&cx.engine.state, cx.engine.registry, oid)
+                        )));
+                    }
                 }
             }
             return Ok(EffectOutcome::Continue);
