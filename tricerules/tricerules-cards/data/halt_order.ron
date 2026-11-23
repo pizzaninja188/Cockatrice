@@ -1,0 +1,16 @@
+// Oracle a5fdf1b2-da22-4fa6-810a-85c3f7587535; text checked 2026-11-23 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// No pinned ruling. CR 701.6 (counter), 115.1a/601.2c (spell target), 121.1 (draw), 608.2b
+// (an illegal sole target removes the spell) and 608.2c. Copy of artifact_blast's filter and
+// contradict's counter-then-draw.
+(
+  id: "halt_order",
+  name: "Halt Order",
+  face_id: "halt_order",
+  mana_cost: "{2}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    CounterTargetSpell(spell_filter: (card_type: Some(Artifact))),
+    Draw(count: 1),
+  ],
+)

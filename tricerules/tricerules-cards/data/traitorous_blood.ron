@@ -1,0 +1,17 @@
+// Oracle 7f1a9248-8e7b-46a8-942b-ca18c7da8c4a; text checked 2026-11-23 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// Pinned 2011-09-22 rulings: any creature is legal (even tapped or already controlled) and
+// control does not take attached Auras or Equipment. CR 611.2a, 701.26, 702.10 (haste),
+// 702.19 (trample) and 608.2b. Copy of act_of_treason with both keywords.
+(
+  id: "traitorous_blood",
+  name: "Traitorous Blood",
+  face_id: "traitorous_blood",
+  mana_cost: "{1}{R}{R}",
+  types: ["Sorcery"],
+  spell_effect: [
+    GainControl(duration: UntilEndOfTurn),
+    Untap(subject: Chosen((kind: Creature))),
+    GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Trample, Haste]),
+  ],
+)

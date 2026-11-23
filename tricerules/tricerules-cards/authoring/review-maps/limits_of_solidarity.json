@@ -1,0 +1,62 @@
+{
+  "format_version": 1,
+  "oracle_id": "a2184c37-ee92-40f2-b7d1-97c39ce5f277",
+  "spans": [
+    {
+      "face_id": "limits_of_solidarity",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2"
+      ]
+    },
+    {
+      "face_id": "limits_of_solidarity",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::GainControl",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Untap",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/2"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q59_batch_a::q59_threaten_canary_limits_of_solidarity",
+      "covers": "control, untap, haste and cleanup reversion"
+    },
+    {
+      "test": "scenario q59_batch_a::q59_threaten_limits_of_solidarity_cycles_from_hand",
+      "covers": "cycling pays {2}, discards itself and draws"
+    },
+    {
+      "test": "mechanic_registry::q59_batch_a::q59_threaten_map_definitions",
+      "covers": "control, untap, keyword and cycling wiring"
+    },
+    {
+      "test": "mechanic_registry::q59_batch_a::q59_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

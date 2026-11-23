@@ -1,0 +1,22 @@
+// Oracle 4bae4e34-fcf4-4aee-8da2-5b3ee41a595a; text checked 2026-11-23 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// Pinned 2018-10-05 and 2024-01-12 rulings: surveil happens even when no card is discarded, but
+// not when every target is illegal. CR 701.9, 701.25 and 608.2c (discard, then surveil).
+(
+  id: "thought_erasure",
+  name: "Thought Erasure",
+  face_id: "thought_erasure",
+  mana_cost: "{U}{B}",
+  types: ["Sorcery"],
+  spell_effect: [
+    ChooseHandCards(action: Discard,
+      count: 1,
+      target: (kind: OpponentPlayer),
+      chooser: Controller,
+      card_filter: Some(Nonland),
+      visibility: PublicReveal,
+    ),
+    LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+)

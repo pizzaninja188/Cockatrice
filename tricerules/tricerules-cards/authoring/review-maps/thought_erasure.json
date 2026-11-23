@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "4bae4e34-fcf4-4aee-8da2-5b3ee41a595a",
+  "spans": [
+    {
+      "face_id": "thought_erasure",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "thought_erasure",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ChooseHandCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::LibraryPartition",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q59_batch_a::q59_hand_discard_thought_erasure_surveils_after_discard",
+      "covers": "discard then surveil, including the empty-hand surveil and the keep-on-top path"
+    },
+    {
+      "test": "mechanic_registry::q59_batch_a::q59_hand_discard_map_definitions",
+      "covers": "discard then surveil wiring"
+    },
+    {
+      "test": "mechanic_registry::q59_batch_a::q59_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    },
+    {
+      "test": "scenario q59_batch_a::q59_hand_discard_target_scope_and_empty_hand_draw",
+      "covers": "opponent-only target rejection"
+    },
+    {
+      "test": "scenario q59_batch_a::q59_hand_discard_thought_erasure_fizzles_without_surveil_when_target_leaves",
+      "covers": "all-targets-illegal fizzle with no surveil (2024-01-12 ruling)"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

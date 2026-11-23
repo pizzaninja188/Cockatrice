@@ -1,0 +1,18 @@
+// Oracle 15d794f4-7789-40e3-9ee0-b09250c0516d; text checked 2026-11-23 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// Pinned 2020-11-10 rulings: any creature is legal, control does not take attached Auras or
+// Equipment, and an illegal target means no control change and no scry. CR 611.2a, 701.26,
+// 702.10, 701.22 and 608.2b/c. Copy of act_of_treason plus dissolve's scry.
+(
+  id: "portent_of_betrayal",
+  name: "Portent of Betrayal",
+  face_id: "portent_of_betrayal",
+  mana_cost: "{3}{R}",
+  types: ["Sorcery"],
+  spell_effect: [
+    GainControl(duration: UntilEndOfTurn),
+    Untap(subject: Chosen((kind: Creature))),
+    GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Haste]),
+    Scry(count: 1),
+  ],
+)

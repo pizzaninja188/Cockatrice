@@ -1,0 +1,21 @@
+// Oracle fef94125-aa8d-4147-a609-1e990961bde2; text checked 2026-11-23 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// Pinned 2009-05-01 rulings: the opponent may have no cards, and the draw still happens when no
+// card is discarded. CR 701.9, 121.1 and 608.2c: the discard parks, then the draw resumes.
+(
+  id: "brainbite",
+  name: "Brainbite",
+  face_id: "brainbite",
+  mana_cost: "{2}{U}{B}",
+  types: ["Sorcery"],
+  spell_effect: [
+    ChooseHandCards(action: Discard,
+      count: 1,
+      target: (kind: OpponentPlayer),
+      chooser: Controller,
+      visibility: PublicReveal,
+    ),
+    Draw(count: 1),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+)

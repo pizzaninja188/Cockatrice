@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "7f1a9248-8e7b-46a8-942b-ca18c7da8c4a",
+  "spans": [
+    {
+      "face_id": "traitorous_blood",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::GainControl",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Untap",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/2"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q59_batch_a::q59_threaten_traitorous_blood_grants_trample_and_haste",
+      "covers": "trample and haste on an opponent's tapped creature, reversion, and an own tapped target"
+    },
+    {
+      "test": "mechanic_registry::q59_batch_a::q59_threaten_map_definitions",
+      "covers": "trample and haste keyword wiring"
+    },
+    {
+      "test": "mechanic_registry::q59_batch_a::q59_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

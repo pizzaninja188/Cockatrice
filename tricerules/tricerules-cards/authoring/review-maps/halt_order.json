@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "a5fdf1b2-da22-4fa6-810a-85c3f7587535",
+  "spans": [
+    {
+      "face_id": "halt_order",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "halt_order",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q59_batch_a::q59_counter_filters_halt_order_targets_only_artifacts",
+      "covers": "artifact spell countered and drawn from, with a creature spell rejected"
+    },
+    {
+      "test": "mechanic_registry::q59_batch_a::q59_counter_filter_map_definitions",
+      "covers": "artifact spell filter and draw wiring"
+    },
+    {
+      "test": "mechanic_registry::q59_batch_a::q59_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

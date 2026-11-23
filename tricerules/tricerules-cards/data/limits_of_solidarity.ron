@@ -1,0 +1,24 @@
+// Oracle a2184c37-ee92-40f2-b7d1-97c39ce5f277; text checked 2026-11-23 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// No pinned ruling. CR 611.2a/613.1b (control change), 701.26 (untap), 702.10 (haste), 608.2b
+// (an illegal sole target prevents the whole spell) and 702.29a (cycling is a hand ability).
+// Copy of the reviewed act_of_treason control shape and ridge_rannet cycling.
+(
+  id: "limits_of_solidarity",
+  name: "Limits of Solidarity",
+  face_id: "limits_of_solidarity",
+  mana_cost: "{3}{R}",
+  types: ["Sorcery"],
+  spell_effect: [
+    GainControl(duration: UntilEndOfTurn),
+    Untap(subject: Chosen((kind: Creature))),
+    GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Haste]),
+  ],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    source_zone: Hand,
+    costs: [Mana("{2}"), DiscardSelf],
+    effect: [Draw(count: 1)],
+  )],
+)

@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "a7dad8fe-b0b8-4c6d-ad11-76b402952799",
+  "spans": [
+    {
+      "face_id": "deny_entry",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/spell_effect/2"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q59_batch_a::q59_counter_filters_deny_entry_loots",
+      "covers": "creature spell countered, draw then discard, with an artifact spell rejected"
+    },
+    {
+      "test": "mechanic_registry::q59_batch_a::q59_counter_filter_map_definitions",
+      "covers": "creature spell filter and loot wiring"
+    },
+    {
+      "test": "mechanic_registry::q59_batch_a::q59_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
