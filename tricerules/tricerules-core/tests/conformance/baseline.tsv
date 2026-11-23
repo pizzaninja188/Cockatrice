@@ -406,7 +406,7 @@ bounce_off	0	cast	exercised
 bounding_wolf	0	cast	exercised
 bountiful_landscape	0	ability:2	exercised
 brainstorm	0	cast	exercised
-brambleback_brute	0	ability:0	unsupported: nonmana costs need additional fixture resources
+brambleback_brute	0	ability:0	exercised
 brambleback_brute	0	cast	exercised
 brambleguard_captain	0	cast	exercised
 brambleweft_behemoth	0	cast	exercised
@@ -458,7 +458,7 @@ bulwark_giant	0	cast	exercised
 bumbleflowers_sharepot	0	ability:0	exercised
 bumbleflowers_sharepot	0	cast	exercised
 bump_in_the_night	0	cast	exercised
-burdened_stoneback	0	ability:0	unsupported: nonmana costs need additional fixture resources
+burdened_stoneback	0	ability:0	exercised
 burdened_stoneback	0	cast	exercised
 burglar_rat	0	cast	exercised
 buried_ruin	0	ability:0	exercised
@@ -1416,7 +1416,7 @@ glorious_anthem	0	cast	exercised
 glorious_charge	0	cast	exercised
 glorious_decay	0	cast	exercised
 glory_seeker	0	cast	exercised
-gnarlbark_elm	0	ability:0	unsupported: nonmana costs need additional fixture resources
+gnarlbark_elm	0	ability:0	exercised
 gnarlbark_elm	0	cast	exercised
 gnarled_mass	0	cast	exercised
 gnarlid_colony	0	cast	exercised
@@ -1656,7 +1656,7 @@ hostile_minotaur	0	cast	exercised
 hot_dog_cart	0	ability:0	exercised
 hot_dog_cart	0	cast	exercised
 hour_of_defeat	0	cast	exercised
-hovel_hurler	0	ability:0	unsupported: nonmana costs need additional fixture resources
+hovel_hurler	0	ability:0	exercised
 hovel_hurler	0	cast	exercised
 hover_barrier	0	cast	exercised
 hovermyr	0	cast	exercised
@@ -1763,7 +1763,7 @@ invasion_of_ulgrotha_grandmother_ravi_sengir	1	cast	intentional: face unavailabl
 invasion_reinforcements	0	cast	exercised
 invasive_maneuvers	0	cast	exercised
 involuntary_employment	0	cast	exercised
-ior_ruin_expedition	0	ability:0	unsupported: nonmana costs need additional fixture resources
+ior_ruin_expedition	0	ability:0	exercised
 iroass_champion	0	cast	exercised
 irohs_demonstration	0	cast	exercised
 iron-shield_elf	0	ability:0	exercised
@@ -1869,7 +1869,7 @@ ketria_triome	0	ability:1	exercised
 khalni_ambush_khalni_territory	0	cast	exercised
 khalni_ambush_khalni_territory	1	ability:0	exercised
 khalni_ambush_khalni_territory	1	land	exercised
-khalni_heart_expedition	0	ability:0	unsupported: nonmana costs need additional fixture resources
+khalni_heart_expedition	0	ability:0	exercised
 kill_shot	0	cast	unsupported: target group 0 needs a richer fixture
 killers_mask	0	ability:0	exercised
 killers_mask	0	cast	exercised
@@ -2224,7 +2224,7 @@ moon_heron	0	cast	exercised
 moon_sprite	0	cast	exercised
 moonglove_extractor	0	cast	exercised
 moonglove_winnower	0	cast	exercised
-moonlit_lamenter	0	ability:0	unsupported: nonmana costs need additional fixture resources
+moonlit_lamenter	0	ability:0	exercised
 moonlit_lamenter	0	cast	exercised
 moonrise_cleric	0	cast	exercised
 moorish_cavalry	0	cast	exercised
@@ -2371,7 +2371,7 @@ omega_myr	0	cast	exercised
 ominous_asylum	0	ability:0	exercised
 ominous_asylum	0	ability:1	exercised
 ominous_asylum	0	land	exercised
-ominous_seas	0	ability:0	unsupported: nonmana costs need additional fixture resources
+ominous_seas	0	ability:0	exercised
 ominous_seas	0	ability:1	exercised
 ominous_seas	0	cast	exercised
 omni-cheese_pizza	0	ability:0	exercised
@@ -2657,7 +2657,7 @@ razortrap_gorge	0	land	exercised
 reach_for_the_sky	0	cast	exercised
 reach_through_mists	0	cast	exercised
 reanimate	0	cast	exercised
-reaping_willow	0	ability:0	unsupported: nonmana costs need additional fixture resources
+reaping_willow	0	ability:0	exercised
 reaping_willow	0	cast	exercised
 rearing_embermare	0	cast	exercised
 rebellious_captives	0	ability:0	exercised
@@ -3144,7 +3144,7 @@ soul-guide_lantern	0	cast	exercised
 soul-shackled_zombie	0	cast	exercised
 soul_of_the_rapids	0	cast	exercised
 soul_salvage	0	cast	exercised
-soul_stair_expedition	0	ability:0	unsupported: nonmana costs need additional fixture resources
+soul_stair_expedition	0	ability:0	exercised
 soul_warden	0	cast	exercised
 soulbound_guardians	0	cast	exercised
 soulstone_sanctuary	0	ability:0	exercised
@@ -3340,7 +3340,7 @@ sunken_hollow	0	land	exercised
 sunset_saboteur	0	cast	exercised
 sunshower_druid	0	cast	exercised
 sunspire_griffin	0	cast	exercised
-sunspring_expedition	0	ability:0	unsupported: nonmana costs need additional fixture resources
+sunspring_expedition	0	ability:0	exercised
 sunstar_expansionist	0	cast	exercised
 suntail_hawk	0	cast	exercised
 super_speed	0	cast	exercised
@@ -3784,13 +3784,13 @@ vital_splicer	0	ability:0	unsupported: target group 0 needs a richer fixture
 vitalize	0	cast	exercised
 viv_vision,_teen_synthezoid	0	ability:0	exercised
 viv_vision,_teen_synthezoid	0	cast	exercised
-vivid_crag	0	ability:1	unsupported: nonmana costs need additional fixture resources
-vivid_creek	0	ability:1	unsupported: nonmana costs need additional fixture resources
+vivid_crag	0	ability:1	exercised
+vivid_creek	0	ability:1	exercised
 vivid_grove	0	ability:0	exercised
-vivid_grove	0	ability:1	unsupported: nonmana costs need additional fixture resources
+vivid_grove	0	ability:1	exercised
 vivid_grove	0	land	exercised
-vivid_marsh	0	ability:1	unsupported: nonmana costs need additional fixture resources
-vivid_meadow	0	ability:1	unsupported: nonmana costs need additional fixture resources
+vivid_marsh	0	ability:1	exercised
+vivid_meadow	0	ability:1	exercised
 vizkopa_vampire	0	cast	exercised
 vizzerdrix	0	cast	exercised
 vodalian_arcanist	0	ability:0	exercised

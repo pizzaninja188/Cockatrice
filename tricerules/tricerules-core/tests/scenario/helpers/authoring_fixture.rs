@@ -183,6 +183,51 @@ pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize
     e
 }
 
+/// Direct relocation skips entry, so seed what the definition says the source would carry:
+/// fixed self enters-with-counters replacements, then enough of each counter kind named by this
+/// ability's own source-paid removal cost. Actual-card scenarios prove how counters are earned.
+fn seed_definition_counters(
+    e: &mut GameEngine,
+    oid: u32,
+    face: &tricerules_cards::CardFace,
+    ability: usize,
+) {
+    use tricerules_cards::primitives::{EntersWithCountersAffected, StaticAbilityDef};
+    use tricerules_cards::{AbilityCost, Amount, CounterRemovalPaymentSource};
+    let mut seeds = vec![];
+    for identified in &face.static_abilities {
+        if let StaticAbilityDef::EntersWithCounters {
+            affected: EntersWithCountersAffected::Self_,
+            counter,
+            amount: Amount::Fixed(amount),
+            cast_cost_condition: None,
+        } = &identified.definition
+        {
+            seeds.push((*counter, *amount));
+        }
+    }
+    for cost in face
+        .activated_abilities
+        .get(ability)
+        .into_iter()
+        .flat_map(|definition| &definition.costs)
+    {
+        if let AbilityCost::RemoveCounters {
+            counter: Some(counter),
+            count,
+            payment_source: CounterRemovalPaymentSource::Source,
+        } = cost
+        {
+            seeds.push((*counter, *count));
+        }
+    }
+    let object = e.state.objects.get_mut(&oid).unwrap();
+    for (counter, amount) in seeds {
+        let current = object.counters.get(&counter).copied().unwrap_or_default();
+        object.set_counter(counter, current.max(amount));
+    }
+}
+
 /// Existing reviewed conformance source setup. Other zone abilities need explicit fixtures.
 pub(crate) fn ability_source(
     e: &mut GameEngine,
@@ -240,6 +285,9 @@ pub(crate) fn ability_source(
             printed_loyalty.max(required_loyalty),
         );
     }
+    if source_zone == tricerules_cards::AbilitySourceZone::Battlefield {
+        seed_definition_counters(e, oid, card_face, ability);
+    }
     if card == "pentad_prism" {
         // Direct relocation skips casting/entry. Dedicated paid scenarios prove Sunburst.
         e.state
@@ -248,22 +296,7 @@ pub(crate) fn ability_source(
             .unwrap()
             .set_counter(tricerules_cards::CounterKind::Charge, 2);
     }
-    if card == "magistrates_scepter" && ability == 1 {
-        // The generic ability conformance fixture prepares Scepter's exact three-Charge cost;
-        // actual-card scenarios separately prove how Charge counters are earned.
-        e.state
-            .objects
-            .get_mut(&oid)
-            .unwrap()
-            .set_counter(tricerules_cards::CounterKind::Charge, 3);
-    }
     if card == "pentavus" {
-        // Direct relocation skips entry. Actual-card scenarios independently prove entry.
-        e.state
-            .objects
-            .get_mut(&oid)
-            .unwrap()
-            .set_counter(tricerules_cards::CounterKind::PlusOnePlusOne, 5);
         if ability == 1 {
             // Any controlled Pentavite creature pays, including a real non-token creature.
             let payment = e.state.players[player]
