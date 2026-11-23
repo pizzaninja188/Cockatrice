@@ -1,0 +1,23 @@
+// Oracle 0b16a650-68b0-44dc-a9e1-15b7966e0b18; source/rulings checked 2026-11-22 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 604.2/611.3b (continuous while the source remains on the battlefield), 613.4c (layer 7c),
+// 109.5 ("you" is the source's controller) and 508.1 (attacking is evaluated continuously).
+// Copy of the reviewed Goblin Oriflamme attacking anthem.
+(
+  id: "orcish_oriflamme",
+  name: "Orcish Oriflamme",
+  face_id: "orcish_oriflamme",
+  mana_cost: "{3}{R}",
+  types: ["Enchantment"],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: AnthemPt(
+        filter: (controller: YouControl, attacking: true),
+        delta_power: 1,
+        delta_toughness: 0,
+      ),
+    ),
+  ],
+)

@@ -1,0 +1,113 @@
+{
+  "format_version": 1,
+  "oracle_id": "daed1b38-510b-4698-95c3-05c09f5fabe9",
+  "spans": [
+    {
+      "face_id": "hidden_footblade",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "hidden_footblade",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    },
+    {
+      "face_id": "hidden_footblade",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "hidden_footblade",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::AttachSource",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Equip",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    },
+    {
+      "symbol": "Keyword::FirstStrike",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1/GrantKeywords/keywords"
+    },
+    {
+      "symbol": "Keyword::Haste",
+      "typed_path": "/faces/0/static_abilities/0/definition/AttachedModifier/keywords"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q57_batch_a::q57_flash_equipment_cards_attach_grant_and_move_the_printed_bonus",
+      "covers": "attaches on entry, applies the printed modifier and temporary grant, and moves the modifier on re-equip"
+    },
+    {
+      "test": "scenario q57_batch_a::q57_flash_equipment_cards_fizzle_the_entry_attach_when_the_target_leaves",
+      "covers": "a stale entry target leaves the Equipment unattached"
+    },
+    {
+      "test": "scenario q57_batch_a::q57_flash_equipment_cards_remove_the_entry_trigger_with_no_legal_creature",
+      "covers": "no legal creature removes the entry trigger and leaves the Equipment unattached"
+    },
+    {
+      "test": "scenario q57_batch_a::q57_flash_equipment_cards_reject_an_opponents_creature_as_an_equip_target",
+      "covers": "an opponent-controlled creature is rejected as an equip target without spending mana"
+    },
+    {
+      "test": "scenario q57_batch_a::q57_flash_equipment_cards_flash_on_an_opponents_turn",
+      "covers": "the Equipment is cast at flash timing during the opponent's upkeep"
+    },
+    {
+      "test": "mechanic_registry::q57_batch_a::q57_flash_equipment_map_definitions",
+      "covers": "reviewed identity, flash, entry trigger, attached modifier and equip cost of hidden_footblade"
+    },
+    {
+      "test": "mechanic_registry::q57_batch_a::q57_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for hidden_footblade"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

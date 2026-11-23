@@ -503,7 +503,7 @@ fn q46_target_player_draw_maps_definitions() {
                 },
             }] if match amount {
                 "X" => matches!(count, Amount::X) == is_x,
-                value => matches!(count, Amount::Fixed(n) if *n == value.parse().expect("count")),
+                value => matches!(count, Amount::Fixed(n) if *n == value.parse::<u32>().expect("count")),
             }
         ));
         let targeting = f.targeting.as_ref().expect("target player");

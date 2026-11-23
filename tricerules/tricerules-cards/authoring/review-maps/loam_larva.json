@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "528a19d7-ee79-45a5-b27f-e0bff4213193",
+  "spans": [
+    {
+      "face_id": "loam_larva",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/SearchLibrary"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q57_batch_a::q57_basic_land_search_entry_cases_may_decline_without_shuffling",
+      "covers": "the controller may decline the optional entry search without shuffling"
+    },
+    {
+      "test": "scenario q57_batch_a::q57_basic_land_search_entry_cases_use_their_printed_destination",
+      "covers": "the chosen basic land is revealed, shuffled and put on top of the library"
+    },
+    {
+      "test": "mechanic_registry::q57_batch_a::q57_basic_land_search_map_definitions",
+      "covers": "reviewed identity and typed optional entry search of loam_larva"
+    },
+    {
+      "test": "mechanic_registry::q57_batch_a::q57_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for loam_larva"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

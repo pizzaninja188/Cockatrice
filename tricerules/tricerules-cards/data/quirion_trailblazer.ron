@@ -1,0 +1,44 @@
+// Oracle a26c4076-c488-4700-8e32-4ceeeac2c29a; source/rulings checked 2026-11-22 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.6a (entry trigger), 701.23 (optional basic-land search; a filtered search may fail to
+// find), 701.24 (shuffle) and 614.1c (the found land enters tapped). The 2004-10-04
+// rulings confirm the land is independent of the normal land drop and that the search may fail.
+// Copy of the reviewed farhaven_elf optional entry-search program.
+(
+  id: "quirion_trailblazer",
+  name: "Quirion Trailblazer",
+  face_id: "quirion_trailblazer",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Elf", "Scout"],
+  power: 1,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      program: Some((
+        body: (steps: [
+          (id: "search_choice", kind: Choose(
+            choice: "search",
+            chooser: Controller,
+            optional: true,
+            branches: [(
+              branch_id: "search_for_a_basic_land",
+              presentation: Fallback,
+              cost: None,
+              body: (steps: [
+                (id: "search", kind: Perform(SearchLibrary(
+                  filter: Some((card_type: Some(BasicLand))),
+                  destination: Battlefield(tapped: true),
+                  selection_bounds: Some((min: 0, max: 1)),
+                )))
+              ]),
+            )],
+            otherwise: (),
+          )),
+        ]),
+      )),
+    ),
+  ],
+)

@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "99bc739e-c745-47d8-8401-2f34b6becd85",
+  "spans": [
+    {
+      "face_id": "war_horn",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemPt",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "CreatureScopeFilter::controller_and_attacking",
+      "typed_path": "/faces/0/static_abilities/0/definition/AnthemPt/filter"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q57_batch_a::q57_static_anthems_canary_war_horn_pumps_only_attacking_creatures_you_control",
+      "covers": "the canary pumps only attacking creatures you control and drops the bonus after combat"
+    },
+    {
+      "test": "scenario q57_batch_a::q57_static_anthems_attacking_pump_covers_each_attacking_card",
+      "covers": "the artifact pumps a controlled attacking creature by +1/+0"
+    },
+    {
+      "test": "scenario q57_batch_a::q57_static_anthems_attacking_filter_follows_its_controller",
+      "covers": "an attacking creature controlled by the opponent is not pumped"
+    },
+    {
+      "test": "mechanic_registry::q57_batch_a::q57_static_anthems_map_definitions",
+      "covers": "reviewed identity and typed static anthem of war_horn"
+    },
+    {
+      "test": "mechanic_registry::q57_batch_a::q57_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for war_horn"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

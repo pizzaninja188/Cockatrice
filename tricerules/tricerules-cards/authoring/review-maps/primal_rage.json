@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "d6464ee4-23fc-4d68-bbda-3b53772015d1",
+  "spans": [
+    {
+      "face_id": "primal_rage",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemKeyword",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/static_abilities/0/definition/AnthemKeyword/keyword"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q57_batch_a::q57_static_anthems_cards_apply_to_later_entries_and_stop_when_the_source_leaves",
+      "covers": "trample is granted to controlled creatures, including later entries, and ends when the source leaves"
+    },
+    {
+      "test": "mechanic_registry::q57_batch_a::q57_static_anthems_map_definitions",
+      "covers": "reviewed identity and typed static anthem of primal_rage"
+    },
+    {
+      "test": "mechanic_registry::q57_batch_a::q57_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for primal_rage"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

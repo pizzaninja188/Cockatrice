@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "a26c4076-c488-4700-8e32-4ceeeac2c29a",
+  "spans": [
+    {
+      "face_id": "quirion_trailblazer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "InstructionKind::Choose",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Choose/branches/0/body/steps/0/kind/Perform/SearchLibrary"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q57_batch_a::q57_basic_land_search_entry_cases_may_decline_without_shuffling",
+      "covers": "the controller may decline the optional entry search without shuffling"
+    },
+    {
+      "test": "scenario q57_batch_a::q57_basic_land_search_entry_cases_use_their_printed_destination",
+      "covers": "the chosen basic land enters the battlefield tapped and controlled by the searching player"
+    },
+    {
+      "test": "mechanic_registry::q57_batch_a::q57_basic_land_search_map_definitions",
+      "covers": "reviewed identity and typed optional entry search of quirion_trailblazer"
+    },
+    {
+      "test": "mechanic_registry::q57_batch_a::q57_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for quirion_trailblazer"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

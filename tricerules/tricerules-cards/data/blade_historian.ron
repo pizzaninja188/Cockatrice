@@ -1,0 +1,22 @@
+// Oracle 314f0a96-5e91-42a3-9d75-3f641f22a9ee; source/rulings checked 2026-11-22 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 604.2/611.3b (continuous while the source remains on the battlefield), 613.1f (layer 6),
+// 109.5 ("you" is the source's controller) and 702.4 (double strike). The 2021-04-16 ruling
+// confirms the grant ends if Blade Historian leaves between damage steps.
+// Copy of the reviewed Berserkers' Onslaught attacking keyword anthem.
+(
+  id: "blade_historian",
+  name: "Blade Historian",
+  face_id: "blade_historian",
+  mana_cost: "{R/W}{R/W}{R/W}{R/W}",
+  types: ["Creature", "Human", "Cleric"],
+  power: 2,
+  toughness: 3,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: AnthemKeyword(filter: (controller: YouControl, attacking: true), keyword: DoubleStrike),
+    ),
+  ],
+)

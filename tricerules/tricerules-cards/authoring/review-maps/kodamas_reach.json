@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "1593ea18-2f2f-4ab4-83fb-6ccc0bec8a90",
+  "spans": [
+    {
+      "face_id": "kodamas_reach",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q57_batch_a::q57_basic_land_search_canary_kodamas_reach_splits_two_ordered_basics",
+      "covers": "the canary cast sends the first chosen basic to the battlefield tapped and the second to hand"
+    },
+    {
+      "test": "scenario q57_batch_a::q57_basic_land_search_canary_kodamas_reach_handles_one_or_zero_basics",
+      "covers": "one found basic enters tapped and finding nothing still shuffles once"
+    },
+    {
+      "test": "scenario q57_batch_a::q57_basic_land_search_spell_cases_use_their_printed_destination",
+      "covers": "the spell resolves its basic-land search and shuffles once; split ordering is covered by the canary"
+    },
+    {
+      "test": "mechanic_registry::q57_batch_a::q57_basic_land_search_map_definitions",
+      "covers": "reviewed identity and typed basic-land search of kodamas_reach"
+    },
+    {
+      "test": "mechanic_registry::q57_batch_a::q57_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for kodamas_reach"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

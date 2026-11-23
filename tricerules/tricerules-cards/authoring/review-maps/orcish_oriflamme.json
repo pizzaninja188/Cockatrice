@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "0b16a650-68b0-44dc-a9e1-15b7966e0b18",
+  "spans": [
+    {
+      "face_id": "orcish_oriflamme",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemPt",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "CreatureScopeFilter::controller_and_attacking",
+      "typed_path": "/faces/0/static_abilities/0/definition/AnthemPt/filter"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q57_batch_a::q57_static_anthems_attacking_pump_covers_each_attacking_card",
+      "covers": "the enchantment pumps a controlled attacking creature by +1/+0"
+    },
+    {
+      "test": "scenario q57_batch_a::q57_static_anthems_attacking_filter_follows_its_controller",
+      "covers": "an attacking creature controlled by the opponent is not pumped"
+    },
+    {
+      "test": "mechanic_registry::q57_batch_a::q57_static_anthems_map_definitions",
+      "covers": "reviewed identity and typed static anthem of orcish_oriflamme"
+    },
+    {
+      "test": "mechanic_registry::q57_batch_a::q57_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for orcish_oriflamme"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

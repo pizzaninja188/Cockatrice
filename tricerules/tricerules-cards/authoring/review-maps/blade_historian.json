@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "314f0a96-5e91-42a3-9d75-3f641f22a9ee",
+  "spans": [
+    {
+      "face_id": "blade_historian",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemKeyword",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "CreatureScopeFilter::controller_and_attacking",
+      "typed_path": "/faces/0/static_abilities/0/definition/AnthemKeyword/filter"
+    },
+    {
+      "symbol": "Keyword::DoubleStrike",
+      "typed_path": "/faces/0/static_abilities/0/definition/AnthemKeyword/keyword"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q57_batch_a::q57_static_anthems_canary_blade_historian_grants_double_strike_only_while_attacking",
+      "covers": "the canary grants double strike to its controller's attackers, deals damage in both steps, and drops the grant after combat"
+    },
+    {
+      "test": "scenario q57_batch_a::q57_static_anthems_blade_historian_grants_itself_double_strike",
+      "covers": "Blade Historian attacking under its own grant gains double strike"
+    },
+    {
+      "test": "scenario q57_batch_a::q57_static_anthems_blade_historian_ruling_prevents_regular_damage_after_it_leaves",
+      "covers": "the 2021-04-16 ruling: losing double strike after first-strike damage prevents regular combat damage"
+    },
+    {
+      "test": "mechanic_registry::q57_batch_a::q57_static_anthems_map_definitions",
+      "covers": "reviewed identity and typed static anthem of blade_historian"
+    },
+    {
+      "test": "mechanic_registry::q57_batch_a::q57_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for blade_historian"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
