@@ -191,28 +191,33 @@ pub(crate) fn ability_source(
     face: usize,
     ability: usize,
 ) -> u32 {
-    let oid = if card == "boseiju,_who_endures" && ability == 1 {
-        // Channel discards its hand source; its target/search use the existing fixture resources.
-        super::relocate_to_hand(e, player, card)
-    } else if (card == "fanatic_of_rhonas" && ability == 2)
-        || (card == "metalwork_colossus" && ability == 0)
-    {
-        let oid = super::take_oid_from_library_or_hand(e, player, card);
-        e.state.players[player].graveyard.push(oid);
-        e.state.objects.get_mut(&oid).unwrap().zone = Zone::Graveyard;
-        oid
-    } else {
-        // Select the fixture face before the first battlefield publication seeds its slots.
-        // This is initial setup, not a front-face permanent changing faces in play.
-        let oid = super::relocate_to_hand(e, player, card);
-        e.state.objects.get_mut(&oid).unwrap().face_up_index = face;
-        super::relocate_to_battlefield(e, player, card, false)
-    };
-    e.state.objects.get_mut(&oid).unwrap().face_up_index = face;
     let card_face = tricerules_cards::registry::global()
         .get(card)
         .and_then(|definition| definition.face(face))
         .expect("conformance source face exists in the card registry");
+    // The printed ability's own functioning zone decides where the source starts.
+    let source_zone = card_face
+        .activated_abilities
+        .get(ability)
+        .map(|definition| definition.source_zone)
+        .unwrap_or_default();
+    let oid = match source_zone {
+        tricerules_cards::AbilitySourceZone::Hand => super::relocate_to_hand(e, player, card),
+        tricerules_cards::AbilitySourceZone::Graveyard => {
+            let oid = super::take_oid_from_library_or_hand(e, player, card);
+            e.state.players[player].graveyard.push(oid);
+            e.state.objects.get_mut(&oid).unwrap().zone = Zone::Graveyard;
+            oid
+        }
+        tricerules_cards::AbilitySourceZone::Battlefield => {
+            // Select the fixture face before the first battlefield publication seeds its slots.
+            // This is initial setup, not a front-face permanent changing faces in play.
+            let oid = super::relocate_to_hand(e, player, card);
+            e.state.objects.get_mut(&oid).unwrap().face_up_index = face;
+            super::relocate_to_battlefield(e, player, card, false)
+        }
+    };
+    e.state.objects.get_mut(&oid).unwrap().face_up_index = face;
     let printed_loyalty = card_face.loyalty.unwrap_or_default();
     let required_loyalty = card_face
         .activated_abilities

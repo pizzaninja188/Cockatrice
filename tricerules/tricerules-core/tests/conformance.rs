@@ -538,9 +538,6 @@ fn evaluate(case: &Case) -> Result<Outcome, String> {
     let actor = e.state.players[0].id;
     let prepared = (|| -> Result<RuledCommand, String> {
         let mut command = if let Some(index) = case.ability {
-            if !def.face(case.face).unwrap().is_permanent() {
-                return Err("nonbattlefield activated ability needs a zone fixture".into());
-            }
             let oid =
                 helpers::authoring_fixture::ability_source(&mut e, 0, &case.card, case.face, index);
             offers::activation(&mut e, actor, oid, index as u32)?
