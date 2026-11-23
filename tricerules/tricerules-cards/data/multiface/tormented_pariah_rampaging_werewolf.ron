@@ -1,0 +1,39 @@
+// Tormented Pariah // Rampaging Werewolf (Innistrad) — transforming DFC (CR 701.27/712).
+(
+    id: "tormented_pariah_rampaging_werewolf",
+    name: "Tormented Pariah // Rampaging Werewolf",
+    layout: Transform,
+    faces: [
+        (
+            name: "Tormented Pariah",
+            face_id: "tormented_pariah",
+            mana_cost: "{3}{R}",
+            types: ["Creature", "Human", "Warrior", "Werewolf"],
+            power: Some(3),
+            toughness: Some(2),
+            triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: OracleLines([1]),
+                trigger: AtBeginningOfUpkeep(player: AnyPlayer),
+                intervening_if: Some(SpellsCastLastTurn(players: All, aggregate: Sum, min: Some(0), max: Some(0))),
+                effect: [ChangeSourceFace(action: Transform)],
+            )],
+        ),
+        (
+            name: "Rampaging Werewolf",
+            face_id: "rampaging_werewolf",
+            mana_cost: "",
+            color_indicator: Some([Red]),
+            types: ["Creature", "Werewolf"],
+            power: Some(6),
+            toughness: Some(4),
+            triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: OracleLines([1]),
+                trigger: AtBeginningOfUpkeep(player: AnyPlayer),
+                intervening_if: Some(SpellsCastLastTurn(players: All, aggregate: Maximum, min: Some(2))),
+                effect: [ChangeSourceFace(action: Transform)],
+            )],
+        ),
+    ],
+)

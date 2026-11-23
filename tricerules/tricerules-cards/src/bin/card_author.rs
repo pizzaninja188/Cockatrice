@@ -359,7 +359,9 @@ fn run() -> Result<Value, String> {
         {
             return Err("target is already implemented; refusing clone collision".into());
         }
-        if new_id.contains(['\\', ':']) || new_id == "." || new_id == ".." {
+        // Ids may keep `"`/`:`; output files use the portable stem (`kongming,_sleeping_dragon`).
+        let new_stem = tricerules_cards::portable_file_stem(&new_id);
+        if new_stem.is_empty() || new_stem == "." || new_stem == ".." {
             return Err("unsafe output identity".into());
         }
         let out = PathBuf::from(required(&options, "out")?);
@@ -381,9 +383,9 @@ fn run() -> Result<Value, String> {
         let from_source = exact_source(&sources, &registry.get(id).unwrap().name)?;
         // A new directory prevents overwriting a user's edited draft or partial prior output.
         fs::create_dir(&out).map_err(|e| e.to_string())?;
-        new_file(&out.join(format!("{new_id}.draft.ron")), &draft)?;
+        new_file(&out.join(format!("{new_stem}.draft.ron")), &draft)?;
         new_file(
-            &out.join(format!("{new_id}.json")),
+            &out.join(format!("{new_stem}.json")),
             &serde_json::to_string_pretty(&map).unwrap(),
         )?;
         new_file(
@@ -476,7 +478,7 @@ fn run() -> Result<Value, String> {
 fn read_map(package: &Path, id: &str) -> Result<Value, String> {
     let path = package
         .join("authoring/review-maps")
-        .join(format!("{id}.json"));
+        .join(format!("{}.json", tricerules_cards::portable_file_stem(id)));
     if !path.exists() {
         return Ok(Value::Null);
     }

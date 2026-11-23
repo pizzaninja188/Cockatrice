@@ -291,14 +291,17 @@ pub(super) fn assert_zone_integrity(e: &GameEngine, expected_objects: usize, ctx
                 .objects
                 .get(&item.id)
                 .is_some_and(|object| object.zone == Zone::Stack)
+                && !e.state.stack.iter().any(|stacked| stacked.id == item.id)
         });
     for item in e.state.stack.iter().chain(parked) {
+        // Abilities and spell copies (CR 707.10) have no backing physical object.
+        let physical = item.ability_text.is_none() && !item.is_copy;
         assert!(
-            seen.insert(item.id) || item.ability_text.is_some(),
+            seen.insert(item.id) || !physical,
             "{ctx}: stack object {} also in a zone",
             item.id
         );
-        if item.ability_text.is_none() {
+        if physical {
             count_in_zones += 1; // a spell on the stack is a real object
         }
     }

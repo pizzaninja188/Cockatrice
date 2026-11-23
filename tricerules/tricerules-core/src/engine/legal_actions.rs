@@ -15,6 +15,7 @@ use super::targeting::{
 use super::*;
 
 pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
+    let _memo = eng.read_memo_scope();
     // Handlers build their batches before the command-boundary prompt publisher assigns a fresh
     // ID, so this early snapshot deliberately stays inactive for an unassigned offer. The command
     // boundary refreshes it after publication; initial/reconnect/terminal batches end here.
@@ -2314,15 +2315,17 @@ pub(super) fn cast_face_count_for_source(
     source: &rv1::cast_source::Location,
 ) -> usize {
     match source {
-        rv1::cast_source::Location::HandIndex(hand_index) => legal_hand_actions(eng, pid)
-            .iter()
-            .filter(|action| {
-                action.hand_index == *hand_index
-                    && action.kind == rv1::HandActionKind::HandActionCastSpell as i32
-            })
-            .map(|action| action.face_index)
-            .collect::<std::collections::BTreeSet<_>>()
-            .len(),
+        rv1::cast_source::Location::HandIndex(hand_index) => {
+            legal_hand_actions_for_slots(eng, pid, Some(*hand_index as usize))
+                .iter()
+                .filter(|action| {
+                    action.hand_index == *hand_index
+                        && action.kind == rv1::HandActionKind::HandActionCastSpell as i32
+                })
+                .map(|action| action.face_index)
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+        }
         rv1::cast_source::Location::GraveyardObjectId(object_id)
         | rv1::cast_source::Location::ExileObjectId(object_id)
         | rv1::cast_source::Location::CommandZoneObjectId(object_id)
@@ -2338,6 +2341,18 @@ pub(super) fn cast_face_count_for_source(
 }
 
 fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandAction> {
+    legal_hand_actions_for_slots(eng, pid, None)
+}
+
+/// Hand offers for every slot, or for `only_slot` alone. Each slot's offers depend only on the
+/// shared game state, so restricting the enumeration yields exactly that slot's subset of the
+/// full list without evaluating the costs, modes and targets of every other hand card.
+fn legal_hand_actions_for_slots(
+    eng: &GameEngine,
+    pid: PlayerId,
+    only_slot: Option<usize>,
+) -> Vec<rv1::LegalHandAction> {
+    let in_scope = |hand_index: usize| only_slot.is_none_or(|slot| slot == hand_index);
     let legendary = eng.legendary_resolution_cast_for(pid);
     if let Some(opening) = &eng.state.opening {
         let Some((bottoming_player, _)) = opening.bottom else {
@@ -2353,6 +2368,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
             .hand
             .iter()
             .enumerate()
+            .filter(|(hand_index, _)| in_scope(*hand_index))
             .map(|(hand_index, &oid)| {
                 let name = object_display_name(&eng.state, eng.registry, oid);
                 hand_action(
@@ -2391,6 +2407,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                 .hand
                 .iter()
                 .enumerate()
+                .filter(|(hand_index, _)| in_scope(*hand_index))
                 .map(|(hand_index, &oid)| {
                     let name = object_display_name(&eng.state, eng.registry, oid);
                     hand_action(
@@ -2411,6 +2428,9 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
     let combat_decl_lock = priority_locked_for_combat_declaration(&eng.state);
     let mut actions = Vec::new();
     for (hand_index, &oid) in eng.state.players[player_index].hand.iter().enumerate() {
+        if !in_scope(hand_index) {
+            continue;
+        }
         let Some(card_id) = eng.state.objects.get(&oid).map(|object| &object.card_id) else {
             continue;
         };

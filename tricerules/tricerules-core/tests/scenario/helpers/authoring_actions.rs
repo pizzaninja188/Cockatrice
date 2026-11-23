@@ -24,126 +24,7 @@ pub(crate) fn activation(
         .cost_choices_by_ability
         .get(&key)
         .ok_or("ability not offered by generic battlefield fixture")?;
-    let costs = if e.state.objects[&object].card_id == "magistrates_scepter" && index == 1 {
-        // The source fixture seeds the exact required count. Build the receipt from the engine's
-        // current offer so the conformance harness exercises the same source generation and
-        // Charge option that a client must submit.
-        if !choices.non_mana_costs_payable || choices.choices.len() != 1 {
-            return Err("Magistrate's Scepter Charge-removal offer is not payable".into());
-        }
-        let choice = &choices.choices[0];
-        if choice.kind() != CostChoiceKind::RemoveCounters
-            || choice.zone != CostChoiceZone::Battlefield as i32
-        {
-            return Err("Magistrate's Scepter did not offer its battlefield counter cost".into());
-        }
-        let removal = choice
-            .counter_removal
-            .as_ref()
-            .ok_or("Magistrate's Scepter omitted its counter-removal offer")?;
-        if removal.count != 3
-            || removal.options.len() != 1
-            || removal.options[0].label != "charge"
-            || removal.options[0].available_count != 3
-        {
-            return Err("Magistrate's Scepter counter-removal offer changed".into());
-        }
-        let source = removal
-            .source
-            .as_ref()
-            .ok_or("Magistrate's Scepter omitted the source payment reference")?;
-        if source.object_id != object
-            || e.state
-                .zone_change_generation
-                .get(&object)
-                .copied()
-                .unwrap_or(0)
-                != source.zone_change_generation
-        {
-            return Err("Magistrate's Scepter source payment reference is stale".into());
-        }
-        vec![CostSelection {
-            cost_index: choice.cost_index,
-            selection: Some(cost_selection::Selection::CounterRemoval(
-                CounterRemovalSelection {
-                    source: Some(*source),
-                    option_id: removal.options[0].option_id,
-                },
-            )),
-        }]
-    } else if matches!(
-        e.state.objects[&object].card_id.as_str(),
-        "pentavus" | "pentad_prism"
-    ) && index == 0
-    {
-        // These bounded fixtures select their single engine-authored fixed-kind source cost.
-        if !choices.non_mana_costs_payable || choices.choices.len() != 1 {
-            return Err("counter fixture is not payable".into());
-        }
-        let choice = &choices.choices[0];
-        let removal = choice
-            .counter_removal
-            .as_ref()
-            .ok_or("missing counter offer")?;
-        if removal.count != 1 || removal.options.len() != 1 {
-            return Err("unexpected Pentavus counter offer".into());
-        }
-        vec![CostSelection {
-            cost_index: choice.cost_index,
-            selection: Some(cost_selection::Selection::CounterRemoval(
-                CounterRemovalSelection {
-                    source: removal.source,
-                    option_id: removal.options[0].option_id,
-                },
-            )),
-        }]
-    } else if e.state.objects[&object].card_id == "nautiloid_ship" && index == 0 {
-        // The generic conformance battlefield has no creatures to crew a Vehicle. Nautiloid
-        // supplies two 2-power creatures in that exact case fixture; select from its live offer
-        // until the independently specified Crew 3 threshold is met.
-        if !choices.non_mana_costs_payable || choices.choices.len() != 1 {
-            return Err("Nautiloid Ship Crew offer is not payable".into());
-        }
-        let choice = &choices.choices[0];
-        let aggregate = choice
-            .aggregate_minimum
-            .as_ref()
-            .ok_or("Nautiloid Ship omitted its Crew 3 aggregate")?;
-        if choice.kind() != CostChoiceKind::Tap
-            || choice.zone != CostChoiceZone::Battlefield as i32
-            || aggregate.minimum != 3
-            || aggregate.contribution_kind() != ObjectContributionKind::CurrentPower
-        {
-            return Err("Nautiloid Ship Crew 3 cost offer changed".into());
-        }
-        let mut objects = Vec::new();
-        let mut contribution = 0i64;
-        for candidate in &choice.candidate_objects {
-            let Some(object) = candidate.object else {
-                continue;
-            };
-            if candidate.contribution <= 0 {
-                continue;
-            }
-            objects.push(object);
-            contribution += candidate.contribution;
-            if contribution >= i64::from(aggregate.minimum) {
-                break;
-            }
-        }
-        if contribution < i64::from(aggregate.minimum) {
-            return Err("Nautiloid Ship Crew fixture lacks enough current power".into());
-        }
-        vec![CostSelection {
-            cost_index: choice.cost_index,
-            selection: Some(cost_selection::Selection::BattlefieldObjects(
-                CostObjectRefs { objects },
-            )),
-        }]
-    } else {
-        costs(Some(choices))?
-    };
-    let (zone, generation, activatable) = if let Some(action) = legal
+    let (zone, generation, activatable, mana_cost) = if let Some(action) = legal
         .zone_ability_actions
         .iter()
         .find(|a| a.object_id == object && a.ability_index == index)
@@ -156,6 +37,7 @@ pub(crate) fn activation(
             action.source_zone,
             action.zone_change_generation,
             ability.activatable,
+            ability.mana_cost.clone(),
         )
     } else {
         let source = batch
@@ -179,8 +61,47 @@ pub(crate) fn activation(
             AbilitySourceZone::Battlefield as i32,
             source.zone_change_generation,
             ability.activatable,
+            ability.mana_cost.clone(),
         )
     };
+    let returns_tapped_creature = zone == AbilitySourceZone::Hand as i32
+        && choices
+            .choices
+            .iter()
+            .any(|choice| choice.kind() == CostChoiceKind::ReturnTappedCreature);
+    let aggregate_counters = choices
+        .choices
+        .iter()
+        .any(|choice| choice.counter_removal_group.is_some());
+    if returns_tapped_creature || aggregate_counters {
+        // These costs are bound in the engine's staged payment window: a returned creature after
+        // mana abilities may tap new candidates, and aggregate counter contributions against the
+        // window's trusted inventory. The drain commits the window with its published candidate.
+        if !choices.non_mana_costs_payable || !activatable {
+            return Err("staged activation is not currently payable".into());
+        }
+        let cost_selections = if aggregate_counters {
+            costs(Some(choices))?
+        } else {
+            vec![]
+        };
+        return Ok(RuledCommand {
+            cmd: Some(Cmd::BeginAbilityActivation(BeginAbilityActivation {
+                source_object_id: object,
+                expected_zone_change_generation: generation,
+                ability_index: index,
+                source_zone: zone,
+                cost_selections,
+                flex_payments: if aggregate_counters {
+                    phyrexian_mana_choices(&mana_cost)?
+                } else {
+                    vec![]
+                },
+                ..Default::default()
+            })),
+        });
+    }
+    let costs = costs(Some(choices))?;
     let mut x_value = 0;
     let mut activation_targets = Vec::new();
     if let Some(offer) = legal.valid_targets_by_ability.get(&key) {
@@ -408,6 +329,44 @@ pub(crate) fn targets(
     Ok(result)
 }
 
+/// Announce mana for every Phyrexian or hybrid Phyrexian pip of an engine-offered ability cost.
+/// Staged aggregate activations require each such pip to be chosen explicitly.
+fn phyrexian_mana_choices(cost: &str) -> Result<Vec<FlexPipPayment>, String> {
+    if cost.is_empty() {
+        return Ok(vec![]);
+    }
+    let cost = ManaCost::parse(cost).map_err(|error| format!("offered mana cost: {error}"))?;
+    Ok(cost
+        .pips
+        .iter()
+        .enumerate()
+        .filter_map(|(index, pip)| {
+            // A single-color Phyrexian pip's mana branch is implied; only hybrid Phyrexian pips
+            // announce which color pays.
+            let mana_color = match pip {
+                ManaSymbol::Phyrexian(_) => 0,
+                ManaSymbol::HybridPhyrexian(color, _) => mana_color(*color) as i32,
+                _ => return None,
+            };
+            Some(FlexPipPayment {
+                pip_index: index as u32,
+                pay_life: false,
+                mana_color,
+            })
+        })
+        .collect())
+}
+
+fn mana_color(color: tricerules_cards::mana::ColorPip) -> ManaColor {
+    match color {
+        tricerules_cards::mana::ColorPip::W => ManaColor::White,
+        tricerules_cards::mana::ColorPip::U => ManaColor::Blue,
+        tricerules_cards::mana::ColorPip::B => ManaColor::Black,
+        tricerules_cards::mana::ColorPip::R => ManaColor::Red,
+        tricerules_cards::mana::ColorPip::G => ManaColor::Green,
+    }
+}
+
 /// Choose one announced full-mana branch from the engine's offered cost, never Oracle display data.
 pub(crate) fn hybrid_phyrexian_choices(cost: &str) -> Result<Vec<FlexPipPayment>, String> {
     let cost = ManaCost::parse(cost).map_err(|error| format!("offered mana cost: {error}"))?;
@@ -435,31 +394,152 @@ pub(crate) fn hybrid_phyrexian_choices(cost: &str) -> Result<Vec<FlexPipPayment>
         .collect())
 }
 
+/// Modes for triggers and activated abilities, which never carry linked cast costs.
 pub(crate) fn modes(
     e: &GameEngine,
     actor: i32,
     min: u32,
     offers: &[LegalSpellMode],
 ) -> Result<Vec<SelectedSpellMode>, String> {
+    let (modes, linked) = spell_modes(e, actor, min, offers)?;
+    if !linked.is_empty() {
+        return Err("linked cast cost offered outside a spell cast".into());
+    }
+    Ok(modes)
+}
+
+/// Spell modes plus the Spree/Tiered cast-cost options linked to the chosen modes. The linked
+/// coordinates are copied verbatim into `cast_cost_groups`.
+pub(crate) fn spell_modes(
+    e: &GameEngine,
+    actor: i32,
+    min: u32,
+    offers: &[LegalSpellMode],
+) -> Result<(Vec<SelectedSpellMode>, Vec<LinkedCastCostOption>), String> {
     let mut result = vec![];
+    let mut linked = vec![];
     for mode in offers.iter().filter(|m| m.selectable) {
         if result.len() == min as usize {
             break;
-        }
-        if mode.linked_cast_cost.is_some() {
-            continue;
         }
         if let Ok(targets) = targets(e, actor, mode.targets.as_ref()) {
             result.push(SelectedSpellMode {
                 mode_index: mode.mode_index,
                 targets,
             });
+            linked.extend(mode.linked_cast_cost);
         }
     }
     if result.len() != min as usize {
         return Err("modal fixture cannot satisfy required selectable modes".into());
     }
+    Ok((result, linked))
+}
+
+/// Required cast-cost groups and mode-linked options, each filled from that option's own
+/// engine-published candidates. Additional mana is funded later by `pay`'s preview.
+pub(crate) fn cast_cost_groups(
+    offer: Option<&LegalCostChoices>,
+    linked: &[LinkedCastCostOption],
+) -> Result<Vec<CastCostGroupSelection>, String> {
+    let Some(offer) = offer else {
+        if linked.is_empty() {
+            return Ok(vec![]);
+        }
+        return Err("linked cast cost without published cast-cost groups".into());
+    };
+    let mut result = vec![];
+    for group in &offer.cast_cost_groups {
+        let chosen: Vec<_> = linked
+            .iter()
+            .filter(|option| option.group_index == group.group_index)
+            .collect();
+        if !chosen.is_empty() {
+            for link in chosen {
+                let option = group
+                    .options
+                    .iter()
+                    .find(|option| option.option_index == link.option_index)
+                    .ok_or("linked cast cost names an unpublished option")?;
+                result.push(cast_cost_option_selection(group.group_index, option)?);
+            }
+            continue;
+        }
+        let mut picked = 0;
+        for option in group.options.iter().filter(|option| option.selectable) {
+            if picked == group.min {
+                break;
+            }
+            if let Ok(selection) = cast_cost_option_selection(group.group_index, option) {
+                result.push(selection);
+                picked += 1;
+            }
+        }
+        if picked < group.min {
+            return Err("required cast-cost group has no satisfiable option".into());
+        }
+    }
+    if linked.iter().any(|link| {
+        !offer
+            .cast_cost_groups
+            .iter()
+            .any(|g| g.group_index == link.group_index)
+    }) {
+        return Err("linked cast cost names an unpublished group".into());
+    }
     Ok(result)
+}
+
+fn cast_cost_option_selection(
+    group_index: u32,
+    option: &LegalCastCostOption,
+) -> Result<CastCostGroupSelection, String> {
+    use cast_cost_group_selection::SelectedObject;
+    let mut selection = CastCostGroupSelection {
+        group_index,
+        option_index: option.option_index,
+        ..Default::default()
+    };
+    if !option.candidate_objects.is_empty() || option.object_min > 0 {
+        let minimum = option.aggregate_minimum.map_or(0, |a| i64::from(a.minimum));
+        let mut objects = vec![];
+        let mut contribution = 0i64;
+        for candidate in &option.candidate_objects {
+            if contribution >= minimum && objects.len() >= option.object_min as usize {
+                break;
+            }
+            if option.object_max > 0 && objects.len() == option.object_max as usize {
+                break;
+            }
+            let Some(object) = candidate.object else {
+                continue;
+            };
+            if minimum > 0 && candidate.contribution <= 0 {
+                continue;
+            }
+            objects.push(object);
+            contribution += candidate.contribution;
+        }
+        if contribution < minimum || objects.len() < option.object_min as usize {
+            return Err("cast-cost cohort lacks offered candidates".into());
+        }
+        selection.battlefield_objects = Some(CostObjectRefs { objects });
+    } else if let Some(&id) = option.valid_permanent_ids.first() {
+        selection.selected_object = Some(SelectedObject::PermanentId(id));
+        selection.expected_zone_change_generation = option
+            .valid_permanent_generations
+            .first()
+            .copied()
+            .ok_or("cast-cost permanent omitted its generation")?;
+    } else if let Some(&slot) = option.valid_hand_indices.first() {
+        selection.selected_object = Some(SelectedObject::HandIndex(slot));
+    } else if !matches!(
+        option.kind(),
+        CastCostOptionKind::Mana | CastCostOptionKind::PayLife
+    ) {
+        return Err("cast-cost option offered no object candidate".into());
+    }
+    Ok(selection)
 }
 
 pub(crate) fn costs(offer: Option<&LegalCostChoices>) -> Result<Vec<CostSelection>, String> {
@@ -469,17 +549,18 @@ pub(crate) fn costs(offer: Option<&LegalCostChoices>) -> Result<Vec<CostSelectio
     if !offer.non_mana_costs_payable {
         return Err("nonmana costs need additional fixture resources".into());
     }
-    if offer.cast_cost_groups.iter().any(|g| g.min > 0) {
-        return Err("required cast-cost group needs a specialized fixture".into());
-    }
     let mut used = std::collections::BTreeSet::new();
     let mut result = vec![];
     for choice in &offer.choices {
-        if choice.min == 0 {
+        if let Some(selection) = counter_or_aggregate_selection(choice, &mut used)? {
+            result.push(CostSelection {
+                cost_index: choice.cost_index,
+                selection: Some(selection),
+            });
             continue;
         }
-        if choice.counter_removal.is_some() || choice.aggregate_minimum.is_some() {
-            return Err("counter or aggregate cost needs a specialized fixture".into());
+        if choice.min == 0 {
+            continue;
         }
         let selection = if choice.zone == CostChoiceZone::Hand as i32 {
             let id = choice
@@ -532,6 +613,98 @@ pub(crate) fn costs(offer: Option<&LegalCostChoices>) -> Result<Vec<CostSelectio
     Ok(result)
 }
 
+/// Select engine-offered counter-removal sources and aggregate-minimum objects (Crew, total
+/// power). Returns `None` for choices with neither shape so the caller's plain path handles them.
+fn counter_or_aggregate_selection(
+    choice: &LegalCostChoice,
+    used: &mut std::collections::BTreeSet<(i32, u32)>,
+) -> Result<Option<cost_selection::Selection>, String> {
+    if let Some(group) = &choice.counter_removal_group {
+        let mut contributions = vec![];
+        let mut remaining = group.required_count;
+        for candidate in &group.candidates {
+            if remaining == 0 {
+                break;
+            }
+            let Some(object) = candidate.object else {
+                continue;
+            };
+            for option in &candidate.options {
+                if remaining == 0 {
+                    break;
+                }
+                let count = option.available_count.min(remaining);
+                if count == 0 {
+                    continue;
+                }
+                contributions.push(CounterRemovalContribution {
+                    object: Some(object),
+                    option_id: option.option_id,
+                    count,
+                });
+                remaining -= count;
+            }
+        }
+        if remaining > 0 {
+            return Err("counter-removal group lacks enough offered counters".into());
+        }
+        return Ok(Some(cost_selection::Selection::CounterRemovalGroup(
+            CounterRemovalGroupSelection { contributions },
+        )));
+    }
+    if let Some(removal) = &choice.counter_removal {
+        let option = removal
+            .options
+            .iter()
+            .find(|option| option.available_count >= removal.count)
+            .ok_or("counter-removal cost lacks enough offered counters")?;
+        let source = match removal.source {
+            Some(source) => source,
+            None => choice
+                .candidate_objects
+                .iter()
+                .find_map(|candidate| candidate.object)
+                .ok_or("counter-removal cost offered no source candidate")?,
+        };
+        return Ok(Some(cost_selection::Selection::CounterRemoval(
+            CounterRemovalSelection {
+                source: Some(source),
+                option_id: option.option_id,
+            },
+        )));
+    }
+    let Some(aggregate) = &choice.aggregate_minimum else {
+        return Ok(None);
+    };
+    let mut objects = vec![];
+    let mut contribution = 0i64;
+    for candidate in &choice.candidate_objects {
+        if contribution >= i64::from(aggregate.minimum) && objects.len() >= choice.min as usize {
+            break;
+        }
+        let Some(object) = candidate.object else {
+            continue;
+        };
+        if candidate.contribution <= 0 || used.contains(&(choice.zone, object.object_id)) {
+            continue;
+        }
+        if choice.max > 0 && objects.len() == choice.max as usize {
+            break;
+        }
+        used.insert((choice.zone, object.object_id));
+        objects.push(object);
+        contribution += candidate.contribution;
+    }
+    if contribution < i64::from(aggregate.minimum) || objects.len() < choice.min as usize {
+        return Err("aggregate cost needs more offered contribution".into());
+    }
+    let refs = CostObjectRefs { objects };
+    Ok(Some(match CostChoiceZone::try_from(choice.zone) {
+        Ok(CostChoiceZone::Graveyard) => cost_selection::Selection::GraveyardObjects(refs),
+        _ => cost_selection::Selection::BattlefieldObjects(refs),
+    }))
+}
+
 pub(crate) fn pay(e: &GameEngine, actor: i32, command: &mut RuledCommand) -> Result<(), String> {
     fn query(command: &RuledCommand) -> PreviewPayment {
         let mut q = PreviewPayment {
@@ -564,6 +737,7 @@ pub(crate) fn pay(e: &GameEngine, actor: i32, command: &mut RuledCommand) -> Res
     )
     .map_err(|err| format!("payment cost: {err:?}"))?;
     let mut mana = selection.mana.unwrap_or_default();
+    let mut generic = 0;
     for pip in cost.pips {
         match pip {
             ManaSymbol::W => mana.w += 1,
@@ -572,7 +746,7 @@ pub(crate) fn pay(e: &GameEngine, actor: i32, command: &mut RuledCommand) -> Res
             ManaSymbol::R => mana.r += 1,
             ManaSymbol::G => mana.g += 1,
             ManaSymbol::C => mana.c += 1,
-            ManaSymbol::Generic(n) | ManaSymbol::MonoHybrid(n, _) => mana.c += n,
+            ManaSymbol::Generic(n) | ManaSymbol::MonoHybrid(n, _) => generic += n,
             ManaSymbol::Hybrid(c, _) | ManaSymbol::Phyrexian(c) => match c {
                 tricerules_cards::mana::ColorPip::W => mana.w += 1,
                 tricerules_cards::mana::ColorPip::U => mana.u += 1,
@@ -586,6 +760,26 @@ pub(crate) fn pay(e: &GameEngine, actor: i32, command: &mut RuledCommand) -> Res
             ManaSymbol::X => return Err("unresolved X payment".into()),
         }
     }
+    // Generic mana comes from colorless first, then from whatever colored mana remains in the
+    // payer's pool after the colored pips above.
+    let pool = e
+        .state
+        .player_idx(actor)
+        .map(|index| e.state.players[index].mana_pool)
+        .unwrap_or_default();
+    for (spent, available) in [
+        (&mut mana.c, pool.colorless),
+        (&mut mana.w, pool.white),
+        (&mut mana.u, pool.blue),
+        (&mut mana.b, pool.black),
+        (&mut mana.r, pool.red),
+        (&mut mana.g, pool.green),
+    ] {
+        let take = generic.min(available.saturating_sub(*spent));
+        *spent += take;
+        generic -= take;
+    }
+    mana.c += generic;
     selection.mana = Some(mana);
     match command.cmd.as_mut().unwrap() {
         Cmd::CastSpell(c) => c.payment = Some(selection),

@@ -396,6 +396,10 @@ fn drain(e: &mut GameEngine, mut batch: RuledEventBatch, budget: usize) -> Resul
                     Cmd::CommitAbilityActivation(CommitAbilityActivation {
                         transaction_id: view.transaction_id,
                         expected_revision: view.revision,
+                        return_tapped_creature: view
+                            .return_tapped_creature_candidates
+                            .first()
+                            .copied(),
                         ..Default::default()
                     })
                 }
@@ -470,16 +474,36 @@ fn drain(e: &mut GameEngine, mut batch: RuledEventBatch, budget: usize) -> Resul
         Err(diagnostic(e, "drain", "command budget exhausted"))
     }
 }
+/// Fixture boards tried in order. A case runs under the first profile that prepares its
+/// initial command; later profiles never retry an execution failure.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Profile {
+    /// The original shared board. Every case is tried here first.
+    Base,
+    /// Base plus typed permanents, graveyard cards, tokens, counters and turn history.
+    Rich,
+    /// Rich, then spells left on the stack. Each variant starts with a sorcery-speed spell on an
+    /// empty stack, with any instants cast on top while the caster holds priority.
+    Stack(&'static [&'static str]),
+    /// Rich, then the declare blockers step: two attackers, one of them blocked.
+    Combat,
+}
+/// Stack spells: a green creature and a blue one-mana instant; a black four-mana sorcery and a
+/// red instant; a colorless artifact.
+const PROFILES: &[Profile] = &[
+    Profile::Base,
+    Profile::Rich,
+    Profile::Stack(&["grizzly_bears", "opt"]),
+    Profile::Stack(&["agonizing_syphon", "lightning_bolt"]),
+    Profile::Stack(&["sol_ring"]),
+    Profile::Combat,
+];
+
 fn fixture(case: &Case) -> GameEngine {
-    let stack_fixture = match case.card.as_str() {
-        // Arcane Denial's target group requires a genuine stack spell. Its card scenario separately
-        // verifies the opposite player's cast and delayed-choice ownership.
-        "arcane_denial" => Some("opt"),
-        "annul" => Some("short_sword"),
-        "flashfreeze" => Some("hill_giant"),
-        "flusterstorm" => Some("divination"),
-        _ => None,
-    };
+    fixture_with(case, Profile::Base)
+}
+
+fn fixture_with(case: &Case, profile: Profile) -> GameEngine {
     let mut e = helpers::authoring_fixture::game(SEED, &[0, 1], &case.card, case.ability);
     if case.card == "luxior,_giadas_gift" && case.face == 0 && case.ability == Some(0) {
         let planeswalker = helpers::inject_permanent_on_battlefield(&mut e, 0, "ajani_steadfast");
@@ -492,31 +516,182 @@ fn fixture(case: &Case) -> GameEngine {
         e.state.zone_change_generation.insert(planeswalker, 0);
         e.initial_response_batch();
     }
-    if case.card == "nautiloid_ship" && case.ability == Some(0) {
-        helpers::inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
-        helpers::inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    if profile != Profile::Base {
+        rich_board(&mut e, case);
     }
-    if let Some(card) = stack_fixture {
-        helpers::relocate_to_hand(&mut e, 0, card);
-        let slot = helpers::hand_index_for_card(&e, 0, card);
-        let mut command = helpers::cast_spell(slot, vec![]);
-        offers::pay(&e, 0, &mut command).expect("fund stack fixture");
-        apply(&mut e, 0, &command).expect("cast stack fixture");
+    if let Profile::Stack(spells) = profile {
+        for &spell in spells {
+            let oid = helpers::inject_card_into_hand(&mut e, 0, spell);
+            let command = hand_play(&mut e, 0, oid, 0)
+                .unwrap_or_else(|err| panic!("stack fixture {spell}: {err}"));
+            apply(&mut e, 0, &command).expect("cast stack fixture");
+        }
+    }
+    if profile == Profile::Combat {
+        combat_board(&mut e);
     }
     e
 }
+/// Typed resources selected only by engine offers: no card in this list is chosen for a
+/// specific case. Injection establishes state; turn history comes from real commands.
+fn rich_board(e: &mut GameEngine, case: &Case) {
+    use helpers::{
+        inject_creature_on_battlefield as creature, inject_graveyard_card as graveyard,
+        inject_permanent_on_battlefield as permanent,
+    };
+    use tricerules_cards::CounterKind;
+    // Player 0: other basic land types, a flier, typed creatures (Soldier, Legendary, Golem,
+    // Goblin), a Vehicle, tokens, a tapped creature, counters on another creature and enough
+    // untapped power for large Crew and total-power costs.
+    for land in ["swamp", "plains", "mountain"] {
+        permanent(e, 0, land);
+    }
+    creature(e, 0, "air_elemental");
+    let soldier = creature(e, 0, "alaborn_trooper");
+    e.state
+        .objects
+        .get_mut(&soldier)
+        .unwrap()
+        .set_counter(CounterKind::PlusOnePlusOne, 3);
+    creature(e, 0, "isamaru,_hound_of_konda");
+    creature(e, 0, "gilded_sentinel");
+    permanent(e, 0, "consulate_dreadnought");
+    let goblin = creature(e, 0, "crazed_goblin");
+    e.state.objects.get_mut(&goblin).unwrap().tapped = true;
+    permanent(e, 0, "food");
+    permanent(e, 0, "treasure");
+    let gnomes = creature(e, 0, "bottle_gnomes");
+    // Player 1: a flier, a tapped black creature with a stun counter, an enchantment and a
+    // nonbasic land.
+    creature(e, 1, "air_elemental");
+    let raiders = creature(e, 1, "bog_raiders");
+    let raiders = e.state.objects.get_mut(&raiders).unwrap();
+    raiders.tapped = true;
+    raiders.set_counter(CounterKind::Stun, 1);
+    permanent(e, 1, "banishing_light");
+    permanent(e, 1, "vivid_grove");
+    // Both graveyards: one card of each relevant type plus a Goblin, Elf, multicolored,
+    // Villain/Hero and planeswalker card. Player 0 also gets two copies of the case card for
+    // costs that exile other same-named cards.
+    for player in 0..2 {
+        for card in [
+            "sol_ring",
+            "divination",
+            "forest",
+            "banishing_light",
+            "elvish_ranger",
+            "agents_of_hydra",
+            "goblin_outlander",
+            "ajani_steadfast",
+        ] {
+            graveyard(e, player, card);
+        }
+    }
+    for _ in 0..2 {
+        graveyard(e, 0, &case.card);
+    }
+    // Turn history through real commands: a creature dies, then an instant is cast.
+    let command = offers::activation(e, 0, gnomes, 0).expect("rich board sacrifice offer");
+    let batch = apply(e, 0, &command).expect("rich board sacrifice");
+    drain(e, batch, COMMAND_BUDGET).expect("rich board sacrifice resolves");
+    helpers::inject_card_into_hand(e, 0, "opt");
+    let slot = helpers::hand_index_for_card(e, 0, "opt");
+    let mut command = helpers::cast_spell(slot, vec![]);
+    offers::pay(e, 0, &mut command).expect("fund rich board instant");
+    let batch = apply(e, 0, &command).expect("rich board instant");
+    drain(e, batch, COMMAND_BUDGET).expect("rich board instant resolves");
+    top_up_pools(e);
+    e.initial_response_batch();
+}
+
+/// Advance a settled main-phase board to declare blockers with two attackers, one blocked,
+/// choosing only engine-published attack assignments and block pairs.
+fn combat_board(e: &mut GameEngine) {
+    let actor = e.state.active_player_id();
+    apply(e, actor, &helpers::primitive_yield()).expect("main phase to combat");
+    helpers::pass_priority_round(e);
+    let mut assignments: Vec<AttackAssignment> = vec![];
+    for assignment in e.initial_response_batch().legal_by_player[&actor]
+        .legal_attack_assignments
+        .clone()
+    {
+        if assignments.len() == 2 {
+            break;
+        }
+        if assignments
+            .iter()
+            .all(|chosen| chosen.attacker_object_id != assignment.attacker_object_id)
+        {
+            assignments.push(assignment);
+        }
+    }
+    assert_eq!(assignments.len(), 2, "combat fixture needs two attackers");
+    let blocked = assignments[0].attacker_object_id;
+    apply(
+        e,
+        actor,
+        &RuledCommand {
+            cmd: Some(Cmd::DeclareAttackers(DeclareAttackers { assignments })),
+        },
+    )
+    .expect("declare fixture attackers");
+    helpers::pass_priority_round(e);
+    let defender = e.state.players[1].id;
+    let pair = e.initial_response_batch().legal_by_player[&defender]
+        .legal_block_pairs
+        .iter()
+        .copied()
+        .find(|pair| pair.attacker_id == blocked)
+        .expect("combat fixture block pair");
+    apply(e, defender, &helpers::declare_blockers(vec![pair])).expect("declare fixture blocker");
+    top_up_pools(e);
+    e.initial_response_batch();
+}
+
+fn top_up_pools(e: &mut GameEngine) {
+    for player in 0..e.state.players.len() {
+        let pool = &mut e.state.players[player].mana_pool;
+        for amount in [
+            &mut pool.white,
+            &mut pool.blue,
+            &mut pool.black,
+            &mut pool.red,
+            &mut pool.green,
+            &mut pool.colorless,
+        ] {
+            *amount = (*amount).max(9);
+        }
+    }
+}
+
+/// A reviewed case that no fixture profile can prepare, with the scenario test that covers it.
+/// Every entry must stay unpreparable and name an existing `fn` under `tests/scenario/`.
+#[derive(Debug, PartialEq, Eq)]
+struct IntentionalExclusion {
+    /// `Case::key()`: card ID, face index and action, tab-separated.
+    case_key: &'static str,
+    reason: &'static str,
+    scenario_test: &'static str,
+}
+/// Empty while every case the engine offers from hand reaches `exercised`. Add an entry only
+/// after review, never to hide a fixture gap that a profile could cover.
+const INTENTIONAL: &[IntentionalExclusion] = &[];
+
 #[derive(Debug, PartialEq, Eq)]
 enum Outcome {
     Exercised,
-    UnsupportedFixture(String),
     IntentionalUncastable,
+    Intentional(&'static IntentionalExclusion),
 }
 impl Outcome {
     fn label(&self) -> String {
         match self {
             Self::Exercised => "exercised".into(),
-            Self::UnsupportedFixture(reason) => format!("unsupported: {reason}"),
             Self::IntentionalUncastable => "intentional: face unavailable from hand".into(),
+            Self::Intentional(entry) => format!(
+                "intentional: {}; covered by {}",
+                entry.reason, entry.scenario_test
+            ),
         }
     }
 }
@@ -533,76 +708,147 @@ fn evaluate(case: &Case) -> Result<Outcome, String> {
     if case.ability.is_none() && !def.face_available_from_hand(case.face) {
         return Ok(Outcome::IntentionalUncastable);
     }
-    let mut e = fixture(case);
-    let baseline = e.state.objects.len();
-    let actor = e.state.players[0].id;
-    let prepared = (|| -> Result<RuledCommand, String> {
-        let mut command = if let Some(index) = case.ability {
-            if !def.face(case.face).unwrap().is_permanent() {
-                return Err("nonbattlefield activated ability needs a zone fixture".into());
-            }
-            let oid =
-                helpers::authoring_fixture::ability_source(&mut e, 0, &case.card, case.face, index);
-            offers::activation(&mut e, actor, oid, index as u32)?
-        } else {
-            let oid = helpers::relocate_to_hand(&mut e, 0, &case.card);
-            let slot = e.state.players[0]
-                .hand
-                .iter()
-                .position(|&id| id == oid)
-                .unwrap() as u32;
-            let batch = e.initial_response_batch();
-            let legal = &batch.legal_by_player[&actor];
-            let offer = legal
-                .hand_actions
-                .iter()
-                .find(|a| {
-                    a.hand_index == slot
-                        && a.face_index == case.face as u32
-                        && a.cast_method == CastMethod::Normal as i32
-                })
-                .ok_or("face not offered by generic hand fixture")?;
-            if offer.kind == HandActionKind::HandActionPlayLand as i32 {
-                helpers::play_land_face(slot as usize, case.face)
-            } else {
-                RuledCommand {
-                    cmd: Some(Cmd::CastSpell(CastSpell {
-                        source: Some(helpers::hand_cast_source(slot as usize)),
-                        face_index: case.face as u32,
-                        cast_method: offer.cast_method,
-                        flex_payments: offers::hybrid_phyrexian_choices(&offer.cost)?,
-                        targets: offers::targets(
-                            &e,
-                            actor,
-                            legal
-                                .valid_targets_by_hand_slot
-                                .get(&((slot << 8) | case.face as u32)),
-                        )?,
-                        selected_modes: offers::modes(&e, actor, offer.min_modes, &offer.modes)?,
-                        cost_selections: offers::costs(offer.cost_choices.as_ref())?,
-                        ..Default::default()
-                    })),
-                }
+    let key = case.key();
+    let exclusion = INTENTIONAL.iter().find(|entry| entry.case_key == key);
+    let mut unsupported = String::new();
+    for &profile in PROFILES {
+        let mut e = fixture_with(case, profile);
+        // Tokens are counted on top of the physical card baseline by the integrity check.
+        let baseline =
+            e.state.objects.len() - e.state.objects.values().filter(|o| o.is_token()).count();
+        let actor = e.state.players[0].id;
+        let command = match prepare(&mut e, case, actor) {
+            Ok(command) => command,
+            Err(reason) => {
+                unsupported = reason;
+                continue;
             }
         };
-        if !matches!(
-            command.cmd,
-            Some(Cmd::PlayLand(_) | Cmd::ActivateAbility(_) | Cmd::BeginAbilityActivation(_))
-        ) {
-            offers::pay(&e, actor, &mut command)?;
+        if exclusion.is_some() {
+            return Err(format!(
+                "stale intentional exclusion {key}: profile {profile:?} prepares it"
+            ));
         }
-        Ok(command)
-    })();
-    let command = match prepared {
-        Ok(command) => command,
-        Err(reason) => return Ok(Outcome::UnsupportedFixture(reason)),
+        let result =
+            apply(&mut e, actor, &command).and_then(|batch| drain(&mut e, batch, COMMAND_BUDGET));
+        integrity::assert_zone_integrity(&e, baseline, &case.key());
+        return result
+            .map(|()| Outcome::Exercised)
+            .map_err(|err| diagnostic(&e, &format!("{}; profile={profile:?}", case.key()), err));
+    }
+    // No reviewed exclusion: an unpreparable case is a fixture gap, never a recordable outcome.
+    exclusion
+        .map(Outcome::Intentional)
+        .ok_or_else(|| format!("{key}: no fixture profile prepares this case: {unsupported}"))
+}
+
+#[test]
+fn intentional_exclusions_name_existing_scenario_tests() {
+    fn sources(dir: &std::path::Path, out: &mut String) {
+        for entry in std::fs::read_dir(dir).expect("read scenario directory") {
+            let path = entry.expect("scenario entry").path();
+            if path.is_dir() {
+                sources(&path, out);
+            } else if path.extension().is_some_and(|ext| ext == "rs") {
+                out.push_str(&std::fs::read_to_string(&path).expect("read scenario source"));
+            }
+        }
+    }
+    let mut text = String::new();
+    sources(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/scenario"),
+        &mut text,
+    );
+    let mut keys = std::collections::BTreeSet::new();
+    for entry in INTENTIONAL {
+        assert!(
+            keys.insert(entry.case_key),
+            "duplicate exclusion {}",
+            entry.case_key
+        );
+        assert!(
+            !entry.reason.trim().is_empty(),
+            "{}: empty reason",
+            entry.case_key
+        );
+        assert!(
+            text.contains(&format!("fn {}(", entry.scenario_test)),
+            "{}: scenario test {} does not exist",
+            entry.case_key,
+            entry.scenario_test
+        );
+    }
+}
+
+/// Build the case's initial command from engine offers, or say why this board can't.
+fn prepare(e: &mut GameEngine, case: &Case, actor: i32) -> Result<RuledCommand, String> {
+    if let Some(index) = case.ability {
+        let oid = helpers::authoring_fixture::ability_source(e, 0, &case.card, case.face, index);
+        offers::activation(e, actor, oid, index as u32)
+    } else {
+        let oid = helpers::relocate_to_hand(e, 0, &case.card);
+        hand_play(e, actor, oid, case.face)
+    }
+}
+
+/// The engine-offered normal hand play of one face: a land play, or a funded cast with targets,
+/// modes and costs chosen from the offer.
+fn hand_play(
+    e: &mut GameEngine,
+    actor: i32,
+    oid: u32,
+    face: usize,
+) -> Result<RuledCommand, String> {
+    let mut command = {
+        let slot = e.state.players[0]
+            .hand
+            .iter()
+            .position(|&id| id == oid)
+            .unwrap() as u32;
+        let batch = e.initial_response_batch();
+        let legal = &batch.legal_by_player[&actor];
+        let offer = legal
+            .hand_actions
+            .iter()
+            .find(|a| {
+                a.hand_index == slot
+                    && a.face_index == face as u32
+                    && a.cast_method == CastMethod::Normal as i32
+            })
+            .ok_or("face not offered by generic hand fixture")?;
+        if offer.kind == HandActionKind::HandActionPlayLand as i32 {
+            helpers::play_land_face(slot as usize, face)
+        } else {
+            let (selected_modes, linked_costs) =
+                offers::spell_modes(e, actor, offer.min_modes, &offer.modes)?;
+            RuledCommand {
+                cmd: Some(Cmd::CastSpell(CastSpell {
+                    source: Some(helpers::hand_cast_source(slot as usize)),
+                    face_index: face as u32,
+                    cast_method: offer.cast_method,
+                    flex_payments: offers::hybrid_phyrexian_choices(&offer.cost)?,
+                    targets: offers::targets(
+                        e,
+                        actor,
+                        legal
+                            .valid_targets_by_hand_slot
+                            .get(&((slot << 8) | face as u32)),
+                    )?,
+                    selected_modes,
+                    cost_selections: offers::costs(offer.cost_choices.as_ref())?,
+                    cast_cost_group_selections: offers::cast_cost_groups(
+                        offer.cost_choices.as_ref(),
+                        &linked_costs,
+                    )?,
+                    ..Default::default()
+                })),
+            }
+        }
     };
-    let result =
-        apply(&mut e, actor, &command).and_then(|batch| drain(&mut e, batch, COMMAND_BUDGET));
-    integrity::assert_zone_integrity(&e, baseline, &case.key());
-    result
-        .map(|()| Outcome::Exercised)
-        .map_err(|err| diagnostic(&e, &case.key(), err))
+    if !matches!(command.cmd, Some(Cmd::PlayLand(_))) {
+        offers::pay(e, actor, &mut command)?;
+    }
+    Ok(command)
 }
 
 #[test]
@@ -1171,12 +1417,16 @@ fn compare_baseline(actual: &str, expected: &str) -> Result<(), String> {
             }
             let key = fields[..3].join("\t");
             let outcome = fields[3];
-            if outcome != "exercised"
-                && outcome != "intentional: face unavailable from hand"
-                && outcome
-                    .strip_prefix("unsupported: ")
-                    .is_none_or(|reason| reason.trim().is_empty())
-            {
+            // `unsupported:` is no longer an outcome: an unpreparable case must be a reviewed
+            // intentional exclusion that names its covering scenario test.
+            let reviewed = outcome == "intentional: face unavailable from hand"
+                || outcome
+                    .strip_prefix("intentional: ")
+                    .and_then(|rest| rest.split_once("; covered by "))
+                    .is_some_and(|(reason, test)| {
+                        !reason.trim().is_empty() && !test.trim().is_empty()
+                    });
+            if outcome != "exercised" && !reviewed {
                 return Err(format!("missing or unknown coverage outcome: {line}"));
             }
             if previous.as_ref().is_some_and(|last| last >= &key) {
@@ -1218,10 +1468,15 @@ fn compare_baseline(actual: &str, expected: &str) -> Result<(), String> {
 #[test]
 fn baseline_accepts_new_successes_but_rejects_unreviewed_gaps_and_regressions() {
     let exercised = "bear\t0\tcast\texercised\n";
-    let unsupported = "bear\t0\tcast\tunsupported: no target fixture\n";
+    let unsupported = "bear\t0\tcast\tintentional: no target fixture; covered by bear_scenario\n";
     assert!(compare_baseline(unsupported, exercised).is_err());
     assert!(compare_baseline(exercised, "").is_ok());
     assert!(compare_baseline(unsupported, "").is_err());
+    // Unreviewed gaps and exclusions without a covering scenario are never valid rows.
+    let gap = "bear\t0\tcast\tunsupported: no target fixture\n";
+    assert!(compare_baseline(gap, gap).is_err());
+    let uncovered = "bear\t0\tcast\tintentional: no target fixture\n";
+    assert!(compare_baseline(uncovered, uncovered).is_err());
     assert!(compare_baseline(
         "bear\t0\tcast\tintentional: face unavailable from hand\n",
         ""
@@ -1229,7 +1484,11 @@ fn baseline_accepts_new_successes_but_rejects_unreviewed_gaps_and_regressions() 
     .is_err());
     assert!(compare_baseline("", exercised).is_err());
     assert!(compare_baseline(exercised, &(exercised.to_owned() + exercised)).is_err());
-    assert!(compare_baseline("bear\t0\tcast\tunsupported: \n", unsupported).is_err());
+    assert!(compare_baseline(
+        "bear\t0\tcast\tintentional: ; covered by bear_scenario\n",
+        unsupported
+    )
+    .is_err());
     assert!(compare_baseline(exercised, exercised).is_ok());
     assert!(compare_baseline(unsupported, unsupported).is_ok());
 }

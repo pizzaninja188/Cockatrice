@@ -13,15 +13,18 @@ struct Case {
     toughness: u32,
     delta_power: u32,
     delta_toughness: u32,
+    /// CR 704.5j: a legendary card can't keep a second copy on the battlefield.
+    legendary: bool,
 }
 
-const CASES: [Case; 3] = [
+const CASES: [Case; 4] = [
     Case {
         id: "veteran_armorer",
         power: 2,
         toughness: 2,
         delta_power: 0,
         delta_toughness: 1,
+        legendary: false,
     },
     Case {
         id: "benalish_marshal",
@@ -29,6 +32,7 @@ const CASES: [Case; 3] = [
         toughness: 3,
         delta_power: 1,
         delta_toughness: 1,
+        legendary: false,
     },
     Case {
         id: "blessed_orator",
@@ -36,6 +40,16 @@ const CASES: [Case; 3] = [
         toughness: 4,
         delta_power: 0,
         delta_toughness: 1,
+        legendary: false,
+    },
+    // #526: a quoted printed name keeps its quotes in the card id.
+    Case {
+        id: "kongming,_\"sleeping_dragon\"",
+        power: 2,
+        toughness: 2,
+        delta_power: 1,
+        delta_toughness: 1,
+        legendary: true,
     },
 ];
 
@@ -121,6 +135,9 @@ fn other_anthems_batch_cards_apply_to_later_entries_and_stop_when_the_source_lea
 #[test]
 fn other_anthems_batch_cards_stack_with_a_second_copy() {
     for (index, case) in CASES.iter().enumerate() {
+        if case.legendary {
+            continue;
+        }
         let mut e = engine(26_052_000 + index as u64, case.id);
         let first = move_ready_to_battlefield(&mut e, 0, case.id);
         let second = move_ready_to_battlefield(&mut e, 0, case.id);

@@ -61,17 +61,17 @@ use tricerules_card_model::primitives::{
     HandChoiceVisibility, Keyword, LibraryBottomOrder, LibraryPartitionKind, LibraryPlacement,
     LifeAmount, LifeChangeKind, ManaAmount, ManaSpendFilter, MassPlayerSet, ObjectCastCostKind,
     ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter,
-    PlayerComparisonMetric, PlayerLifeAggregate, PlayerQuantifier, PlayerRecipient,
-    PowerComparison, PowerToughnessCharacteristic, PreventionAmountBasis, ProtectionCardType,
-    ProtectionGrant, ProtectionQuality, PtScaleBasis, RelativePlayerSet, ResolutionCost,
-    ResolvingEffectDuration, ResolvingPermanentModifier, ReturnController, SearchDestination,
-    SearchSelectionSlot, SearchZoneSelection, SpecialActionAffected, SpecialActionKind,
-    SpecialActionManaPurpose, SpellCastFilter, SpellCastOrigin, SpellCostFilter, SpellCostModifier,
-    SpellEffectKind, SpellKeyword, SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef,
-    StaticDamagePreventionAmount, StaticEmblemEffect, TapTriggerCardinality, TargetController,
-    TargetFilter, TargetKind, TargetOwner, TargetingCostAction, TargetingCostProtected,
-    TargetingDef, TargetingSourceFilter, TriggerCondition, TriggeredAbilityDef,
-    TriggeredCardReference, ZoneCardFilter,
+    PlayerComparisonMetric, PlayerCountAggregate, PlayerLifeAggregate, PlayerQuantifier,
+    PlayerRecipient, PowerComparison, PowerToughnessCharacteristic, PreventionAmountBasis,
+    ProtectionCardType, ProtectionGrant, ProtectionQuality, PtScaleBasis, RelativePlayerSet,
+    ResolutionCost, ResolvingEffectDuration, ResolvingPermanentModifier, ReturnController,
+    SearchDestination, SearchSelectionSlot, SearchZoneSelection, SpecialActionAffected,
+    SpecialActionKind, SpecialActionManaPurpose, SpellCastFilter, SpellCastOrigin, SpellCostFilter,
+    SpellCostModifier, SpellEffectKind, SpellKeyword, SpellManaSpentComparison, StackSpellFilter,
+    StaticAbilityDef, StaticDamagePreventionAmount, StaticEmblemEffect, TapTriggerCardinality,
+    TargetController, TargetFilter, TargetKind, TargetOwner, TargetingCostAction,
+    TargetingCostProtected, TargetingDef, TargetingSourceFilter, TriggerCondition,
+    TriggeredAbilityDef, TriggeredCardReference, ZoneCardFilter,
 };
 use tricerules_card_model::{
     is_creature_type, mode_fallback, CardDefinition, CardFace, CardRegistry,
@@ -204,6 +204,8 @@ mod activation;
 mod activation_tests;
 pub(crate) mod automation;
 mod blight;
+#[cfg(test)]
+mod board_scaling_tests;
 mod card_predicates;
 mod casting;
 mod characteristics;
@@ -250,6 +252,7 @@ mod preparation;
 mod presentation;
 mod priority;
 pub(crate) mod proliferate;
+mod read_memo;
 mod rebound;
 pub(crate) mod replacement;
 mod resolution;
@@ -1362,6 +1365,9 @@ pub struct GameEngine {
     /// Derived companion to `battlefield_view_cache`. Its inputs are included in that snapshot,
     /// so an unchanged battlefield view can reuse this without another characteristics pass.
     first_strike_step_pending_cache: bool,
+    /// Derived-query cache, active only inside a [`read_memo::ReadMemoScope`]. Never part of
+    /// state or replay; a clone starts empty.
+    read_memo: read_memo::ReadMemo,
 }
 
 /// A player's concealed-zone contents as last broadcast, compared to decide whether the next
@@ -1533,7 +1539,8 @@ impl GameEngine {
         if changed.is_empty() {
             return Vec::new();
         }
-        let mut sources = self.battlefield_sources_apnap();
+        // `TapActionSnapshot::sources` is read only by `BecameTapped` trigger matching.
+        let mut sources = self.battlefield_trigger_observers_apnap();
         for source in &mut sources {
             source.triggered_abilities.retain(|(_, ability, _)| {
                 self.intervening_if_holds(
@@ -2035,6 +2042,7 @@ impl GameEngine {
             private_zone_cache: HashMap::new(),
             battlefield_view_cache: None,
             first_strike_step_pending_cache: false,
+            read_memo: Default::default(),
         };
         let mut e = vec![];
         let _ = eng.apply_sbas(&mut e);

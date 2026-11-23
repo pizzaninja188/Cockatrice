@@ -6,6 +6,10 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Mirrors `tricerules_card_model::slug::RESERVED_FILE_NAME_CHARS` without the path separators,
+/// which `rel` legitimately contains after normalization to `/`.
+const NON_PORTABLE_FILE_NAME_CHARS: [char; 7] = ['"', ':', '?', '*', '<', '>', '|'];
+
 fn collect_ron_files(dir: &Path, out: &mut Vec<PathBuf>) {
     for entry in fs::read_dir(dir).expect("read data dir") {
         let path = entry.expect("read data dir entry").path();
@@ -46,8 +50,22 @@ fn main() {
             .to_str()
             .expect("utf-8 path")
             .replace('\\', "/");
-        let line =
-            format!("    include_str!(concat!(env!(\"CARGO_MANIFEST_DIR\"), \"/{rel}\")),\n");
+        // Ids may keep `"`/`:` (`id == slugify(name)`), but file names must stay portable so
+        // the data tree checks out on Windows; author them with `portable_file_stem(id)`.
+        if let Some(reserved) = rel
+            .chars()
+            .find(|ch| NON_PORTABLE_FILE_NAME_CHARS.contains(ch))
+        {
+            panic!(
+                "card data file {rel:?} contains {reserved:?}, which is not portable to Windows; \
+                 name it with `tricerules_card_model::portable_file_stem(id)` instead"
+            );
+        }
+        // Debug formatting escapes the path into a valid Rust string literal.
+        let line = format!(
+            "    include_str!(concat!(env!(\"CARGO_MANIFEST_DIR\"), {:?})),\n",
+            format!("/{rel}")
+        );
         if rel.starts_with("data/tokens/") {
             token_list.push_str(&line);
         } else {

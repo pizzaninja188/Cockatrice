@@ -61,6 +61,9 @@ $buildScript = if ($isWindowsHost) { 'build-ninja.ps1' } else { 'build-linux.ps1
 $buildDirectory = if ($isWindowsHost) { 'build/windows-ninja-all' } else { 'build/linux-ninja-all' }
 $environmentArguments = @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'check-verification-environment.ps1'))
 if ($PSBoundParameters.ContainsKey('MinimumFreeGiB')) { $environmentArguments += @('-MinimumFreeGiB', [string] $MinimumFreeGiB) }
+# Bound internal conformance workers to half the logical CPUs unless the caller already chose a value.
+$conformanceWorkers = if ($env:TRICERULES_CONFORMANCE_WORKERS) { $env:TRICERULES_CONFORMANCE_WORKERS }
+    else { [string] [Math]::Max(1, [int] [Math]::Floor([Environment]::ProcessorCount / 2)) }
 
 function Assert-DisposableBuildPath {
     param([string] $Path)
@@ -99,7 +102,8 @@ function Remove-DisposableBuildOutput {
 
 function Add-VerificationStep {
     param([string] $Label, [string] $Executable, [string[]] $Arguments,
-        [string] $WorkingDirectory = $repo, [bool] $RequireE2E = $false, [bool] $Exact = $false)
+        [string] $WorkingDirectory = $repo, [bool] $RequireE2E = $false, [bool] $Exact = $false,
+        [hashtable] $Environment = @{})
     $steps.Add([pscustomobject][ordered]@{
         Label = $Label
         Executable = $Executable
@@ -107,6 +111,7 @@ function Add-VerificationStep {
         WorkingDirectory = $WorkingDirectory
         RequireE2E = $RequireE2E
         Exact = $Exact
+        Environment = $Environment
         Status = 'NotRun'
         ExitCode = $null
         LogPath = $null
@@ -119,6 +124,7 @@ function Get-FullVerificationSteps {
     $preflight = $environmentArguments
     if ($SelectedSide -eq 'Cpp' -or $DisposableBuild) { $preflight += '-SkipRustCache' }
     Add-VerificationStep 'Verification environment' $windowsPowerShell $preflight
+    Add-VerificationStep 'Git diff check' 'git' @('diff', '--check')
     if ($CheckCardData) {
         $cardArguments = @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'update-card-data.ps1'), '-Mode', 'Check')
         if ($OracleBulk) { $cardArguments += @('-OracleBulk', $OracleBulk) }
@@ -130,12 +136,12 @@ function Get-FullVerificationSteps {
         Add-VerificationStep 'Card data dependency boundary' $windowsPowerShell @(
             '-NoProfile', '-File', (Join-Path $repo 'tests/scripts/card_data_boundary_test.ps1')
         )
-        Add-VerificationStep 'Rust tests' 'cargo' @('test') $rust
-        Add-VerificationStep 'Rust Clippy' 'cargo' @('clippy', '--all-targets', '--', '-D', 'warnings') $rust
         . (Join-Path $PSScriptRoot 'rust-format-checks.ps1')
         foreach ($format in @(Get-RustFormatChecks -Repository $repo)) {
             Add-VerificationStep $format.Label $format.Executable $format.Args $rust
         }
+        Add-VerificationStep 'Rust Clippy' 'cargo' @('clippy', '--all-targets', '--', '-D', 'warnings') $rust
+        Add-VerificationStep 'Rust tests' 'cargo' @('test') $rust -Environment @{ TRICERULES_CONFORMANCE_WORKERS = $conformanceWorkers }
     }
     if ($SelectedSide -in @('Cpp', 'Both')) {
         Add-VerificationStep "$buildPlatform Ninja build" $windowsPowerShell @(
@@ -145,7 +151,6 @@ function Get-FullVerificationSteps {
             '--test-dir', $buildDirectory, '--output-on-failure', '--no-tests=error'
         ) $repo $true
     }
-    Add-VerificationStep 'Git diff check' 'git' @('diff', '--check')
     return $steps.ToArray()
 }
 $steps = [Collections.Generic.List[object]]::new()
@@ -159,6 +164,7 @@ if ($Preview) {
         Write-Output (@($step.Executable) + $step.Arguments | ConvertTo-Json -Compress)
         if ($step.RequireE2E) { Write-Output 'Child environment: RULED_E2E_REQUIRE=1' }
         if ($step.RequireE2E -and -not $isWindowsHost) { Write-Output 'Child environment: QT_QPA_PLATFORM=offscreen' }
+        foreach ($name in $step.Environment.Keys) { Write-Output "Child environment: $name=$($step.Environment[$name])" }
     }
     exit 0
 }
@@ -266,7 +272,7 @@ try {
                 if ($fullStep.Label -ne 'Rust tests') { $steps.Add($fullStep); continue }
                 $rust = Join-Path $repo 'tricerules'
                 Add-VerificationStep 'Card registry tests' 'cargo' @('test', '-p', 'tricerules-cards') $rust
-                Add-VerificationStep 'Card conformance tests' 'cargo' @('test', '-p', 'tricerules-core', '--test', 'conformance') $rust
+                Add-VerificationStep 'Card conformance tests' 'cargo' @('test', '-p', 'tricerules-core', '--test', 'conformance') $rust -Environment @{ TRICERULES_CONFORMANCE_WORKERS = $conformanceWorkers }
                 foreach ($test in $plan.Tests) {
                     Add-VerificationStep "Card semantic test: $($test.Target)::$($test.Name)" 'cargo' @(
                         'test', '--quiet', '-p', $test.Package, '--test', $test.Target, $test.Name, '--', '--exact'
@@ -280,7 +286,12 @@ try {
         $currentStep = $step
         $previousE2E = $env:RULED_E2E_REQUIRE
         $previousQpa = $env:QT_QPA_PLATFORM
+        $previousEnvironment = @{}
         try {
+            foreach ($name in $step.Environment.Keys) {
+                $previousEnvironment[$name] = [Environment]::GetEnvironmentVariable($name)
+                Set-Item -LiteralPath "Env:$name" -Value $step.Environment[$name]
+            }
             if ($step.RequireE2E) { $env:RULED_E2E_REQUIRE = '1' }
             if ($step.RequireE2E -and -not $isWindowsHost) { $env:QT_QPA_PLATFORM = 'offscreen' }
             if ($step.Label -eq 'Verification environment' -and $cacheBudget) {
@@ -291,6 +302,10 @@ try {
                 -WorkingDirectory $step.WorkingDirectory -LogDirectory $runDirectory -AsResultObject
         }
         finally {
+            foreach ($name in $previousEnvironment.Keys) {
+                if ($null -eq $previousEnvironment[$name]) { Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue }
+                else { Set-Item -LiteralPath "Env:$name" -Value $previousEnvironment[$name] }
+            }
             if ($step.Label -eq 'Verification environment') {
                 $env:COCKATRICE_RUST_CACHE_BUDGET_GIB = $originalCacheBudget
             }

@@ -563,6 +563,3 @@ fn teferi_minus_ten_schedules_exactly_two_controller_turns_before_rotation() {
         "ordinary rotation resumes after exactly two extra turns"
     );
 }
-
-// Strict no-development-command EngineSession cast/+1 proof:
-// see `tricerules-server/src/replay.rs::teferi_master_of_time_casts_and_resolves_plus_one_from_normal_offers`.

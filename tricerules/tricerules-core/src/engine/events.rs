@@ -534,28 +534,44 @@ impl GameEngine {
     /// A batch may carry two views (the untap-step roll emits one mid-batch); the first updates the
     /// cache, so the second correctly reports unchanged.
     pub(super) fn ev_zone_view_sync_tracked(&mut self) -> RuledEvent {
-        let battlefield_snapshot = self.battlefield_view_snapshot();
-        let battlefields_unchanged =
-            self.battlefield_view_cache.as_ref() == Some(&battlefield_snapshot);
-        let first_strike_step_pending = if battlefields_unchanged {
-            self.first_strike_step_pending_cache
-        } else {
-            self.current_first_strike_step_pending()
-        };
-        let mut per_player = Vec::with_capacity(self.state.players.len());
-        for idx in 0..self.state.players.len() {
-            let p = &self.state.players[idx];
-            let current = PrivateZoneSnapshot {
-                hand: p.hand.to_vec(),
-                library: self.state.library_card_objects(p.id).collect(),
+        // Every view below reads the same state, so its derived queries share one memo scope.
+        // Cache updates wait until the scope (and its shared borrow) has ended.
+        let (battlefield_snapshot, battlefields_unchanged, first_strike_step_pending, views) = {
+            let _memo = self.read_memo_scope();
+            let battlefield_snapshot = self.battlefield_view_snapshot();
+            let battlefields_unchanged =
+                self.battlefield_view_cache.as_ref() == Some(&battlefield_snapshot);
+            let first_strike_step_pending = if battlefields_unchanged {
+                self.first_strike_step_pending_cache
+            } else {
+                self.current_first_strike_step_pending()
             };
-            let unchanged = self.private_zone_cache.get(&p.id) == Some(&current);
-            let mut view = self.per_player_view(
-                idx,
-                !unchanged,
-                !battlefields_unchanged,
+            let views = (0..self.state.players.len())
+                .map(|idx| {
+                    let p = &self.state.players[idx];
+                    let current = PrivateZoneSnapshot {
+                        hand: p.hand.to_vec(),
+                        library: self.state.library_card_objects(p.id).collect(),
+                    };
+                    let unchanged = self.private_zone_cache.get(&p.id) == Some(&current);
+                    let view = self.per_player_view(
+                        idx,
+                        !unchanged,
+                        !battlefields_unchanged,
+                        first_strike_step_pending,
+                    );
+                    (current, unchanged, view)
+                })
+                .collect::<Vec<_>>();
+            (
+                battlefield_snapshot,
+                battlefields_unchanged,
                 first_strike_step_pending,
-            );
+                views,
+            )
+        };
+        let mut per_player = Vec::with_capacity(views.len());
+        for (current, unchanged, mut view) in views {
             if unchanged {
                 view.private_zones_unchanged = true;
             } else {
@@ -1046,14 +1062,11 @@ impl GameEngine {
             .iter()
             .flat_map(|player| player.battlefield.iter().copied())
             .any(|source| {
-                super::characteristics::printed_static_source_is_available(
-                    &self.state,
-                    self.registry,
-                    source,
-                ) && self
-                    .active_static_abilities(source)
-                    .iter()
-                    .any(|ability| matches!(ability.definition, StaticAbilityDef::ZurWeirding))
+                self.printed_static_source_available(source)
+                    && self
+                        .active_static_abilities(source)
+                        .iter()
+                        .any(|ability| matches!(ability.definition, StaticAbilityDef::ZurWeirding))
             })
     }
 

@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "21e9e1a9-5d6d-473e-adab-6a1e8e2b0ebd",
+  "spans": [
+    {
+      "face_id": "kongming_sleeping_dragon",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemPt",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario other_anthems_batch::other_anthems_batch_cards_pump_only_other_creatures_you_control",
+      "covers": "actual kongming,_\"sleeping_dragon\" is exercised by the shared other_anthems_batch actual-card scenario"
+    },
+    {
+      "test": "scenario other_anthems_batch::other_anthems_batch_cards_apply_to_later_entries_and_stop_when_the_source_leaves",
+      "covers": "actual kongming,_\"sleeping_dragon\" is exercised by the shared other_anthems_batch actual-card scenario"
+    },
+    {
+      "test": "mechanic_registry::other_anthems_batch::other_anthems_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of kongming,_\"sleeping_dragon\""
+    },
+    {
+      "test": "mechanic_registry::other_anthems_batch::other_anthems_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for kongming,_\"sleeping_dragon\""
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

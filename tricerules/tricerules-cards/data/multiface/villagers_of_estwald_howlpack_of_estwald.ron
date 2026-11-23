@@ -1,0 +1,39 @@
+// Villagers of Estwald // Howlpack of Estwald (Innistrad) — transforming DFC (CR 701.27/712).
+(
+    id: "villagers_of_estwald_howlpack_of_estwald",
+    name: "Villagers of Estwald // Howlpack of Estwald",
+    layout: Transform,
+    faces: [
+        (
+            name: "Villagers of Estwald",
+            face_id: "villagers_of_estwald",
+            mana_cost: "{2}{G}",
+            types: ["Creature", "Human", "Werewolf"],
+            power: Some(2),
+            toughness: Some(3),
+            triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: OracleLines([1]),
+                trigger: AtBeginningOfUpkeep(player: AnyPlayer),
+                intervening_if: Some(SpellsCastLastTurn(players: All, aggregate: Sum, min: Some(0), max: Some(0))),
+                effect: [ChangeSourceFace(action: Transform)],
+            )],
+        ),
+        (
+            name: "Howlpack of Estwald",
+            face_id: "howlpack_of_estwald",
+            mana_cost: "",
+            color_indicator: Some([Green]),
+            types: ["Creature", "Werewolf"],
+            power: Some(4),
+            toughness: Some(6),
+            triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: OracleLines([1]),
+                trigger: AtBeginningOfUpkeep(player: AnyPlayer),
+                intervening_if: Some(SpellsCastLastTurn(players: All, aggregate: Maximum, min: Some(2))),
+                effect: [ChangeSourceFace(action: Transform)],
+            )],
+        ),
+    ],
+)

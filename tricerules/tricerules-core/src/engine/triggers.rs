@@ -795,7 +795,17 @@ impl GameEngine {
     /// snapshot becomes-the-target triggers at target selection, then commit them only after every
     /// cost has been paid and the spell or ability has successfully reached the stack.
     pub(super) fn collect_event_triggers(&self, events: &[GameEvent]) -> Vec<CollectedTrigger> {
-        let post_event_sources = self.battlefield_sources_apnap();
+        let _memo = self.read_memo_scope();
+        // A tap event is matched against its own action's observer snapshot. Only other events
+        // read the current board, so a mana tap alone skips the O(board) snapshot.
+        let post_event_sources = if events
+            .iter()
+            .all(|event| matches!(event, GameEvent::BecameTapped { .. }))
+        {
+            Vec::new()
+        } else {
+            self.battlefield_sources_apnap()
+        };
         let mut sources = post_event_sources.clone();
         // Zone-leaving sources are no longer in the battlefield index. Their event-local snapshot
         // supplies the identity/controller needed for LKI trigger matching (CR 603.6/603.10).
@@ -1332,12 +1342,27 @@ impl GameEngine {
     /// nonactive player's upkeep trigger never fired at all (CR 603.2: *every* permanent observes
     /// the event). `sort_by_key` is stable, so each player's battlefield keeps its own order.
     pub(super) fn battlefield_sources_apnap(&self) -> Vec<TriggerSourceSnapshot> {
+        self.battlefield_snapshots_apnap(false)
+    }
+
+    /// [`Self::battlefield_sources_apnap`] without permanents that have no triggered abilities.
+    /// Only for a list read solely by trigger matching, such as a tap action's observers: there a
+    /// permanent without triggered abilities matches nothing. Zone snapshots keep every permanent,
+    /// because they also supply last-known counters and leave/die event sources.
+    pub(super) fn battlefield_trigger_observers_apnap(&self) -> Vec<TriggerSourceSnapshot> {
+        self.battlefield_snapshots_apnap(true)
+    }
+
+    fn battlefield_snapshots_apnap(&self, observers_only: bool) -> Vec<TriggerSourceSnapshot> {
+        // Each snapshot re-reads characteristics and the effective face; share them per object.
+        let _memo = self.read_memo_scope();
         let mut ordered: Vec<usize> = (0..self.state.players.len()).collect();
         ordered.sort_by_key(|&i| self.state.apnap_rank(self.state.players[i].id));
         let mut sources = Vec::new();
         for pi in ordered {
             for &source_id in &self.state.players[pi].battlefield {
-                if let Some(source) = self.trigger_source_snapshot(source_id) {
+                if let Some(source) = self.trigger_source_snapshot_where(source_id, observers_only)
+                {
                     sources.push(source);
                 }
             }
@@ -1513,21 +1538,22 @@ impl GameEngine {
                         {
                             continue;
                         }
-                        for receipt in
-                            batch.cards.iter().filter(|receipt| {
-                                filter.as_ref().is_none_or(|filter| {
-                                    receipt
+                        for receipt in batch.cards.iter().filter(|receipt| {
+                            filter.as_ref().is_none_or(|filter| {
+                                receipt
                                     .known_card_id
                                     .as_ref()
                                     .and_then(|id| self.registry.get(id))
                                     .is_some_and(|card| {
                                         super::card_predicates::matches_filter_with_current_color(
-                                            card, filter, receipt.known_colorless, None,
+                                            card,
+                                            filter,
+                                            receipt.known_colors.as_deref(),
+                                            None,
                                         )
                                     })
-                                })
                             })
-                        {
+                        }) {
                             let mut occurrence = trigger.clone();
                             occurrence.trigger_context.observed_object = Some(TriggerObjectRef {
                                 object_id: receipt.object_id,
@@ -2815,11 +2841,26 @@ impl GameEngine {
         &self,
         source_id: ObjectId,
     ) -> Option<TriggerSourceSnapshot> {
+        self.trigger_source_snapshot_where(source_id, false)
+    }
+
+    /// None for an object without triggered abilities when `observers_only` is set.
+    fn trigger_source_snapshot_where(
+        &self,
+        source_id: ObjectId,
+        observers_only: bool,
+    ) -> Option<TriggerSourceSnapshot> {
         let object = self.state.objects.get(&source_id)?;
         let (card_id, face_index) = self
             .effective_card_identity(source_id)
             .map(|(card_id, face_index)| (card_id.to_string(), face_index))
             .unwrap_or_else(|| (object.card_id.clone(), object.face_up_index));
+        let triggered_abilities =
+            self.effective_triggered_abilities(source_id, &card_id, face_index);
+        if observers_only && triggered_abilities.is_empty() {
+            return None;
+        }
+        super::read_memo::count_probe(super::read_memo::Probe::TriggerSourceSnapshot);
         let characteristics = self.characteristics(source_id);
         let controller = characteristics
             .as_ref()
@@ -2891,8 +2932,7 @@ impl GameEngine {
                 .unwrap_or_default(),
             event_conditions_checked: false,
             object_id: source_id,
-            triggered_abilities: self
-                .effective_triggered_abilities(source_id, &card_id, face_index),
+            triggered_abilities,
             face_name: if object.face_down {
                 "Face-down permanent".to_owned()
             } else {
@@ -3152,7 +3192,8 @@ impl GameEngine {
         }
         let mut active = self.active_millennium_calendar_state_trigger_keys();
         let mut collected = Vec::new();
-        for source in self.battlefield_sources_apnap() {
+        // Only a source with this triggered ability matters, so skip the rest of the board.
+        for source in self.battlefield_trigger_observers_apnap() {
             if !source.triggered_abilities.iter().any(|(_, ability, _)| {
                 matches!(
                     ability.trigger,
@@ -4202,7 +4243,7 @@ mod tests {
             destination: Zone::Graveyard,
             cause: crate::state::DiscardCause::Effect,
             known_card_id: None,
-            known_colorless: None,
+            known_colors: None,
         }
     }
 

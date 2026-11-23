@@ -1,0 +1,39 @@
+// Convicted Killer // Branded Howler (Innistrad) — transforming DFC (CR 701.27/712).
+(
+    id: "convicted_killer_branded_howler",
+    name: "Convicted Killer // Branded Howler",
+    layout: Transform,
+    faces: [
+        (
+            name: "Convicted Killer",
+            face_id: "convicted_killer",
+            mana_cost: "{2}{R}",
+            types: ["Creature", "Human", "Werewolf"],
+            power: Some(2),
+            toughness: Some(2),
+            triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: OracleLines([1]),
+                trigger: AtBeginningOfUpkeep(player: AnyPlayer),
+                intervening_if: Some(SpellsCastLastTurn(players: All, aggregate: Sum, min: Some(0), max: Some(0))),
+                effect: [ChangeSourceFace(action: Transform)],
+            )],
+        ),
+        (
+            name: "Branded Howler",
+            face_id: "branded_howler",
+            mana_cost: "",
+            color_indicator: Some([Red]),
+            types: ["Creature", "Werewolf"],
+            power: Some(4),
+            toughness: Some(4),
+            triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: OracleLines([1]),
+                trigger: AtBeginningOfUpkeep(player: AnyPlayer),
+                intervening_if: Some(SpellsCastLastTurn(players: All, aggregate: Maximum, min: Some(2))),
+                effect: [ChangeSourceFace(action: Transform)],
+            )],
+        ),
+    ],
+)

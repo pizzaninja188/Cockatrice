@@ -147,6 +147,14 @@ impl GameEngine {
         &self,
         oid: ObjectId,
     ) -> Vec<tricerules_card_model::IdentifiedStaticAbility> {
+        self.memoized_active_static_abilities(oid, || self.compute_active_static_abilities(oid))
+    }
+
+    fn compute_active_static_abilities(
+        &self,
+        oid: ObjectId,
+    ) -> Vec<tricerules_card_model::IdentifiedStaticAbility> {
+        super::read_memo::count_evaluation();
         let Some(_object) = self.state.objects.get(&oid).filter(|object| {
             object.zone == Zone::Battlefield && object.phase_status.is_none() && !object.face_down
         }) else {
@@ -180,14 +188,13 @@ impl GameEngine {
     }
 
     pub(super) fn active_static_ability_definitions(&self, oid: ObjectId) -> Vec<StaticAbilityDef> {
-        if !super::characteristics::printed_static_source_is_available(
-            &self.state,
-            self.registry,
-            oid,
-        ) {
+        // Most permanents have no static abilities; settle that before the availability check,
+        // which evaluates the early layers and removal effects.
+        let abilities = self.active_static_abilities(oid);
+        if abilities.is_empty() || !self.printed_static_source_available(oid) {
             return Vec::new();
         }
-        self.active_static_abilities(oid)
+        abilities
             .into_iter()
             .map(|ability| ability.definition)
             .collect()
@@ -308,24 +315,14 @@ impl GameEngine {
             .player_idx(player)
             .is_some_and(|index| !self.state.players[index].has_lost)
             && self
-                .state
-                .objects
-                .values()
-                .filter(|object| object.zone == Zone::Battlefield)
-                .any(|object| {
-                    self.active_static_abilities(object.id)
-                        .iter()
-                        .any(|ability| {
-                            matches!(
-                                &ability.definition,
-                                StaticAbilityDef::AllPlayersMaySpendManaAsThoughAnyColor
-                            )
-                        })
-                        && super::characteristics::printed_static_source_is_available(
-                            &self.state,
-                            self.registry,
-                            object.id,
-                        )
+                .battlefield_static_sources()
+                .iter()
+                .flat_map(|source| &source.abilities)
+                .any(|ability| {
+                    matches!(
+                        ability,
+                        StaticAbilityDef::AllPlayersMaySpendManaAsThoughAnyColor
+                    )
                 })
     }
 
@@ -442,7 +439,7 @@ impl GameEngine {
             return false;
         }
         !self.state.objects.iter().any(|(&source, object)| {
-            if !super::characteristics::printed_static_source_is_available(&self.state, self.registry, source)
+            if !self.printed_static_source_available(source)
             {
                 return false;
             }
@@ -703,11 +700,7 @@ impl GameEngine {
             return false;
         }
         !self.state.objects.keys().any(|&oid| {
-            if !super::characteristics::printed_static_source_is_available(
-                &self.state,
-                self.registry,
-                oid,
-            ) {
+            if !self.printed_static_source_available(oid) {
                 return false;
             }
             self.active_static_ability_definitions(oid)
@@ -2090,11 +2083,7 @@ impl GameEngine {
     /// CR 502.3: this printed/copied static ability adds an untap attempt during each other
     /// player's untap step. A layer-6 remove-all-abilities effect suppresses the hook.
     pub(super) fn untaps_during_other_players_untap_steps(&self, oid: ObjectId) -> bool {
-        if !super::characteristics::printed_static_source_is_available(
-            &self.state,
-            self.registry,
-            oid,
-        ) {
+        if !self.printed_static_source_available(oid) {
             return false;
         }
         self.active_static_ability_definitions(oid)
@@ -2117,11 +2106,7 @@ impl GameEngine {
         let mut groups = Vec::new();
         let mut recipients = BTreeSet::new();
         for (source, snapshot) in &candidates {
-            if !super::characteristics::printed_static_source_is_available(
-                &self.state,
-                self.registry,
-                *source,
-            ) {
+            if !self.printed_static_source_available(*source) {
                 continue;
             }
             if self.untaps_during_other_players_untap_steps(*source) {

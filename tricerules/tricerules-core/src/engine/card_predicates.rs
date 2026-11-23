@@ -1,7 +1,7 @@
 use super::*;
 
 fn filter_checks_color(filter: &ZoneCardFilter) -> bool {
-    filter.is_colorless.is_some()
+    filter.has_color_leaf()
         || filter
             .any_of
             .as_ref()
@@ -10,34 +10,29 @@ fn filter_checks_color(filter: &ZoneCardFilter) -> bool {
 
 /// Keep each printed non-color predicate intact while evaluating color in the current layer view.
 /// OR branches must be evaluated independently so their other constraints remain associated.
+/// `colors` is `None` when current colors are unknown; any color leaf then fails closed.
 pub(super) fn matches_filter_with_current_color(
     definition: &CardDefinition,
     filter: &ZoneCardFilter,
-    colorless: Option<bool>,
+    colors: Option<&[Color]>,
     face_index: Option<usize>,
 ) -> bool {
     if let Some(branches) = &filter.any_of {
         return branches.iter().any(|branch| {
-            matches_filter_with_current_color(definition, branch, colorless, face_index)
+            matches_filter_with_current_color(definition, branch, colors, face_index)
         });
     }
-    if filter
-        .is_colorless
-        .is_some_and(|required| colorless != Some(required))
-    {
-        return false;
-    }
-    if filter.is_colorless.is_none() {
-        return match face_index {
-            Some(index) => definition.matches_zone_card_filter_for_face(index, filter),
-            None => definition.matches_zone_card_filter(filter),
-        };
-    }
-    let mut printed = filter.clone();
-    printed.is_colorless = None;
+    let printed = if filter.has_color_leaf() {
+        if !colors.is_some_and(|colors| filter.color_leaves_match(colors)) {
+            return false;
+        }
+        &filter.without_color_leaves()
+    } else {
+        filter
+    };
     match face_index {
-        Some(index) => definition.matches_zone_card_filter_for_face(index, &printed),
-        None => definition.matches_zone_card_filter(&printed),
+        Some(index) => definition.matches_zone_card_filter_for_face(index, printed),
+        None => definition.matches_zone_card_filter(printed),
     }
 }
 
@@ -54,12 +49,11 @@ pub(super) fn proposed_face_matches_filter(
     let Some(face) = definition.face(face_index) else {
         return false;
     };
-    let colorless = filter_checks_color(filter).then(|| {
+    let colors = filter_checks_color(filter).then(|| {
         super::characteristics::spell_cast_characteristics(state, registry, oid, controller, face)
             .colors
-            .is_empty()
     });
-    matches_filter_with_current_color(definition, filter, colorless, Some(face_index))
+    matches_filter_with_current_color(definition, filter, colors.as_deref(), Some(face_index))
 }
 
 /// Resolve the printed card definition for library searches, hand costs, and graveyard counts.
@@ -85,13 +79,13 @@ pub(super) fn zone_card_matches_filter(
         return false;
     }
     registry.get(&object.card_id).is_some_and(|definition| {
-        let colorless = filter_checks_color(filter)
+        let colors = filter_checks_color(filter)
             .then(|| {
                 super::characteristics::characteristics_from(state, registry, oid)
-                    .map(|values| values.colors.is_empty())
+                    .map(|values| values.colors)
             })
             .flatten();
-        matches_filter_with_current_color(definition, filter, colorless, None)
+        matches_filter_with_current_color(definition, filter, colors.as_deref(), None)
     })
 }
 
@@ -123,13 +117,13 @@ pub(super) fn linked_exile_card_matches_filter(
     }
     filter.is_none_or(|filter| {
         registry.get(&object.card_id).is_some_and(|definition| {
-            let colorless = filter_checks_color(filter)
+            let colors = filter_checks_color(filter)
                 .then(|| {
                     super::characteristics::characteristics_from(state, registry, oid)
-                        .map(|values| values.colors.is_empty())
+                        .map(|values| values.colors)
                 })
                 .flatten();
-            matches_filter_with_current_color(definition, filter, colorless, None)
+            matches_filter_with_current_color(definition, filter, colors.as_deref(), None)
         })
     })
 }

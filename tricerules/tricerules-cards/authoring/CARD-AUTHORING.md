@@ -146,7 +146,9 @@ For a hand-authored card:
 4. Express mechanics with typed costs, filters, targeting, conditions, abilities, and ordered
    effects. Do not encode rules in comments, labels, or presentation fields.
 5. Add the `.ron` anywhere under `tricerules-cards/data/`; `build.rs` discovers it automatically.
-   Do not edit a registry list.
+   Do not edit a registry list. Name it `portable_file_stem(id)`: ids keep `"` and `:`
+   (`kongming,_"sleeping_dragon"`), file names drop them (`kongming,_sleeping_dragon.ron`), and
+   `build.rs` rejects non-portable file names.
 6. Add the card to applicable shared happy/illegal scenarios with independently reviewed inputs
    and expectations, or write focused scenarios where reuse does not cover its differences. Keep
    explicit zone, step, priority and state assertions; see [reusable semantic evidence](#reusable-semantic-evidence).
@@ -2092,7 +2094,8 @@ do not create retrospective issues for completed routine batches. Capability lin
 delivered-card mentions are not duplicate ownership. Lack of an issue is not proof of blockage.
 
 `scripts/check-card-evidence.ps1` validates all checked-in review maps against canonical handwritten
-definitions and the pinned source. Map filenames equal the canonical RON filename stem.
+definitions and the pinned source. Map filenames equal the canonical RON filename stem,
+`portable_file_stem(id)`.
 The checker uses directory-mode `--review-existing` to load and deduplicate the corpus once for
 the entire batch, with packets written outside data. Checked-in maps must be fully resolved and
 confirmed; review output remains evidence, never proof of mechanical equivalence.

@@ -929,6 +929,78 @@ mod tests {
     }
 
     #[test]
+    fn mana_only_sees_tap_triggers_granted_by_a_class_level() {
+        // A level-gated trigger is not on the Class's face, only in its effective triggered
+        // abilities. The board check must read the same list the tap snapshot matches.
+        const CLASS: &str = r#"(
+            id: "synthetic_tap_watch_class", name: "Synthetic Tap Watch Class",
+            face_id: "synthetic_tap_watch_class", mana_cost: "{G}", types: ["Enchantment", "Class"],
+            class_level_bars: [(
+                level: 2,
+                level_ability: (ability_id: "level_2", presentation: Fallback,
+                    costs: [Mana("{1}")], effect: [SetClassLevel(level: 2)], timing: SorcerySpeed),
+                triggered_abilities: [(ability_id: "level_2_trigger", presentation: Fallback,
+                    trigger: WheneverPlayerTapsCreature(player: Controller, controllers: Controller,
+                        cardinality: EachObject),
+                    effect: [GainLife(amount: 1)])],
+            ), (
+                level: 3,
+                level_ability: (ability_id: "level_3", presentation: Fallback,
+                    costs: [Mana("{2}")], effect: [SetClassLevel(level: 3)], timing: SorcerySpeed),
+            )],
+        )"#;
+        let registry = tricerules_cards::registry::CardRegistry::from_chunks_and_tokens(
+            &[
+                include_str!("../../../tricerules-cards/data/forest.ron"),
+                include_str!("../../../tricerules-cards/data/generated/l/llanowar_elves.ron"),
+                CLASS,
+            ],
+            &[],
+        )
+        .unwrap();
+        let mut e = GameEngine::new(
+            Box::leak(Box::new(registry)),
+            13_110_603,
+            &[0, 1],
+            20,
+            Some(vec![vec!["forest".to_string(); 40]; 2]),
+            true,
+        )
+        .unwrap();
+        e.state.opening = None;
+        e.state.turn_step = TurnStep::Main1;
+        e.state.priority_idx = 0;
+        let elves = put(&mut e, "Llanowar Elves", rv1::DevZone::Battlefield);
+        let class = put(
+            &mut e,
+            "Synthetic Tap Watch Class",
+            rv1::DevZone::Battlefield,
+        );
+        let mana = e.effective_activated_abilities(elves)[0].definition.clone();
+        // Level 1: nothing watches the tap.
+        assert_eq!(proofs::mana_only(&e, 0, elves, &mana), Some(true));
+        let generation = e
+            .state
+            .zone_change_generation
+            .get(&class)
+            .copied()
+            .unwrap_or(0);
+        e.state.class_levels.insert(
+            class,
+            crate::state::ClassLevelDesignation {
+                zone_change_generation: generation,
+                level: 2,
+            },
+        );
+        let _memo = e.read_memo_scope();
+        assert_eq!(
+            proofs::mana_only(&e, 0, elves, &mana),
+            Some(false),
+            "tapping Elves now triggers the Class's level-2 ability"
+        );
+    }
+
+    #[test]
     fn spell_hints_require_payable_mana_and_priority_without_mutation() {
         let mut e = engine();
         let bear = put(&mut e, "Grizzly Bears", rv1::DevZone::Hand);

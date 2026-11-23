@@ -1,0 +1,12 @@
+// Oracle 51991d28-137e-4690-a674-d852b904bd1a; source checked 2026-11-22, no rulings.
+// CR 115.1 and 601.2c (one graveyard-card target), 105.2 (current color), 400.7 (new object
+// on zone change) and 608.2b (illegal target fizzles).
+(
+  id: "revive",
+  name: "Revive",
+  face_id: "revive",
+  mana_cost: "{1}{G}",
+  types: ["Sorcery"],
+  spell_effect: [MoveGraveyardCards(filter: (card: Some((is_color: Some(Green)))), destination: Hand)],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+)

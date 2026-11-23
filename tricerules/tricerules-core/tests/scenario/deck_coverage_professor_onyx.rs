@@ -1,4 +1,4 @@
-//! Actual Onyx with prepared zones, mana and loyalty; normal capture and GUI are separate.
+//! Actual Onyx with prepared zones, mana and loyalty; GUI acceptance is separate.
 use super::helpers::*;
 use crate::helpers::ScenarioCommandExt;
 use tricerules_cards::primitives::CounterKind;

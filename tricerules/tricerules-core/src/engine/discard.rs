@@ -191,7 +191,7 @@ impl GameEngine {
             cause,
             known_card_id: (revealed || matches!(destination, Zone::Graveyard | Zone::Exile))
                 .then_some(card_id),
-            known_colorless: None,
+            known_colors: None,
         };
         if destination == Zone::Exile {
             if let Some(cost) = madness {
@@ -262,10 +262,10 @@ impl GameEngine {
                             .unwrap_or(0)
                             == receipt.after_generation
                 });
-                receipt.known_colorless = current
+                receipt.known_colors = current
                     .then(|| {
                         self.characteristics(receipt.object_id)
-                            .map(|value| value.colors.is_empty())
+                            .map(|value| value.colors)
                     })
                     .flatten();
             }
@@ -305,14 +305,11 @@ impl GameEngine {
             .flat_map(|p| p.battlefield.iter().copied())
             .any(|oid| {
                 self.controller_of(oid).is_some_and(|controller| {
-                    super::characteristics::printed_static_source_is_available(
-                        &self.state,
-                        self.registry,
-                        oid,
-                    ) && self
-                        .active_static_ability_definitions(oid)
-                        .iter()
-                        .any(|ability| predicate(ability, controller))
+                    self.printed_static_source_available(oid)
+                        && self
+                            .active_static_ability_definitions(oid)
+                            .iter()
+                            .any(|ability| predicate(ability, controller))
                 })
             })
     }
@@ -338,11 +335,7 @@ impl GameEngine {
             let Some(controller) = self.controller_of(oid) else {
                 continue;
             };
-            if !super::characteristics::printed_static_source_is_available(
-                &self.state,
-                self.registry,
-                oid,
-            ) {
+            if !self.printed_static_source_available(oid) {
                 continue;
             }
             for ability in self.active_static_ability_definitions(oid) {

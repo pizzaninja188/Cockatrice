@@ -2596,6 +2596,14 @@ pub struct ZoneCardFilter {
     /// spells in addition to artifacts, so this keeps the shared source filter reusable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub is_colorless: Option<bool>,
+    /// CR 105.2: the card's colors include this color. Revive returns a green card; Force of
+    /// Will exiles a blue card from hand.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is_color: Option<Color>,
+    /// CR 105.2b: the card is two or more colors. Reborn Hope and Jared Carthalion return a
+    /// multicolored card from a graveyard.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is_multicolored: Option<bool>,
     /// No One Left Behind and Recommission use inclusive mana-value bounds.
     #[serde(default)]
     pub min_mana_value: Option<u32>,
@@ -2725,7 +2733,38 @@ impl ZoneCardFilter {
         {
             return Err("zone card filter cannot both require and exclude a card type".into());
         }
+        if self.is_colorless == Some(true)
+            && (self.is_color.is_some() || self.is_multicolored == Some(true))
+        {
+            return Err("zone card filter cannot require a color and colorless together".into());
+        }
         Ok(())
+    }
+
+    /// Whether this terminal filter reads color, which callers resolve from current values.
+    pub fn has_color_leaf(&self) -> bool {
+        self.is_colorless.is_some() || self.is_color.is_some() || self.is_multicolored.is_some()
+    }
+
+    /// Evaluate this terminal filter's color leaves against one color set. `any_of` branches
+    /// are not inspected; callers evaluate each branch on its own.
+    pub fn color_leaves_match(&self, colors: &[Color]) -> bool {
+        self.is_colorless
+            .is_none_or(|required| colors.is_empty() == required)
+            && self.is_color.is_none_or(|color| colors.contains(&color))
+            && self
+                .is_multicolored
+                .is_none_or(|required| (colors.len() >= 2) == required)
+    }
+
+    /// This terminal filter with its color leaves cleared, for printed non-color matching.
+    pub fn without_color_leaves(&self) -> Self {
+        Self {
+            is_colorless: None,
+            is_color: None,
+            is_multicolored: None,
+            ..self.clone()
+        }
     }
 
     fn collect_terminal_filters<'a>(&'a self, out: &mut Vec<&'a Self>) {

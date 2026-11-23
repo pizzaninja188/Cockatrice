@@ -800,11 +800,7 @@ impl GameEngine {
             .collect();
         battlefield_sources.sort_by_key(|object| object.id);
         for source in battlefield_sources {
-            if !super::characteristics::printed_static_source_is_available(
-                &self.state,
-                self.registry,
-                source.id,
-            ) {
+            if !self.printed_static_source_available(source.id) {
                 continue;
             }
             let Some(face) = self.effective_face(source.id) else {

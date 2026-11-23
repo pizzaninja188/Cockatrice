@@ -5160,6 +5160,46 @@ fn zone_card_filters_validate_leaf_and_recursive_or_shapes() {
 }
 
 #[test]
+fn zone_card_filter_color_leaves_round_trip_and_reject_colorless_contradictions() {
+    let encoded = ron::ser::to_string(&ZoneCardFilter::default()).unwrap();
+    assert!(!encoded.contains("is_color"), "{encoded}");
+    assert!(!encoded.contains("is_multicolored"), "{encoded}");
+
+    // Revive and Reborn Hope.
+    let green: ZoneCardFilter = ron::from_str("(is_color: Some(Green))").unwrap();
+    assert_eq!(green.is_color, Some(crate::Color::Green));
+    assert!(green.validate().is_ok());
+    let multicolored: ZoneCardFilter = ron::from_str("(is_multicolored: Some(true))").unwrap();
+    assert_eq!(multicolored.is_multicolored, Some(true));
+    assert!(multicolored.validate().is_ok());
+    assert!(ZoneCardFilter {
+        is_multicolored: Some(false),
+        is_color: Some(crate::Color::Blue),
+        ..Default::default()
+    }
+    .validate()
+    .is_ok());
+
+    for contradiction in [
+        ZoneCardFilter {
+            is_color: Some(crate::Color::Green),
+            is_colorless: Some(true),
+            ..Default::default()
+        },
+        ZoneCardFilter {
+            is_multicolored: Some(true),
+            is_colorless: Some(true),
+            ..Default::default()
+        },
+    ] {
+        assert_eq!(
+            contradiction.validate(),
+            Err("zone card filter cannot require a color and colorless together".into())
+        );
+    }
+}
+
+#[test]
 fn zone_card_filter_required_supertypes_must_be_nonempty_and_unique() {
     let empty = ZoneCardFilter {
         card_type: Some(CardTypeFilter::Creature),

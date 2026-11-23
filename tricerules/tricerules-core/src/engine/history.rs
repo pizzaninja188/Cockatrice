@@ -366,6 +366,58 @@ pub(super) fn spell_cast_count_in_record(
     )
 }
 
+/// Largest single selected player's committed casts in one record. A cast counts only when its
+/// caster is selected and the spell filter matches, so the filter narrows each player's count
+/// rather than being applied after players are combined.
+fn max_player_spell_cast_count_in_record(
+    state: &GameState,
+    record: &TurnRecord,
+    players: RelativePlayerSet,
+    filter: &SpellCastFilter,
+    controller: PlayerId,
+) -> u32 {
+    let mut per_caster: BTreeMap<PlayerId, usize> = BTreeMap::new();
+    for fact in record.spell_casts.iter().filter(|fact| {
+        relative_player_set_contains(state, players, controller, fact.caster)
+            && spell_cast_matches(filter, fact)
+    }) {
+        *per_caster.entry(fact.caster).or_default() += 1;
+    }
+    clamp_public_count(per_caster.values().copied().max().unwrap_or(0))
+}
+
+/// Last-turn spell count for a `SpellsCastLastTurn` condition under its explicit aggregate.
+/// `Sum` keeps the aggregate counter fast path for the unfiltered all-players case; `Maximum`
+/// reads per-caster facts.
+pub(super) fn spells_cast_last_turn_count(
+    state: &GameState,
+    players: RelativePlayerSet,
+    filter: &SpellCastFilter,
+    aggregate: PlayerCountAggregate,
+    controller: PlayerId,
+) -> u32 {
+    let record = &state.turn_history.previous;
+    match aggregate {
+        PlayerCountAggregate::Sum
+            if players == RelativePlayerSet::All && *filter == SpellCastFilter::default() =>
+        {
+            record.spells_cast
+        }
+        PlayerCountAggregate::Sum => spell_cast_count_in_record(
+            state,
+            record,
+            ConditionPlayerSet::Relative(players),
+            filter,
+            controller,
+            None,
+            false,
+        ),
+        PlayerCountAggregate::Maximum => {
+            max_player_spell_cast_count_in_record(state, record, players, filter, controller)
+        }
+    }
+}
+
 fn selected_condition_player(
     players: ConditionPlayerSet,
     targets: Option<&[StackTarget]>,
@@ -1336,23 +1388,18 @@ impl GameEngine {
                 false,
             )),
             GameCondition::SpellsCastLastTurn {
-                players, filter, ..
+                players,
+                aggregate,
+                filter,
+                ..
             } => {
-                let count = if *players == RelativePlayerSet::All
-                    && *filter == SpellCastFilter::default()
-                {
-                    self.state.turn_history.previous.spells_cast
-                } else {
-                    spell_cast_count_in_record(
-                        &self.state,
-                        &self.state.turn_history.previous,
-                        ConditionPlayerSet::Relative(*players),
-                        filter,
-                        context.controller,
-                        None,
-                        false,
-                    )
-                };
+                let count = spells_cast_last_turn_count(
+                    &self.state,
+                    *players,
+                    filter,
+                    *aggregate,
+                    context.controller,
+                );
                 condition.matches_value(count)
             }
             GameCondition::CrimesCommittedThisTurn { players, .. } => {

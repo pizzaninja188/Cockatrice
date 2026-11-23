@@ -246,7 +246,9 @@ impl GameEngine {
                 performed = true;
             }
         }
-        let zone_snapshot = self.snapshot_zone_event();
+        // Detection below only reads the state, so derived queries are memoized until the first
+        // mutation (counter cancellation). Each permanent's characteristics are computed once.
+        let detection_memo = self.read_memo_scope();
         let mut leaves: Vec<(TriggerSourceSnapshot, bool, bool)> = Vec::new();
         let mut tap_events = Vec::new();
         let mut commander_zone_moved = false;
@@ -411,6 +413,16 @@ impl GameEngine {
                 }
             }
         }
+        // CR 603.10a observers see the board before any action in this set. Nothing above mutated
+        // it, so this is the same snapshot as one taken at the start of the pass. A pass with no
+        // departure, regeneration or answered choice dispatches no zone triggers and skips the
+        // O(board) snapshot.
+        let zone_snapshot = (!to_destroy_t0.is_empty()
+            || !to_destroy_lethal.is_empty()
+            || !sagas_to_sacrifice.is_empty()
+            || choice_set.is_some())
+        .then(|| self.snapshot_zone_event());
+        drop(detection_memo);
         // Counter cancellation and deaths are one simultaneous SBA set. Capture all death decisions
         // and last-known characteristics before removing either kind of counter.
         for o in self.state.objects.values_mut() {
@@ -590,7 +602,9 @@ impl GameEngine {
                                 .objects
                                 .get(&object_id)
                                 .map(|object| object.owner);
-                            let source = zone_snapshot.source(object_id);
+                            let source = zone_snapshot
+                                .as_ref()
+                                .and_then(|snapshot| snapshot.source(object_id));
                             let was_creature = source.as_ref().is_some_and(|source| {
                                 source.types.iter().any(|type_name| type_name == "Creature")
                             });
@@ -636,6 +650,8 @@ impl GameEngine {
                     sacrifice_events(source, was_creature, controller, died)
                 },
             ));
+            let zone_snapshot = zone_snapshot
+                .expect("a departure, regeneration or answered choice took the zone snapshot");
             self.fire_zone_triggers(zone_snapshot, trigger_events, out);
         }
 
@@ -809,6 +825,13 @@ impl GameEngine {
             })
             .map(|(id, _)| *id)
             .collect();
+        if orphaned_auras.is_empty() {
+            // Firing an empty zone batch matches no trigger and records no history. Keep only the
+            // refreshes `fire_triggers` performs before collecting, and skip the O(board) snapshot.
+            self.refresh_enduring_story_designations();
+            self.reconcile_combat_characteristics(out);
+            return Ok((changed, performed));
+        }
         let aura_zones = self.snapshot_zone_event();
         let mut aura_events = Vec::new();
         for id in orphaned_auras {

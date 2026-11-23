@@ -2744,18 +2744,18 @@ fn zone_filter_matches_characteristics(
             characteristics.has_name(name)
         }
     });
-    let colors_are_empty = if let Some((item, _, _)) = stack {
+    let colors = if let Some((item, _, _)) = stack {
         super::super::characteristics::stack_spell_colors(&engine.state, engine.registry, item)
-            .map(|colors| colors.is_empty())
     } else {
-        Some(characteristics.colors.is_empty())
+        Some(characteristics.colors.clone())
     };
     let live_fields_match = name_matches
         && filter.card_type.is_none_or(type_matches)
         && !filter.excluded_card_types.iter().copied().any(type_matches)
-        && filter
-            .is_colorless
-            .is_none_or(|required| colors_are_empty.is_some_and(|actual| actual == required))
+        && (!filter.has_color_leaf()
+            || colors
+                .as_deref()
+                .is_some_and(|colors| filter.color_leaves_match(colors)))
         && filter.min_mana_value.is_none_or(|minimum| {
             stack.is_some_and(|(item, _, face)| {
                 face.mana_cost.mana_value_on_stack(item.chosen_x) >= minimum
@@ -8861,6 +8861,26 @@ mod tests {
         )
         .is_some());
         assert!(!engine.characteristics(oid).unwrap().colors.is_empty());
+        let green = ZoneCardFilter {
+            is_color: Some(tricerules_card_model::Color::Green),
+            ..Default::default()
+        };
+        let multicolored = ZoneCardFilter {
+            is_multicolored: Some(true),
+            ..Default::default()
+        };
+        let candidate = |engine: &GameEngine, filter: &ZoneCardFilter| {
+            committed_choose_card_candidate(
+                engine,
+                &entry,
+                0,
+                RelativePlayerSet::Controller,
+                filter,
+            )
+            .is_some()
+        };
+        assert!(candidate(&engine, &green));
+        assert!(!candidate(&engine, &multicolored));
 
         engine
             .state
@@ -8940,6 +8960,32 @@ mod tests {
             &wrong_mana_value,
         )
         .is_none());
+        assert!(!candidate(&engine, &green), "Layer 5 made it colorless");
+        engine
+            .state
+            .continuous_effects
+            .push(crate::state::ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: crate::state::AffectedScope::Single(oid),
+                kind: tricerules_card_model::primitives::ContinuousEffectKind::Layer5SetColors(
+                    vec![
+                        tricerules_card_model::Color::White,
+                        tricerules_card_model::Color::Blue,
+                    ],
+                ),
+                condition: None,
+                duration: tricerules_card_model::primitives::EffectDuration::UntilEndOfTurn,
+                timestamp: 2,
+            });
+        assert!(
+            candidate(&engine, &multicolored),
+            "current colors are white and blue"
+        );
+        assert!(
+            !candidate(&engine, &green),
+            "the printed green no longer applies"
+        );
     }
 
     fn linked_exile_test_item(occurrence: crate::state::LinkedExileOccurrence) -> StackItem {

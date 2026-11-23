@@ -188,7 +188,7 @@ card". Nothing here is interchangeable.
 | **engine `ObjectId`** (`oid`) | `u32` / proto `uint32` / `quint32` | engine (`GameState::next_object_id`) | One game object, from creation until it leaves the game. Allocation starts **above** the highest `PlayerId` so a player target and an object can share the `TargetRef.object_id` field unambiguously. |
 | **presentation object handle** | positive `uint32` | Servatrice, per session and incarnation epoch | Client-facing object references in events, maps and offered actions. May initially equal the canonical `ObjectId`; it changes when a card emerges face down from a concealed zone. Client commands return the handle and projected generation. |
 | **engine `PlayerId`** | `i32` | Servatrice seat id, mirrored into the engine | The seat. Also travels as `TargetRef.object_id` for player targets. |
-| **tricerules `card_id`** (`cardId`) | `String`, `snake_case` slug | `tricerules-cards` registry; `id == slugify(name)` (enforced by a registry test) | Printing-independent identity of a *card definition*. Tokens live in a separate id namespace and are deliberately absent from the session catalog. |
+| **tricerules `card_id`** (`cardId`) | `String`, `snake_case` slug | `tricerules-cards` registry; `id == slugify(name)` (enforced by a registry test) | Printing-independent identity of a *card definition*. May contain `"` or `:`; RON and review-map file names use `portable_file_stem(id)` and never define identity. Tokens live in a separate id namespace and are deliberately absent from the session catalog. |
 | **Oracle name** | `QString` / `String` | `cards.xml` (Scryfall) | Display and deck lists. The **only** card identity that crosses IPC in `PlayerDeck`; the engine resolves it with `CardRegistry::id_for_name` (trim + lowercase; every face name of a multi-face card resolves to the one card id). |
 | **`Server_Card.id`** (`serverCardId`) | `int` | Servatrice, per physical card | Unique within its owner's zones. This is what a client `CardItem` carries on the wire. |
 | **engine hand slot** (`handSlot`) | index into `PlayerState.hand` | engine | Valid **only for the batch that reported it**. Any hand change renumbers it. |
@@ -446,7 +446,8 @@ Do not re-derive this per card.
   the unused layer subparts are explicit stages. Layers 3–5 currently support name, type-line,
   and color replacement effects; implementing another effect in a layer means filling its slot,
   not adding another characteristics path. The calculation is pure
-  (state + registry + oid), so it can be memoized without touching callers.
+  (state + registry + oid). Inside a read-only scope (`engine/read_memo.rs`) it is memoized,
+  with static-source availability and active static abilities, without touching callers.
 - **Timestamps.** Continuous effects carry CR 613.7 timestamps stamped from `command_index`;
   `ordered_effects` sorts by timestamp with the vector index as a deterministic tiebreak. That
   function is also the documented insertion point for CR 613.8 dependency ordering, which is
@@ -511,12 +512,20 @@ What grows is **board complexity**. The hot paths, in the order they are likely 
 1. legal-action enumeration, once per priority window (`engine/legal_actions.rs`);
 2. triggered-ability scans, once per internal `GameEvent` (`engine/triggers.rs`);
 3. the SBA fixed-point loop, which re-queries characteristics per permanent per pass;
-4. characteristics recomputation (currently unmemoized by design — see §6);
+4. characteristics recomputation — memoized only inside a read scope (§6), so per-permanent
+   loops outside one (SBA passes, mutable command paths, payment probes) still pay for it;
 5. zone-view serialization + per-participant redaction, once per batch.
+
+Per-permanent consumers that rescan every permanent are the usual way a command becomes
+O(board²). Legal-action generation, trigger collection and zone views open a
+`GameEngine::read_memo_scope`, whose shared borrow guarantees the state cannot change while its
+cache lives; engine clones start with an empty memo.
 
 **Measure before optimizing.** The paired stress scenario in
 `tricerules-core/tests/scenario/performance.rs` drives a large board through a full turn under
-`--release` with a wall-time assertion, so growth shows up as a failing test. Determinism makes
+`--release` with a wall-time assertion, so growth shows up as a failing test.
+`engine/board_scaling_tests.rs` counts derived-query evaluations for one command on boards of
+two sizes and fails when that count grows faster than the board, in every test profile. Determinism makes
 any profile exactly reproducible. Consider binary card-data embedding only after measured
 registry startup exceeds roughly one second or CI regresses; preserve embedded data and replay
 hashing rather than runtime file loading. Consider two-letter generated-data sharding only when

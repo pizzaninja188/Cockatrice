@@ -35,13 +35,6 @@ pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize
         "island",
         "explosive_apparatus",
     ];
-    cards.extend(match card {
-        "arcane_denial" => Some("opt"),
-        "annul" => Some("short_sword"),
-        "flashfreeze" => Some("hill_giant"),
-        "flusterstorm" => Some("divination"),
-        _ => None,
-    });
     if card == "decimate" {
         cards.push("ominous_seas");
     }
@@ -183,6 +176,51 @@ pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize
     e
 }
 
+/// Direct relocation skips entry, so seed what the definition says the source would carry:
+/// fixed self enters-with-counters replacements, then enough of each counter kind named by this
+/// ability's own source-paid removal cost. Actual-card scenarios prove how counters are earned.
+fn seed_definition_counters(
+    e: &mut GameEngine,
+    oid: u32,
+    face: &tricerules_cards::CardFace,
+    ability: usize,
+) {
+    use tricerules_cards::primitives::{EntersWithCountersAffected, StaticAbilityDef};
+    use tricerules_cards::{AbilityCost, Amount, CounterRemovalPaymentSource};
+    let mut seeds = vec![];
+    for identified in &face.static_abilities {
+        if let StaticAbilityDef::EntersWithCounters {
+            affected: EntersWithCountersAffected::Self_,
+            counter,
+            amount: Amount::Fixed(amount),
+            cast_cost_condition: None,
+        } = &identified.definition
+        {
+            seeds.push((*counter, *amount));
+        }
+    }
+    for cost in face
+        .activated_abilities
+        .get(ability)
+        .into_iter()
+        .flat_map(|definition| &definition.costs)
+    {
+        if let AbilityCost::RemoveCounters {
+            counter: Some(counter),
+            count,
+            payment_source: CounterRemovalPaymentSource::Source,
+        } = cost
+        {
+            seeds.push((*counter, *count));
+        }
+    }
+    let object = e.state.objects.get_mut(&oid).unwrap();
+    for (counter, amount) in seeds {
+        let current = object.counters.get(&counter).copied().unwrap_or_default();
+        object.set_counter(counter, current.max(amount));
+    }
+}
+
 /// Existing reviewed conformance source setup. Other zone abilities need explicit fixtures.
 pub(crate) fn ability_source(
     e: &mut GameEngine,
@@ -191,28 +229,33 @@ pub(crate) fn ability_source(
     face: usize,
     ability: usize,
 ) -> u32 {
-    let oid = if card == "boseiju,_who_endures" && ability == 1 {
-        // Channel discards its hand source; its target/search use the existing fixture resources.
-        super::relocate_to_hand(e, player, card)
-    } else if (card == "fanatic_of_rhonas" && ability == 2)
-        || (card == "metalwork_colossus" && ability == 0)
-    {
-        let oid = super::take_oid_from_library_or_hand(e, player, card);
-        e.state.players[player].graveyard.push(oid);
-        e.state.objects.get_mut(&oid).unwrap().zone = Zone::Graveyard;
-        oid
-    } else {
-        // Select the fixture face before the first battlefield publication seeds its slots.
-        // This is initial setup, not a front-face permanent changing faces in play.
-        let oid = super::relocate_to_hand(e, player, card);
-        e.state.objects.get_mut(&oid).unwrap().face_up_index = face;
-        super::relocate_to_battlefield(e, player, card, false)
-    };
-    e.state.objects.get_mut(&oid).unwrap().face_up_index = face;
     let card_face = tricerules_cards::registry::global()
         .get(card)
         .and_then(|definition| definition.face(face))
         .expect("conformance source face exists in the card registry");
+    // The printed ability's own functioning zone decides where the source starts.
+    let source_zone = card_face
+        .activated_abilities
+        .get(ability)
+        .map(|definition| definition.source_zone)
+        .unwrap_or_default();
+    let oid = match source_zone {
+        tricerules_cards::AbilitySourceZone::Hand => super::relocate_to_hand(e, player, card),
+        tricerules_cards::AbilitySourceZone::Graveyard => {
+            let oid = super::take_oid_from_library_or_hand(e, player, card);
+            e.state.players[player].graveyard.push(oid);
+            e.state.objects.get_mut(&oid).unwrap().zone = Zone::Graveyard;
+            oid
+        }
+        tricerules_cards::AbilitySourceZone::Battlefield => {
+            // Select the fixture face before the first battlefield publication seeds its slots.
+            // This is initial setup, not a front-face permanent changing faces in play.
+            let oid = super::relocate_to_hand(e, player, card);
+            e.state.objects.get_mut(&oid).unwrap().face_up_index = face;
+            super::relocate_to_battlefield(e, player, card, false)
+        }
+    };
+    e.state.objects.get_mut(&oid).unwrap().face_up_index = face;
     let printed_loyalty = card_face.loyalty.unwrap_or_default();
     let required_loyalty = card_face
         .activated_abilities
@@ -235,6 +278,9 @@ pub(crate) fn ability_source(
             printed_loyalty.max(required_loyalty),
         );
     }
+    if source_zone == tricerules_cards::AbilitySourceZone::Battlefield {
+        seed_definition_counters(e, oid, card_face, ability);
+    }
     if card == "pentad_prism" {
         // Direct relocation skips casting/entry. Dedicated paid scenarios prove Sunburst.
         e.state
@@ -243,44 +289,27 @@ pub(crate) fn ability_source(
             .unwrap()
             .set_counter(tricerules_cards::CounterKind::Charge, 2);
     }
-    if card == "magistrates_scepter" && ability == 1 {
-        // The generic ability conformance fixture prepares Scepter's exact three-Charge cost;
-        // actual-card scenarios separately prove how Charge counters are earned.
+    if card == "pentavus" && ability == 1 {
+        // Any controlled Pentavite creature pays, including a real non-token creature.
+        let payment = e.state.players[player]
+            .battlefield
+            .iter()
+            .copied()
+            .find(|id| e.state.objects[id].card_id == "grizzly_bears")
+            .expect("existing conformance creature resource");
         e.state
-            .objects
-            .get_mut(&oid)
-            .unwrap()
-            .set_counter(tricerules_cards::CounterKind::Charge, 3);
-    }
-    if card == "pentavus" {
-        // Direct relocation skips entry. Actual-card scenarios independently prove entry.
-        e.state
-            .objects
-            .get_mut(&oid)
-            .unwrap()
-            .set_counter(tricerules_cards::CounterKind::PlusOnePlusOne, 5);
-        if ability == 1 {
-            // Any controlled Pentavite creature pays, including a real non-token creature.
-            let payment = e.state.players[player]
-                .battlefield
-                .iter()
-                .copied()
-                .find(|id| e.state.objects[id].card_id == "grizzly_bears")
-                .expect("existing conformance creature resource");
-            e.state
-                .continuous_effects
-                .push(tricerules_core::ContinuousEffect {
-                    trigger_grant_origin: None,
-                    source_id: None,
-                    affected: tricerules_core::AffectedScope::Single(payment),
-                    kind: tricerules_cards::ContinuousEffectKind::Layer4SetCreatureTypes(vec![
-                        "Pentavite".into(),
-                    ]),
-                    condition: None,
-                    duration: tricerules_cards::EffectDuration::Indefinite,
-                    timestamp: e.state.command_index,
-                });
-        }
+            .continuous_effects
+            .push(tricerules_core::ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: tricerules_core::AffectedScope::Single(payment),
+                kind: tricerules_cards::ContinuousEffectKind::Layer4SetCreatureTypes(vec![
+                    "Pentavite".into(),
+                ]),
+                condition: None,
+                duration: tricerules_cards::EffectDuration::Indefinite,
+                timestamp: e.state.command_index,
+            });
     }
     oid
 }
