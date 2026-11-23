@@ -35,13 +35,6 @@ pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize
         "island",
         "explosive_apparatus",
     ];
-    cards.extend(match card {
-        "arcane_denial" => Some("opt"),
-        "annul" => Some("short_sword"),
-        "flashfreeze" => Some("hill_giant"),
-        "flusterstorm" => Some("divination"),
-        _ => None,
-    });
     if card == "decimate" {
         cards.push("ominous_seas");
     }
@@ -296,29 +289,27 @@ pub(crate) fn ability_source(
             .unwrap()
             .set_counter(tricerules_cards::CounterKind::Charge, 2);
     }
-    if card == "pentavus" {
-        if ability == 1 {
-            // Any controlled Pentavite creature pays, including a real non-token creature.
-            let payment = e.state.players[player]
-                .battlefield
-                .iter()
-                .copied()
-                .find(|id| e.state.objects[id].card_id == "grizzly_bears")
-                .expect("existing conformance creature resource");
-            e.state
-                .continuous_effects
-                .push(tricerules_core::ContinuousEffect {
-                    trigger_grant_origin: None,
-                    source_id: None,
-                    affected: tricerules_core::AffectedScope::Single(payment),
-                    kind: tricerules_cards::ContinuousEffectKind::Layer4SetCreatureTypes(vec![
-                        "Pentavite".into(),
-                    ]),
-                    condition: None,
-                    duration: tricerules_cards::EffectDuration::Indefinite,
-                    timestamp: e.state.command_index,
-                });
-        }
+    if card == "pentavus" && ability == 1 {
+        // Any controlled Pentavite creature pays, including a real non-token creature.
+        let payment = e.state.players[player]
+            .battlefield
+            .iter()
+            .copied()
+            .find(|id| e.state.objects[id].card_id == "grizzly_bears")
+            .expect("existing conformance creature resource");
+        e.state
+            .continuous_effects
+            .push(tricerules_core::ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: tricerules_core::AffectedScope::Single(payment),
+                kind: tricerules_cards::ContinuousEffectKind::Layer4SetCreatureTypes(vec![
+                    "Pentavite".into(),
+                ]),
+                condition: None,
+                duration: tricerules_cards::EffectDuration::Indefinite,
+                timestamp: e.state.command_index,
+            });
     }
     oid
 }

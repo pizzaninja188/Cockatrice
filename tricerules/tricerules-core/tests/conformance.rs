@@ -504,15 +504,6 @@ fn fixture(case: &Case) -> GameEngine {
 }
 
 fn fixture_with(case: &Case, profile: Profile) -> GameEngine {
-    let stack_fixture = match case.card.as_str() {
-        // Arcane Denial's target group requires a genuine stack spell. Its card scenario separately
-        // verifies the opposite player's cast and delayed-choice ownership.
-        "arcane_denial" => Some("opt"),
-        "annul" => Some("short_sword"),
-        "flashfreeze" => Some("hill_giant"),
-        "flusterstorm" => Some("divination"),
-        _ => None,
-    };
     let mut e = helpers::authoring_fixture::game(SEED, &[0, 1], &case.card, case.ability);
     if case.card == "luxior,_giadas_gift" && case.face == 0 && case.ability == Some(0) {
         let planeswalker = helpers::inject_permanent_on_battlefield(&mut e, 0, "ajani_steadfast");
@@ -524,10 +515,6 @@ fn fixture_with(case: &Case, profile: Profile) -> GameEngine {
             .insert(tricerules_cards::CounterKind::Loyalty, 4);
         e.state.zone_change_generation.insert(planeswalker, 0);
         e.initial_response_batch();
-    }
-    if case.card == "nautiloid_ship" && case.ability == Some(0) {
-        helpers::inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
-        helpers::inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     }
     if profile != Profile::Base {
         rich_board(&mut e, case);
@@ -542,13 +529,6 @@ fn fixture_with(case: &Case, profile: Profile) -> GameEngine {
     }
     if profile == Profile::Combat {
         combat_board(&mut e);
-    }
-    if let Some(card) = stack_fixture {
-        helpers::relocate_to_hand(&mut e, 0, card);
-        let slot = helpers::hand_index_for_card(&e, 0, card);
-        let mut command = helpers::cast_spell(slot, vec![]);
-        offers::pay(&e, 0, &mut command).expect("fund stack fixture");
-        apply(&mut e, 0, &command).expect("cast stack fixture");
     }
     e
 }
@@ -684,18 +664,34 @@ fn top_up_pools(e: &mut GameEngine) {
     }
 }
 
+/// A reviewed case that no fixture profile can prepare, with the scenario test that covers it.
+/// Every entry must stay unpreparable and name an existing `fn` under `tests/scenario/`.
+#[derive(Debug, PartialEq, Eq)]
+struct IntentionalExclusion {
+    /// `Case::key()`: card ID, face index and action, tab-separated.
+    case_key: &'static str,
+    reason: &'static str,
+    scenario_test: &'static str,
+}
+/// Empty while every case the engine offers from hand reaches `exercised`. Add an entry only
+/// after review, never to hide a fixture gap that a profile could cover.
+const INTENTIONAL: &[IntentionalExclusion] = &[];
+
 #[derive(Debug, PartialEq, Eq)]
 enum Outcome {
     Exercised,
-    UnsupportedFixture(String),
     IntentionalUncastable,
+    Intentional(&'static IntentionalExclusion),
 }
 impl Outcome {
     fn label(&self) -> String {
         match self {
             Self::Exercised => "exercised".into(),
-            Self::UnsupportedFixture(reason) => format!("unsupported: {reason}"),
             Self::IntentionalUncastable => "intentional: face unavailable from hand".into(),
+            Self::Intentional(entry) => format!(
+                "intentional: {}; covered by {}",
+                entry.reason, entry.scenario_test
+            ),
         }
     }
 }
@@ -712,6 +708,8 @@ fn evaluate(case: &Case) -> Result<Outcome, String> {
     if case.ability.is_none() && !def.face_available_from_hand(case.face) {
         return Ok(Outcome::IntentionalUncastable);
     }
+    let key = case.key();
+    let exclusion = INTENTIONAL.iter().find(|entry| entry.case_key == key);
     let mut unsupported = String::new();
     for &profile in PROFILES {
         let mut e = fixture_with(case, profile);
@@ -726,6 +724,11 @@ fn evaluate(case: &Case) -> Result<Outcome, String> {
                 continue;
             }
         };
+        if exclusion.is_some() {
+            return Err(format!(
+                "stale intentional exclusion {key}: profile {profile:?} prepares it"
+            ));
+        }
         let result =
             apply(&mut e, actor, &command).and_then(|batch| drain(&mut e, batch, COMMAND_BUDGET));
         integrity::assert_zone_integrity(&e, baseline, &case.key());
@@ -733,7 +736,48 @@ fn evaluate(case: &Case) -> Result<Outcome, String> {
             .map(|()| Outcome::Exercised)
             .map_err(|err| diagnostic(&e, &format!("{}; profile={profile:?}", case.key()), err));
     }
-    Ok(Outcome::UnsupportedFixture(unsupported))
+    // No reviewed exclusion: an unpreparable case is a fixture gap, never a recordable outcome.
+    exclusion
+        .map(Outcome::Intentional)
+        .ok_or_else(|| format!("{key}: no fixture profile prepares this case: {unsupported}"))
+}
+
+#[test]
+fn intentional_exclusions_name_existing_scenario_tests() {
+    fn sources(dir: &std::path::Path, out: &mut String) {
+        for entry in std::fs::read_dir(dir).expect("read scenario directory") {
+            let path = entry.expect("scenario entry").path();
+            if path.is_dir() {
+                sources(&path, out);
+            } else if path.extension().is_some_and(|ext| ext == "rs") {
+                out.push_str(&std::fs::read_to_string(&path).expect("read scenario source"));
+            }
+        }
+    }
+    let mut text = String::new();
+    sources(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/scenario"),
+        &mut text,
+    );
+    let mut keys = std::collections::BTreeSet::new();
+    for entry in INTENTIONAL {
+        assert!(
+            keys.insert(entry.case_key),
+            "duplicate exclusion {}",
+            entry.case_key
+        );
+        assert!(
+            !entry.reason.trim().is_empty(),
+            "{}: empty reason",
+            entry.case_key
+        );
+        assert!(
+            text.contains(&format!("fn {}(", entry.scenario_test)),
+            "{}: scenario test {} does not exist",
+            entry.case_key,
+            entry.scenario_test
+        );
+    }
 }
 
 /// Build the case's initial command from engine offers, or say why this board can't.
@@ -1373,12 +1417,16 @@ fn compare_baseline(actual: &str, expected: &str) -> Result<(), String> {
             }
             let key = fields[..3].join("\t");
             let outcome = fields[3];
-            if outcome != "exercised"
-                && outcome != "intentional: face unavailable from hand"
-                && outcome
-                    .strip_prefix("unsupported: ")
-                    .is_none_or(|reason| reason.trim().is_empty())
-            {
+            // `unsupported:` is no longer an outcome: an unpreparable case must be a reviewed
+            // intentional exclusion that names its covering scenario test.
+            let reviewed = outcome == "intentional: face unavailable from hand"
+                || outcome
+                    .strip_prefix("intentional: ")
+                    .and_then(|rest| rest.split_once("; covered by "))
+                    .is_some_and(|(reason, test)| {
+                        !reason.trim().is_empty() && !test.trim().is_empty()
+                    });
+            if outcome != "exercised" && !reviewed {
                 return Err(format!("missing or unknown coverage outcome: {line}"));
             }
             if previous.as_ref().is_some_and(|last| last >= &key) {
@@ -1420,10 +1468,15 @@ fn compare_baseline(actual: &str, expected: &str) -> Result<(), String> {
 #[test]
 fn baseline_accepts_new_successes_but_rejects_unreviewed_gaps_and_regressions() {
     let exercised = "bear\t0\tcast\texercised\n";
-    let unsupported = "bear\t0\tcast\tunsupported: no target fixture\n";
+    let unsupported = "bear\t0\tcast\tintentional: no target fixture; covered by bear_scenario\n";
     assert!(compare_baseline(unsupported, exercised).is_err());
     assert!(compare_baseline(exercised, "").is_ok());
     assert!(compare_baseline(unsupported, "").is_err());
+    // Unreviewed gaps and exclusions without a covering scenario are never valid rows.
+    let gap = "bear\t0\tcast\tunsupported: no target fixture\n";
+    assert!(compare_baseline(gap, gap).is_err());
+    let uncovered = "bear\t0\tcast\tintentional: no target fixture\n";
+    assert!(compare_baseline(uncovered, uncovered).is_err());
     assert!(compare_baseline(
         "bear\t0\tcast\tintentional: face unavailable from hand\n",
         ""
@@ -1431,7 +1484,11 @@ fn baseline_accepts_new_successes_but_rejects_unreviewed_gaps_and_regressions() 
     .is_err());
     assert!(compare_baseline("", exercised).is_err());
     assert!(compare_baseline(exercised, &(exercised.to_owned() + exercised)).is_err());
-    assert!(compare_baseline("bear\t0\tcast\tunsupported: \n", unsupported).is_err());
+    assert!(compare_baseline(
+        "bear\t0\tcast\tintentional: ; covered by bear_scenario\n",
+        unsupported
+    )
+    .is_err());
     assert!(compare_baseline(exercised, exercised).is_ok());
     assert!(compare_baseline(unsupported, unsupported).is_ok());
 }
