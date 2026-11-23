@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "6dd8ba09-f117-4514-9e09-f9f9f5fb5025",
+  "spans": [
+    {
+      "face_id": "floodhound",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/costs/0",
+        "/faces/0/activated_abilities/0/costs/1",
+        "/faces/0/activated_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q66_batch_a::q66_investigate_cards_create_one_clue_on_their_printed_path",
+      "covers": "actual Floodhound pays {3} and taps to create exactly one Clue token"
+    },
+    {
+      "test": "mechanic_registry::q66_batch_a::q66_investigate_permanent_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of floodhound"
+    },
+    {
+      "test": "mechanic_registry::q66_batch_a::q66_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for floodhound"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

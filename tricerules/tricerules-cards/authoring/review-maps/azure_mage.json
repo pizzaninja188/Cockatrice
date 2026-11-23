@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "bbf9fd47-10e1-4749-b06f-4fe72200afc7",
+  "spans": [
+    {
+      "face_id": "azure_mage",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/costs/0",
+        "/faces/0/activated_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q66_batch_a::q66_draw_cards_use_their_printed_costs",
+      "covers": "actual Azure Mage pays exactly {3}{U}, does not tap, and draws one card"
+    },
+    {
+      "test": "mechanic_registry::q66_batch_a::q66_activated_draw_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of azure_mage"
+    },
+    {
+      "test": "mechanic_registry::q66_batch_a::q66_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for azure_mage"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

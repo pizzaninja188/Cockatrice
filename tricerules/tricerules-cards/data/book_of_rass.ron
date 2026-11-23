@@ -1,0 +1,20 @@
+// Oracle a5e3ca74-ec33-4679-9366-8b1a45048783; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.2 (activate), 118.3b/119.4 (paying life) and 121.1 (draw). The pinned 2004-10-04 ruling
+// confirms a player cannot pay life below zero or pay life they do not have.
+// Copy of Trading Post's mana-plus-life activated shape with the printed artifact type.
+(
+  id: "book_of_rass",
+  name: "Book of Rass",
+  face_id: "book_of_rass",
+  mana_cost: "{6}",
+  types: ["Artifact", "Book"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{2}"), PayLife(amount: 2)],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

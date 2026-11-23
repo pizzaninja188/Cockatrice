@@ -1,0 +1,43 @@
+{
+  "format_version": 1,
+  "oracle_id": "c1ebbe89-8976-4ed7-a68a-8b08aac4616c",
+  "spans": [
+    {
+      "face_id": "drownyard_explorers",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q66_batch_a::q66_investigate_cards_create_one_clue_on_their_printed_path",
+      "covers": "actual Drownyard Explorers enters and creates exactly one Clue token on its 2/4 body"
+    },
+    {
+      "test": "mechanic_registry::q66_batch_a::q66_investigate_permanent_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of drownyard_explorers"
+    },
+    {
+      "test": "mechanic_registry::q66_batch_a::q66_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for drownyard_explorers"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

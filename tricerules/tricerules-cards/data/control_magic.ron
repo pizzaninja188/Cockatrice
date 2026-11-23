@@ -1,0 +1,16 @@
+// Oracle cd0d7141-46d2-4aa3-bc77-6b3b4513803e; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 303.4 (Aura attach) and 613.1b (control-changing layer). The pinned 2016-06-08 ruling
+// confirms gaining control of a creature does not gain control of Auras or Equipment attached to
+// it. Copy of Mind Control with the printed {2}{U}{U} cost.
+(
+  id: "control_magic",
+  name: "Control Magic",
+  face_id: "control_magic",
+  mana_cost: "{2}{U}{U}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (ability_id: "static_01", presentation: OracleLines([2]), definition: ControlsAttached),
+  ],
+)

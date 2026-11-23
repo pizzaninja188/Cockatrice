@@ -1,0 +1,27 @@
+// Oracle f2ce9e55-07c0-4f36-a59e-127693fc0f62; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 605.1a/605.3b (the {T}: Add {C} ability is a mana ability), 602.2/118.3 (the investigate
+// activation and its costs), 701.16a (investigate creates a Clue) and 111.10f (token identity).
+// The pinned 2016-04-08 rulings confirm Clue is an artifact type and one Clue cannot pay two costs.
+// Copy of Mind Stone's mana ability plus a {4}, {T} investigate activation.
+(
+  id: "magnifying_glass",
+  name: "Magnifying Glass",
+  face_id: "magnifying_glass",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Mana("{4}"), Tap],
+      effect: [CreateTokens(token: "clue", count: 1)],
+    ),
+  ],
+)

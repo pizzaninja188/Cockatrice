@@ -1,0 +1,21 @@
+// Oracle 15b618f0-281f-4745-8504-bd70e7b4a267; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 303.4 (Aura attach), 613.1b (control-changing layer), 613.4c (layer 7c pump) and 702.9
+// (flying). No pinned ruling. Copy of Mind Control's control with Cartouche of Knowledge's
+// attached +2/+2 and flying rider.
+(
+  id: "spirit_away",
+  name: "Spirit Away",
+  face_id: "spirit_away",
+  mana_cost: "{5}{U}{U}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (ability_id: "static_01", presentation: OracleLines([2]), definition: ControlsAttached),
+    (
+      ability_id: "static_02",
+      presentation: OracleLines([3]),
+      definition: AttachedModifier(delta_power: 2, delta_toughness: 2, keywords: [Flying]),
+    ),
+  ],
+)

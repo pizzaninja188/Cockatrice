@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "15b618f0-281f-4745-8504-bd70e7b4a267",
+  "spans": [
+    {
+      "face_id": "spirit_away",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "spirit_away",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "spirit_away",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/static_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::ControlsAttached",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/1/definition"
+    },
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/static_abilities/1/definition/AttachedModifier/keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q66_batch_a::q66_control_canary_hardest_spirit_away_adds_the_printed_body_and_flying",
+      "covers": "actual Spirit Away controls the creature, grants the printed +2/+2 and flying, and reverts both when it leaves"
+    },
+    {
+      "test": "mechanic_registry::q66_batch_a::q66_control_aura_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of spirit_away"
+    },
+    {
+      "test": "mechanic_registry::q66_batch_a::q66_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for spirit_away"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

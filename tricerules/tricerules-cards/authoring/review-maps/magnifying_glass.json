@@ -1,0 +1,67 @@
+{
+  "format_version": 1,
+  "oracle_id": "f2ce9e55-07c0-4f36-a59e-127693fc0f62",
+  "spans": [
+    {
+      "face_id": "magnifying_glass",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/costs/0",
+        "/faces/0/activated_abilities/0/effect/0"
+      ]
+    },
+    {
+      "face_id": "magnifying_glass",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1",
+        "/faces/0/activated_abilities/1/costs/0",
+        "/faces/0/activated_abilities/1/costs/1",
+        "/faces/0/activated_abilities/1/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q66_batch_a::q66_investigate_canary_hardest_magnifying_glass_has_a_mana_ability_and_investigates",
+      "covers": "actual Magnifying Glass taps for {C} without the stack and pays {4} and tap for one Clue"
+    },
+    {
+      "test": "mechanic_registry::q66_batch_a::q66_investigate_permanent_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of magnifying_glass"
+    },
+    {
+      "test": "mechanic_registry::q66_batch_a::q66_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for magnifying_glass"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
