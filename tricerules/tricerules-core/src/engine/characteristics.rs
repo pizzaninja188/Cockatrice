@@ -1458,6 +1458,9 @@ impl CharacteristicsEvaluator<'_> {
                 },
             )
             .is_some_and(|value| condition.matches_life_value(value)),
+            GameCondition::PlayerCount { players, .. } => condition.matches_value(
+                super::history::live_player_count(self.state, *players, controller),
+            ),
             GameCondition::CreatureDeathsThisTurn { .. } => {
                 condition.matches_value(self.state.turn_history.current.creatures_died)
             }

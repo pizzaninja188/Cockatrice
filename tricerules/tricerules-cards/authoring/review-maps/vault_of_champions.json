@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "ebc5ac83-08d4-4d6b-b840-0c4ba71a38ab",
+  "spans": [
+    {
+      "face_id": "vault_of_champions",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "vault_of_champions",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "GameCondition::PlayerCount",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario battlebond_lands_batch::battlebond_lands_enter_tapped_with_one_opponent",
+      "covers": "actual vault_of_champions enters tapped in a two-player game"
+    },
+    {
+      "test": "scenario battlebond_lands_batch::battlebond_lands_enter_untapped_with_two_or_more_opponents",
+      "covers": "actual vault_of_champions enters untapped in three- and four-player games"
+    },
+    {
+      "test": "scenario battlebond_lands_batch::battlebond_lands_count_only_opponents_still_in_the_game",
+      "covers": "actual vault_of_champions counts current opponents after a concession"
+    },
+    {
+      "test": "scenario battlebond_lands_batch::battlebond_lands_produce_each_printed_color",
+      "covers": "actual vault_of_champions produces each printed color"
+    },
+    {
+      "test": "mechanic_registry::battlebond_lands_batch::battlebond_lands_batch_maps_definitions",
+      "covers": "reviewed identity and complete typed shape of vault_of_champions"
+    },
+    {
+      "test": "mechanic_registry::battlebond_lands_batch::battlebond_lands_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for vault_of_champions"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

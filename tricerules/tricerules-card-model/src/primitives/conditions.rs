@@ -96,6 +96,16 @@ pub enum GameCondition {
         #[serde(default)]
         max: Option<i32>,
     },
+    /// Count the players in a relative player set who are still in the game, compared against
+    /// inclusive bounds. The Battlebond lands read "you have two or more opponents" as the live
+    /// count when the condition is checked; players who have left the game are not counted.
+    PlayerCount {
+        players: RelativePlayerSet,
+        #[serde(default)]
+        min: Option<u32>,
+        #[serde(default)]
+        max: Option<u32>,
+    },
     /// Descend (Deep Goblin Skulltaker, Enterprising Scallywag): destination-zone permanent
     /// cards, not battlefield creatures that died or cards still present in the graveyard.
     PermanentCardsEnteredGraveyardThisTurn {
@@ -501,6 +511,12 @@ impl GameCondition {
             GameCondition::PlayerLifeAggregate { min, max, .. } => {
                 validate_optional_bounds(min.as_ref(), max.as_ref(), "PlayerLifeAggregate")
             }
+            GameCondition::PlayerCount { players, min, max } => {
+                if matches!(players, RelativePlayerSet::TargetedPlayer { .. }) {
+                    return Err("PlayerCount does not support TargetedPlayer".into());
+                }
+                validate_optional_bounds(min.as_ref(), max.as_ref(), "PlayerCount")
+            }
             GameCondition::CardsInHand { players, min, max } => {
                 if !players.identifies_one_player() {
                     return Err("CardsInHand requires a single player selector".into());
@@ -619,6 +635,7 @@ impl GameCondition {
             | GameCondition::CrimesCommittedThisTurn { min, max, .. }
             | GameCondition::CardsDrawnThisTurn { min, max, .. }
             | GameCondition::CardsInHand { min, max, .. }
+            | GameCondition::PlayerCount { min, max, .. }
             | GameCondition::AttackersDeclaredThisTurn { min, max, .. }
             | GameCondition::PermanentsEnteredThisTurn { min, max, .. }
             | GameCondition::SourceCounterCount { min, max, .. }

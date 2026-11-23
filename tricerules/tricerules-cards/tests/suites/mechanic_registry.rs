@@ -1347,3 +1347,6 @@ mod q56_batch_b;
 
 #[path = "../q56_batch_c.rs"]
 mod q56_batch_c;
+
+#[path = "../battlebond_lands_batch.rs"]
+mod battlebond_lands_batch;

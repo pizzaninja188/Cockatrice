@@ -1,0 +1,31 @@
+// Oracle cf6d10ed-85c3-48f2-8ba0-2960e03b408b; source checked 2026-11-23 against the pinned Scryfall oracle_cards
+// bulk 27bf3214-1271-490b-bdfe-c0be6c23d02e; rulings checked 2026-11-23. CR 614.1d/614.12
+// (enters-tapped replacement effect), 605.1a/605.3b (mana ability), 102.2-102.3 and 800.4
+// (count the opponents you currently have; players who left the game are not counted). The
+// rulings state that an effect putting this land onto the battlefield tapped is not undone.
+
+(
+  id: "spectator_seating",
+  name: "Spectator Seating",
+  face_id: "spectator_seating",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(r: 1), (w: 1)])],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: EntersTapped(
+        affected: Self_,
+        condition: Some(PlayerCount(players: Opponents, max: Some(1))),
+      ),
+    ),
+  ],
+)

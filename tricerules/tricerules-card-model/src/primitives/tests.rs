@@ -7123,6 +7123,34 @@ fn issue_479_opponent_land_comparison_condition_is_authored() {
 }
 
 #[test]
+fn issue_519_player_count_condition_parses_and_validates_bounds() {
+    let condition =
+        ron::from_str::<GameCondition>("PlayerCount(players: Opponents, max: Some(1))").unwrap();
+    assert_eq!(
+        condition,
+        GameCondition::PlayerCount {
+            players: RelativePlayerSet::Opponents,
+            min: None,
+            max: Some(1),
+        }
+    );
+    assert_eq!(condition.validate(), Ok(()));
+    assert!(condition.matches_value(0));
+    assert!(condition.matches_value(1));
+    assert!(!condition.matches_value(2));
+
+    for invalid in [
+        "PlayerCount(players: Opponents)",
+        "PlayerCount(players: All, min: Some(3), max: Some(2))",
+        "PlayerCount(players: TargetedPlayer(group_index: 0, kind: OpponentPlayer), min: Some(1))",
+    ] {
+        let parsed = ron::from_str::<GameCondition>(invalid)
+            .unwrap_or_else(|error| panic!("{invalid}: {error}"));
+        assert!(parsed.validate().is_err(), "{invalid} must be rejected");
+    }
+}
+
+#[test]
 fn issue_207_stack_ability_and_source_linked_ability_loss_primitives_parse() {
     for authored in [
         "CounterTargetAbility",

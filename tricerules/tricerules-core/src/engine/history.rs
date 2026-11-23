@@ -523,6 +523,22 @@ pub(super) fn relative_player_set_contains(
     }
 }
 
+/// Players in `set` relative to `reference` who are still in the game. CR 102.2-102.3 define
+/// opponents; under CR 800.4 a player who has left the game is no longer counted.
+pub(super) fn live_player_count(
+    state: &GameState,
+    set: RelativePlayerSet,
+    reference: PlayerId,
+) -> u32 {
+    let count = state
+        .players
+        .iter()
+        .filter(|player| !player.has_lost)
+        .filter(|player| relative_player_set_contains(state, set, reference, player.id))
+        .count();
+    u32::try_from(count).unwrap_or(u32::MAX)
+}
+
 pub(super) fn player_life_aggregate_value(
     state: &GameState,
     players: RelativePlayerSet,
@@ -1348,6 +1364,8 @@ impl GameEngine {
                 },
             )
             .is_some_and(|value| condition.matches_life_value(value)),
+            GameCondition::PlayerCount { players, .. } => condition
+                .matches_value(live_player_count(&self.state, *players, context.controller)),
             GameCondition::CreatureDeathsThisTurn { .. } => {
                 condition.matches_value(self.state.turn_history.current.creatures_died)
             }

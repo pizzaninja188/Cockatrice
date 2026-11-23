@@ -8878,3 +8878,58 @@ fn conditional_fast_land_ignores_lands_entering_in_the_same_batch() {
         "three lands entering in the same batch are not three other lands already on the battlefield"
     );
 }
+
+fn return_battlebond_land(engine: &mut GameEngine, tapped_by_instruction: bool) -> ObjectId {
+    let land = object(engine, "spectator_seating", Zone::Graveyard, 0);
+    let mut entry = event(engine, land);
+    entry.tapped = tapped_by_instruction;
+    let mut events = Vec::new();
+    engine
+        .begin_zone_entry_batch(
+            ParkedStackResolution::dedicated(engine.observer_return_item(land, 0)),
+            vec![entry],
+            Zone::Graveyard,
+            "battlebond land return",
+            None,
+            &mut events,
+        )
+        .expect("the land entry is valid");
+    finish_simultaneous_entry_order(engine, &mut events);
+    assert_eq!(engine.state.objects[&land].zone, Zone::Battlefield);
+    land
+}
+
+#[test]
+fn opponent_count_entry_condition_reads_live_opponents_at_replacement_time() {
+    let mut engine = engine_with_players(&[0, 1, 2]);
+    let land = return_battlebond_land(&mut engine, false);
+    assert!(
+        !engine.state.objects[&land].tapped,
+        "two opponents in the game: the land enters untapped"
+    );
+
+    let mut engine = engine_with_players(&[0, 1, 2]);
+    engine.state.players[2].has_lost = true;
+    let land = return_battlebond_land(&mut engine, false);
+    assert!(
+        engine.state.objects[&land].tapped,
+        "an opponent who left the game is not counted"
+    );
+
+    let mut engine = engine_with_players(&[0, 1]);
+    let land = return_battlebond_land(&mut engine, false);
+    assert!(
+        engine.state.objects[&land].tapped,
+        "a single opponent: the land enters tapped"
+    );
+}
+
+#[test]
+fn opponent_count_entry_condition_does_not_untap_a_land_put_onto_the_battlefield_tapped() {
+    let mut engine = engine_with_players(&[0, 1, 2]);
+    let land = return_battlebond_land(&mut engine, true);
+    assert!(
+        engine.state.objects[&land].tapped,
+        "having two or more opponents does not undo an instruction to enter tapped"
+    );
+}
