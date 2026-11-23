@@ -1,0 +1,24 @@
+// Pinned Oracle f2ce9e55-07c0-4f36-a59e-127693fc0f62; Scryfall rulings checked 2026-11-23 (Clue facts only).
+// CR 605.1a/605.3a-b (the {C} mana ability resolves immediately), 602.2 (activation with mana and
+// tap costs), 701.16a/111.10f (investigate creates one Clue).
+(
+  id: "magnifying_glass",
+  name: "Magnifying Glass",
+  face_id: "magnifying_glass",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Mana("{4}"), Tap],
+      effect: [Investigate(count: 1)],
+    ),
+  ],
+)

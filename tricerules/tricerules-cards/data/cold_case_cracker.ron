@@ -1,0 +1,19 @@
+// Pinned Oracle 2e18ee5b-cda3-428b-be91-939c410256ac; Scryfall rulings checked 2026-11-23 (Clue facts only).
+// CR 702.9 (flying), 603.6c/603.10a (a dies trigger looks back in time), 700.4 (dies), 701.16a/111.10f
+// (investigate creates one Clue under the trigger's controller).
+(
+  id: "cold_case_cracker",
+  name: "Cold Case Cracker",
+  face_id: "cold_case_cracker",
+  mana_cost: "{3}{U}",
+  types: ["Creature", "Spirit", "Detective"],
+  power: 3,
+  toughness: 3,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfDies,
+    effect: [Investigate(count: 1)],
+  )],
+)

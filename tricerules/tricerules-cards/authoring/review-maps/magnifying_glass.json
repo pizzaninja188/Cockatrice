@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "f2ce9e55-07c0-4f36-a59e-127693fc0f62",
+  "spans": [
+    {
+      "face_id": "magnifying_glass",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "magnifying_glass",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Investigate",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_339_investigate_cohort::magnifying_glass_taps_for_colorless_or_investigates_for_four",
+      "covers": "colorless mana ability off the stack; four-mana tap investigate rejected without mana"
+    },
+    {
+      "test": "batch_registry::issue_339_investigate_cohort::issue_339_cohort_registers_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line and body"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

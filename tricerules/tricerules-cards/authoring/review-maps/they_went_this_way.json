@@ -1,0 +1,43 @@
+{
+  "format_version": 1,
+  "oracle_id": "47951720-9584-4ca3-a73d-3d259102b2f8",
+  "spans": [
+    {
+      "face_id": "they_went_this_way",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Investigate",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_339_investigate_cohort::they_went_this_way_fetches_a_tapped_basic_then_investigates",
+      "covers": "basic-only search, tapped battlefield entry, then one Clue"
+    },
+    {
+      "test": "scenario issue_339_investigate_cohort::they_went_this_way_still_investigates_after_finding_nothing",
+      "covers": "an empty search still investigates"
+    },
+    {
+      "test": "batch_registry::issue_339_investigate_cohort::issue_339_cohort_registers_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line and body"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,18 @@
+// Pinned Oracle 47951720-9584-4ca3-a73d-3d259102b2f8; Scryfall rulings checked 2026-11-23 (Clue facts only).
+// CR 701.23 (search a hidden zone; finding nothing is allowed, then shuffle), 701.16a/111.10f
+// (investigate creates one Clue after the search completes, even if no land was found).
+(
+  id: "they_went_this_way",
+  name: "They Went This Way",
+  face_id: "they_went_this_way",
+  mana_cost: "{2}{G}",
+  types: ["Sorcery"],
+  spell_effect: [
+    SearchLibrary(
+      count: 1,
+      filter: Some((card_type: Some(BasicLand))),
+      destination: Battlefield(tapped: true),
+    ),
+    Investigate(count: 1),
+  ],
+)

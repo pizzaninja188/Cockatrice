@@ -1,0 +1,51 @@
+{
+  "format_version": 1,
+  "oracle_id": "e4ecfccd-b8b4-4b18-b989-30de79b4971e",
+  "spans": [
+    {
+      "face_id": "detectives_satchel",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "detectives_satchel",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Investigate",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "GameCondition::PermanentsSacrificedThisTurn",
+      "typed_path": "/faces/0/activated_abilities/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "clue",
+    "thopter_c_1_1_flying"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_339_investigate_cohort::detectives_satchel_investigates_twice_and_makes_thopters_only_after_an_artifact_sacrifice",
+      "covers": "two investigate actions on entry; Thopter ability rejected until an artifact (a cracked Clue) was sacrificed"
+    },
+    {
+      "test": "batch_registry::issue_339_investigate_cohort::issue_339_cohort_registers_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line and body"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

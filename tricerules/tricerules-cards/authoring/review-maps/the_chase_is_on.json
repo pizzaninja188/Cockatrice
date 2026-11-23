@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "789899eb-3a33-4a41-b6b5-5e2f55a9af51",
+  "spans": [
+    {
+      "face_id": "the_chase_is_on",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Investigate",
+      "typed_path": "/faces/0/spell_effect/2"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_339_investigate_cohort::the_chase_is_on_pumps_grants_first_strike_and_investigates",
+      "covers": "plus three power, first strike and one Clue for the caster"
+    },
+    {
+      "test": "scenario issue_339_investigate_cohort::targeted_investigate_spells_create_no_clue_when_their_target_is_illegal",
+      "covers": "an illegal sole target makes the spell not resolve and creates no Clue"
+    },
+    {
+      "test": "batch_registry::issue_339_investigate_cohort::issue_339_cohort_registers_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line and body"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

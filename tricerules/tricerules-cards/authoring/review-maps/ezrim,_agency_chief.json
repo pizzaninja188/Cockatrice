@@ -1,0 +1,66 @@
+{
+  "format_version": 1,
+  "oracle_id": "ddcd8a0a-7ac3-4400-a16f-8bb5aa50994e",
+  "spans": [
+    {
+      "face_id": "ezrim_agency_chief",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "ezrim_agency_chief",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "ezrim_agency_chief",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "SpellEffectKind::Investigate",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywordChoice",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_339_investigate_cohort::ezrim_investigates_twice_and_sacrifices_an_artifact_for_a_chosen_keyword",
+      "covers": "two separate investigate actions on entry; sacrificing a Clue grants the chosen keyword only"
+    },
+    {
+      "test": "scenario issue_339_investigate_cohort::ezrim_requires_an_artifact_to_sacrifice",
+      "covers": "activation is rejected without an artifact to sacrifice"
+    },
+    {
+      "test": "batch_registry::issue_339_investigate_cohort::issue_339_cohort_registers_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line and body"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

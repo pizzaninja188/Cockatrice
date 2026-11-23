@@ -1,0 +1,17 @@
+// Pinned Oracle 789899eb-3a33-4a41-b6b5-5e2f55a9af51; Scryfall rulings checked 2026-11-23.
+// CR 115.1a/601.2c (target at cast), 613.4c (pump), 702.7a-b (first strike), 611.2a/514.2 (until
+// end of turn), 701.16a/111.10f (investigate creates one Clue). Ruling: if the target is illegal on
+// resolution, the spell doesn't resolve and no Clue is created (CR 608.2b).
+(
+  id: "the_chase_is_on",
+  name: "The Chase Is On",
+  face_id: "the_chase_is_on",
+  mana_cost: "{2}{R}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 3, toughness: 0),
+    GrantKeywords(keywords: [FirstStrike]),
+    Investigate(count: 1),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0, 1])])),
+)

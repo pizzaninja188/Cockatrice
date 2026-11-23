@@ -1,0 +1,28 @@
+// Pinned Oracle e4ecfccd-b8b4-4b18-b989-30de79b4971e; Scryfall rulings checked 2026-11-23 (Clue facts only).
+// CR 603.6a (enters trigger), 701.16a/111.10f ("investigate twice" is two investigate actions),
+// 602.5b (an "activate only if" restriction is checked on activation), 701.21a (sacrifices this turn
+// count any artifact you sacrificed, including Clues and tokens), 111.1 (Thopter token).
+(
+  id: "detectives_satchel",
+  name: "Detective's Satchel",
+  face_id: "detectives_satchel",
+  mana_cost: "{2}{U}{R}",
+  types: ["Artifact"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Investigate(count: 2)],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Tap],
+    effect: [CreateTokens(token: "thopter_c_1_1_flying", count: 1)],
+    conditions: [PermanentsSacrificedThisTurn(
+      players: Controller,
+      permanent_type: Some(Artifact),
+      min: Some(1),
+    )],
+  )],
+)

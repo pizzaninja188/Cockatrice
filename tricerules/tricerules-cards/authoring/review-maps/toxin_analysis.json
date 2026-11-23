@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "1f3b0b15-2c38-4aaa-b527-afbb540a6715",
+  "spans": [
+    {
+      "face_id": "toxin_analysis",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Investigate",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_339_investigate_cohort::toxin_analysis_grants_deathtouch_and_lifelink_and_investigates",
+      "covers": "deathtouch and lifelink on any creature; the caster investigates"
+    },
+    {
+      "test": "scenario issue_339_investigate_cohort::targeted_investigate_spells_create_no_clue_when_their_target_is_illegal",
+      "covers": "an illegal sole target makes the spell not resolve and creates no Clue"
+    },
+    {
+      "test": "batch_registry::issue_339_investigate_cohort::issue_339_cohort_registers_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line and body"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

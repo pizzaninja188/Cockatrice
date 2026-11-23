@@ -1028,6 +1028,8 @@ mod issue_337_generated_eight_clause_batch;
 mod issue_338_additional_costs;
 #[path = "scenario/issue_339_investigate.rs"]
 mod issue_339_investigate;
+#[path = "scenario/issue_339_investigate_cohort.rs"]
+mod issue_339_investigate_cohort;
 
 #[path = "scenario/issue_322_bargain.rs"]
 mod issue_322_bargain;
