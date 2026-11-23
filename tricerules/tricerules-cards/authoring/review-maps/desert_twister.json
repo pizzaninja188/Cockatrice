@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "6f880348-6dc8-4cf8-9313-9893c41a70a3",
+  "spans": [
+    {
+      "face_id": "desert_twister",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q65_batch_a::q65_destroy_cards_destroy_their_printed_permanent_types",
+      "covers": "actual Desert Twister destroys an enchantment for its printed cost"
+    },
+    {
+      "test": "mechanic_registry::q65_batch_a::q65_destroy_permanent_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of desert_twister"
+    },
+    {
+      "test": "mechanic_registry::q65_batch_a::q65_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for desert_twister"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

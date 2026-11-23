@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "63c1ac21-e3d8-40c2-8c09-3f31c52992ef",
+  "spans": [
+    {
+      "face_id": "vindicate",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q65_batch_a::q65_destroy_canary_hardest_vindicate_any_permanent_and_stale_target",
+      "covers": "actual Vindicate destroys a land for its printed cost and fizzles against a stale target"
+    },
+    {
+      "test": "scenario q65_batch_a::q65_destroy_spells_reject_nonpermanent_targets",
+      "covers": "actual Vindicate rejects a player target"
+    },
+    {
+      "test": "mechanic_registry::q65_batch_a::q65_destroy_permanent_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of vindicate"
+    },
+    {
+      "test": "mechanic_registry::q65_batch_a::q65_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for vindicate"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

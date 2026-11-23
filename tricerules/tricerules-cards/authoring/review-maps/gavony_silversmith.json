@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "a0ee4faa-1ab0-4b4f-a564-ee2358500daf",
+  "spans": [
+    {
+      "face_id": "gavony_silversmith",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q65_batch_a::q65_counters_cards_apply_their_printed_target_scopes",
+      "covers": "actual Gavony Silversmith counters up to two creatures under any controllers and accepts zero targets"
+    },
+    {
+      "test": "mechanic_registry::q65_batch_a::q65_etb_counter_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of gavony_silversmith"
+    },
+    {
+      "test": "mechanic_registry::q65_batch_a::q65_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for gavony_silversmith"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

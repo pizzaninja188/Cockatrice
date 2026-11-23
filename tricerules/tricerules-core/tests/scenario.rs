@@ -2567,3 +2567,6 @@ mod q63_batch_a;
 
 #[path = "scenario/q64_batch_a.rs"]
 mod q64_batch_a;
+
+#[path = "scenario/q65_batch_a.rs"]
+mod q65_batch_a;

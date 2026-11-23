@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "f34ba913-cf9a-48fe-b5fe-68bf504693b2",
+  "spans": [
+    {
+      "face_id": "universal_solvent",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/2"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/Destroy/subject"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/activated_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q65_batch_a::q65_destroy_canary_simplest_universal_solvent_activates_and_sacrifices",
+      "covers": "actual Universal Solvent pays its printed {7}, taps and sacrifices itself to destroy a creature"
+    },
+    {
+      "test": "scenario q65_batch_a::q65_destroy_cards_destroy_their_printed_permanent_types",
+      "covers": "actual Universal Solvent destroys a land"
+    },
+    {
+      "test": "mechanic_registry::q65_batch_a::q65_destroy_permanent_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of universal_solvent"
+    },
+    {
+      "test": "mechanic_registry::q65_batch_a::q65_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for universal_solvent"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
