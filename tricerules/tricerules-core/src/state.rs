@@ -3434,11 +3434,24 @@ pub(crate) struct PendingAmass {
     pub count: u32,
 }
 
+/// CR 701.16a: the investigate action whose Clue batch is entering, plus the investigate actions
+/// of the same instruction that have not started. A parked Clue entry resumes here so each action
+/// still completes, and reports its completion, before the next one begins.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct PendingInvestigate {
+    pub player: PlayerId,
+    pub remaining: Vec<PlayerId>,
+    pub created: Vec<TriggerObjectRef>,
+    pub spell_label: String,
+}
+
 #[derive(serde::Serialize, Debug, Clone, Default)]
 pub(crate) struct TokenEntryBatchOptions {
     pub attacking: Option<AttackingTokenBatch>,
     pub delayed_sacrifice: Option<DelayedTokenSacrificeTiming>,
     pub amass: Option<PendingAmass>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub investigate: Option<PendingInvestigate>,
 }
 
 #[derive(serde::Serialize, Debug, Clone)]

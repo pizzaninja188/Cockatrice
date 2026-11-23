@@ -391,6 +391,7 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::ExileAll { .. } => mass::exile_all(cx, effect)?,
         effect @ SpellEffectKind::DamageAll { .. } => mass::damage_all(cx, effect)?,
         effect @ SpellEffectKind::CreateTokens { .. } => tokens::create_tokens(cx, effect)?,
+        effect @ SpellEffectKind::Investigate { .. } => tokens::investigate(cx, effect)?,
         effect @ SpellEffectKind::CreateTokenBatch { .. } => {
             tokens::create_token_batch(cx, effect)?
         }

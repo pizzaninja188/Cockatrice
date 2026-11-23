@@ -8,7 +8,7 @@
   types: ["Instant"],
   spell_effect: [
     PumpTarget(power: 2, toughness: 2, subject: Chosen((kind: Creature))),
-    CreateTokens(token: "clue", count: 1),
+    Investigate(count: 1),
   ],
   targeting: Some((groups: [(
     min: 1,

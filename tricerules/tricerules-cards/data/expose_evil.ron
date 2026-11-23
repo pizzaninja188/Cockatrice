@@ -11,7 +11,7 @@
   types: ["Instant"],
   spell_effect: [
     Tap(subject: Chosen((kind: Creature))),
-    CreateTokens(token: "clue", count: 1),
+    Investigate(count: 1),
   ],
   targeting: Some((groups: [(min: 0, max: 2, effect_indices: [0])])),
 )

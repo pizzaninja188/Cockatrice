@@ -549,6 +549,9 @@ fn collect_token_references(value: &Value, tokens: &mut BTreeSet<String>) {
                         tokens.insert(token.to_string());
                     }
                 }
+                if key == "Investigate" {
+                    tokens.insert(crate::primitives::CLUE_TOKEN_ID.to_string());
+                }
                 if key == "CreateTokenBatch" {
                     if let Some(ids) = value.get("tokens").and_then(Value::as_array) {
                         tokens.extend(ids.iter().filter_map(Value::as_str).map(str::to_string));

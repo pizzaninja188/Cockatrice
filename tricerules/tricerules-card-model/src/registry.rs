@@ -804,6 +804,7 @@ fn scoped_grant_effect_amount(effect: &SpellEffectKind) -> Option<&Amount> {
         | SpellEffectKind::PutCountersAllPlaneswalkers { count: amount, .. }
         | SpellEffectKind::Amass { count: amount, .. }
         | SpellEffectKind::CreateTokens { count: amount, .. }
+        | SpellEffectKind::Investigate { count: amount, .. }
         | SpellEffectKind::CreateTokenCopies { count: amount, .. }
         | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => Some(amount),
         SpellEffectKind::PumpTarget {
@@ -1080,6 +1081,7 @@ fn validate_effect_cast_cost_conditions(
         | SpellEffectKind::PutCounters { count: amount, .. }
         | SpellEffectKind::Amass { count: amount, .. }
         | SpellEffectKind::CreateTokens { count: amount, .. }
+        | SpellEffectKind::Investigate { count: amount, .. }
         | SpellEffectKind::CreateTokenCopies { count: amount, .. }
         | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => Some(amount),
         SpellEffectKind::PumpTarget {

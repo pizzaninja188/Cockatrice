@@ -1,4 +1,5 @@
 use super::*;
+use tricerules_card_model::primitives::CLUE_TOKEN_ID;
 
 pub(super) fn create_token_copies(
     cx: &mut EffectCx<'_>,
@@ -308,6 +309,141 @@ pub(super) fn create_tokens(
         .set(crate::state::ProgramValue::CreatedTokenBatch(created));
 
     Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn investigate(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::Investigate { count, who } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let item = cx.top.clone();
+    let parked_stack = cx.parked_stack();
+    let recipients = player_recipients(cx, who);
+    let count = cx.engine.resolve_amount(
+        &count,
+        AmountContext::for_stack_item(&item, cx.controller)
+            .with_previous_effect_result(cx.previous_effect_result),
+    );
+    let actions = recipients
+        .into_iter()
+        .flat_map(|player| std::iter::repeat_n(player, count as usize))
+        .collect();
+    let Some(created) = cx.engine.run_investigates(
+        parked_stack,
+        actions,
+        Vec::new(),
+        cx.spell_label.to_string(),
+        cx.events,
+    )?
+    else {
+        return Ok(EffectOutcome::Suspended);
+    };
+    // CR 608.2: later instructions may name every Clue this instruction created.
+    cx.effect_result
+        .set(crate::state::ProgramValue::CreatedTokenBatch(created));
+    Ok(EffectOutcome::Continue)
+}
+
+impl GameEngine {
+    /// CR 701.16a: perform each investigate action in order. Every action creates its own Clue
+    /// batch (token replacements such as doublers apply per action) and completes before the next
+    /// begins. Returns `None` when a Clue entry parked for a CR 616 choice; the parked batch
+    /// carries the remaining actions and resumes through
+    /// [`Self::finish_investigate_after_token_entry`].
+    pub(in crate::engine) fn run_investigates(
+        &mut self,
+        stack: ParkedStackResolution,
+        actions: Vec<PlayerId>,
+        mut created: Vec<TriggerObjectRef>,
+        spell_label: String,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<Option<Vec<TriggerObjectRef>>, EngineError> {
+        let mut actions = actions.into_iter();
+        while let Some(player) = actions.next() {
+            let (entries, logs) = self.prepare_token_entries(
+                TokenCreationRequest {
+                    token_id: CLUE_TOKEN_ID,
+                    copy: None,
+                    count: 1,
+                    recipients: vec![player],
+                    spell_label: &spell_label,
+                },
+                false,
+            )?;
+            let ids = entries
+                .iter()
+                .map(|entry| entry.event.object_id)
+                .collect::<Vec<_>>();
+            let pending = PendingInvestigate {
+                player,
+                remaining: actions.clone().collect(),
+                created: created.clone(),
+                spell_label: spell_label.clone(),
+            };
+            if self.begin_token_entry_batch_with_stack(
+                stack.clone(),
+                entries,
+                logs,
+                TokenEntryBatchOptions {
+                    investigate: Some(pending),
+                    ..Default::default()
+                },
+                events,
+            )? {
+                return Ok(None);
+            }
+            created.extend(self.token_entry_object_refs(&ids));
+            self.complete_investigate(player, &spell_label, events);
+        }
+        Ok(Some(created))
+    }
+
+    fn complete_investigate(
+        &mut self,
+        player: PlayerId,
+        spell_label: &str,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) {
+        // A player who has left the game creates no Clue and performs no action.
+        if self
+            .state
+            .player_idx(player)
+            .is_none_or(|index| self.state.players[index].has_lost)
+        {
+            return;
+        }
+        events.push(ev_log(format!("P{player} investigates ({spell_label}).")));
+        self.fire_triggers(&[GameEvent::Investigated { player }], events);
+    }
+
+    /// Resume an investigate instruction after its parked Clue batch entered: complete that
+    /// action, perform the remaining actions, then continue the parked resolution.
+    pub(in crate::engine) fn finish_investigate_after_token_entry(
+        &mut self,
+        stack: ParkedStackResolution,
+        pending: PendingInvestigate,
+        entered: Vec<TriggerObjectRef>,
+        mut events: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let PendingInvestigate {
+            player,
+            remaining,
+            mut created,
+            spell_label,
+        } = pending;
+        created.extend(entered);
+        self.complete_investigate(player, &spell_label, &mut events);
+        let Some(created) =
+            self.run_investigates(stack.clone(), remaining, created, spell_label, &mut events)?
+        else {
+            return Ok(crate::engine::events::finish_with_events(self, events));
+        };
+        let mut previous_result = stack.previous_result().clone();
+        previous_result.set(crate::state::ProgramValue::CreatedTokenBatch(created));
+        self.complete_parked_stack_with_previous(stack, previous_result, events)
+    }
 }
 
 pub(super) fn create_token_batch(

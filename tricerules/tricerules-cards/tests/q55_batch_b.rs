@@ -139,7 +139,7 @@ fn q55_b_tap_two_riders_map_definitions() {
     let f = identity("expose_evil", "Expose Evil", "{1}{W}", &["Instant"]);
     let debug = format!("{:?}", f.spell_effect);
     assert!(debug.contains("Tap"), "{debug}");
-    assert!(debug.contains("CreateTokens { token: \"clue\""), "{debug}");
+    assert!(debug.contains("Investigate { count: Fixed(1)"), "{debug}");
     assert_eq!(f.targeting.as_ref().expect("targeting").groups[0].max, 2);
 
     let f = identity(

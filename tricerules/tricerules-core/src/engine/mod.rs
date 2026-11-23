@@ -18,7 +18,7 @@ use crate::state::{
     LinkedChoiceOccurrence, LinkedExileKey, LinkedExileOccurrence, LinkedExiledObject, ObjectId,
     ObservedGameEvent, ObserverReturnEntry, OpeningSequence, OperationInput, OperationResults,
     ParkedStackResolution, PendingAmass, PendingBattlefieldEntry, PendingCopyCandidate,
-    PendingEntryTimestampOrder, PendingHandChoice, PendingLibraryLookStage,
+    PendingEntryTimestampOrder, PendingHandChoice, PendingInvestigate, PendingLibraryLookStage,
     PendingLibraryPartitionKind, PendingLibraryPartitionStage, PendingManaPayment,
     PendingObserverReturnBatch, PendingPlayerDiscardChoice, PendingPlayerSetDiscard,
     PendingProgramCohortPartitionStage, PendingProgramPartitionMoveStage, PendingResolution,
@@ -1257,6 +1257,12 @@ enum GameEvent {
     /// CR 701.25d: one completed surveil action. This is emitted after the complete library
     /// partition, including any retained-card ordering, even when the library was empty.
     Surveilled {
+        player: PlayerId,
+    },
+    /// CR 701.16a: one completed investigate action, after its Clue token entered (or a token
+    /// replacement left nothing to enter). "Investigate twice" emits two events. Erdwal
+    /// Illuminator and Wernog, Rider's Chaplain observe investigating; no trigger reads it yet.
+    Investigated {
         player: PlayerId,
     },
     /// CR 701.44b: one completed explore action. The exact permanent generation and controller

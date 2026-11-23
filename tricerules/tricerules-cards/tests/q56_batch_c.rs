@@ -88,8 +88,10 @@ fn q56_c_destroy_investigate_map_definitions() {
         let effects = format!("{:?}", f.spell_effect);
         assert!(effects.contains("Destroy"), "{id}: {effects}");
         assert!(effects.contains(filter), "{id}: {effects}");
-        assert!(effects.contains("CreateTokens"), "{id}: {effects}");
-        assert!(effects.contains("clue") == clue, "{id}: {effects}");
+        assert!(
+            effects.contains("Investigate { count: Fixed(1)") == clue,
+            "{id}: {effects}"
+        );
         assert!(effects.contains("count: Fixed(1)"), "{id}: {effects}");
         let targeting = f.targeting.as_ref().expect("targeting");
         assert_eq!(targeting.groups.len(), 1, "{id}");

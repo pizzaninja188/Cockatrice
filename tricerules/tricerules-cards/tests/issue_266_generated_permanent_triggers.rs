@@ -178,9 +178,17 @@ fn issue_266_emits_exact_draw_and_token_triggers() {
         );
     }
 
+    // Novice Inspector investigates (CR 701.16a); Forecasting Fortune Teller only creates a Clue.
+    assert_eq!(
+        first_ability(registry, "novice_inspector").effect,
+        [SpellEffectKind::Investigate {
+            count: Amount::Fixed(1),
+            who: PlayerRecipient::Controller,
+        }]
+    );
+
     for (id, token) in [
         ("forecasting_fortune_teller", "clue"),
-        ("novice_inspector", "clue"),
         ("merrow_skyswimmer", "merfolk_wu_1_1"),
         ("resolute_reinforcements", "soldier_w_1_1"),
         ("s.h.i.e.l.d._deployment_drone", "soldier_w_1_1"),

@@ -6,7 +6,7 @@
 //! Each fingerprint is SHA-256 of the exact pinned Oracle lines.
 
 use tricerules_cards::primitives::{
-    AbilityCost, Amount, EntersTappedAffected, SpellEffectKind, StaticAbilityDef,
+    AbilityCost, Amount, EntersTappedAffected, PlayerRecipient, SpellEffectKind, StaticAbilityDef,
 };
 use tricerules_cards::{AbilityPresentation, CardRegistry, Layout};
 
@@ -196,8 +196,10 @@ fn investigate_lands_batch_maps_definitions() {
         assert!(
             matches!(
                 investigate.effect.as_slice(),
-                [SpellEffectKind::CreateTokens { token, count, .. }]
-                    if token == "clue" && *count == Amount::Fixed(1)
+                [SpellEffectKind::Investigate {
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                }]
             ),
             "{}: investigate creates exactly one Clue",
             card.id

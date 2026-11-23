@@ -1098,6 +1098,9 @@ fn default_put_permanent_from_hand_up_to_count() -> u32 {
     1
 }
 
+/// Registry token id of the predefined Clue token (CR 111.10f) that `Investigate` creates.
+pub const CLUE_TOKEN_ID: &str = "clue";
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpellEffectKind {
     /// Triskaidekaphile and Twenty-Toed Toad check public thresholds as their triggers resolve.
@@ -2209,6 +2212,17 @@ pub enum SpellEffectKind {
         tapped: bool,
         #[serde(default)]
         sacrifice_timing: Option<DelayedTokenSacrificeTiming>,
+    },
+    /// CR 701.16a: each recipient investigates `count` times ([`CLUE_TOKEN_ID`]). Each investigate is a separate
+    /// keyword action that creates one registry-defined Clue token (CR 111.10f), so "investigate
+    /// twice" is two token-creation events rather than one cohort of two (Ezrim, Agency Chief;
+    /// Detective's Satchel). Single investigates (Deduce, the investigate lands) use `count: 1`;
+    /// "Target player investigates" (Panther Pounce) selects the recipient through `who`.
+    /// Cards that create a Clue without investigating (Zuko's Exile) keep `CreateTokens`.
+    Investigate {
+        count: Amount,
+        #[serde(default)]
+        who: PlayerRecipient,
     },
     /// CR 111 / 603.6: create one of each named token simultaneously under the resolving
     /// controller. Triplicate Titan and Bestial Menace need heterogeneous cohorts; separate
@@ -3397,6 +3411,7 @@ impl SpellEffectKind {
             | SpellEffectKind::PutCountersAllPlaneswalkers { count: amount, .. }
             | SpellEffectKind::Amass { count: amount, .. }
             | SpellEffectKind::CreateTokens { count: amount, .. }
+            | SpellEffectKind::Investigate { count: amount, .. }
             | SpellEffectKind::CreateTokenCopies { count: amount, .. }
             | SpellEffectKind::CreateAttackingTokens { count: amount, .. }
             | SpellEffectKind::SetSourceBasePower { amount } => Some(amount),
@@ -3433,6 +3448,7 @@ impl SpellEffectKind {
                 | SpellEffectKind::Discard { .. }
                 | SpellEffectKind::LookChooseToHand { .. }
                 | SpellEffectKind::CreateTokens { .. }
+                | SpellEffectKind::Investigate { .. }
                 | SpellEffectKind::Scry { .. }
                 | SpellEffectKind::LibraryPartition {
                     kind: LibraryPartitionKind::Surveil,
@@ -3671,6 +3687,9 @@ impl SpellEffectKind {
             } | SpellEffectKind::CreateTokens {
                 who: PlayerRecipient::TriggerObjectController,
                 ..
+            } | SpellEffectKind::Investigate {
+                who: PlayerRecipient::TriggerObjectController,
+                ..
             } | SpellEffectKind::CreateTokenCopies {
                 source: TokenCopySource::TriggerObject,
                 ..
@@ -3755,6 +3774,10 @@ impl SpellEffectKind {
                 who: PlayerRecipient::DefendingPlayer
                     | PlayerRecipient::AttackingOpponentsOfDefendingPlayer,
                 ..
+            } | SpellEffectKind::Investigate {
+                who: PlayerRecipient::DefendingPlayer
+                    | PlayerRecipient::AttackingOpponentsOfDefendingPlayer,
+                ..
             } | SpellEffectKind::Draw {
                 who: PlayerRecipient::TriggeringAttackingPlayer,
                 ..
@@ -3800,6 +3823,7 @@ impl SpellEffectKind {
                 }
                 | Self::Mill { who: Attacker, .. }
                 | Self::CreateTokens { who: Attacker, .. }
+                | Self::Investigate { who: Attacker, .. }
                 | Self::MayBehold { who: Attacker, .. }
                 | Self::SearchLibrary { who: Attacker, .. }
         )
@@ -3925,6 +3949,9 @@ impl SpellEffectKind {
                     who: PlayerRecipient::ProgramInputPlayer,
                     ..
                 } | Self::CreateTokens {
+                    who: PlayerRecipient::ProgramInputPlayer,
+                    ..
+                } | Self::Investigate {
                     who: PlayerRecipient::ProgramInputPlayer,
                     ..
                 } | Self::MayBehold {
@@ -4489,6 +4516,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ReturnAllToOwnersHand { .. }
             | SpellEffectKind::DamageAll { .. }
             | SpellEffectKind::CreateTokens { .. }
+            | SpellEffectKind::Investigate { .. }
             | SpellEffectKind::CreateTokenBatch { .. }
             | SpellEffectKind::Amass { .. }
             | SpellEffectKind::Populate
@@ -4715,6 +4743,7 @@ impl SpellEffectKind {
             | Self::PutCountersAllPlaneswalkers { count: amount, .. }
             | Self::Amass { count: amount, .. }
             | Self::CreateTokens { count: amount, .. }
+            | Self::Investigate { count: amount, .. }
             | Self::CreateTokenCopies { count: amount, .. }
             | Self::CreateAttackingTokens { count: amount, .. }
             | Self::SetSourceBasePower { amount } => {
@@ -5402,6 +5431,9 @@ impl SpellEffectKind {
                 who: PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
                 ..
             } | Self::CreateTokens {
+                who: PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
+                ..
+            } | Self::Investigate {
                 who: PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
                 ..
             } | Self::MayBehold {
@@ -6159,7 +6191,7 @@ impl SpellEffectKind {
                 }
                 if !effect.supports_conditional_instruction() {
                     return Err(
-                        "Conditional currently supports Destroy, GrantKeywords, ChoosePermanents, Draw, Discard, LookChooseToHand, CreateTokens, Scry, Surveil, Untap, UntapAll, Sacrifice, and RemoveAllAbilities effects"
+                        "Conditional currently supports Destroy, GrantKeywords, ChoosePermanents, Draw, Discard, LookChooseToHand, CreateTokens, Investigate, Scry, Surveil, Untap, UntapAll, Sacrifice, and RemoveAllAbilities effects"
                             .into(),
                     );
                 }
@@ -6194,6 +6226,7 @@ impl SpellEffectKind {
             | SpellEffectKind::PutCountersAllPlaneswalkers { count: amount, .. }
             | SpellEffectKind::Amass { count: amount, .. }
             | SpellEffectKind::CreateTokens { count: amount, .. }
+            | SpellEffectKind::Investigate { count: amount, .. }
             | SpellEffectKind::CreateTokenCopies { count: amount, .. }
             | SpellEffectKind::CreateAttackingTokens { count: amount, .. }
             | SpellEffectKind::SetSourceBasePower { amount } => {
@@ -7753,6 +7786,7 @@ impl SpellEffectKind {
             | Self::PutCountersAllPlaneswalkers { count: amount, .. }
             | Self::Amass { count: amount, .. }
             | Self::CreateTokens { count: amount, .. }
+            | Self::Investigate { count: amount, .. }
             | Self::CreateTokenCopies { count: amount, .. }
             | Self::CreateAttackingTokens { count: amount, .. }
             | Self::SetSourceBasePower { amount } => amount.requires_triggering_spell_context(),
@@ -7789,6 +7823,7 @@ impl SpellEffectKind {
             Self::CreateTokens { token, .. } | Self::CreateAttackingTokens { token, .. } => {
                 vec![token.as_str()]
             }
+            Self::Investigate { .. } => vec![CLUE_TOKEN_ID],
             Self::CreateTokenBatch { tokens } => tokens.iter().map(String::as_str).collect(),
             Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
                 effect.referenced_token_ids()
@@ -7845,6 +7880,7 @@ impl SpellEffectKind {
             | Self::PutCountersAllPlaneswalkers { count: amount, .. }
             | Self::Amass { count: amount, .. }
             | Self::CreateTokens { count: amount, .. }
+            | Self::Investigate { count: amount, .. }
             | Self::CreateTokenCopies { count: amount, .. }
             | Self::CreateAttackingTokens { count: amount, .. }
             | Self::SetSourceBasePower { amount } => amount.requires_source_counters(),
@@ -7895,6 +7931,7 @@ impl SpellEffectKind {
             | Self::PutCountersAllPlaneswalkers { count: amount, .. }
             | Self::Amass { count: amount, .. }
             | Self::CreateTokens { count: amount, .. }
+            | Self::Investigate { count: amount, .. }
             | Self::CreateTokenCopies { count: amount, .. }
             | Self::CreateAttackingTokens { count: amount, .. }
             | Self::SetSourceBasePower { amount } => amount.uses_trigger_event_count(),

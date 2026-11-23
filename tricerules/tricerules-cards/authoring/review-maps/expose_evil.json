@@ -19,7 +19,7 @@
       "typed_path": "/faces/0/spell_effect/0"
     },
     {
-      "symbol": "SpellEffectKind::CreateTokens",
+      "symbol": "SpellEffectKind::Investigate",
       "typed_path": "/faces/0/spell_effect/1"
     },
     {

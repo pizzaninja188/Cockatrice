@@ -889,6 +889,10 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                     who: super::PlayerRecipient::ControllerOfTargetGroup { group_index },
                     ..
                 }
+                | SpellEffectKind::Investigate {
+                    who: super::PlayerRecipient::ControllerOfTargetGroup { group_index },
+                    ..
+                }
                 | SpellEffectKind::DamagePlayer {
                     who: super::PlayerRecipient::ControllerOfTargetGroup { group_index },
                     ..

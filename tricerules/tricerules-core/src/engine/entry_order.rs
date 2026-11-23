@@ -277,6 +277,7 @@ impl GameEngine {
                 let stack = stack.ok_or(EngineError::Illegal("token entry has no stack"))?;
                 let created_ids = batch.result_object_ids.clone();
                 let amass = batch.options.amass;
+                let investigate = batch.options.investigate.clone();
                 self.commit_token_entry_batch(
                     &stack.item,
                     batch.ready,
@@ -287,6 +288,15 @@ impl GameEngine {
                 )?;
                 if let Some(amass) = amass {
                     return self.finish_amass_after_token_entry(stack, amass, events);
+                }
+                if let Some(investigate) = investigate {
+                    let entered = self.token_entry_object_refs(&created_ids);
+                    return self.finish_investigate_after_token_entry(
+                        stack,
+                        investigate,
+                        entered,
+                        events,
+                    );
                 }
                 let mut previous_result = stack.previous_result().clone();
                 previous_result.set(crate::state::ProgramValue::CreatedTokenBatch(

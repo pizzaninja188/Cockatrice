@@ -246,6 +246,14 @@ pub(super) fn simple_effects(effects: &[SpellEffectKind]) -> Option<String> {
                     top_max: None,
                     kind: LibraryPartitionKind::Surveil,
                 } => format!("Surveil {count}."),
+                SpellEffectKind::Investigate {
+                    count: Amount::Fixed(count),
+                    who: PlayerRecipient::Controller,
+                } => match count {
+                    1 => "Investigate.".into(),
+                    2 => "Investigate twice.".into(),
+                    count => format!("Investigate {count} times."),
+                },
                 SpellEffectKind::AddMana { amount, retention } => format!(
                     "Add {}.{}",
                     mana_text(amount),
