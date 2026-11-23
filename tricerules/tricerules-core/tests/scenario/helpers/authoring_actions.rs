@@ -24,8 +24,7 @@ pub(crate) fn activation(
         .cost_choices_by_ability
         .get(&key)
         .ok_or("ability not offered by generic battlefield fixture")?;
-    let costs = costs(Some(choices))?;
-    let (zone, generation, activatable) = if let Some(action) = legal
+    let (zone, generation, activatable, mana_cost) = if let Some(action) = legal
         .zone_ability_actions
         .iter()
         .find(|a| a.object_id == object && a.ability_index == index)
@@ -38,6 +37,7 @@ pub(crate) fn activation(
             action.source_zone,
             action.zone_change_generation,
             ability.activatable,
+            ability.mana_cost.clone(),
         )
     } else {
         let source = batch
@@ -61,8 +61,47 @@ pub(crate) fn activation(
             AbilitySourceZone::Battlefield as i32,
             source.zone_change_generation,
             ability.activatable,
+            ability.mana_cost.clone(),
         )
     };
+    let returns_tapped_creature = zone == AbilitySourceZone::Hand as i32
+        && choices
+            .choices
+            .iter()
+            .any(|choice| choice.kind() == CostChoiceKind::ReturnTappedCreature);
+    let aggregate_counters = choices
+        .choices
+        .iter()
+        .any(|choice| choice.counter_removal_group.is_some());
+    if returns_tapped_creature || aggregate_counters {
+        // These costs are bound in the engine's staged payment window: a returned creature after
+        // mana abilities may tap new candidates, and aggregate counter contributions against the
+        // window's trusted inventory. The drain commits the window with its published candidate.
+        if !choices.non_mana_costs_payable || !activatable {
+            return Err("staged activation is not currently payable".into());
+        }
+        let cost_selections = if aggregate_counters {
+            costs(Some(choices))?
+        } else {
+            vec![]
+        };
+        return Ok(RuledCommand {
+            cmd: Some(Cmd::BeginAbilityActivation(BeginAbilityActivation {
+                source_object_id: object,
+                expected_zone_change_generation: generation,
+                ability_index: index,
+                source_zone: zone,
+                cost_selections,
+                flex_payments: if aggregate_counters {
+                    phyrexian_mana_choices(&mana_cost)?
+                } else {
+                    vec![]
+                },
+                ..Default::default()
+            })),
+        });
+    }
+    let costs = costs(Some(choices))?;
     let mut x_value = 0;
     let mut activation_targets = Vec::new();
     if let Some(offer) = legal.valid_targets_by_ability.get(&key) {
@@ -290,6 +329,44 @@ pub(crate) fn targets(
     Ok(result)
 }
 
+/// Announce mana for every Phyrexian or hybrid Phyrexian pip of an engine-offered ability cost.
+/// Staged aggregate activations require each such pip to be chosen explicitly.
+fn phyrexian_mana_choices(cost: &str) -> Result<Vec<FlexPipPayment>, String> {
+    if cost.is_empty() {
+        return Ok(vec![]);
+    }
+    let cost = ManaCost::parse(cost).map_err(|error| format!("offered mana cost: {error}"))?;
+    Ok(cost
+        .pips
+        .iter()
+        .enumerate()
+        .filter_map(|(index, pip)| {
+            // A single-color Phyrexian pip's mana branch is implied; only hybrid Phyrexian pips
+            // announce which color pays.
+            let mana_color = match pip {
+                ManaSymbol::Phyrexian(_) => 0,
+                ManaSymbol::HybridPhyrexian(color, _) => mana_color(*color) as i32,
+                _ => return None,
+            };
+            Some(FlexPipPayment {
+                pip_index: index as u32,
+                pay_life: false,
+                mana_color,
+            })
+        })
+        .collect())
+}
+
+fn mana_color(color: tricerules_cards::mana::ColorPip) -> ManaColor {
+    match color {
+        tricerules_cards::mana::ColorPip::W => ManaColor::White,
+        tricerules_cards::mana::ColorPip::U => ManaColor::Blue,
+        tricerules_cards::mana::ColorPip::B => ManaColor::Black,
+        tricerules_cards::mana::ColorPip::R => ManaColor::Red,
+        tricerules_cards::mana::ColorPip::G => ManaColor::Green,
+    }
+}
+
 /// Choose one announced full-mana branch from the engine's offered cost, never Oracle display data.
 pub(crate) fn hybrid_phyrexian_choices(cost: &str) -> Result<Vec<FlexPipPayment>, String> {
     let cost = ManaCost::parse(cost).map_err(|error| format!("offered mana cost: {error}"))?;
@@ -402,10 +479,12 @@ pub(crate) fn cast_cost_groups(
             return Err("required cast-cost group has no satisfiable option".into());
         }
     }
-    if linked
-        .iter()
-        .any(|link| !offer.cast_cost_groups.iter().any(|g| g.group_index == link.group_index))
-    {
+    if linked.iter().any(|link| {
+        !offer
+            .cast_cost_groups
+            .iter()
+            .any(|g| g.group_index == link.group_index)
+    }) {
         return Err("linked cast cost names an unpublished group".into());
     }
     Ok(result)

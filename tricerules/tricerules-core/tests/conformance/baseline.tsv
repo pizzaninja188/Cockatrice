@@ -36,8 +36,8 @@ adventuring_gear	0	ability:0	exercised
 adventuring_gear	0	cast	exercised
 aegis_of_the_heavens	0	cast	exercised
 aegis_turtle	0	cast	exercised
-aerial_assault	0	cast	unsupported: target group 0 needs a richer fixture
-aerial_predation	0	cast	unsupported: target group 0 needs a richer fixture
+aerial_assault	0	cast	exercised
+aerial_predation	0	cast	exercised
 aerial_responder	0	cast	exercised
 aetherize	0	cast	exercised
 affa_protector	0	cast	exercised
@@ -83,7 +83,7 @@ alpha_myr	0	cast	exercised
 alpha_tyrranax	0	cast	exercised
 alpine_grizzly	0	cast	exercised
 alpine_watchdog	0	cast	exercised
-altanak,_the_thrice-called	0	ability:0	unsupported: target group 0 needs a richer fixture
+altanak,_the_thrice-called	0	ability:0	exercised
 altanak,_the_thrice-called	0	cast	exercised
 amateur_hero	0	cast	exercised
 amazing_acrobatics	0	cast	exercised
@@ -142,8 +142,8 @@ archweaver	0	cast	exercised
 arctic_flats	0	ability:0	exercised
 arctic_flats	0	land	exercised
 ardent_militia	0	cast	exercised
-argivian_find	0	cast	unsupported: target group 0 needs a richer fixture
-argivian_restoration	0	cast	unsupported: target group 0 needs a richer fixture
+argivian_find	0	cast	exercised
+argivian_restoration	0	cast	exercised
 argothian_enchantress	0	cast	exercised
 argothian_sprite	0	ability:0	exercised
 argothian_sprite	0	cast	exercised
@@ -155,7 +155,7 @@ armored_warhorse	0	cast	exercised
 armored_whirl_turtle	0	cast	exercised
 armored_wolf-rider	0	cast	exercised
 armory_mice	0	cast	exercised
-arnim_zola,_bio-fanatic	0	ability:0	unsupported: nonmana costs need additional fixture resources
+arnim_zola,_bio-fanatic	0	ability:0	exercised
 arnim_zola,_bio-fanatic	0	cast	exercised
 arrogant_vampire	0	cast	exercised
 arrogant_wurm	0	cast	exercised
@@ -166,7 +166,7 @@ asgardian_citadel	0	ability:0	exercised
 asgardian_citadel	0	land	exercised
 ashcoat_bear	0	cast	exercised
 ashioks_reaper	0	cast	exercised
-assassinate	0	cast	unsupported: target group 0 needs a richer fixture
+assassinate	0	cast	exercised
 assault_griffin	0	cast	exercised
 assault_zeppelid	0	cast	exercised
 assert_perfection	0	cast	exercised
@@ -317,15 +317,15 @@ bitter_triumph	0	cast	exercised
 bitterbow_sharpshooters	0	cast	exercised
 black_knight	0	cast	exercised
 black_widow,_natasha_romanoff	0	cast	exercised
-blade_banish	0	cast	unsupported: target group 0 needs a richer fixture
+blade_banish	0	cast	exercised
 blade_of_the_sixth_pride	0	cast	exercised
 bladebrand	0	cast	exercised
 bladetusk_boar	0	cast	exercised
 blanchwood_treefolk	0	cast	exercised
 blasphemous_act	0	cast	exercised
 blaze	0	cast	exercised
-blazemire_verge	0	ability:1	unsupported: nonmana costs need additional fixture resources
-bleachbone_verge	0	ability:1	unsupported: nonmana costs need additional fixture resources
+blazemire_verge	0	ability:1	exercised
+bleachbone_verge	0	ability:1	exercised
 bleeding_woods	0	ability:0	exercised
 bleeding_woods	0	land	exercised
 blight_rot	0	cast	exercised
@@ -357,8 +357,8 @@ blossoming_sands	0	ability:0	exercised
 blossoming_sands	0	land	exercised
 boar-q-pine	0	cast	exercised
 bog_imp	0	cast	exercised
-bog_naughty	0	ability:0	unsupported: nonmana costs need additional fixture resources
-boggart_birth_rite	0	cast	unsupported: target group 0 needs a richer fixture
+bog_naughty	0	ability:0	exercised
+boggart_birth_rite	0	cast	exercised
 boggart_brute	0	cast	exercised
 boggart_cursecrafter	0	cast	exercised
 boggart_prankster	0	cast	exercised
@@ -438,7 +438,7 @@ brightclimb_pathway_grimclimb_pathway	1	land	exercised
 brightwood_tracker	0	ability:0	exercised
 brightwood_tracker	0	cast	exercised
 brilliant_plan	0	cast	exercised
-bring_to_trial	0	cast	unsupported: target group 0 needs a richer fixture
+bring_to_trial	0	cast	exercised
 bristlepack_sentry	0	cast	exercised
 bristling_backwoods	0	ability:0	exercised
 bristling_backwoods	0	land	exercised
@@ -462,7 +462,7 @@ burdened_stoneback	0	ability:0	exercised
 burdened_stoneback	0	cast	exercised
 burglar_rat	0	cast	exercised
 buried_ruin	0	ability:0	exercised
-buried_ruin	0	ability:1	unsupported: target group 0 needs a richer fixture
+buried_ruin	0	ability:1	exercised
 buried_ruin	0	land	exercised
 burn,_burn,_tree_and_fern	0	cast	exercised
 burning_curiosity	0	cast	exercised
@@ -479,7 +479,7 @@ cackling_fiend	0	cast	exercised
 cackling_prowler	0	cast	exercised
 cackling_slasher	0	cast	exercised
 caelorna,_coral_tyrant	0	cast	exercised
-caged_zombie	0	ability:0	unsupported: nonmana costs need additional fixture resources
+caged_zombie	0	ability:0	exercised
 caged_zombie	0	cast	exercised
 calamitous_cave-in	0	cast	exercised
 calamitous_tide	0	cast	exercised
@@ -488,7 +488,7 @@ calciform_pools	0	ability:1	exercised
 calciform_pools	0	ability:2	exercised
 calciform_pools	0	land	exercised
 call_the_cavalry	0	cast	exercised
-call_to_mind	0	cast	unsupported: target group 0 needs a richer fixture
+call_to_mind	0	cast	exercised
 callous_inspector	0	cast	exercised
 campus_guide	0	cast	exercised
 canal_monitor	0	cast	exercised
@@ -541,7 +541,7 @@ caustic_exhale	0	cast	exercised
 cavalry_drillmaster	0	cast	exercised
 cavern_stomper	0	ability:0	exercised
 cavern_stomper	0	cast	exercised
-celestial_enforcer	0	ability:0	unsupported: nonmana costs need additional fixture resources
+celestial_enforcer	0	ability:0	exercised
 celestial_enforcer	0	cast	exercised
 cenote_scout	0	cast	exercised
 censor	0	ability:0	exercised
@@ -591,7 +591,7 @@ civic_wayfinder	0	cast	exercised
 clachan_festival	0	ability:0	exercised
 clachan_festival	0	cast	exercised
 clammy_prowler	0	cast	exercised
-clamorous_ironclad	0	ability:0	unsupported: nonmana costs need additional fixture resources
+clamorous_ironclad	0	ability:0	exercised
 clamorous_ironclad	0	ability:1	exercised
 clamorous_ironclad	0	cast	exercised
 claustrophobia	0	cast	exercised
@@ -631,7 +631,7 @@ coeurl	0	cast	exercised
 cogwork_wrestler	0	cast	exercised
 cold-water_snapper	0	cast	exercised
 coliseum_behemoth	0	cast	exercised
-collar_the_culprit	0	cast	unsupported: target group 0 needs a richer fixture
+collar_the_culprit	0	cast	exercised
 collective_blessing	0	cast	exercised
 collectors_vault	0	ability:0	exercised
 collectors_vault	0	cast	exercised
@@ -668,7 +668,7 @@ confiscate	0	cast	exercised
 confusticate_and_bebother	0	cast	exercised
 conifer_strider	0	cast	exercised
 consecrated_sphinx	0	cast	exercised
-consulate_dreadnought	0	ability:0	unsupported: nonmana costs need additional fixture resources
+consulate_dreadnought	0	ability:0	exercised
 consulate_skygate	0	cast	exercised
 contaminated_landscape	0	ability:2	exercised
 contradict	0	cast	unsupported: target group 0 needs a richer fixture
@@ -740,13 +740,13 @@ cudgel_troll	0	ability:0	exercised
 cudgel_troll	0	cast	exercised
 cult_healer	0	cast	exercised
 cultivators_caravan	0	ability:0	exercised
-cultivators_caravan	0	ability:1	unsupported: nonmana costs need additional fixture resources
+cultivators_caravan	0	ability:1	exercised
 cultivators_caravan	0	cast	exercised
 cunning_maneuver	0	cast	exercised
 curio_vendor	0	cast	exercised
 curse_of_disturbance	0	cast	exercised
 curse_of_opulence	0	cast	exercised
-cursebreak	0	cast	unsupported: target group 0 needs a richer fixture
+cursebreak	0	cast	exercised
 cursed_minotaur	0	cast	exercised
 cursed_windbreaker	0	ability:0	exercised
 cursed_windbreaker	0	cast	exercised
@@ -765,7 +765,7 @@ dakmor_scorpion	0	cast	exercised
 dalkovan_packbeasts	0	cast	exercised
 damage_control_crew	0	cast	exercised
 dancing_scimitar	0	cast	exercised
-daring_mechanic	0	ability:0	unsupported: target group 0 needs a richer fixture
+daring_mechanic	0	ability:0	exercised
 daring_mechanic	0	cast	exercised
 daring_thunder-thief	0	cast	exercised
 dark_deed	0	cast	exercised
@@ -785,7 +785,7 @@ darksteel_myr	0	cast	exercised
 darksteel_plate	0	ability:0	exercised
 darksteel_plate	0	cast	exercised
 darkwatch_elves	0	ability:0	exercised
-daru_encampment	0	ability:1	unsupported: target group 0 needs a richer fixture
+daru_encampment	0	ability:1	exercised
 dauntless_veteran	0	cast	exercised
 dawn_gryff	0	cast	exercised
 dawnhand_eulogist	0	cast	exercised
@@ -807,9 +807,9 @@ deadly_insect	0	cast	exercised
 deadly_plot	0	cast	exercised
 deadly_precision	0	cast	exercised
 deadly_recluse	0	cast	exercised
-deadly_riposte	0	cast	unsupported: target group 0 needs a richer fixture
+deadly_riposte	0	cast	exercised
 death_in_the_family	0	cast	exercised
-death_stroke	0	cast	unsupported: target group 0 needs a richer fixture
+death_stroke	0	cast	exercised
 deathcap_glade	0	ability:0	exercised
 deathcap_glade	0	land	exercised
 deathcap_marionette	0	cast	exercised
@@ -825,7 +825,7 @@ decanter_of_endless_water	0	ability:0	exercised
 decanter_of_endless_water	0	cast	exercised
 deceptive_landscape	0	ability:2	exercised
 decode_transmissions	0	cast	exercised
-decoy_ploy	0	cast	unsupported: face not offered by generic hand fixture
+decoy_ploy	0	cast	exercised
 deduce	0	cast	exercised
 deep_goblin_skulltaker	0	cast	exercised
 deer-dog	0	cast	exercised
@@ -834,15 +834,15 @@ defiant_khenra	0	cast	exercised
 defibrillating_current	0	cast	exercised
 deft_duelist	0	cast	exercised
 deglamer	0	cast	exercised
-deja_vu	0	cast	unsupported: target group 0 needs a richer fixture
+deja_vu	0	cast	exercised
 delta_bloodflies	0	cast	exercised
 demand_answers	0	cast	exercised
 demolition_field	0	ability:0	exercised
-demolition_field	0	ability:1	unsupported: target group 0 needs a richer fixture
+demolition_field	0	ability:1	exercised
 demolition_field	0	land	exercised
 demonic_tutor	0	cast	exercised
 dependable_quinjet	0	ability:0	exercised
-dependable_quinjet	0	ability:1	unsupported: nonmana costs need additional fixture resources
+dependable_quinjet	0	ability:1	exercised
 dependable_quinjet	0	cast	exercised
 depower	0	cast	exercised
 depressurize	0	cast	exercised
@@ -862,12 +862,12 @@ deserts_due	0	cast	exercised
 desolation_prowler	0	ability:0	exercised
 desolation_prowler	0	cast	exercised
 destructive_tampering	0	cast	exercised
-detention_chariot	0	ability:0	unsupported: nonmana costs need additional fixture resources
+detention_chariot	0	ability:0	exercised
 detention_chariot	0	ability:1	exercised
 detention_chariot	0	cast	exercised
 devilthorn_fox	0	cast	exercised
 devoted_hero	0	cast	exercised
-devout_decree	0	cast	unsupported: target group 0 needs a richer fixture
+devout_decree	0	cast	exercised
 devout_monk	0	cast	exercised
 diabolic_edict	0	cast	exercised
 dictate_of_kruphix	0	cast	exercised
@@ -950,7 +950,7 @@ drown_in_shapelessness	0	cast	exercised
 drowsing_tyrannodon	0	cast	exercised
 drudge_skeletons	0	ability:0	exercised
 drudge_skeletons	0	cast	exercised
-druid_lyrist	0	ability:0	unsupported: target group 0 needs a richer fixture
+druid_lyrist	0	ability:0	exercised
 druid_of_the_cowl	0	ability:0	exercised
 druid_of_the_cowl	0	cast	exercised
 druid_of_the_spade	0	cast	exercised
@@ -1017,9 +1017,9 @@ elven_passage	0	land	exercised
 elvenkings_harper	0	ability:0	exercised
 elvenkings_harper	0	cast	exercised
 elvish_archers	0	cast	exercised
-elvish_hexhunter	0	ability:0	unsupported: target group 0 needs a richer fixture
+elvish_hexhunter	0	ability:0	exercised
 elvish_lookout	0	cast	exercised
-elvish_lyrist	0	ability:0	unsupported: target group 0 needs a richer fixture
+elvish_lyrist	0	ability:0	exercised
 elvish_mystic	0	ability:0	exercised
 elvish_mystic	0	cast	exercised
 elvish_regrower	0	cast	exercised
@@ -1041,10 +1041,10 @@ environmental_scientist	0	cast	exercised
 envoy_of_okinec_ahau	0	ability:0	exercised
 envoy_of_okinec_ahau	0	cast	exercised
 epf_point_squad	0	cast	exercised
-epic_downfall	0	cast	unsupported: target group 0 needs a richer fixture
+epic_downfall	0	cast	exercised
 epic_fight	0	cast	exercised
-erase	0	cast	unsupported: target group 0 needs a richer fixture
-eriettes_lullaby	0	cast	unsupported: target group 0 needs a richer fixture
+erase	0	cast	exercised
+eriettes_lullaby	0	cast	exercised
 eroded_canyon	0	ability:0	exercised
 eroded_canyon	0	land	exercised
 erratic_apparition	0	cast	exercised
@@ -1052,7 +1052,7 @@ erudite_wizard	0	cast	exercised
 escape_tunnel	0	ability:0	exercised
 escape_tunnel	0	ability:1	exercised
 escape_tunnel	0	land	exercised
-esikas_chariot	0	ability:0	unsupported: nonmana costs need additional fixture resources
+esikas_chariot	0	ability:0	exercised
 esikas_chariot	0	cast	exercised
 esper_cormorants	0	cast	exercised
 esper_origins_summon:_esper_maduin	0	cast	exercised
@@ -1071,14 +1071,14 @@ evolving_wilds	0	ability:0	exercised
 evolving_wilds	0	land	exercised
 exclude	0	cast	unsupported: target group 0 needs a richer fixture
 exclusion_mage	0	cast	exercised
-excoriate	0	cast	unsupported: target group 0 needs a richer fixture
+excoriate	0	cast	exercised
 exdeath,_void_warlock_neo_exdeath,_dimensions_end	0	cast	exercised
 exdeath,_void_warlock_neo_exdeath,_dimensions_end	1	cast	intentional: face unavailable from hand
 exocomp	0	cast	exercised
 exorcise	0	cast	exercised
 exosuit_savior	0	cast	exercised
 expedition_envoy	0	cast	exercised
-expel	0	cast	unsupported: target group 0 needs a richer fixture
+expel	0	cast	exercised
 experimental_confectioner	0	cast	exercised
 exploration	0	cast	exercised
 explosive_apparatus	0	ability:0	exercised
@@ -1132,7 +1132,7 @@ feed_the_swarm	0	cast	exercised
 feisty_spikeling	0	cast	exercised
 feiyi_snake	0	cast	exercised
 felhide_minotaur	0	cast	exercised
-felidar_cub	0	ability:0	unsupported: target group 0 needs a richer fixture
+felidar_cub	0	ability:0	exercised
 felidar_cub	0	cast	exercised
 felidar_savior	0	cast	exercised
 fell	0	cast	exercised
@@ -1216,7 +1216,7 @@ flick_a_coin	0	cast	exercised
 flight	0	cast	exercised
 flight-deck_coordinator	0	cast	exercised
 flood_the_engine	0	cast	exercised
-floodpits_drowner	0	ability:0	unsupported: target group 0 needs a richer fixture
+floodpits_drowner	0	ability:0	exercised
 floodpits_drowner	0	cast	exercised
 flow_of_knowledge	0	cast	exercised
 flow_state	0	cast	exercised
@@ -1243,7 +1243,7 @@ force_spike	0	cast	unsupported: target group 0 needs a richer fixture
 foreboding_landscape	0	ability:2	exercised
 forecasting_fortune_teller	0	cast	exercised
 forensic_researcher	0	ability:0	exercised
-forensic_researcher	0	ability:1	unsupported: nonmana costs need additional fixture resources
+forensic_researcher	0	ability:1	exercised
 forensic_researcher	0	cast	exercised
 forest	0	ability:0	exercised
 forest	0	land	exercised
@@ -1266,7 +1266,7 @@ forum_of_amity	0	land	exercised
 foul_orchard	0	ability:0	exercised
 foul_orchard	0	land	exercised
 fountainport	0	ability:0	exercised
-fountainport	0	ability:1	unsupported: nonmana costs need additional fixture resources
+fountainport	0	ability:1	exercised
 fountainport	0	ability:2	exercised
 fountainport	0	ability:3	exercised
 fountainport	0	land	exercised
@@ -1307,7 +1307,7 @@ fungal_colossus	0	cast	exercised
 fusion_elemental	0	cast	exercised
 futurist_forge	0	ability:0	exercised
 futurist_forge	0	cast	exercised
-futurist_sentinel	0	ability:0	unsupported: nonmana costs need additional fixture resources
+futurist_sentinel	0	ability:0	exercised
 fyndhorn_elves	0	ability:0	exercised
 fyndhorn_elves	0	cast	exercised
 gaeas_anthem	0	cast	exercised
@@ -1320,7 +1320,7 @@ galion,_elvenkings_butler	0	cast	exercised
 gallant_citizen	0	cast	exercised
 gallant_pie-wielder	0	cast	exercised
 gallant_strike	0	ability:0	exercised
-gallant_strike	0	cast	unsupported: target group 0 needs a richer fixture
+gallant_strike	0	cast	exercised
 galvanize	0	cast	exercised
 galvanizing_sawship	0	ability:0	exercised
 galvanizing_sawship	0	cast	exercised
@@ -1428,11 +1428,11 @@ goblin-town_flunkies	0	cast	exercised
 goblin_arsonist	0	cast	exercised
 goblin_assailant	0	cast	exercised
 goblin_berserker	0	cast	exercised
-goblin_bird-grabber	0	ability:0	unsupported: nonmana costs need additional fixture resources
+goblin_bird-grabber	0	ability:0	exercised
 goblin_bird-grabber	0	cast	exercised
 goblin_boarders	0	cast	exercised
 goblin_brigand	0	cast	exercised
-goblin_burrows	0	ability:1	unsupported: target group 0 needs a richer fixture
+goblin_burrows	0	ability:1	exercised
 goblin_chariot	0	cast	exercised
 goblin_chieftain	0	cast	exercised
 goblin_deathraiders	0	cast	exercised
@@ -1533,7 +1533,7 @@ guardian_lions	0	cast	exercised
 guardian_of_the_great_door	0	cast	exercised
 guardians_of_meletis	0	cast	exercised
 guidelight_synergist	0	cast	exercised
-guiding_bolt	0	cast	unsupported: target group 0 needs a richer fixture
+guiding_bolt	0	cast	exercised
 gundabad_opportunist	0	cast	exercised
 gurmag_nightwatch	0	cast	exercised
 gurmag_swiftwing	0	cast	exercised
@@ -1554,7 +1554,7 @@ hard-won_jitte	0	cast	exercised
 hardbristle_bandit	0	ability:0	exercised
 hardbristle_bandit	0	cast	exercised
 hardened_escort	0	cast	exercised
-hardened_tactician	0	ability:0	unsupported: nonmana costs need additional fixture resources
+hardened_tactician	0	ability:0	exercised
 hardened_tactician	0	cast	exercised
 harmonize	0	cast	exercised
 harried_spearguard	0	cast	exercised
@@ -1672,10 +1672,10 @@ hulk_smash!	0	cast	exercised
 hulking_bugbear	0	cast	exercised
 hulking_devil	0	cast	exercised
 hullcarver	0	cast	exercised
-hulldrifter	0	ability:0	unsupported: nonmana costs need additional fixture resources
+hulldrifter	0	ability:0	exercised
 hulldrifter	0	cast	exercised
 humble_budoka	0	cast	exercised
-humble_the_brute	0	cast	unsupported: target group 0 needs a richer fixture
+humble_the_brute	0	cast	exercised
 humbling_elder	0	cast	exercised
 humongulus	0	cast	exercised
 humpback_whales	0	ability:0	exercised
@@ -1777,7 +1777,7 @@ iron_will	0	cast	exercised
 ironclad_krovod	0	cast	exercised
 ironpaw_aspirant	0	cast	exercised
 ironroot_treefolk	0	cast	exercised
-irontread_crusher	0	ability:0	unsupported: nonmana costs need additional fixture resources
+irontread_crusher	0	ability:0	exercised
 irrigated_farmland	0	ability:0	exercised
 irrigated_farmland	0	ability:1	exercised
 irrigated_farmland	0	land	exercised
@@ -1834,7 +1834,7 @@ kaito,_bane_of_nightmares	0	cast	exercised
 kalakscion,_hunger_tyrant	0	cast	exercised
 kalonian_behemoth	0	cast	exercised
 kalonian_tusker	0	cast	exercised
-kami_of_ancient_law	0	ability:0	unsupported: target group 0 needs a richer fixture
+kami_of_ancient_law	0	ability:0	exercised
 kami_of_ancient_law	0	cast	exercised
 kami_of_old_stone	0	cast	exercised
 kami_of_the_crescent_moon	0	cast	exercised
@@ -1855,9 +1855,9 @@ kavu_climber	0	cast	exercised
 kederekt_creeper	0	cast	exercised
 keen-eyed_archers	0	cast	exercised
 keeneye_aven	0	ability:0	exercised
-keening_apparition	0	ability:0	unsupported: target group 0 needs a richer fixture
+keening_apparition	0	ability:0	exercised
 keening_apparition	0	cast	exercised
-keep_out	0	cast	unsupported: face not offered by generic hand fixture
+keep_out	0	cast	exercised
 keepers_of_the_faith	0	cast	exercised
 keldon_raider	0	cast	exercised
 kelinore_bat	0	cast	exercised
@@ -1874,7 +1874,7 @@ kill_shot	0	cast	unsupported: target group 0 needs a richer fixture
 killers_mask	0	ability:0	exercised
 killers_mask	0	cast	exercised
 kin-tree_nurturer	0	cast	exercised
-kin-tree_severance	0	cast	unsupported: target group 0 needs a richer fixture
+kin-tree_severance	0	cast	exercised
 kindercatch	0	cast	exercised
 kindled_fury	0	cast	exercised
 kindled_heroism	0	cast	exercised
@@ -1950,7 +1950,7 @@ lead_pipe	0	ability:1	exercised
 lead_pipe	0	cast	exercised
 leaden_myr	0	ability:0	exercised
 leaden_myr	0	cast	exercised
-leaf_arrow	0	cast	unsupported: target group 0 needs a richer fixture
+leaf_arrow	0	cast	exercised
 leaf_gilder	0	ability:0	exercised
 leaf_gilder	0	cast	exercised
 leafkin_druid	0	ability:0	exercised
@@ -1961,7 +1961,7 @@ lecturing_scornmage	0	cast	exercised
 legion_guildmage	0	ability:0	exercised
 legion_guildmage	0	ability:1	exercised
 legion_guildmage	0	cast	exercised
-legions_judgment	0	cast	unsupported: target group 0 needs a richer fixture
+legions_judgment	0	cast	exercised
 leonin_skyhunter	0	cast	exercised
 leopard-spotted_jiao	0	cast	exercised
 library_larcenist	0	cast	exercised
@@ -2033,7 +2033,7 @@ loxodon_line_breaker	0	cast	exercised
 loxodon_wayfarer	0	cast	exercised
 lucent_liminid	0	cast	exercised
 lull	0	ability:0	exercised
-lumbering_worldwagon	0	ability:0	unsupported: nonmana costs need additional fixture resources
+lumbering_worldwagon	0	ability:0	exercised
 lumbering_worldwagon	0	cast	exercised
 lumen-class_frigate	0	ability:0	exercised
 lumen-class_frigate	0	cast	exercised
@@ -2045,7 +2045,7 @@ lurking_lizards	0	cast	exercised
 lush_oasis	0	ability:0	exercised
 lush_oasis	0	land	exercised
 lush_portico	0	land	exercised
-lys_alana_dignitary	0	ability:0	unsupported: nonmana costs need additional fixture resources
+lys_alana_dignitary	0	ability:0	exercised
 lys_alana_dignitary	0	cast	exercised
 lys_alana_informant	0	cast	exercised
 maalfeld_twins	0	cast	exercised
@@ -2237,7 +2237,7 @@ moss_kami	0	cast	exercised
 moss_monster	0	cast	exercised
 moss_viper	0	cast	exercised
 mossbeard_ancient	0	cast	exercised
-mossbridge_troll	0	ability:0	unsupported: nonmana costs need additional fixture resources
+mossbridge_troll	0	ability:0	exercised
 mossbridge_troll	0	cast	exercised
 mosscoat_goriak	0	cast	exercised
 mossfire_valley	0	ability:0	exercised
@@ -2271,7 +2271,7 @@ mystic_archaeologist	0	cast	exercised
 mystic_denial	0	cast	unsupported: target group 0 needs a richer fixture
 mystic_monastery	0	ability:0	exercised
 mystic_monastery	0	land	exercised
-mystic_retrieval	0	cast	unsupported: target group 0 needs a richer fixture
+mystic_retrieval	0	cast	exercised
 mystical_tutor	0	cast	exercised
 naga_eternal	0	cast	exercised
 narsets_rebuke	0	cast	exercised
@@ -2359,7 +2359,7 @@ ogre_warrior	0	cast	exercised
 ohran_frostfang	0	cast	exercised
 oin_the_brave	0	ability:0	exercised
 oin_the_brave	0	cast	exercised
-okina,_temple_to_the_grandfathers	0	ability:1	unsupported: target group 0 needs a richer fixture
+okina,_temple_to_the_grandfathers	0	ability:1	exercised
 okos_accomplices	0	cast	exercised
 old_ghastbark	0	cast	exercised
 oltec_archaeologists	0	cast	exercised
@@ -2378,7 +2378,7 @@ omni-cheese_pizza	0	ability:0	exercised
 omni-cheese_pizza	0	ability:1	exercised
 omni-cheese_pizza	0	cast	exercised
 on_the_job	0	cast	exercised
-onakke_oathkeeper	0	ability:0	unsupported: target group 0 needs a richer fixture
+onakke_oathkeeper	0	ability:0	exercised
 onakke_ogre	0	cast	exercised
 ooze_patrol	0	cast	exercised
 ooze_spill	0	cast	unsupported: target group 0 needs a richer fixture
@@ -2460,7 +2460,7 @@ pheres-band_centaurs	0	cast	exercised
 phyrexian_arena	0	cast	exercised
 phyrexian_walker	0	cast	exercised
 phytoburst	0	cast	exercised
-pierce_the_sky	0	cast	unsupported: target group 0 needs a richer fixture
+pierce_the_sky	0	cast	exercised
 piggy_bank	0	cast	exercised
 pigment_wrangler_striking_palette	0	cast	exercised
 pigment_wrangler_striking_palette	1	cast	intentional: face unavailable from hand
@@ -2495,7 +2495,7 @@ plover_knights	0	cast	exercised
 plow_through	0	cast	exercised
 plumecreed_escort	0	cast	exercised
 plumeveil	0	cast	exercised
-plummet	0	cast	unsupported: target group 0 needs a richer fixture
+plummet	0	cast	exercised
 plundering_pirate	0	cast	exercised
 plunge_into_winter	0	cast	exercised
 poised_practitioner	0	cast	exercised
@@ -2506,7 +2506,7 @@ porcelain_legionnaire	0	cast	exercised
 portcullis_vine	0	ability:0	exercised
 portcullis_vine	0	cast	exercised
 potioners_trove	0	ability:0	exercised
-potioners_trove	0	ability:1	unsupported: nonmana costs need additional fixture resources
+potioners_trove	0	ability:1	exercised
 potioners_trove	0	cast	exercised
 pouncing_cheetah	0	cast	exercised
 power_boost	0	cast	exercised
@@ -2549,7 +2549,7 @@ prompto_argentum	0	cast	exercised
 prophetic_prism	0	ability:0	exercised
 prophetic_prism	0	cast	exercised
 prosperity	0	cast	exercised
-prosperity_tycoon	0	ability:0	unsupported: nonmana costs need additional fixture resources
+prosperity_tycoon	0	ability:0	exercised
 prosperity_tycoon	0	cast	exercised
 protective_response	0	cast	unsupported: target group 0 needs a richer fixture
 prowcatcher_specialist	0	ability:0	exercised
@@ -2646,10 +2646,10 @@ ravenous_giant	0	cast	exercised
 ravenous_lindwurm	0	cast	exercised
 ravine_raider	0	ability:0	exercised
 ravine_raider	0	cast	exercised
-ray_fillet,_man_ray	0	ability:0	unsupported: nonmana costs need additional fixture resources
+ray_fillet,_man_ray	0	ability:0	exercised
 ray_fillet,_man_ray	0	cast	exercised
 ray_of_command	0	cast	exercised
-ray_of_dissolution	0	cast	unsupported: target group 0 needs a richer fixture
+ray_of_dissolution	0	cast	exercised
 razorfield_thresher	0	cast	exercised
 razorfoot_griffin	0	cast	exercised
 razortrap_gorge	0	ability:0	exercised
@@ -2663,7 +2663,7 @@ rearing_embermare	0	cast	exercised
 rebellious_captives	0	ability:0	exercised
 rebellious_captives	0	cast	exercised
 rebellious_strike	0	cast	exercised
-reborn_hope	0	cast	unsupported: target group 0 needs a richer fixture
+reborn_hope	0	cast	exercised
 rebuke	0	cast	unsupported: target group 0 needs a richer fixture
 reckless_air_strike	0	cast	exercised
 reckless_lackey	0	ability:0	exercised
@@ -2672,19 +2672,19 @@ reckless_ransacking	0	cast	exercised
 reckless_waif_merciless_predator	0	cast	exercised
 reckless_waif_merciless_predator	1	cast	intentional: face unavailable from hand
 reclamation_sage	0	cast	exercised
-reconstruction	0	cast	unsupported: target group 0 needs a richer fixture
+reconstruction	0	cast	exercised
 red_guardian,_super-soldier	0	cast	exercised
 red_tiger_mechan	0	cast	exercised
 redcap_thief	0	cast	exercised
 redrock_sentinel	0	ability:0	exercised
 redrock_sentinel	0	cast	exercised
 redwood_treefolk	0	cast	exercised
-refurbish	0	cast	unsupported: target group 0 needs a richer fixture
+refurbish	0	cast	exercised
 refute	0	cast	unsupported: target group 0 needs a richer fixture
 regal_unicorn	0	cast	exercised
 regathan_firecat	0	cast	exercised
 reigning_victor	0	cast	exercised
-relearn	0	cast	unsupported: target group 0 needs a richer fixture
+relearn	0	cast	exercised
 release_the_dogs	0	cast	exercised
 relic_sloth	0	cast	exercised
 reliquary_tower	0	ability:0	exercised
@@ -2695,7 +2695,7 @@ remote_isle	0	ability:1	exercised
 remove_soul	0	cast	unsupported: target group 0 needs a richer fixture
 renegade_demon	0	cast	exercised
 renegade_troops	0	cast	exercised
-repel_calamity	0	cast	unsupported: target group 0 needs a richer fixture
+repel_calamity	0	cast	exercised
 repulsor_rays	0	cast	exercised
 reputable_merchant	0	cast	exercised
 requisition_raid	0	cast	exercised
@@ -2738,7 +2738,7 @@ rise_again	0	cast	exercised
 risen_sanctuary	0	cast	exercised
 risky_research	0	cast	exercised
 risky_shortcut	0	cast	exercised
-ritual_of_restoration	0	cast	unsupported: target group 0 needs a richer fixture
+ritual_of_restoration	0	cast	exercised
 river_boa	0	ability:0	exercised
 river_boa	0	cast	exercised
 river_herald_guide	0	cast	exercised
@@ -2761,7 +2761,7 @@ rock_soldiers	0	cast	exercised
 rocky_rebuke	0	cast	exercised
 roiling_dragonstorm	0	cast	exercised
 romantic_rendezvous	0	cast	exercised
-ronom_unicorn	0	ability:0	unsupported: target group 0 needs a richer fixture
+ronom_unicorn	0	ability:0	exercised
 ronom_unicorn	0	cast	exercised
 rooftop_assassin	0	cast	exercised
 rooftop_percher	0	cast	exercised
@@ -2789,7 +2789,7 @@ roving_harper	0	cast	exercised
 rowan_treefolk	0	cast	exercised
 rowdy_research	0	cast	exercised
 rowdy_snowballers	0	cast	exercised
-royal_assassin	0	ability:0	unsupported: target group 0 needs a richer fixture
+royal_assassin	0	ability:0	exercised
 royal_assassin	0	cast	exercised
 royal_falcon	0	cast	exercised
 rubble_slinger	0	cast	exercised
@@ -2818,7 +2818,7 @@ rustler_rampage	0	cast	exercised
 rustwing_falcon	0	cast	exercised
 rydias_return	0	cast	exercised
 s.h.i.e.l.d._deployment_drone	0	cast	exercised
-s.h.i.e.l.d._helicarrier	0	ability:0	unsupported: nonmana costs need additional fixture resources
+s.h.i.e.l.d._helicarrier	0	ability:0	exercised
 s.h.i.e.l.d._helicarrier	0	cast	exercised
 saber-tooth_moose-lion	0	ability:0	exercised
 saber-tooth_moose-lion	0	cast	exercised
@@ -2832,9 +2832,9 @@ sacred_wolf	0	cast	exercised
 safewright_cavalry	0	ability:0	exercised
 safewright_cavalry	0	cast	exercised
 sage_of_days	0	cast	exercised
-sage_of_fables	0	ability:0	unsupported: nonmana costs need additional fixture resources
+sage_of_fables	0	ability:0	exercised
 sage_of_fables	0	cast	exercised
-sages_knowledge	0	cast	unsupported: target group 0 needs a richer fixture
+sages_knowledge	0	cast	exercised
 sagu_pummeler	0	ability:0	exercised
 sagu_pummeler	0	cast	exercised
 sagu_wildling_roost_seek	0	cast	exercised
@@ -2878,7 +2878,7 @@ savannah	0	land	exercised
 savannah_lions	0	cast	exercised
 savannah_sage	0	cast	exercised
 savor	0	cast	exercised
-say_its_name	0	ability:0	unsupported: nonmana costs need additional fixture resources
+say_its_name	0	ability:0	exercised
 say_its_name	0	cast	exercised
 sazhs_chocobo	0	cast	exercised
 scaled_behemoth	0	cast	exercised
@@ -2996,7 +2996,7 @@ shepherding_spirits	0	ability:0	exercised
 shepherding_spirits	0	cast	exercised
 shimmerscale_drake	0	ability:0	exercised
 shining_aerosaur	0	cast	exercised
-shinka,_the_bloodsoaked_keep	0	ability:1	unsupported: target group 0 needs a richer fixture
+shinka,_the_bloodsoaked_keep	0	ability:1	exercised
 shinra_reinforcements	0	cast	exercised
 shipwreck_dowser	0	cast	exercised
 shipwreck_sentry	0	cast	exercised
@@ -3018,7 +3018,7 @@ show_of_valor	0	cast	exercised
 shredder,_unrelenting	0	cast	exercised
 shredders_revenge	0	cast	exercised
 shredders_technique	0	cast	exercised
-shredding_winds	0	cast	unsupported: target group 0 needs a richer fixture
+shredding_winds	0	cast	exercised
 shrike_force	0	cast	exercised
 shroudstomper	0	cast	exercised
 shu_elite_infantry	0	cast	exercised
@@ -3089,7 +3089,7 @@ skystinger	0	cast	exercised
 skystreak_engineer	0	ability:0	exercised
 skystreak_engineer	0	cast	exercised
 skyswirl_harrier	0	cast	exercised
-skywhalers_shot	0	cast	unsupported: target group 0 needs a richer fixture
+skywhalers_shot	0	cast	exercised
 slagdrill_scrapper	0	ability:0	exercised
 slagdrill_scrapper	0	cast	exercised
 slagstorm	0	cast	exercised
@@ -3113,7 +3113,7 @@ smaug,_the_great_calamity_spew_flame	1	cast	exercised
 smaug_the_magnificent	0	cast	exercised
 smaugs_fury	0	cast	exercised
 smelt	0	cast	exercised
-smite_the_monstrous	0	cast	unsupported: target group 0 needs a richer fixture
+smite_the_monstrous	0	cast	exercised
 smoldering_crater	0	ability:1	exercised
 smugglers_buggy	0	ability:0	exercised
 snakeskin_veil	0	cast	exercised
@@ -3223,7 +3223,7 @@ stalactite_stalker	0	cast	exercised
 stall_out	0	ability:0	exercised
 stall_out	0	cast	exercised
 stampeding_rhino	0	cast	exercised
-stand_up_for_yourself	0	cast	unsupported: target group 0 needs a richer fixture
+stand_up_for_yourself	0	cast	exercised
 standing_troops	0	cast	exercised
 star_charter	0	cast	exercised
 starbreach_whale	0	cast	exercised
@@ -3324,7 +3324,7 @@ sun-dappled_celebrant	0	cast	exercised
 sun_sentinel	0	cast	exercised
 sunastian_falconer	0	ability:0	exercised
 sunastian_falconer	0	cast	exercised
-sunbillow_verge	0	ability:1	unsupported: nonmana costs need additional fixture resources
+sunbillow_verge	0	ability:1	exercised
 sunblade_angel	0	cast	exercised
 sunderflock	0	cast	exercised
 sundering_eruption_volcanic_fissure	0	cast	exercised
@@ -3333,7 +3333,7 @@ sundering_eruption_volcanic_fissure	1	land	exercised
 sundial,_dawn_tyrant	0	cast	exercised
 sundown_pass	0	ability:0	exercised
 sundown_pass	0	land	exercised
-sungold_barrage	0	cast	unsupported: target group 0 needs a richer fixture
+sungold_barrage	0	cast	exercised
 sungrace_pegasus	0	cast	exercised
 sunken_hollow	0	ability:0	exercised
 sunken_hollow	0	land	exercised
@@ -3367,10 +3367,10 @@ swallowed_by_leviathan	0	cast	unsupported: target group 0 needs a richer fixture
 swamp	0	ability:0	exercised
 swamp	0	land	exercised
 swan_song	0	cast	unsupported: target group 0 needs a richer fixture
-sweettooth_witch	0	ability:0	unsupported: nonmana costs need additional fixture resources
+sweettooth_witch	0	ability:0	exercised
 sweettooth_witch	0	cast	exercised
 sweltering_suns	0	ability:0	exercised
-swift_response	0	cast	unsupported: target group 0 needs a richer fixture
+swift_response	0	cast	exercised
 swift_spinner	0	cast	exercised
 swiftblade_vindicator	0	cast	exercised
 swiftfoot_boots	0	ability:0	exercised
@@ -3394,17 +3394,17 @@ syphon_fuel	0	cast	exercised
 tackle_artist	0	cast	exercised
 taiga	0	ability:0	exercised
 taiga	0	land	exercised
-tainted_field	0	ability:1	unsupported: nonmana costs need additional fixture resources
-tainted_isle	0	ability:1	unsupported: nonmana costs need additional fixture resources
-tainted_peak	0	ability:1	unsupported: nonmana costs need additional fixture resources
+tainted_field	0	ability:1	exercised
+tainted_isle	0	ability:1	exercised
+tainted_peak	0	ability:1	exercised
 tainted_treats	0	cast	exercised
-tainted_wood	0	ability:1	unsupported: nonmana costs need additional fixture resources
+tainted_wood	0	ability:1	exercised
 tajuru_blightblade	0	cast	exercised
 tajuru_pathwarden	0	cast	exercised
 tajuru_snarecaster	0	cast	exercised
 take_the_fall	0	cast	exercised
 take_up_the_shield	0	cast	exercised
-take_vengeance	0	cast	unsupported: target group 0 needs a richer fixture
+take_vengeance	0	cast	exercised
 taken_by_nightmares	0	cast	exercised
 talas_air_ship	0	cast	exercised
 talas_merchant	0	cast	exercised
@@ -3432,7 +3432,7 @@ teferi,_temporal_pilgrim	0	ability:1	exercised
 teferi,_temporal_pilgrim	0	ability:2	exercised
 teferis_protege	0	ability:0	exercised
 teferis_protege	0	cast	exercised
-tekuthal,_inquiry_dominus	0	ability:0	unsupported: nonmana costs need additional fixture resources
+tekuthal,_inquiry_dominus	0	ability:0	exercised
 tempest_angler	0	cast	exercised
 tempest_drake	0	cast	exercised
 tempest_hawk	0	cast	exercised
@@ -3505,7 +3505,7 @@ thornweald_archer	0	cast	exercised
 thornwood_falls	0	ability:0	exercised
 thornwood_falls	0	land	exercised
 those_who_serve	0	cast	exercised
-thought_shucker	0	ability:0	unsupported: nonmana costs need additional fixture resources
+thought_shucker	0	ability:0	exercised
 thought_shucker	0	cast	exercised
 thought_vessel	0	ability:0	exercised
 thought_vessel	0	cast	exercised
@@ -3519,7 +3519,7 @@ thran_dynamo	0	cast	exercised
 thrashing_brontodon	0	ability:0	exercised
 thrashing_brontodon	0	cast	exercised
 threadbind_clique_rip_the_seams	0	cast	exercised
-threadbind_clique_rip_the_seams	1	cast	unsupported: target group 0 needs a richer fixture
+threadbind_clique_rip_the_seams	1	cast	exercised
 threaten	0	cast	exercised
 three_steps_ahead	0	cast	exercised
 three_tree_mascot	0	ability:0	exercised
@@ -3694,7 +3694,7 @@ untamed_hunger	0	cast	exercised
 updraft_elemental	0	cast	exercised
 ur-golems_eye	0	ability:0	exercised
 ur-golems_eye	0	cast	exercised
-urban_retreat	0	ability:1	unsupported: nonmana costs need additional fixture resources
+urban_retreat	0	ability:1	exercised
 urenis_rebuff	0	cast	exercised
 urzas_cave	0	ability:0	exercised
 urzas_cave	0	ability:1	exercised
@@ -3721,7 +3721,7 @@ vampire_soulcaller	0	cast	exercised
 vampire_spawn	0	cast	exercised
 vampiric_rites	0	ability:0	exercised
 vampiric_rites	0	cast	exercised
-vanquish_the_foul	0	cast	unsupported: target group 0 needs a richer fixture
+vanquish_the_foul	0	cast	exercised
 vanquish_the_horde	0	cast	exercised
 vassal_soul	0	cast	exercised
 vastwood_gorger	0	cast	exercised
@@ -3738,7 +3738,7 @@ veloheart_bike	0	ability:1	exercised
 veloheart_bike	0	cast	exercised
 venerable_lammasu	0	cast	exercised
 venerable_monk	0	cast	exercised
-vengeance	0	cast	unsupported: target group 0 needs a richer fixture
+vengeance	0	cast	exercised
 vengeful_tracker	0	cast	exercised
 venomized_cat	0	cast	exercised
 venomthrope	0	cast	exercised
@@ -3780,7 +3780,7 @@ virulent_emissary	0	cast	exercised
 virus_beetle	0	cast	exercised
 vision_skeins	0	cast	exercised
 visions_of_villainy	0	cast	exercised
-vital_splicer	0	ability:0	unsupported: target group 0 needs a richer fixture
+vital_splicer	0	ability:0	exercised
 vitalize	0	cast	exercised
 viv_vision,_teen_synthezoid	0	ability:0	exercised
 viv_vision,_teen_synthezoid	0	cast	exercised
@@ -3933,7 +3933,7 @@ wind_drake	0	cast	exercised
 wind_strider	0	cast	exercised
 windurst,_federation_center	0	ability:0	exercised
 windurst,_federation_center	0	land	exercised
-wing_snare	0	cast	unsupported: target group 0 needs a richer fixture
+wing_snare	0	cast	exercised
 winged_coatl	0	cast	exercised
 winged_words	0	cast	exercised
 wingspan_stride	0	ability:0	exercised

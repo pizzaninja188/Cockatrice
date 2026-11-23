@@ -396,6 +396,10 @@ fn drain(e: &mut GameEngine, mut batch: RuledEventBatch, budget: usize) -> Resul
                     Cmd::CommitAbilityActivation(CommitAbilityActivation {
                         transaction_id: view.transaction_id,
                         expected_revision: view.revision,
+                        return_tapped_creature: view
+                            .return_tapped_creature_candidates
+                            .first()
+                            .copied(),
                         ..Default::default()
                     })
                 }
@@ -470,7 +474,22 @@ fn drain(e: &mut GameEngine, mut batch: RuledEventBatch, budget: usize) -> Resul
         Err(diagnostic(e, "drain", "command budget exhausted"))
     }
 }
+/// Fixture boards tried in order. A case runs under the first profile that prepares its
+/// initial command; later profiles never retry an execution failure.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Profile {
+    /// The original shared board. Every case is tried here first.
+    Base,
+    /// Base plus typed permanents, graveyard cards, tokens, counters and turn history.
+    Rich,
+}
+const PROFILES: &[Profile] = &[Profile::Base, Profile::Rich];
+
 fn fixture(case: &Case) -> GameEngine {
+    fixture_with(case, Profile::Base)
+}
+
+fn fixture_with(case: &Case, profile: Profile) -> GameEngine {
     let stack_fixture = match case.card.as_str() {
         // Arcane Denial's target group requires a genuine stack spell. Its card scenario separately
         // verifies the opposite player's cast and delayed-choice ownership.
@@ -496,6 +515,9 @@ fn fixture(case: &Case) -> GameEngine {
         helpers::inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
         helpers::inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
     }
+    if profile != Profile::Base {
+        rich_board(&mut e, case);
+    }
     if let Some(card) = stack_fixture {
         helpers::relocate_to_hand(&mut e, 0, card);
         let slot = helpers::hand_index_for_card(&e, 0, card);
@@ -505,6 +527,90 @@ fn fixture(case: &Case) -> GameEngine {
     }
     e
 }
+/// Typed resources selected only by engine offers: no card in this list is chosen for a
+/// specific case. Injection establishes state; turn history comes from real commands.
+fn rich_board(e: &mut GameEngine, case: &Case) {
+    use helpers::{
+        inject_creature_on_battlefield as creature, inject_graveyard_card as graveyard,
+        inject_permanent_on_battlefield as permanent,
+    };
+    use tricerules_cards::CounterKind;
+    // Player 0: other basic land types, a flier, typed creatures (Soldier, Legendary, Golem,
+    // Goblin), a Vehicle, tokens, a tapped creature, counters on another creature and enough
+    // untapped power for large Crew and total-power costs.
+    for land in ["swamp", "plains", "mountain"] {
+        permanent(e, 0, land);
+    }
+    creature(e, 0, "air_elemental");
+    let soldier = creature(e, 0, "alaborn_trooper");
+    e.state
+        .objects
+        .get_mut(&soldier)
+        .unwrap()
+        .set_counter(CounterKind::PlusOnePlusOne, 3);
+    creature(e, 0, "isamaru,_hound_of_konda");
+    creature(e, 0, "gilded_sentinel");
+    permanent(e, 0, "consulate_dreadnought");
+    let goblin = creature(e, 0, "crazed_goblin");
+    e.state.objects.get_mut(&goblin).unwrap().tapped = true;
+    permanent(e, 0, "food");
+    permanent(e, 0, "treasure");
+    let gnomes = creature(e, 0, "bottle_gnomes");
+    // Player 1: a flier, a tapped black creature with a stun counter, an enchantment and a
+    // nonbasic land.
+    creature(e, 1, "air_elemental");
+    let raiders = creature(e, 1, "bog_raiders");
+    let raiders = e.state.objects.get_mut(&raiders).unwrap();
+    raiders.tapped = true;
+    raiders.set_counter(CounterKind::Stun, 1);
+    permanent(e, 1, "banishing_light");
+    permanent(e, 1, "vivid_grove");
+    // Both graveyards: one card of each relevant type plus a Goblin, Elf, multicolored,
+    // Villain/Hero and planeswalker card. Player 0 also gets two copies of the case card for
+    // costs that exile other same-named cards.
+    for player in 0..2 {
+        for card in [
+            "sol_ring",
+            "divination",
+            "forest",
+            "banishing_light",
+            "elvish_ranger",
+            "agents_of_hydra",
+            "goblin_outlander",
+            "ajani_steadfast",
+        ] {
+            graveyard(e, player, card);
+        }
+    }
+    for _ in 0..2 {
+        graveyard(e, 0, &case.card);
+    }
+    // Turn history through real commands: a creature dies, then an instant is cast.
+    let command = offers::activation(e, 0, gnomes, 0).expect("rich board sacrifice offer");
+    let batch = apply(e, 0, &command).expect("rich board sacrifice");
+    drain(e, batch, COMMAND_BUDGET).expect("rich board sacrifice resolves");
+    helpers::inject_card_into_hand(e, 0, "opt");
+    let slot = helpers::hand_index_for_card(e, 0, "opt");
+    let mut command = helpers::cast_spell(slot, vec![]);
+    offers::pay(e, 0, &mut command).expect("fund rich board instant");
+    let batch = apply(e, 0, &command).expect("rich board instant");
+    drain(e, batch, COMMAND_BUDGET).expect("rich board instant resolves");
+    for player in 0..e.state.players.len() {
+        let pool = &mut e.state.players[player].mana_pool;
+        for amount in [
+            &mut pool.white,
+            &mut pool.blue,
+            &mut pool.black,
+            &mut pool.red,
+            &mut pool.green,
+            &mut pool.colorless,
+        ] {
+            *amount = (*amount).max(9);
+        }
+    }
+    e.initial_response_batch();
+}
+
 #[derive(Debug, PartialEq, Eq)]
 enum Outcome {
     Exercised,
@@ -533,79 +639,89 @@ fn evaluate(case: &Case) -> Result<Outcome, String> {
     if case.ability.is_none() && !def.face_available_from_hand(case.face) {
         return Ok(Outcome::IntentionalUncastable);
     }
-    let mut e = fixture(case);
-    let baseline = e.state.objects.len();
-    let actor = e.state.players[0].id;
-    let prepared = (|| -> Result<RuledCommand, String> {
-        let mut command = if let Some(index) = case.ability {
-            let oid =
-                helpers::authoring_fixture::ability_source(&mut e, 0, &case.card, case.face, index);
-            offers::activation(&mut e, actor, oid, index as u32)?
-        } else {
-            let oid = helpers::relocate_to_hand(&mut e, 0, &case.card);
-            let slot = e.state.players[0]
-                .hand
-                .iter()
-                .position(|&id| id == oid)
-                .unwrap() as u32;
-            let batch = e.initial_response_batch();
-            let legal = &batch.legal_by_player[&actor];
-            let offer = legal
-                .hand_actions
-                .iter()
-                .find(|a| {
-                    a.hand_index == slot
-                        && a.face_index == case.face as u32
-                        && a.cast_method == CastMethod::Normal as i32
-                })
-                .ok_or("face not offered by generic hand fixture")?;
-            if offer.kind == HandActionKind::HandActionPlayLand as i32 {
-                helpers::play_land_face(slot as usize, case.face)
-            } else {
-                let (selected_modes, linked_costs) =
-                    offers::spell_modes(&e, actor, offer.min_modes, &offer.modes)?;
-                RuledCommand {
-                    cmd: Some(Cmd::CastSpell(CastSpell {
-                        source: Some(helpers::hand_cast_source(slot as usize)),
-                        face_index: case.face as u32,
-                        cast_method: offer.cast_method,
-                        flex_payments: offers::hybrid_phyrexian_choices(&offer.cost)?,
-                        targets: offers::targets(
-                            &e,
-                            actor,
-                            legal
-                                .valid_targets_by_hand_slot
-                                .get(&((slot << 8) | case.face as u32)),
-                        )?,
-                        selected_modes,
-                        cost_selections: offers::costs(offer.cost_choices.as_ref())?,
-                        cast_cost_group_selections: offers::cast_cost_groups(
-                            offer.cost_choices.as_ref(),
-                            &linked_costs,
-                        )?,
-                        ..Default::default()
-                    })),
-                }
+    let mut unsupported = String::new();
+    for &profile in PROFILES {
+        let mut e = fixture_with(case, profile);
+        // Tokens are counted on top of the physical card baseline by the integrity check.
+        let baseline =
+            e.state.objects.len() - e.state.objects.values().filter(|o| o.is_token()).count();
+        let actor = e.state.players[0].id;
+        let command = match prepare(&mut e, case, actor) {
+            Ok(command) => command,
+            Err(reason) => {
+                unsupported = reason;
+                continue;
             }
         };
-        if !matches!(
-            command.cmd,
-            Some(Cmd::PlayLand(_) | Cmd::ActivateAbility(_) | Cmd::BeginAbilityActivation(_))
-        ) {
-            offers::pay(&e, actor, &mut command)?;
+        let result =
+            apply(&mut e, actor, &command).and_then(|batch| drain(&mut e, batch, COMMAND_BUDGET));
+        integrity::assert_zone_integrity(&e, baseline, &case.key());
+        return result
+            .map(|()| Outcome::Exercised)
+            .map_err(|err| diagnostic(&e, &format!("{}; profile={profile:?}", case.key()), err));
+    }
+    Ok(Outcome::UnsupportedFixture(unsupported))
+}
+
+/// Build the case's initial command from engine offers, or say why this board can't.
+fn prepare(e: &mut GameEngine, case: &Case, actor: i32) -> Result<RuledCommand, String> {
+    let mut command = if let Some(index) = case.ability {
+        let oid = helpers::authoring_fixture::ability_source(e, 0, &case.card, case.face, index);
+        offers::activation(e, actor, oid, index as u32)?
+    } else {
+        let oid = helpers::relocate_to_hand(e, 0, &case.card);
+        let slot = e.state.players[0]
+            .hand
+            .iter()
+            .position(|&id| id == oid)
+            .unwrap() as u32;
+        let batch = e.initial_response_batch();
+        let legal = &batch.legal_by_player[&actor];
+        let offer = legal
+            .hand_actions
+            .iter()
+            .find(|a| {
+                a.hand_index == slot
+                    && a.face_index == case.face as u32
+                    && a.cast_method == CastMethod::Normal as i32
+            })
+            .ok_or("face not offered by generic hand fixture")?;
+        if offer.kind == HandActionKind::HandActionPlayLand as i32 {
+            helpers::play_land_face(slot as usize, case.face)
+        } else {
+            let (selected_modes, linked_costs) =
+                offers::spell_modes(e, actor, offer.min_modes, &offer.modes)?;
+            RuledCommand {
+                cmd: Some(Cmd::CastSpell(CastSpell {
+                    source: Some(helpers::hand_cast_source(slot as usize)),
+                    face_index: case.face as u32,
+                    cast_method: offer.cast_method,
+                    flex_payments: offers::hybrid_phyrexian_choices(&offer.cost)?,
+                    targets: offers::targets(
+                        &e,
+                        actor,
+                        legal
+                            .valid_targets_by_hand_slot
+                            .get(&((slot << 8) | case.face as u32)),
+                    )?,
+                    selected_modes,
+                    cost_selections: offers::costs(offer.cost_choices.as_ref())?,
+                    cast_cost_group_selections: offers::cast_cost_groups(
+                        offer.cost_choices.as_ref(),
+                        &linked_costs,
+                    )?,
+                    ..Default::default()
+                })),
+            }
         }
-        Ok(command)
-    })();
-    let command = match prepared {
-        Ok(command) => command,
-        Err(reason) => return Ok(Outcome::UnsupportedFixture(reason)),
     };
-    let result =
-        apply(&mut e, actor, &command).and_then(|batch| drain(&mut e, batch, COMMAND_BUDGET));
-    integrity::assert_zone_integrity(&e, baseline, &case.key());
-    result
-        .map(|()| Outcome::Exercised)
-        .map_err(|err| diagnostic(&e, &case.key(), err))
+    if !matches!(
+        command.cmd,
+        Some(Cmd::PlayLand(_) | Cmd::ActivateAbility(_) | Cmd::BeginAbilityActivation(_))
+    ) {
+        offers::pay(e, actor, &mut command)?;
+    }
+    Ok(command)
 }
 
 #[test]
