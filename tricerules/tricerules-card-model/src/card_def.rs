@@ -1430,9 +1430,7 @@ impl CardDefinition {
                 .excluded_card_types
                 .iter()
                 .any(|kind| self.matches_card_type_outside_stack(*kind))
-            && filter
-                .is_colorless
-                .is_none_or(|required| self.primary_face().colors().is_empty() == required)
+            && filter.color_leaves_match(&self.primary_face().colors())
             && filter
                 .min_mana_value
                 .is_none_or(|min| self.mana_value_outside_stack() >= min)
@@ -1491,9 +1489,7 @@ impl CardDefinition {
                 .excluded_card_types
                 .iter()
                 .any(|kind| face.matches_card_type(*kind))
-            && filter
-                .is_colorless
-                .is_none_or(|required| face.colors().is_empty() == required)
+            && filter.color_leaves_match(&face.colors())
             && filter
                 .min_mana_value
                 .is_none_or(|min| face.mana_cost.mana_value() >= min)

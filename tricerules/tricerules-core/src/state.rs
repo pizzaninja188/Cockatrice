@@ -175,9 +175,9 @@ pub struct DiscardReceipt {
     pub cause: DiscardCause,
     /// None for an unrevealed hidden-zone destination (CR 701.9c).
     pub known_card_id: Option<String>,
-    /// Destination-incarnation color at the completed discard event, when observable.
+    /// Destination-incarnation colors at the completed discard event, when observable.
     /// None preserves undefined characteristics and stale or unavailable event evidence.
-    pub known_colorless: Option<bool>,
+    pub known_colors: Option<Vec<Color>>,
 }
 
 /// One semantic CR 701.9 discard action: every card one instruction, cost, or turn-based action

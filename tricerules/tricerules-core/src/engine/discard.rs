@@ -191,7 +191,7 @@ impl GameEngine {
             cause,
             known_card_id: (revealed || matches!(destination, Zone::Graveyard | Zone::Exile))
                 .then_some(card_id),
-            known_colorless: None,
+            known_colors: None,
         };
         if destination == Zone::Exile {
             if let Some(cost) = madness {
@@ -262,10 +262,10 @@ impl GameEngine {
                             .unwrap_or(0)
                             == receipt.after_generation
                 });
-                receipt.known_colorless = current
+                receipt.known_colors = current
                     .then(|| {
                         self.characteristics(receipt.object_id)
-                            .map(|value| value.colors.is_empty())
+                            .map(|value| value.colors)
                     })
                     .flatten();
             }

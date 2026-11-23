@@ -397,6 +397,8 @@ fn zone_card(filter: &ZoneCardFilter, plural: bool, location: &str) -> Option<Ph
         card_type,
         excluded_card_types,
         is_colorless: None,
+        is_color,
+        is_multicolored,
         min_mana_value,
         max_mana_value,
         required_subtypes,
@@ -440,9 +442,16 @@ fn zone_card(filter: &ZoneCardFilter, plural: bool, location: &str) -> Option<Ph
             None,
         );
     }
+    let multicolored = match is_multicolored {
+        None => None,
+        Some(true) => Some("multicolored"),
+        Some(false) => return None,
+    };
     let mut adjectives = required_supertypes
         .iter()
         .map(|name| name.to_ascii_lowercase())
+        .chain(is_color.map(|color| color_name(color).to_owned()))
+        .chain(multicolored.map(str::to_owned))
         .collect::<Vec<_>>();
     use super::CardTypeFilter::{
         BasicLand, Instant, InstantOrSorcery, Noncreature, Nonland, NonlandPermanent, Sorcery,

@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "51991d28-137e-4690-a674-d852b904bd1a",
+  "spans": [
+    {
+      "face_id": "revive",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_524_color_graveyard::issue_524_cards_return_only_matching_graveyard_cards",
+      "covers": "actual revive offers and returns only a currently green card from its controller's graveyard"
+    },
+    {
+      "test": "scenario issue_524_color_graveyard::issue_524_cards_fizzle_when_the_chosen_card_leaves_the_graveyard",
+      "covers": "actual revive fizzles when the chosen card leaves the graveyard before resolution"
+    },
+    {
+      "test": "scenario issue_524_color_graveyard::issue_524_cards_reject_nonmatching_and_missing_targets",
+      "covers": "actual revive rejects a non-green card, an opponent's card and a missing target without spending mana"
+    },
+    {
+      "test": "mechanic_registry::issue_524_color_graveyard::issue_524_maps_definitions",
+      "covers": "reviewed identity, cost, type, green-card-to-hand shape and generated prompt of revive"
+    },
+    {
+      "test": "mechanic_registry::issue_524_color_graveyard::issue_524_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for revive"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

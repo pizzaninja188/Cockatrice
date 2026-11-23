@@ -516,3 +516,94 @@ fn issue_198_graveyard_context_rejects_non_cards_wrong_zones_and_wrong_owners() 
         filter.card.as_ref()
     ));
 }
+
+#[test]
+fn issue_524_color_leaves_match_current_graveyard_colors() {
+    let cards = [
+        "grizzly_bears",
+        "advent_of_the_wurm",
+        "lightning_helix",
+        "lightning_bolt",
+        "ornithopter",
+        "forest",
+        "short_sword",
+    ];
+    let deck = cards
+        .into_iter()
+        .cycle()
+        .take(14)
+        .map(str::to_owned)
+        .collect();
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        524_001,
+        &[0, 1],
+        20,
+        Some(vec![deck, vec!["forest".into(); 12]]),
+        true,
+    )
+    .expect("color predicate fixture");
+    for card in &cards[..6] {
+        let oid = object(&engine, card);
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            oid,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("move fixture card");
+    }
+    let green = graveyard_filter("(card: Some((is_color: Some(Green))))");
+    let multicolored = graveyard_filter("(card: Some((is_multicolored: Some(true))))");
+    let monocolored_green =
+        graveyard_filter("(card: Some((is_color: Some(Green), is_multicolored: Some(false))))");
+    let green_or_red_creature = graveyard_filter(
+        "(card: Some((any_of: Some([(is_color: Some(Green), card_type: Some(Instant)), (is_color: Some(Red), card_type: Some(Creature))]))))",
+    );
+    let legal = |engine: &GameEngine, filter: &GraveyardFilter, card: &str| {
+        graveyard_target_legal(
+            engine,
+            filter,
+            object(engine, card),
+            0,
+            TargetSourceIdentity::current(engine, u32::MAX),
+            TriggerContext::default(),
+        )
+    };
+    for (card, is_green, is_multi) in [
+        ("grizzly_bears", true, false),
+        ("advent_of_the_wurm", true, true),
+        ("lightning_helix", false, true),
+        ("lightning_bolt", false, false),
+        ("ornithopter", false, false),
+        ("forest", false, false),
+    ] {
+        assert_eq!(legal(&engine, &green, card), is_green, "green: {card}");
+        assert_eq!(
+            legal(&engine, &multicolored, card),
+            is_multi,
+            "multicolored: {card}"
+        );
+        assert_eq!(
+            legal(&engine, &monocolored_green, card),
+            is_green && !is_multi,
+            "monocolored green: {card}"
+        );
+        assert_eq!(
+            legal(&engine, &green_or_red_creature, card),
+            card == "advent_of_the_wurm",
+            "each branch keeps its own color leaf: {card}"
+        );
+    }
+
+    // Mycosynth Lattice makes cards outside the battlefield colorless (CR 105.2c).
+    install_lattice(&mut engine);
+    for card in &cards[..6] {
+        assert!(!legal(&engine, &green, card), "lattice green: {card}");
+        assert!(
+            !legal(&engine, &multicolored, card),
+            "lattice multicolored: {card}"
+        );
+    }
+}

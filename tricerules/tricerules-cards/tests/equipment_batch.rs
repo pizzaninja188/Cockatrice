@@ -254,7 +254,7 @@ const FINGERPRINTS: &[Fingerprint] = &[
         "slagwurm_armor",
         "Slagwurm Armor",
         "slagwurm_armor",
-        "aeb18f441f1cb7019f5dd26370a4ced3d08c0a08c022a761a4f81faaf4a971d3",
+        "ac695ab8d8e8e913add4cc621fd9e8c34e3ea25b161fa829910784a33a9cb91e",
     ),
     (
         "torch_gauntlet",

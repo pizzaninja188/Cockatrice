@@ -1538,21 +1538,22 @@ impl GameEngine {
                         {
                             continue;
                         }
-                        for receipt in
-                            batch.cards.iter().filter(|receipt| {
-                                filter.as_ref().is_none_or(|filter| {
-                                    receipt
+                        for receipt in batch.cards.iter().filter(|receipt| {
+                            filter.as_ref().is_none_or(|filter| {
+                                receipt
                                     .known_card_id
                                     .as_ref()
                                     .and_then(|id| self.registry.get(id))
                                     .is_some_and(|card| {
                                         super::card_predicates::matches_filter_with_current_color(
-                                            card, filter, receipt.known_colorless, None,
+                                            card,
+                                            filter,
+                                            receipt.known_colors.as_deref(),
+                                            None,
                                         )
                                     })
-                                })
                             })
-                        {
+                        }) {
                             let mut occurrence = trigger.clone();
                             occurrence.trigger_context.observed_object = Some(TriggerObjectRef {
                                 object_id: receipt.object_id,
@@ -4242,7 +4243,7 @@ mod tests {
             destination: Zone::Graveyard,
             cause: crate::state::DiscardCause::Effect,
             known_card_id: None,
-            known_colorless: None,
+            known_colors: None,
         }
     }
 
