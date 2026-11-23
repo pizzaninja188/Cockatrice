@@ -1,0 +1,26 @@
+// Oracle c6b915b3-b504-42fb-8059-62a3e8e224e1; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 701.23 (search), 701.24 (shuffle), 115.1/601.2c (target at cast) and
+// 608.2b (stale sole target). Pinned 2004-10-04 (a search may fail to find) and 2013-01-24 (an
+// illegal target fizzles the whole spell, so no search or shuffle) rulings. Copy of the reviewed
+// craterize destruction plus scampering_surveyor's tapped basic-land search.
+(
+  id: "frenzied_tilling",
+  name: "Frenzied Tilling",
+  face_id: "frenzied_tilling",
+  mana_cost: "{3}{R}{G}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Land]))),
+    SearchLibrary(
+      filter: Some((card_type: Some(BasicLand))),
+      destination: Battlefield(tapped: true),
+    ),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target land",
+    effect_indices: [0],
+  )])),
+)

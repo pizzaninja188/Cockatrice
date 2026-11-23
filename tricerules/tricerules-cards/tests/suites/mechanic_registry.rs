@@ -1359,3 +1359,6 @@ mod q59_batch_a;
 
 #[path = "../q60_batch_a.rs"]
 mod q60_batch_a;
+
+#[path = "../q61_batch_a.rs"]
+mod q61_batch_a;
