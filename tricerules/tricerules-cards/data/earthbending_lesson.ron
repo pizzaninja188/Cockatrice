@@ -1,0 +1,11 @@
+// Pinned Oracle 5e113f0f-4469-4276-82e1-0a804f3de444; Scryfall rulings checked 2026-11-23 (shared
+// Earthbend rulings only). CR 701.66 (earthbend), 608.2b (an illegal land target means the spell
+// doesn't resolve) and 205.3k (Lesson is a sorcery subtype).
+(
+  id: "earthbending_lesson",
+  name: "Earthbending Lesson",
+  face_id: "earthbending_lesson",
+  mana_cost: "{3}{G}",
+  types: ["Sorcery", "Lesson"],
+  spell_effect: [Earthbend(count: 4)],
+)

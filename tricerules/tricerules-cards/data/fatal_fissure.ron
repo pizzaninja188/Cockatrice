@@ -1,0 +1,20 @@
+// Pinned Oracle 202e45d6-8c7a-46db-85fb-634aa77b4097; Scryfall rulings checked 2026-11-23 (shared
+// Earthbend rulings only). CR 603.7a/603.7c (the spell creates a delayed trigger that watches the
+// exact creature this turn; its land target is chosen when it is put on the stack, CR 603.3d),
+// 700.4 (dies) and 701.66 (earthbend 4).
+(
+  id: "fatal_fissure",
+  name: "Fatal Fissure",
+  face_id: "fatal_fissure",
+  mana_cost: "{1}{B}",
+  types: ["Instant"],
+  spell_effect: [CreateDelayedTrigger(
+    subject: Some(Chosen((kind: Creature))),
+    ability: (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenWatchedObjectDiesThisTurn,
+      effect: [Earthbend(count: 4)],
+    ),
+  )],
+)

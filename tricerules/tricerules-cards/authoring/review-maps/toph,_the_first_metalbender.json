@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "fbfef028-b10c-4ade-9503-d9af5b0c211b",
+  "spans": [
+    {
+      "face_id": "toph_the_first_metalbender",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "toph_the_first_metalbender",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AddTypesToPermanents",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfEndStep",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Earthbend",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_431_earthbend_cohort::toph_makes_nontoken_artifacts_you_control_lands_and_earthbends_two_at_end_step",
+      "covers": "your nontoken artifacts become lands too (not tokens or opponents'), and the end-step earthbend can target one"
+    },
+    {
+      "test": "scenario issue_431_earthbend_cohort::toph_ceasing_to_be_on_the_battlefield_ends_the_land_type",
+      "covers": "the land type ends when Toph leaves"
+    },
+    {
+      "test": "batch_registry::issue_431_earthbend_cohort::issue_431_cohort_registers_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line and body"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

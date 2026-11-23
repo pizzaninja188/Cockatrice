@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "0380e99c-18f9-4472-8223-bb208e5f0963",
+  "spans": [
+    {
+      "face_id": "earth_village_ruffians",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Earthbend",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_431_earthbend_cohort::earth_village_ruffians_earthbends_two_when_it_dies",
+      "covers": "dies trigger earthbends two from the graveyard"
+    },
+    {
+      "test": "scenario issue_431_earthbend_cohort::earth_village_ruffians_dying_without_a_land_puts_no_trigger_on_the_stack",
+      "covers": "no land you control means the trigger is removed for lack of a target"
+    },
+    {
+      "test": "batch_registry::issue_431_earthbend_cohort::issue_431_cohort_registers_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line and body"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

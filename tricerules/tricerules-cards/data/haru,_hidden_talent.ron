@@ -1,0 +1,23 @@
+// Pinned Oracle 7488ce54-37c6-475c-b327-59f52f2b1424; Scryfall rulings checked 2026-11-23 (shared
+// Earthbend rulings only). CR 603.6a/603.2 (enters trigger for another Ally you control; "another"
+// excludes Haru itself) and 701.66 (earthbend 1).
+(
+  id: "haru,_hidden_talent",
+  name: "Haru, Hidden Talent",
+  face_id: "haru_hidden_talent",
+  mana_cost: "{1}{G}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Human", "Peasant", "Ally"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Creature), exclude_source: true),
+      creature_filter: Some((required_subtypes: ["Ally"])),
+    ),
+    effect: [Earthbend(count: 1)],
+  )],
+)

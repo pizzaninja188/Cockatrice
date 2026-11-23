@@ -1,0 +1,32 @@
+// Pinned Oracle dfc8b8de-be1d-4f7f-bb21-4761a0e7db4e; Scryfall rulings checked 2026-11-23 (shared
+// Earthbend rulings only). CR 700.2a (choose one mode), 701.8 (destroy), 608.2b (the power
+// restriction is rechecked on resolution) and 701.66 (earthbend 3).
+(
+  id: "sandbenders_storm",
+  name: "Sandbenders' Storm",
+  face_id: "sandbenders_storm",
+  mana_cost: "{3}{W}",
+  types: ["Instant"],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 1,
+    modes: [
+      (
+        mode_id: "mode_01",
+        presentation: OracleLines([2]),
+        effects: [Destroy(subject: Chosen((kind: Creature, power: Some(AtLeast(4)))))],
+        targeting: Some((groups: [(
+          min: 1,
+          max: 1,
+          prompt: "Choose target creature with power 4 or greater",
+          effect_indices: [0],
+        )])),
+      ),
+      (
+        mode_id: "mode_02",
+        presentation: OracleLines([3]),
+        effects: [Earthbend(count: 3)],
+      ),
+    ],
+  ),
+)

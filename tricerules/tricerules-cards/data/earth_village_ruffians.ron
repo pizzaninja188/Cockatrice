@@ -1,0 +1,18 @@
+// Pinned Oracle 0380e99c-18f9-4472-8223-bb208e5f0963; Scryfall rulings checked 2026-11-23 (shared
+// Earthbend rulings only). CR 107.4e (hybrid mana), 603.6c/603.10a (dies trigger looks back; the
+// source is in the graveyard as it resolves) and 701.66 (earthbend targets a land you control).
+(
+  id: "earth_village_ruffians",
+  name: "Earth Village Ruffians",
+  face_id: "earth_village_ruffians",
+  mana_cost: "{2}{B/G}",
+  types: ["Creature", "Human", "Soldier", "Rogue"],
+  power: 3,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfDies,
+    effect: [Earthbend(count: 2)],
+  )],
+)

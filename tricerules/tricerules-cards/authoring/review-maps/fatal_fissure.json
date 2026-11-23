@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "202e45d6-8c7a-46db-85fb-634aa77b4097",
+  "spans": [
+    {
+      "face_id": "fatal_fissure",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateDelayedTrigger",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenWatchedObjectDiesThisTurn",
+      "typed_path": "/faces/0/spell_effect/0/CreateDelayedTrigger/ability/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Earthbend",
+      "typed_path": "/faces/0/spell_effect/0/CreateDelayedTrigger/ability/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_431_earthbend_cohort::fatal_fissure_earthbends_four_when_the_chosen_creature_dies_this_turn",
+      "covers": "only the chosen creature's death this turn triggers; the land is targeted as the delayed trigger is put on the stack"
+    },
+    {
+      "test": "scenario issue_431_earthbend_cohort::fatal_fissure_does_nothing_if_the_creature_survives_the_turn",
+      "covers": "the watch ends with the turn"
+    },
+    {
+      "test": "batch_registry::issue_431_earthbend_cohort::issue_431_cohort_registers_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line and body"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "5e113f0f-4469-4276-82e1-0a804f3de444",
+  "spans": [
+    {
+      "face_id": "earthbending_lesson",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Earthbend",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_431_earthbend_cohort::earthbending_lesson_earthbends_four_and_the_land_returns_tapped",
+      "covers": "a land you control becomes a 4/4 haste land creature and returns tapped when it dies"
+    },
+    {
+      "test": "scenario issue_431_earthbend_cohort::earthbending_lesson_requires_a_land_you_control_and_fizzles_if_it_is_bounced",
+      "covers": "an opponent's land is rejected; a bounced sole target makes the spell not resolve and sets up no return"
+    },
+    {
+      "test": "batch_registry::issue_431_earthbend_cohort::issue_431_cohort_registers_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line and body"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

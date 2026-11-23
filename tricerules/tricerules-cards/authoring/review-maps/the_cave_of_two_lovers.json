@@ -1,0 +1,66 @@
+{
+  "format_version": 1,
+  "oracle_id": "c2df54f1-a2db-4de3-bc96-5c07f4594752",
+  "spans": [
+    {
+      "face_id": "the_cave_of_two_lovers",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0"
+      ]
+    },
+    {
+      "face_id": "the_cave_of_two_lovers",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "the_cave_of_two_lovers",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1"
+      ]
+    },
+    {
+      "face_id": "the_cave_of_two_lovers",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Earthbend",
+      "typed_path": "/faces/0/triggered_abilities/2/effect/0"
+    }
+  ],
+  "tokens": [
+    "ally_w_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_431_earthbend_cohort::the_cave_of_two_lovers_makes_allies_fetches_a_mountain_or_cave_then_earthbends_three",
+      "covers": "two 1/1 Allies; Mountain-or-Cave search to hand (not Island); earthbend three; sacrificed after III"
+    },
+    {
+      "test": "batch_registry::issue_431_earthbend_cohort::issue_431_cohort_registers_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line and body"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

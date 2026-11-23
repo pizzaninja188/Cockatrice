@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "7488ce54-37c6-475c-b327-59f52f2b1424",
+  "spans": [
+    {
+      "face_id": "haru_hidden_talent",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Earthbend",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_431_earthbend_cohort::haru_earthbends_one_for_another_ally_you_control_only",
+      "covers": "only another Ally you control triggers: not Haru, a non-Ally or an opponent's Ally"
+    },
+    {
+      "test": "batch_registry::issue_431_earthbend_cohort::issue_431_cohort_registers_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line and body"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

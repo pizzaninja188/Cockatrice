@@ -1,0 +1,36 @@
+// Pinned Oracle c2df54f1-a2db-4de3-bc96-5c07f4594752; Scryfall rulings checked 2026-11-23 (shared
+// Earthbend rulings only). CR 714 (Saga chapters and sacrifice after III), 111.1 (Ally tokens),
+// 701.23a/701.20 (search, reveal, shuffle) and 701.66 (earthbend 3).
+(
+  id: "the_cave_of_two_lovers",
+  name: "The Cave of Two Lovers",
+  face_id: "the_cave_of_two_lovers",
+  mana_cost: "{3}{R}",
+  types: ["Enchantment", "Saga"],
+  triggered_abilities: [
+    (
+      ability_id: "chapter_i",
+      presentation: OracleLines([2]),
+      trigger: SagaChapter(chapters: [1]),
+      effect: [CreateTokens(token: "ally_w_1_1", count: 2)],
+    ),
+    (
+      ability_id: "chapter_ii",
+      presentation: OracleLines([3]),
+      trigger: SagaChapter(chapters: [2]),
+      effect: [SearchLibrary(
+        filter: Some((any_of: Some([
+          (required_subtypes: ["Mountain"]),
+          (required_subtypes: ["Cave"]),
+        ]))),
+        reveal: true,
+      )],
+    ),
+    (
+      ability_id: "chapter_iii",
+      presentation: OracleLines([4]),
+      trigger: SagaChapter(chapters: [3]),
+      effect: [Earthbend(count: 3)],
+    ),
+  ],
+)

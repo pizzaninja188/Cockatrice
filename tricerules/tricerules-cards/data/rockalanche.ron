@@ -1,0 +1,15 @@
+// Pinned Oracle d1ecfad3-e79a-447b-a932-68ef728eaf1f; Scryfall rulings checked 2026-11-23. CR 701.66
+// (earthbend X), 608.2h (X counts Forests you control as the spell resolves) and 702.34a (flashback:
+// cast from the graveyard for {5}{G}; the card is exiled whenever it leaves the stack).
+(
+  id: "rockalanche",
+  name: "Rockalanche",
+  face_id: "rockalanche",
+  mana_cost: "{2}{G}",
+  flashback_cost: Some("{5}{G}"),
+  types: ["Sorcery", "Lesson"],
+  spell_effect: [Earthbend(count: Count(BattlefieldPermanents(filter: (
+    controllers: Controller,
+    required_subtypes: ["Forest"],
+  ))))],
+)

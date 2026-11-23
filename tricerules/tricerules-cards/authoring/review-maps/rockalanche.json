@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "d1ecfad3-e79a-447b-a932-68ef728eaf1f",
+  "spans": [
+    {
+      "face_id": "rockalanche",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "rockalanche",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Earthbend",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CountExpression::BattlefieldPermanents",
+      "typed_path": "/faces/0/spell_effect/0/Earthbend/count"
+    },
+    {
+      "symbol": "CardFaceDef.flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_431_earthbend_cohort::rockalanche_counts_forests_you_control_on_resolution_and_flashes_back",
+      "covers": "X counts only your Forests on resolution; flashback costs {5}{G} and exiles the card"
+    },
+    {
+      "test": "batch_registry::issue_431_earthbend_cohort::issue_431_cohort_registers_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line and body"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

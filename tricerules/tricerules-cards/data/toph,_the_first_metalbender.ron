@@ -1,0 +1,33 @@
+// Pinned Oracle fbfef028-b10c-4ade-9503-d9af5b0c211b; Scryfall rulings checked 2026-11-23. CR 613.1d
+// (layer 4 type addition; no land subtype, so no intrinsic mana ability per 305.6), 110.4 (only
+// permanents on the battlefield are affected; the ruling: artifacts can't be played as lands),
+// 513.1/603.2b (end-step trigger) and 701.66 (an artifact made a land is a legal earthbend target).
+(
+  id: "toph,_the_first_metalbender",
+  name: "Toph, the First Metalbender",
+  face_id: "toph_the_first_metalbender",
+  mana_cost: "{1}{R}{G}{W}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Human", "Warrior", "Ally"],
+  power: 3,
+  toughness: 3,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: AddTypesToPermanents(
+      filter: (
+        kind: AnyPermanent,
+        controller: You,
+        permanent_types: [Artifact],
+        token: Some(false),
+      ),
+      addition: (card_types: [Land]),
+    ),
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: AtBeginningOfEndStep(),
+    effect: [Earthbend(count: 2)],
+  )],
+)
