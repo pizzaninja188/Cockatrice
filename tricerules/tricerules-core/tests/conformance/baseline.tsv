@@ -55,7 +55,7 @@ agna_qela	0	ability:1	exercised
 agna_qela	0	land	exercised
 air_elemental	0	cast	exercised
 air_nomad_legacy	0	cast	exercised
-air_response_unit	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+air_response_unit	0	ability:0	exercised
 air_response_unit	0	cast	exercised
 airbending_lesson	0	cast	exercised
 airship_crash	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
@@ -442,7 +442,7 @@ bring_to_trial	0	cast	unsupported: target group 0 needs a richer fixture
 bristlepack_sentry	0	cast	exercised
 bristling_backwoods	0	ability:0	exercised
 bristling_backwoods	0	land	exercised
-broadcast_rambler	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+broadcast_rambler	0	ability:0	exercised
 broadcast_rambler	0	cast	exercised
 broadside_barrage	0	cast	exercised
 broken_wings	0	cast	exercised
@@ -451,7 +451,7 @@ bronze_sable	0	cast	exercised
 broodhunter_wurm	0	cast	exercised
 brushstrider	0	cast	exercised
 brute_force	0	cast	exercised
-brute_suit	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+brute_suit	0	ability:0	exercised
 bull_cerodon	0	cast	exercised
 bull_rush	0	cast	exercised
 bulwark_giant	0	cast	exercised
@@ -521,7 +521,7 @@ captain_storm,_cosmium_raider	0	cast	exercised
 captains_call	0	cast	exercised
 capture_sphere	0	cast	exercised
 caravan_hurda	0	cast	exercised
-careening_mine_cart	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+careening_mine_cart	0	ability:0	exercised
 careening_mine_cart	0	cast	exercised
 careful_study	0	cast	exercised
 carrion_screecher	0	cast	exercised
@@ -816,7 +816,7 @@ deathcap_marionette	0	cast	exercised
 deathgaze_cockatrice	0	cast	exercised
 deathgrip	0	ability:0	unsupported: target group 0 needs a richer fixture
 deathmark	0	cast	exercised
-debris_beetle	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+debris_beetle	0	ability:0	exercised
 debris_beetle	0	cast	exercised
 debris_field_crusher	0	ability:0	exercised
 debris_field_crusher	0	ability:1	exercised
@@ -966,7 +966,7 @@ dune_beetle	0	cast	exercised
 durable_coilbug	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 durkwood_boars	0	cast	exercised
 dusk_imp	0	cast	exercised
-dusk_legion_dreadnought	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+dusk_legion_dreadnought	0	ability:0	exercised
 dusk_rose_reliquary	0	cast	unsupported: required cast-cost group needs a specialized fixture
 duskdale_wurm	0	cast	exercised
 dusyut_earthcarver	0	cast	exercised
@@ -1182,7 +1182,7 @@ fire_nation_cadets	0	ability:0	exercised
 fire_nation_cadets	0	cast	exercised
 fire_nation_raider	0	cast	exercised
 fire_nation_soldier	0	cast	exercised
-fire_nation_warship	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+fire_nation_warship	0	ability:0	exercised
 fire_nation_warship	0	cast	exercised
 fire_nations_conquest	0	cast	exercised
 fire_prophecy	0	cast	exercised
@@ -1302,7 +1302,7 @@ frostbridge_guard	0	cast	exercised
 fuel_the_flames	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 fuel_the_flames	0	cast	exercised
 fugitive_wizard	0	cast	exercised
-funeral_longboat	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+funeral_longboat	0	ability:0	exercised
 fungal_colossus	0	cast	exercised
 fusion_elemental	0	cast	exercised
 futurist_forge	0	ability:0	exercised
@@ -2056,7 +2056,7 @@ magebane_lizard	0	cast	exercised
 magic_damper	0	cast	exercised
 magic_pot	0	ability:0	exercised
 magic_pot	0	cast	exercised
-magitek_armor	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+magitek_armor	0	ability:0	exercised
 magitek_armor	0	cast	exercised
 magnificent_end	0	cast	exercised
 magnigoth_sentry	0	cast	exercised
@@ -2730,7 +2730,7 @@ riot_devils	0	cast	exercised
 rip-clan_crasher	0	cast	exercised
 ripchain_razorkin	0	ability:0	exercised
 ripchain_razorkin	0	cast	exercised
-ripclaw_wrangler	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+ripclaw_wrangler	0	ability:0	exercised
 ripclaw_wrangler	0	cast	exercised
 ripscale_predator	0	cast	exercised
 riptide_turtle	0	cast	exercised
@@ -2783,7 +2783,7 @@ rough_rhino_cavalry	0	ability:0	exercised
 rough_rhino_cavalry	0	cast	exercised
 rousing_read	0	cast	exercised
 rover_blades	0	ability:0	exercised
-rover_blades	0	ability:1	unsupported: payment preview rejected: illegal command: missing tap cost selection
+rover_blades	0	ability:1	exercised
 rover_blades	0	cast	exercised
 roving_harper	0	cast	exercised
 rowan_treefolk	0	cast	exercised
@@ -3066,7 +3066,7 @@ sky_spirit	0	cast	exercised
 sky_terror	0	cast	exercised
 skybeast_tracker	0	cast	exercised
 skyblade_of_the_legion	0	cast	exercised
-skybox_ferry	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+skybox_ferry	0	ability:0	exercised
 skybox_ferry	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 skybox_ferry	0	cast	exercised
 skycrash	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
@@ -3098,7 +3098,7 @@ slavering_branchsnapper	0	ability:0	unsupported: ability not offered by generic 
 slavering_branchsnapper	0	cast	exercised
 sledge-class_seedship	0	ability:0	exercised
 sledge-class_seedship	0	cast	exercised
-sleek_schooner	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+sleek_schooner	0	ability:0	exercised
 sleight_of_hand	0	cast	exercised
 slice_from_the_shadows	0	cast	exercised
 slick_sequence	0	cast	exercised
@@ -3115,7 +3115,7 @@ smaugs_fury	0	cast	exercised
 smelt	0	cast	exercised
 smite_the_monstrous	0	cast	unsupported: target group 0 needs a richer fixture
 smoldering_crater	0	ability:1	unsupported: ability not offered by generic battlefield fixture
-smugglers_buggy	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+smugglers_buggy	0	ability:0	exercised
 snakeskin_veil	0	cast	exercised
 snapping_drake	0	cast	exercised
 snare_thopter	0	cast	exercised
@@ -3201,7 +3201,7 @@ splatter_technique	0	cast	exercised
 splinters_technique	0	cast	exercised
 split_up	0	cast	exercised
 sporecap_spider	0	cast	exercised
-spotcycle_scouter	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+spotcycle_scouter	0	ability:0	exercised
 spotcycle_scouter	0	cast	exercised
 spotted_griffin	0	cast	exercised
 spring_of_eternal_peace	0	cast	exercised
@@ -3294,7 +3294,7 @@ streetbreaker_wurm	0	cast	exercised
 striped_bears	0	cast	exercised
 strix_lookout	0	ability:0	exercised
 strix_lookout	0	cast	exercised
-strixhaven_skycoach	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+strixhaven_skycoach	0	ability:0	exercised
 strixhaven_skycoach	0	cast	exercised
 stroke_of_midnight	0	cast	exercised
 stuck_in_summoners_sanctum	0	cast	exercised
@@ -3622,7 +3622,7 @@ trusty_packbeast	0	cast	exercised
 trystans_command	0	cast	exercised
 tundra	0	ability:0	exercised
 tundra	0	land	exercised
-tundra_tank	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+tundra_tank	0	ability:0	exercised
 tundra_tank	0	cast	exercised
 tundra_wall	0	cast	exercised
 tundra_wolves	0	cast	exercised
@@ -3632,7 +3632,7 @@ turn_to_slag	0	cast	exercised
 turntimber_ascetic	0	cast	exercised
 turret_ogre	0	cast	exercised
 turtle-seals	0	cast	exercised
-turtle_blimp	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+turtle_blimp	0	ability:0	exercised
 turtle_blimp	0	cast	exercised
 tusked_colossodon	0	cast	exercised
 twinblade_assassins	0	cast	exercised
@@ -3734,7 +3734,7 @@ vector,_imperial_capital	0	ability:0	exercised
 vector,_imperial_capital	0	land	exercised
 vedalken_blademaster	0	cast	exercised
 veloheart_bike	0	ability:0	exercised
-veloheart_bike	0	ability:1	unsupported: payment preview rejected: illegal command: missing tap cost selection
+veloheart_bike	0	ability:1	exercised
 veloheart_bike	0	cast	exercised
 venerable_lammasu	0	cast	exercised
 venerable_monk	0	cast	exercised

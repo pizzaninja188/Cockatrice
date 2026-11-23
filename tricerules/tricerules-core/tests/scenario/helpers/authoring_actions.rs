@@ -24,125 +24,7 @@ pub(crate) fn activation(
         .cost_choices_by_ability
         .get(&key)
         .ok_or("ability not offered by generic battlefield fixture")?;
-    let costs = if e.state.objects[&object].card_id == "magistrates_scepter" && index == 1 {
-        // The source fixture seeds the exact required count. Build the receipt from the engine's
-        // current offer so the conformance harness exercises the same source generation and
-        // Charge option that a client must submit.
-        if !choices.non_mana_costs_payable || choices.choices.len() != 1 {
-            return Err("Magistrate's Scepter Charge-removal offer is not payable".into());
-        }
-        let choice = &choices.choices[0];
-        if choice.kind() != CostChoiceKind::RemoveCounters
-            || choice.zone != CostChoiceZone::Battlefield as i32
-        {
-            return Err("Magistrate's Scepter did not offer its battlefield counter cost".into());
-        }
-        let removal = choice
-            .counter_removal
-            .as_ref()
-            .ok_or("Magistrate's Scepter omitted its counter-removal offer")?;
-        if removal.count != 3
-            || removal.options.len() != 1
-            || removal.options[0].label != "charge"
-            || removal.options[0].available_count != 3
-        {
-            return Err("Magistrate's Scepter counter-removal offer changed".into());
-        }
-        let source = removal
-            .source
-            .as_ref()
-            .ok_or("Magistrate's Scepter omitted the source payment reference")?;
-        if source.object_id != object
-            || e.state
-                .zone_change_generation
-                .get(&object)
-                .copied()
-                .unwrap_or(0)
-                != source.zone_change_generation
-        {
-            return Err("Magistrate's Scepter source payment reference is stale".into());
-        }
-        vec![CostSelection {
-            cost_index: choice.cost_index,
-            selection: Some(cost_selection::Selection::CounterRemoval(
-                CounterRemovalSelection {
-                    source: Some(*source),
-                    option_id: removal.options[0].option_id,
-                },
-            )),
-        }]
-    } else if matches!(
-        e.state.objects[&object].card_id.as_str(),
-        "pentavus" | "pentad_prism"
-    ) && index == 0
-    {
-        // These bounded fixtures select their single engine-authored fixed-kind source cost.
-        if !choices.non_mana_costs_payable || choices.choices.len() != 1 {
-            return Err("counter fixture is not payable".into());
-        }
-        let choice = &choices.choices[0];
-        let removal = choice
-            .counter_removal
-            .as_ref()
-            .ok_or("missing counter offer")?;
-        if removal.count != 1 || removal.options.len() != 1 {
-            return Err("unexpected Pentavus counter offer".into());
-        }
-        vec![CostSelection {
-            cost_index: choice.cost_index,
-            selection: Some(cost_selection::Selection::CounterRemoval(
-                CounterRemovalSelection {
-                    source: removal.source,
-                    option_id: removal.options[0].option_id,
-                },
-            )),
-        }]
-    } else if e.state.objects[&object].card_id == "nautiloid_ship" && index == 0 {
-        // The generic conformance battlefield has no creatures to crew a Vehicle. Nautiloid
-        // supplies two 2-power creatures in that exact case fixture; select from its live offer
-        // until the independently specified Crew 3 threshold is met.
-        if !choices.non_mana_costs_payable || choices.choices.len() != 1 {
-            return Err("Nautiloid Ship Crew offer is not payable".into());
-        }
-        let choice = &choices.choices[0];
-        let aggregate = choice
-            .aggregate_minimum
-            .as_ref()
-            .ok_or("Nautiloid Ship omitted its Crew 3 aggregate")?;
-        if choice.kind() != CostChoiceKind::Tap
-            || choice.zone != CostChoiceZone::Battlefield as i32
-            || aggregate.minimum != 3
-            || aggregate.contribution_kind() != ObjectContributionKind::CurrentPower
-        {
-            return Err("Nautiloid Ship Crew 3 cost offer changed".into());
-        }
-        let mut objects = Vec::new();
-        let mut contribution = 0i64;
-        for candidate in &choice.candidate_objects {
-            let Some(object) = candidate.object else {
-                continue;
-            };
-            if candidate.contribution <= 0 {
-                continue;
-            }
-            objects.push(object);
-            contribution += candidate.contribution;
-            if contribution >= i64::from(aggregate.minimum) {
-                break;
-            }
-        }
-        if contribution < i64::from(aggregate.minimum) {
-            return Err("Nautiloid Ship Crew fixture lacks enough current power".into());
-        }
-        vec![CostSelection {
-            cost_index: choice.cost_index,
-            selection: Some(cost_selection::Selection::BattlefieldObjects(
-                CostObjectRefs { objects },
-            )),
-        }]
-    } else {
-        costs(Some(choices))?
-    };
+    let costs = costs(Some(choices))?;
     let (zone, generation, activatable) = if let Some(action) = legal
         .zone_ability_actions
         .iter()
@@ -475,11 +357,15 @@ pub(crate) fn costs(offer: Option<&LegalCostChoices>) -> Result<Vec<CostSelectio
     let mut used = std::collections::BTreeSet::new();
     let mut result = vec![];
     for choice in &offer.choices {
-        if choice.min == 0 {
+        if let Some(selection) = counter_or_aggregate_selection(choice, &mut used)? {
+            result.push(CostSelection {
+                cost_index: choice.cost_index,
+                selection: Some(selection),
+            });
             continue;
         }
-        if choice.counter_removal.is_some() || choice.aggregate_minimum.is_some() {
-            return Err("counter or aggregate cost needs a specialized fixture".into());
+        if choice.min == 0 {
+            continue;
         }
         let selection = if choice.zone == CostChoiceZone::Hand as i32 {
             let id = choice
@@ -530,6 +416,98 @@ pub(crate) fn costs(offer: Option<&LegalCostChoices>) -> Result<Vec<CostSelectio
         });
     }
     Ok(result)
+}
+
+/// Select engine-offered counter-removal sources and aggregate-minimum objects (Crew, total
+/// power). Returns `None` for choices with neither shape so the caller's plain path handles them.
+fn counter_or_aggregate_selection(
+    choice: &LegalCostChoice,
+    used: &mut std::collections::BTreeSet<(i32, u32)>,
+) -> Result<Option<cost_selection::Selection>, String> {
+    if let Some(group) = &choice.counter_removal_group {
+        let mut contributions = vec![];
+        let mut remaining = group.required_count;
+        for candidate in &group.candidates {
+            if remaining == 0 {
+                break;
+            }
+            let Some(object) = candidate.object else {
+                continue;
+            };
+            for option in &candidate.options {
+                if remaining == 0 {
+                    break;
+                }
+                let count = option.available_count.min(remaining);
+                if count == 0 {
+                    continue;
+                }
+                contributions.push(CounterRemovalContribution {
+                    object: Some(object),
+                    option_id: option.option_id,
+                    count,
+                });
+                remaining -= count;
+            }
+        }
+        if remaining > 0 {
+            return Err("counter-removal group lacks enough offered counters".into());
+        }
+        return Ok(Some(cost_selection::Selection::CounterRemovalGroup(
+            CounterRemovalGroupSelection { contributions },
+        )));
+    }
+    if let Some(removal) = &choice.counter_removal {
+        let option = removal
+            .options
+            .iter()
+            .find(|option| option.available_count >= removal.count)
+            .ok_or("counter-removal cost lacks enough offered counters")?;
+        let source = match removal.source {
+            Some(source) => source,
+            None => choice
+                .candidate_objects
+                .iter()
+                .find_map(|candidate| candidate.object)
+                .ok_or("counter-removal cost offered no source candidate")?,
+        };
+        return Ok(Some(cost_selection::Selection::CounterRemoval(
+            CounterRemovalSelection {
+                source: Some(source),
+                option_id: option.option_id,
+            },
+        )));
+    }
+    let Some(aggregate) = &choice.aggregate_minimum else {
+        return Ok(None);
+    };
+    let mut objects = vec![];
+    let mut contribution = 0i64;
+    for candidate in &choice.candidate_objects {
+        if contribution >= i64::from(aggregate.minimum) && objects.len() >= choice.min as usize {
+            break;
+        }
+        let Some(object) = candidate.object else {
+            continue;
+        };
+        if candidate.contribution <= 0 || used.contains(&(choice.zone, object.object_id)) {
+            continue;
+        }
+        if choice.max > 0 && objects.len() == choice.max as usize {
+            break;
+        }
+        used.insert((choice.zone, object.object_id));
+        objects.push(object);
+        contribution += candidate.contribution;
+    }
+    if contribution < i64::from(aggregate.minimum) || objects.len() < choice.min as usize {
+        return Err("aggregate cost needs more offered contribution".into());
+    }
+    let refs = CostObjectRefs { objects };
+    Ok(Some(match CostChoiceZone::try_from(choice.zone) {
+        Ok(CostChoiceZone::Graveyard) => cost_selection::Selection::GraveyardObjects(refs),
+        _ => cost_selection::Selection::BattlefieldObjects(refs),
+    }))
 }
 
 pub(crate) fn pay(e: &GameEngine, actor: i32, command: &mut RuledCommand) -> Result<(), String> {
