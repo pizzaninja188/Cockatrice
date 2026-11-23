@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "88ce2017-83a6-4b55-afba-371875bf2172",
+  "spans": [
+    {
+      "face_id": "blinding_spray",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q64_batch_a::q64_shrink_canary_hardest_blinding_spray_draws_even_with_no_opposing_creatures",
+      "covers": "actual card draws with no opposing creatures and pays its exact cost"
+    },
+    {
+      "test": "scenario q64_batch_a::q64_shrink_cards_apply_their_printed_values_and_do_not_touch_friendly_creatures",
+      "covers": "the printed -4/-0 applies to each opposing creature only"
+    },
+    {
+      "test": "scenario q64_batch_a::q64_shrink_cards_do_not_affect_later_entrants_or_expire_at_cleanup",
+      "covers": "later entrants are unaffected and the shrink expires at cleanup"
+    },
+    {
+      "test": "mechanic_registry::q64_batch_a::q64_opponent_shrink_map_definitions",
+      "covers": "reviewed identity, printed characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q64_batch_a::q64_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,22 @@
+// Oracle 4fd3dafe-e6a4-49d5-950a-e2fcc77eda98; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 611.2c (the affected set is fixed at resolution), 613.4c (layer-7c modification),
+// 514.2 (cleanup expiry) and 702.29a-b (cycling is a hand-zone activated ability). No pinned
+// ruling. Copy of Hysterical Blindness's opponent-wide shrink plus Censor's cycling.
+(
+  id: "hampering_snare",
+  name: "Hampering Snare",
+  face_id: "hampering_snare",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  spell_effect: [PumpAll(filter: (controller: Opponents), power: -2, toughness: 0)],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      source_zone: Hand,
+      costs: [Mana("{2}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

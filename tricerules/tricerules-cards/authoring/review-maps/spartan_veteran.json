@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "b255d1ec-49ac-49a2-9af8-21915bbcd224",
+  "spans": [
+    {
+      "face_id": "spartan_veteran",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0",
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::ConditionalSelfModifier",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "GameCondition::ActivePlayer",
+      "typed_path": "/faces/0/static_abilities/0/definition/ConditionalSelfModifier/condition"
+    },
+    {
+      "symbol": "Keyword::FirstStrike",
+      "typed_path": "/faces/0/static_abilities/0/definition/ConditionalSelfModifier/keywords"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q64_batch_a::q64_first_strike_canary_hardest_spartan_veteran_pumps_only_itself",
+      "covers": "the exact pump, source-only scope, cost and cleanup expiry"
+    },
+    {
+      "test": "scenario q64_batch_a::q64_first_strike_cards_cast_with_their_printed_costs_and_bodies",
+      "covers": "printed cost, body and condition"
+    },
+    {
+      "test": "mechanic_registry::q64_batch_a::q64_during_turn_first_strike_map_definitions",
+      "covers": "reviewed identity, printed characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q64_batch_a::q64_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

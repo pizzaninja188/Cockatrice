@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "4fd3dafe-e6a4-49d5-950a-e2fcc77eda98",
+  "spans": [
+    {
+      "face_id": "hampering_snare",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q64_batch_a::q64_shrink_cards_apply_their_printed_values_and_do_not_touch_friendly_creatures",
+      "covers": "the printed -2/-0 applies to each opposing creature only"
+    },
+    {
+      "test": "scenario q64_batch_a::q64_shrink_cards_cycle_for_two_and_draw_one",
+      "covers": "cycling discards the card and draws one for {2}"
+    },
+    {
+      "test": "mechanic_registry::q64_batch_a::q64_opponent_shrink_map_definitions",
+      "covers": "reviewed identity, printed characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q64_batch_a::q64_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

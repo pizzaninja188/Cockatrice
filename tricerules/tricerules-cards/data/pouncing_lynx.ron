@@ -1,0 +1,21 @@
+// Oracle d8d92f97-d54c-4954-8324-b9c0a9b96ec2; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.7 (first strike), 611.3a (a static ability's continuous effect applies while its source
+// is on the battlefield), 613.1f (layer 6) and 109.5 ("your" is the controller). No pinned
+// ruling. Copy of Bearer of Glory's during-your-turn first strike.
+(
+  id: "pouncing_lynx",
+  name: "Pouncing Lynx",
+  face_id: "pouncing_lynx",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Cat"],
+  power: 2,
+  toughness: 1,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: ConditionalSelfModifier(condition: ActivePlayer(players: Controller), keywords: [FirstStrike]),
+    ),
+  ],
+)

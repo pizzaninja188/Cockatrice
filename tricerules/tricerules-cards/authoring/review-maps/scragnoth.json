@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "9e66f2d6-cc51-4747-914d-2c04e439da2b",
+  "spans": [
+    {
+      "face_id": "scragnoth",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0",
+        "/faces/0/protections/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::SpellCannotBeCountered",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "ProtectionQuality::Color",
+      "typed_path": "/faces/0/protections/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q64_batch_a::q64_uncounterable_canary_hardest_scragnoth_has_protection_from_blue",
+      "covers": "protection from blue rejects a blue battlefield target without spending"
+    },
+    {
+      "test": "scenario q64_batch_a::q64_uncounterable_cards_all_resolve_through_a_counter_attempt",
+      "covers": "the creature spell is not countered and keeps its printed body"
+    },
+    {
+      "test": "mechanic_registry::q64_batch_a::q64_uncounterable_creatures_map_definitions",
+      "covers": "reviewed identity, printed characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q64_batch_a::q64_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,30 @@
+// Oracle b255d1ec-49ac-49a2-9af8-21915bbcd224; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.7 (first strike), 611.3a (a static ability's continuous effect applies while its source
+// is on the battlefield), 613.1f (layer 6), 602.2 (activate) and 611.2c/613.4c (until-end-of-turn
+// pump). No pinned ruling. Copy of Bearer of Glory's during-your-turn first strike plus Sandstone
+// Warrior's self-pump.
+(
+  id: "spartan_veteran",
+  name: "Spartan Veteran",
+  face_id: "spartan_veteran",
+  mana_cost: "{R}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 1,
+  toughness: 1,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: ConditionalSelfModifier(condition: ActivePlayer(players: Controller), keywords: [FirstStrike]),
+    ),
+  ],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{2}")],
+      effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
+    ),
+  ],
+)
