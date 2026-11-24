@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "0fc56124-bdcd-4f4f-886f-0fafcf8003bc",
+  "spans": [
+    {
+      "face_id": "punish_ignorance",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0/kind/Perform",
+        "/faces/0/spell_program/body/steps/1/kind/Perform",
+        "/faces/0/spell_program/body/steps/2/kind/Perform"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform"
+    },
+    {
+      "symbol": "PlayerRecipient::ProgramInputPlayer",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/LoseLife/who"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_program/body/steps/2/kind/Perform"
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_529_counter_drain::issue_529_countered_spell_controller_loses_the_printed_life",
+      "covers": "counterable target is countered and its controller loses 3 life; the caster gains 3"
+    },
+    {
+      "test": "scenario issue_529_counter_drain::issue_529_legal_uncounterable_target_still_drains",
+      "covers": "legal uncounterable target stays on the stack, yet its controller still loses life and the caster still gains life"
+    },
+    {
+      "test": "scenario issue_529_counter_drain::issue_529_illegal_sole_target_fizzles_without_life_change",
+      "covers": "sole target left the stack and changed generation, so the spell fizzles with no loss or gain"
+    },
+    {
+      "test": "mechanic_registry::issue_529_counter_drain::issue_529_registers_counter_drain_cohort",
+      "covers": "exact Oracle identity, mana, type, counter filter and target binding, typed controller result feeding fixed LoseLife, and caster GainLife"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

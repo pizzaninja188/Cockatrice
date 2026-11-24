@@ -917,11 +917,13 @@ target group keeps the spell resolving publishes typed `None`; if every target i
 stops the spell before its Program runs. The existing fixed-payment `CounterPaymentOutcome` contract
 is unchanged, and this does not add a combined paid-counter/controller result.
 
-`ProgramInputPlayer` is an explicit typed Program input supported only by `CreateTokens` and
-`CreateDelayedTrigger` in spell Programs. The consuming instruction must name the result slot with
-`input`; an ambient previous-effect lookup is not available. A `None` receipt creates no tokens or
-delayed ability and never falls back to the spell's caster. `An Offer You Can't Refuse` and `Swan
-Song` bind the receipt to token creation. `Arcane Denial` binds it to a subjectless
+`ProgramInputPlayer` is an explicit typed Program input supported only by `CreateTokens`,
+`CreateDelayedTrigger` and fixed-amount `LoseLife` in spell Programs. The consuming instruction must
+name the result slot with `input`; an ambient previous-effect lookup is not available. A `None`
+receipt creates no tokens, delayed ability or life loss and never falls back to the spell's caster.
+`An Offer You Can't Refuse` and `Swan Song` bind the receipt to token creation; `Countersquall`,
+`Undermine`, `Psychic Barrier` and `Punish Ignorance` bind it to `LoseLife(amount: Fixed(n), who:
+ProgramInputPlayer)`. `Arcane Denial` binds it to a subjectless
 `CreateDelayedTrigger` for `AtBeginningOfNextTurnUpkeep`, preserving its child Program and separate
 subjectless, no-input `delayed_02` caster draw.
 

@@ -4661,6 +4661,19 @@ fn compile_operation(
                 "LoseLife(RevealedCardManaValue) requires an activated ability resolution program"
                     .into(),
             ),
+            SpellEffectKind::LoseLife {
+                amount: LifeAmount::Fixed(_),
+                who: PlayerRecipient::ProgramInputPlayer,
+            } if context == EffectContext::Spell => {
+                // #529 counter-drain cohort (Countersquall, Undermine, Psychic Barrier, Punish
+                // Ignorance): the controller captured for the legal stack
+                // target by the bound CounterTargetSpell, even when that spell can't be countered.
+                admitted_program_input_player = true;
+                dependency.require(&|actual| matches!(actual, ResultType::TargetedSpellController))?;
+
+                effect.validate(context)?;
+                Ok(Vec::new())
+            }
             SpellEffectKind::LoseLife { amount, who }
                 if matches!(amount, LifeAmount::Fixed(_))
                     && (*who == PlayerRecipient::EachOpponent
@@ -4671,7 +4684,7 @@ fn compile_operation(
                 Ok(Vec::new())
             }
             SpellEffectKind::LoseLife { .. } => Err(
-                "LoseLife in a resolution program supports a fixed EachOpponent amount, or a fixed Controller amount on a spell or ability program".into(),
+                "LoseLife in a resolution program supports a fixed EachOpponent amount, a fixed Controller amount on a spell or ability program, or a fixed ProgramInputPlayer amount on a spell program".into(),
             ),
             SpellEffectKind::Blight { .. } => {
                 effect.validate(context)?;
@@ -5865,7 +5878,7 @@ fn compile_operation(
         }
     })();
     if effect.contains_program_input_player() && !admitted_program_input_player {
-        return Err("ProgramInputPlayer is supported only by CreateTokens and CreateDelayedTrigger through a typed Program input".into());
+        return Err("ProgramInputPlayer is supported only by CreateTokens and CreateDelayedTrigger, or a fixed spell LoseLife, through a typed Program input".into());
     }
     if effect
         .result_consuming_amount()

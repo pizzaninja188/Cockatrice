@@ -237,6 +237,8 @@ mod issue_511_maze_of_ith;
 mod issue_512_standstill;
 #[path = "../issue_524_color_graveyard.rs"]
 mod issue_524_color_graveyard;
+#[path = "../issue_529_counter_drain.rs"]
+mod issue_529_counter_drain;
 #[path = "../issue_52_composite_activated_costs.rs"]
 mod issue_52_composite_activated_costs;
 #[path = "../issue_53_additional_spell_costs.rs"]

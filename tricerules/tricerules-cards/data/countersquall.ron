@@ -1,0 +1,24 @@
+// Pinned Oracle 6df620b8-1e54-4f63-8556-12c75e5679af; Scryfall rulings checked 2026-11-24.
+// CR 608.2b, 701.6a, 119.3: a legal target that can't be countered still costs its controller life.
+(
+  id: "countersquall",
+  name: "Countersquall",
+  face_id: "countersquall",
+  mana_cost: "{U}{B}",
+  types: ["Instant"],
+  spell_program: Some((body: (steps: [
+    (id: "counter_spell", bind: ["target_controller"],
+      kind: Perform(CounterTargetSpell(
+        spell_filter: (card_type: Some(Noncreature)),
+      ))),
+    (id: "lose_life", input: Some("target_controller"),
+      kind: Perform(LoseLife(amount: Fixed(2), who: ProgramInputPlayer))),
+  ]), target_bindings: [
+    (instruction_id: "counter_spell", role: Spell, target_group_index: 0),
+  ])),
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    effect_indices: [],
+  )])),
+)

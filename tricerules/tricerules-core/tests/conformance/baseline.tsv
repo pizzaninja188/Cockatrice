@@ -697,6 +697,7 @@ council_of_advisors	0	cast	exercised
 council_of_echoes	0	cast	exercised
 counsel_of_the_soratami	0	cast	exercised
 counterspell	0	cast	exercised
+countersquall	0	cast	exercised
 courier_griffin	0	cast	exercised
 courier_hawk	0	cast	exercised
 cowl_prowler	0	cast	exercised
@@ -2554,11 +2555,13 @@ protective_response	0	cast	exercised
 prowcatcher_specialist	0	ability:0	exercised
 prowcatcher_specialist	0	cast	exercised
 prowling_caracal	0	cast	exercised
+psychic_barrier	0	cast	exercised
 pterafractyl	0	cast	exercised
 pull_from_the_grave	0	cast	exercised
 pull_through_the_weft	0	cast	exercised
 pulse_tracker	0	cast	exercised
 pumpkin_bombardment	0	cast	exercised
+punish_ignorance	0	cast	exercised
 punk_frogs	0	cast	exercised
 purple_dragon_punks	0	ability:0	exercised
 purple_dragon_punks	0	cast	exercised
@@ -3672,6 +3675,7 @@ underground_sea	0	ability:0	exercised
 underground_sea	0	land	exercised
 undergrowth_leopard	0	ability:0	exercised
 undergrowth_leopard	0	cast	exercised
+undermine	0	cast	exercised
 unending_whisper	0	cast	exercised
 unexpected_assistance	0	cast	exercised
 unexpected_windfall	0	cast	exercised

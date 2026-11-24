@@ -1,0 +1,25 @@
+// Pinned Oracle 0fc56124-bdcd-4f4f-886f-0fafcf8003bc; Scryfall rulings checked 2026-11-24.
+// CR 608.2b, 701.6a, 119.3: a legal target that can't be countered still costs its controller life.
+(
+  id: "punish_ignorance",
+  name: "Punish Ignorance",
+  face_id: "punish_ignorance",
+  mana_cost: "{W}{U}{U}{B}",
+  types: ["Instant"],
+  spell_program: Some((body: (steps: [
+    (id: "counter_spell", bind: ["target_controller"],
+      kind: Perform(CounterTargetSpell(
+        spell_filter: (),
+      ))),
+    (id: "lose_life", input: Some("target_controller"),
+      kind: Perform(LoseLife(amount: Fixed(3), who: ProgramInputPlayer))),
+    (id: "gain_life", kind: Perform(GainLife(who: Controller, amount: 3))),
+  ]), target_bindings: [
+    (instruction_id: "counter_spell", role: Spell, target_group_index: 0),
+  ])),
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    effect_indices: [],
+  )])),
+)

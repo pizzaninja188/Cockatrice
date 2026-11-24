@@ -1,0 +1,24 @@
+// Pinned Oracle 2e712090-2284-4325-8ee8-38cd0e2bedd8; Scryfall rulings checked 2026-11-24.
+// CR 608.2b, 701.6a, 119.3: a legal target that can't be countered still costs its controller life.
+(
+  id: "psychic_barrier",
+  name: "Psychic Barrier",
+  face_id: "psychic_barrier",
+  mana_cost: "{U}{U}",
+  types: ["Instant"],
+  spell_program: Some((body: (steps: [
+    (id: "counter_spell", bind: ["target_controller"],
+      kind: Perform(CounterTargetSpell(
+        spell_filter: (card_type: Some(Creature)),
+      ))),
+    (id: "lose_life", input: Some("target_controller"),
+      kind: Perform(LoseLife(amount: Fixed(1), who: ProgramInputPlayer))),
+  ]), target_bindings: [
+    (instruction_id: "counter_spell", role: Spell, target_group_index: 0),
+  ])),
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    effect_indices: [],
+  )])),
+)

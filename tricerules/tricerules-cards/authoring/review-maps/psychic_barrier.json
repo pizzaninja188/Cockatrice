@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "2e712090-2284-4325-8ee8-38cd0e2bedd8",
+  "spans": [
+    {
+      "face_id": "psychic_barrier",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0/kind/Perform",
+        "/faces/0/spell_program/body/steps/1/kind/Perform"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform"
+    },
+    {
+      "symbol": "StackSpellFilter::Creature",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/CounterTargetSpell/spell_filter/card_type"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform"
+    },
+    {
+      "symbol": "PlayerRecipient::ProgramInputPlayer",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/LoseLife/who"
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_529_counter_drain::issue_529_countered_spell_controller_loses_the_printed_life",
+      "covers": "counterable target is countered and its controller loses 1 life; the caster's life is unchanged"
+    },
+    {
+      "test": "scenario issue_529_counter_drain::issue_529_spell_type_filters_reject_at_cast",
+      "covers": "creature filter rejects the other spell type before committing the cast"
+    },
+    {
+      "test": "mechanic_registry::issue_529_counter_drain::issue_529_registers_counter_drain_cohort",
+      "covers": "exact Oracle identity, mana, type, counter filter and target binding, typed controller result feeding fixed LoseLife"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

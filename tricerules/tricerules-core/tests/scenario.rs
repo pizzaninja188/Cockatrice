@@ -808,6 +808,8 @@ mod issue_284_generated_optional_basic_land_to_top;
 mod issue_507_replicating_ring_program;
 #[path = "scenario/issue_524_color_graveyard.rs"]
 mod issue_524_color_graveyard;
+#[path = "scenario/issue_529_counter_drain.rs"]
+mod issue_529_counter_drain;
 #[path = "scenario/luxior_runtime.rs"]
 mod luxior_runtime;
 

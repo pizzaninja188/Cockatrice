@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "6bcfe240-c165-49f2-a90a-be05c05498a1",
+  "spans": [
+    {
+      "face_id": "undermine",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0/kind/Perform",
+        "/faces/0/spell_program/body/steps/1/kind/Perform"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform"
+    },
+    {
+      "symbol": "PlayerRecipient::ProgramInputPlayer",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/LoseLife/who"
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_529_counter_drain::issue_529_countered_spell_controller_loses_the_printed_life",
+      "covers": "counterable target is countered and its controller loses 3 life; the caster's life is unchanged"
+    },
+    {
+      "test": "scenario issue_529_counter_drain::issue_529_multiplayer_drains_only_the_target_controller",
+      "covers": "three-player game: only the target spell's controller loses life"
+    },
+    {
+      "test": "scenario issue_529_counter_drain::issue_529_countering_your_own_spell_drains_you",
+      "covers": "countering your own spell makes you lose the life"
+    },
+    {
+      "test": "mechanic_registry::issue_529_counter_drain::issue_529_registers_counter_drain_cohort",
+      "covers": "exact Oracle identity, mana, type, counter filter and target binding, typed controller result feeding fixed LoseLife"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "6df620b8-1e54-4f63-8556-12c75e5679af",
+  "spans": [
+    {
+      "face_id": "countersquall",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0/kind/Perform",
+        "/faces/0/spell_program/body/steps/1/kind/Perform"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform"
+    },
+    {
+      "symbol": "StackSpellFilter::Noncreature",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/CounterTargetSpell/spell_filter/card_type"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform"
+    },
+    {
+      "symbol": "PlayerRecipient::ProgramInputPlayer",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/LoseLife/who"
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_529_counter_drain::issue_529_countered_spell_controller_loses_the_printed_life",
+      "covers": "counterable target is countered and its controller loses 2 life; the caster's life is unchanged"
+    },
+    {
+      "test": "scenario issue_529_counter_drain::issue_529_legal_uncounterable_target_still_drains",
+      "covers": "legal uncounterable target stays on the stack, yet its controller still loses life"
+    },
+    {
+      "test": "scenario issue_529_counter_drain::issue_529_spell_type_filters_reject_at_cast",
+      "covers": "noncreature filter rejects the other spell type before committing the cast"
+    },
+    {
+      "test": "mechanic_registry::issue_529_counter_drain::issue_529_registers_counter_drain_cohort",
+      "covers": "exact Oracle identity, mana, type, counter filter and target binding, typed controller result feeding fixed LoseLife"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

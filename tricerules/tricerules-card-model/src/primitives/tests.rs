@@ -13188,10 +13188,131 @@ fn counter_controller_input_rejects_missing_or_wrong_typed_producers() {
             (instruction_id: "counter", role: Spell, target_group_index: 0),
         ])"#,
     )
-    .expect_err("controller inputs remain limited to the two approved consumer families");
+    .expect_err("controller inputs remain limited to the approved consumer families");
     assert!(
         unsupported_consumer.contains("supported only by CreateTokens and CreateDelayedTrigger"),
         "{unsupported_consumer}"
+    );
+}
+
+fn counter_drain_targeting() -> crate::primitives::TargetingDef {
+    crate::primitives::TargetingDef {
+        groups: vec![crate::primitives::TargetGroupDef {
+            controlled_by_chooser: false,
+            for_each_opponent: false,
+            chooser: crate::primitives::TargetChooser::Controller,
+            min: 1,
+            max: 1,
+            prompt: "Choose a target spell".into(),
+            effect_indices: Vec::new(),
+            distinct_from: Vec::new(),
+            same_graveyard: false,
+            cast_cost_expansion: None,
+        }],
+    }
+}
+
+fn compile_counter_drain(
+    context: crate::primitives::EffectContext,
+    program: &str,
+) -> Result<crate::primitives::CompiledProgram, String> {
+    let program: crate::primitives::CardProgram =
+        ron::from_str(program).expect("counter-drain fixture parses");
+    let owner = crate::ProgramOwnerId::face(
+        "counter_drain_program_fixture",
+        crate::CardFaceId::new("counter_drain_program_fixture").unwrap(),
+    );
+    crate::primitives::CompiledProgram::compile_with_targeting(
+        owner,
+        context,
+        &program,
+        Some(&counter_drain_targeting()),
+    )
+}
+
+#[test]
+fn counter_controller_input_drives_fixed_spell_life_loss() {
+    let compiled = compile_counter_drain(
+        crate::primitives::EffectContext::Spell,
+        r#"(body: (steps: [
+            (id: "counter", bind: ["controller"], kind: Perform(CounterTargetSpell(
+                spell_filter: (),
+            ))),
+            (id: "drain", input: Some("controller"), kind: Perform(LoseLife(
+                amount: Fixed(3), who: ProgramInputPlayer,
+            ))),
+            (id: "gain", kind: Perform(GainLife(who: Controller, amount: 3))),
+        ], yields: []), target_bindings: [
+            (instruction_id: "counter", role: Spell, target_group_index: 0),
+        ])"#,
+    )
+    .expect("a countered spell's controller can lose a fixed amount of life");
+
+    let [controller_result] = compiled.body.steps[0].outputs.as_slice() else {
+        panic!("the counter binds one explicit controller receipt");
+    };
+    assert_eq!(
+        compiled.slot(*controller_result).unwrap().result_type,
+        crate::primitives::ResultType::TargetedSpellController,
+    );
+    assert_eq!(compiled.body.steps[1].input, Some(*controller_result));
+    assert!(compiled.body.steps[1].outputs.is_empty());
+    assert_eq!(compiled.body.steps[2].input, None);
+}
+
+#[test]
+fn counter_controller_life_loss_rejects_unproven_shapes() {
+    let program = |producer: &str, consumer: &str| {
+        format!(
+            r#"(body: (steps: [
+                (id: "counter", bind: ["controller"], kind: Perform(CounterTargetSpell(
+                    spell_filter: (),
+                ))),
+                {producer}
+                {consumer}
+            ], yields: []), target_bindings: [
+                (instruction_id: "counter", role: Spell, target_group_index: 0),
+            ])"#
+        )
+    };
+
+    let missing = compile_counter_drain(
+        crate::primitives::EffectContext::Spell,
+        &program(
+            "",
+            r#"(id: "drain", kind: Perform(LoseLife(amount: Fixed(3), who: ProgramInputPlayer))),"#,
+        ),
+    )
+    .expect_err("a ProgramInputPlayer life loss cannot infer an ambient receipt");
+    assert!(
+        missing.contains("requires an explicitly bound input result"),
+        "{missing}"
+    );
+
+    let wrong_type = compile_counter_drain(
+        crate::primitives::EffectContext::Spell,
+        &program(
+            r#"(id: "draw", bind: ["drawn"], kind: Perform(Draw(who: Controller, count: 1))),"#,
+            r#"(id: "drain", input: Some("drawn"), kind: Perform(LoseLife(amount: Fixed(3), who: ProgramInputPlayer))),"#,
+        ),
+    )
+    .expect_err("a different typed producer cannot supply the life-loss recipient");
+    assert!(
+        wrong_type.contains("wrong type for this instruction"),
+        "{wrong_type}"
+    );
+
+    let variable_amount = compile_counter_drain(
+        crate::primitives::EffectContext::Spell,
+        &program(
+            "",
+            r#"(id: "drain", input: Some("controller"), kind: Perform(LoseLife(amount: TargetManaValue, who: ProgramInputPlayer))),"#,
+        ),
+    )
+    .expect_err("the countered-spell drain supports only a fixed amount");
+    assert!(
+        variable_amount.contains("or a fixed spell LoseLife"),
+        "{variable_amount}"
     );
 }
 
