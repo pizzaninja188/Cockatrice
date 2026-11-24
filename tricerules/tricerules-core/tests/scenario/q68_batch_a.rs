@@ -1394,8 +1394,8 @@ fn q68_aura_self_return_belongs_to_the_aura_controller_and_needs_the_battlefield
     assert!(
         matches!(
             rejected,
-            tricerules_core::EngineError::Illegal(ref message)
-                if *message == "ability source is not in its authored zone"
+            tricerules_core::EngineError::Illegal(message)
+                if message == "ability source is not in its authored zone"
         ),
         "expected the controller/zone rejection, got {rejected:?}"
     );
@@ -1479,8 +1479,8 @@ fn q68_aura_self_return_belongs_to_the_aura_controller_and_needs_the_battlefield
     assert!(
         matches!(
             rejected,
-            tricerules_core::EngineError::Illegal(ref message)
-                if *message == "ability source is not in its authored zone"
+            tricerules_core::EngineError::Illegal(message)
+                if message == "ability source is not in its authored zone"
         ),
         "expected the zone rejection, got {rejected:?}"
     );
