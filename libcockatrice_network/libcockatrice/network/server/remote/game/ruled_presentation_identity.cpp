@@ -88,7 +88,11 @@ bool supportedSchema()
         // ids (unchanged, zero generation) from permanent handles (paired generation below).
         // Cursor/count and renamed stage values carry no object identity; enclosing private
         // candidate/group fields remain recipient-only. Legacy singleton targets are permanent.
-        const QByteArray expected("60b9a87b42a6f1af3e12b44cfc3873f8ea3e60e1594a494e60dc6859f39ec29d");
+        // LegalTargetGroup.relation replaces same_graveyard. Its TargetRelationKey.candidate reuses
+        // TargetCandidateRef, whose object_id is already projected unless it names a player; the
+        // key itself is an owner/controller player id and the mode an enum, so neither enters the
+        // object-identity domain. All of it stays per-player like the enclosing target group.
+        const QByteArray expected("c0da147de2086a9129eeb7460be643cececfd3cf518bd7aca3342f44a0d389a7");
         if (digest != expected)
             qCritical() << "ruled presentation schema needs an identity audit:" << digest;
         return digest == expected;

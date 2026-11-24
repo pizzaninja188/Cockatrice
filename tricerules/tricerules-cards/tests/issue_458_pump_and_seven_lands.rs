@@ -228,7 +228,7 @@ fn issue_458_pump_life_spells_apply_the_ordered_effects_to_one_mandatory_target(
             case.id
         );
         assert!(group.distinct_from.is_empty(), "{}", case.id);
-        assert!(!group.same_graveyard, "{}", case.id);
+        assert!(group.relation.is_none(), "{}", case.id);
         assert!(group.cast_cost_expansion.is_none(), "{}", case.id);
     }
 }

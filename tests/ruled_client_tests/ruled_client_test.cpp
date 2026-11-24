@@ -12167,6 +12167,44 @@ TEST(RuledPendingTargetTest, PairedSpellTargetsPruneChangedEdgesAndReopenTheDepe
     EXPECT_TRUE(spell.waitingForTarget);
 }
 
+TEST(RuledPendingTargetTest, SpellRelationGraysOutSameControllerPicksWhileTheActiveGroupIsInProgress)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    RuledSpellTargetData data;
+    data.groups.resize(1);
+    auto &group = data.groups[0];
+    group.minTargets = 2;
+    group.maxTargets = 2;
+    group.validPermanentIds = {40, 41, 50};
+    auto &relation = group.relation.emplace();
+    relation.mode = ruled::v1::TARGET_RELATION_MODE_ALL_DISTINCT;
+    const int permanent = ruled::v1::TARGET_REF_KIND_PERMANENT;
+    relation.keys.insert(qMakePair(permanent, 40u), 1);
+    relation.keys.insert(qMakePair(permanent, 41u), 1);
+    relation.keys.insert(qMakePair(permanent, 50u), 2);
+    state.validTargetsByHandSlot.insert(RuledClientState::spellTargetKey(6, 0), data);
+    PendingRuledSpellCast spell;
+    spell.valid = true;
+    spell.waitingForTarget = true;
+    spell.handIndex = 6;
+    spell.activeTargetGroupPosition = 0;
+    const auto eligibility = [&](quint32 oid) {
+        return ruledTargetClickEligibility(spell, {}, state, RuledTargetCandidateKind::Battlefield, oid, kLocalPlayer);
+    };
+    for (const quint32 oid : {40u, 41u, 50u}) {
+        EXPECT_EQ(eligibility(oid), RuledTargetClickEligibility::Legal) << oid;
+    }
+    // The first pick is staged only in the active group's in-progress list, as a click leaves it.
+    spell.selectedTargetOids = {40};
+    EXPECT_EQ(eligibility(41), RuledTargetClickEligibility::Illegal)
+        << "the same controller's other creature is grayed out and its click is refused";
+    EXPECT_EQ(eligibility(50), RuledTargetClickEligibility::Legal);
+    EXPECT_EQ(eligibility(40), RuledTargetClickEligibility::Legal) << "the staged pick stays clickable to deselect";
+    spell.selectedTargetOids.clear();
+    EXPECT_EQ(eligibility(41), RuledTargetClickEligibility::Legal) << "deselecting re-widens the choices";
+}
+
 TEST_F(RuledClientTest, StalePairsArePrunedWhenPermanentsLeaveTheBattlefield)
 {
     ruled::v1::RuledEventBatch setup;
@@ -15079,10 +15117,18 @@ TEST_F(RuledClientTest, VariableTriggerTargetsStageOneGraveyardCohortAndRestoreO
     group->set_prompt_text("Choose up to two target cards from a single graveyard");
     group->set_min(0);
     group->set_max(2);
-    group->set_same_graveyard(true);
     group->add_valid_graveyard_ids(501);
     group->add_valid_graveyard_ids(502);
     group->add_valid_graveyard_ids(601);
+    // The engine publishes each card's owner key; the client no longer reads the graveyard map.
+    auto *relation = group->mutable_relation();
+    relation->set_mode(ruled::v1::TARGET_RELATION_MODE_ALL_EQUAL);
+    for (const auto &[oid, owner] : {std::pair{501u, 7u}, std::pair{502u, 7u}, std::pair{601u, 8u}}) {
+        auto *key = relation->add_keys();
+        key->mutable_candidate()->set_kind(ruled::v1::TARGET_REF_KIND_GRAVEYARD);
+        key->mutable_candidate()->set_object_id(oid);
+        key->set_key(owner);
+    }
     apply(batch);
 
     EXPECT_TRUE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_GRAVEYARD, 501, kLocalPlayer));
@@ -15102,6 +15148,80 @@ TEST_F(RuledClientTest, VariableTriggerTargetsStageOneGraveyardCohortAndRestoreO
     host.answerPendingAck(false);
     EXPECT_TRUE(state->hasPendingTriggerTarget());
     EXPECT_EQ(state->pendingTriggerSelectedCount(), 2);
+}
+
+TEST(RuledTargetRelationTest, DifferentControllersComparesOnlyEnginePublishedKeysWithinTheGroup)
+{
+    RuledTargetGroupData group;
+    group.groupIndex = 2;
+    group.minTargets = 2;
+    group.maxTargets = 2;
+    RuledTargetRelationData relation;
+    relation.mode = ruled::v1::TARGET_RELATION_MODE_ALL_DISTINCT;
+    const int permanent = ruled::v1::TARGET_REF_KIND_PERMANENT;
+    relation.keys.insert(qMakePair(permanent, 40u), 1);
+    relation.keys.insert(qMakePair(permanent, 41u), 1);
+    relation.keys.insert(qMakePair(permanent, 50u), 2);
+    group.relation = relation;
+    const auto pick = [](quint32 groupIndex, quint32 oid) {
+        ruled::v1::TargetRef target;
+        target.set_group_index(groupIndex);
+        target.set_object_id(oid);
+        target.set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+        return target;
+    };
+    QVector<ruled::v1::TargetRef> selected;
+    // First pick: any keyed candidate; an unkeyed or wrong-domain candidate never.
+    EXPECT_TRUE(ruledTargetRelationCompatible(group, ruled::v1::TARGET_REF_KIND_PERMANENT, 40, selected));
+    EXPECT_FALSE(ruledTargetRelationCompatible(group, ruled::v1::TARGET_REF_KIND_PERMANENT, 99, selected));
+    EXPECT_FALSE(ruledTargetRelationCompatible(group, ruled::v1::TARGET_REF_KIND_GRAVEYARD, 40, selected));
+    selected.append(pick(2, 40));
+    EXPECT_FALSE(ruledTargetRelationCompatible(group, ruled::v1::TARGET_REF_KIND_PERMANENT, 41, selected))
+        << "same published controller key";
+    EXPECT_TRUE(ruledTargetRelationCompatible(group, ruled::v1::TARGET_REF_KIND_PERMANENT, 50, selected));
+    EXPECT_TRUE(ruledTargetRelationCompatible(group, ruled::v1::TARGET_REF_KIND_PERMANENT, 40, selected))
+        << "an already-selected target remains compatible with itself";
+    // Another group's selection never participates in this group's relation.
+    QVector<ruled::v1::TargetRef> otherGroup{pick(1, 40)};
+    EXPECT_TRUE(ruledTargetRelationCompatible(group, ruled::v1::TARGET_REF_KIND_PERMANENT, 41, otherGroup));
+    // Deselecting the first pick re-widens the choices.
+    selected.clear();
+    EXPECT_TRUE(ruledTargetRelationCompatible(group, ruled::v1::TARGET_REF_KIND_PERMANENT, 41, selected));
+    // A selected target whose key was withdrawn fails closed.
+    selected.append(pick(2, 77));
+    EXPECT_FALSE(ruledTargetRelationCompatible(group, ruled::v1::TARGET_REF_KIND_PERMANENT, 50, selected));
+    // No relation imposes nothing.
+    group.relation.reset();
+    EXPECT_TRUE(ruledTargetRelationCompatible(group, ruled::v1::TARGET_REF_KIND_PERMANENT, 99, selected));
+}
+
+TEST_F(RuledClientTest, TriggerTargetsWithDifferentControllerKeysRejectASharedControllerPick)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *trigger = batch.add_events()->mutable_trigger_needs_target();
+    trigger->set_source_permanent_id(100);
+    trigger->set_controller_player_id(kLocalPlayer);
+    auto *group = trigger->mutable_targets()->add_groups();
+    group->set_min(2);
+    group->set_max(2);
+    auto *relation = group->mutable_relation();
+    relation->set_mode(ruled::v1::TARGET_RELATION_MODE_ALL_DISTINCT);
+    for (const auto &[oid, controller] : {std::pair{701u, 1u}, std::pair{702u, 1u}, std::pair{703u, 2u}}) {
+        group->add_valid_permanent_ids(oid);
+        auto *key = relation->add_keys();
+        key->mutable_candidate()->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+        key->mutable_candidate()->set_object_id(oid);
+        key->set_key(controller);
+    }
+    apply(batch);
+    EXPECT_TRUE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, 701, kOpponent));
+    EXPECT_FALSE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, 702, kOpponent));
+    EXPECT_TRUE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, 703, kOpponent));
+    EXPECT_EQ(state->pendingTriggerSelectedCount(), 2);
+    EXPECT_TRUE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, 701, kOpponent));
+    EXPECT_EQ(state->pendingTriggerSelectedCount(), 1);
+    EXPECT_TRUE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, 702, kOpponent))
+        << "after deselecting 701, its controller's other creature is choosable again";
 }
 
 TEST_F(RuledClientTest, AnyNumberTriggerTargetsAcceptMultipleDeselectAndExplicitConfirmation)

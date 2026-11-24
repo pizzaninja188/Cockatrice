@@ -174,6 +174,14 @@ struct RuledXTargetChoiceData
     QHash<quint32, quint64> candidateGenerations;
 };
 
+/// Engine-published relation among one group's targets. Keys are opaque: the client compares
+/// them and never derives an owner or controller itself.
+struct RuledTargetRelationData
+{
+    ruled::v1::TargetRelationMode mode = ruled::v1::TARGET_RELATION_MODE_UNSPECIFIED;
+    QHash<QPair<int, quint32>, quint32> keys;
+};
+
 struct RuledTargetGroupData
 {
     int groupIndex = 0;
@@ -187,7 +195,8 @@ struct RuledTargetGroupData
     int maxTargets = 1;
     QString promptText;
     QVector<int> distinctFromGroupIndices;
-    bool sameGraveyard = false;
+    /// Absent means no relation; present with no key for a candidate means it cannot be chosen.
+    std::optional<RuledTargetRelationData> relation;
     bool chosenByOpponent = false;
     /// Presence matters: a present constraint with no edges permits no pair.
     std::optional<ruled::v1::TargetPairConstraint> pairConstraint;
@@ -234,6 +243,23 @@ struct RuledTargetGroupData
                                               ruled::v1::TargetRefKind kind,
                                               quint32 oid,
                                               const QVector<ruled::v1::TargetRef> &selected);
+
+/// Whether adding (or keeping) `oid` satisfies the group's engine-published relation against the
+/// other targets already selected for that same group.
+[[nodiscard]] bool ruledTargetRelationCompatible(const RuledTargetGroupData &group,
+                                                 ruled::v1::TargetRefKind kind,
+                                                 quint32 oid,
+                                                 const QVector<ruled::v1::TargetRef> &selected);
+
+/// Every engine-published cross-target constraint: the prior-group pair and the group relation.
+[[nodiscard]] inline bool ruledTargetSelectionCompatible(const RuledTargetGroupData &group,
+                                                         ruled::v1::TargetRefKind kind,
+                                                         quint32 oid,
+                                                         const QVector<ruled::v1::TargetRef> &selected)
+{
+    return ruledTargetPairCompatible(group, kind, oid, selected) &&
+           ruledTargetRelationCompatible(group, kind, oid, selected);
+}
 
 /// Builds the common ruled target prompt from engine-authored source and group presentation data.
 /// `groupPosition` is zero-based; `groupCount` is the number of sequential groups in the active

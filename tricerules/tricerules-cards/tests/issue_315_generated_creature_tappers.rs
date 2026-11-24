@@ -146,7 +146,7 @@ fn issue_315_registry_contains_exactly_the_reviewed_creature_tapper_cohort() {
         );
         assert_eq!(group.effect_indices, [0]);
         assert!(group.distinct_from.is_empty());
-        assert!(!group.same_graveyard);
+        assert!(group.relation.is_none());
         assert!(group.cast_cost_expansion.is_none());
 
         let presentation = registry

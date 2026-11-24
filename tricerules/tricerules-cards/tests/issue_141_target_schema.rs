@@ -138,7 +138,7 @@ fn token_copy_requires_one_permanent_source() {
             prompt: "Sources".into(),
             effect_indices: vec![0],
             distinct_from: vec![],
-            same_graveyard: false,
+            relation: None,
             cast_cost_expansion: None,
         }],
     };

@@ -140,7 +140,7 @@ fn arashin_sunshield_requires_one_graveyard_and_revalidates_each_target() {
         .values()
         .next()
         .expect("pending trigger targets");
-    assert!(targets.groups[0].same_graveyard);
+    assert!(all_equal_relation(&targets.groups[0]));
     assert_eq!(targets.groups[0].min, 0);
     assert_eq!(targets.groups[0].max, 2);
     assert!(engine
@@ -419,7 +419,7 @@ fn soul_shackled_zombie_three_player_cast_replays_the_same_events_and_life_chang
         first_offer.legal_by_player[&0]
             .valid_targets_by_ability
             .values()
-            .any(|targets| targets.groups[0].same_graveyard),
+            .any(|targets| all_equal_relation(&targets.groups[0])),
         "the ETB offers its same-graveyard target group"
     );
     let selection_boundary = accepted_commands.len();
@@ -496,7 +496,7 @@ fn rooftop_percher_accepts_targets_from_different_graveyards() {
         .next()
         .expect("pending Rooftop Percher targets");
     assert_eq!((targets.groups[0].min, targets.groups[0].max), (0, 2));
-    assert!(!targets.groups[0].same_graveyard);
+    assert!(targets.groups[0].relation.is_none());
     engine
         .apply_scenario_command(0, &choose_trigger_targets(&[own, opposing]))
         .expect("choose one target from each graveyard");

@@ -3528,7 +3528,7 @@ fn has_duplicant_imprint_producer(
                         && group.effect_indices == [0]
                         && group.chooser == crate::primitives::TargetChooser::Controller
                         && group.distinct_from.is_empty()
-                        && !group.same_graveyard
+                        && group.relation.is_none()
                         && group.cast_cost_expansion.is_none())
             });
             ability.ability_id == *producer_ability_id
@@ -5855,7 +5855,7 @@ mod luxior_model_contract_tests {
             prompt: "Choose a planeswalker you control".into(),
             effect_indices,
             distinct_from: Vec::new(),
-            same_graveyard: false,
+            relation: None,
             cast_cost_expansion: None,
         }
     }
@@ -6113,7 +6113,7 @@ mod luxior_model_contract_tests {
 
         let mut graveyard_constraint =
             target_group(crate::primitives::TargetChooser::Controller, 1, 1, vec![0]);
-        graveyard_constraint.same_graveyard = true;
+        graveyard_constraint.relation = Some(crate::primitives::TargetGroupRelation::SameGraveyard);
         let mut same_graveyard = base.clone();
         set_target_groups(&mut same_graveyard, vec![graveyard_constraint]);
         expect_rejected(&same_graveyard, "a graveyard-only group constraint");

@@ -200,7 +200,7 @@ fn issue_424_up_to_two_counter_mode_is_bounded_and_targeted() {
         "Choose up to two target creatures"
     );
     assert_eq!(group.effect_indices, vec![0]);
-    assert!(!group.same_graveyard);
+    assert!(group.relation.is_none());
     assert_modal_schema("daily_bugle_reporters", &bugle);
 }
 
@@ -323,7 +323,10 @@ fn issue_424_exile_modes_use_the_printed_type_union_and_single_graveyard_group()
         .expect("single-graveyard group")
         .groups[0];
     assert_eq!((group.min, group.max), (0, 2));
-    assert!(group.same_graveyard);
+    assert_eq!(
+        group.relation,
+        Some(tricerules_cards::primitives::TargetGroupRelation::SameGraveyard)
+    );
     assert_eq!(
         crate::common::compiled_legacy_target_prompt(
             &qutrub.modes[1].effects,

@@ -1563,16 +1563,24 @@ impl GameEngine {
                     mode.targeting.as_ref(),
                     program,
                 );
+                let relation_illegal = super::targeting::relation_illegal_target_indices(
+                    self,
+                    mode.targeting.as_ref(),
+                    &chosen.targets,
+                );
+                let mut index = 0;
                 chosen.targets.retain(|target| {
-                    requirements
-                        .get(target.group_index as usize)
-                        .is_some_and(|group| {
-                            legal(
-                                group,
-                                target,
-                                x_bound_groups.contains(&(target.group_index as usize)),
-                            )
-                        })
+                    index += 1;
+                    !relation_illegal.contains(&(index - 1))
+                        && requirements
+                            .get(target.group_index as usize)
+                            .is_some_and(|group| {
+                                legal(
+                                    group,
+                                    target,
+                                    x_bound_groups.contains(&(target.group_index as usize)),
+                                )
+                            })
                 });
             }
             return authored_target_groups
@@ -1620,16 +1628,22 @@ impl GameEngine {
         };
         let requirements = target_roles_by_group(self, controller, effects, targeting, program);
         let x_bound_groups = super::targeting::x_target_group_indices(effects, targeting, program);
+        // Relations compare the receipts before any departed target is dropped below.
+        let relation_illegal =
+            super::targeting::relation_illegal_target_indices(self, targeting, &top.targets);
+        let mut index = 0;
         top.targets.retain(|target| {
-            requirements
-                .get(target.group_index as usize)
-                .is_some_and(|group| {
-                    legal(
-                        group,
-                        target,
-                        x_bound_groups.contains(&(target.group_index as usize)),
-                    )
-                })
+            index += 1;
+            !relation_illegal.contains(&(index - 1))
+                && requirements
+                    .get(target.group_index as usize)
+                    .is_some_and(|group| {
+                        legal(
+                            group,
+                            target,
+                            x_bound_groups.contains(&(target.group_index as usize)),
+                        )
+                    })
         });
         authored_target_groups && top.targets.is_empty()
     }

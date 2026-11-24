@@ -285,7 +285,17 @@ RuledClientState::SpellTargetData parseSpellTargets(const ruled::v1::SpellTarget
             parsed.maxTargets = static_cast<int>(std::min(group.max(), representable));
         }
         parsed.promptText = QString::fromStdString(group.prompt_text());
-        parsed.sameGraveyard = group.same_graveyard();
+        if (group.has_relation()) {
+            RuledTargetRelationData relation;
+            relation.mode = group.relation().mode();
+            for (const auto &key : group.relation().keys()) {
+                if (key.has_candidate()) {
+                    relation.keys.insert(
+                        qMakePair(static_cast<int>(key.candidate().kind()), key.candidate().object_id()), key.key());
+                }
+            }
+            parsed.relation = std::move(relation);
+        }
         parsed.chosenByOpponent = group.chosen_by_opponent();
         if (group.has_pair_constraint()) {
             parsed.pairConstraint = group.pair_constraint();

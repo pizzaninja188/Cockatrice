@@ -136,7 +136,7 @@ fn issue_425_tap_mode_is_bounded_to_one_or_two_creatures() {
         "Choose one or two target creatures"
     );
     assert_eq!(group.effect_indices, vec![0]);
-    assert!(!group.same_graveyard);
+    assert!(group.relation.is_none());
 }
 
 #[test]

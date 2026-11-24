@@ -39,7 +39,7 @@
       min: 0,
       max: 2,
       effect_indices: [],
-      same_graveyard: true,
+      relation: Some(SameGraveyard),
     )])),
   )],
 )

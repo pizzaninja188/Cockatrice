@@ -12103,6 +12103,66 @@ TEST_F(RuledBatchTest, AliasedPackedMapsMixedTargetsAndCombatEdgesRoundTrip)
     EXPECT_EQ(returnedSentinel.defender_zone_change_generation(), 0u);
 }
 
+TEST_F(RuledBatchTest, TargetRelationKeysProjectCandidatesAndKeepPlayerKeysForTheActorOnly)
+{
+    constexpr quint32 firstId = 11060;
+    constexpr quint32 secondId = 11061;
+    constexpr quint64 generation = 23;
+
+    ruled::v1::RuledEventBatch batch;
+    for (const quint32 id : {firstId, secondId}) {
+        auto *boundary = batch.add_events()->mutable_presentation_identity_break();
+        boundary->set_object_id(id);
+        boundary->set_zone_change_generation(generation);
+    }
+    auto *view = batch.add_events()->mutable_zone_view();
+    for (const auto &[player, id] : {std::pair{p1, firstId}, std::pair{p2, secondId}}) {
+        auto *playerView = view->add_per_player();
+        playerView->set_player_id(player->getPlayerId());
+        auto *object = playerView->add_battlefield_objects();
+        object->set_object_id(id);
+        object->set_zone_change_generation(generation);
+    }
+
+    auto &legal = (*batch.mutable_legal_by_player())[p1->getPlayerId()];
+    auto &targets = (*legal.mutable_valid_targets_by_hand_slot())[0];
+    auto *group = targets.add_groups();
+    group->set_min(2);
+    group->set_max(2);
+    auto *relation = group->mutable_relation();
+    relation->set_mode(ruled::v1::TARGET_RELATION_MODE_ALL_DISTINCT);
+    for (const auto &[player, id] : {std::pair{p1, firstId}, std::pair{p2, secondId}}) {
+        group->add_valid_permanent_ids(id);
+        auto *key = relation->add_keys();
+        key->mutable_candidate()->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+        key->mutable_candidate()->set_object_id(id);
+        key->set_key(static_cast<quint32>(player->getPlayerId()));
+    }
+
+    ASSERT_TRUE(prepareIdentityBatch(batch));
+    const auto actorProjection = redactFor(batch, p1);
+    ASSERT_TRUE(actorProjection.legal_by_player().contains(p1->getPlayerId()));
+    const auto &projectedTargets =
+        actorProjection.legal_by_player().at(p1->getPlayerId()).valid_targets_by_hand_slot().at(0);
+    ASSERT_EQ(projectedTargets.groups_size(), 1);
+    const auto &projected = projectedTargets.groups(0);
+    ASSERT_TRUE(projected.has_relation());
+    EXPECT_EQ(projected.relation().mode(), ruled::v1::TARGET_RELATION_MODE_ALL_DISTINCT);
+    ASSERT_EQ(projected.relation().keys_size(), 2);
+    ASSERT_EQ(projected.valid_permanent_ids_size(), 2);
+    for (int i = 0; i < 2; ++i) {
+        const auto &key = projected.relation().keys(i);
+        EXPECT_EQ(key.candidate().object_id(), projected.valid_permanent_ids(i))
+            << "a key names the same presented handle as the candidate it describes";
+        EXPECT_NE(key.candidate().object_id(), i == 0 ? firstId : secondId);
+        EXPECT_EQ(key.key(), static_cast<quint32>((i == 0 ? p1 : p2)->getPlayerId()))
+            << "player keys are not object identities";
+    }
+
+    const auto observerProjection = redactFor(batch, p2);
+    EXPECT_FALSE(observerProjection.legal_by_player().contains(p1->getPlayerId()));
+}
+
 TEST_F(RuledBatchTest, ActivatedAbilityModeOffersProjectPackedKeyAndTargetGenerationForActorOnly)
 {
     constexpr quint32 sourceId = 11050;

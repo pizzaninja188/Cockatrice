@@ -30,7 +30,7 @@ fn rooftop_percher_allows_zero_targets_across_graveyards() {
         group.prompt,
         "Choose up to two target cards from graveyards"
     );
-    assert!(!group.same_graveyard);
+    assert!(group.relation.is_none());
     assert!(TargetSchema::compile(&ability.effect, Some(targeting)).is_ok());
 }
 
@@ -153,7 +153,10 @@ fn soul_shackled_zombie_loses_life_only_when_a_creature_was_exiled() {
         panic!("Soul-Shackled Zombie uses one target group");
     };
     assert_eq!((group.min, group.max), (0, 2));
-    assert!(group.same_graveyard);
+    assert_eq!(
+        group.relation,
+        Some(tricerules_cards::primitives::TargetGroupRelation::SameGraveyard)
+    );
     assert!(group.effect_indices.is_empty());
     let schema = TargetSchema::compile_program(program, Some(targeting))
         .expect("the Program target belongs to one graveyard-card role");

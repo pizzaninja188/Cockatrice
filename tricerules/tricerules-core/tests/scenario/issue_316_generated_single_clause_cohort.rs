@@ -258,7 +258,7 @@ fn issue_316_griffnaut_tracker_exiles_up_to_two_cards_from_a_single_graveyard() 
         .expect("pending entry trigger targets");
     let group = &targets.groups[0];
     assert_eq!((group.min, group.max), (0, 2));
-    assert!(group.same_graveyard);
+    assert!(all_equal_relation(group));
     let mut offered = group.valid_graveyard_ids.clone();
     offered.sort_unstable();
     let mut expected = vec![own_first, own_second, opposing];

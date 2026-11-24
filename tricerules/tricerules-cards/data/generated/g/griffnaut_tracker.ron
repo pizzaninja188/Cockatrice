@@ -21,7 +21,7 @@
               min: 0,
               max: 2,
               effect_indices: [0],
-              same_graveyard: true,
+              relation: Some(SameGraveyard),
             ),
           ],
         ),

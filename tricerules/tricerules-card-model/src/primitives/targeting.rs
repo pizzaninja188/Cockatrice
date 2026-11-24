@@ -80,11 +80,109 @@ pub struct TargetGroupDef {
     /// Indices of other groups whose chosen objects must be distinct from this group.
     #[serde(default)]
     pub distinct_from: Vec<u32>,
-    /// All chosen cards must currently belong to the same player's graveyard.
-    #[serde(default)]
-    pub same_graveyard: bool,
+    /// A relation every target chosen for this group must satisfy together.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relation: Option<TargetGroupRelation>,
     #[serde(default)]
     pub cast_cost_expansion: Option<CastCostTargetExpansion>,
+}
+
+/// CR 115.1 and 601.2c: a printed requirement that relates the targets of one group to each
+/// other rather than constraining each target alone. The engine evaluates it from one typed key
+/// per target and publishes those keys, so consumers never derive owner or controller.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum TargetGroupRelation {
+    /// "from a single graveyard": every chosen card has one owner (Arashin Sunshield,
+    /// Soul-Shackled Zombie, Griffnaut Tracker, Qutrub Forayer).
+    SameGraveyard,
+    /// "controlled by different players": no two chosen permanents share a controller
+    /// (Run Away Together). A departed target keeps its last-known controller (CR 608.2b).
+    DifferentControllers,
+}
+
+/// Which player a related target contributes as its key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TargetRelationKey {
+    /// The owner of a graveyard card.
+    Owner,
+    /// The controller of a permanent, or its last-known controller after it leaves.
+    Controller,
+}
+
+/// How the keys of one group's chosen targets must compare.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TargetRelationMode {
+    AllEqual,
+    AllDistinct,
+}
+
+impl TargetGroupRelation {
+    pub fn key(self) -> TargetRelationKey {
+        match self {
+            Self::SameGraveyard => TargetRelationKey::Owner,
+            Self::DifferentControllers => TargetRelationKey::Controller,
+        }
+    }
+
+    pub fn mode(self) -> TargetRelationMode {
+        match self {
+            Self::SameGraveyard => TargetRelationMode::AllEqual,
+            Self::DifferentControllers => TargetRelationMode::AllDistinct,
+        }
+    }
+
+    /// Whether `keys`, one per chosen target, satisfy this relation. A missing key never does.
+    pub fn is_satisfied_by<K: Eq + std::hash::Hash>(
+        self,
+        keys: impl IntoIterator<Item = Option<K>>,
+    ) -> bool {
+        let mut seen = std::collections::HashSet::new();
+        for key in keys {
+            let Some(key) = key else {
+                return false;
+            };
+            let fresh = seen.insert(key);
+            match self.mode() {
+                TargetRelationMode::AllEqual if seen.len() > 1 => return false,
+                TargetRelationMode::AllDistinct if !fresh => return false,
+                _ => {}
+            }
+        }
+        true
+    }
+
+    /// Structural admission shared by legacy and Program target groups.
+    fn validate(
+        self,
+        group: &TargetGroupDef,
+        bindings: &[TargetBinding<'_>],
+    ) -> Result<(), String> {
+        match self {
+            Self::SameGraveyard => {
+                if bindings
+                    .iter()
+                    .any(|binding| !matches!(binding.role, TargetRole::GraveyardCard(_)))
+                {
+                    return Err("SameGraveyard requires a graveyard-card target group".into());
+                }
+            }
+            Self::DifferentControllers => {
+                if group.max < 2
+                    || group.chooser != TargetChooser::Controller
+                    || group.for_each_opponent
+                    || group.controlled_by_chooser
+                    || group.cast_cost_expansion.is_some()
+                    || bindings.is_empty()
+                    || bindings
+                        .iter()
+                        .any(|binding| !binding.role.is_permanent_only())
+                {
+                    return Err("DifferentControllers requires a controller-chosen permanent-only target group with max >= 2".into());
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -187,7 +285,7 @@ pub struct TargetGroupSchema<'effects, 'targeting> {
     pub max: u32,
     pub prompt: Cow<'targeting, str>,
     pub distinct_from: Cow<'targeting, [u32]>,
-    pub same_graveyard: bool,
+    pub relation: Option<TargetGroupRelation>,
     pub bindings: Vec<TargetBinding<'effects>>,
 }
 
@@ -267,12 +365,8 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                         return Err("target group repeats a distinctness reference".into());
                     }
                 }
-                if group.same_graveyard
-                    && bindings
-                        .iter()
-                        .any(|binding| !matches!(binding.role, TargetRole::GraveyardCard(_)))
-                {
-                    return Err("same_graveyard requires a graveyard-card target group".into());
+                if let Some(relation) = group.relation {
+                    relation.validate(group, &bindings)?;
                 }
                 groups.push(TargetGroupSchema {
                     chooser: group.chooser,
@@ -290,7 +384,7 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                         }),
                     )?,
                     distinct_from: Cow::Borrowed(group.distinct_from.as_slice()),
-                    same_graveyard: group.same_graveyard,
+                    relation: group.relation,
                     bindings,
                 });
             }
@@ -327,7 +421,7 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                     max: 1,
                     prompt: Cow::Borrowed("Choose a target"),
                     distinct_from: Cow::Borrowed(&[]),
-                    same_graveyard: false,
+                    relation: None,
                     bindings,
                 });
             }
@@ -679,7 +773,7 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                     && group.chooser == TargetChooser::Controller
                     && group_program_bindings.len() == 1
                     && group.distinct_from.is_empty()
-                    && !group.same_graveyard
+                    && group.relation.is_none()
                     && group.cast_cost_expansion.is_none();
                 if !damage_matches_group
                     || !targeting_profile_matches
@@ -755,12 +849,8 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                     return Err("target group repeats a distinctness reference".into());
                 }
             }
-            if group.same_graveyard
-                && bindings
-                    .iter()
-                    .any(|binding| !matches!(binding.role, TargetRole::GraveyardCard(_)))
-            {
-                return Err("same_graveyard requires a graveyard-card target group".into());
+            if let Some(relation) = group.relation {
+                relation.validate(group, &bindings)?;
             }
             groups.push(TargetGroupSchema {
                 chooser: group.chooser,
@@ -768,7 +858,7 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                 max: group.max,
                 prompt: target_group_prompt(&targeting.groups, &bindings, group_index, false)?,
                 distinct_from: Cow::Borrowed(group.distinct_from.as_slice()),
-                same_graveyard: group.same_graveyard,
+                relation: group.relation,
                 bindings,
             });
         }
@@ -1223,7 +1313,7 @@ impl TargetingDef {
             || group.max != 1
             || group.effect_indices != [0]
             || !group.distinct_from.is_empty()
-            || group.same_graveyard
+            || group.relation.is_some()
             || group.cast_cost_expansion.is_some()
             || !matches!(effects, [SpellEffectKind::ReturnToOwnersHand {
                 subject: super::EffectSubject::Chosen(filter)
@@ -1305,7 +1395,7 @@ impl TargetingDef {
             || group.effect_indices.as_slice() != [*effect_index as u32]
             || group.chooser != TargetChooser::Controller
             || !group.distinct_from.is_empty()
-            || group.same_graveyard
+            || group.relation.is_some()
             || group.cast_cost_expansion.is_some()
         {
             return Err(
@@ -1384,7 +1474,7 @@ impl TargetingDef {
             || group.bindings[0].role_index != 0
             || !matches!(group.bindings[0].role, TargetRole::Filtered(_))
             || !group.distinct_from.is_empty()
-            || group.same_graveyard
+            || group.relation.is_some()
             || targeting_group_has_expansion
         {
             return Err("EquipPlaneswalker requires one controller-chosen mandatory singleton group bound only to its target role".into());
@@ -1432,7 +1522,7 @@ impl TargetingDef {
             } else if opponent_started {
                 return Err("controller target groups must precede opponent target groups".into());
             }
-            if group.same_graveyard
+            if group.relation.is_some()
                 || !group.bindings.iter().all(|binding| {
                     matches!(
                         binding.role,
@@ -2478,7 +2568,7 @@ mod tests {
                 prompt: "Choose target creature".into(),
                 effect_indices,
                 distinct_from: Vec::new(),
-                same_graveyard: false,
+                relation: None,
                 cast_cost_expansion: None,
             }],
         }
@@ -2494,7 +2584,7 @@ mod tests {
             prompt: prompt.into(),
             effect_indices: vec![0],
             distinct_from,
-            same_graveyard: false,
+            relation: None,
             cast_cost_expansion: None,
         };
         TargetingDef {
@@ -2538,7 +2628,7 @@ mod tests {
             prompt: "Unexpected target".into(),
             effect_indices: vec![0],
             distinct_from: Vec::new(),
-            same_graveyard: false,
+            relation: None,
             cast_cost_expansion: None,
         });
         assert!(TargetSchema::compile(&effects, Some(&extra_group)).is_err());
@@ -2725,7 +2815,7 @@ mod tests {
                     prompt: "Choose a creature".into(),
                     effect_indices: vec![0],
                     distinct_from: Vec::new(),
-                    same_graveyard: false,
+                    relation: None,
                     cast_cost_expansion: None,
                 }],
             };
@@ -2770,7 +2860,7 @@ mod tests {
                 prompt: "Choose target opponent".into(),
                 effect_indices: vec![0, 2],
                 distinct_from: Vec::new(),
-                same_graveyard: false,
+                relation: None,
                 cast_cost_expansion: None,
             }],
         };
@@ -2808,7 +2898,7 @@ mod tests {
                 prompt: "Choose target player".into(),
                 effect_indices: vec![0],
                 distinct_from: Vec::new(),
-                same_graveyard: false,
+                relation: None,
                 cast_cost_expansion: None,
             }],
         };
@@ -2993,7 +3083,7 @@ mod tests {
                     prompt: "Choose a creature you control".into(),
                     effect_indices: vec![0],
                     distinct_from: vec![1],
-                    same_graveyard: false,
+                    relation: None,
                     cast_cost_expansion: None,
                 },
                 TargetGroupDef {
@@ -3005,7 +3095,7 @@ mod tests {
                     prompt: "Choose a creature an opponent controls".into(),
                     effect_indices: vec![0],
                     distinct_from: vec![0],
-                    same_graveyard: false,
+                    relation: None,
                     cast_cost_expansion: None,
                 },
             ],
@@ -3137,7 +3227,7 @@ mod tests {
                 prompt: String::new(),
                 effect_indices: vec![0],
                 distinct_from: Vec::new(),
-                same_graveyard: true,
+                relation: Some(TargetGroupRelation::SameGraveyard),
                 cast_cost_expansion: None,
             }],
         };
@@ -3152,5 +3242,84 @@ mod tests {
             target: TargetFilter::default_creature(),
         }];
         assert!(TargetSchema::compile(&permanent_effects, Some(&same_graveyard)).is_err());
+    }
+
+    #[test]
+    fn issue_485_different_controllers_requires_a_multi_target_permanent_group() {
+        let bounce = vec![SpellEffectKind::ReturnToOwnersHand {
+            subject: super::super::EffectSubject::Chosen(
+                Box::new(TargetFilter::default_creature()),
+            ),
+        }];
+        let group = |min, max| TargetGroupDef {
+            controlled_by_chooser: false,
+            for_each_opponent: false,
+            chooser: Default::default(),
+            min,
+            max,
+            prompt: String::new(),
+            effect_indices: vec![0],
+            distinct_from: Vec::new(),
+            relation: Some(TargetGroupRelation::DifferentControllers),
+            cast_cost_expansion: None,
+        };
+        let targeting = |group| TargetingDef {
+            groups: vec![group],
+        };
+
+        let pair = targeting(group(2, 2));
+        let schema = TargetSchema::compile(&bounce, Some(&pair)).unwrap();
+        assert_eq!(
+            schema.groups[0].relation,
+            Some(TargetGroupRelation::DifferentControllers)
+        );
+        assert_eq!(
+            schema.groups[0].prompt,
+            "Choose 2 target creatures controlled by different players"
+        );
+
+        assert!(
+            TargetSchema::compile(&bounce, Some(&targeting(group(1, 1)))).is_err(),
+            "one target cannot relate to another"
+        );
+        let mut opponent_chosen = group(2, 2);
+        opponent_chosen.chooser = TargetChooser::ChosenOpponent;
+        assert!(TargetSchema::compile(&bounce, Some(&targeting(opponent_chosen))).is_err());
+
+        let graveyard = vec![SpellEffectKind::MoveGraveyardCards {
+            filter: GraveyardFilter {
+                owner: GraveyardOwner::AnyPlayer,
+                ..GraveyardFilter::default()
+            },
+            destination: GraveyardDestination::Exile,
+            linked_exile_id: None,
+            entry_modifiers: Vec::new(),
+        }];
+        assert!(
+            TargetSchema::compile(&graveyard, Some(&targeting(group(2, 2)))).is_err(),
+            "graveyard cards have no controller"
+        );
+        let players = vec![SpellEffectKind::DamageTarget {
+            amount: Amount::Fixed(1),
+            target: TargetFilter {
+                kind: TargetKind::AnyTarget,
+                ..TargetFilter::default_creature()
+            },
+        }];
+        assert!(
+            TargetSchema::compile(&players, Some(&targeting(group(2, 2)))).is_err(),
+            "players are not controlled permanents"
+        );
+    }
+
+    #[test]
+    fn issue_485_relation_satisfaction_compares_every_key_and_fails_closed() {
+        use TargetGroupRelation::*;
+        assert!(DifferentControllers.is_satisfied_by([Some(1), Some(2), Some(3)]));
+        assert!(!DifferentControllers.is_satisfied_by([Some(1), Some(2), Some(1)]));
+        assert!(!DifferentControllers.is_satisfied_by([Some(1), None]));
+        assert!(SameGraveyard.is_satisfied_by([Some(4), Some(4)]));
+        assert!(!SameGraveyard.is_satisfied_by([Some(4), Some(5)]));
+        assert!(SameGraveyard.is_satisfied_by(std::iter::empty::<Option<u32>>()));
     }
 }

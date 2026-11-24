@@ -1200,7 +1200,8 @@ TEST_F(RuledE2ESmokeTest, GraveyardTargetCohortIsPrivateAndMovesExactPhysicalCar
     ASSERT_TRUE(p1.pendingTriggerTarget.has_value());
     ASSERT_EQ(p1.pendingTriggerTarget->targets().groups_size(), 1);
     const auto &group = p1.pendingTriggerTarget->targets().groups(0);
-    EXPECT_TRUE(group.same_graveyard());
+    ASSERT_TRUE(group.has_relation());
+    EXPECT_EQ(group.relation().mode(), ruled::v1::TARGET_RELATION_MODE_ALL_EQUAL);
     EXPECT_EQ(group.min(), 0u);
     EXPECT_EQ(group.max(), 2u);
     EXPECT_TRUE(p2.sawOtherTriggerTargetsRedacted);

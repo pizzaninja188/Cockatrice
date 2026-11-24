@@ -36,7 +36,7 @@ fn issue_301_registers_exactly_the_reviewed_two_card_cohort() {
                                 && group.max == 1
                                 && group.effect_indices == [0]
                                 && group.distinct_from.is_empty()
-                                && !group.same_graveyard
+                                && group.relation.is_none()
                                 && group.cast_cost_expansion.is_none()
                                 && crate::common::compiled_legacy_target_prompt(
                                     &ability.effect, ability.targeting.as_ref(), 0

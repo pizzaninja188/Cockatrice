@@ -82,7 +82,7 @@ fn issue_318_misleading_motes_offers_the_owners_placement_choice() {
             .expect("Misleading Motes target schema");
     assert_eq!(schema.groups[0].prompt, "Choose target creature");
     assert!(group.effect_indices.is_empty());
-    assert!(!group.same_graveyard);
+    assert!(group.relation.is_none());
     assert!(group.distinct_from.is_empty());
 }
 

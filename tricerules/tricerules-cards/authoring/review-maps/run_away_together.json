@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "290faa28-450e-4797-9a8f-642d8af3f82a",
+  "spans": [
+    {
+      "face_id": "run_away_together",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_485_run_away_together::run_away_together_returns_creatures_of_two_different_opponents",
+      "covers": "two opponents' creatures are a legal pair and both return to their owners' hands together"
+    },
+    {
+      "test": "scenario issue_485_run_away_together::run_away_together_rejects_and_unpublishes_a_same_controller_pair",
+      "covers": "a same-controller pair is unpublished and rejected without changing state"
+    },
+    {
+      "test": "scenario issue_485_run_away_together::run_away_together_fizzles_when_one_player_controls_both_on_resolution",
+      "covers": "both targets are illegal when one player controls both as it resolves"
+    },
+    {
+      "test": "scenario issue_485_run_away_together::run_away_together_compares_a_departed_target_by_last_known_controller",
+      "covers": "a departed target's last-known controller decides whether the other still returns"
+    },
+    {
+      "test": "mechanic_registry::issue_485_run_away_together::issue_485_run_away_together_maps_two_creatures_controlled_by_different_players",
+      "covers": "reviewed identity, characteristics and typed definition of run_away_together"
+    },
+    {
+      "test": "mechanic_registry::issue_485_run_away_together::issue_485_fingerprint_matches_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for run_away_together"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

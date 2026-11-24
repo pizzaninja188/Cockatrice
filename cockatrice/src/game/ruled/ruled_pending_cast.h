@@ -1426,6 +1426,25 @@ currentRuledSpellTargetGroup(const PendingRuledSpellCast &spell, const RuledClie
     return data->groups.at(spell.activeTargetGroupPosition);
 }
 
+/// Every staged spell target, including the active group's in-progress picks. Those live in
+/// `selectedTargetOids` and reach `selectedTargetOidsByGroup` only when the group advances, so a
+/// constraint within the active group (such as an engine-published relation) must read them here.
+[[nodiscard]] inline QVector<ruled::v1::TargetRef>
+ruledPendingSpellSelectedTargetRefs(const PendingRuledSpellCast &spell,
+                                    const RuledSpellTargetData &data,
+                                    int localPlayerId)
+{
+    auto byGroup = spell.selectedTargetOidsByGroup;
+    const int active = spell.activeTargetGroupPosition;
+    if (active >= 0 && active < data.groups.size()) {
+        while (byGroup.size() <= active) {
+            byGroup.append(QVector<quint32>{});
+        }
+        byGroup[active] = spell.selectedTargetOids;
+    }
+    return ruledSelectedTargetRefs(data, byGroup, localPlayerId);
+}
+
 [[nodiscard]] inline QString ruledPendingSpellTargetPrompt(const PendingRuledSpellCast &spell,
                                                            const RuledClientState &state)
 {
@@ -1699,8 +1718,8 @@ ruledAdvancePendingActivatedTargetGroup(PendingActivatedAbility &ability,
             }
         }
         return !group->chosenByOpponent && ruledTargetDataContains(*group, kind, oid, localPlayerId) &&
-                       ruledTargetPairCompatible(*group, ruledTargetCandidateRefKind(kind), oid,
-                                                   ruledSelectedTargetRefs(ability))
+                       ruledTargetSelectionCompatible(*group, ruledTargetCandidateRefKind(kind), oid,
+                                                      ruledSelectedTargetRefs(ability))
                    ? RuledTargetClickEligibility::Legal
                    : RuledTargetClickEligibility::Illegal;
     }
@@ -1708,9 +1727,9 @@ ruledAdvancePendingActivatedTargetGroup(PendingActivatedAbility &ability,
         const auto data = currentRuledSpellTargetGroup(spell, state);
         const auto allGroups = currentRuledSpellTargetData(spell, state);
         return data.has_value() && allGroups.has_value() && ruledTargetDataContains(*data, kind, oid, localPlayerId) &&
-                       ruledTargetPairCompatible(*data, ruledTargetRefKind(*data, oid, localPlayerId), oid,
-                                                  ruledSelectedTargetRefs(*allGroups, spell.selectedTargetOidsByGroup,
-                                                                           localPlayerId))
+                       ruledTargetSelectionCompatible(
+                           *data, ruledTargetRefKind(*data, oid, localPlayerId), oid,
+                           ruledPendingSpellSelectedTargetRefs(spell, *allGroups, localPlayerId))
                    ? RuledTargetClickEligibility::Legal
                    : RuledTargetClickEligibility::Illegal;
     }
@@ -1767,7 +1786,8 @@ ruledAdvancePendingActivatedTargetGroup(PendingActivatedAbility &ability,
                            const RuledTargetGroupData &data, const QVector<ruled::v1::TargetRef> &selected) {
         for (int i = oids.size() - 1; i >= 0; --i) {
             if (ruledTargetDataContainsOid(data, oids.at(i), localPlayerId) &&
-                ruledTargetPairCompatible(data, ruledTargetRefKind(data, oids.at(i), localPlayerId), oids.at(i), selected)) {
+                ruledTargetSelectionCompatible(data, ruledTargetRefKind(data, oids.at(i), localPlayerId), oids.at(i),
+                                               selected)) {
                 continue;
             }
             oids.remove(i);
@@ -1912,10 +1932,11 @@ ruledAdvancePendingActivatedTargetGroup(PendingActivatedAbility &ability,
             if (candidates.hasXTargetChoices && !xTargetIncarnationMatches && ability.targetingCostApplied) {
                 ability.restartAfterTargetInvalidation = true;
             }
-            const bool targetStillLegal = ruledTargetDataContainsOid(candidates, target.ref.object_id(), localPlayerId) &&
-                                          xTargetIncarnationMatches && modeTargetIncarnationMatches &&
-                                          ruledTargetPairCompatible(candidates, target.ref.kind(), target.ref.object_id(),
-                                                                   ruledSelectedTargetRefs(ability));
+            const bool targetStillLegal =
+                ruledTargetDataContainsOid(candidates, target.ref.object_id(), localPlayerId) &&
+                xTargetIncarnationMatches && modeTargetIncarnationMatches &&
+                ruledTargetSelectionCompatible(candidates, target.ref.kind(), target.ref.object_id(),
+                                               ruledSelectedTargetRefs(ability));
             if ((ability.selectedMode || data.counterAllocation) && !targetStillLegal) {
                 ability.restartAfterTargetInvalidation = true;
             }

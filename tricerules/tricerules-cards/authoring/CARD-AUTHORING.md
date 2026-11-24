@@ -614,8 +614,8 @@ unsupported.
 An ability Program may bind a `MoveGraveyardCards` result only with destination `Exile`, no linked Exile,
 no entry modifiers, and an ordinary validated graveyard filter that does not depend on a trigger
 object. It requires one explicit `ProgramTargetRole::Target` reference to the instruction and one
-controller-chosen graveyard-card group with bounds `0..2`, `same_graveyard: true`, and empty legacy
-`effect_indices`. The compiler derives `TargetCardResultCohort { action: Exile, cardinality: 0..2,
+controller-chosen graveyard-card group with bounds `0..2`, `relation: Some(SameGraveyard)`, and empty
+legacy `effect_indices`. The compiler derives `TargetCardResultCohort { action: Exile, cardinality: 0..2,
 target_group_index }` from that validated group. Named `CardResultCount` consumes only successful
 Exile receipts, including their captured card types and exact owner/ObjectId/generation facts.
 Soul-Shackled Zombie uses this profile when at least one creature was exiled: each opponent loses
@@ -1069,6 +1069,14 @@ as a legacy group intersects its effects; use separate groups when distinct inst
 different requirements, including targetful leaves in separate conditional branches. All groups
 for the owner are announced and revalidated even when a branch is not selected. Mode groups are
 local to their mode, not flattened across sibling modes.
+
+A group's optional `relation` relates its chosen targets to each other. `SameGraveyard` ("from a
+single graveyard") requires graveyard-card roles and one owner for every chosen card.
+`DifferentControllers` ("controlled by different players", Run Away Together) requires a
+controller-chosen, permanent-only group with `max >= 2`; no two chosen permanents may share a
+controller at cast time, and on resolution a target is illegal when another target of the group
+has the same current or last-known controller (CR 608.2b). The engine publishes one opaque key per
+candidate in `LegalTargetGroup.relation`; clients compare keys and never derive owner or controller.
 
 Omit `prompt` when the shared formatter can describe the target group from its validated roles,
 filters, and bounds. It can describe filter alternatives, target distinctness, and chooser-relative

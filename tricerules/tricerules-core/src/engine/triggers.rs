@@ -3498,10 +3498,7 @@ impl GameEngine {
                         program,
                     );
                     let selectable = !mode_needs_target
-                        || targets
-                            .groups
-                            .iter()
-                            .all(|group| legal_target_group_has_minimum(&self.state, group));
+                        || targets.groups.iter().all(legal_target_group_has_minimum);
                     let selectable = selectable
                         && !mode_history_origin_missing
                         && !used_modes.contains(&mode.mode_id);
@@ -3537,12 +3534,9 @@ impl GameEngine {
         } else {
             None
         };
-        let has_legal_target = legal_targets.as_ref().is_none_or(|targets| {
-            targets
-                .groups
-                .iter()
-                .all(|group| legal_target_group_has_minimum(&self.state, group))
-        });
+        let has_legal_target = legal_targets
+            .as_ref()
+            .is_none_or(|targets| targets.groups.iter().all(legal_target_group_has_minimum));
 
         let needs_choice = needs_target || modal_modes.is_some();
         let (min_modes, max_modes) = ability

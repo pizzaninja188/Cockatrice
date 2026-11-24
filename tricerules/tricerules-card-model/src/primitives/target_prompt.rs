@@ -542,10 +542,17 @@ fn constrained_prompt(
         TargetRole::CreaturePermanent => Phrase::new(noun("creature", plural)),
         TargetRole::StackSpell(filter) => spell(filter, plural)?,
         TargetRole::StackAbility => Phrase::new(noun("activated or triggered ability", plural)),
-        TargetRole::GraveyardCard(filter) => graveyard(filter, plural, group.same_graveyard)?,
+        TargetRole::GraveyardCard(filter) => graveyard(
+            filter,
+            plural,
+            group.relation == Some(super::TargetGroupRelation::SameGraveyard),
+        )?,
     };
     if matches_activation_x {
         phrase.add("with mana value X");
+    }
+    if group.relation == Some(super::TargetGroupRelation::DifferentControllers) {
+        phrase.add("controlled by different players");
     }
     let mut text = format!(
         "Choose {}",

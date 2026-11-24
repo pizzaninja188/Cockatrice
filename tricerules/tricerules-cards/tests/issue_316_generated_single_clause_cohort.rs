@@ -94,7 +94,7 @@ fn issue_316_rip_the_seams_adventure_face_destroys_only_tapped_creatures() {
     assert_eq!((group.min, group.max), (1, 1));
     assert_eq!(group.prompt, "Choose target tapped creature");
     assert_eq!(group.effect_indices, [0]);
-    assert!(!group.same_graveyard);
+    assert!(group.relation.is_none());
     assert!(TargetSchema::compile(&adventure.spell_effect, Some(targeting)).is_ok());
 }
 
@@ -156,7 +156,7 @@ fn issue_316_chomping_changeling_keeps_changeling_and_optional_destroy() {
         "Choose up to one target artifact or enchantment"
     );
     assert_eq!(group.effect_indices, [0]);
-    assert!(!group.same_graveyard);
+    assert!(group.relation.is_none());
     assert!(TargetSchema::compile(&ability.effect, Some(targeting)).is_ok());
 }
 
@@ -271,7 +271,10 @@ fn issue_316_griffnaut_tracker_exiles_up_to_two_from_one_graveyard() {
         "Choose up to two target cards from a single graveyard"
     );
     assert_eq!(group.effect_indices, [0]);
-    assert!(group.same_graveyard);
+    assert_eq!(
+        group.relation,
+        Some(tricerules_cards::primitives::TargetGroupRelation::SameGraveyard)
+    );
     assert!(TargetSchema::compile(&ability.effect, Some(targeting)).is_ok());
 }
 
@@ -356,7 +359,7 @@ fn issue_316_first_strike_pumps_share_one_mandatory_target_group() {
         let group = single_group(targeting);
         assert_eq!((group.min, group.max), (1, 1));
         assert_eq!(group.effect_indices, [0, 1]);
-        assert!(!group.same_graveyard);
+        assert!(group.relation.is_none());
         let schema = TargetSchema::compile(&face.spell_effect, Some(targeting)).unwrap();
         assert_eq!(schema.groups[0].prompt, "Choose target creature");
     }

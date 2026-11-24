@@ -804,6 +804,8 @@ mod issue_282_self_tap_loot;
 mod issue_283_generated_graveyard_to_library_bottom;
 #[path = "scenario/issue_284_generated_optional_basic_land_to_top.rs"]
 mod issue_284_generated_optional_basic_land_to_top;
+#[path = "scenario/issue_485_run_away_together.rs"]
+mod issue_485_run_away_together;
 #[path = "scenario/issue_507_replicating_ring_program.rs"]
 mod issue_507_replicating_ring_program;
 #[path = "scenario/issue_524_color_graveyard.rs"]

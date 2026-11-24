@@ -255,7 +255,7 @@ fn token_copy_inline_ability_preserves_explicit_target_groups() {
                 prompt: "Choose a damage recipient".into(),
                 effect_indices: vec![index],
                 distinct_from: vec![],
-                same_graveyard: false,
+                relation: None,
                 cast_cost_expansion: None,
             })
             .collect(),

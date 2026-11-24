@@ -255,7 +255,20 @@ QJsonValue value(const RuledTargetGroupData &v)
     result.insert("maxTargets", value(v.maxTargets));
     result.insert("promptText", value(v.promptText));
     result.insert("distinctFromGroupIndices", value(v.distinctFromGroupIndices));
-    result.insert("sameGraveyard", value(v.sameGraveyard));
+    if (v.relation) {
+        QJsonObject relation;
+        relation.insert("mode", static_cast<int>(v.relation->mode));
+        QJsonArray keys;
+        for (auto it = v.relation->keys.cbegin(); it != v.relation->keys.cend(); ++it) {
+            QJsonObject key;
+            key.insert("kind", it.key().first);
+            key.insert("oid", static_cast<qint64>(it.key().second));
+            key.insert("key", static_cast<qint64>(it.value()));
+            keys.append(key);
+        }
+        relation.insert("keys", keys);
+        result.insert("relation", relation);
+    }
     result.insert("pairConstraint", value(v.pairConstraint));
     return result;
 }

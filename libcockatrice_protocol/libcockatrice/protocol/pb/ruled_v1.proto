@@ -919,7 +919,9 @@ message LegalTargetGroup {
   bool can_target_opponent = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated uint32 valid_graveyard_ids = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated uint32 distinct_from_group_indices = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  bool same_graveyard = 11 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Replaced by `relation` (ALL_EQUAL graveyard-owner keys).
+  reserved 11;
+  reserved "same_graveyard";
   bool chosen_by_opponent = 12 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Presence requires an engine-published compatible pair with an earlier selected group.
   // Present with no pairs means no legal selection; absent means no pair constraint.
@@ -932,6 +934,29 @@ message LegalTargetGroup {
   // required physical incarnation receipt.
   repeated LegalPermanentTargetCandidate valid_permanent_targets = 15
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Engine-authored relation among the targets chosen for this one group ("from a single
+  // graveyard", "controlled by different players"). Absent means no relation.
+  TargetRelationConstraint relation = 16 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+// Consumers compare the opaque keys only; they must not derive owner or controller themselves.
+// A published candidate without a key cannot be selected for the group.
+message TargetRelationConstraint {
+  TargetRelationMode mode = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated TargetRelationKey keys = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+enum TargetRelationMode {
+  TARGET_RELATION_MODE_UNSPECIFIED = 0;
+  // Every chosen target carries the same key (Arashin Sunshield's single graveyard).
+  TARGET_RELATION_MODE_ALL_EQUAL = 1;
+  // No two chosen targets share a key (Run Away Together's different controllers).
+  TARGET_RELATION_MODE_ALL_DISTINCT = 2;
+}
+
+message TargetRelationKey {
+  TargetCandidateRef candidate = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 key = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message LegalPermanentTargetCandidate {

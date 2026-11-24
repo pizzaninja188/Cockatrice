@@ -41,6 +41,46 @@ bool ruledTargetPairCompatible(const RuledTargetGroupData &group,
                                 });
 }
 
+bool ruledTargetRelationCompatible(const RuledTargetGroupData &group,
+                                   ruled::v1::TargetRefKind kind,
+                                   quint32 oid,
+                                   const QVector<ruled::v1::TargetRef> &selected)
+{
+    if (!group.relation) {
+        return true;
+    }
+    const auto &relation = *group.relation;
+    const auto candidateKey = relation.keys.constFind(qMakePair(static_cast<int>(kind), oid));
+    if (candidateKey == relation.keys.cend()) {
+        return false;
+    }
+    for (const auto &target : selected) {
+        if (static_cast<int>(target.group_index()) != group.groupIndex ||
+            (target.kind() == kind && target.object_id() == oid)) {
+            continue;
+        }
+        const auto otherKey = relation.keys.constFind(qMakePair(static_cast<int>(target.kind()), target.object_id()));
+        if (otherKey == relation.keys.cend()) {
+            return false;
+        }
+        switch (relation.mode) {
+            case ruled::v1::TARGET_RELATION_MODE_ALL_EQUAL:
+                if (otherKey.value() != candidateKey.value()) {
+                    return false;
+                }
+                break;
+            case ruled::v1::TARGET_RELATION_MODE_ALL_DISTINCT:
+                if (otherKey.value() == candidateKey.value()) {
+                    return false;
+                }
+                break;
+            default:
+                return false;
+        }
+    }
+    return true;
+}
+
 QString formatRuledTargetPrompt(const QString &sourceContext,
                                 const RuledTargetGroupData &group,
                                 int groupPosition,
@@ -1174,7 +1214,7 @@ bool RuledClientState::isPendingTriggerTargetCandidate(ruled::v1::TargetRefKind 
     for (const auto &targets : pendingChoice->selectedTriggerTargetsByGroup) {
         allSelected += targets;
     }
-    if (!ruledTargetPairCompatible(*group, kind, oid, allSelected)) {
+    if (!ruledTargetSelectionCompatible(*group, kind, oid, allSelected)) {
         return false;
     }
 
@@ -1195,13 +1235,6 @@ bool RuledClientState::isPendingTriggerTargetCandidate(ruled::v1::TargetRefKind 
         const auto &other = pendingChoice->selectedTriggerTargetsByGroup.at(otherGroup);
         if (std::any_of(other.cbegin(), other.cend(),
                         [oid](const ruled::v1::TargetRef &target) { return target.object_id() == oid; })) {
-            return false;
-        }
-    }
-    if (group->sameGraveyard && !selected.isEmpty()) {
-        const int firstOwner = graveyardOidToPlayerId.value(selected.first().object_id(), -1);
-        const int candidateOwner = graveyardOidToPlayerId.value(oid, -1);
-        if (firstOwner < 0 || candidateOwner != firstOwner) {
             return false;
         }
     }

@@ -500,7 +500,7 @@ fn issue_429_friendly_neighborhood_creates_citizens_and_pumps_per_creature() {
                         prompt: String::new(),
                         effect_indices: vec![0],
                         distinct_from: Vec::new(),
-                        same_graveyard: false,
+                        relation: None,
                         cast_cost_expansion: None,
                     }],
                 }),

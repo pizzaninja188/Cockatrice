@@ -111,6 +111,23 @@ mod tests {
     }
 
     #[test]
+    fn empty_target_relation_preserves_presence_and_mode_through_wire_roundtrip() {
+        let related = rv1::LegalTargetGroup {
+            relation: Some(rv1::TargetRelationConstraint {
+                mode: rv1::TargetRelationMode::AllDistinct as i32,
+                keys: vec![],
+            }),
+            ..Default::default()
+        };
+        let decoded = rv1::LegalTargetGroup::decode(related.encode_to_vec().as_slice()).unwrap();
+        assert_eq!(decoded, related);
+        assert!(
+            decoded.relation.is_some(),
+            "a keyless relation still forbids every pick"
+        );
+    }
+
+    #[test]
     fn presentation_reference_round_trips_every_identity_and_mapping_component() {
         let reference = rv1::PresentationRef {
             card_id: "grow_from_the_ashes".into(),

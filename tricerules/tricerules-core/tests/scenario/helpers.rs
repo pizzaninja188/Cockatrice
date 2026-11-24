@@ -860,6 +860,15 @@ pub(crate) fn submit_trigger_order(trigger_object_id: u32) -> RuledCommand {
     }
 }
 
+/// Whether a published group carries the engine's "all chosen targets share one key" relation,
+/// the wire form of a "from a single graveyard" group.
+pub(crate) fn all_equal_relation(group: &rv1::LegalTargetGroup) -> bool {
+    group
+        .relation
+        .as_ref()
+        .is_some_and(|relation| relation.mode == rv1::TargetRelationMode::AllEqual as i32)
+}
+
 pub(crate) fn pass_both_players(e: &mut GameEngine) {
     let _ = pass_both_players_with_batch(e);
 }

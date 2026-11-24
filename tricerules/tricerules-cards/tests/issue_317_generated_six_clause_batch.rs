@@ -167,7 +167,7 @@ fn issue_317_fight_on_returns_up_to_two_creature_cards_from_own_graveyard() {
         "Choose up to two target creature cards from your graveyard"
     );
     assert_eq!(group.effect_indices, [0]);
-    assert!(!group.same_graveyard);
+    assert!(group.relation.is_none());
     assert!(TargetSchema::compile(&face.spell_effect, Some(targeting)).is_ok());
 }
 

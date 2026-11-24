@@ -172,7 +172,7 @@ fn issue_460_fleeting_distraction_and_overkill_own_the_reviewed_negative_pumps()
         );
         assert_eq!(group.effect_indices, vec![0], "{id}: only the pump targets");
         assert!(group.distinct_from.is_empty(), "{id}");
-        assert!(!group.same_graveyard, "{id}");
+        assert!(group.relation.is_none(), "{id}");
         assert!(group.cast_cost_expansion.is_none(), "{id}");
     }
 }

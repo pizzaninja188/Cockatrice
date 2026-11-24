@@ -1357,7 +1357,7 @@ fn validate_spell_target_damage_history_profile(
         || target_group.max != 1
         || !target_group.effect_indices.is_empty()
         || !target_group.distinct_from.is_empty()
-        || target_group.same_graveyard
+        || target_group.relation.is_some()
         || target_group.cast_cost_expansion.is_some()
         || schema_group.chooser != super::TargetChooser::Controller
         || schema_group.min != 1
@@ -1457,7 +1457,7 @@ fn ability_graveyard_exile_target_group(
     if group.chooser != super::TargetChooser::Controller
         || group.min != 0
         || group.max != 2
-        || !group.same_graveyard
+        || group.relation != Some(super::TargetGroupRelation::SameGraveyard)
         || !group.effect_indices.is_empty()
         || !group.distinct_from.is_empty()
         || group.cast_cost_expansion.is_some()
@@ -1496,7 +1496,7 @@ fn ability_graveyard_battlefield_target_group(
     if group.chooser != super::TargetChooser::Controller
         || group.min != 1
         || group.max != 1
-        || group.same_graveyard
+        || group.relation.is_some()
         || !group.effect_indices.is_empty()
         || !group.distinct_from.is_empty()
         || group.cast_cost_expansion.is_some()
@@ -1563,7 +1563,7 @@ fn validate_target_card_result_groups(
                     && group.chooser == super::TargetChooser::Controller
                     && group.min == 0
                     && group.max == 2
-                    && group.same_graveyard
+                    && group.relation == Some(super::TargetGroupRelation::SameGraveyard)
                     && group.bindings.len() == 1
                     && matches!(group.bindings[0].role, super::TargetRole::GraveyardCard(_)) => {}
             CardResultAction::Exile => {
@@ -6971,7 +6971,7 @@ mod scalar_program_input_tests {
                 prompt: "Choose target opponent".into(),
                 effect_indices: Vec::new(),
                 distinct_from: Vec::new(),
-                same_graveyard: false,
+                relation: None,
                 cast_cost_expansion: None,
             }],
         };
@@ -7275,7 +7275,7 @@ mod scalar_program_input_tests {
                 prompt: "Choose target opponent".into(),
                 effect_indices: Vec::new(),
                 distinct_from: Vec::new(),
-                same_graveyard: false,
+                relation: None,
                 cast_cost_expansion: None,
             }],
         };
@@ -7392,7 +7392,7 @@ mod target_exile_result_tests {
                 prompt: "Choose target creature".into(),
                 effect_indices: Vec::new(),
                 distinct_from: Vec::new(),
-                same_graveyard: false,
+                relation: None,
                 cast_cost_expansion: None,
             }],
         };
@@ -7487,7 +7487,7 @@ mod target_exile_result_tests {
                 prompt: "Choose a target".into(),
                 effect_indices: Vec::new(),
                 distinct_from: Vec::new(),
-                same_graveyard: false,
+                relation: None,
                 cast_cost_expansion: None,
             }],
         };
@@ -7578,7 +7578,7 @@ mod target_exile_result_tests {
                 prompt: "Choose target permanent".into(),
                 effect_indices: Vec::new(),
                 distinct_from: Vec::new(),
-                same_graveyard: false,
+                relation: None,
                 cast_cost_expansion: None,
             }],
         };
@@ -7792,7 +7792,7 @@ mod target_exile_result_tests {
             prompt: "Choose another target permanent".into(),
             effect_indices: Vec::new(),
             distinct_from: Vec::new(),
-            same_graveyard: false,
+            relation: None,
             cast_cost_expansion: None,
         });
 
@@ -7859,7 +7859,7 @@ mod target_exile_result_tests {
             prompt: "Choose a second target creature".into(),
             effect_indices: Vec::new(),
             distinct_from: Vec::new(),
-            same_graveyard: false,
+            relation: None,
             cast_cost_expansion: None,
         });
 
@@ -8012,7 +8012,7 @@ mod target_exile_result_tests {
                 prompt: "Choose target artifact".into(),
                 effect_indices: Vec::new(),
                 distinct_from: Vec::new(),
-                same_graveyard: false,
+                relation: None,
                 cast_cost_expansion: None,
             }],
         };

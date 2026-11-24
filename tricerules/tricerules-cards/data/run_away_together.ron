@@ -1,0 +1,16 @@
+// Oracle 290faa28-450e-4797-9a8f-642d8af3f82a; source checked 2026-11-24 against the pinned Scryfall
+// bulk 27bf3214-1271-490b-bdfe-c0be6c23d02e updated 2026-11-22T22:01:57.207+00:00 SHA-256
+// 0516f05397c02e093ec03c9cd02bcf4d8d629f1678e7ec8f4b016df7a01d86de; rulings checked 2026-11-24.
+// CR 115.1a/601.2c: two target creatures whose controllers differ. CR 608.2b and the rulings:
+// both targets are illegal if one player controls both on resolution; a target that became
+// illegal still supplies its (last-known) controller for the other's legality. CR 400.7: both
+// return to their owners' hands in one simultaneous move.
+(
+  id: "run_away_together",
+  name: "Run Away Together",
+  face_id: "run_away_together",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  spell_effect: [ReturnToOwnersHand(subject: Chosen((kind: Creature)))],
+  targeting: Some((groups: [(min: 2, max: 2, relation: Some(DifferentControllers), effect_indices: [0])])),
+)

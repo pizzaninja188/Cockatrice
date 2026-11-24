@@ -496,7 +496,7 @@ impl ActivatedAbilityDef {
                         && group.effect_indices == [0]
                         && group.chooser == super::TargetChooser::Controller
                         && group.distinct_from.is_empty()
-                        && !group.same_graveyard
+                        && group.relation.is_none()
                         && group.cast_cost_expansion.is_none()
                 })
             {

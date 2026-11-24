@@ -1560,7 +1560,7 @@ fn narset_phase_b_model_admits_only_the_flat_captured_spell_grant_profile() {
             prompt: "Choose a target".into(),
             effect_indices: vec![0],
             distinct_from: Vec::new(),
-            same_graveyard: false,
+            relation: None,
             cast_cost_expansion: None,
         }],
     });

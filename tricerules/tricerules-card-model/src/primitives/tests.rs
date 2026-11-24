@@ -4734,7 +4734,7 @@ fn activated_modal_shape_rejects_unsupported_owners_and_cost_contexts() {
                 prompt: "Choose target".into(),
                 effect_indices: vec![0],
                 distinct_from: Vec::new(),
-                same_graveyard: false,
+                relation: None,
                 cast_cost_expansion: Some(crate::primitives::CastCostTargetExpansion {
                     condition: crate::primitives::CastCostReceiptCondition {
                         group_id: crate::ChoiceId::new("cast_cost_group").unwrap(),
@@ -5694,7 +5694,7 @@ fn typed_optional_exile_result_is_available_for_ability_programs() {
             prompt: "Choose up to one other target creature".into(),
             effect_indices: Vec::new(),
             distinct_from: Vec::new(),
-            same_graveyard: false,
+            relation: None,
             cast_cost_expansion: None,
         }],
     };
@@ -5777,7 +5777,7 @@ fn typed_exile_result_accepts_permanent_filters_and_lexically_scoped_inputs() {
                 prompt: "Choose a permanent".into(),
                 effect_indices: Vec::new(),
                 distinct_from: Vec::new(),
-                same_graveyard: false,
+                relation: None,
                 cast_cost_expansion: None,
             };
             let targeting = crate::primitives::TargetingDef {
@@ -5870,7 +5870,7 @@ fn typed_exile_result_accepts_permanent_filters_and_lexically_scoped_inputs() {
             prompt: "Choose a permanent".into(),
             effect_indices: Vec::new(),
             distinct_from: Vec::new(),
-            same_graveyard: false,
+            relation: None,
             cast_cost_expansion: None,
         };
         let targeting = crate::primitives::TargetingDef {
@@ -12899,7 +12899,7 @@ fn program_compiler_types_fixed_cost_counter_payment_results() {
             prompt: "Choose a target".into(),
             effect_indices: Vec::new(),
             distinct_from: Vec::new(),
-            same_graveyard: false,
+            relation: None,
             cast_cost_expansion: None,
         }],
     };
@@ -12967,7 +12967,7 @@ fn counter_payment_outputs_remain_optional_and_conditions_are_typed() {
                 prompt: "Choose a target".into(),
                 effect_indices: Vec::new(),
                 distinct_from: Vec::new(),
-                same_graveyard: false,
+                relation: None,
                 cast_cost_expansion: None,
             }],
         };
@@ -13080,7 +13080,7 @@ fn nonpayment_counter_controller_receipt_is_an_opt_in_typed_program_input() {
             prompt: "Choose a target spell".into(),
             effect_indices: Vec::new(),
             distinct_from: Vec::new(),
-            same_graveyard: false,
+            relation: None,
             cast_cost_expansion: None,
         }],
     };
@@ -13120,7 +13120,7 @@ fn counter_controller_input_rejects_missing_or_wrong_typed_producers() {
             prompt: "Choose a target spell".into(),
             effect_indices: Vec::new(),
             distinct_from: Vec::new(),
-            same_graveyard: false,
+            relation: None,
             cast_cost_expansion: None,
         }],
     };
@@ -13206,7 +13206,7 @@ fn counter_drain_targeting() -> crate::primitives::TargetingDef {
             prompt: "Choose a target spell".into(),
             effect_indices: Vec::new(),
             distinct_from: Vec::new(),
-            same_graveyard: false,
+            relation: None,
             cast_cost_expansion: None,
         }],
     }
@@ -14174,7 +14174,7 @@ fn program_compiler_lowers_owner_local_named_target_alias() {
             prompt: "Choose target creature you control".into(),
             effect_indices: Vec::new(),
             distinct_from: Vec::new(),
-            same_graveyard: false,
+            relation: None,
             cast_cost_expansion: None,
         }],
     };
@@ -14235,7 +14235,7 @@ fn program_target_aliases_preserve_singleton_requiredness_and_reject_invalid_use
             prompt: "Choose a creature".into(),
             effect_indices: Vec::new(),
             distinct_from: Vec::new(),
-            same_graveyard: false,
+            relation: None,
             cast_cost_expansion: None,
         }],
     };
@@ -14703,7 +14703,7 @@ fn program_target_aliases_lower_recursively_through_if_result_and_choose_conditi
             prompt: "Choose a creature".into(),
             effect_indices: Vec::new(),
             distinct_from: Vec::new(),
-            same_graveyard: false,
+            relation: None,
             cast_cost_expansion: None,
         }],
     };
@@ -14833,7 +14833,7 @@ fn program_target_aliases_reuse_subject_and_shuffle_role_mappings() {
             prompt: "Choose a creature".into(),
             effect_indices: Vec::new(),
             distinct_from: Vec::new(),
-            same_graveyard: false,
+            relation: None,
             cast_cost_expansion: None,
         }],
     };
@@ -17183,7 +17183,7 @@ fn bound_card_result_count_lowers_typed_cohort_families() {
         r#"(groups: [(
             min: 0, max: 2,
             prompt: "Choose up to two target cards from a single graveyard",
-            effect_indices: [], distinct_from: [], same_graveyard: true,
+            effect_indices: [], distinct_from: [], relation: Some(SameGraveyard),
             cast_cost_expansion: None,
         )])"#,
     )
@@ -18361,7 +18361,7 @@ fn spell_program_accepts_fixed_controller_of_target_group_damage_riders() {
             prompt: "Choose target creature".into(),
             effect_indices: Vec::new(),
             distinct_from: Vec::new(),
-            same_graveyard: false,
+            relation: None,
             cast_cost_expansion: None,
         }],
     };
@@ -18678,7 +18678,7 @@ fn spell_program_target_group_damage_rider_rejects_unsupported_contracts() {
             prompt: "Choose target creature".into(),
             effect_indices: Vec::new(),
             distinct_from: Vec::new(),
-            same_graveyard: false,
+            relation: None,
             cast_cost_expansion: None,
         }],
     };
@@ -21574,7 +21574,7 @@ fn ability_program_binds_same_graveyard_exile_result_to_its_target_group() {
         r#"(groups: [(
             min: 0, max: 2,
             prompt: "Choose up to two target cards from a single graveyard",
-            effect_indices: [], distinct_from: [], same_graveyard: true,
+            effect_indices: [], distinct_from: [], relation: Some(SameGraveyard),
             cast_cost_expansion: None,
         )])"#,
     )
@@ -21684,7 +21684,7 @@ fn ability_graveyard_exile_result_rejects_unsupported_profiles() {
 
     const EXILE: &str = "MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: None, entry_modifiers: [])";
     const TARGET: &str = "(instruction_id: \"exile\", role: Target, target_group_index: 0)";
-    const GROUP: &str = "(min: 0, max: 2, prompt: \"Choose up to two cards from one graveyard\", effect_indices: [], same_graveyard: true)";
+    const GROUP: &str = "(min: 0, max: 2, prompt: \"Choose up to two cards from one graveyard\", effect_indices: [], relation: Some(SameGraveyard))";
     let compile_default = |context, effect, bindings, group| {
         compile(
             context,
@@ -21799,35 +21799,35 @@ fn ability_graveyard_exile_result_rejects_unsupported_profiles() {
             crate::primitives::EffectContext::Ability,
             EXILE,
             TARGET,
-            Some("(min: 0, max: 2, prompt: \"Choose cards\", effect_indices: [0], same_graveyard: true)"),
+            Some("(min: 0, max: 2, prompt: \"Choose cards\", effect_indices: [0], relation: Some(SameGraveyard))"),
         ),
         (
             "too many targets",
             crate::primitives::EffectContext::Ability,
             EXILE,
             TARGET,
-            Some("(min: 0, max: 3, prompt: \"Choose cards\", effect_indices: [], same_graveyard: true)"),
+            Some("(min: 0, max: 3, prompt: \"Choose cards\", effect_indices: [], relation: Some(SameGraveyard))"),
         ),
         (
             "mandatory target minimum",
             crate::primitives::EffectContext::Ability,
             EXILE,
             TARGET,
-            Some("(min: 1, max: 2, prompt: \"Choose cards\", effect_indices: [], same_graveyard: true)"),
+            Some("(min: 1, max: 2, prompt: \"Choose cards\", effect_indices: [], relation: Some(SameGraveyard))"),
         ),
         (
             "cross-graveyard selection",
             crate::primitives::EffectContext::Ability,
             EXILE,
             TARGET,
-            Some("(min: 0, max: 2, prompt: \"Choose cards\", effect_indices: [], same_graveyard: false)"),
+            Some("(min: 0, max: 2, prompt: \"Choose cards\", effect_indices: [], relation: None)"),
         ),
         (
             "opponent-chosen group",
             crate::primitives::EffectContext::Ability,
             EXILE,
             TARGET,
-            Some("(chooser: ChosenOpponent, min: 0, max: 2, prompt: \"Choose cards\", effect_indices: [], same_graveyard: true)"),
+            Some("(chooser: ChosenOpponent, min: 0, max: 2, prompt: \"Choose cards\", effect_indices: [], relation: Some(SameGraveyard))"),
         ),
     ];
     for (label, context, effect, bindings, group) in cases {
@@ -21851,7 +21851,7 @@ fn ability_graveyard_exile_result_rejects_unsupported_profiles() {
             crate::primitives::EffectContext::Ability,
             EXILE,
             TARGET,
-            Some("(min: 0, max: 2, prompt: \"First group\", effect_indices: [], same_graveyard: true), (min: 0, max: 1, prompt: \"Second group\", effect_indices: [], same_graveyard: true)"),
+            Some("(min: 0, max: 2, prompt: \"First group\", effect_indices: [], relation: Some(SameGraveyard)), (min: 0, max: 1, prompt: \"Second group\", effect_indices: [], relation: Some(SameGraveyard))"),
         )
         .is_err(),
         "the Exile result profile admits exactly one target group"
@@ -22300,7 +22300,7 @@ mod combustible_gearhulk_program_compiler_tests {
                 prompt: "Choose target opponent".into(),
                 effect_indices: Vec::new(),
                 distinct_from: Vec::new(),
-                same_graveyard: false,
+                relation: None,
                 cast_cost_expansion: None,
             }],
         }
@@ -22850,7 +22850,8 @@ mod combustible_gearhulk_program_compiler_tests {
         let mut distinct_target_group = opponent_targeting();
         distinct_target_group.groups[0].distinct_from.push(1);
         let mut same_graveyard_target_group = opponent_targeting();
-        same_graveyard_target_group.groups[0].same_graveyard = true;
+        same_graveyard_target_group.groups[0].relation =
+            Some(crate::primitives::TargetGroupRelation::SameGraveyard);
         let mut cast_cost_expansion_target_group = opponent_targeting();
         cast_cost_expansion_target_group.groups[0].cast_cost_expansion =
             Some(crate::primitives::CastCostTargetExpansion {
@@ -23013,7 +23014,7 @@ mod tidebinder_program_compiler_tests {
             prompt: "Choose target activated or triggered ability".into(),
             effect_indices: Vec::new(),
             distinct_from: Vec::new(),
-            same_graveyard: false,
+            relation: None,
             cast_cost_expansion: None,
         }
     }
@@ -23115,7 +23116,7 @@ mod tidebinder_program_compiler_tests {
                 prompt: "Choose target activated or triggered ability".into(),
                 effect_indices: Vec::new(),
                 distinct_from: Vec::new(),
-                same_graveyard: false,
+                relation: None,
                 cast_cost_expansion: None,
             }],
         };

@@ -3068,7 +3068,7 @@ mod tests {
                 explicit_group.max,
                 explicit_group.prompt.as_ref(),
                 explicit_group.distinct_from.as_ref(),
-                explicit_group.same_graveyard,
+                explicit_group.relation,
             ),
             (
                 inferred_group.chooser,
@@ -3076,7 +3076,7 @@ mod tests {
                 inferred_group.max,
                 inferred_group.prompt.as_ref(),
                 inferred_group.distinct_from.as_ref(),
-                inferred_group.same_graveyard,
+                inferred_group.relation,
             )
         );
         assert_eq!(explicit_group.bindings.len(), 1);

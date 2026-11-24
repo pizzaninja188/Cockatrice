@@ -1355,3 +1355,6 @@ mod battlebond_lands_batch;
 
 #[path = "../issue_433_infinite_guideline_station.rs"]
 mod issue_433_infinite_guideline_station;
+
+#[path = "../issue_485_run_away_together.rs"]
+mod issue_485_run_away_together;
