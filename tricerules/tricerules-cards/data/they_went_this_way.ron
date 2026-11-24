@@ -1,0 +1,19 @@
+// Oracle 47951720-9584-4ca3-a73d-3d259102b2f8; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.23 (hidden-zone search; may fail to find), 701.24a (shuffle after searching), 701.16a
+// (investigate) and 111.10f (Clue token). Pinned 2024-02-02 rulings: Clue is an artifact type;
+// a Clue cannot pay two costs.
+(
+  id: "they_went_this_way",
+  name: "They Went This Way",
+  face_id: "they_went_this_way",
+  mana_cost: "{2}{G}",
+  types: ["Sorcery"],
+  spell_effect: [
+    SearchLibrary(
+      filter: Some((card_type: Some(BasicLand))),
+      destination: Battlefield(tapped: true),
+    ),
+    CreateTokens(token: "clue", count: 1),
+  ],
+)

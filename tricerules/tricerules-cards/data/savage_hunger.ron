@@ -1,0 +1,33 @@
+// Oracle 0e608f48-d3a6-422c-839d-f06bb8a32014; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 303.4a (Aura attach), 613.4c (layer-7c static modifier), 613.1f (layer-6 keyword grant),
+// 702.19 (trample), 702.29a (cycling is an activated ability), 118.3 (printed cycling cost),
+// 701.8 (discard) and 121 (draw). Pinned 2008-10-01 ruling: cycling is an activated ability.
+(
+  id: "savage_hunger",
+  name: "Savage Hunger",
+  face_id: "savage_hunger",
+  mana_cost: "{2}{G}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: AttachedModifier(
+        delta_power: 1,
+        delta_toughness: 0,
+        keywords: [Trample],
+      ),
+    ),
+  ],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([3]),
+      source_zone: Hand,
+      costs: [Mana("{2}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

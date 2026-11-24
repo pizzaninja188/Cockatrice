@@ -1,0 +1,51 @@
+{
+  "format_version": 1,
+  "oracle_id": "47951720-9584-4ca3-a73d-3d259102b2f8",
+  "spans": [
+    {
+      "face_id": "they_went_this_way",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "ZoneCardFilter.card_type",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q72_batch_a::q72_investigate_riders_canary_hardest_they_went_this_way_searches_tapped_and_investigates",
+      "covers": "actual They Went This Way searches a basic land onto the battlefield tapped and investigates"
+    },
+    {
+      "test": "scenario q72_batch_a::q72_they_went_this_way_keeps_the_opponent_library_private_and_still_investigates_without_a_basic",
+      "covers": "actual They Went This Way searches only the caster's library, keeps the opponent's library private and still investigates when no basic land is found"
+    },
+    {
+      "test": "mechanic_registry::q72_batch_a::q72_investigate_riders_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of They Went This Way"
+    },
+    {
+      "test": "mechanic_registry::q72_batch_a::q72_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for They Went This Way"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

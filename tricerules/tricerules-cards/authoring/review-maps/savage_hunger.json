@@ -1,0 +1,80 @@
+{
+  "format_version": 1,
+  "oracle_id": "0e608f48-d3a6-422c-839d-f06bb8a32014",
+  "spans": [
+    {
+      "face_id": "savage_hunger",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "savage_hunger",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "savage_hunger",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "AbilitySourceZone::Hand",
+      "typed_path": "/faces/0/activated_abilities/0/source_zone"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q72_batch_a::q72_cycling_auras_apply_their_printed_static_values_and_cycle",
+      "covers": "actual Savage Hunger applies +1/+0 and trample and cycles"
+    },
+    {
+      "test": "scenario q72_batch_a::q72_cycling_auras_reject_noncreature_targets_and_unfunded_cycling",
+      "covers": "actual Savage Hunger rejects a land target and underfunded cycling"
+    },
+    {
+      "test": "mechanic_registry::q72_batch_a::q72_cycling_auras_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of Savage Hunger"
+    },
+    {
+      "test": "mechanic_registry::q72_batch_a::q72_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Savage Hunger"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

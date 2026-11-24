@@ -1,0 +1,69 @@
+{
+  "format_version": 1,
+  "oracle_id": "789899eb-3a33-4a41-b6b5-5e2f55a9af51",
+  "spans": [
+    {
+      "face_id": "the_chase_is_on",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "Keyword::FirstStrike",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/2"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q72_batch_a::q72_investigate_riders_canary_simplest_the_chase_is_on_pumps_first_strike_and_investigates",
+      "covers": "actual The Chase Is On applies +3/+0 and first strike and investigates"
+    },
+    {
+      "test": "scenario q72_batch_a::q72_investigate_riders_apply_their_printed_values_and_create_one_clue",
+      "covers": "actual The Chase Is On is exercised by the shared rider scenario"
+    },
+    {
+      "test": "scenario q72_batch_a::q72_investigate_riders_fizzle_stale_targets_without_clues",
+      "covers": "actual The Chase Is On does not investigate when its only target is illegal"
+    },
+    {
+      "test": "scenario q72_batch_a::q72_investigate_riders_reject_noncreature_targets",
+      "covers": "actual The Chase Is On rejects a land target"
+    },
+    {
+      "test": "mechanic_registry::q72_batch_a::q72_investigate_riders_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of The Chase Is On"
+    },
+    {
+      "test": "mechanic_registry::q72_batch_a::q72_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for The Chase Is On"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

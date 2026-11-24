@@ -1,0 +1,24 @@
+// Oracle f85edb4f-1eec-40cc-9e21-0a6fb71e8499; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 508.1k/611.2c (the affected set is the creatures attacking as the spell resolves), 613.4c
+// (layer-7c pump), 702.29a (cycling is an activated ability), 118.3 (printed cycling cost),
+// 701.8 (discard) and 121 (draw). Pinned 2008-10-01 ruling: cycling is an activated ability.
+(
+  id: "pursue_glory",
+  name: "Pursue Glory",
+  face_id: "pursue_glory",
+  mana_cost: "{3}{R}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpAll(filter: (attacking: true), power: 2, toughness: 0),
+  ],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      source_zone: Hand,
+      costs: [Mana("{2}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)
