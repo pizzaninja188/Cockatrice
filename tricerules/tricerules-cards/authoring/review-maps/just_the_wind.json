@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "761ebd6a-8f53-46fa-b3cd-16616b773007",
+  "spans": [
+    {
+      "face_id": "just_the_wind",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "just_the_wind",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::Madness",
+      "typed_path": "/faces/0/static_abilities/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q73_batch_a::q73_madness_spells_apply_their_printed_bodies_from_hand",
+      "covers": "actual Just the Wind applies its printed body from hand"
+    },
+    {
+      "test": "mechanic_registry::q73_batch_a::q73_madness_spells_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of just_the_wind"
+    },
+    {
+      "test": "mechanic_registry::q73_batch_a::q73_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for just_the_wind"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

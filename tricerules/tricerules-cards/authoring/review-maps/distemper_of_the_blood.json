@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "4d3e7cde-a4ed-428f-bd37-c6dda2104221",
+  "spans": [
+    {
+      "face_id": "distemper_of_the_blood",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "distemper_of_the_blood",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "StaticAbilityDef::Madness",
+      "typed_path": "/faces/0/static_abilities/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q73_batch_a::q73_madness_spells_apply_their_printed_bodies_from_hand",
+      "covers": "actual Distemper of the Blood applies its printed body from hand"
+    },
+    {
+      "test": "mechanic_registry::q73_batch_a::q73_madness_spells_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of distemper_of_the_blood"
+    },
+    {
+      "test": "mechanic_registry::q73_batch_a::q73_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for distemper_of_the_blood"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

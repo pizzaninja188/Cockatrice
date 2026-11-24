@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "35069cdb-e5bd-4224-a1a8-b329054e003b",
+  "spans": [
+    {
+      "face_id": "rejuvenate",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "rejuvenate",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "AbilitySourceZone::Hand",
+      "typed_path": "/faces/0/activated_abilities/0/source_zone"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q73_batch_a::q73_cycling_card_advantage_cards_apply_their_printed_values_and_cycle",
+      "covers": "actual Rejuvenate applies its printed body and cycles for its printed cost"
+    },
+    {
+      "test": "scenario q73_batch_a::q73_cycling_card_advantage_rejects_missing_targets_and_unfunded_cycling",
+      "covers": "actual Rejuvenate rejects an underfunded cycling activation"
+    },
+    {
+      "test": "mechanic_registry::q73_batch_a::q73_cycling_card_advantage_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of rejuvenate"
+    },
+    {
+      "test": "mechanic_registry::q73_batch_a::q73_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for rejuvenate"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

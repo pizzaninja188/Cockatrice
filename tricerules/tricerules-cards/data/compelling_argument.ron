@@ -1,0 +1,22 @@
+// Oracle 686e0b86-121c-45be-842d-c83d3b6547f6; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1/601.2c (target player at cast), 701.17a-b (mill that player's library; a short library
+// mills as many as possible), 702.29a (cycling), 118.3 and 701.9. The card has no pinned ruling.
+// Copy of Tome Scour's target-player mill with Scrap's reviewed cycling ability.
+(
+  id: "compelling_argument",
+  name: "Compelling Argument",
+  face_id: "compelling_argument",
+  mana_cost: "{1}{U}",
+  types: ["Sorcery"],
+  spell_effect: [MillTargetPlayer(count: 5, target: (kind: AnyPlayer))],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      source_zone: Hand,
+      costs: [Mana("{U}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

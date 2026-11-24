@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "ac2720d2-b010-4fa9-8c94-b13680b75aac",
+  "spans": [
+    {
+      "face_id": "dark_withering",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "dark_withering",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "StaticAbilityDef::Madness",
+      "typed_path": "/faces/0/static_abilities/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q73_batch_a::q73_madness_canary_dark_withering_casts_from_exile_and_binds_its_target",
+      "covers": "actual Dark Withering casts from exile for its madness cost and binds its target"
+    },
+    {
+      "test": "scenario q73_batch_a::q73_madness_spells_apply_their_printed_bodies_from_hand",
+      "covers": "actual Dark Withering applies its printed body from hand"
+    },
+    {
+      "test": "mechanic_registry::q73_batch_a::q73_madness_spells_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of dark_withering"
+    },
+    {
+      "test": "mechanic_registry::q73_batch_a::q73_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for dark_withering"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
