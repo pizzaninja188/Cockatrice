@@ -1,0 +1,17 @@
+// Oracle 6e7e9685-ebe9-4db2-b52c-f6ce95e37e56; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1/601.2c (single any-target), 119.3 (life gain), 120.3 (damage), 702.34a-d (flashback
+// alternative cost and exile) and 608.2b (stale target means no damage and no life gain).
+(
+  id: "morbid_hunger",
+  name: "Morbid Hunger",
+  face_id: "morbid_hunger",
+  mana_cost: "{4}{B}{B}",
+  flashback_cost: Some("{7}{B}{B}"),
+  types: ["Sorcery"],
+  spell_effect: [
+    DamageTarget(amount: 3, target: (kind: AnyTarget)),
+    GainLife(amount: 3),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [0])])),
+)

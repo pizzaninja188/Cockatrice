@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "8a9525f4-74a6-44f0-a1b1-d57937d7783b",
+  "spans": [
+    {
+      "face_id": "temporal_fissure",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "temporal_fissure",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_keywords/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellKeyword::Storm",
+      "typed_path": "/faces/0/spell_keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q71_batch_a::q71_storm_targeted_copies_choose_independent_targets",
+      "covers": "actual temporal_fissure canary end-to-end path"
+    },
+    {
+      "test": "mechanic_registry::q71_batch_a::q71_batch_a_storm_spells_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of temporal_fissure"
+    },
+    {
+      "test": "mechanic_registry::q71_batch_a::q71_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for temporal_fissure"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

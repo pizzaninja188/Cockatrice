@@ -1,0 +1,22 @@
+// Oracle 78db3190-59bc-4033-95bc-32d8ed872b6a; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.40a (Storm copies), 119.3 (life loss and gain), 115.1/601.2c (player target) and
+// 608.2b. Pinned rulings cover independent targets for every copy and non-cast copies.
+(
+  id: "tendrils_of_agony",
+  name: "Tendrils of Agony",
+  face_id: "tendrils_of_agony",
+  mana_cost: "{2}{B}{B}",
+  types: ["Sorcery"],
+  spell_keywords: [Storm],
+  spell_effect: [
+    TargetPlayerLosesLife(amount: 2, target: (kind: AnyPlayer)),
+    GainLife(amount: 2),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target player",
+    effect_indices: [0],
+  )])),
+)

@@ -1,0 +1,22 @@
+// Oracle 02e2dbde-2373-4f29-bd9d-787f1805b061; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1 (one player-or-planeswalker target), 120.3 (damage), 702.34a-d (flashback alternative
+// cost and exile) and 608.2b (stale target). Pinned rulings cover timing and exile.
+(
+  id: "scorching_missile",
+  name: "Scorching Missile",
+  face_id: "scorching_missile",
+  mana_cost: "{3}{R}",
+  flashback_cost: Some("{9}{R}"),
+  types: ["Sorcery"],
+  spell_effect: [DamageTarget(
+    amount: 4,
+    target: (any_of: Some([
+      (kind: AnyPlayer),
+      (kind: AnyPermanent, permanent_types: [Planeswalker]),
+    ])),
+  )],
+  targeting: Some((groups: [(
+    min: 1, max: 1, prompt: "Choose target player or planeswalker", effect_indices: [0],
+  )])),
+)

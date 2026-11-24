@@ -1,0 +1,62 @@
+{
+  "format_version": 1,
+  "oracle_id": "19d19e32-af13-4bb3-925f-8ed54cce2fcb",
+  "spans": [
+    {
+      "face_id": "smiting_helix",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "smiting_helix",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "CardFace::flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q71_batch_a::q71_flashback_canary_hardest_smiting_helix_off_color_flashback",
+      "covers": "actual smiting_helix canary and shared flashback path"
+    },
+    {
+      "test": "scenario q71_batch_a::q71_flashback_damage_cards_deal_damage_gain_life_and_exile",
+      "covers": "actual smiting_helix cast and flashback damage/life/exile"
+    },
+    {
+      "test": "mechanic_registry::q71_batch_a::q71_batch_a_flashback_damage_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of smiting_helix"
+    },
+    {
+      "test": "mechanic_registry::q71_batch_a::q71_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for smiting_helix"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,13 @@
+// Oracle 8a9525f4-74a6-44f0-a1b1-d57937d7783b; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.40a (Storm copies), 115.1/601.2c (permanent target), 400.7 and 608.2b.
+// Pinned rulings cover independent targets for every copy and non-cast copies.
+(
+  id: "temporal_fissure",
+  name: "Temporal Fissure",
+  face_id: "temporal_fissure",
+  mana_cost: "{4}{U}",
+  types: ["Sorcery"],
+  spell_keywords: [Storm],
+  spell_effect: [ReturnToOwnersHand(subject: Chosen((kind: AnyPermanent)))],
+)

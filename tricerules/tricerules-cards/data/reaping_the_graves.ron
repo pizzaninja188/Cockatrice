@@ -1,0 +1,17 @@
+// Oracle 80c663a5-2794-4748-b47a-34352fb2112f; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.40a (Storm copies), 115.1/601.2c (creature-card target), 400.7 (new object on zone
+// change), 404.1 and 608.2b. Pinned rulings cover independent copy targets.
+(
+  id: "reaping_the_graves",
+  name: "Reaping the Graves",
+  face_id: "reaping_the_graves",
+  mana_cost: "{2}{B}",
+  types: ["Instant"],
+  spell_keywords: [Storm],
+  spell_effect: [MoveGraveyardCards(
+    filter: (card: Some((card_type: Some(Creature)))),
+    destination: Hand,
+    linked_exile_id: None,
+  )],
+)

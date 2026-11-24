@@ -1,0 +1,14 @@
+// Oracle 2145329d-49df-4f4a-b7d7-3cc2f64639d3; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.40a (Storm copies), 115.1a/601.2c (land target), 701.8 (destroy) and 608.2b.
+// Pinned rulings cover independent targets for every copy and non-cast copies.
+(
+  id: "volcanic_awakening",
+  name: "Volcanic Awakening",
+  face_id: "volcanic_awakening",
+  mana_cost: "{4}{R}{R}",
+  types: ["Sorcery"],
+  spell_keywords: [Storm],
+  spell_effect: [Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Land])))],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target land", effect_indices: [0])])),
+)

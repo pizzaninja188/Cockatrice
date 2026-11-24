@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "eaa0c6c2-eee5-443a-867f-ab77b995b6ef",
+  "spans": [
+    {
+      "face_id": "hush",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "hush",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DestroyAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "AbilitySourceZone::Hand",
+      "typed_path": "/faces/0/activated_abilities/0/source_zone"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q71_batch_a::q71_cycling_canary_hardest_hush_cycles_and_destroys_all_enchantments",
+      "covers": "actual hush printed removal body"
+    },
+    {
+      "test": "scenario q71_batch_a::q71_cycling_removal_cards_cycle_for_the_printed_cost",
+      "covers": "actual hush cycling cost, discard and draw"
+    },
+    {
+      "test": "mechanic_registry::q71_batch_a::q71_batch_a_cycling_removal_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of hush"
+    },
+    {
+      "test": "mechanic_registry::q71_batch_a::q71_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for hush"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

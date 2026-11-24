@@ -1,0 +1,13 @@
+// Oracle ed3652da-0127-4c9e-9913-f20becdd0ba9; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.40a (Storm copies), 115.1a/601.2c (creature target), 120.3 (damage) and 608.2b.
+// Pinned rulings cover independent targets for every copy and non-cast copies.
+(
+  id: "scattershot",
+  name: "Scattershot",
+  face_id: "scattershot",
+  mana_cost: "{2}{R}",
+  types: ["Instant"],
+  spell_keywords: [Storm],
+  spell_effect: [DamageTarget(amount: 1, target: (kind: Creature))],
+)

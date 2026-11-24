@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "02e2dbde-2373-4f29-bd9d-787f1805b061",
+  "spans": [
+    {
+      "face_id": "scorching_missile",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "scorching_missile",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "CardFace::flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q71_batch_a::q71_flashback_canary_simplest_scorching_missile_flashbacks",
+      "covers": "actual scorching_missile canary and shared flashback path"
+    },
+    {
+      "test": "scenario q71_batch_a::q71_flashback_damage_cards_deal_damage_gain_life_and_exile",
+      "covers": "actual scorching_missile cast and flashback damage/life/exile"
+    },
+    {
+      "test": "mechanic_registry::q71_batch_a::q71_batch_a_flashback_damage_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of scorching_missile"
+    },
+    {
+      "test": "mechanic_registry::q71_batch_a::q71_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for scorching_missile"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
