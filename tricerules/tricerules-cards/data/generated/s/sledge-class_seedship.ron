@@ -29,32 +29,32 @@
       timing: SorcerySpeed,
     ),
   ],
-  triggered_abilities: [
-    (
-      ability_id: "triggered_01",
-      presentation: OracleLines([3]),
-      trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
-      effect: [
-        SearchLibrary(
-          optional: true,
-          filter: Some((card_type: Some(Creature))),
-          zones: Fixed([Hand]),
-          destination: Battlefield(),
-          shuffle: false,
-        ),
-      ],
-    ),
-  ],
   static_abilities: [
     (
       ability_id: "static_01",
-      presentation: OracleLines([2]),
+      presentation: OracleLines([2, 3]),
       definition: ConditionalSelfModifier(
         condition: SourceCounterCount(counter: Charge, min: Some(7)),
         add_types: (card_types: [Creature]),
         base_power: Some(4),
         base_toughness: Some(5),
         keywords: [Flying],
+        triggered_abilities: [
+          (
+            ability_id: "triggered_01",
+            presentation: OracleLines([3]),
+            trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+            effect: [
+              SearchLibrary(
+                optional: true,
+                filter: Some((card_type: Some(Creature))),
+                zones: Fixed([Hand]),
+                destination: Battlefield(),
+                shuffle: false,
+              ),
+            ],
+          ),
+        ],
       ),
     ),
   ],

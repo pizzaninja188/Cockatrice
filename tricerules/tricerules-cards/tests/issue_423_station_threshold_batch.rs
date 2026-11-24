@@ -8,8 +8,8 @@
 //! source; the threshold striations are continuously reevaluated static
 //! abilities (CR 611.3/613), with CR 721.2a base P/T for the animation.
 //!
-//! The excluded cohort identities (Adagia, Entropic Battlecruiser, Infinite
-//! Guideline Station, Susurian Dirgecraft, The Seriema) intentionally have no
+//! The excluded cohort identities (Adagia, Entropic Battlecruiser, Susurian
+//! Dirgecraft, The Seriema) intentionally have no
 //! registry entry here; their unsupported clauses stay fail-closed.
 
 use tricerules_cards::primitives::{
@@ -517,10 +517,24 @@ fn issue_423_companion_abilities_are_registered_exactly() {
             && filter.validate().is_ok()
     ));
 
+    // CR 722.2: the attack triggers are printed in the threshold striations, so the threshold
+    // static ability grants them; neither exists below the threshold.
     let sledge = registered_face("sledge-class_seedship");
-    let [attack] = sledge.triggered_abilities.as_slice() else {
-        panic!("Sledge-Class Seedship has one attack trigger");
+    assert!(sledge.triggered_abilities.is_empty());
+    let StaticAbilityDef::ConditionalSelfModifier {
+        triggered_abilities: sledge_granted,
+        ..
+    } = threshold_static(&sledge, 7)
+    else {
+        panic!("Sledge-Class Seedship's 7+ striation");
     };
+    let [attack] = sledge_granted.as_slice() else {
+        panic!("Sledge-Class Seedship's 7+ striation grants one attack trigger");
+    };
+    assert_eq!(
+        attack.presentation,
+        AbilityPresentation::OracleLines(vec![3])
+    );
     assert_eq!(
         attack.trigger,
         TriggerCondition::WheneverSelfAttacks {
@@ -557,22 +571,24 @@ fn issue_423_companion_abilities_are_registered_exactly() {
     );
 
     let specimen = registered_face("specimen_freighter");
-    assert_eq!(specimen.triggered_abilities.len(), 2);
-    let bounce = specimen
-        .triggered_abilities
+    let [bounce] = specimen.triggered_abilities.as_slice() else {
+        panic!("Specimen Freighter prints one ungated entry trigger");
+    };
+    assert!(bounce
+        .effect
         .iter()
-        .find(|ability| {
-            ability
-                .effect
-                .iter()
-                .any(|effect| matches!(effect, SpellEffectKind::ReturnToOwnersHand { .. }))
-        })
-        .expect("Specimen Freighter's entry bounces");
+        .any(|effect| matches!(effect, SpellEffectKind::ReturnToOwnersHand { .. })));
     assert_eq!(bounce.trigger, TriggerCondition::WhenSelfEntersBattlefield);
     let targeting = bounce.targeting.as_ref().expect("the bounce targets");
     assert_eq!((targeting.groups[0].min, targeting.groups[0].max), (0, 2));
-    let mill = specimen
-        .triggered_abilities
+    let StaticAbilityDef::ConditionalSelfModifier {
+        triggered_abilities: specimen_granted,
+        ..
+    } = threshold_static(&specimen, 9)
+    else {
+        panic!("Specimen Freighter's 9+ striation");
+    };
+    let mill = specimen_granted
         .iter()
         .find(|ability| {
             ability

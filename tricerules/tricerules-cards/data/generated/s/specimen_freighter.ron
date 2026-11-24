@@ -48,23 +48,25 @@
         ),
       ),
     ),
-    (
-      ability_id: "triggered_02",
-      presentation: OracleLines([4]),
-      trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
-      effect: [Mill(count: 4, who: DefendingPlayer)],
-    ),
   ],
   static_abilities: [
     (
       ability_id: "static_01",
-      presentation: OracleLines([3]),
+      presentation: OracleLines([3, 4]),
       definition: ConditionalSelfModifier(
         condition: SourceCounterCount(counter: Charge, min: Some(9)),
         add_types: (card_types: [Creature]),
         base_power: Some(4),
         base_toughness: Some(7),
         keywords: [Flying],
+        triggered_abilities: [
+          (
+            ability_id: "triggered_02",
+            presentation: OracleLines([4]),
+            trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+            effect: [Mill(count: 4, who: DefendingPlayer)],
+          ),
+        ],
       ),
     ),
   ],

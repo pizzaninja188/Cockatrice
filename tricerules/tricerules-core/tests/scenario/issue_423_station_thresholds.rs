@@ -11,8 +11,9 @@
 use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
-use tricerules_cards::{CounterKind, Keyword};
-use tricerules_core::{TurnStep, Zone};
+use tricerules_cards::primitives::{PermanentTypeFilter, TypeLineAddition};
+use tricerules_cards::{ContinuousEffectKind, CounterKind, EffectDuration, Keyword};
+use tricerules_core::{AffectedScope, ContinuousEffect, TurnStep, Zone};
 use tricerules_proto::ruled::v1::{
     cost_selection::Selection, ChoiceKind, CostObjectRef, CostObjectRefs, CostSelection,
     ResolutionChoiceDecision, SubmitResolutionChoice, TargetRef, TargetRefKind,
@@ -1008,4 +1009,69 @@ fn issue_423_susur_secundi_draws_equal_to_the_sacrificed_creatures_power() {
         hand_before + 3,
         "the sacrificed creature's power sets the draw count"
     );
+}
+
+/// Another effect makes the Spacecraft a creature below its threshold (CR 613.1d), so it can
+/// attack without the striation applying.
+fn animate_below_threshold(engine: &mut GameEngine, object_id: u32) {
+    engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: None,
+        affected: AffectedScope::Single(object_id),
+        kind: ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+            land_types: Vec::new(),
+            card_types: vec![PermanentTypeFilter::Creature],
+            creature_types: Vec::new(),
+        }),
+        condition: None,
+        duration: EffectDuration::UntilEndOfTurn,
+        timestamp: engine.state.command_index,
+    });
+    engine
+        .state
+        .objects
+        .get_mut(&object_id)
+        .unwrap()
+        .summoning_sick = false;
+    engine.initial_response_batch();
+}
+
+#[test]
+fn issue_423_attack_triggers_printed_in_a_striation_need_its_threshold() {
+    // CR 722.2: an ability printed in a striation is part of that station symbol's static
+    // ability, so below the threshold the Spacecraft has no attack trigger even as a creature.
+    let mut engine = issue_423_engine(423_060, "specimen_freighter");
+    let freighter = deploy(&mut engine, "specimen_freighter");
+    engine
+        .apply_scenario_command(0, &choose_trigger_targets(Vec::new()))
+        .expect("the entry bounce may choose no targets");
+    resolve_entire_stack_two_player(&mut engine);
+    set_charge(&mut engine, freighter, 8);
+    animate_below_threshold(&mut engine, freighter);
+    assert!(engine
+        .characteristics(freighter)
+        .unwrap()
+        .has_type("Creature"));
+    assert!(!engine.effective_has_keyword(freighter, Keyword::Flying));
+    let library_before = engine.state.players[1].library.len();
+    advance_main1_to_declare_attackers(&mut engine);
+    engine
+        .apply_scenario_command(0, &declare_attackers(vec![freighter]))
+        .expect("the otherwise-animated Freighter attacks");
+    assert!(engine.state.stack.is_empty());
+    assert!(engine.state.pending_triggers.is_empty());
+    assert_eq!(engine.state.players[1].library.len(), library_before);
+
+    let mut engine = issue_423_engine(423_061, "sledge-class_seedship");
+    let sledge = deploy(&mut engine, "sledge-class_seedship");
+    set_charge(&mut engine, sledge, 6);
+    animate_below_threshold(&mut engine, sledge);
+    let hand_creature = inject_card_into_hand(&mut engine, 0, "grizzly_bears");
+    advance_main1_to_declare_attackers(&mut engine);
+    engine
+        .apply_scenario_command(0, &declare_attackers(vec![sledge]))
+        .expect("the otherwise-animated Seedship attacks");
+    assert!(engine.state.stack.is_empty());
+    assert!(engine.state.pending_triggers.is_empty());
+    assert_eq!(engine.state.objects[&hand_creature].zone, Zone::Hand);
 }

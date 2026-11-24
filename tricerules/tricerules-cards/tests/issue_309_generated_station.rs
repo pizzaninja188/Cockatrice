@@ -25,19 +25,21 @@ fn issue_309_registry_contains_exactly_the_reviewed_station_cohort() {
                             && ability.timing == ActivationTiming::SorcerySpeed
                     })
                     && face.static_abilities.iter().any(|ability| {
-                        ability.presentation == AbilityPresentation::OracleLines(vec![3])
-                            && matches!(
-                                &ability.definition,
-                                StaticAbilityDef::ConditionalSelfModifier {
-                                    condition: GameCondition::SourceCounterCount {
-                                        counter: CounterKind::Charge,
-                                        min: Some(8),
-                                        max: None,
-                                    },
-                                    keywords,
-                                    ..
-                                } if *keywords == vec![Keyword::Flying]
-                            )
+                        matches!(
+                            &ability.presentation,
+                            AbilityPresentation::OracleLines(lines) if lines.first() == Some(&3)
+                        ) && matches!(
+                            &ability.definition,
+                            StaticAbilityDef::ConditionalSelfModifier {
+                                condition: GameCondition::SourceCounterCount {
+                                    counter: CounterKind::Charge,
+                                    min: Some(8),
+                                    max: None,
+                                },
+                                keywords,
+                                ..
+                            } if *keywords == vec![Keyword::Flying]
+                        )
                     })
             })
         })
@@ -160,8 +162,18 @@ fn issue_309_cards_preserve_exact_faces_abilities_and_presentation_fingerprints(
                     })
             ));
         } else {
-            assert_eq!(face.activated_abilities.len(), 2);
-            let pump = &face.activated_abilities[1];
+            // CR 722.2: the pump is printed in the 8+ striation, so the threshold grants it.
+            assert_eq!(face.activated_abilities.len(), 1);
+            let StaticAbilityDef::ConditionalSelfModifier {
+                activated_abilities: granted,
+                ..
+            } = &face.static_abilities[0].definition
+            else {
+                panic!("Debris 8+ striation")
+            };
+            let [pump] = granted.as_slice() else {
+                panic!("Debris 8+ striation grants one pump")
+            };
             assert_eq!(pump.ability_id.as_str(), "activated_02");
             assert_eq!(pump.presentation, AbilityPresentation::OracleLines(vec![4]));
             assert_eq!(

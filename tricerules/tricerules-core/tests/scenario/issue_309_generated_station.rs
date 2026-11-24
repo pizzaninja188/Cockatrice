@@ -219,6 +219,10 @@ fn canonical_command(inner: RuledCommand) -> RuledCommand {
     }
 }
 
+/// Station is slot 0 and slot 1 is the reserved intrinsic land-mana hole; the 8+ striation's
+/// granted pump takes the next stable slot.
+const DEBRIS_PUMP_SLOT: u32 = 2;
+
 #[test]
 fn issue_309_station_publishes_only_controlled_untapped_creatures_and_reads_power_on_resolution() {
     let (mut engine, station, crew) = station_engine(309_001, "uthros_scanship");
@@ -786,6 +790,7 @@ fn issue_309_debris_etb_can_damage_a_player_and_pump_accumulates_until_cleanup()
         .get_mut(&debris)
         .unwrap()
         .set_counter(CounterKind::Charge, 8);
+    pump.initial_response_batch();
     assert_eq!(pump.effective_power(debris), Some(1));
     assert!(pump.effective_has_keyword(debris, Keyword::Flying));
     give_mana(
@@ -797,14 +802,16 @@ fn issue_309_debris_etb_can_damage_a_player_and_pump_accumulates_until_cleanup()
             ..Default::default()
         },
     );
-    apply_ability(&mut pump, 0, debris, 1, Vec::new()).expect("first pump activation");
+    apply_ability(&mut pump, 0, debris, DEBRIS_PUMP_SLOT, Vec::new())
+        .expect("first pump activation");
     assert_eq!(pump.state.players[0].mana_pool.red, 1);
     assert_eq!(pump.state.players[0].mana_pool.colorless, 1);
     assert!(!pump.state.objects[&debris].tapped);
     assert_eq!(pump.effective_power(debris), Some(1));
     resolve_entire_stack_two_player(&mut pump);
     assert_eq!(pump.effective_power(debris), Some(3));
-    apply_ability(&mut pump, 0, debris, 1, Vec::new()).expect("second pump activation");
+    apply_ability(&mut pump, 0, debris, DEBRIS_PUMP_SLOT, Vec::new())
+        .expect("second pump activation");
     assert_eq!(pump.state.players[0].mana_pool.red, 0);
     assert_eq!(pump.state.players[0].mana_pool.colorless, 0);
     assert!(!pump.state.objects[&debris].tapped);
@@ -830,13 +837,15 @@ fn issue_309_debris_pump_is_available_at_normal_timing_outside_sorcery_speed() {
     )
     .expect("Debris timing engine");
     advance_to_main1_from_game_start(&mut engine);
-    let debris = relocate_to_battlefield(&mut engine, 0, "debris_field_crusher", false);
+    let debris = move_ready_to_battlefield(&mut engine, 0, "debris_field_crusher");
+    settle_entry_trigger(&mut engine, "debris_field_crusher");
     engine
         .state
         .objects
         .get_mut(&debris)
         .unwrap()
         .set_counter(CounterKind::Charge, 8);
+    engine.initial_response_batch();
     give_mana(
         &mut engine,
         0,
@@ -847,7 +856,7 @@ fn issue_309_debris_pump_is_available_at_normal_timing_outside_sorcery_speed() {
         },
     );
     engine.state.turn_step = TurnStep::Upkeep;
-    apply_ability(&mut engine, 0, debris, 1, Vec::new())
+    apply_ability(&mut engine, 0, debris, DEBRIS_PUMP_SLOT, Vec::new())
         .expect("Debris's normal-timing pump is not sorcery-speed restricted");
     assert_eq!(engine.state.stack.len(), 1);
     assert!(!engine.state.objects[&debris].tapped);
@@ -868,13 +877,15 @@ fn issue_309_debris_pump_old_generation_does_not_modify_the_reentered_source() {
     )
     .expect("generation-bound pump engine");
     advance_to_main1_from_game_start(&mut engine);
-    let debris = relocate_to_battlefield(&mut engine, 0, "debris_field_crusher", false);
+    let debris = move_ready_to_battlefield(&mut engine, 0, "debris_field_crusher");
+    settle_entry_trigger(&mut engine, "debris_field_crusher");
     engine
         .state
         .objects
         .get_mut(&debris)
         .unwrap()
         .set_counter(CounterKind::Charge, 8);
+    engine.initial_response_batch();
     give_mana(
         &mut engine,
         0,
@@ -884,7 +895,7 @@ fn issue_309_debris_pump_old_generation_does_not_modify_the_reentered_source() {
             ..Default::default()
         },
     );
-    apply_ability(&mut engine, 0, debris, 1, Vec::new()).expect("activate pump");
+    apply_ability(&mut engine, 0, debris, DEBRIS_PUMP_SLOT, Vec::new()).expect("activate pump");
     move_to_hand(&mut engine, 0, debris);
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.state.objects[&debris].zone, Zone::Hand);
@@ -1082,4 +1093,60 @@ fn issue_309_pending_library_losses_are_deterministic_for_both_players() {
     );
     assert_eq!(commit([true, true]), ([true, true], [false, false], None));
     assert_eq!(commit([true, true]), commit([true, true]));
+}
+
+#[test]
+fn issue_309_debris_pump_is_printed_in_the_eight_plus_striation() {
+    // CR 722.2: "{1}{R}: ... +2/+0" is printed in the 8+ striation, so it is not an ability
+    // of Debris Field Crusher below eight charge counters.
+    let mut engine = GameEngine::new(
+        tricerules_cards::registry::global(),
+        309_027,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck_with("mountain", &["debris_field_crusher"]),
+            forest_only_deck(),
+        ]),
+        true,
+    )
+    .expect("Debris threshold engine");
+    advance_to_main1_from_game_start(&mut engine);
+    let debris = move_ready_to_battlefield(&mut engine, 0, "debris_field_crusher");
+    settle_entry_trigger(&mut engine, "debris_field_crusher");
+    engine
+        .state
+        .objects
+        .get_mut(&debris)
+        .unwrap()
+        .set_counter(CounterKind::Charge, 7);
+    engine.initial_response_batch();
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            r: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    for slot in 1..=DEBRIS_PUMP_SLOT {
+        assert!(
+            apply_ability(&mut engine, 0, debris, slot, Vec::new()).is_err(),
+            "no pump in slot {slot} below 8+"
+        );
+    }
+    assert!(engine.state.stack.is_empty());
+
+    engine
+        .state
+        .objects
+        .get_mut(&debris)
+        .unwrap()
+        .set_counter(CounterKind::Charge, 8);
+    engine.initial_response_batch();
+    apply_ability(&mut engine, 0, debris, DEBRIS_PUMP_SLOT, Vec::new())
+        .expect("8+ grants the pump");
+    resolve_entire_stack_two_player(&mut engine);
+    assert_eq!(engine.effective_power(debris), Some(3));
 }
