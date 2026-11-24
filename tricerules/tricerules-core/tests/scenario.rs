@@ -2621,3 +2621,12 @@ mod q76_subtype_lords;
 
 #[path = "scenario/q76_activated_draw.rs"]
 mod q76_activated_draw;
+
+#[path = "scenario/q77_quality_removal.rs"]
+mod q77_quality_removal;
+
+#[path = "scenario/q77_land_sac_life.rs"]
+mod q77_land_sac_life;
+
+#[path = "scenario/q77_sac_artifact_destroy.rs"]
+mod q77_sac_artifact_destroy;

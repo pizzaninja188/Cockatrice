@@ -1,0 +1,16 @@
+// Oracle bd95c832-9ae9-404a-a2bc-0760a5b9ff56; source/rulings checked 2026-11-24 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 115.1/601.2c (target), 205.3m (Human is a creature type) and 608.2b
+// (stale target). Copy of Doom Blade's filtered destruction with the printed Human subtype
+// requirement.
+(
+  id: "human_frailty",
+  name: "Human Frailty",
+  face_id: "human_frailty",
+  mana_cost: "{B}",
+  types: ["Instant"],
+  spell_effect: [Destroy(subject: Chosen((kind: Creature, required_subtypes: ["Human"])))],
+  targeting: Some((groups: [
+    (min: 1, max: 1, prompt: "Choose target Human creature", effect_indices: [0]),
+  ])),
+)

@@ -1,0 +1,69 @@
+{
+  "format_version": 1,
+  "oracle_id": "15f8049c-f21d-4cd0-aa81-1a533936cf77",
+  "spans": [
+    {
+      "face_id": "torch_fiend",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/Destroy/subject"
+    },
+    {
+      "symbol": "TargetGroupDef",
+      "typed_path": "/faces/0/activated_abilities/0/targeting/groups/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q77_sac_artifact_destroy::q77_sac_artifact_destroy_canary_simplest_torch_fiend_sacrifices_to_destroy_an_artifact",
+      "covers": "canary simplest actual Torch Fiend sacrifices itself for {R} to destroy an artifact"
+    },
+    {
+      "test": "scenario q77_sac_artifact_destroy::q77_sac_artifact_destroy_cards_use_their_printed_costs_and_bodies",
+      "covers": "actual torch_fiend pays its printed mana, sacrifices itself and destroys a target artifact"
+    },
+    {
+      "test": "scenario q77_sac_artifact_destroy::q77_sac_artifact_destroy_cards_reject_nonartifact_targets_and_underfunded_costs_atomically",
+      "covers": "actual torch_fiend rejects a nonartifact target and an underfunded activation without paying costs"
+    },
+    {
+      "test": "scenario q77_sac_artifact_destroy::q77_sac_artifact_destroy_cards_fizzle_on_stale_target_but_keep_the_paid_sacrifice",
+      "covers": "actual torch_fiend keeps its paid sacrifice when its artifact target leaves"
+    },
+    {
+      "test": "scenario q77_sac_artifact_destroy::q77_sac_artifact_destroy_cards_can_destroy_the_controllers_own_artifact",
+      "covers": "actual torch_fiend can target its controller's own artifact"
+    },
+    {
+      "test": "mechanic_registry::q77_sac_artifact_destroy::q77_sac_artifact_destroy_map_definitions",
+      "covers": "reviewed identity, characteristics and activated Destroy definition of torch_fiend"
+    },
+    {
+      "test": "mechanic_registry::q77_sac_artifact_destroy::q77_sac_artifact_destroy_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for torch_fiend"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1425,3 +1425,12 @@ mod q76_subtype_lords;
 
 #[path = "../q76_activated_draw.rs"]
 mod q76_activated_draw;
+
+#[path = "../q77_quality_removal.rs"]
+mod q77_quality_removal;
+
+#[path = "../q77_land_sac_life.rs"]
+mod q77_land_sac_life;
+
+#[path = "../q77_sac_artifact_destroy.rs"]
+mod q77_sac_artifact_destroy;

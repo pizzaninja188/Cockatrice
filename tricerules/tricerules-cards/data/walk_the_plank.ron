@@ -1,0 +1,16 @@
+// Oracle 9093e6f1-12bc-4dfb-bc78-6ead0752ad61; source/rulings checked 2026-11-24 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 115.1/601.2c (target), 205.3m (Merfolk is a creature type) and 608.2b
+// (stale target). Copy of Eyeblight's Ending's excluded-subtype destruction with the printed
+// non-Merfolk restriction.
+(
+  id: "walk_the_plank",
+  name: "Walk the Plank",
+  face_id: "walk_the_plank",
+  mana_cost: "{B}{B}",
+  types: ["Sorcery"],
+  spell_effect: [Destroy(subject: Chosen((kind: Creature, excluded_subtypes: ["Merfolk"])))],
+  targeting: Some((groups: [
+    (min: 1, max: 1, prompt: "Choose target non-Merfolk creature", effect_indices: [0]),
+  ])),
+)

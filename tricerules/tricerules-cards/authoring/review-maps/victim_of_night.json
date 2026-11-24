@@ -1,0 +1,65 @@
+{
+  "format_version": 1,
+  "oracle_id": "d92b9f63-17b6-4ed2-b6ae-083a8161863e",
+  "spans": [
+    {
+      "face_id": "victim_of_night",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject"
+    },
+    {
+      "symbol": "TargetGroupDef",
+      "typed_path": "/faces/0/targeting/groups/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q77_quality_removal::q77_quality_removal_cards_cast_with_exact_costs_and_destroy_matching_creatures",
+      "covers": "actual victim_of_night pays its printed cost and destroys a matching non-Vampire, non-Werewolf, non-Zombie creature"
+    },
+    {
+      "test": "scenario q77_quality_removal::q77_quality_removal_cards_destroy_only_the_chosen_matching_creature",
+      "covers": "actual victim_of_night leaves a non-targeted bystander on the battlefield"
+    },
+    {
+      "test": "scenario q77_quality_removal::q77_quality_removal_cards_reject_illegal_targets_without_spending_mana",
+      "covers": "actual victim_of_night rejects its printed illegal target and spends no mana"
+    },
+    {
+      "test": "scenario q77_quality_removal::q77_quality_removal_cards_recheck_filters_on_resolution",
+      "covers": "actual victim_of_night does not destroy a target that stopped matching on resolution"
+    },
+    {
+      "test": "scenario q77_quality_removal::q77_quality_removal_cards_fizzle_on_stale_target",
+      "covers": "actual victim_of_night fizzles when its target leaves the battlefield"
+    },
+    {
+      "test": "mechanic_registry::q77_quality_removal::q77_quality_removal_map_definitions",
+      "covers": "reviewed identity, characteristics, targeting and Destroy definition of victim_of_night"
+    },
+    {
+      "test": "mechanic_registry::q77_quality_removal::q77_quality_removal_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for victim_of_night"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

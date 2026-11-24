@@ -1,0 +1,16 @@
+// Oracle cdaab6b0-1a2d-4809-8e6b-56013acd8f78; source/rulings checked 2026-11-24 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 115.1/601.2c (target), 205.4a (legendary is a supertype) and 608.2b
+// (stale target). Copy of Doom Blade's filtered destruction with the printed nonlegendary
+// supertype exclusion.
+(
+  id: "cast_down",
+  name: "Cast Down",
+  face_id: "cast_down",
+  mana_cost: "{1}{B}",
+  types: ["Instant"],
+  spell_effect: [Destroy(subject: Chosen((kind: Creature, excluded_supertypes: ["Legendary"])))],
+  targeting: Some((groups: [
+    (min: 1, max: 1, prompt: "Choose target nonlegendary creature", effect_indices: [0]),
+  ])),
+)

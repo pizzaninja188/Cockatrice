@@ -1,0 +1,16 @@
+// Oracle 1c2ce0d0-8c3e-48e8-b1fd-54658bdb9af9; source/rulings checked 2026-11-24 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.8 (destroy), 115.1/601.2c (target), 608.2b (the tapped state is rechecked on resolution)
+// and 701.26a (the tapped designation). Copy of Doom Blade's filtered destruction with the printed
+// untapped restriction.
+(
+  id: "asphyxiate",
+  name: "Asphyxiate",
+  face_id: "asphyxiate",
+  mana_cost: "{1}{B}{B}",
+  types: ["Sorcery"],
+  spell_effect: [Destroy(subject: Chosen((kind: Creature, tapped: Some(false))))],
+  targeting: Some((groups: [
+    (min: 1, max: 1, prompt: "Choose target untapped creature", effect_indices: [0]),
+  ])),
+)

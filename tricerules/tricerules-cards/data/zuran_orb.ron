@@ -1,0 +1,20 @@
+// Oracle 08cb8a30-9cb4-4517-bee5-8848aa60d1a2; source/rulings checked 2026-11-24 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.2b (costs are paid during activation), 701.21a (sacrifice), 118.3 (a cost cannot be paid
+// without the required permanent) and 119.3 (the controller gains life). Copy of Vampiric Rites'
+// sacrifice-a-permanent activation cost with the printed land restriction and life only.
+(
+  id: "zuran_orb",
+  name: "Zuran Orb",
+  face_id: "zuran_orb",
+  mana_cost: "{0}",
+  types: ["Artifact"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [
+      SacrificePermanent(filter: (kind: AnyPermanent, controller: You, permanent_types: [Land])),
+    ],
+    effect: [GainLife(amount: 2)],
+  )],
+)

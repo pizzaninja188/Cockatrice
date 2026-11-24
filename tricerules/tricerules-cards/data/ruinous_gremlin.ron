@@ -1,0 +1,23 @@
+// Oracle b88d67c0-ef12-453c-8e58-6642650dffcc; source/rulings checked 2026-11-24 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.2b (costs are paid during activation), 701.21a (sacrifice), 115.1/601.2c (target artifact),
+// 701.8 (destroy) and 608.2b (stale target). Copy of Sylvok Replica's mana-plus-sacrifice activated
+// destruction with the printed {2}{R} cost.
+(
+  id: "ruinous_gremlin",
+  name: "Ruinous Gremlin",
+  face_id: "ruinous_gremlin",
+  mana_cost: "{R}",
+  types: ["Creature", "Gremlin"],
+  power: 1,
+  toughness: 1,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{2}{R}"), SacrificeSelf],
+    effect: [Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact])))],
+    targeting: Some((groups: [
+      (min: 1, max: 1, prompt: "Choose target artifact", effect_indices: [0]),
+    ])),
+  )],
+)

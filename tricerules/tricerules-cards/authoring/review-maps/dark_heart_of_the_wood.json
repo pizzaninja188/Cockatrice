@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "c44f40da-867e-4237-b4b1-ed6feb1f37b7",
+  "spans": [
+    {
+      "face_id": "dark_heart_of_the_wood",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q77_land_sac_life::q77_land_sac_life_canary_hardest_dark_heart_requires_a_forest_and_gains_three",
+      "covers": "canary hardest actual Dark Heart of the Wood requires a Forest and gains three life"
+    },
+    {
+      "test": "scenario q77_land_sac_life::q77_land_sac_life_cards_use_their_printed_costs_and_life_totals",
+      "covers": "actual dark_heart_of_the_wood sacrifices a Forest as its cost and gains its printed life total"
+    },
+    {
+      "test": "scenario q77_land_sac_life::q77_land_sac_life_cards_reject_nonmatching_or_missing_land_costs_atomically",
+      "covers": "actual dark_heart_of_the_wood rejects a missing or nonmatching sacrifice cost atomically"
+    },
+    {
+      "test": "mechanic_registry::q77_land_sac_life::q77_land_sac_life_map_definitions",
+      "covers": "reviewed identity, characteristics and sacrifice/GainLife definition of dark_heart_of_the_wood"
+    },
+    {
+      "test": "mechanic_registry::q77_land_sac_life::q77_land_sac_life_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for dark_heart_of_the_wood"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,23 @@
+// Oracle 15f8049c-f21d-4cd0-aa81-1a533936cf77; source/rulings checked 2026-11-24 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.2b (costs are paid during activation), 701.21a (sacrifice), 115.1/601.2c (target artifact),
+// 701.8 (destroy) and 608.2b (stale target). Copy of Sylvok Replica's mana-plus-sacrifice activated
+// destruction with the printed red cost and artifact-only target.
+(
+  id: "torch_fiend",
+  name: "Torch Fiend",
+  face_id: "torch_fiend",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Devil"],
+  power: 2,
+  toughness: 1,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{R}"), SacrificeSelf],
+    effect: [Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact])))],
+    targeting: Some((groups: [
+      (min: 1, max: 1, prompt: "Choose target artifact", effect_indices: [0]),
+    ])),
+  )],
+)
