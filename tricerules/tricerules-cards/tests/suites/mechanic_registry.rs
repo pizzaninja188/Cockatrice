@@ -1398,3 +1398,12 @@ mod q72_batch_a;
 
 #[path = "../q73_batch_a.rs"]
 mod q73_batch_a;
+
+#[path = "../q74_cycling_control.rs"]
+mod q74_cycling_control;
+
+#[path = "../q74_flashback_utility.rs"]
+mod q74_flashback_utility;
+
+#[path = "../q74_scry_riders.rs"]
+mod q74_scry_riders;

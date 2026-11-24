@@ -1,0 +1,63 @@
+{
+  "format_version": 1,
+  "oracle_id": "7d07821e-d34b-4441-a137-836ffce7127b",
+  "spans": [
+    {
+      "face_id": "samuts_sprint",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "Keyword::Haste",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/spell_effect/2"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q74_scry_riders::q74_scry_riders_apply_their_printed_bodies_and_scry_counts",
+      "covers": "actual Samut's Sprint applies its printed body and scry count"
+    },
+    {
+      "test": "scenario q74_scry_riders::q74_scry_riders_reject_wrong_targets_and_fizzle_stale_targets_without_scrying",
+      "covers": "actual Samut's Sprint rejects an illegal target without paying"
+    },
+    {
+      "test": "mechanic_registry::q74_scry_riders::q74_scry_riders_map_definitions",
+      "covers": "reviewed identity, characteristics and typed scry definition of samut's sprint"
+    },
+    {
+      "test": "mechanic_registry::q74_scry_riders::q74_scry_riders_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for samut's sprint"
+    },
+    {
+      "test": "scenario q74_scry_riders::q74_scry_riders_fizzle_stale_targets_without_scrying",
+      "covers": "actual Samut's Sprint pumps nothing and does not scry when its only target is stale"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "1be474c6-5a9f-4c58-adc6-c1508348adea",
+  "spans": [
+    {
+      "face_id": "jayas_greeting",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q74_scry_riders::q74_scry_riders_reject_wrong_targets_and_fizzle_stale_targets_without_scrying",
+      "covers": "actual Jaya's Greeting does not damage or scry when its only target left"
+    },
+    {
+      "test": "scenario q74_scry_riders::q74_scry_riders_apply_their_printed_bodies_and_scry_counts",
+      "covers": "actual Jaya's Greeting applies its printed body and scry count"
+    },
+    {
+      "test": "scenario q74_scry_riders::q74_scry_riders_reject_wrong_targets_and_fizzle_stale_targets_without_scrying",
+      "covers": "actual Jaya's Greeting rejects an illegal target without paying"
+    },
+    {
+      "test": "mechanic_registry::q74_scry_riders::q74_scry_riders_map_definitions",
+      "covers": "reviewed identity, characteristics and typed scry definition of jaya's greeting"
+    },
+    {
+      "test": "mechanic_registry::q74_scry_riders::q74_scry_riders_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for jaya's greeting"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

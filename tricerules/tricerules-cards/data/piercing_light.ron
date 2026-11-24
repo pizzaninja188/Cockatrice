@@ -1,0 +1,17 @@
+// Oracle 2a6c7826-dcfe-4029-894e-6c82c4dd84b7; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1/601.2c (attacking or blocking creature target), 120.3 (damage), 701.22a-b (scry) and
+// 608.2b (a stale sole target fizzles the spell, so scry does not happen). Copy of Cosmium
+// Blast's combat-role damage and Unsubtle Mockery's damage-then-scry ordering.
+(
+  id: "piercing_light",
+  name: "Piercing Light",
+  face_id: "piercing_light",
+  mana_cost: "{W}",
+  types: ["Instant"],
+  spell_effect: [
+    DamageTarget(amount: 2, target: (kind: Creature, combat_role: AttackingOrBlocking)),
+    Scry(count: 1),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target attacking or blocking creature", effect_indices: [0])])),
+)

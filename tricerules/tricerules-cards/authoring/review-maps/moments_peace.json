@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "b6d22228-a45e-4296-9ae2-1649e04b1c53",
+  "spans": [
+    {
+      "face_id": "moments_peace",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "moments_peace",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PreventAllCombatDamageTurn",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardFace::flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q74_flashback_utility::q74_moments_peace_prevents_all_combat_damage_this_turn",
+      "covers": "actual Moment's Peace prevents all combat damage this turn"
+    },
+    {
+      "test": "scenario q74_flashback_utility::q74_flashback_utility_cards_apply_their_printed_bodies_and_flash_back",
+      "covers": "actual Moment's Peace applies its printed body from hand and flashback"
+    },
+    {
+      "test": "mechanic_registry::q74_flashback_utility::q74_flashback_utility_map_definitions",
+      "covers": "reviewed identity, characteristics and typed flashback definition of moment's peace"
+    },
+    {
+      "test": "mechanic_registry::q74_flashback_utility::q74_flashback_utility_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for moment's peace"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -2594,3 +2594,12 @@ mod q72_batch_a;
 
 #[path = "scenario/q73_batch_a.rs"]
 mod q73_batch_a;
+
+#[path = "scenario/q74_cycling_control.rs"]
+mod q74_cycling_control;
+
+#[path = "scenario/q74_flashback_utility.rs"]
+mod q74_flashback_utility;
+
+#[path = "scenario/q74_scry_riders.rs"]
+mod q74_scry_riders;

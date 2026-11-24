@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "56956afd-db53-4542-816b-490c8b0bbcf7",
+  "spans": [
+    {
+      "face_id": "serum_visions",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q74_scry_riders::q74_scry_canary_simplest_serum_visions_draws_then_scries_two",
+      "covers": "actual Serum Visions draws before publishing its scry-2 choice"
+    },
+    {
+      "test": "scenario q74_scry_riders::q74_scry_riders_apply_their_printed_bodies_and_scry_counts",
+      "covers": "actual Serum Visions applies its printed body and scry count"
+    },
+    {
+      "test": "mechanic_registry::q74_scry_riders::q74_scry_riders_map_definitions",
+      "covers": "reviewed identity, characteristics and typed scry definition of serum visions"
+    },
+    {
+      "test": "mechanic_registry::q74_scry_riders::q74_scry_riders_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for serum visions"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

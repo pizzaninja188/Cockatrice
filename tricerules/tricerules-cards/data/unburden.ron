@@ -1,0 +1,22 @@
+// Oracle 97acd3aa-ae4a-4e9d-a5b9-36eaba158735; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1 (one player target), 118.3 (cycling cost), 701.9a (discard), 702.29a (cycling is an
+// activated ability) and 608.2b (stale target). Copy of Mind Rot's player-scoped two-card discard
+// and Scrap's cycling.
+(
+  id: "unburden",
+  name: "Unburden",
+  face_id: "unburden",
+  mana_cost: "{1}{B}{B}",
+  types: ["Sorcery"],
+  spell_effect: [ChooseHandCards(action: Discard, count: 2, target: (kind: AnyPlayer))],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      source_zone: Hand,
+      costs: [Mana("{2}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

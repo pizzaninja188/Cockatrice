@@ -1,0 +1,23 @@
+// Oracle 3e00326d-2bf4-4731-a6cd-1c015f94f553; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1/601.2c (one creature target), 401.4 (top of library), 701.22a-b (scry) and
+// 608.2b (a stale sole target fizzles the whole spell, so scry does not happen). Copy of
+// Excommunicate's put-on-top Program with an appended Opt-style scry step.
+(
+  id: "anchor_to_the_aether",
+  name: "Anchor to the Aether",
+  face_id: "anchor_to_the_aether",
+  mana_cost: "{2}{U}",
+  types: ["Sorcery"],
+  spell_program: Some((
+    body: (steps: [
+      (id: "put_in_owners_library",
+        kind: Perform(PutInOwnersLibrary(
+          subject: Chosen((kind: Creature)), placement: Top,
+        ))),
+      (id: "scry", kind: Perform(Scry(count: 1))),
+    ]),
+    target_bindings: [(instruction_id: "put_in_owners_library", role: Subject, target_group_index: 0)],
+  )),
+  targeting: Some((groups: [(min: 1, max: 1, effect_indices: [])])),
+)

@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "c34c17c7-3827-49a2-be25-67f44fdfe150",
+  "spans": [
+    {
+      "face_id": "strike_it_rich",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "strike_it_rich",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardFace::flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q74_flashback_utility::q74_flashback_canary_simplest_strike_it_rich_creates_treasures_and_exiles",
+      "covers": "actual Strike It Rich creates one Treasure from hand and flashback, then exiles"
+    },
+    {
+      "test": "scenario q74_flashback_utility::q74_flashback_utility_cards_apply_their_printed_bodies_and_flash_back",
+      "covers": "actual Strike It Rich applies its printed body from hand and flashback"
+    },
+    {
+      "test": "mechanic_registry::q74_flashback_utility::q74_flashback_utility_map_definitions",
+      "covers": "reviewed identity, characteristics and typed flashback definition of strike it rich"
+    },
+    {
+      "test": "mechanic_registry::q74_flashback_utility::q74_flashback_utility_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for strike it rich"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

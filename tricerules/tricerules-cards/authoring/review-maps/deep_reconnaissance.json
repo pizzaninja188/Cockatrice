@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "a823e880-3d5f-4186-a7da-e710a7db583c",
+  "spans": [
+    {
+      "face_id": "deep_reconnaissance",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "deep_reconnaissance",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "ZoneCardFilter.card_type",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardFace::flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q74_flashback_utility::q74_flashback_utility_cards_apply_their_printed_bodies_and_flash_back",
+      "covers": "actual Deep Reconnaissance applies its printed body from hand and flashback"
+    },
+    {
+      "test": "mechanic_registry::q74_flashback_utility::q74_flashback_utility_map_definitions",
+      "covers": "reviewed identity, characteristics and typed flashback definition of deep reconnaissance"
+    },
+    {
+      "test": "mechanic_registry::q74_flashback_utility::q74_flashback_utility_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for deep reconnaissance"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

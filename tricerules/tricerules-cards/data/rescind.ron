@@ -1,0 +1,22 @@
+// Oracle 3f487c8e-a923-4031-b0a7-04f778544fe0; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1 (one permanent target), 118.3 (cycling cost), 400.3 (owner's hand),
+// 608.2b (stale target) and 702.29a (cycling is an activated ability). Pinned 2008-10-01 ruling:
+// cycling is an activated ability. Copy of Boomerang's any-permanent bounce and Scrap's cycling.
+(
+  id: "rescind",
+  name: "Rescind",
+  face_id: "rescind",
+  mana_cost: "{1}{U}{U}",
+  types: ["Instant"],
+  spell_effect: [ReturnToOwnersHand(subject: Chosen((kind: AnyPermanent)))],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      source_zone: Hand,
+      costs: [Mana("{2}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)
