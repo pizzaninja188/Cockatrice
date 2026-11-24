@@ -1,0 +1,12 @@
+// Oracle 7416c8db-ec33-4d92-866c-b7fdc69c8b41; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.26 (untap) and 608.2 (the resolving spell untaps only creatures its controller controls
+// at resolution). Copy of Vitalize's UntapAll shape.
+(
+  id: "mobilize",
+  name: "Mobilize",
+  face_id: "mobilize",
+  mana_cost: "{G}",
+  types: ["Sorcery"],
+  spell_effect: [UntapAll(players: Controller)],
+)

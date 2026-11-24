@@ -1,0 +1,21 @@
+// Oracle 41bfef9f-6eb7-49c7-9b90-ff9f385ba670; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1a/601.2c (target attacking creature), 608.2b (stale target fizzles the whole spell),
+// 701.13 (exile) and 121.1 (draw). The pinned 2016-06-08 ruling: an illegal target means no draw.
+// Copy of Not on My Watch's exile target plus Slice in Twain's draw.
+(
+  id: "second_thoughts",
+  name: "Second Thoughts",
+  face_id: "second_thoughts",
+  mana_cost: "{4}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    Exile(subject: Chosen((kind: Creature, combat_role: Attacking))),
+    Draw(count: 1),
+  ],
+  targeting: Some((groups: [(
+    min: 1, max: 1,
+    prompt: "Choose target attacking creature",
+    effect_indices: [0],
+  )])),
+)

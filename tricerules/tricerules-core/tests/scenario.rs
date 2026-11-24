@@ -2630,3 +2630,12 @@ mod q77_land_sac_life;
 
 #[path = "scenario/q77_sac_artifact_destroy.rs"]
 mod q77_sac_artifact_destroy;
+
+#[path = "scenario/q78_ritual_mana.rs"]
+mod q78_ritual_mana;
+
+#[path = "scenario/q78_attack_removal_rider.rs"]
+mod q78_attack_removal_rider;
+
+#[path = "scenario/q78_team_untap.rs"]
+mod q78_team_untap;
