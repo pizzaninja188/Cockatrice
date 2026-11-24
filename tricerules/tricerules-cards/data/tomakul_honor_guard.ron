@@ -1,0 +1,26 @@
+// Oracle b68cf4e6-205e-40b6-b28b-f4b7d8af7017; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.21a-c (ward). No pinned ruling. Copy of Tolarian Terror's Ward {2} triggered ability.
+(
+  id: "tomakul_honor_guard",
+  name: "Tomakul Honor Guard",
+  face_id: "tomakul_honor_guard",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 3,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
+      program: Some(
+        (
+          body: (
+            steps: [(id: "ward", kind: Perform(CounterTriggeringStackObjectUnlessPays(cost: Mana("{2}"))))],
+          ),
+        ),
+      ),
+    ),
+  ],
+)

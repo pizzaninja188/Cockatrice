@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "b68cf4e6-205e-40b6-b28b-f4b7d8af7017",
+  "spans": [
+    {
+      "face_id": "tomakul_honor_guard",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfBecomesTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CounterTriggeringStackObjectUnlessPays",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/CounterTriggeringStackObjectUnlessPays"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q67_batch_a::q67_ward_canary_simplest_tomakul_honor_guard_charges_two",
+      "covers": "actual Tomakul Honor Guard Ward {2} counters an unpaid spell and preserves a paid one"
+    },
+    {
+      "test": "scenario q67_batch_a::q67_ward_canary_hardest_purple_worm_reduces_once_and_keeps_ward",
+      "covers": "actual Purple Worm reduces by exactly {2} after creature deaths and enforces Ward {2}"
+    },
+    {
+      "test": "scenario q67_batch_a::q67_ward_rimeshield_frost_giant_charges_three",
+      "covers": "actual Rimeshield Frost Giant Ward {3} payment"
+    },
+    {
+      "test": "mechanic_registry::q67_batch_a::q67_cohorts_maps_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q67_batch_a::q67_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

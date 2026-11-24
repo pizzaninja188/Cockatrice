@@ -1,0 +1,24 @@
+// Oracle 7101f0ab-89ce-4b13-a5a8-4cabd6c8670d; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 303.4 (Aura enchant), 502.3 (doesn't untap), 120.4b (damage) and 603.2 (attached-object
+// trigger). No pinned ruling. Combines Paralyzing Grasp's untap lock with Cracked Skull's
+// damage-triggered destruction of the enchanted creature.
+(
+  id: "frozen_solid",
+  name: "Frozen Solid",
+  face_id: "frozen_solid",
+  mana_cost: "{1}{U}{U}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([3]),
+      trigger: WheneverAttachedObjectIsDealtDamage,
+      effect: [Destroy(subject: TriggerObject)],
+    ),
+  ],
+  static_abilities: [
+    (ability_id: "static_01", presentation: OracleLines([2]), definition: AttachedModifier(doesnt_untap_during_untap_step: true)),
+  ],
+)

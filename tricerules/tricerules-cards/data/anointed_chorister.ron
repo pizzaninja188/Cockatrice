@@ -1,0 +1,20 @@
+// Oracle 61859443-e298-41c7-a179-6e6554de91c9; source/rulings checked 2026-11-23 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.15 (lifelink), 602.2 (activate), 118.3 (costs) and 611.2c/613.4c (until-end-of-turn pump).
+// No pinned ruling. Copy of Thirsting Shade's keyword plus activated self-pump.
+(
+  id: "anointed_chorister",
+  name: "Anointed Chorister",
+  face_id: "anointed_chorister",
+  mana_cost: "{W}",
+  types: ["Creature", "Human", "Cleric"],
+  power: 1,
+  toughness: 1,
+  keywords: [Lifelink],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Mana("{4}{W}")],
+    effect: [PumpTarget(power: 3, toughness: 3, subject: Source)],
+  )],
+)
