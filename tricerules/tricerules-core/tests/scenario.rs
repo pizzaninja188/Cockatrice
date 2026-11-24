@@ -2639,3 +2639,12 @@ mod q78_attack_removal_rider;
 
 #[path = "scenario/q78_team_untap.rs"]
 mod q78_team_untap;
+
+#[path = "scenario/q79_gain_life_drain.rs"]
+mod q79_gain_life_drain;
+
+#[path = "scenario/q79_cast_damage.rs"]
+mod q79_cast_damage;
+
+#[path = "scenario/q79_counter_riders.rs"]
+mod q79_counter_riders;

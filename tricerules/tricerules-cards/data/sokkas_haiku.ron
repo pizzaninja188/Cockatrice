@@ -1,0 +1,23 @@
+// Oracle 87a97c72-143d-48a8-a1c5-3c44aa8e5a86; source/rulings checked 2026-11-24 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.6 (counter), 115.1a/601.2c (spell and land targets), 608.2b (a stale target is removed
+// before it resolves), 121.1 (draw), 701.13 (mill) and 701.26 (untap). The pinned 2025-10-02
+// ruling is presentation-only (haiku syllable count) and has no rules effect. Printed order is
+// counter, draw, mill, untap; the two target groups are chosen as the spell is cast.
+(
+  id: "sokkas_haiku",
+  name: "Sokka's Haiku",
+  face_id: "sokkas_haiku",
+  mana_cost: "{3}{U}{U}",
+  types: ["Instant", "Lesson"],
+  spell_effect: [
+    CounterTargetSpell(spell_filter: ()),
+    Draw(count: 1),
+    Mill(count: 3),
+    Untap(subject: Chosen((kind: AnyPermanent, permanent_types: [Land]))),
+  ],
+  targeting: Some((groups: [
+    (min: 1, max: 1, effect_indices: [0]),
+    (min: 1, max: 1, effect_indices: [3]),
+  ])),
+)

@@ -1,0 +1,21 @@
+// Oracle 2fa94a07-c932-4f85-b6e0-a97d2b29eb52; source/rulings checked 2026-11-24 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.3a-b (defender), 601.2 (casting a spell), 603.2/603.3 (the cast trigger) and 120.3
+// (each opponent is dealt 1 damage). The pinned 2018-10-05 rulings confirm the trigger resolves
+// before the spell and resolves even if that spell is countered.
+(
+  id: "electrostatic_field",
+  name: "Electrostatic Field",
+  face_id: "electrostatic_field",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Wall"],
+  power: 0,
+  toughness: 4,
+  keywords: [Defender],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPlayerCastsSpell(filter: (card_type: Some(InstantOrSorcery))),
+    effect: [DamagePlayer(amount: 1, who: EachOpponent)],
+  )],
+)

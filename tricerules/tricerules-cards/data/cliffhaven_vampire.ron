@@ -1,0 +1,22 @@
+// Oracle 1915a311-209b-4628-8122-af3055a78fed; source/rulings checked 2026-11-24 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.9a-b (flying), 118.3 (a life-gain event) and 119.3 (each opponent loses 1 life).
+// The pinned 2016-01-22 rulings confirm one trigger per life-gaining event, including a single
+// lifelink source dealing damage to several recipients, and that a teammate's life gain in
+// Two-Headed Giant does not trigger it.
+(
+  id: "cliffhaven_vampire",
+  name: "Cliffhaven Vampire",
+  face_id: "cliffhaven_vampire",
+  mana_cost: "{2}{W}{B}",
+  types: ["Creature", "Vampire", "Warrior", "Ally"],
+  power: 2,
+  toughness: 4,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPlayerGainsLife(),
+    effect: [LoseLife(amount: Fixed(1), who: EachOpponent)],
+  )],
+)
