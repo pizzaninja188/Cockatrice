@@ -39,6 +39,8 @@ fn issue_67_cards_use_one_validated_battlefield_condition_vocabulary() {
                 card_type: Some(CardTypeFilter::Artifact),
                 color: None,
                 name: None,
+                min_colors: None,
+                max_colors: None,
                 exclude_source: false,
                 ..
             },
@@ -55,6 +57,8 @@ fn issue_67_cards_use_one_validated_battlefield_condition_vocabulary() {
                 token: None,
                 card_type: Some(CardTypeFilter::Creature),
                 name: Some(name),
+                min_colors: None,
+                max_colors: None,
                 exclude_source: true,
                 ..
             },
@@ -69,6 +73,8 @@ fn issue_67_cards_use_one_validated_battlefield_condition_vocabulary() {
         GameCondition::BattlefieldAggregate {
             filter: BattlefieldPermanentFilter {
                 token: None,
+                min_colors: None,
+                max_colors: None,
                 exclude_source: false,
                 ..
             },
@@ -83,6 +89,8 @@ fn issue_67_cards_use_one_validated_battlefield_condition_vocabulary() {
         GameCondition::BattlefieldAggregate {
             filter: BattlefieldPermanentFilter {
                 token: None,
+                min_colors: None,
+                max_colors: None,
                 exclude_source: true,
                 ..
             },
@@ -145,6 +153,8 @@ fn battlefield_aggregate_conditions_reject_invalid_bounds_and_names() {
             color: None,
             name: name.map(str::to_string),
             required_subtypes: vec![],
+            min_colors: None,
+            max_colors: None,
             exclude_source: false,
         },
         aggregate: BattlefieldAggregate::TotalPower,

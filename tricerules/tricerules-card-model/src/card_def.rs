@@ -2152,6 +2152,8 @@ mod tests {
                 color: None,
                 name: None,
                 required_subtypes: vec![],
+                min_colors: None,
+                max_colors: None,
                 exclude_source: false,
             },
         };

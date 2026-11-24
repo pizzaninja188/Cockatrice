@@ -346,6 +346,8 @@ fn issue_351_gravblade_heavy_keeps_the_artifact_condition() {
                     color: None,
                     name: None,
                     required_subtypes: Vec::new(),
+                    min_colors: None,
+                    max_colors: None,
                     exclude_source: false,
                 },
                 aggregate: BattlefieldAggregate::Count,

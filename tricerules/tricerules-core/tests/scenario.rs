@@ -1107,6 +1107,8 @@ mod issue_428_choose_two;
 mod issue_429_aura_restriction;
 #[path = "scenario/issue_430_direct_ron.rs"]
 mod issue_430_direct_ron;
+#[path = "scenario/issue_433_multicolored_count.rs"]
+mod issue_433_multicolored_count;
 #[path = "scenario/issue_444_commands.rs"]
 mod issue_444_commands;
 #[path = "scenario/issue_452_direct_ron.rs"]

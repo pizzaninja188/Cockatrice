@@ -2729,6 +2729,8 @@ mod static_permanent_keyword_grant_tests {
                 color: None,
                 name: Some("Grizzly Bears".into()),
                 required_subtypes: vec![],
+                min_colors: None,
+                max_colors: None,
                 exclude_source: false,
             },
             aggregate: BattlefieldAggregate::Count,

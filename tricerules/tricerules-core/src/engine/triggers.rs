@@ -4626,6 +4626,8 @@ mod tests {
                 color: None,
                 name: None,
                 required_subtypes: vec!["Mountain".into()],
+                min_colors: None,
+                max_colors: None,
                 exclude_source: false,
             },
             aggregate: BattlefieldAggregate::Count,

@@ -201,6 +201,8 @@ fn issue_426_modes_expose_exact_effects_and_target_prompts() {
         color: None,
         name: None,
         required_subtypes: Vec::new(),
+        min_colors: None,
+        max_colors: None,
         exclude_source: false,
     };
     let vehicle = BattlefieldPermanentFilter {
@@ -212,6 +214,8 @@ fn issue_426_modes_expose_exact_effects_and_target_prompts() {
         color: None,
         name: None,
         required_subtypes: vec!["Vehicle".into()],
+        min_colors: None,
+        max_colors: None,
         exclude_source: false,
     };
     let collision = modal("collision_course");
@@ -228,6 +232,8 @@ fn issue_426_modes_expose_exact_effects_and_target_prompts() {
                     color: None,
                     name: None,
                     required_subtypes: Vec::new(),
+                    min_colors: None,
+                    max_colors: None,
                     exclude_source: false,
                 },
             }),

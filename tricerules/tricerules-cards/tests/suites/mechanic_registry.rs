@@ -1350,3 +1350,6 @@ mod q56_batch_c;
 
 #[path = "../battlebond_lands_batch.rs"]
 mod battlebond_lands_batch;
+
+#[path = "../issue_433_infinite_guideline_station.rs"]
+mod issue_433_infinite_guideline_station;

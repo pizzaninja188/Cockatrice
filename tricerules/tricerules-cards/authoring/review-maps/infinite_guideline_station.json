@@ -1,0 +1,94 @@
+{
+  "format_version": 1,
+  "oracle_id": "cda39514-86c9-483e-8d95-fd08138ce33a",
+  "spans": [
+    {
+      "face_id": "infinite_guideline_station",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "infinite_guideline_station",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "infinite_guideline_station",
+      "start_line": 3,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "CountExpression::BattlefieldPermanents",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/CreateTokens/count/Count/BattlefieldPermanents"
+    },
+    {
+      "symbol": "AbilityCost::TapPermanents",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::ConditionalSelfModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/static_abilities/0/definition/ConditionalSelfModifier/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/static_abilities/0/definition/ConditionalSelfModifier/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "robot_c_2_2"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_433_multicolored_count::issue_433_entry_creates_a_tapped_robot_for_each_multicolored_permanent_you_control",
+      "covers": "actual infinite_guideline_station creates one tapped Robot per multicolored permanent you control, counting itself and a multicolored artifact creature once, excluding monocolored, colorless, and opponents' permanents"
+    },
+    {
+      "test": "scenario issue_433_multicolored_count::issue_433_color_changes_made_in_response_change_the_resolution_count",
+      "covers": "actual infinite_guideline_station reads layer-5 colors at resolution after color changes made in response"
+    },
+    {
+      "test": "scenario issue_433_multicolored_count::issue_433_station_twelve_attacks_and_draws_for_each_multicolored_permanent",
+      "covers": "actual infinite_guideline_station is a noncreature at 11, a 7/15 at 12+, and draws per multicolored permanent when it attacks"
+    },
+    {
+      "test": "scenario issue_433_multicolored_count::issue_433_multiplayer_counts_only_the_controllers_multicolored_permanents",
+      "covers": "actual infinite_guideline_station counts only its controller's multicolored permanents in a three-player game"
+    },
+    {
+      "test": "mechanic_registry::issue_433_infinite_guideline_station::issue_433_infinite_guideline_station_maps_definition",
+      "covers": "reviewed identity and complete typed shape of infinite_guideline_station"
+    },
+    {
+      "test": "mechanic_registry::issue_433_infinite_guideline_station::issue_433_infinite_guideline_station_fingerprint_matches_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for infinite_guideline_station"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -7151,6 +7151,50 @@ fn issue_519_player_count_condition_parses_and_validates_bounds() {
 }
 
 #[test]
+fn issue_433_battlefield_filter_color_count_bounds_parse_and_validate() {
+    use crate::primitives::BattlefieldPermanentFilter;
+
+    let multicolored = ron::from_str::<BattlefieldPermanentFilter>(
+        "(controllers: Controller, min_colors: Some(2))",
+    )
+    .unwrap();
+    assert_eq!(multicolored.min_colors, Some(2));
+    assert_eq!(multicolored.max_colors, None);
+    assert_eq!(multicolored.validate(), Ok(()));
+    let serialized = ron::to_string(&multicolored).unwrap();
+    assert!(serialized.contains("min_colors"));
+    assert!(!serialized.contains("max_colors"));
+
+    for valid in [
+        // Niv-Mizzet, Guildpact: exactly two colors.
+        "(controllers: Controller, min_colors: Some(2), max_colors: Some(2))",
+        // Colorless.
+        "(controllers: Controller, max_colors: Some(0))",
+        "(controllers: Controller, color: Some(Red), min_colors: Some(2))",
+    ] {
+        let parsed = ron::from_str::<BattlefieldPermanentFilter>(valid).unwrap();
+        assert_eq!(parsed.validate(), Ok(()), "{valid}");
+    }
+    for (invalid, reason) in [
+        ("(controllers: Controller, min_colors: Some(0))", "at least one"),
+        ("(controllers: Controller, min_colors: Some(6))", "cannot exceed five"),
+        ("(controllers: Controller, max_colors: Some(6))", "cannot exceed five"),
+        (
+            "(controllers: Controller, min_colors: Some(3), max_colors: Some(2))",
+            "min_colors cannot exceed max_colors",
+        ),
+        (
+            "(controllers: Controller, any_of: Some([(controllers: Controller, min_colors: Some(0)), (controllers: Controller)]))",
+            "at least one",
+        ),
+    ] {
+        let parsed = ron::from_str::<BattlefieldPermanentFilter>(invalid).unwrap();
+        let error = parsed.validate().expect_err(invalid);
+        assert!(error.contains(reason), "{invalid}: {error}");
+    }
+}
+
+#[test]
 fn issue_207_stack_ability_and_source_linked_ability_loss_primitives_parse() {
     for authored in [
         "CounterTargetAbility",
@@ -9076,6 +9120,8 @@ fn authored_choose_accepts_the_closed_resultless_conditional_top_search() {
                     color: None,
                     name: None,
                     required_subtypes: vec!["Dragon".into()],
+                    min_colors: None,
+                    max_colors: None,
                     exclude_source: false,
                 },
                 aggregate: crate::primitives::BattlefieldAggregate::Count,
@@ -11031,6 +11077,8 @@ fn program_if_accepts_controller_creature_maximum_power_conditions() {
                 color: None,
                 name: None,
                 required_subtypes: Vec::new(),
+                min_colors: None,
+                max_colors: None,
                 exclude_source: false,
             },
             aggregate: crate::primitives::BattlefieldAggregate::MaximumPower,

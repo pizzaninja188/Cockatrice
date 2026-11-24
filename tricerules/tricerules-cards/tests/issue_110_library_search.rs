@@ -279,6 +279,8 @@ fn issue_110_conditional_and_owner_choice_cards_are_complete() {
                         controllers: tricerules_cards::primitives::RelativePlayerSet::Controller,
                         card_type: None,
                         required_subtypes,
+                        min_colors: None,
+                        max_colors: None,
                         exclude_source: false,
                         ..
                     },

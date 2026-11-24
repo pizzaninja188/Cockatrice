@@ -520,6 +520,8 @@ fn issue_373_lasyd_prowler_mills_per_land_and_renews_from_the_graveyard() {
                     color: None,
                     name: None,
                     required_subtypes: Vec::new(),
+                    min_colors: None,
+                    max_colors: None,
                     exclude_source: false,
                 },
             }),

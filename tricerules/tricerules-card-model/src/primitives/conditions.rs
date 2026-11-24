@@ -782,6 +782,14 @@ pub struct BattlefieldPermanentFilter {
     /// Derived color after copy and color-changing effects. Gearsmith Guardian uses `Blue`.
     #[serde(default)]
     pub color: Option<Color>,
+    /// Inclusive lower bound on the number of distinct derived colors (CR 105.2). Multicolored
+    /// (CR 105.2b, Infinite Guideline Station) is `Some(2)`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_colors: Option<u8>,
+    /// Inclusive upper bound on the number of distinct derived colors. "Exactly two colors"
+    /// (Niv-Mizzet, Guildpact) pairs `Some(2)` with `min_colors: Some(2)`; colorless is `Some(0)`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_colors: Option<u8>,
     #[serde(default)]
     pub name: Option<String>,
     /// Every listed derived subtype must be present.
@@ -799,6 +807,20 @@ impl BattlefieldPermanentFilter {
             if supertype.trim().is_empty() || !seen.insert(supertype) {
                 return Err(
                     "battlefield permanent filter supertypes must be nonblank and unique".into(),
+                );
+            }
+        }
+        if self.min_colors == Some(0) {
+            return Err("battlefield permanent filter min_colors must be at least one".into());
+        }
+        if self.min_colors.is_some_and(|min| min > 5) || self.max_colors.is_some_and(|max| max > 5)
+        {
+            return Err("battlefield permanent filter color bounds cannot exceed five".into());
+        }
+        if let (Some(min), Some(max)) = (self.min_colors, self.max_colors) {
+            if min > max {
+                return Err(
+                    "battlefield permanent filter min_colors cannot exceed max_colors".into(),
                 );
             }
         }
@@ -1037,6 +1059,8 @@ mod observed_object_aggregate_tests {
                 color: None,
                 name: None,
                 required_subtypes: vec!["Mountain".into()],
+                min_colors: None,
+                max_colors: None,
                 exclude_source: false,
             },
             aggregate: BattlefieldAggregate::Count,

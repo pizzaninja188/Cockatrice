@@ -54,6 +54,7 @@ pub(super) fn battlefield_permanent_matches(
             CardTypeFilter::Noncreature => !c.is_creature(),
         })
         && filter.color.is_none_or(|color| c.colors.contains(&color))
+        && battlefield_color_count_matches(filter, c)
         && filter
             .required_subtypes
             .iter()
@@ -64,6 +65,29 @@ pub(super) fn battlefield_permanent_matches(
                 .iter()
                 .any(|branch| battlefield_permanent_matches(state, branch, oid, c, context))
         })
+}
+
+/// CR 105.2/105.2b: compare the number of distinct derived colors (after copy and layer-5
+/// color-setting effects) against the filter's inclusive bounds.
+fn battlefield_color_count_matches(
+    filter: &BattlefieldPermanentFilter,
+    c: &Characteristics,
+) -> bool {
+    if filter.min_colors.is_none() && filter.max_colors.is_none() {
+        return true;
+    }
+    let count = [
+        Color::White,
+        Color::Blue,
+        Color::Black,
+        Color::Red,
+        Color::Green,
+    ]
+    .iter()
+    .filter(|color| c.colors.contains(color))
+    .count() as u8;
+    filter.min_colors.is_none_or(|min| count >= min)
+        && filter.max_colors.is_none_or(|max| count <= max)
 }
 
 fn battlefield_creature_source_is_excluded(
@@ -3058,6 +3082,8 @@ mod tests {
                 color: None,
                 name: None,
                 required_subtypes: vec![],
+                min_colors: None,
+                max_colors: None,
                 exclude_source: false,
             },
         };
@@ -3128,6 +3154,8 @@ mod tests {
             color: None,
             name: None,
             required_subtypes: vec![],
+            min_colors: None,
+            max_colors: None,
             exclude_source: false,
         };
         let maximum = |filter, characteristic| {
@@ -3490,6 +3518,8 @@ mod tests {
             color: None,
             name: None,
             required_subtypes: vec![],
+            min_colors: None,
+            max_colors: None,
             exclude_source: false,
         };
         let mut union = filter.clone();
@@ -4471,6 +4501,8 @@ mod tests {
                     color: None,
                     name: None,
                     required_subtypes: vec![],
+                    min_colors: None,
+                    max_colors: None,
                     exclude_source: false,
                 },
                 BattlefieldPermanentFilter {
@@ -4482,6 +4514,8 @@ mod tests {
                     color: None,
                     name: None,
                     required_subtypes: vec![],
+                    min_colors: None,
+                    max_colors: None,
                     exclude_source: false,
                 },
             ]),
@@ -4490,6 +4524,8 @@ mod tests {
             color: None,
             name: None,
             required_subtypes: vec![],
+            min_colors: None,
+            max_colors: None,
             exclude_source: false,
         };
         assert_eq!(
@@ -4937,6 +4973,8 @@ mod tests {
             color: None,
             name: None,
             required_subtypes: vec![],
+            min_colors: None,
+            max_colors: None,
             exclude_source: true,
         };
         let context = ConditionContext {
@@ -5016,6 +5054,8 @@ mod tests {
             color: None,
             name: None,
             required_subtypes: Vec::new(),
+            min_colors: None,
+            max_colors: None,
             exclude_source: false,
         };
         let condition = GameCondition::BattlefieldAggregate {

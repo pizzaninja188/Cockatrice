@@ -732,7 +732,7 @@ fn issue_423_excluded_cohort_identities_have_no_registry_entry() {
     for id in [
         "adagia,_windswept_bastion",
         "entropic_battlecruiser",
-        "infinite_guideline_station",
+        // Infinite Guideline Station shipped with #433's color-count filter.
         "susurian_dirgecraft",
         "the_seriema",
     ] {

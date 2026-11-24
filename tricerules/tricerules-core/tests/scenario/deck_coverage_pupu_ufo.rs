@@ -275,6 +275,8 @@ fn pupu_ufo_source_setter_resolves_a_different_valid_battlefield_filter() {
                 color: None,
                 name: None,
                 required_subtypes: vec![],
+                min_colors: None,
+                max_colors: None,
                 exclude_source: false,
             },
         }),
