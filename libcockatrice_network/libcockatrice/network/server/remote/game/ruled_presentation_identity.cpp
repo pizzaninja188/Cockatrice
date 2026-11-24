@@ -92,7 +92,9 @@ bool supportedSchema()
         // TargetCandidateRef, whose object_id is already projected unless it names a player; the
         // key itself is an owner/controller player id and the mode an enum, so neither enters the
         // object-identity domain. All of it stays per-player like the enclosing target group.
-        const QByteArray expected("c0da147de2086a9129eeb7460be643cececfd3cf518bd7aca3342f44a0d389a7");
+        // Goblin Welder's TargetPairConstraint/TargetPairChoice are removed in favor of that
+        // relation; its related_group_indices are group positions, not object identities.
+        const QByteArray expected("e1542f201012ba10aec55858c25445e226b405a110033a192f1e2db6353bcf8b");
         if (digest != expected)
             qCritical() << "ruled presentation schema needs an identity audit:" << digest;
         return digest == expected;

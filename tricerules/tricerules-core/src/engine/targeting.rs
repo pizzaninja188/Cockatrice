@@ -1913,21 +1913,37 @@ fn validate_grouped_targets_at(
                 )?;
             }
         }
-        if let Some(relation) = group.relation {
-            if !relation.is_satisfied_by(selected.iter().map(|target| {
-                target_relation_key(
-                    engine,
-                    relation,
-                    target.object_id,
-                    target.expected_zone_change_generation,
-                )
-            })) {
+        // A relation spanning groups needs every group's announcement; a staged single-group
+        // announcement checks only a relation within that group.
+        if let Some(relation) = group
+            .relation
+            .filter(|relation| only_group.is_none() || relation.related_group().is_none())
+        {
+            let keys = std::iter::once(group_index)
+                .chain(relation.related_group())
+                .flat_map(|scoped| {
+                    let key = schema.groups[scoped].relation_key();
+                    grouped[scoped].iter().map(move |target| {
+                        key.and_then(|key| {
+                            target_relation_key(
+                                engine,
+                                key,
+                                target.object_id,
+                                target.expected_zone_change_generation,
+                            )
+                        })
+                    })
+                });
+            if !relation.is_satisfied_by(keys) {
                 return Err(EngineError::Illegal(match relation {
                     TargetGroupRelation::SameGraveyard => {
                         "targets must be cards from the same graveyard"
                     }
                     TargetGroupRelation::DifferentControllers => {
                         "targets must be controlled by different players"
+                    }
+                    TargetGroupRelation::SamePlayerAs(_) => {
+                        "related targets must belong to the same player"
                     }
                 }));
             }
@@ -1948,21 +1964,6 @@ fn validate_grouped_targets_at(
             }) {
                 return Err(EngineError::Illegal(
                     "target must be distinct across target groups",
-                ));
-            }
-        }
-    }
-    for (effect_index, effect) in target_context.effects.iter().enumerate() {
-        if only_group.is_none() && matches!(effect, SpellEffectKind::ExchangeArtifactWithGraveyard)
-        {
-            let (first, second) = schema
-                .artifact_exchange_groups(effect_index)
-                .expect("registry validated artifact exchange roles");
-            let departure = grouped[first][0].object_id;
-            let incoming = grouped[second][0].object_id;
-            if artifact_exchange_player(engine, departure, incoming).is_none() {
-                return Err(EngineError::Illegal(
-                    "artifact targets must belong to the same player",
                 ));
             }
         }
@@ -2078,7 +2079,7 @@ fn target_ref_domain_exists(engine: &GameEngine, target: &rv1::TargetRef) -> boo
 /// graveyard card uses its owner while it remains that exact card. `None` fails the relation.
 pub(super) fn target_relation_key(
     engine: &GameEngine,
-    relation: TargetGroupRelation,
+    key: TargetRelationKey,
     object_id: ObjectId,
     expected_generation: Option<u64>,
 ) -> Option<PlayerId> {
@@ -2091,7 +2092,7 @@ pub(super) fn target_relation_key(
         .unwrap_or(0);
     let generation = expected_generation.unwrap_or(current_generation);
     let current = generation == current_generation;
-    match relation.key() {
+    match key {
         TargetRelationKey::Owner => object
             .filter(|object| current && object.zone == Zone::Graveyard)
             .map(|object| object.owner),
@@ -2130,12 +2131,12 @@ pub(super) fn relation_illegal_target_indices(
         return illegal;
     };
     for (group_index, group) in targeting.groups.iter().enumerate() {
-        let Some(relation) = group
+        if group
             .relation
-            .filter(|relation| relation.mode() == TargetRelationMode::AllDistinct)
-        else {
+            .is_none_or(|relation| relation.mode() != TargetRelationMode::AllDistinct)
+        {
             continue;
-        };
+        }
         let keyed = targets
             .iter()
             .enumerate()
@@ -2143,9 +2144,10 @@ pub(super) fn relation_illegal_target_indices(
             .map(|(index, target)| {
                 (
                     index,
+                    // DifferentControllers is the only AllDistinct relation: permanent targets.
                     target_relation_key(
                         engine,
-                        relation,
+                        TargetRelationKey::Controller,
                         target.object_id,
                         target.zone_change_generation,
                     ),
@@ -2165,55 +2167,120 @@ pub(super) fn relation_illegal_target_indices(
     illegal
 }
 
-/// Publish each candidate's relation key and prune candidates that cannot belong to any legal
-/// selection of at least `min` targets. Consumers compare these keys only.
-fn publish_target_relation(
+/// Publish every relation's player keys on each group it covers. A relation within one group
+/// (single graveyard, different controllers) or across two (Goblin Welder's "that player") uses
+/// the same keys, so consumers compare keys only. Ordinary offers also prune candidates that
+/// cannot complete a legal selection; copy offers keep them so an original target stays visible.
+fn publish_target_relations(
     engine: &GameEngine,
-    relation: TargetGroupRelation,
-    min: u32,
-    permanent_ids: &mut Vec<ObjectId>,
-    graveyard_ids: &mut Vec<ObjectId>,
-) -> rv1::TargetRelationConstraint {
-    let key = |object_id: ObjectId| target_relation_key(engine, relation, object_id, None);
-    permanent_ids.retain(|&object_id| key(object_id).is_some());
-    graveyard_ids.retain(|&object_id| key(object_id).is_some());
-    let mut counts = std::collections::HashMap::<PlayerId, u32>::new();
-    for &object_id in permanent_ids.iter().chain(graveyard_ids.iter()) {
-        *counts.entry(key(object_id).expect("retained")).or_default() += 1;
-    }
-    let distinct = counts.len() as u32;
-    let keep = |object_id: &ObjectId| match relation.mode() {
-        TargetRelationMode::AllEqual => counts[&key(*object_id).expect("retained")] >= min,
-        TargetRelationMode::AllDistinct => distinct >= min,
-    };
-    permanent_ids.retain(keep);
-    graveyard_ids.retain(keep);
-    let entry = |kind: rv1::TargetRefKind, object_id: ObjectId| rv1::TargetRelationKey {
-        candidate: Some(rv1::TargetCandidateRef {
-            kind: kind as i32,
-            object_id,
-        }),
-        key: key(object_id).expect("retained") as u32,
-    };
-    rv1::TargetRelationConstraint {
-        mode: match relation.mode() {
+    schema: &TargetSchema<'_, '_>,
+    groups: &mut [rv1::LegalTargetGroup],
+    prune: bool,
+) {
+    for (index, authored) in schema.groups.iter().enumerate() {
+        let Some(relation) = authored.relation else {
+            continue;
+        };
+        let scope = std::iter::once(index)
+            .chain(relation.related_group())
+            .collect::<Vec<_>>();
+        let candidates = |scoped: usize, groups: &[rv1::LegalTargetGroup]| {
+            let key = schema.groups[scoped].relation_key();
+            let published = &groups[scoped];
+            published
+                .valid_permanent_ids
+                .iter()
+                .map(|&oid| (rv1::TargetRefKind::Permanent, oid))
+                .chain(
+                    published
+                        .valid_graveyard_ids
+                        .iter()
+                        .map(|&oid| (rv1::TargetRefKind::Graveyard, oid)),
+                )
+                .map(|(kind, oid)| {
+                    let player = key.and_then(|key| target_relation_key(engine, key, oid, None));
+                    (kind, oid, player)
+                })
+                .collect::<Vec<_>>()
+        };
+        let mut keyed = scope
+            .iter()
+            .map(|&scoped| candidates(scoped, groups))
+            .collect::<Vec<_>>();
+        if prune {
+            let counts = keyed
+                .iter()
+                .map(|candidates| {
+                    let mut counts = std::collections::HashMap::<PlayerId, u32>::new();
+                    for player in candidates.iter().filter_map(|(_, _, player)| *player) {
+                        *counts.entry(player).or_default() += 1;
+                    }
+                    counts
+                })
+                .collect::<Vec<_>>();
+            let completes = |player: PlayerId| match relation.mode() {
+                // Every covered group must still be able to choose its minimum with this key.
+                TargetRelationMode::AllEqual => {
+                    scope.iter().zip(&counts).all(|(&scoped, counts)| {
+                        counts.get(&player).copied().unwrap_or(0) >= schema.groups[scoped].min
+                    })
+                }
+                TargetRelationMode::AllDistinct => counts[0].len() as u32 >= authored.min,
+            };
+            for (position, &scoped) in scope.iter().enumerate() {
+                keyed[position].retain(|(_, _, player)| player.is_some_and(completes));
+                let kept = |kind: rv1::TargetRefKind, oid: &ObjectId| {
+                    keyed[position]
+                        .iter()
+                        .any(|(candidate_kind, candidate, _)| {
+                            *candidate_kind == kind && candidate == oid
+                        })
+                };
+                groups[scoped]
+                    .valid_permanent_ids
+                    .retain(|oid| kept(rv1::TargetRefKind::Permanent, oid));
+                groups[scoped]
+                    .valid_graveyard_ids
+                    .retain(|oid| kept(rv1::TargetRefKind::Graveyard, oid));
+            }
+        }
+        let keys = keyed
+            .iter()
+            .flatten()
+            .filter_map(|&(kind, object_id, player)| {
+                player.map(|player| rv1::TargetRelationKey {
+                    candidate: Some(rv1::TargetCandidateRef {
+                        kind: kind as i32,
+                        object_id,
+                    }),
+                    key: player as u32,
+                })
+            })
+            .collect::<Vec<_>>();
+        let mode = match relation.mode() {
             TargetRelationMode::AllEqual => rv1::TargetRelationMode::AllEqual,
             TargetRelationMode::AllDistinct => rv1::TargetRelationMode::AllDistinct,
-        } as i32,
-        keys: permanent_ids
-            .iter()
-            .map(|&object_id| entry(rv1::TargetRefKind::Permanent, object_id))
-            .chain(
-                graveyard_ids
+        } as i32;
+        for &scoped in &scope {
+            groups[scoped].relation = Some(rv1::TargetRelationConstraint {
+                mode,
+                keys: keys.clone(),
+                related_group_indices: scope
                     .iter()
-                    .map(|&object_id| entry(rv1::TargetRefKind::Graveyard, object_id)),
-            )
-            .collect(),
+                    .filter(|&&other| other != scoped)
+                    .map(|&other| other as u32)
+                    .collect(),
+            });
+        }
     }
 }
 
 pub(super) fn legal_target_group_has_minimum(group: &rv1::LegalTargetGroup) -> bool {
-    if let Some(relation) = &group.relation {
+    if let Some(relation) = group
+        .relation
+        .as_ref()
+        .filter(|relation| relation.related_group_indices.is_empty())
+    {
         if group.min == 0 {
             return true;
         }
@@ -2388,7 +2455,7 @@ fn compute_targets_with_context(
     source: TargetSourceIdentity,
     target_context: TargetResolutionContext<'_>,
     targeting_cost_action: Option<TargetingCostAction>,
-    prune_unpaired_artifact_targets: bool,
+    prune_related_candidates: bool,
 ) -> rv1::SpellTargets {
     // DamageTargets metadata controls the allocation UI. Cardinality lives exclusively on groups.
     let mut fixed_damage: u32 = 0;
@@ -2514,15 +2581,6 @@ fn compute_targets_with_context(
                             .collect(),
                     }
                 });
-            let relation = group.relation.map(|relation| {
-                publish_target_relation(
-                    engine,
-                    relation,
-                    group.min,
-                    &mut permanent_ids,
-                    &mut graveyard_ids,
-                )
-            });
             let mut self_legal = false;
             let mut opponent_legal = false;
             for player in &engine.state.players {
@@ -2548,58 +2606,13 @@ fn compute_targets_with_context(
                 valid_graveyard_ids: graveyard_ids,
                 valid_permanent_targets: Vec::new(),
                 distinct_from_group_indices: group.distinct_from.to_vec(),
-                relation,
-                pair_constraint: None,
+                relation: None,
                 x_target_choices,
             }
         })
         .collect::<Vec<_>>();
 
-    for (effect_index, effect) in target_context.effects.iter().enumerate() {
-        if !prune_unpaired_artifact_targets
-            || !matches!(effect, SpellEffectKind::ExchangeArtifactWithGraveyard)
-        {
-            continue;
-        }
-        let (first, second) = schema
-            .artifact_exchange_groups(effect_index)
-            .expect("registry validated artifact exchange roles");
-        let mut pairs = Vec::new();
-        for &departure in &groups[first].valid_permanent_ids {
-            for &incoming in &groups[second].valid_graveyard_ids {
-                if artifact_exchange_player(engine, departure, incoming).is_some() {
-                    pairs.push(rv1::TargetPairChoice {
-                        prior_target: Some(rv1::TargetCandidateRef {
-                            kind: rv1::TargetRefKind::Permanent as i32,
-                            object_id: departure,
-                        }),
-                        candidate: Some(rv1::TargetCandidateRef {
-                            kind: rv1::TargetRefKind::Graveyard as i32,
-                            object_id: incoming,
-                        }),
-                    });
-                }
-            }
-        }
-        groups[first].valid_permanent_ids.retain(|oid| {
-            pairs.iter().any(|pair| {
-                pair.prior_target
-                    .as_ref()
-                    .is_some_and(|target| target.object_id == *oid)
-            })
-        });
-        groups[second].valid_graveyard_ids.retain(|oid| {
-            pairs.iter().any(|pair| {
-                pair.candidate
-                    .as_ref()
-                    .is_some_and(|target| target.object_id == *oid)
-            })
-        });
-        groups[second].pair_constraint = Some(rv1::TargetPairConstraint {
-            prior_group_index: first as u32,
-            compatible_pairs: pairs,
-        });
-    }
+    publish_target_relations(engine, &schema, &mut groups, prune_related_candidates);
 
     let counter_allocation = counter_allocation_for_schema(target_context.effects, &schema);
     for (group, authored) in groups.iter_mut().zip(&schema.groups) {
@@ -3838,7 +3851,8 @@ mod tests {
         let effects = vec![effect];
         let targeting: TargetingDef = serde_json::from_value(serde_json::json!({"groups": [
             {"min":1,"max":1,"prompt":"Choose battlefield artifact","effect_indices":[0]},
-            {"min":1,"max":1,"prompt":"Choose artifact in that player's graveyard","effect_indices":[0]}
+            {"min":1,"max":1,"prompt":"Choose artifact in that player's graveyard","effect_indices":[0],
+             "relation":{"SamePlayerAs":0}}
         ]})).unwrap();
         let mut engine = GameEngine::new(
             tricerules_cards::registry::global(),
@@ -3905,23 +3919,38 @@ mod tests {
             .unwrap();
         }
         let published = compute_spell_targets(&engine, 10, source, &effects, Some(&targeting), &[]);
-        assert!(published.groups[0].pair_constraint.is_none());
-        let constraint = published.groups[1]
-            .pair_constraint
-            .as_ref()
-            .expect("matched target pairs are engine-published");
-        assert_eq!(constraint.prior_group_index, 0);
-        assert_eq!(constraint.compatible_pairs.len(), 3);
-        for index in 0..3 {
-            assert!(constraint.compatible_pairs.iter().any(|pair| {
-                pair.prior_target.as_ref().is_some_and(|target| {
-                    target.object_id == battlefield[index]
-                        && target.kind == rv1::TargetRefKind::Permanent as i32
-                }) && pair.candidate.as_ref().is_some_and(|target| {
-                    target.object_id == graveyard[index]
-                        && target.kind == rv1::TargetRefKind::Graveyard as i32
-                })
-            }));
+        // Both groups carry the same cross-group relation: each player's artifact and card share
+        // that player's key, so consumers compare keys without deriving control or ownership.
+        for (group, related) in [(0, 1), (1, 0)] {
+            let relation = published.groups[group]
+                .relation
+                .as_ref()
+                .expect("the related player keys are engine-published");
+            assert_eq!(relation.mode, rv1::TargetRelationMode::AllEqual as i32);
+            assert_eq!(relation.related_group_indices, vec![related]);
+            assert_eq!(relation.keys.len(), 6);
+            for index in 0..3 {
+                let key = |kind: rv1::TargetRefKind, oid| {
+                    relation
+                        .keys
+                        .iter()
+                        .find(|key| {
+                            key.candidate.as_ref().is_some_and(|candidate| {
+                                candidate.kind == kind as i32 && candidate.object_id == oid
+                            })
+                        })
+                        .map(|key| key.key)
+                };
+                let player = engine.state.players[index].id as u32;
+                assert_eq!(
+                    key(rv1::TargetRefKind::Permanent, battlefield[index]),
+                    Some(player)
+                );
+                assert_eq!(
+                    key(rv1::TargetRefKind::Graveyard, graveyard[index]),
+                    Some(player)
+                );
+            }
         }
         assert!(validate_spell_targets(
             &engine,
@@ -3944,6 +3973,12 @@ mod tests {
         assert!(
             TargetSchema::compile(&effects, Some(&malformed)).is_err(),
             "the ability controller chooses both targets"
+        );
+        malformed = targeting.clone();
+        malformed.groups[1].relation = None;
+        assert!(
+            TargetSchema::compile(&effects, Some(&malformed)).is_err(),
+            "the exchange requires its authored same-player relation"
         );
         // Current control, not physical ownership, selects the matching graveyard.
         engine.state.players[1]
@@ -3981,13 +4016,8 @@ mod tests {
         );
         assert!(empty.groups[1].valid_graveyard_ids.is_empty());
         assert!(
-            empty.groups[1]
-                .pair_constraint
-                .as_ref()
-                .unwrap()
-                .compatible_pairs
-                .is_empty(),
-            "constrained-empty is retained"
+            empty.groups[1].relation.as_ref().unwrap().keys.is_empty(),
+            "a present relation with no keys permits no selection"
         );
         assert!(!legal_target_group_has_minimum(&empty.groups[0]));
     }

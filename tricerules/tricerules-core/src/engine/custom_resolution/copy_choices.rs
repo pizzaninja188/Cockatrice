@@ -676,110 +676,55 @@ impl GameEngine {
                         ));
                     }
                 }
-                match group.relation {
-                    None => {}
-                    Some(relation @ TargetGroupRelation::SameGraveyard) => {
-                        // Departed originals are already illegal; only current cards compare.
-                        let keys = group_targets
-                            .iter()
-                            .filter(|target| copy_target_is_current(self, target))
-                            .filter_map(|target| {
-                                target_relation_key(self, relation, target.object_id, None)
-                            })
-                            .map(Some);
-                        if !relation.is_satisfied_by(keys) {
-                            return Err(EngineError::Illegal(
-                                "targets must be cards from the same graveyard",
-                            ));
-                        }
-                    }
-                    Some(relation @ TargetGroupRelation::DifferentControllers) => {
-                        // CR 707.10c keeps an unchanged pair even if it became illegal. A changed
-                        // pair compares every target, a departed one by last-known controller.
-                        let changed = owner_occurrences.iter().any(|(index, occurrence)| {
-                            occurrence.group_index as usize == group_index
-                                && !same_copy_target_identity(
-                                    &selected[*index],
-                                    &occurrence.original,
-                                )
-                        });
-                        if changed
-                            && !relation.is_satisfied_by(group_targets.iter().map(|target| {
-                                target_relation_key(
-                                    self,
-                                    relation,
-                                    target.object_id,
-                                    target.zone_change_generation,
-                                )
-                            }))
-                        {
-                            return Err(EngineError::Illegal(
-                                "targets must be controlled by different players",
-                            ));
-                        }
-                    }
-                }
-            }
-            for (effect_index, effect) in effects.iter().enumerate() {
-                if !matches!(effect, SpellEffectKind::ExchangeArtifactWithGraveyard) {
+                let Some(relation) = group.relation else {
+                    continue;
+                };
+                // CR 707.10c keeps an unchanged original selection even if it became illegal.
+                // A changed selection compares every covered target: a departed permanent by
+                // its last-known controller, while a departed graveyard card is already illegal
+                // and contributes nothing.
+                let scope = std::iter::once(group_index)
+                    .chain(relation.related_group())
+                    .collect::<Vec<_>>();
+                let in_scope = |occurrence: &CopyTargetOccurrence| {
+                    scope.contains(&(occurrence.group_index as usize))
+                };
+                let changed = owner_occurrences.iter().any(|(index, occurrence)| {
+                    in_scope(occurrence)
+                        && !same_copy_target_identity(&selected[*index], &occurrence.original)
+                });
+                if !changed {
                     continue;
                 }
-                let (departure_group, incoming_group) = schema
-                    .artifact_exchange_groups(effect_index)
-                    .ok_or(EngineError::ProgramInvariant(
-                        "artifact exchange target groups are missing",
-                    ))?;
-                let target_for_group = |group_index: usize| {
-                    owner_occurrences
-                        .iter()
-                        .find(|(_, occurrence)| occurrence.group_index as usize == group_index)
-                        .map(|(index, _)| &selected[*index])
-                };
-                if let (Some(departure), Some(incoming)) = (
-                    target_for_group(departure_group),
-                    target_for_group(incoming_group),
-                ) {
-                    // CR 115.7d permits retaining an already-illegal original pair. A current
-                    // graveyard target in a changed pair must match the battlefield target's
-                    // controller, including the departed target's exact-incarnation LKI.
-                    let pair_changed = owner_occurrences.iter().any(|(index, occurrence)| {
-                        (occurrence.group_index as usize == departure_group
-                            || occurrence.group_index as usize == incoming_group)
-                            && !same_copy_target_identity(&selected[*index], &occurrence.original)
+                let keys = owner_occurrences
+                    .iter()
+                    .filter(|(_, occurrence)| in_scope(occurrence))
+                    .filter_map(|(index, occurrence)| {
+                        let target = &selected[*index];
+                        let key = schema.groups[occurrence.group_index as usize].relation_key()?;
+                        (key == TargetRelationKey::Controller
+                            || copy_target_is_current(self, target))
+                        .then(|| {
+                            target_relation_key(
+                                self,
+                                key,
+                                target.object_id,
+                                target.zone_change_generation,
+                            )
+                        })
                     });
-                    if pair_changed && copy_target_is_current(self, incoming) {
-                        let compatible = if copy_target_is_current(self, departure) {
-                            artifact_exchange_player(self, departure.object_id, incoming.object_id)
-                                .is_some()
-                        } else {
-                            let controller =
-                                departure.zone_change_generation.and_then(|generation| {
-                                    self.state
-                                        .last_known_information
-                                        .controller(&(departure.object_id, generation))
-                                        .copied()
-                                });
-                            let graveyard_owner = self
-                                .state
-                                .objects
-                                .get(&incoming.object_id)
-                                .filter(|object| object.zone == Zone::Graveyard)
-                                .map(|object| object.owner);
-                            controller
-                                .zip(graveyard_owner)
-                                .is_some_and(|(controller, owner)| {
-                                    controller == owner
-                                        && self.state.player_idx(controller).is_some_and(|index| {
-                                            !self.state.players[index].has_lost
-                                        })
-                                })
-                        };
-                        if !compatible {
-                            return Err(EngineError::Illegal(
-                                "artifact targets must belong to the same player",
-                            ));
+                if !relation.is_satisfied_by(keys) {
+                    return Err(EngineError::Illegal(match relation {
+                        TargetGroupRelation::SameGraveyard => {
+                            "targets must be cards from the same graveyard"
                         }
-                    }
+                        TargetGroupRelation::DifferentControllers => {
+                            "targets must be controlled by different players"
+                        }
+                        TargetGroupRelation::SamePlayerAs(_) => {
+                            "related targets must belong to the same player"
+                        }
+                    }));
                 }
             }
         }

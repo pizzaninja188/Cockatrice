@@ -10263,6 +10263,23 @@ TEST(RuledActivatedTargetSelectionTest, DuplicateToggleTouchesOnlyTheActiveGroup
     EXPECT_EQ(ability.selectedTargets.first().ref.object_id(), 90u);
 }
 
+namespace
+{
+/// An engine-published "same player" relation (Goblin Welder) over typed candidate keys.
+RuledTargetRelationData
+ruledTestSamePlayerRelation(QVector<int> related,
+                            std::initializer_list<std::tuple<ruled::v1::TargetRefKind, quint32, quint32>> keys)
+{
+    RuledTargetRelationData relation;
+    relation.mode = ruled::v1::TARGET_RELATION_MODE_ALL_EQUAL;
+    relation.relatedGroupIndices = std::move(related);
+    for (const auto &[kind, oid, key] : keys) {
+        relation.keys.insert(qMakePair(static_cast<int>(kind), oid), key);
+    }
+    return relation;
+}
+} // namespace
+
 TEST(RuledActivatedTargetSelectionTest, ClickEligibilityPreservesSameObjectSelectedInAnEarlierGroup)
 {
     FakeHost host;
@@ -10277,14 +10294,7 @@ TEST(RuledActivatedTargetSelectionTest, ClickEligibilityPreservesSameObjectSelec
     active.minTargets = 0;
     active.maxTargets = 4;
     active.validPermanentIds.insert(90);
-    ruled::v1::TargetPairConstraint pairConstraint;
-    pairConstraint.set_prior_group_index(0);
-    auto *pair = pairConstraint.add_compatible_pairs();
-    pair->mutable_prior_target()->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
-    pair->mutable_prior_target()->set_object_id(90);
-    pair->mutable_candidate()->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
-    pair->mutable_candidate()->set_object_id(90);
-    active.pairConstraint = pairConstraint;
+    active.relation = ruledTestSamePlayerRelation({0}, {{ruled::v1::TARGET_REF_KIND_PERMANENT, 90, 1}});
     RuledSpellTargetData data;
     data.groups = {prior, active};
     state.validTargetsByAbility.insert(RuledClientState::abilityTargetKey(80, 1), data);
@@ -12042,7 +12052,7 @@ TEST(RuledPaymentTest, AttackManaUndoCommandUsesTheSelectedReversibleReceipt)
     EXPECT_EQ(ordinary->undo_mana_ability().attack_transaction_id(), 0u);
 }
 
-TEST(RuledPendingTargetTest, PairedAbilityTargetsReconcileChangedEdgesWithoutObjectRemoval)
+TEST(RuledPendingTargetTest, RelatedAbilityTargetsReconcileChangedKeysWithoutObjectRemoval)
 {
     FakeHost host;
     RuledClientState state(&host);
@@ -12052,13 +12062,10 @@ TEST(RuledPendingTargetTest, PairedAbilityTargetsReconcileChangedEdgesWithoutObj
     auto &second = data.groups[1];
     second.groupIndex = 1;
     second.validGraveyardIds = {50, 51};
-    auto &constraint = second.pairConstraint.emplace();
-    constraint.set_prior_group_index(0);
-    auto *pair = constraint.add_compatible_pairs();
-    pair->mutable_prior_target()->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
-    pair->mutable_prior_target()->set_object_id(40);
-    pair->mutable_candidate()->set_kind(ruled::v1::TARGET_REF_KIND_GRAVEYARD);
-    pair->mutable_candidate()->set_object_id(50);
+    second.relation = ruledTestSamePlayerRelation({0}, {{ruled::v1::TARGET_REF_KIND_PERMANENT, 40, 1},
+                                                        {ruled::v1::TARGET_REF_KIND_PERMANENT, 41, 2},
+                                                        {ruled::v1::TARGET_REF_KIND_GRAVEYARD, 50, 1},
+                                                        {ruled::v1::TARGET_REF_KIND_GRAVEYARD, 51, 3}});
     state.validTargetsByAbility.insert(RuledClientState::abilityTargetKey(30, 1), data);
     PendingActivatedAbility ability;
     ability.valid = true;
@@ -12080,7 +12087,7 @@ TEST(RuledPendingTargetTest, PairedAbilityTargetsReconcileChangedEdgesWithoutObj
     ability.waitingForTarget = false;
     ability.waitingForMana = true;
     // Both objects remain candidates; the authoritative relation changed.
-    data.groups[1].pairConstraint->mutable_compatible_pairs(0)->mutable_prior_target()->set_object_id(41);
+    data.groups[1].relation->keys.insert(qMakePair(static_cast<int>(ruled::v1::TARGET_REF_KIND_PERMANENT), 40u), 4);
     state.validTargetsByAbility.insert(RuledClientState::abilityTargetKey(30, 1), data);
     PendingRuledSpellCast spell;
     EXPECT_TRUE(reconcileRuledPendingTargets(spell, ability, state, kLocalPlayer));
@@ -12093,36 +12100,34 @@ TEST(RuledPendingTargetTest, PairedAbilityTargetsReconcileChangedEdgesWithoutObj
               RuledTargetClickEligibility::Illegal);
 }
 
-TEST(RuledPendingTargetTest, PairCompatibilityRequiresOneEarlierTypedSelection)
+TEST(RuledPendingTargetTest, RelatedGroupCompatibilityComparesTypedKeysAcrossGroups)
 {
     RuledTargetGroupData group;
     group.groupIndex = 7;
-    auto &constraint = group.pairConstraint.emplace();
-    constraint.set_prior_group_index(3);
-    auto *pair = constraint.add_compatible_pairs();
-    pair->mutable_prior_target()->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
-    pair->mutable_prior_target()->set_object_id(40);
-    pair->mutable_candidate()->set_kind(ruled::v1::TARGET_REF_KIND_GRAVEYARD);
-    pair->mutable_candidate()->set_object_id(50);
+    group.relation = ruledTestSamePlayerRelation({3}, {{ruled::v1::TARGET_REF_KIND_PERMANENT, 40, 1},
+                                                       {ruled::v1::TARGET_REF_KIND_GRAVEYARD, 50, 1},
+                                                       {ruled::v1::TARGET_REF_KIND_GRAVEYARD, 51, 2}});
     QVector<ruled::v1::TargetRef> selected;
-    EXPECT_FALSE(ruledTargetPairCompatible(group, ruled::v1::TARGET_REF_KIND_GRAVEYARD, 50, selected));
+    EXPECT_TRUE(ruledTargetRelationCompatible(group, ruled::v1::TARGET_REF_KIND_GRAVEYARD, 50, selected))
+        << "with nothing related selected, any keyed candidate remains possible";
     auto &target = selected.emplaceBack();
     target.set_group_index(3);
     target.set_object_id(40);
     target.set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
-    EXPECT_TRUE(ruledTargetPairCompatible(group, ruled::v1::TARGET_REF_KIND_GRAVEYARD, 50, selected));
-    EXPECT_FALSE(ruledTargetPairCompatible(group, ruled::v1::TARGET_REF_KIND_PERMANENT, 50, selected));
+    EXPECT_TRUE(ruledTargetRelationCompatible(group, ruled::v1::TARGET_REF_KIND_GRAVEYARD, 50, selected));
+    EXPECT_FALSE(ruledTargetRelationCompatible(group, ruled::v1::TARGET_REF_KIND_GRAVEYARD, 51, selected));
+    EXPECT_FALSE(ruledTargetRelationCompatible(group, ruled::v1::TARGET_REF_KIND_PERMANENT, 50, selected))
+        << "keys are typed: the same integer in another domain has no key";
     target.set_kind(ruled::v1::TARGET_REF_KIND_STACK);
-    EXPECT_FALSE(ruledTargetPairCompatible(group, ruled::v1::TARGET_REF_KIND_GRAVEYARD, 50, selected));
+    EXPECT_FALSE(ruledTargetRelationCompatible(group, ruled::v1::TARGET_REF_KIND_GRAVEYARD, 50, selected))
+        << "a related selection without a published key fails closed";
     target.set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
-    selected.append(target);
-    EXPECT_FALSE(ruledTargetPairCompatible(group, ruled::v1::TARGET_REF_KIND_GRAVEYARD, 50, selected));
-    selected.removeLast();
-    constraint.set_prior_group_index(7);
-    EXPECT_FALSE(ruledTargetPairCompatible(group, ruled::v1::TARGET_REF_KIND_GRAVEYARD, 50, selected));
+    target.set_group_index(4);
+    EXPECT_TRUE(ruledTargetRelationCompatible(group, ruled::v1::TARGET_REF_KIND_GRAVEYARD, 51, selected))
+        << "an unrelated group's selection never participates";
 }
 
-TEST(RuledPendingTargetTest, PairedSpellTargetsPruneChangedEdgesAndReopenTheDependentGroup)
+TEST(RuledPendingTargetTest, RelatedSpellTargetsPruneChangedKeysAndReopenTheDependentGroup)
 {
     FakeHost host;
     RuledClientState state(&host);
@@ -12132,12 +12137,9 @@ TEST(RuledPendingTargetTest, PairedSpellTargetsPruneChangedEdgesAndReopenTheDepe
     auto &second = data.groups[1];
     second.groupIndex = 1;
     second.validGraveyardIds = {50, 51};
-    auto &constraint = second.pairConstraint.emplace();
-    auto *pair = constraint.add_compatible_pairs();
-    pair->mutable_prior_target()->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
-    pair->mutable_prior_target()->set_object_id(40);
-    pair->mutable_candidate()->set_kind(ruled::v1::TARGET_REF_KIND_GRAVEYARD);
-    pair->mutable_candidate()->set_object_id(50);
+    second.relation = ruledTestSamePlayerRelation({0}, {{ruled::v1::TARGET_REF_KIND_PERMANENT, 40, 1},
+                                                        {ruled::v1::TARGET_REF_KIND_GRAVEYARD, 50, 1},
+                                                        {ruled::v1::TARGET_REF_KIND_GRAVEYARD, 51, 2}});
     state.validTargetsByHandSlot.insert(RuledClientState::spellTargetKey(6, 0), data);
     PendingRuledSpellCast spell;
     spell.valid = true;
@@ -12154,7 +12156,7 @@ TEST(RuledPendingTargetTest, PairedSpellTargetsPruneChangedEdgesAndReopenTheDepe
     spell.selectedTargetDamages = {3};
     spell.selectedTargetDamagesByGroup = {{0}, {3}};
     spell.targetDamageAllocations = {3};
-    data.groups[1].pairConstraint->clear_compatible_pairs();
+    data.groups[1].relation->keys.clear();
     state.validTargetsByHandSlot.insert(RuledClientState::spellTargetKey(6, 0), data);
     PendingActivatedAbility ability;
     EXPECT_TRUE(reconcileRuledPendingTargets(spell, ability, state, kLocalPlayer));
@@ -14689,7 +14691,7 @@ TEST_F(RuledClientTest, TriggerTargetPromptAdvancesSequentialGroupGuidance)
                                 "Target 2 of 2: Choose target creature."));
 }
 
-TEST_F(RuledClientTest, TargetPairsUseEngineCompatibilityAndConstrainedEmptyFailsClosed)
+TEST_F(RuledClientTest, RelatedTargetKeysUseEngineCompatibilityAndKeylessRelationFailsClosed)
 {
     ruled::v1::RuledEventBatch batch;
     auto *trigger = batch.add_events()->mutable_trigger_needs_target();
@@ -14707,25 +14709,28 @@ TEST_F(RuledClientTest, TargetPairsUseEngineCompatibilityAndConstrainedEmptyFail
     second->set_max(1);
     second->add_valid_graveyard_ids(801);
     second->add_valid_graveyard_ids(802);
-    auto *constraint = second->mutable_pair_constraint();
-    constraint->set_prior_group_index(0);
-    for (const auto &[prior, candidate] : {std::pair{701u, 801u}, std::pair{702u, 802u}}) {
-        auto *pair = constraint->add_compatible_pairs();
-        pair->mutable_prior_target()->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
-        pair->mutable_prior_target()->set_object_id(prior);
-        pair->mutable_candidate()->set_kind(ruled::v1::TARGET_REF_KIND_GRAVEYARD);
-        pair->mutable_candidate()->set_object_id(candidate);
+    auto *relation = second->mutable_relation();
+    relation->set_mode(ruled::v1::TARGET_RELATION_MODE_ALL_EQUAL);
+    relation->add_related_group_indices(0);
+    for (const auto &[kind, oid, player] : {std::tuple{ruled::v1::TARGET_REF_KIND_PERMANENT, 701u, 1u},
+                                            std::tuple{ruled::v1::TARGET_REF_KIND_GRAVEYARD, 801u, 1u},
+                                            std::tuple{ruled::v1::TARGET_REF_KIND_PERMANENT, 702u, 2u},
+                                            std::tuple{ruled::v1::TARGET_REF_KIND_GRAVEYARD, 802u, 2u}}) {
+        auto *key = relation->add_keys();
+        key->mutable_candidate()->set_kind(kind);
+        key->mutable_candidate()->set_object_id(oid);
+        key->set_key(player);
     }
     apply(batch);
     ASSERT_TRUE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, 701, kLocalPlayer));
     EXPECT_FALSE(state->isPendingTriggerTargetCandidate(ruled::v1::TARGET_REF_KIND_GRAVEYARD, 802, kLocalPlayer));
     EXPECT_TRUE(state->isPendingTriggerTargetCandidate(ruled::v1::TARGET_REF_KIND_GRAVEYARD, 801, kLocalPlayer));
     EXPECT_TRUE(host.sentCommands.empty());
-    constraint->clear_compatible_pairs();
+    relation->clear_keys();
     apply(batch);
     ASSERT_TRUE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, 701, kLocalPlayer));
     EXPECT_FALSE(state->isPendingTriggerTargetCandidate(ruled::v1::TARGET_REF_KIND_GRAVEYARD, 801, kLocalPlayer));
-    second->clear_pair_constraint();
+    second->clear_relation();
     apply(batch);
     ASSERT_TRUE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, 701, kLocalPlayer));
     EXPECT_TRUE(state->isPendingTriggerTargetCandidate(ruled::v1::TARGET_REF_KIND_GRAVEYARD, 802, kLocalPlayer));

@@ -267,9 +267,9 @@ QJsonValue value(const RuledTargetGroupData &v)
             keys.append(key);
         }
         relation.insert("keys", keys);
+        relation.insert("relatedGroupIndices", value(v.relation->relatedGroupIndices));
         result.insert("relation", relation);
     }
-    result.insert("pairConstraint", value(v.pairConstraint));
     return result;
 }
 QJsonValue value(const RuledTargetingCostCandidate &v)

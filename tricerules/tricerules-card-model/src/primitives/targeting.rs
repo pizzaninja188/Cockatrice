@@ -87,9 +87,10 @@ pub struct TargetGroupDef {
     pub cast_cost_expansion: Option<CastCostTargetExpansion>,
 }
 
-/// CR 115.1 and 601.2c: a printed requirement that relates the targets of one group to each
-/// other rather than constraining each target alone. The engine evaluates it from one typed key
-/// per target and publishes those keys, so consumers never derive owner or controller.
+/// CR 115.1 and 601.2c: a printed requirement that relates chosen targets to each other rather
+/// than constraining each target alone. Each target contributes one player key from its group's
+/// domain (a permanent's controller, a graveyard card's owner); the engine evaluates and
+/// publishes those keys, so consumers never derive owner or controller.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TargetGroupRelation {
     /// "from a single graveyard": every chosen card has one owner (Arashin Sunshield,
@@ -98,9 +99,12 @@ pub enum TargetGroupRelation {
     /// "controlled by different players": no two chosen permanents share a controller
     /// (Run Away Together). A departed target keeps its last-known controller (CR 608.2b).
     DifferentControllers,
+    /// "...in that player's graveyard": this group's target shares its player with the target of
+    /// the earlier group named here (Goblin Welder: the artifact's controller owns the card).
+    SamePlayerAs(u32),
 }
 
-/// Which player a related target contributes as its key.
+/// Which player a related target contributes as its key, fixed by its group's target domain.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TargetRelationKey {
     /// The owner of a graveyard card.
@@ -116,18 +120,75 @@ pub enum TargetRelationMode {
     AllDistinct,
 }
 
+/// A permanent-only group keys its targets by controller; a graveyard-card group by owner.
+/// A group may relate to one earlier group that declares no relation of its own; each group in
+/// the pair keys its targets by one domain.
+fn validate_cross_group_relations(groups: &[TargetGroupSchema<'_, '_>]) -> Result<(), String> {
+    for (index, group) in groups.iter().enumerate() {
+        let Some(other) = group.relation.and_then(TargetGroupRelation::related_group) else {
+            continue;
+        };
+        let referenced = groups
+            .get(other)
+            .filter(|_| other < index)
+            .ok_or("SamePlayerAs must name an earlier target group")?;
+        if referenced.relation.is_some()
+            || referenced.chooser != TargetChooser::Controller
+            || referenced.relation_key().is_none()
+        {
+            return Err("SamePlayerAs requires an unrelated controller-chosen permanent-only or graveyard-only earlier group".into());
+        }
+        if groups.iter().enumerate().any(|(other_index, candidate)| {
+            other_index != index
+                && candidate
+                    .relation
+                    .and_then(TargetGroupRelation::related_group)
+                    == Some(other)
+        }) {
+            return Err("only one target group may relate to a given earlier group".into());
+        }
+    }
+    Ok(())
+}
+
+fn relation_key_for(bindings: &[TargetBinding<'_>]) -> Option<TargetRelationKey> {
+    if bindings.is_empty() {
+        None
+    } else if bindings
+        .iter()
+        .all(|binding| matches!(binding.role, TargetRole::GraveyardCard(_)))
+    {
+        Some(TargetRelationKey::Owner)
+    } else if bindings
+        .iter()
+        .all(|binding| binding.role.is_permanent_only())
+    {
+        Some(TargetRelationKey::Controller)
+    } else {
+        None
+    }
+}
+
+impl TargetGroupSchema<'_, '_> {
+    /// The key each target of this group contributes to a relation that covers it.
+    pub fn relation_key(&self) -> Option<TargetRelationKey> {
+        relation_key_for(&self.bindings)
+    }
+}
+
 impl TargetGroupRelation {
-    pub fn key(self) -> TargetRelationKey {
+    pub fn mode(self) -> TargetRelationMode {
         match self {
-            Self::SameGraveyard => TargetRelationKey::Owner,
-            Self::DifferentControllers => TargetRelationKey::Controller,
+            Self::SameGraveyard | Self::SamePlayerAs(_) => TargetRelationMode::AllEqual,
+            Self::DifferentControllers => TargetRelationMode::AllDistinct,
         }
     }
 
-    pub fn mode(self) -> TargetRelationMode {
+    /// The other group whose targets this relation also compares, if it spans groups.
+    pub fn related_group(self) -> Option<usize> {
         match self {
-            Self::SameGraveyard => TargetRelationMode::AllEqual,
-            Self::DifferentControllers => TargetRelationMode::AllDistinct,
+            Self::SamePlayerAs(group) => Some(group as usize),
+            Self::SameGraveyard | Self::DifferentControllers => None,
         }
     }
 
@@ -178,6 +239,15 @@ impl TargetGroupRelation {
                         .any(|binding| !binding.role.is_permanent_only())
                 {
                     return Err("DifferentControllers requires a controller-chosen permanent-only target group with max >= 2".into());
+                }
+            }
+            Self::SamePlayerAs(_) => {
+                if group.chooser != TargetChooser::Controller
+                    || group.for_each_opponent
+                    || group.controlled_by_chooser
+                    || relation_key_for(bindings).is_none()
+                {
+                    return Err("SamePlayerAs requires a controller-chosen permanent-only or graveyard-only target group".into());
                 }
             }
         }
@@ -388,6 +458,7 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                     bindings,
                 });
             }
+            validate_cross_group_relations(&groups)?;
             for (effect_index, (&actual, &expected)) in
                 occurrences.iter().zip(&effect_role_counts).enumerate()
             {
@@ -462,9 +533,11 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                                 || group.bindings.len() != 1
                                 || group.chooser != TargetChooser::Controller
                         })
+                        || schema.groups[second].relation
+                            != Some(TargetGroupRelation::SamePlayerAs(first as u32))
                 }) {
                     return Err(
-                        "artifact exchange requires two singleton controller-chosen target groups"
+                        "artifact exchange requires two singleton controller-chosen target groups, the second SamePlayerAs the first"
                             .into(),
                     );
                 }
@@ -863,6 +936,7 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
             });
         }
 
+        validate_cross_group_relations(&groups)?;
         for binding in &program.target_bindings {
             if binding.target_group_index as usize >= groups.len() {
                 return Err("program target binding references an unknown target group".into());
@@ -3309,6 +3383,64 @@ mod tests {
         assert!(
             TargetSchema::compile(&players, Some(&targeting(group(2, 2)))).is_err(),
             "players are not controlled permanents"
+        );
+    }
+
+    #[test]
+    fn same_player_as_must_relate_to_an_earlier_unrelated_single_domain_group() {
+        let effects = vec![
+            SpellEffectKind::ReturnToOwnersHand {
+                subject: super::super::EffectSubject::Chosen(Box::new(
+                    TargetFilter::default_creature(),
+                )),
+            },
+            SpellEffectKind::MoveGraveyardCards {
+                filter: GraveyardFilter {
+                    owner: GraveyardOwner::AnyPlayer,
+                    ..GraveyardFilter::default()
+                },
+                destination: GraveyardDestination::Exile,
+                linked_exile_id: None,
+                entry_modifiers: Vec::new(),
+            },
+        ];
+        let group = |effect, relation| TargetGroupDef {
+            controlled_by_chooser: false,
+            for_each_opponent: false,
+            chooser: Default::default(),
+            min: 1,
+            max: 1,
+            prompt: "Choose".into(),
+            effect_indices: vec![effect],
+            distinct_from: Vec::new(),
+            relation,
+            cast_cost_expansion: None,
+        };
+        let compile =
+            |groups| TargetSchema::compile(&effects, Some(&TargetingDef { groups })).is_ok();
+        use TargetGroupRelation::SamePlayerAs;
+        assert!(compile(vec![
+            group(0, None),
+            group(1, Some(SamePlayerAs(0)))
+        ]));
+        assert!(
+            !compile(vec![group(0, Some(SamePlayerAs(1))), group(1, None)]),
+            "must name an earlier group"
+        );
+        assert!(
+            !compile(vec![group(0, None), group(1, Some(SamePlayerAs(1)))]),
+            "never itself"
+        );
+        assert!(
+            !compile(vec![group(0, None), group(1, Some(SamePlayerAs(7)))]),
+            "a known group"
+        );
+        assert!(
+            !compile(vec![
+                group(0, Some(TargetGroupRelation::SameGraveyard)),
+                group(1, Some(SamePlayerAs(0)))
+            ]),
+            "the referenced group declares no relation of its own"
         );
     }
 

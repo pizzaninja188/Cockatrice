@@ -1075,8 +1075,12 @@ single graveyard") requires graveyard-card roles and one owner for every chosen 
 `DifferentControllers` ("controlled by different players", Run Away Together) requires a
 controller-chosen, permanent-only group with `max >= 2`; no two chosen permanents may share a
 controller at cast time, and on resolution a target is illegal when another target of the group
-has the same current or last-known controller (CR 608.2b). The engine publishes one opaque key per
-candidate in `LegalTargetGroup.relation`; clients compare keys and never derive owner or controller.
+has the same current or last-known controller (CR 608.2b). `SamePlayerAs(n)` ("...in that
+player's graveyard", Goblin Welder) relates a group to one earlier group that declares no relation
+of its own; each target's key is its group's domain player (a permanent's controller, a graveyard
+card's owner) and both groups' keys must match. The engine publishes one opaque key per candidate
+in `LegalTargetGroup.relation` on every covered group, with `related_group_indices` naming the
+other group; clients compare keys and never derive owner or controller.
 
 Omit `prompt` when the shared formatter can describe the target group from its validated roles,
 filters, and bounds. It can describe filter alternatives, target distinctness, and chooser-relative

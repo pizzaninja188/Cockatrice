@@ -10,37 +10,6 @@
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <limits>
 
-bool ruledTargetPairCompatible(const RuledTargetGroupData &group,
-                               ruled::v1::TargetRefKind kind,
-                               quint32 oid,
-                               const QVector<ruled::v1::TargetRef> &selected)
-{
-    if (!group.pairConstraint) {
-        return true;
-    }
-    const auto &constraint = *group.pairConstraint;
-    if (group.groupIndex < 0 || constraint.prior_group_index() >= static_cast<quint32>(group.groupIndex) ||
-        kind == ruled::v1::TARGET_REF_KIND_UNSPECIFIED) {
-        return false;
-    }
-    const ruled::v1::TargetRef *prior = nullptr;
-    for (const auto &target : selected) {
-        if (target.group_index() == constraint.prior_group_index()) {
-            if (prior || target.kind() == ruled::v1::TARGET_REF_KIND_UNSPECIFIED) {
-                return false;
-            }
-            prior = &target;
-        }
-    }
-    return prior && std::any_of(constraint.compatible_pairs().begin(), constraint.compatible_pairs().end(),
-                                [prior, kind, oid](const auto &pair) {
-                                    return pair.has_prior_target() && pair.has_candidate() &&
-                                           pair.prior_target().kind() == prior->kind() &&
-                                           pair.prior_target().object_id() == prior->object_id() &&
-                                           pair.candidate().kind() == kind && pair.candidate().object_id() == oid;
-                                });
-}
-
 bool ruledTargetRelationCompatible(const RuledTargetGroupData &group,
                                    ruled::v1::TargetRefKind kind,
                                    quint32 oid,
@@ -55,8 +24,10 @@ bool ruledTargetRelationCompatible(const RuledTargetGroupData &group,
         return false;
     }
     for (const auto &target : selected) {
-        if (static_cast<int>(target.group_index()) != group.groupIndex ||
-            (target.kind() == kind && target.object_id() == oid)) {
+        const int targetGroup = static_cast<int>(target.group_index());
+        const bool sameGroup = targetGroup == group.groupIndex;
+        if ((!sameGroup && !relation.relatedGroupIndices.contains(targetGroup)) ||
+            (sameGroup && target.kind() == kind && target.object_id() == oid)) {
             continue;
         }
         const auto otherKey = relation.keys.constFind(qMakePair(static_cast<int>(target.kind()), target.object_id()));

@@ -95,27 +95,12 @@ mod tests {
     }
 
     #[test]
-    fn empty_target_pair_constraint_preserves_presence_through_wire_roundtrip() {
-        let ordinary = rv1::LegalTargetGroup::default();
-        let constrained = rv1::LegalTargetGroup {
-            pair_constraint: Some(rv1::TargetPairConstraint {
-                prior_group_index: 0,
-                compatible_pairs: vec![],
-            }),
-            ..Default::default()
-        };
-        for group in [ordinary, constrained] {
-            let decoded = rv1::LegalTargetGroup::decode(group.encode_to_vec().as_slice()).unwrap();
-            assert_eq!(decoded, group);
-        }
-    }
-
-    #[test]
     fn empty_target_relation_preserves_presence_and_mode_through_wire_roundtrip() {
         let related = rv1::LegalTargetGroup {
             relation: Some(rv1::TargetRelationConstraint {
-                mode: rv1::TargetRelationMode::AllDistinct as i32,
+                mode: rv1::TargetRelationMode::AllEqual as i32,
                 keys: vec![],
+                related_group_indices: vec![0],
             }),
             ..Default::default()
         };

@@ -923,9 +923,9 @@ message LegalTargetGroup {
   reserved 11;
   reserved "same_graveyard";
   bool chosen_by_opponent = 12 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  // Presence requires an engine-published compatible pair with an earlier selected group.
-  // Present with no pairs means no legal selection; absent means no pair constraint.
-  TargetPairConstraint pair_constraint = 13 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Replaced by `relation` (Goblin Welder's cross-group ALL_EQUAL player keys).
+  reserved 13;
+  reserved "pair_constraint";
   // Present for effects whose activation X is bound to a target's current characteristic.
   // An empty choices list means no legal X-target pair exists.
   XTargetChoices x_target_choices = 14 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
@@ -934,8 +934,8 @@ message LegalTargetGroup {
   // required physical incarnation receipt.
   repeated LegalPermanentTargetCandidate valid_permanent_targets = 15
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  // Engine-authored relation among the targets chosen for this one group ("from a single
-  // graveyard", "controlled by different players"). Absent means no relation.
+  // Engine-authored relation among chosen targets ("from a single graveyard", "controlled by
+  // different players", Goblin Welder's "that player's graveyard"). Absent means no relation.
   TargetRelationConstraint relation = 16 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
@@ -943,7 +943,10 @@ message LegalTargetGroup {
 // A published candidate without a key cannot be selected for the group.
 message TargetRelationConstraint {
   TargetRelationMode mode = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Keys cover the candidates of this group and of every related group.
   repeated TargetRelationKey keys = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Other groups whose chosen targets this relation also compares; empty within one group.
+  repeated uint32 related_group_indices = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 enum TargetRelationMode {
@@ -962,18 +965,6 @@ message TargetRelationKey {
 message LegalPermanentTargetCandidate {
   uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   uint64 zone_change_generation = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-}
-
-// Opaque engine-authored compatibility for Goblin Welder's two target roles. Consumers
-// compare typed identities only; they must not derive the owner/controller relation.
-message TargetPairConstraint {
-  uint32 prior_group_index = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  repeated TargetPairChoice compatible_pairs = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-}
-
-message TargetPairChoice {
-  TargetCandidateRef prior_target = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  TargetCandidateRef candidate = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // Engine-authored X-to-target choices for abilities such as The Mycosynth Gardens. Message

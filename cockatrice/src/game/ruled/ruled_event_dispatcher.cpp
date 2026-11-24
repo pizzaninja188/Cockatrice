@@ -294,12 +294,12 @@ RuledClientState::SpellTargetData parseSpellTargets(const ruled::v1::SpellTarget
                         qMakePair(static_cast<int>(key.candidate().kind()), key.candidate().object_id()), key.key());
                 }
             }
+            for (const quint32 related : group.relation().related_group_indices()) {
+                relation.relatedGroupIndices.append(static_cast<int>(related));
+            }
             parsed.relation = std::move(relation);
         }
         parsed.chosenByOpponent = group.chosen_by_opponent();
-        if (group.has_pair_constraint()) {
-            parsed.pairConstraint = group.pair_constraint();
-        }
         parsed.hasXTargetChoices = group.has_x_target_choices();
         if (parsed.hasXTargetChoices) {
             for (const auto &choice : group.x_target_choices().choices()) {

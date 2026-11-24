@@ -16,13 +16,13 @@ use super::resolution::{
     sacrifice_permanent, ResolutionEffect,
 };
 use super::targeting::{
-    artifact_exchange_player, capture_stack_target, compute_copy_targets_with_context_and_program,
-    face_mode_program, face_program, required_target_controller_is_current, runtime_target_schema,
+    capture_stack_target, compute_copy_targets_with_context_and_program, face_mode_program,
+    face_program, required_target_controller_is_current, runtime_target_schema,
     target_relation_key, target_role_legality_error, TargetResolutionContext, TargetSourceIdentity,
 };
 use super::*;
 use crate::state::{PendingTargetedPlayerChoiceStage, SpecialCastCompletion};
-use tricerules_card_model::primitives::TargetGroupRelation;
+use tricerules_card_model::primitives::{TargetGroupRelation, TargetRelationKey};
 
 mod attacking_tokens;
 mod branches;
