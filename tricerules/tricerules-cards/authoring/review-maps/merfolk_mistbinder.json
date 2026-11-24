@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "be56dfea-1ece-4f06-b1cc-d7425b5018b4",
+  "spans": [
+    {
+      "face_id": "merfolk_mistbinder",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemPt",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q76_subtype_lords::q76_subtype_lords_all_cards_pump_only_other_controlled_creatures_of_the_subtype",
+      "covers": "actual merfolk_mistbinder pumps only another controlled creature of its printed subtype"
+    },
+    {
+      "test": "scenario q76_subtype_lords::q76_subtype_lords_apply_to_later_entries_and_end_when_the_source_leaves",
+      "covers": "actual merfolk_mistbinder affects a later same-subtype creature and drains when the source leaves"
+    },
+    {
+      "test": "scenario q76_subtype_lords::q76_subtype_lords_two_copies_pump_each_other",
+      "covers": "two actual merfolk_mistbinder copies pump each other, proving \"other\" excludes only the source"
+    },
+    {
+      "test": "mechanic_registry::q76_subtype_lords::q76_subtype_lords_map_definitions",
+      "covers": "reviewed identity, characteristics and AnthemPt definition of merfolk_mistbinder"
+    },
+    {
+      "test": "mechanic_registry::q76_subtype_lords::q76_subtype_lords_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for merfolk_mistbinder"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

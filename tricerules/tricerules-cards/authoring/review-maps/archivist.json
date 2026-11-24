@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "d137586f-83b0-40af-8100-443460b07ac0",
+  "spans": [
+    {
+      "face_id": "archivist",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/costs/0",
+        "/faces/0/activated_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q76_activated_draw::q76_activated_draw_canary_simplest_archivist_draws_for_tap_only",
+      "covers": "canary simplest actual Archivist draws for the tap cost alone"
+    },
+    {
+      "test": "scenario q76_activated_draw::q76_activated_draw_all_cards_use_their_printed_costs_and_counts",
+      "covers": "actual archivist pays its printed cost and draws its printed count"
+    },
+    {
+      "test": "mechanic_registry::q76_activated_draw::q76_activated_draw_map_definitions",
+      "covers": "reviewed identity, characteristics and activated Draw definition of archivist"
+    },
+    {
+      "test": "mechanic_registry::q76_activated_draw::q76_activated_draw_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for archivist"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

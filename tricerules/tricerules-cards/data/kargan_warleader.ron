@@ -1,0 +1,24 @@
+// Oracle 63324e72-e580-456a-91be-766c9f07b7b3; source/rulings checked 2026-11-24 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 604.2/611.3b (the continuous effect is active while the source remains on the
+// battlefield), 613.4c (layer 7c), 109.5 ("you" is the source's controller) and the
+// printed "other" excludes the source. Copy of Benalish Marshal with the printed
+// subtype scope. The 2020-09-25 ruling covers marked damage becoming lethal when the lord leaves.
+(
+  id: "kargan_warleader",
+  name: "Kargan Warleader",
+  face_id: "kargan_warleader",
+  mana_cost: "{1}{R}{W}",
+  types: ["Creature", "Human", "Warrior"],
+  power: 3,
+  toughness: 3,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: AnthemPt(
+      filter: (controller: YouControl, subtype: "Warrior", exclude_self: true),
+      delta_power: 1,
+      delta_toughness: 1,
+    ),
+  )],
+)

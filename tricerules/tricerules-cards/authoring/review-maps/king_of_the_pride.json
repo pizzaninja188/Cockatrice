@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "96d0e4dd-6cc2-4349-ac44-785b50f8dd90",
+  "spans": [
+    {
+      "face_id": "king_of_the_pride",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemPt",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q76_subtype_lords::q76_subtype_lords_all_cards_pump_only_other_controlled_creatures_of_the_subtype",
+      "covers": "actual king_of_the_pride pumps only another controlled creature of its printed subtype"
+    },
+    {
+      "test": "scenario q76_subtype_lords::q76_subtype_lords_apply_to_later_entries_and_end_when_the_source_leaves",
+      "covers": "actual king_of_the_pride affects a later same-subtype creature and drains when the source leaves"
+    },
+    {
+      "test": "scenario q76_subtype_lords::q76_subtype_lords_two_copies_pump_each_other",
+      "covers": "two actual king_of_the_pride copies pump each other, proving \"other\" excludes only the source"
+    },
+    {
+      "test": "mechanic_registry::q76_subtype_lords::q76_subtype_lords_map_definitions",
+      "covers": "reviewed identity, characteristics and AnthemPt definition of king_of_the_pride"
+    },
+    {
+      "test": "mechanic_registry::q76_subtype_lords::q76_subtype_lords_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for king_of_the_pride"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

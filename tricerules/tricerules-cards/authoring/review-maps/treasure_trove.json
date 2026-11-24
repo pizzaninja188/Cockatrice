@@ -1,0 +1,50 @@
+{
+  "format_version": 1,
+  "oracle_id": "3c4a6b34-a9bb-426d-908c-7ae0011591df",
+  "spans": [
+    {
+      "face_id": "treasure_trove",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/costs/0",
+        "/faces/0/activated_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q76_activated_draw::q76_activated_draw_all_cards_use_their_printed_costs_and_counts",
+      "covers": "actual treasure_trove pays its printed cost and draws its printed count"
+    },
+    {
+      "test": "scenario q76_activated_draw::q76_activated_draw_rejects_underfunded_activations_atomically",
+      "covers": "actual treasure_trove rejects an underfunded activation without paying any cost"
+    },
+    {
+      "test": "scenario q76_activated_draw::q76_activated_draw_repeatable_abilities_do_not_tap",
+      "covers": "actual treasure_trove can be activated again because it does not tap"
+    },
+    {
+      "test": "mechanic_registry::q76_activated_draw::q76_activated_draw_map_definitions",
+      "covers": "reviewed identity, characteristics and activated Draw definition of treasure_trove"
+    },
+    {
+      "test": "mechanic_registry::q76_activated_draw::q76_activated_draw_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for treasure_trove"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

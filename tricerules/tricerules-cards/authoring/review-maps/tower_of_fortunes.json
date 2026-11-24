@@ -1,0 +1,55 @@
+{
+  "format_version": 1,
+  "oracle_id": "dfb23df9-f912-4daa-9842-01bd12b4a72a",
+  "spans": [
+    {
+      "face_id": "tower_of_fortunes",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/costs/0",
+        "/faces/0/activated_abilities/0/costs/1",
+        "/faces/0/activated_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q76_activated_draw::q76_activated_draw_canary_hardest_tower_of_fortunes_draws_four_for_eight",
+      "covers": "canary hardest actual Tower of Fortunes draws four for {8} and a tap"
+    },
+    {
+      "test": "scenario q76_activated_draw::q76_activated_draw_all_cards_use_their_printed_costs_and_counts",
+      "covers": "actual tower_of_fortunes pays its printed cost and draws its printed count"
+    },
+    {
+      "test": "scenario q76_activated_draw::q76_activated_draw_rejects_underfunded_activations_atomically",
+      "covers": "actual tower_of_fortunes rejects an underfunded activation without paying any cost"
+    },
+    {
+      "test": "mechanic_registry::q76_activated_draw::q76_activated_draw_map_definitions",
+      "covers": "reviewed identity, characteristics and activated Draw definition of tower_of_fortunes"
+    },
+    {
+      "test": "mechanic_registry::q76_activated_draw::q76_activated_draw_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for tower_of_fortunes"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

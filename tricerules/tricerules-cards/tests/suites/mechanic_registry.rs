@@ -1416,3 +1416,12 @@ mod q75_proliferate_riders;
 
 #[path = "../q75_surveil_cantrips.rs"]
 mod q75_surveil_cantrips;
+
+#[path = "../q76_sliver_keywords.rs"]
+mod q76_sliver_keywords;
+
+#[path = "../q76_subtype_lords.rs"]
+mod q76_subtype_lords;
+
+#[path = "../q76_activated_draw.rs"]
+mod q76_activated_draw;

@@ -1,0 +1,18 @@
+// Oracle dfb23df9-f912-4daa-9842-01bd12b4a72a; source/rulings checked 2026-11-24 against the pinned Scryfall bulk
+// SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 602.2 (activation puts the ability on the stack and pays its costs), 118.3 (a cost
+// can't be paid without the necessary resources) and 121.1 (draw). Artifact permanent; the largest printed draw count in the cohort.
+// Copy of Azure Mage's activated Draw with the printed cost and count.
+(
+  id: "tower_of_fortunes",
+  name: "Tower of Fortunes",
+  face_id: "tower_of_fortunes",
+  mana_cost: "{4}",
+  types: ["Artifact"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{8}"), Tap],
+    effect: [Draw(count: 4)],
+  )],
+)

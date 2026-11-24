@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "4adf959b-2e09-47ff-a1b1-b889348735b8",
+  "spans": [
+    {
+      "face_id": "battering_sliver",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemKeyword",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q76_sliver_keywords::q76_sliver_keywords_all_cards_grant_their_printed_keyword_to_every_sliver",
+      "covers": "actual battering_sliver grants its printed keyword to every Sliver, including the source and opponents' Slivers"
+    },
+    {
+      "test": "scenario q76_sliver_keywords::q76_sliver_keywords_apply_to_later_slivers_and_end_when_the_source_leaves",
+      "covers": "actual battering_sliver affects a later Sliver and stops when the source leaves"
+    },
+    {
+      "test": "mechanic_registry::q76_sliver_keywords::q76_sliver_keywords_map_definitions",
+      "covers": "reviewed identity, characteristics and AnthemKeyword definition of battering_sliver"
+    },
+    {
+      "test": "mechanic_registry::q76_sliver_keywords::q76_sliver_keywords_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for battering_sliver"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

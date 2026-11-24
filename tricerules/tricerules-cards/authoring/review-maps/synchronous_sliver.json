@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "b90e2fb8-9b09-4d95-a8a2-5287b5f18132",
+  "spans": [
+    {
+      "face_id": "synchronous_sliver",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemKeyword",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "Keyword::Vigilance",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q76_sliver_keywords::q76_sliver_keywords_all_cards_grant_their_printed_keyword_to_every_sliver",
+      "covers": "actual synchronous_sliver grants its printed keyword to every Sliver, including the source and opponents' Slivers"
+    },
+    {
+      "test": "scenario q76_sliver_keywords::q76_sliver_keywords_apply_to_later_slivers_and_end_when_the_source_leaves",
+      "covers": "actual synchronous_sliver affects a later Sliver and stops when the source leaves"
+    },
+    {
+      "test": "mechanic_registry::q76_sliver_keywords::q76_sliver_keywords_map_definitions",
+      "covers": "reviewed identity, characteristics and AnthemKeyword definition of synchronous_sliver"
+    },
+    {
+      "test": "mechanic_registry::q76_sliver_keywords::q76_sliver_keywords_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for synchronous_sliver"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

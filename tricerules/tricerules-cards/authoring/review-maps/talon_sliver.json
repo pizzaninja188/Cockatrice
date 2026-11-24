@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "74910702-e385-48f7-a6b3-064ebed08be7",
+  "spans": [
+    {
+      "face_id": "talon_sliver",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemKeyword",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "Keyword::FirstStrike",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q76_sliver_keywords::q76_sliver_keywords_canary_simplest_talon_sliver_grants_first_strike",
+      "covers": "canary simplest actual Talon Sliver grants first strike"
+    },
+    {
+      "test": "scenario q76_sliver_keywords::q76_sliver_keywords_all_cards_grant_their_printed_keyword_to_every_sliver",
+      "covers": "actual talon_sliver grants its printed keyword to every Sliver, including the source and opponents' Slivers"
+    },
+    {
+      "test": "scenario q76_sliver_keywords::q76_sliver_keywords_apply_to_later_slivers_and_end_when_the_source_leaves",
+      "covers": "actual talon_sliver affects a later Sliver and stops when the source leaves"
+    },
+    {
+      "test": "mechanic_registry::q76_sliver_keywords::q76_sliver_keywords_map_definitions",
+      "covers": "reviewed identity, characteristics and AnthemKeyword definition of talon_sliver"
+    },
+    {
+      "test": "mechanic_registry::q76_sliver_keywords::q76_sliver_keywords_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for talon_sliver"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
