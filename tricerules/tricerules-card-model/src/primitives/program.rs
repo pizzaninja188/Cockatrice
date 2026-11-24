@@ -4516,6 +4516,21 @@ fn compile_operation(
                 }
                 Ok(Vec::new())
             }
+            SpellEffectKind::Investigate { count, who } => {
+                // CR 701.16a: each action creates one Clue. A parked Clue entry resumes through
+                // the same parked-stack completion as CreateTokens and publishes the same batch.
+                effect.validate(context)?;
+                if *who != PlayerRecipient::Controller {
+                    return Err(
+                        "Investigate in a resolution program supports only the controller".into(),
+                    );
+                }
+                validate_program_amount(count)?;
+                validate_fixed_program_amount("Investigate count", count)?;
+                Ok(vec![ResultType::CreatedTokenBatch {
+                    cardinality: Cardinality { min: 0, max: None },
+                }])
+            }
             SpellEffectKind::LookTopCardOptionalToHand { .. } => {
                 effect.validate(context)?;
                 if context != EffectContext::Spell {
@@ -5041,8 +5056,10 @@ fn compile_operation(
             SpellEffectKind::SearchLibrary { .. } => {
                 Err("SearchLibrary in spell_program requires typed retained selection_bounds".into())
             }
+            // Surveil N (Uncharted Voyage surveils 1, Drag the Canal surveils 2): the controller's
+            // private top-N partition uses the same continuation for every positive count.
             SpellEffectKind::LibraryPartition {
-                count: 1,
+                count: 1..,
                 top_min: 0,
                 top_max: None,
                 kind: super::LibraryPartitionKind::Surveil,
@@ -6455,6 +6472,24 @@ fn validate_program_condition(condition: &GameCondition) -> Result<(), String> {
         } => {
             filter.validate_characteristic_constraints()?;
         }
+        // Committed turn history ("if a creature died this turn", raid, descend): these read
+        // only the condition controller and the turn record, never a target, event or result.
+        GameCondition::CreatureDeathsThisTurn { .. } => {}
+        GameCondition::PermanentLeftBattlefieldThisTurn {
+            controllers: players,
+        }
+        | GameCondition::PermanentCardsEnteredGraveyardThisTurn { players, .. }
+        | GameCondition::PermanentsSacrificedThisTurn { players, .. }
+        | GameCondition::SpellsCastThisTurn { players, .. }
+        | GameCondition::SpellsCastLastTurn { players, .. }
+        | GameCondition::CrimesCommittedThisTurn { players, .. }
+        | GameCondition::CardsDrawnThisTurn { players, .. }
+        | GameCondition::AttackedThisTurn { players }
+        | GameCondition::AttackersDeclaredThisTurn { players, .. }
+        | GameCondition::LifeChangedThisTurn {
+            players: super::ConditionPlayerSet::Relative(players),
+            ..
+        } => validate_program_relative_player_set(*players, "turn-history condition")?,
         GameCondition::AllOf(branches) | GameCondition::AnyOf(branches) => {
             for branch in branches {
                 validate_program_condition(branch)?;
@@ -6490,8 +6525,8 @@ fn is_ability_source_condition_family(condition: &GameCondition) -> bool {
 
 const PROGRAM_CONDITION_UNSUPPORTED: &str = concat!(
     "If condition uses context outside the finite controller-hand/library, validated ",
-    "graveyard and battlefield aggregate, and TargetSchema-validated singleton-creature ",
-    "ChosenTarget condition set",
+    "graveyard and battlefield aggregate, relative-player turn-history, and ",
+    "TargetSchema-validated singleton-creature ChosenTarget condition set",
 );
 
 fn validate_program_relative_player_set(

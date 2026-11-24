@@ -10458,10 +10458,12 @@ fn program_if_accepts_void_and_rejects_unrelated_turn_history() {
     assert!(yes.steps.is_empty() && yes.yields.is_empty());
     assert!(no.steps.is_empty() && no.yields.is_empty());
 
+    // Relative-player turn history is admitted through the shared validator; source-relative
+    // permanent-entry facts are not.
     let unrelated_turn_history = program_fixture(
         r#"(steps: [
             (id: "if", kind: If(
-                condition: SpellsCastThisTurn(players: Controller, min: Some(1)),
+                condition: PermanentsEnteredThisTurn(controllers: Controller, min: Some(1)),
                 yes: (steps: [], yields: []),
                 no: (steps: [], yields: []),
             )),
@@ -10470,7 +10472,7 @@ fn program_if_accepts_void_and_rejects_unrelated_turn_history() {
     let error = invalid_program_reason(&unrelated_turn_history);
     assert!(
         error.contains("If condition uses context outside"),
-        "an unrelated turn-history condition remains rejected: {error}"
+        "a source-relative turn-history condition remains rejected: {error}"
     );
 
     let composite_void = program_fixture(
@@ -10682,6 +10684,202 @@ fn program_if_accepts_battlefield_creature_count_for_spell_and_ability_programs(
         ability_program_fixture("battlefield_count_ability", &body).unwrap_or_else(|error| {
             panic!("valid Ability ProgramIf count should compile ({label}): {error}")
         });
+    }
+}
+
+#[test]
+fn program_if_accepts_turn_history_conditions_for_spell_and_ability_programs() {
+    // "If <something> happened this turn" reads only the condition controller and committed turn
+    // history, so it needs no target, event, or prior-result context (Drag the Canal).
+    let conditions = [
+        ("Void", "Void"),
+        ("a creature died", "CreatureDeathsThisTurn(min: Some(1))"),
+        (
+            "a permanent you controlled left",
+            "PermanentLeftBattlefieldThisTurn(controllers: Controller)",
+        ),
+        (
+            "descend",
+            "PermanentCardsEnteredGraveyardThisTurn(players: Controller, min: Some(1))",
+        ),
+        (
+            "a creature was sacrificed",
+            "PermanentsSacrificedThisTurn(players: All, permanent_type: Some(Creature), min: Some(1))",
+        ),
+        (
+            "two or more filtered spells cast",
+            "SpellsCastThisTurn(players: Controller, filter: (card_type: Some(Instant)), min: Some(2))",
+        ),
+        (
+            "a player cast two spells last turn",
+            "SpellsCastLastTurn(players: All, aggregate: Maximum, min: Some(2))",
+        ),
+        (
+            "an opponent committed a crime",
+            "CrimesCommittedThisTurn(players: Opponents, min: Some(1))",
+        ),
+        (
+            "a second card drawn",
+            "CardsDrawnThisTurn(players: Controller, min: Some(2))",
+        ),
+        ("raid", "AttackedThisTurn(players: Controller)"),
+        (
+            "three attackers declared",
+            "AttackersDeclaredThisTurn(players: Controller, min: Some(3))",
+        ),
+        (
+            "you gained life",
+            "LifeChangedThisTurn(players: Relative(Controller), change: Gain, quantifier: Any)",
+        ),
+        (
+            "composed with another supported condition",
+            "AllOf([AttackedThisTurn(players: Controller), CreatureDeathsThisTurn(min: Some(1))])",
+        ),
+    ];
+
+    for (label, condition) in conditions {
+        let body = format!(
+            r#"(steps: [(id: "if", kind: If(
+                condition: {condition}, yes: (steps: [], yields: []),
+                no: (steps: [], yields: []),
+            ))], yields: [])"#
+        );
+        let definition = program_fixture(&body);
+        crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[]).unwrap_or_else(|error| {
+            panic!("turn-history Spell ProgramIf should compile ({label}): {error}")
+        });
+        ability_program_fixture("turn_history_ability", &body).unwrap_or_else(|error| {
+            panic!("turn-history Ability ProgramIf should compile ({label}): {error}")
+        });
+    }
+}
+
+#[test]
+fn program_admits_controller_investigate_and_rejects_other_recipients() {
+    // Drag the Canal investigates inside a Program If; each action creates one Clue (CR 701.16a).
+    const CLUE: &str =
+        r#"(id: "clue", name: "Clue", face_id: "clue", types: ["Artifact", "Clue"])"#;
+    let body = |effect: &str| {
+        format!(r#"(steps: [(id: "investigate", kind: Perform({effect}))], yields: [])"#)
+    };
+    let ability = |effect: &str| {
+        format!(
+            r#"(id: "investigate_ability", name: "Investigate Ability", face_id: "investigate_ability",
+                types: ["Creature"], power: 1, toughness: 1,
+                triggered_abilities: [(
+                    ability_id: "triggered_01", presentation: Fallback,
+                    trigger: WhenSelfEntersBattlefield, effect: [],
+                    program: Some((body: {})),
+                )])"#,
+            body(effect)
+        )
+    };
+    for effect in ["Investigate(count: 1)", "Investigate(count: 2)"] {
+        let definition = program_fixture(&body(effect));
+        crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[CLUE]).unwrap_or_else(
+            |error| panic!("a controller {effect} should compile in a spell Program: {error}"),
+        );
+        crate::CardRegistry::from_chunks_and_tokens(&[&ability(effect)], &[CLUE]).unwrap_or_else(
+            |error| panic!("a controller {effect} should compile in an ability Program: {error}"),
+        );
+    }
+    for (label, definition) in [
+        (
+            "EachPlayer in a spell Program",
+            program_fixture(&body("Investigate(count: 1, who: EachPlayer)")),
+        ),
+        (
+            "SourceController in a spell Program",
+            program_fixture(&body("Investigate(count: 1, who: SourceController)")),
+        ),
+        (
+            "SourceController in an ability Program",
+            ability("Investigate(count: 1, who: SourceController)"),
+        ),
+    ] {
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&definition], &[CLUE])
+            .err()
+            .unwrap_or_else(|| panic!("{label} must be rejected"))
+            .to_string();
+        assert!(
+            error.contains("Investigate in a resolution program supports"),
+            "{label}: other investigating players stay outside the Program subset: {error}"
+        );
+    }
+}
+
+#[test]
+fn program_admits_spell_surveil_of_any_positive_count() {
+    let body = |count: u32| {
+        format!(
+            r#"(steps: [(id: "surveil", kind: Perform(LibraryPartition(
+                count: {count}, top_min: 0, top_max: None, kind: Surveil,
+            )))], yields: [])"#
+        )
+    };
+    for count in [1, 2, 3] {
+        crate::CardRegistry::from_chunks_and_tokens(&[&program_fixture(&body(count))], &[])
+            .unwrap_or_else(|error| panic!("surveil {count} should compile: {error}"));
+    }
+    let error = invalid_program_reason(&program_fixture(&body(0)));
+    assert!(
+        error.contains("resolution-program operation whitelist"),
+        "surveil 0 stays outside the Program subset: {error}"
+    );
+}
+
+#[test]
+fn program_if_rejects_turn_history_conditions_that_need_bound_context() {
+    let fixture = |condition: &str| {
+        program_fixture(&format!(
+            r#"(steps: [(id: "if", kind: If(
+                condition: {condition},
+                yes: (steps: [], yields: []),
+                no: (steps: [], yields: []),
+            ))], yields: [])"#
+        ))
+    };
+    let unsupported = "If condition uses context outside";
+    let cases = [
+        (
+            "a targeted player's spells",
+            "SpellsCastThisTurn(players: TargetedPlayer(group_index: 0, kind: AnyPlayer), min: Some(1))",
+            "TargetedPlayer",
+        ),
+        (
+            "a targeted player's attack",
+            "AttackedThisTurn(players: TargetedPlayer(group_index: 0, kind: AnyPlayer))",
+            "TargetedPlayer",
+        ),
+        (
+            "the event's affected player",
+            "LifeChangedThisTurn(players: AffectedPlayer, change: Loss, quantifier: Any)",
+            unsupported,
+        ),
+        (
+            "a chosen target player",
+            "LifeChangedThisTurn(players: ChosenTarget(group_index: 0, target_index: 0), change: Loss, quantifier: Any)",
+            unsupported,
+        ),
+        (
+            "source-relative entry facts",
+            "PermanentsEnteredThisTurn(controllers: Controller, min: Some(1))",
+            unsupported,
+        ),
+        (
+            "invalid bounds",
+            "CreatureDeathsThisTurn(min: Some(3), max: Some(2))",
+            "min cannot exceed max",
+        ),
+    ];
+
+    for (label, condition, expected_error) in cases {
+        let definition = fixture(condition);
+        let error = invalid_program_reason(&definition);
+        assert!(
+            error.contains(expected_error),
+            "{label}: expected {expected_error:?}, got {error:?}"
+        );
     }
 }
 

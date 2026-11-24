@@ -667,6 +667,13 @@ no input result and binds or yields no output. The reviewed owners are Cavern St
 trigger and Greedy Freebooter's Scry 1 followed by its Treasure creation. This bounded Program subset
 does not add trigger-observer support for `Whenever you scry`, change who can see or answer the
 existing private prompt, or admit additional card definitions.
+Surveil (`LibraryPartition(top_min: 0, top_max: None, kind: Surveil)`) is a resultless spell-Program
+leaf for any fixed positive count; Uncharted Voyage surveils 1 and Drag the Canal surveils 2. The
+controller's private top-N partition uses the same continuation for every count (CR 701.25a).
+`Investigate` is a `Perform` leaf with a fixed literal count for the controller. Each action
+creates one Clue (CR 701.16a); a parked Clue
+entry resumes through the same parked-stack completion as `CreateTokens`, and the instruction
+publishes the same `CreatedTokenBatch` result. Other investigating players stay outside Programs.
 `CounterTriggeringStackObjectUnlessPays` is a resultless `Perform` leaf only in a triggered ability
 Program. Its cost must be either a fixed, nonempty `Mana` cost with no X or
 `DiscardCard(filter: None)`. The exact trigger owner must provide both `TriggerAffectedPlayer` and
@@ -795,7 +802,15 @@ Discard retains the existing validated `DiscardQuantity` choices. Permanent filt
 must be empty.
 `If` accepts `ControllerLibraryEmpty`, controller `CardsInHand`, validated graveyard aggregates,
 `BattlefieldCreatureCount`, `BattlefieldAggregate(Count)`, `TotalPower`, and positive-minimum
-`MaximumPower`, with the player-set and filter restrictions described above. Those live-state
+`MaximumPower`, with the player-set and filter restrictions described above. It also accepts the
+relative-player turn-history family: `CreatureDeathsThisTurn`, `PermanentLeftBattlefieldThisTurn`,
+`PermanentCardsEnteredGraveyardThisTurn`, `PermanentsSacrificedThisTurn`, `SpellsCastThisTurn`,
+`SpellsCastLastTurn`, `CrimesCommittedThisTurn`, `CardsDrawnThisTurn`, `AttackedThisTurn`,
+`AttackersDeclaredThisTurn`, and `LifeChangedThisTurn` with a `Relative` player set. These read
+only the condition controller and committed turn history, and are sampled when the instruction
+resolves (CR 608.2c), so Drag the Canal checks for a death after creating its Detective.
+`TargetedPlayer`, `AffectedPlayer` and `ChosenTarget` player sets, and the source-relative
+`PermanentsEnteredThisTurn`, remain unsupported. Those live-state and turn-history
 conditions share the same validator in `Choose` requirements and conditional search predicates.
 The ability-only source-condition family described above also applies in `Choose` requirements; it
 does not extend to spell Programs, conditional-search predicates, event conditions, or cross-object

@@ -7,29 +7,38 @@
       "start_line": 1,
       "end_line": 1,
       "typed_paths": [
-        "/faces/0/spell_effect/0",
-        "/faces/0/spell_effect/1",
-        "/faces/0/spell_effect/2",
-        "/faces/0/spell_effect/3"
+        "/faces/0/spell_program/body/steps/0",
+        "/faces/0/spell_program/body/steps/1/kind/If/condition",
+        "/faces/0/spell_program/body/steps/1/kind/If/yes/steps/0",
+        "/faces/0/spell_program/body/steps/1/kind/If/yes/steps/1",
+        "/faces/0/spell_program/body/steps/1/kind/If/yes/steps/2"
       ]
     }
   ],
   "primitive_references": [
     {
       "symbol": "SpellEffectKind::CreateTokens",
-      "typed_path": "/faces/0/spell_effect/0"
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/CreateTokens"
+    },
+    {
+      "symbol": "InstructionKind::If",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/If"
+    },
+    {
+      "symbol": "GameCondition::CreatureDeathsThisTurn",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/If/condition"
     },
     {
       "symbol": "SpellEffectKind::GainLife",
-      "typed_path": "/faces/0/spell_effect/1"
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/If/yes/steps/0/kind/Perform/GainLife"
     },
     {
-      "symbol": "SpellEffectKind::Conditional",
-      "typed_path": "/faces/0/spell_effect/2"
+      "symbol": "SpellEffectKind::LibraryPartition",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/If/yes/steps/1/kind/Perform/LibraryPartition"
     },
     {
-      "symbol": "SpellEffectKind::Conditional",
-      "typed_path": "/faces/0/spell_effect/3"
+      "symbol": "SpellEffectKind::Investigate",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/If/yes/steps/2/kind/Perform/Investigate"
     }
   ],
   "tokens": [
