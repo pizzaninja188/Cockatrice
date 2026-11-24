@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "0248bf01-14e0-4a39-ba3a-5177fe272fe9",
+  "spans": [
+    {
+      "face_id": "commune_with_evil",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::LookChooseOneToHandRestToGraveyard",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q68_batch_a::q68_top_selection_canary_simplest_commune_with_evil_bins_three_and_gains_three",
+      "covers": "actual Commune with Evil top-four partition and printed life gain"
+    },
+    {
+      "test": "scenario q68_batch_a::q68_top_selection_keeps_the_look_private_and_clamps_a_short_library",
+      "covers": "actual Commune with Evil privacy and short-library clamp"
+    },
+    {
+      "test": "mechanic_registry::q68_batch_a::q68_batch_a_cohorts_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q68_batch_a::q68_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

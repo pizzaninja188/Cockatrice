@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "66d65cda-e3d1-4a00-8ff3-c6d5ef0ab0c1",
+  "spans": [
+    {
+      "face_id": "forbidden_alchemy",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "forbidden_alchemy",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::LookChooseOneToHandRestToGraveyard",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardFace::flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q68_batch_a::q68_top_selection_forbidden_alchemy_flashes_back_and_exiles",
+      "covers": "actual Forbidden Alchemy look partition, flashback cost, exile and timing"
+    },
+    {
+      "test": "scenario q68_batch_a::q68_top_selection_keeps_the_look_private_and_clamps_a_short_library",
+      "covers": "shared private-look evidence"
+    },
+    {
+      "test": "mechanic_registry::q68_batch_a::q68_batch_a_cohorts_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q68_batch_a::q68_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

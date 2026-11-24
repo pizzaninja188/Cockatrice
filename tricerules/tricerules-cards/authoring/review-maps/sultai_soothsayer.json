@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "5fe127e0-ee38-4f80-969b-13e84712a26f",
+  "spans": [
+    {
+      "face_id": "sultai_soothsayer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::LookChooseOneToHandRestToGraveyard",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q68_batch_a::q68_top_selection_canary_hardest_sultai_soothsayer_partitions_on_entry",
+      "covers": "actual Sultai Soothsayer enters trigger partitions the top four"
+    },
+    {
+      "test": "mechanic_registry::q68_batch_a::q68_batch_a_cohorts_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q68_batch_a::q68_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

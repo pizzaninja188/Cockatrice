@@ -1,0 +1,80 @@
+{
+  "format_version": 1,
+  "oracle_id": "c6c53277-daad-4aa3-b29a-11378d550651",
+  "spans": [
+    {
+      "face_id": "dega_disciple",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "dega_disciple",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/PumpTarget/subject"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/PumpTarget/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q68_batch_a::q68_disciple_canary_simplest_dega_pumps_both_directions_and_expires",
+      "covers": "actual Dega Disciple both pumps, exact costs and cleanup expiry"
+    },
+    {
+      "test": "scenario q68_batch_a::q68_disciples_reject_the_other_color_without_spending_or_tapping",
+      "covers": "wrong-color activation is rejected without spending or tapping"
+    },
+    {
+      "test": "scenario q68_batch_a::q68_disciples_stale_target_does_not_pump_another_creature",
+      "covers": "actual Dega Disciple stale-target path does not retarget the penalty"
+    },
+    {
+      "test": "mechanic_registry::q68_batch_a::q68_batch_a_cohorts_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition"
+    },
+    {
+      "test": "mechanic_registry::q68_batch_a::q68_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
