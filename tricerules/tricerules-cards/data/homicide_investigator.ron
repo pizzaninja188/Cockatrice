@@ -1,0 +1,25 @@
+// Pinned Oracle dc4d5602-47cb-47c8-8a43-3b840e12b79c; Scryfall rulings checked 2026-11-23.
+// CR 700.4 (dies), 603.2c/603.10a (one trigger for one simultaneous event; leaves-the-battlefield
+// abilities look back, so it triggers on its own death), 603.2h (triggers only once each turn),
+// 701.16a/111.10f (investigate). Ruling: it triggers when it dies itself if it isn't a token.
+(
+  id: "homicide_investigator",
+  name: "Homicide Investigator",
+  face_id: "homicide_investigator",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Human", "Detective"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentLeavesBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Creature), token: Some(false)),
+      destination: OneOf([Graveyard]),
+      cardinality: OneOrMore,
+    ),
+    effect: [Investigate(count: 1)],
+    max_triggers_per_turn: Some(1),
+  )],
+)

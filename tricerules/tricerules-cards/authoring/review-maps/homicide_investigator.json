@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "dc4d5602-47cb-47c8-8a43-3b840e12b79c",
+  "spans": [
+    {
+      "face_id": "homicide_investigator",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerKind::WheneverPermanentLeavesBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Investigate",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_339_investigate_cohort::homicide_investigator_investigates_once_for_simultaneous_deaths_including_its_own",
+      "covers": "a wrath killing it and two nontoken creatures yields one Clue"
+    },
+    {
+      "test": "scenario issue_339_investigate_cohort::homicide_investigator_triggers_once_each_turn_for_your_nontoken_creatures",
+      "covers": "token and opponent deaths are ignored; a second death in the turn does not retrigger"
+    },
+    {
+      "test": "batch_registry::issue_339_investigate_cohort::issue_339_cohort_registers_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line and body"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

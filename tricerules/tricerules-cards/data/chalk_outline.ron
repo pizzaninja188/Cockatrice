@@ -1,0 +1,20 @@
+// Pinned Oracle af335eb3-f60a-44b3-a1ed-1e165f3e3605; Scryfall rulings checked 2026-11-23.
+// CR 603.2c (one trigger for one event), 111.1 (create a token), 701.16a/111.10f (then investigate).
+// Ruling: creature cards leaving your graveyard at the same time trigger it only once.
+(
+  id: "chalk_outline",
+  name: "Chalk Outline",
+  face_id: "chalk_outline",
+  mana_cost: "{3}{G}",
+  types: ["Enchantment"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverCardsLeaveGraveyard(
+      owner: Controller,
+      filter: (permanent_type: Some(Creature)),
+      cardinality: OneOrMore,
+    ),
+    effect: [CreateTokens(token: "detective_wu_2_2", count: 1), Investigate(count: 1)],
+  )],
+)

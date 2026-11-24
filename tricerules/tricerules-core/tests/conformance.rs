@@ -541,7 +541,7 @@ fn rich_board(e: &mut GameEngine, case: &Case) {
     };
     use tricerules_cards::CounterKind;
     // Player 0: other basic land types, a flier, typed creatures (Soldier, Legendary, Golem,
-    // Goblin), a Vehicle, tokens, a tapped creature, counters on another creature and enough
+    // Goblin), a Vehicle, Food/Treasure/Clue tokens, a tapped creature, counters on another creature and enough
     // untapped power for large Crew and total-power costs.
     for land in ["swamp", "plains", "mountain"] {
         permanent(e, 0, land);
@@ -560,6 +560,7 @@ fn rich_board(e: &mut GameEngine, case: &Case) {
     e.state.objects.get_mut(&goblin).unwrap().tapped = true;
     permanent(e, 0, "food");
     permanent(e, 0, "treasure");
+    permanent(e, 0, "clue");
     let gnomes = creature(e, 0, "bottle_gnomes");
     // Player 1: a flier, a tapped black creature with a stun counter, an enchantment and a
     // nonbasic land.

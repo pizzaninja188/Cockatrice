@@ -1,0 +1,27 @@
+// Pinned Oracle de83b1a4-0ce0-4cc1-aff3-6d0239d92302; Scryfall rulings checked 2026-11-23 (none).
+// CR 603.6a (enters trigger), 115.1d (target opponent), 701.9a-b (the player discards a card of
+// their choice), 603.2h (triggers only once each turn), 701.16a/111.10f (investigate).
+(
+  id: "hostile_investigator",
+  name: "Hostile Investigator",
+  face_id: "hostile_investigator",
+  mana_cost: "{3}{B}",
+  types: ["Creature", "Ogre", "Rogue", "Detective"],
+  power: 4,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [ChooseHandCards(action: Discard, count: 1, target: (kind: OpponentPlayer))],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([2]),
+      trigger: WheneverPlayerDiscardsOneOrMoreCards(player: AnyPlayer),
+      effect: [Investigate(count: 1)],
+      max_triggers_per_turn: Some(1),
+    ),
+  ],
+)

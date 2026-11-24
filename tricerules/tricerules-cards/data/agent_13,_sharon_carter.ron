@@ -1,0 +1,19 @@
+// Pinned Oracle ddf7201a-6672-416d-be6b-202dafbeccab; Scryfall rulings checked 2026-11-23 (none).
+// CR 506.5 (a creature attacks alone if it's the only creature declared as an attacker), 508.1/603.2
+// (declare-attackers trigger), 701.16a/111.10f (investigate).
+(
+  id: "agent_13,_sharon_carter",
+  name: "Agent 13, Sharon Carter",
+  face_id: "agent_13_sharon_carter",
+  mana_cost: "{2}{W}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Human", "Spy", "Hero"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverControllerAttacks(min_attackers: Some(1), max_attackers: Some(1)),
+    effect: [Investigate(count: 1)],
+  )],
+)

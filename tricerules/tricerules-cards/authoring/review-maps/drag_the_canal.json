@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "0c0ffb66-94db-4ba9-afde-c5b4fbf09578",
+  "spans": [
+    {
+      "face_id": "drag_the_canal",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2",
+        "/faces/0/spell_effect/3"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Conditional",
+      "typed_path": "/faces/0/spell_effect/2"
+    },
+    {
+      "symbol": "SpellEffectKind::Conditional",
+      "typed_path": "/faces/0/spell_effect/3"
+    }
+  ],
+  "tokens": [
+    "clue",
+    "detective_wu_2_2"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_339_investigate_cohort::drag_the_canal_without_a_death_only_makes_a_detective",
+      "covers": "no death this turn: only the Detective, no life, surveil or Clue"
+    },
+    {
+      "test": "scenario issue_339_investigate_cohort::drag_the_canal_after_a_death_gains_life_surveils_then_investigates",
+      "covers": "after a death: Detective, two life, a surveil 2 choice, then one Clue"
+    },
+    {
+      "test": "batch_registry::issue_339_investigate_cohort::issue_339_cohort_registers_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line and body"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

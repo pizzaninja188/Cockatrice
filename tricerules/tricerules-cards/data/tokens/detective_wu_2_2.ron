@@ -1,0 +1,10 @@
+// 2/2 white and blue Detective creature token (Chalk Outline, Drag the Canal).
+(
+  id: "detective_wu_2_2",
+  name: "Detective",
+  face_id: "detective",
+  types: ["Creature", "Detective"],
+  colors: [White, Blue],
+  power: 2,
+  toughness: 2,
+)

@@ -1,0 +1,28 @@
+// Pinned Oracle 2d16d51b-47e0-4cdc-83dd-a805ba50bd83; Scryfall rulings checked 2026-11-23.
+// CR 101.2/701.6 (can't be countered, including by ward), 115.1a (zero to two targets), 701.26
+// (tap), 122.1d/614.1d (stun counters), 701.16a/111.10f (investigate). Rulings: it may be cast
+// with no targets and still investigates; if all chosen targets are illegal it doesn't resolve
+// and no Clue is created (CR 608.2b).
+(
+  id: "out_cold",
+  name: "Out Cold",
+  face_id: "out_cold",
+  mana_cost: "{3}{U}",
+  types: ["Instant"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: SpellCannotBeCountered,
+  )],
+  spell_effect: [
+    Tap(subject: Chosen((kind: Creature))),
+    PutCounters(counter: Stun, count: 1, subject: Chosen((kind: Creature))),
+    Investigate(count: 1),
+  ],
+  targeting: Some((groups: [(
+    min: 0,
+    max: 2,
+    prompt: "Choose up to two target creatures",
+    effect_indices: [0, 1],
+  )])),
+)

@@ -1,0 +1,25 @@
+// Pinned Oracle 52fe8101-82af-4aed-a395-54e7b7639bd2; Scryfall rulings checked 2026-11-23 (Clue facts only).
+// CR 303.4 (Aura), 702.5 (enchant creature), 613.4c (+1/+1), 613.1f (granted ability), 510.2/603.2
+// (combat damage to a player trigger), 701.16a/111.10f (the creature's controller investigates).
+(
+  id: "curious_inquiry",
+  name: "Curious Inquiry",
+  face_id: "curious_inquiry",
+  mana_cost: "{U}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach()],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: AttachedModifier(
+      delta_power: 1,
+      delta_toughness: 1,
+      triggered_abilities: [(
+        ability_id: "triggered_01",
+        presentation: Fallback,
+        trigger: WheneverSelfDealsCombatDamageToPlayer,
+        effect: [Investigate(count: 1)],
+      )],
+    ),
+  )],
+)

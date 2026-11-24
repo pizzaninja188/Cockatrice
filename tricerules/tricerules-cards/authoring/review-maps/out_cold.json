@@ -1,0 +1,65 @@
+{
+  "format_version": 1,
+  "oracle_id": "2d16d51b-47e0-4cdc-83dd-a805ba50bd83",
+  "spans": [
+    {
+      "face_id": "out_cold",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "out_cold",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::SpellCannotBeCountered",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Investigate",
+      "typed_path": "/faces/0/spell_effect/2"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_339_investigate_cohort::out_cold_taps_and_stuns_up_to_two_creatures_and_investigates",
+      "covers": "two targets tapped with one stun counter each and one Clue for the caster"
+    },
+    {
+      "test": "scenario issue_339_investigate_cohort::out_cold_with_no_targets_still_investigates_and_cannot_be_countered",
+      "covers": "zero targets still investigates; Counterspell does not counter it"
+    },
+    {
+      "test": "scenario issue_339_investigate_cohort::out_cold_with_all_targets_illegal_does_not_investigate",
+      "covers": "an illegal sole target makes the spell not resolve and creates no Clue"
+    },
+    {
+      "test": "batch_registry::issue_339_investigate_cohort::issue_339_cohort_registers_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line and body"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

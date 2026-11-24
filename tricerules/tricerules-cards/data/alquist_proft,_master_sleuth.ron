@@ -1,0 +1,31 @@
+// Pinned Oracle dd79a994-7dad-49d4-8d8f-62dbedde4a38; Scryfall rulings checked 2026-11-23.
+// CR 702.20 (vigilance), 603.6a (enters trigger), 701.16a/111.10f (investigate creates one Clue),
+// 107.3a/602.2b (X chosen on activation), 118.3/701.21a (sacrifice a Clue as a cost). Rulings: any
+// Clue artifact may be sacrificed, not just a Clue token; one Clue can't pay two costs.
+(
+  id: "alquist_proft,_master_sleuth",
+  name: "Alquist Proft, Master Sleuth",
+  face_id: "alquist_proft_master_sleuth",
+  mana_cost: "{1}{W}{U}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Human", "Detective"],
+  power: 3,
+  toughness: 3,
+  keywords: [Vigilance],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Investigate(count: 1)],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
+    costs: [
+      Mana("{X}{W}{U}{U}"),
+      Tap,
+      SacrificePermanent(filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Clue"])),
+    ],
+    effect: [Draw(count: "X"), GainLife(amount: "X")],
+  )],
+)

@@ -1,0 +1,28 @@
+// Pinned Oracle 0c0ffb66-94db-4ba9-afde-c5b4fbf09578; Scryfall rulings checked 2026-11-23 (Clue facts only).
+// CR 111.1 (create a token), 700.4 (died this turn), 608.2c (follow the instructions in order),
+// 701.25 (surveil 2), 701.16a/111.10f (then investigate), 119.9 (gaining 0 life is no event).
+// Each rider re-checks the same resolution-time condition. A creature-death count this turn only
+// grows and none of the riders can lower it, so the three checks always agree.
+(
+  id: "drag_the_canal",
+  name: "Drag the Canal",
+  face_id: "drag_the_canal",
+  mana_cost: "{U}{B}",
+  types: ["Instant"],
+  spell_effect: [
+    CreateTokens(token: "detective_wu_2_2", count: 1),
+    GainLife(amount: Conditional(
+      condition: CreatureDeathsThisTurn(min: Some(1)),
+      when_true: 2,
+      otherwise: 0,
+    )),
+    Conditional(
+      condition: CreatureDeathsThisTurn(min: Some(1)),
+      effect: LibraryPartition(count: 2, top_min: 0, top_max: None, kind: Surveil),
+    ),
+    Conditional(
+      condition: CreatureDeathsThisTurn(min: Some(1)),
+      effect: Investigate(count: 1),
+    ),
+  ],
+)

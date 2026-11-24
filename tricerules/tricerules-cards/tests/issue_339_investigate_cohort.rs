@@ -1,4 +1,4 @@
-//! Printed identities for the first #339 investigate cohort.
+//! Printed identities for the #339 investigate cohorts.
 
 use tricerules_cards::Layout;
 
@@ -60,6 +60,86 @@ fn issue_339_cohort_registers_exact_card_identities() {
             "{2}{U}{R}",
             &[][..],
             &["Artifact"][..],
+            None,
+        ),
+        (
+            "alquist_proft,_master_sleuth",
+            "Alquist Proft, Master Sleuth",
+            "{1}{W}{U}",
+            &["Legendary"][..],
+            &["Creature", "Human", "Detective"][..],
+            Some((3, 3)),
+        ),
+        (
+            "out_cold",
+            "Out Cold",
+            "{3}{U}",
+            &[][..],
+            &["Instant"][..],
+            None,
+        ),
+        (
+            "homicide_investigator",
+            "Homicide Investigator",
+            "{1}{B}",
+            &[][..],
+            &["Creature", "Human", "Detective"][..],
+            Some((2, 2)),
+        ),
+        (
+            "hostile_investigator",
+            "Hostile Investigator",
+            "{3}{B}",
+            &[][..],
+            &["Creature", "Ogre", "Rogue", "Detective"][..],
+            Some((4, 3)),
+        ),
+        (
+            "malcolm,_the_eyes",
+            "Malcolm, the Eyes",
+            "{U}{R}",
+            &["Legendary"][..],
+            &["Creature", "Siren", "Pirate"][..],
+            Some((2, 2)),
+        ),
+        (
+            "curious_inquiry",
+            "Curious Inquiry",
+            "{U}",
+            &[][..],
+            &["Enchantment", "Aura"][..],
+            None,
+        ),
+        (
+            "agent_13,_sharon_carter",
+            "Agent 13, Sharon Carter",
+            "{2}{W}",
+            &["Legendary"][..],
+            &["Creature", "Human", "Spy", "Hero"][..],
+            Some((3, 2)),
+        ),
+        (
+            "meddling_youths",
+            "Meddling Youths",
+            "{3}{R}{W}",
+            &[][..],
+            &["Creature", "Human", "Detective"][..],
+            Some((4, 5)),
+        ),
+        (
+            "chalk_outline",
+            "Chalk Outline",
+            "{3}{G}",
+            &[][..],
+            &["Enchantment"][..],
+            None,
+        ),
+        (
+            "drag_the_canal",
+            "Drag the Canal",
+            "{U}{B}",
+            &[][..],
+            &["Instant"][..],
             None,
         ),
     ] {

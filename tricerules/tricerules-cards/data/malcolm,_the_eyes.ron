@@ -1,0 +1,20 @@
+// Pinned Oracle 7932ab35-39dc-4500-aa44-2ad7228f0d2a; Scryfall rulings checked 2026-11-23.
+// CR 702.9 (flying), 702.10 (haste), 603.2 (cast trigger), 701.16a/111.10f (investigate). Ruling:
+// spells cast before Malcolm entered count, so Malcolm can be the first spell.
+(
+  id: "malcolm,_the_eyes",
+  name: "Malcolm, the Eyes",
+  face_id: "malcolm_the_eyes",
+  mana_cost: "{U}{R}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Siren", "Pirate"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying, Haste],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPlayerCastsSpell(ordinal: Some(2)),
+    effect: [Investigate(count: 1)],
+  )],
+)

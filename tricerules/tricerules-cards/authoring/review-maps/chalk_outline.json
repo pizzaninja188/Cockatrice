@@ -1,0 +1,47 @@
+{
+  "format_version": 1,
+  "oracle_id": "af335eb3-f60a-44b3-a1ed-1e165f3e3605",
+  "spans": [
+    {
+      "face_id": "chalk_outline",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerKind::WheneverCardsLeaveGraveyard",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Investigate",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [
+    "clue",
+    "detective_wu_2_2"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_339_investigate_cohort::chalk_outline_makes_one_detective_and_one_clue_for_simultaneous_creature_cards",
+      "covers": "two creature cards exiled together give one 2/2 Detective and one Clue to the owner"
+    },
+    {
+      "test": "scenario issue_339_investigate_cohort::chalk_outline_ignores_noncreature_cards_leaving_the_graveyard",
+      "covers": "a noncreature card leaving does not trigger"
+    },
+    {
+      "test": "batch_registry::issue_339_investigate_cohort::issue_339_cohort_registers_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line and body"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
