@@ -1,0 +1,16 @@
+// Oracle d2145ad3-fe7e-459b-b155-1b3ed089e936; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 701.34 (proliferate), 121.1 (draw) and 608.2c (printed order: proliferate, then draw).
+// Pinned 2011-01-01 ruling: the spell has no targets and resolves even with no counters.
+// Copy of Tezzeret's Gambit's Proliferate and Opt's draw.
+(
+  id: "steady_progress",
+  name: "Steady Progress",
+  face_id: "steady_progress",
+  mana_cost: "{2}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    Proliferate,
+    Draw(count: 1),
+  ],
+)

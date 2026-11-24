@@ -1407,3 +1407,12 @@ mod q74_flashback_utility;
 
 #[path = "../q74_scry_riders.rs"]
 mod q74_scry_riders;
+
+#[path = "../q75_treasure_riders.rs"]
+mod q75_treasure_riders;
+
+#[path = "../q75_proliferate_riders.rs"]
+mod q75_proliferate_riders;
+
+#[path = "../q75_surveil_cantrips.rs"]
+mod q75_surveil_cantrips;

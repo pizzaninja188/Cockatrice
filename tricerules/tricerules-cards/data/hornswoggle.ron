@@ -1,0 +1,17 @@
+// Oracle 71b178bd-3b37-4de9-97a3-96e23d5444a4; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 115.1/601.2c (creature spell target), 701.6 (counter), 111.10a/701.7 (Treasure token) and
+// 608.2c (printed order). Pinned 2018-01-19 ruling: Hornswoggle may target a spell that cannot be
+// countered, and the Treasure is still created; the counter fails while the rider remains.
+// Copy of Bone to Ash's creature-spell counter and Flick a Coin's Treasure rider.
+(
+  id: "hornswoggle",
+  name: "Hornswoggle",
+  face_id: "hornswoggle",
+  mana_cost: "{2}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    CounterTargetSpell(spell_filter: (card_type: Some(Creature))),
+    CreateTokens(token: "treasure", count: 1),
+  ],
+)

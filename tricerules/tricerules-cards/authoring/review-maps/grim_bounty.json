@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "8060dc97-9868-4846-85f4-0ef70da2b021",
+  "spans": [
+    {
+      "face_id": "grim_bounty",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Creature",
+      "typed_path": "/faces/0/targeting/groups/0"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Planeswalker",
+      "typed_path": "/faces/0/targeting/groups/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q75_treasure_riders::q75_treasure_riders_fizzle_without_a_treasure_when_the_target_is_stale",
+      "covers": "actual Grim Bounty creates no Treasure when its only target is stale"
+    },
+    {
+      "test": "scenario q75_treasure_riders::q75_treasure_riders_apply_their_printed_bodies_and_exact_costs",
+      "covers": "actual Grim Bounty applies its printed body and creates the Treasure for its printed cost"
+    },
+    {
+      "test": "scenario q75_treasure_riders::q75_treasure_riders_reject_underfunded_casts",
+      "covers": "actual Grim Bounty rejects an underfunded cast"
+    },
+    {
+      "test": "mechanic_registry::q75_treasure_riders::q75_treasure_riders_map_definitions",
+      "covers": "reviewed identity, characteristics and typed Treasure-rider definition of grim bounty"
+    },
+    {
+      "test": "mechanic_registry::q75_treasure_riders::q75_treasure_riders_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for grim bounty"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

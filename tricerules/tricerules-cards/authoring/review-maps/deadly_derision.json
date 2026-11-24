@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "4b74d2d9-d75b-496e-bbb4-2b95b3d3ba55",
+  "spans": [
+    {
+      "face_id": "deadly_derision",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Creature",
+      "typed_path": "/faces/0/targeting/groups/0"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Planeswalker",
+      "typed_path": "/faces/0/targeting/groups/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q75_treasure_riders::q75_treasure_riders_fizzle_without_a_treasure_when_the_target_is_stale",
+      "covers": "actual Deadly Derision creates no Treasure when its only target is stale"
+    },
+    {
+      "test": "scenario q75_treasure_riders::q75_treasure_riders_apply_their_printed_bodies_and_exact_costs",
+      "covers": "actual Deadly Derision applies its printed body and creates the Treasure for its printed cost"
+    },
+    {
+      "test": "scenario q75_treasure_riders::q75_treasure_riders_reject_underfunded_casts",
+      "covers": "actual Deadly Derision rejects an underfunded cast"
+    },
+    {
+      "test": "mechanic_registry::q75_treasure_riders::q75_treasure_riders_map_definitions",
+      "covers": "reviewed identity, characteristics and typed Treasure-rider definition of deadly derision"
+    },
+    {
+      "test": "mechanic_registry::q75_treasure_riders::q75_treasure_riders_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for deadly derision"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

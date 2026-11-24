@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "fa5dad0b-8e23-4b88-b383-849f7318e01f",
+  "spans": [
+    {
+      "face_id": "improvised_weaponry",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetKind::AnyTarget",
+      "typed_path": "/faces/0/targeting/groups/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q75_treasure_riders::q75_treasure_canary_simplest_improvised_weaponry_damages_and_makes_a_treasure",
+      "covers": "actual Improvised Weaponry deals exactly two damage to the chosen player and creates a Treasure"
+    },
+    {
+      "test": "scenario q75_treasure_riders::q75_treasure_riders_fizzle_without_a_treasure_when_the_target_is_stale",
+      "covers": "actual Improvised Weaponry creates no Treasure when its only target is stale"
+    },
+    {
+      "test": "scenario q75_treasure_riders::q75_treasure_riders_apply_their_printed_bodies_and_exact_costs",
+      "covers": "actual Improvised Weaponry applies its printed body and creates the Treasure for its printed cost"
+    },
+    {
+      "test": "scenario q75_treasure_riders::q75_treasure_riders_reject_underfunded_casts",
+      "covers": "actual Improvised Weaponry rejects an underfunded cast"
+    },
+    {
+      "test": "mechanic_registry::q75_treasure_riders::q75_treasure_riders_map_definitions",
+      "covers": "reviewed identity, characteristics and typed Treasure-rider definition of improvised weaponry"
+    },
+    {
+      "test": "mechanic_registry::q75_treasure_riders::q75_treasure_riders_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for improvised weaponry"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

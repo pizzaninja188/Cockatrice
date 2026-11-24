@@ -1,0 +1,63 @@
+{
+  "format_version": 1,
+  "oracle_id": "71b178bd-3b37-4de9-97a3-96e23d5444a4",
+  "spans": [
+    {
+      "face_id": "hornswoggle",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardTypeFilter::Creature",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q75_treasure_riders::q75_treasure_canary_hardest_hornswoggle_counters_a_creature_spell",
+      "covers": "actual Hornswoggle counters a creature spell and its controller creates a Treasure"
+    },
+    {
+      "test": "scenario q75_treasure_riders::q75_treasure_hornswoggle_still_creates_a_treasure_on_an_uncounterable_spell",
+      "covers": "actual Hornswoggle still creates the Treasure when the creature spell cannot be countered"
+    },
+    {
+      "test": "scenario q75_treasure_riders::q75_treasure_riders_reject_missing_and_wrong_targets",
+      "covers": "actual Hornswoggle rejects a noncreature spell and a missing target"
+    },
+    {
+      "test": "scenario q75_treasure_riders::q75_treasure_hornswoggle_fizzles_without_a_treasure_when_the_spell_leaves_the_stack",
+      "covers": "actual Hornswoggle fizzles with no Treasure when its creature-spell target leaves the stack"
+    },
+    {
+      "test": "scenario q75_treasure_riders::q75_treasure_riders_reject_underfunded_casts",
+      "covers": "actual Hornswoggle rejects an underfunded cast"
+    },
+    {
+      "test": "mechanic_registry::q75_treasure_riders::q75_treasure_riders_map_definitions",
+      "covers": "reviewed identity, characteristics and typed Treasure-rider definition of hornswoggle"
+    },
+    {
+      "test": "mechanic_registry::q75_treasure_riders::q75_treasure_riders_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for hornswoggle"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

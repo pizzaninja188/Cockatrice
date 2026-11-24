@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "05d1e797-bda2-4411-a546-919493768650",
+  "spans": [
+    {
+      "face_id": "unnatural_restoration",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardTypeFilter::Land",
+      "typed_path": "/faces/0/spell_effect/0/MoveGraveyardCards/filter/card/any_of/0/card_type"
+    },
+    {
+      "symbol": "CardTypeFilter::NonlandPermanent",
+      "typed_path": "/faces/0/spell_effect/0/MoveGraveyardCards/filter/card/any_of/1/card_type"
+    },
+    {
+      "symbol": "SpellEffectKind::Proliferate",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q75_proliferate_riders::q75_proliferate_riders_fizzle_without_proliferating_on_a_stale_target",
+      "covers": "actual Unnatural Restoration does not proliferate when its only target is stale"
+    },
+    {
+      "test": "scenario q75_proliferate_riders::q75_proliferate_riders_apply_their_printed_bodies_in_order",
+      "covers": "actual Unnatural Restoration applies its printed body in order and then proliferates"
+    },
+    {
+      "test": "scenario q75_proliferate_riders::q75_proliferate_riders_reject_illegal_targets_and_underfunded_costs",
+      "covers": "actual Unnatural Restoration rejects an illegal or underfunded cast"
+    },
+    {
+      "test": "mechanic_registry::q75_proliferate_riders::q75_proliferate_riders_map_definitions",
+      "covers": "reviewed identity, characteristics and typed Proliferate-rider definition of unnatural restoration"
+    },
+    {
+      "test": "mechanic_registry::q75_proliferate_riders::q75_proliferate_riders_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for unnatural restoration"
+    },
+    {
+      "test": "mechanic_registry::q75_proliferate_riders::q75_proliferate_riders_target_groups_match_their_bodies",
+      "covers": "the graveyard move owns its card target and adds no separate spell target group"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

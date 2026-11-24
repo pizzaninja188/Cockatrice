@@ -2603,3 +2603,12 @@ mod q74_flashback_utility;
 
 #[path = "scenario/q74_scry_riders.rs"]
 mod q74_scry_riders;
+
+#[path = "scenario/q75_treasure_riders.rs"]
+mod q75_treasure_riders;
+
+#[path = "scenario/q75_proliferate_riders.rs"]
+mod q75_proliferate_riders;
+
+#[path = "scenario/q75_surveil_cantrips.rs"]
+mod q75_surveil_cantrips;

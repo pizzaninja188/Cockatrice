@@ -1,0 +1,15 @@
+// Oracle 6de8bdc0-9b2a-4105-bbac-d5a2f73f52dc; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 121.1 (draw), 111.10a/701.7 (Treasure token) and 608.2c (printed order). Copy of
+// Seize the Spoils' draw-plus-Treasure composition.
+(
+  id: "pirates_prize",
+  name: "Pirate's Prize",
+  face_id: "pirates_prize",
+  mana_cost: "{3}{U}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Draw(count: 2),
+    CreateTokens(token: "treasure", count: 1),
+  ],
+)
