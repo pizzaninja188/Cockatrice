@@ -1,0 +1,26 @@
+// Oracle e0cb503e-9814-4280-9c29-4eff3379bc24; source/rulings checked 2026-11-23 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 605.1a/605.3b (tap mana ability), 106.1a (one mana of any of the five colors),
+// 602.1/602.2 and 118.3 (mana and sacrifice costs), 701.21a (sacrifice) and 121.1 (draw).
+// No pinned ruling.
+(
+  id: "letter_of_acceptance",
+  name: "Letter of Acceptance",
+  face_id: "letter_of_acceptance",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Mana("{2}"), Tap, SacrificeSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

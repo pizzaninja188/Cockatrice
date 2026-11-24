@@ -1,0 +1,12 @@
+// Oracle 7ffae8f8-3006-4969-a339-6d30678f87ea; source/rulings checked 2026-11-23 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 121.2 (two separate draw events), 119.3 (life loss) and 608.2c (instructions in printed order).
+// The card has no pinned ruling.
+(
+  id: "nights_whisper",
+  name: "Night's Whisper",
+  face_id: "nights_whisper",
+  mana_cost: "{1}{B}",
+  types: ["Sorcery"],
+  spell_effect: [Draw(count: 2), LoseLife(amount: Fixed(2))],
+)

@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "0844f4e6-2b98-4d09-a5c5-92f0a3b6a517",
+  "spans": [
+    {
+      "face_id": "mana_geode",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "mana_geode",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ManaAmount",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/ProduceMana/options"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q69_batch_a::q69_rocks_canary_simplest_mana_geode_enters_scries_one_then_makes_any_color",
+      "covers": "actual Mana Geode clause coverage"
+    },
+    {
+      "test": "scenario q69_batch_a::q69_rocks_each_card_offers_its_printed_any_color_option",
+      "covers": "actual Mana Geode clause coverage"
+    },
+    {
+      "test": "scenario q69_batch_a::q69_rocks_mana_abilities_reject_a_tapped_source_without_producing",
+      "covers": "actual Mana Geode clause coverage"
+    },
+    {
+      "test": "mechanic_registry::q69_batch_a::q69_batch_a_cohorts_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of mana_geode"
+    },
+    {
+      "test": "mechanic_registry::q69_batch_a::q69_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for mana_geode"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

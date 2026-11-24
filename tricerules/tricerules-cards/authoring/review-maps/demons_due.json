@@ -1,0 +1,50 @@
+{
+  "format_version": 1,
+  "oracle_id": "bf65a5f5-5536-4616-a09e-2416439c7bc6",
+  "spans": [
+    {
+      "face_id": "demons_due",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_program/body/steps/0",
+        "/faces/0/spell_program/body/steps/1",
+        "/faces/0/spell_program/body/steps/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/Scry"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_program/body/steps/1/kind/Perform/Draw"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/spell_program/body/steps/2/kind/Perform/LoseLife"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q69_batch_a::q69_draw_two_life_demons_due_is_an_instant_with_printed_scry_two",
+      "covers": "actual Demon's Due scries two on the printed top cards, then draws two and loses two"
+    },
+    {
+      "test": "scenario q69_batch_a::q69_draw_two_life_cards_require_their_exact_mana_and_leave_state_unchanged",
+      "covers": "actual Demon's Due rejects an unfunded cast without changing the library, hand, life or stack"
+    },
+    {
+      "test": "mechanic_registry::q69_batch_a::q69_batch_a_cohorts_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of demons_due"
+    },
+    {
+      "test": "mechanic_registry::q69_batch_a::q69_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for demons_due"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

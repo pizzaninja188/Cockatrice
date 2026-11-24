@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "7ffae8f8-3006-4969-a339-6d30678f87ea",
+  "spans": [
+    {
+      "face_id": "nights_whisper",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q69_batch_a::q69_draw_two_life_canary_simplest_nights_whisper_draws_two_and_loses_two",
+      "covers": "actual Night's Whisper draws two, loses exactly two life and has no resolution choice"
+    },
+    {
+      "test": "scenario q69_batch_a::q69_draw_two_life_cards_require_their_exact_mana_and_leave_state_unchanged",
+      "covers": "actual Night's Whisper rejects an unfunded cast without drawing, losing life or changing the stack"
+    },
+    {
+      "test": "mechanic_registry::q69_batch_a::q69_batch_a_cohorts_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of nights_whisper"
+    },
+    {
+      "test": "mechanic_registry::q69_batch_a::q69_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for nights_whisper"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
