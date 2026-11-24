@@ -1,0 +1,66 @@
+{
+  "format_version": 1,
+  "oracle_id": "45bee121-0beb-4901-9473-20e4704ba6dc",
+  "spans": [
+    {
+      "face_id": "reckless_charge",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "reckless_charge",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "Keyword::Haste",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "CardFace::flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q70_batch_a::q70_flashback_pump_canary_simplest_reckless_charge_pumps_and_exiles",
+      "covers": "actual Reckless Charge pumps and grants haste from hand, again from the graveyard, then exiles and expires"
+    },
+    {
+      "test": "scenario q70_batch_a::q70_flashback_pump_cards_fizzle_on_a_stale_target_and_still_exile_after_flashback",
+      "covers": "the actual card fizzles on a stale target and still exiles after a flashback cast"
+    },
+    {
+      "test": "mechanic_registry::q70_batch_a::q70_batch_a_cohorts_map_definitions",
+      "covers": "reviewed identity, printed characteristics and typed definition of reckless_charge"
+    },
+    {
+      "test": "mechanic_registry::q70_batch_a::q70_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for reckless_charge"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

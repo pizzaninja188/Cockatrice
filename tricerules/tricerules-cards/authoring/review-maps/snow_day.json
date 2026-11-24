@@ -1,0 +1,71 @@
+{
+  "format_version": 1,
+  "oracle_id": "057729d0-f7ed-465b-91aa-fb2c6d6612b2",
+  "spans": [
+    {
+      "face_id": "snow_day",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "snow_day",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/2",
+        "/faces/0/spell_effect/3"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::SkipNextUntap",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/2"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/spell_effect/3"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q70_batch_a::q70_tap_skip_canary_hardest_snow_day_taps_two_draws_and_discards",
+      "covers": "actual Snow Day taps two, records both skips, draws two and then discards one"
+    },
+    {
+      "test": "scenario q70_batch_a::q70_tap_skip_all_illegal_targets_fizzle_without_riders",
+      "covers": "the actual card neither draws nor discards when all targets are illegal"
+    },
+    {
+      "test": "scenario q70_batch_a::q70_tap_skip_cards_reject_unfunded_casts_and_cycling",
+      "covers": "the actual card rejects an unfunded cast"
+    },
+    {
+      "test": "mechanic_registry::q70_batch_a::q70_batch_a_cohorts_map_definitions",
+      "covers": "reviewed identity, printed characteristics and typed definition of snow_day"
+    },
+    {
+      "test": "mechanic_registry::q70_batch_a::q70_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for snow_day"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

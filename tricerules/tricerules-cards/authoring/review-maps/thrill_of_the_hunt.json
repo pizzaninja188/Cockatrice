@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "7b1f0b78-806f-4a7d-809b-d2bc60cf1b01",
+  "spans": [
+    {
+      "face_id": "thrill_of_the_hunt",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "thrill_of_the_hunt",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardFace::flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q70_batch_a::q70_flashback_pump_cards_apply_their_printed_pump_and_keyword",
+      "covers": "actual Thrill of the Hunt applies +1/+2 with no keyword grant"
+    },
+    {
+      "test": "scenario q70_batch_a::q70_flashback_pump_cards_flash_back_for_their_printed_cost_and_exile",
+      "covers": "the actual card pays its white flashback cost and exiles"
+    },
+    {
+      "test": "mechanic_registry::q70_batch_a::q70_batch_a_cohorts_map_definitions",
+      "covers": "reviewed identity, printed characteristics and typed definition of thrill_of_the_hunt"
+    },
+    {
+      "test": "mechanic_registry::q70_batch_a::q70_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for thrill_of_the_hunt"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

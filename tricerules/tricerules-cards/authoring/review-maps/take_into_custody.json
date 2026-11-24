@@ -1,0 +1,50 @@
+{
+  "format_version": 1,
+  "oracle_id": "5e5f92b3-204b-42a3-b86f-8e2a1d263d1d",
+  "spans": [
+    {
+      "face_id": "take_into_custody",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::SkipNextUntap",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q70_batch_a::q70_tap_skip_canary_simplest_take_into_custody_taps_and_skips_untap",
+      "covers": "actual Take into Custody taps one creature and records its next-untap skip"
+    },
+    {
+      "test": "scenario q70_batch_a::q70_tap_skip_cards_accept_already_tapped_creatures",
+      "covers": "the actual card accepts an already-tapped creature and still skips its next untap"
+    },
+    {
+      "test": "mechanic_registry::q70_batch_a::q70_batch_a_cohorts_map_definitions",
+      "covers": "reviewed identity, printed characteristics and typed definition of take_into_custody"
+    },
+    {
+      "test": "mechanic_registry::q70_batch_a::q70_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for take_into_custody"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
