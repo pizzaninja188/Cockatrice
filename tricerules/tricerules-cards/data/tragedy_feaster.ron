@@ -1,0 +1,50 @@
+// Oracle and rulings checked 2026-11-25 against pinned Scryfall oracle 0c4277ec-aa12-41f5-8896-c83cfc754d6e.
+// Handwritten typed definition promoted through the reviewed direct-RON path (#430);
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.19 (trample), CR 702.21 (ward), CR 513.1/603.2b (the end-step trigger), CR 608.2c
+// ("unless" is checked on resolution, not as an intervening-if), CR 119 (life gain history),
+// and CR 701.21a (the controller sacrifices a permanent they control, possibly this one).
+(
+  id: "tragedy_feaster",
+  name: "Tragedy Feaster",
+  face_id: "tragedy_feaster",
+  mana_cost: "{2}{B}{B}",
+  types: ["Creature", "Demon"],
+  power: 7,
+  toughness: 6,
+  keywords: [Trample],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
+      program: Some((body: (steps: [
+        (id: "ward", kind: Perform(CounterTriggeringStackObjectUnlessPays(cost: DiscardCard(filter: None)))),
+      ]))),
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([3]),
+      trigger: AtBeginningOfEndStep(),
+      program: Some((body: (steps: [
+        (
+          id: "unless_gained_life",
+          kind: If(
+            condition: LifeChangedThisTurn(
+              players: Relative(Controller),
+              change: Gain,
+              quantifier: Any,
+            ),
+            yes: (steps: []),
+            no: (steps: [
+              (
+                id: "sacrifice_a_permanent",
+                kind: Perform(ChooseAndSacrifice(players: Controller, count: 1, filter: (kind: AnyPermanent))),
+              ),
+            ]),
+          ),
+        ),
+      ]))),
+    ),
+  ],
+)

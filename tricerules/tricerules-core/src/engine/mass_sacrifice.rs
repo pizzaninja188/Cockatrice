@@ -470,15 +470,9 @@ impl GameEngine {
         )? {
             return Ok(events::finish_with_events(self, events));
         }
-        {
-            let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
-            self.complete_parked_resolution_with_previous(
-                parked_item,
-                parked_resume_effect_index,
-                effect_result,
-                events,
-            )
-        }
+        // A Program-parked choice resumes its remaining instructions and fills the bound
+        // sacrifice receipt; a legacy parked list falls back to the flat continuation.
+        self.complete_parked_stack_with_previous(stack, effect_result, events)
     }
 
     pub(super) fn refresh_player_set_sacrifice_departure(
@@ -517,15 +511,8 @@ impl GameEngine {
         if self.commit_player_set_sacrifice(stack.clone(), &cohort, &mut effect_result, events)? {
             return Ok(());
         }
-        let completed = {
-            let (parked_item, parked_resume_effect_index, _, _) = stack.into_parts();
-            self.complete_parked_resolution_with_previous(
-                parked_item,
-                parked_resume_effect_index,
-                effect_result,
-                std::mem::take(events),
-            )
-        }?;
+        let completed =
+            self.complete_parked_stack_with_previous(stack, effect_result, std::mem::take(events))?;
         events.extend(completed.events);
         Ok(())
     }

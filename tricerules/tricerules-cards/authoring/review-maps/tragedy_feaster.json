@@ -1,0 +1,102 @@
+{
+  "format_version": 1,
+  "oracle_id": "0c4277ec-aa12-41f5-8896-c83cfc754d6e",
+  "spans": [
+    {
+      "face_id": "tragedy_feaster",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "tragedy_feaster",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/CounterTriggeringStackObjectUnlessPays"
+      ]
+    },
+    {
+      "face_id": "tragedy_feaster",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1",
+        "/faces/0/triggered_abilities/1/program/body/steps/0/kind/If"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverSelfBecomesTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CounterTriggeringStackObjectUnlessPays",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/CounterTriggeringStackObjectUnlessPays"
+    },
+    {
+      "symbol": "ResolutionCost::DiscardCard",
+      "typed_path": "/faces/0/triggered_abilities/0/program/body/steps/0/kind/Perform/CounterTriggeringStackObjectUnlessPays/cost"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfEndStep",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger"
+    },
+    {
+      "symbol": "InstructionKind::If",
+      "typed_path": "/faces/0/triggered_abilities/1/program/body/steps/0/kind/If"
+    },
+    {
+      "symbol": "GameCondition::LifeChangedThisTurn",
+      "typed_path": "/faces/0/triggered_abilities/1/program/body/steps/0/kind/If/condition"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseAndSacrifice",
+      "typed_path": "/faces/0/triggered_abilities/1/program/body/steps/0/kind/If/no/steps/0/kind/Perform/ChooseAndSacrifice"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_430_direct_ron::issue_430_tragedy_feaster_sacrifices_a_chosen_own_permanent_without_life_gain",
+      "covers": "with no life gained, the controller's end-step trigger asks the controller to choose among their own permanents (the Feaster included), rejects an opponent's permanent while keeping the choice, and sacrifices exactly the chosen one; Trample is the effective keyword"
+    },
+    {
+      "test": "scenario issue_430_direct_ron::issue_430_tragedy_feaster_alone_sacrifices_itself_without_a_prompt",
+      "covers": "when the Feaster is the controller's only permanent it is sacrificed with no prompt"
+    },
+    {
+      "test": "scenario issue_430_direct_ron::issue_430_tragedy_feaster_life_gain_this_turn_skips_the_sacrifice",
+      "covers": "life gained earlier this turn makes the resolving trigger do nothing"
+    },
+    {
+      "test": "scenario issue_430_direct_ron::issue_430_tragedy_feaster_life_loss_or_opponent_gain_is_not_your_gain",
+      "covers": "the controller losing life and an opponent gaining life do not count as the controller gaining life"
+    },
+    {
+      "test": "scenario issue_430_direct_ron::issue_430_tragedy_feaster_does_not_trigger_on_an_opponents_end_step",
+      "covers": "the Infusion trigger fires only at its controller's end step"
+    },
+    {
+      "test": "scenario issue_430_direct_ron::issue_430_tragedy_feaster_ward_discard_pays_or_counters",
+      "covers": "Ward-Discard makes the targeting opponent the payer; discarding preserves the spell, declining counters it"
+    },
+    {
+      "test": "mechanic_registry::issue_430_direct_ron::issue_430_tragedy_feaster_maps_trample_ward_and_unless_sacrifice",
+      "covers": "reviewed identity, printed P/T, Trample, the Ward trigger/payment, and the controller end-step ProgramIf whose no branch is the controller's ChooseAndSacrifice"
+    },
+    {
+      "test": "mechanic_registry::issue_430_direct_ron::issue_430_direct_ron_fingerprint_matches_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for the face"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

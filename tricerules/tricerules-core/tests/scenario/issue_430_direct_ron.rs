@@ -1,4 +1,4 @@
-//! Issue #430 — reviewed direct-RON scenarios for Sunset Saboteur.
+//! Issue #430 — reviewed direct-RON scenarios for Sunset Saboteur and Tragedy Feaster.
 //!
 //! Exact Scryfall record and `rulings_uri` were fetched 2026-09-20 against the pinned snapshot
 //! identity `c3731735-2b78-4a15-bff4-4d8559401f68`. Sunset Saboteur prints `Menace`,
@@ -384,4 +384,270 @@ fn issue_430_attack_trigger_places_one_counter_on_a_legal_opponent_creature_only
         "a stale target receives no counter"
     );
     assert_eq!(stale.effective_power(survivor), Some(2));
+}
+
+// Tragedy Feaster: pinned Scryfall oracle `0c4277ec-aa12-41f5-8896-c83cfc754d6e`, checked
+// 2026-11-25; the record has no rulings. It prints `Trample`, `Ward—Discard a card.`, and
+// `Infusion — At the beginning of your end step, sacrifice a permanent unless you gained life this
+// turn.` CR 513.1/603.2b (end-step trigger), 608.2c (the "unless" is read on resolution, not as an
+// intervening-if), 119 (life gain history; a loss or another player's gain is not your gain), and
+// 701.21a (the controller chooses and sacrifices a permanent they control, possibly the Feaster).
+
+fn feaster_advance_to_end_step(e: &mut GameEngine, active: i32) {
+    e.apply_scenario_command(active, &primitive_yield())
+        .expect("main 1 to beginning of combat");
+    e.apply_scenario_command(active, &primitive_yield())
+        .expect("beginning of combat advance");
+    if e.state.turn_step == tricerules_core::TurnStep::DeclareAttackers {
+        e.apply_scenario_command(active, &primitive_yield())
+            .expect("declare no attackers");
+    }
+    e.apply_scenario_command(active, &primitive_yield())
+        .expect("end combat to main 2");
+    e.apply_scenario_command(active, &primitive_yield())
+        .expect("main 2 to end step");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::EndStep);
+}
+
+fn feaster_resolve_until_parked(e: &mut GameEngine) {
+    for _ in 0..40 {
+        if e.state.pending_resolution.is_some() || e.state.stack.is_empty() {
+            return;
+        }
+        answer_trigger_order_in_engine_order(e);
+        let priority = e.state.priority_player_id();
+        semantic::accepted(e, priority, &pass());
+    }
+    panic!("stack never settled");
+}
+
+/// Casts `card` from `player`'s hand (handing priority over first if needed) and resolves it.
+fn feaster_cast_and_resolve(
+    e: &mut GameEngine,
+    player: usize,
+    card: &str,
+    targets: Vec<TargetRef>,
+) {
+    inject_card_into_hand(e, player, card);
+    grant_pool(e, player);
+    if e.state.priority_player_id() != player as i32 {
+        let priority = e.state.priority_player_id();
+        semantic::accepted(e, priority, &pass());
+    }
+    let slot = hand_index_for_card(e, player, card);
+    semantic::accepted(e, player as i32, &cast_spell(slot, targets));
+    resolve_entire_stack_two_player(e);
+}
+
+#[test]
+fn issue_430_program_sacrifice_choice_resumes_the_remaining_program() {
+    // Regression: a ChooseAndSacrifice leaf whose choice parks inside a ProgramIf branch must
+    // resume the rest of that branch and the parent body after the player answers, exactly as
+    // the no-prompt path does.
+    let fixture = r#"(id: "program_sacrifice_fixture", name: "Program Sacrifice Fixture",
+        face_id: "program_sacrifice_fixture", types: ["Creature"], power: 1, toughness: 1,
+        triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+            trigger: AtBeginningOfEndStep(),
+            program: Some((body: (steps: [
+                (id: "unless", kind: If(
+                    condition: LifeChangedThisTurn(players: Relative(Controller), change: Gain, quantifier: Any),
+                    yes: (steps: []),
+                    no: (steps: [
+                        (id: "sacrifice", bind: ["sacrificed"], input: None,
+                            kind: Perform(ChooseAndSacrifice(players: Controller, count: 1, filter: (kind: AnyPermanent)))),
+                        (id: "after_in_branch", kind: Perform(GainLife(amount: 2))),
+                    ]),
+                )),
+                (id: "after_if", kind: Perform(GainLife(amount: 1))),
+            ]))),
+        )])"#;
+    let registry = Box::leak(Box::new(
+        tricerules_cards::CardRegistry::from_chunks_and_tokens(
+            &[
+                fixture,
+                include_str!("../../../tricerules-cards/data/island.ron"),
+                include_str!("../../../tricerules-cards/data/swamp.ron"),
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+            ],
+            &[],
+        )
+        .expect("the Program sacrifice fixture is valid card data"),
+    ));
+    let decks = Some(vec![deck_with("island", &[]), deck_with("swamp", &[])]);
+    let mut e = GameEngine::new(registry, 430_120, &[0, 1], 20, decks, true).expect("engine");
+    advance_to_main1_from_game_start(&mut e);
+    let source = inject_creature_on_battlefield(&mut e, 0, "program_sacrifice_fixture");
+    let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+
+    feaster_advance_to_end_step(&mut e, 0);
+    feaster_resolve_until_parked(&mut e);
+    assert!(
+        e.state.pending_resolution.is_some(),
+        "two candidates park the sacrifice choice"
+    );
+    semantic::accepted(&mut e, 0, &submit_resolution_choice(vec![bear]));
+    feaster_resolve_until_parked(&mut e);
+    assert!(e.state.pending_resolution.is_none());
+    assert!(e.state.stack.is_empty());
+    assert_eq!(e.state.objects[&bear].zone, Zone::Graveyard);
+    assert!(on_battlefield(&e, source));
+    assert_eq!(
+        e.state.players[0].life, 23,
+        "both the in-branch and post-If instructions ran after the answered choice"
+    );
+}
+
+fn on_battlefield(e: &GameEngine, object: u32) -> bool {
+    e.state.objects[&object].zone == Zone::Battlefield
+}
+
+#[test]
+fn issue_430_tragedy_feaster_sacrifices_a_chosen_own_permanent_without_life_gain() {
+    let mut e = saboteur_engine(430_100);
+    let feaster = inject_creature_on_battlefield(&mut e, 0, "tragedy_feaster");
+    assert!(e.effective_has_keyword(feaster, tricerules_cards::Keyword::Trample));
+    let own_bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let other_bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+
+    feaster_advance_to_end_step(&mut e, 0);
+    feaster_resolve_until_parked(&mut e);
+    let pending = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("the controller chooses a permanent to sacrifice");
+    assert_eq!(pending.deciding_player, 0);
+    let candidates = &pending.presentation.candidates;
+    assert!(
+        candidates.contains(&feaster),
+        "the Feaster itself is a legal choice"
+    );
+    assert!(candidates.contains(&own_bear));
+    assert!(
+        !candidates.contains(&other_bear),
+        "CR 701.21a: an opponent's permanent cannot be sacrificed"
+    );
+
+    // An opponent's permanent is rejected and the choice survives.
+    assert!(e
+        .apply_scenario_command(0, &submit_resolution_choice(vec![other_bear]))
+        .is_err());
+    assert!(e.state.pending_resolution.is_some());
+
+    semantic::accepted(&mut e, 0, &submit_resolution_choice(vec![own_bear]));
+    assert!(e.state.pending_resolution.is_none());
+    assert_eq!(e.state.objects[&own_bear].zone, Zone::Graveyard);
+    assert!(on_battlefield(&e, feaster));
+    assert!(on_battlefield(&e, other_bear));
+}
+
+#[test]
+fn issue_430_tragedy_feaster_alone_sacrifices_itself_without_a_prompt() {
+    let mut e = saboteur_engine(430_101);
+    let feaster = inject_creature_on_battlefield(&mut e, 0, "tragedy_feaster");
+    assert_eq!(
+        e.state.players[0].battlefield,
+        [feaster],
+        "precondition: the Feaster is the controller's only permanent"
+    );
+    feaster_advance_to_end_step(&mut e, 0);
+    feaster_resolve_until_parked(&mut e);
+    assert!(
+        e.state.pending_resolution.is_none(),
+        "a single legal permanent is sacrificed without a choice"
+    );
+    assert!(e.state.stack.is_empty());
+    assert_eq!(e.state.objects[&feaster].zone, Zone::Graveyard);
+}
+
+#[test]
+fn issue_430_tragedy_feaster_life_gain_this_turn_skips_the_sacrifice() {
+    let mut e = saboteur_engine(430_102);
+    let feaster = inject_creature_on_battlefield(&mut e, 0, "tragedy_feaster");
+    let own_bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    feaster_cast_and_resolve(&mut e, 0, "angels_mercy", vec![]);
+    assert_eq!(e.state.players[0].life, 27);
+
+    feaster_advance_to_end_step(&mut e, 0);
+    feaster_resolve_until_parked(&mut e);
+    assert!(e.state.pending_resolution.is_none());
+    assert!(
+        e.state.stack.is_empty(),
+        "the trigger resolved and did nothing"
+    );
+    assert!(on_battlefield(&e, feaster));
+    assert!(on_battlefield(&e, own_bear));
+}
+
+#[test]
+fn issue_430_tragedy_feaster_life_loss_or_opponent_gain_is_not_your_gain() {
+    let mut e = saboteur_engine(430_103);
+    let feaster = inject_creature_on_battlefield(&mut e, 0, "tragedy_feaster");
+    feaster_cast_and_resolve(&mut e, 0, "lightning_bolt", target_player(0));
+    assert_eq!(e.state.players[0].life, 17);
+    feaster_cast_and_resolve(&mut e, 1, "angels_mercy", vec![]);
+    assert_eq!(e.state.players[1].life, 27);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main1);
+
+    feaster_advance_to_end_step(&mut e, 0);
+    feaster_resolve_until_parked(&mut e);
+    assert!(e.state.pending_resolution.is_none());
+    assert_eq!(
+        e.state.objects[&feaster].zone,
+        Zone::Graveyard,
+        "the only permanent is sacrificed"
+    );
+}
+
+#[test]
+fn issue_430_tragedy_feaster_does_not_trigger_on_an_opponents_end_step() {
+    let mut e = saboteur_engine(430_104);
+    let feaster = inject_creature_on_battlefield(&mut e, 1, "tragedy_feaster");
+    feaster_advance_to_end_step(&mut e, 0);
+    assert!(
+        e.state.stack.is_empty(),
+        "\"your end step\" is only the controller's end step"
+    );
+    assert!(e.state.pending_resolution.is_none());
+    assert!(on_battlefield(&e, feaster));
+}
+
+#[test]
+fn issue_430_tragedy_feaster_ward_discard_pays_or_counters() {
+    // Paying: P0 discards and Unsummon resolves against P1's Feaster.
+    let mut pay = saboteur_engine(430_110);
+    let feaster = inject_creature_on_battlefield(&mut pay, 1, "tragedy_feaster");
+    let discard = inject_card_into_hand(&mut pay, 0, "grizzly_bears");
+    inject_card_into_hand(&mut pay, 0, "unsummon");
+    grant_pool(&mut pay, 0);
+    let slot = hand_index_for_card(&pay, 0, "unsummon");
+    semantic::accepted(&mut pay, 0, &cast_spell(slot, target_object(feaster)));
+    assert_eq!(pay.state.stack.len(), 2, "Ward above Unsummon");
+    assert_eq!(pay.state.stack.last().unwrap().controller, 1);
+    pass_both_players(&mut pay);
+    let pending = pay.state.pending_resolution.as_ref().expect("Ward payment");
+    assert_eq!(pending.deciding_player, 0, "the targeting player pays Ward");
+    assert_eq!(pending.presentation.choice_kind, ChoiceKind::HandCards);
+    semantic::accepted(&mut pay, 0, &submit_resolution_choice(vec![discard]));
+    assert_eq!(pay.state.objects[&discard].zone, Zone::Graveyard);
+    pass_both_players(&mut pay);
+    assert_eq!(pay.state.objects[&feaster].zone, Zone::Hand);
+
+    // Declining counters Unsummon and the Feaster stays.
+    let mut decline = saboteur_engine(430_111);
+    let feaster = inject_creature_on_battlefield(&mut decline, 1, "tragedy_feaster");
+    inject_card_into_hand(&mut decline, 0, "grizzly_bears");
+    inject_card_into_hand(&mut decline, 0, "unsummon");
+    grant_pool(&mut decline, 0);
+    let slot = hand_index_for_card(&decline, 0, "unsummon");
+    let spell_id = decline.state.players[0].hand[slot];
+    semantic::accepted(&mut decline, 0, &cast_spell(slot, target_object(feaster)));
+    pass_both_players(&mut decline);
+    semantic::accepted(
+        &mut decline,
+        0,
+        &submit_resolution_decision(ResolutionChoiceDecision::Decline),
+    );
+    assert_eq!(decline.state.objects[&spell_id].zone, Zone::Graveyard);
+    assert!(on_battlefield(&decline, feaster));
 }

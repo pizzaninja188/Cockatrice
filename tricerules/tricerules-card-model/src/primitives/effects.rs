@@ -6775,10 +6775,13 @@ impl SpellEffectKind {
                 filter.validate_characteristic_constraints()?;
                 if !matches!(
                     players,
-                    PlayerRecipient::EachOpponent | PlayerRecipient::EachPlayer
+                    PlayerRecipient::Controller
+                        | PlayerRecipient::EachOpponent
+                        | PlayerRecipient::EachPlayer
                 ) {
                     return Err(
-                        "ChooseAndSacrifice.players must be EachOpponent or EachPlayer".into(),
+                        "ChooseAndSacrifice.players must be Controller, EachOpponent, or EachPlayer"
+                            .into(),
                     );
                 }
                 if *count == 0 {

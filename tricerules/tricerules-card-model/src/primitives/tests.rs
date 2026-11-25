@@ -1984,6 +1984,93 @@ fn greatest_power_sacrifice_is_a_closed_one_creature_restriction() {
 }
 
 #[test]
+fn choose_and_sacrifice_admits_the_controller_and_rejects_other_recipients() {
+    for players in ["Controller", "EachOpponent", "EachPlayer"] {
+        let effect: super::SpellEffectKind = ron::from_str(&format!(
+            "ChooseAndSacrifice(players: {players}, count: 1, filter: (kind: AnyPermanent))"
+        ))
+        .unwrap();
+        assert_eq!(effect.validate(super::EffectContext::Ability), Ok(()));
+        assert_eq!(effect.validate(super::EffectContext::Spell), Ok(()));
+    }
+    for (players, count, expected) in [
+        (
+            "DefendingPlayer",
+            1,
+            "players must be Controller, EachOpponent, or EachPlayer",
+        ),
+        ("Controller", 0, "count must be positive"),
+    ] {
+        let effect: super::SpellEffectKind = ron::from_str(&format!(
+            "ChooseAndSacrifice(players: {players}, count: {count}, filter: (kind: AnyPermanent))"
+        ))
+        .unwrap();
+        let error = effect
+            .validate(super::EffectContext::Ability)
+            .expect_err("invalid sacrifice shape is rejected");
+        assert!(error.contains(expected), "unexpected error: {error}");
+    }
+}
+
+#[test]
+fn choose_and_sacrifice_is_a_program_leaf_with_an_unbounded_sacrifice_receipt() {
+    // Tragedy Feaster: "sacrifice a permanent unless you gained life this turn" is a
+    // resolution-time ProgramIf whose `no` branch is the controller's sacrifice choice.
+    let body = r#"(steps: [
+        (id: "unless_gained_life", kind: If(
+            condition: LifeChangedThisTurn(players: Relative(Controller), change: Gain, quantifier: Any),
+            yes: (steps: []),
+            no: (steps: [
+                (id: "sacrifice", bind: ["sacrificed"], input: None,
+                    kind: Perform(ChooseAndSacrifice(players: Controller, count: 1, filter: (kind: AnyPermanent)))),
+            ]),
+        )),
+    ], yields: [])"#;
+    let program = ability_program_fixture("choose_and_sacrifice_program_fixture", body)
+        .expect("ChooseAndSacrifice is an admitted Program leaf inside an If branch");
+    let [instruction] = program.body.steps.as_slice() else {
+        panic!("one ProgramIf instruction")
+    };
+    let crate::primitives::CompiledInstructionKind::If { yes, no, .. } = &instruction.kind else {
+        panic!("the unless clause compiles to ProgramIf")
+    };
+    assert!(yes.steps.is_empty());
+    let [sacrifice] = no.steps.as_slice() else {
+        panic!("the no branch is the sacrifice leaf")
+    };
+    let [sacrificed] = sacrifice.outputs.as_slice() else {
+        panic!("the sacrifice binds its receipt")
+    };
+    // The receipt never aliases the exact source-only `Sacrifice(Source)` receipt, so a
+    // "sacrificed this way" reflexive consumer cannot be satisfied by an arbitrary choice.
+    assert_eq!(
+        program.slots[sacrificed.0 as usize].result_type,
+        crate::primitives::ResultType::CardResultCohort {
+            action: crate::primitives::CardResultAction::Sacrifice,
+            who: crate::primitives::PlayerRecipient::Controller,
+            cardinality: crate::primitives::Cardinality { min: 0, max: None },
+        }
+    );
+
+    // Multi-card shapes could reach the graveyard-order continuation, which does not resume a
+    // parked Program, so they stay legacy-only for now.
+    for (players, count) in [("EachOpponent", 1), ("EachPlayer", 1), ("Controller", 2)] {
+        let body = format!(
+            r#"(steps: [
+                (id: "sacrifice", kind: Perform(ChooseAndSacrifice(
+                    players: {players}, count: {count}, filter: (kind: AnyPermanent)))),
+            ], yields: [])"#
+        );
+        let error = ability_program_fixture("choose_and_sacrifice_rejected_fixture", &body)
+            .expect_err("only the single-card controller sacrifice is a Program leaf");
+        assert!(
+            error.contains("requires players: Controller and count: 1"),
+            "unexpected error for {players}/{count}: {error}"
+        );
+    }
+}
+
+#[test]
 fn opponent_optional_discard_penalty_is_a_closed_direct_ability_round() {
     let effect: super::SpellEffectKind =
         ron::from_str("EachOpponentMayDiscardOrLoseLife(amount: 3)")

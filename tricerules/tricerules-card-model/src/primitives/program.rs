@@ -5739,6 +5739,26 @@ fn compile_operation(
                     },
                 }])
             }
+            // CR 701.21a: the controller chooses and sacrifices one permanent they control. Only
+            // the single-card controller shape is admitted: it can never put two cards into one
+            // graveyard at once, so it never reaches the CR 404.3 graveyard-order continuation,
+            // which does not yet resume a parked Program. The receipt is deliberately unbounded
+            // so it never aliases the source-only sacrifice receipt that "sacrificed this way"
+            // reflexive consumers require.
+            SpellEffectKind::ChooseAndSacrifice { players, count, .. } => {
+                if *players != PlayerRecipient::Controller || *count != 1 {
+                    return Err(
+                        "ChooseAndSacrifice in a resolution program requires players: Controller and count: 1"
+                            .into(),
+                    );
+                }
+                effect.validate(context)?;
+                Ok(vec![ResultType::CardResultCohort {
+                    action: CardResultAction::Sacrifice,
+                    who: *players,
+                    cardinality: Cardinality { min: 0, max: None },
+                }])
+            }
             SpellEffectKind::ApplyCombatRestriction {
                 scope: super::CombatRestrictionScope::Source,
                 restriction,

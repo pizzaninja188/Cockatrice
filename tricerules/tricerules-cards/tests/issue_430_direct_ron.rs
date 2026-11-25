@@ -1,4 +1,5 @@
-//! Registry conformance for the issue #430 reviewed direct-RON card Sunset Saboteur.
+//! Registry conformance for the issue #430 reviewed direct-RON cards Sunset Saboteur and
+//! Tragedy Feaster.
 //!
 //! Sunset Saboteur (`c3731735-2b78-4a15-bff4-4d8559401f68`) was promoted after complete-definition
 //! review against the pinned Scryfall snapshot. It prints `Menace`, `Ward—Discard a card.`, and
@@ -117,21 +118,148 @@ fn issue_430_sunset_saboteur_maps_menace_ward_and_attack_trigger() {
     assert_eq!(group.effect_indices, [0]);
 }
 
+/// Tragedy Feaster (`0c4277ec-aa12-41f5-8896-c83cfc754d6e`): Trample, Ward—Discard a card, and
+/// "Infusion — At the beginning of your end step, sacrifice a permanent unless you gained life
+/// this turn." The record has no rulings. CR 608.2c reads the "unless" on resolution, so it is a
+/// ProgramIf rather than an intervening-if; CR 701.21a makes the controller the chooser.
 #[test]
-fn issue_430_direct_ron_fingerprint_matches_the_pinned_oracle_text() {
+fn issue_430_tragedy_feaster_maps_trample_ward_and_unless_sacrifice() {
+    use tricerules_cards::primitives::{
+        ConditionPlayerSet, GameCondition, InstructionKind, LifeChangeKind, PlayerQuantifier,
+        PlayerRecipient, RelativePlayerSet, SacrificeRestriction,
+    };
+
+    let registry = tricerules_cards::registry::global();
+    let definition = registry.get("tragedy_feaster").expect("registered");
+    assert_eq!(
+        registry.id_for_name("Tragedy Feaster"),
+        Some("tragedy_feaster")
+    );
+    assert_eq!(definition.layout, Layout::Normal);
+    assert_eq!(definition.face_count(), 1);
+    let face = definition.primary_face();
+    assert_eq!(face.mana_cost.to_string(), "{2}{B}{B}");
+    assert_eq!(face.types, ["Creature", "Demon"]);
+    assert_eq!(face.colors(), vec![Color::Black]);
+    assert_eq!((face.power, face.toughness), (Some(7), Some(6)));
+    assert_eq!(face.keywords, [Keyword::Trample]);
+    assert!(face.spell_effect.is_empty());
+    assert!(face.activated_abilities.is_empty());
+    assert!(face.static_abilities.is_empty());
+    assert!(face.targeting.is_none());
+
+    let [ward, infusion] = face.triggered_abilities.as_slice() else {
+        panic!("Tragedy Feaster has exactly the Ward and end-step triggers");
+    };
+    assert_eq!(ward.ability_id.as_str(), "triggered_01");
+    assert_eq!(ward.presentation, AbilityPresentation::OracleLines(vec![2]));
+    assert_eq!(
+        ward.trigger,
+        TriggerCondition::WheneverSelfBecomesTarget {
+            source: TargetingSourceFilter::SpellOrAbility,
+            source_controller: CastTriggerPlayer::Opponent,
+        }
+    );
+    let [ward_leaf] = ward
+        .program
+        .as_ref()
+        .expect("Ward Program")
+        .body
+        .steps
+        .as_slice()
+    else {
+        panic!("Ward has one Program leaf");
+    };
+    let InstructionKind::Perform(ward_effect) = &ward_leaf.kind else {
+        panic!("Ward is a Perform leaf");
+    };
+    assert_eq!(
+        **ward_effect,
+        SpellEffectKind::CounterTriggeringStackObjectUnlessPays {
+            cost: ResolutionCost::DiscardCard { filter: None },
+        }
+    );
+
+    assert_eq!(infusion.ability_id.as_str(), "triggered_02");
+    assert_eq!(
+        infusion.presentation,
+        AbilityPresentation::OracleLines(vec![3])
+    );
+    assert_eq!(
+        infusion.trigger,
+        TriggerCondition::AtBeginningOfEndStep {
+            player: CastTriggerPlayer::Controller,
+        },
+        "\"your end step\" only"
+    );
+    assert!(
+        infusion.intervening_if.is_none(),
+        "CR 608.2c: \"unless\" is checked on resolution, not as an intervening-if"
+    );
+    assert!(infusion.effect.is_empty());
+    assert!(infusion.targeting.is_none());
+    let [branch] = infusion
+        .program
+        .as_ref()
+        .expect("end-step Program")
+        .body
+        .steps
+        .as_slice()
+    else {
+        panic!("one ProgramIf instruction");
+    };
+    let InstructionKind::If { condition, yes, no } = &branch.kind else {
+        panic!("the unless clause is a ProgramIf");
+    };
+    assert_eq!(
+        **condition,
+        GameCondition::LifeChangedThisTurn {
+            players: ConditionPlayerSet::Relative(RelativePlayerSet::Controller),
+            change: LifeChangeKind::Gain,
+            quantifier: PlayerQuantifier::Any,
+        }
+    );
+    assert!(yes.steps.is_empty(), "gaining life does nothing");
+    let [sacrifice] = no.steps.as_slice() else {
+        panic!("not gaining life sacrifices");
+    };
+    let InstructionKind::Perform(sacrifice) = &sacrifice.kind else {
+        panic!("the sacrifice is a Perform leaf");
+    };
+    assert_eq!(
+        **sacrifice,
+        SpellEffectKind::ChooseAndSacrifice {
+            players: PlayerRecipient::Controller,
+            count: 1,
+            filter: TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                ..TargetFilter::default()
+            },
+            restriction: SacrificeRestriction::None,
+        }
+    );
+}
+
+fn assert_fingerprint_row(id: &str, name: &str, fingerprint: &str) {
     let fingerprints = include_str!("../presentation/oracle_fingerprints.tsv");
     let row = fingerprints
         .lines()
-        .find(|line| line.starts_with("sunset_saboteur\t"))
-        .expect("missing fingerprint row for sunset_saboteur");
+        .find(|line| line.starts_with(&format!("{id}\t")))
+        .unwrap_or_else(|| panic!("missing fingerprint row for {id}"));
     let fields: Vec<&str> = row.split('\t').collect();
-    assert_eq!(fields.len(), 5, "fingerprint row shape: {row}");
-    assert_eq!(fields[0], "sunset_saboteur");
-    assert_eq!(fields[1], "Sunset Saboteur");
-    assert_eq!(fields[2], "sunset_saboteur");
-    assert_eq!(fields[3], "Sunset Saboteur");
     assert_eq!(
-        fields[4], FINGERPRINT,
-        "fingerprint drift for sunset_saboteur"
+        fields,
+        [id, name, id, name, fingerprint],
+        "fingerprint row for {id}"
+    );
+}
+
+#[test]
+fn issue_430_direct_ron_fingerprint_matches_the_pinned_oracle_text() {
+    assert_fingerprint_row("sunset_saboteur", "Sunset Saboteur", FINGERPRINT);
+    assert_fingerprint_row(
+        "tragedy_feaster",
+        "Tragedy Feaster",
+        "f2f3d2a3a16248c5f9bf15822a2c4c6070bdf34b7eb75321d282d8b1b660e8d5",
     );
 }
