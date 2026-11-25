@@ -19,7 +19,7 @@
       effect: [
         CreateTokens(
           token: "robot_c_2_2",
-          count: Count(BattlefieldPermanents(filter: (controllers: Controller, min_colors: Some(2)))),
+          count: Count(BattlefieldPermanents(filter: (controllers: Controller, matching: (kind: AnyPermanent, min_colors: Some(2))))),
           tapped: true,
         ),
       ],
@@ -63,7 +63,7 @@
             presentation: OracleLines([4]),
             trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
             effect: [
-              Draw(count: Count(BattlefieldPermanents(filter: (controllers: Controller, min_colors: Some(2))))),
+              Draw(count: Count(BattlefieldPermanents(filter: (controllers: Controller, matching: (kind: AnyPermanent, min_colors: Some(2)))))),
             ],
           ),
         ],

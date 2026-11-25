@@ -22,8 +22,8 @@
         filter: (
           controllers: Controller,
           any_of: Some([
-            (controllers: Controller, required_subtypes: ["Island"]),
-            (controllers: Controller, required_subtypes: ["Swamp"]),
+            (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Island"])),
+            (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Swamp"])),
           ]),
         ),
         aggregate: Count,

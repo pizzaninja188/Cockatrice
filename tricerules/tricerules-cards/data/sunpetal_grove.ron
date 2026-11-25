@@ -28,12 +28,12 @@
         condition: Some(BattlefieldAggregate(
           filter: (
             controllers: Controller,
-            card_type: Some(Land),
             any_of: Some([
-              (controllers: All, required_subtypes: ["Forest"]),
-              (controllers: All, required_subtypes: ["Plains"]),
+              (controllers: All, matching: (kind: AnyPermanent, required_subtypes: ["Forest"])),
+              (controllers: All, matching: (kind: AnyPermanent, required_subtypes: ["Plains"])),
             ]),
             exclude_source: true,
+            matching: (kind: AnyPermanent, permanent_types: [Land]),
           ),
           aggregate: Count,
           max: Some(0),

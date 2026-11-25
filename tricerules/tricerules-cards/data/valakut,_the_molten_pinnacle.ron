@@ -24,8 +24,7 @@
     intervening_if: Some(BattlefieldAggregate(
       filter: (
         controllers: Controller,
-        card_type: Some(Land),
-        required_subtypes: ["Mountain"],
+        matching: (kind: AnyPermanent, permanent_types: [Land], required_subtypes: ["Mountain"]),
       ),
       aggregate: Count,
       min: Some(5),

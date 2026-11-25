@@ -2,7 +2,9 @@ use super::*;
 use crate::state::TurnRecord;
 
 /// Shared public-cohort matcher. The caller supplies the characteristic layer appropriate to
-/// its consumer, so layer-7 static counts never recursively evaluate layer 7.
+/// its consumer, so layer-7 static counts never recursively evaluate layer 7. Only the relations
+/// (controllers, source exclusion, outer disjunction) are evaluated here; every descriptive
+/// predicate is the shared object matcher's.
 pub(super) fn battlefield_permanent_matches(
     state: &GameState,
     filter: &BattlefieldPermanentFilter,
@@ -11,55 +13,15 @@ pub(super) fn battlefield_permanent_matches(
     context: ConditionContext<'_>,
 ) -> bool {
     relative_player_set_contains(state, filter.controllers, context.controller, c.controller)
-        && filter
-            .required_supertypes
-            .iter()
-            .all(|supertype| c.supertypes.contains(supertype))
-        && filter.token.is_none_or(|token| {
-            state
-                .objects
-                .get(&oid)
-                .is_some_and(|object| object.is_token() == token)
-        })
-        && (!filter.exclude_source
-            || oid != context.source_object_id
-            || state.zone_change_generation.get(&oid).copied().unwrap_or(0)
-                != context.source_zone_change)
-        && filter.card_type.is_none_or(|kind| match kind {
-            CardTypeFilter::BasicLand => {
-                c.has_type("Land") && c.supertypes.iter().any(|s| s == "Basic")
-            }
-            CardTypeFilter::Land => c.has_type("Land"),
-            CardTypeFilter::Enchantment => c.has_type("Enchantment"),
-            CardTypeFilter::Instant => c.has_type("Instant"),
-            CardTypeFilter::Sorcery => c.has_type("Sorcery"),
-            CardTypeFilter::InstantOrSorcery => c.has_type("Instant") || c.has_type("Sorcery"),
-            CardTypeFilter::Creature => c.is_creature(),
-            CardTypeFilter::Artifact => c.is_artifact(),
-            CardTypeFilter::Planeswalker => c.has_type("Planeswalker"),
-            CardTypeFilter::Battle => c.has_type("Battle"),
-            CardTypeFilter::Nonland => !c.has_type("Land"),
-            CardTypeFilter::NonlandPermanent => {
-                !c.has_type("Land")
-                    && [
-                        "Artifact",
-                        "Battle",
-                        "Creature",
-                        "Enchantment",
-                        "Planeswalker",
-                    ]
-                    .iter()
-                    .any(|kind| c.has_type(kind))
-            }
-            CardTypeFilter::Noncreature => !c.is_creature(),
-        })
-        && filter.color.is_none_or(|color| c.colors.contains(&color))
-        && battlefield_color_count_matches(filter, c)
-        && filter
-            .required_subtypes
-            .iter()
-            .all(|subtype| c.has_type(subtype))
-        && filter.name.as_ref().is_none_or(|name| c.has_name(name))
+        && !battlefield_source_is_excluded(state, filter.exclude_source, oid, context)
+        && super::characteristics::permanent_matches_target_scope(
+            state,
+            &filter.matching,
+            context.controller,
+            None,
+            oid,
+            c,
+        )
         && filter.any_of.as_ref().is_none_or(|branches| {
             branches
                 .iter()
@@ -67,36 +29,14 @@ pub(super) fn battlefield_permanent_matches(
         })
 }
 
-/// CR 105.2/105.2b: compare the number of distinct derived colors (after copy and layer-5
-/// color-setting effects) against the filter's inclusive bounds.
-fn battlefield_color_count_matches(
-    filter: &BattlefieldPermanentFilter,
-    c: &Characteristics,
-) -> bool {
-    if filter.min_colors.is_none() && filter.max_colors.is_none() {
-        return true;
-    }
-    let count = [
-        Color::White,
-        Color::Blue,
-        Color::Black,
-        Color::Red,
-        Color::Green,
-    ]
-    .iter()
-    .filter(|color| c.colors.contains(color))
-    .count() as u8;
-    filter.min_colors.is_none_or(|min| count >= min)
-        && filter.max_colors.is_none_or(|max| count <= max)
-}
-
-fn battlefield_creature_source_is_excluded(
+/// "Another": exclude only the exact source object generation that created the condition.
+fn battlefield_source_is_excluded(
     state: &GameState,
-    filter: &tricerules_card_model::BattlefieldCreatureCountFilter,
+    exclude_source: bool,
     oid: ObjectId,
     context: ConditionContext<'_>,
 ) -> bool {
-    filter.exclude_source
+    exclude_source
         && oid == context.source_object_id
         && state.zone_change_generation.get(&oid).copied().unwrap_or(0)
             == context.source_zone_change
@@ -109,24 +49,17 @@ fn battlefield_creature_matches(
     c: &Characteristics,
     context: ConditionContext<'_>,
 ) -> bool {
-    !battlefield_creature_source_is_excluded(state, filter, oid, context)
+    !battlefield_source_is_excluded(state, filter.exclude_source, oid, context)
         && relative_player_set_contains(state, filter.controllers, context.controller, c.controller)
         && c.is_creature()
-        && filter
-            .subtype
-            .as_ref()
-            .is_none_or(|subtype| c.has_type(subtype))
-        && filter
-            .required_keywords
-            .iter()
-            .all(|keyword| c.has_keyword(*keyword))
-        && state.objects.get(&oid).is_some_and(|object| {
-            filter.tapped.is_none_or(|tapped| object.tapped == tapped)
-                && (!filter.requires_any_counter || object.has_any_counter())
-                && filter
-                    .required_counter
-                    .is_none_or(|counter| object.counter_count(counter) > 0)
-        })
+        && super::characteristics::permanent_matches_target_scope(
+            state,
+            &filter.matching,
+            context.controller,
+            None,
+            oid,
+            c,
+        )
 }
 
 pub(super) fn battlefield_quantity_value(
@@ -1988,7 +1921,7 @@ impl GameEngine {
             .iter()
             .flat_map(|player| player.battlefield.iter().copied())
             .filter(|oid| {
-                !battlefield_creature_source_is_excluded(&self.state, filter, *oid, context)
+                !battlefield_source_is_excluded(&self.state, filter.exclude_source, *oid, context)
             })
             .filter_map(|oid| {
                 self.characteristics(oid)
@@ -3074,17 +3007,13 @@ mod tests {
         let mut engine = quantity_engine();
         let quantity = CountExpression::BattlefieldPowerSum {
             filter: BattlefieldPermanentFilter {
-                required_supertypes: Vec::new(),
-                token: None,
                 any_of: None,
                 controllers: RelativePlayerSet::Controller,
-                card_type: Some(CardTypeFilter::Creature),
-                color: None,
-                name: None,
-                required_subtypes: vec![],
-                min_colors: None,
-                max_colors: None,
                 exclude_source: false,
+                matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                    kind: tricerules_card_model::primitives::TargetKind::Creature,
+                    ..tricerules_card_model::primitives::TargetFilter::default()
+                }),
             },
         };
         assert_eq!(
@@ -3146,17 +3075,13 @@ mod tests {
     fn issue_165_maxima_use_derived_signed_values_and_all_opponents() {
         let mut engine = quantity_engine();
         let mut filter = BattlefieldPermanentFilter {
-            required_supertypes: Vec::new(),
-            token: None,
             any_of: None,
             controllers: RelativePlayerSet::Controller,
-            card_type: Some(CardTypeFilter::Creature),
-            color: None,
-            name: None,
-            required_subtypes: vec![],
-            min_colors: None,
-            max_colors: None,
             exclude_source: false,
+            matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                kind: tricerules_card_model::primitives::TargetKind::Creature,
+                ..tricerules_card_model::primitives::TargetFilter::default()
+            }),
         };
         let maximum = |filter, characteristic| {
             Amount::Count(CountExpression::BattlefieldMaximum {
@@ -3250,7 +3175,7 @@ mod tests {
             &[r#"(
             id: "test", name: "Test", face_id: "test", types: ["Sorcery"],
             spell_effect: [GainLife(amount: Count(BattlefieldMaximum(
-                filter: (controllers: Controller, required_subtypes: ["Elemental"]),
+                filter: (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Elemental"])),
                 characteristic: ManaValue)))])"#],
             &[],
         )
@@ -3510,17 +3435,14 @@ mod tests {
         move_to_battlefield(&mut engine, 1, "forest");
         let graveyard_card = move_to_graveyard(&mut engine, 0, "island");
         let filter = BattlefieldPermanentFilter {
-            required_supertypes: Vec::new(),
-            token: None,
             any_of: None,
             controllers: RelativePlayerSet::Controller,
-            card_type: Some(CardTypeFilter::Land),
-            color: None,
-            name: None,
-            required_subtypes: vec![],
-            min_colors: None,
-            max_colors: None,
             exclude_source: false,
+            matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
+                permanent_types: vec![tricerules_card_model::primitives::PermanentTypeFilter::Land],
+                ..tricerules_card_model::primitives::TargetFilter::default()
+            }),
         };
         let mut union = filter.clone();
         union.any_of = Some(vec![filter.clone(), filter]);
@@ -4489,44 +4411,39 @@ mod tests {
         };
 
         let union = BattlefieldPermanentFilter {
-            required_supertypes: Vec::new(),
-            token: None,
             any_of: Some(vec![
                 BattlefieldPermanentFilter {
-                    required_supertypes: Vec::new(),
-                    token: None,
                     any_of: None,
                     controllers: RelativePlayerSet::Controller,
-                    card_type: Some(CardTypeFilter::Land),
-                    color: None,
-                    name: None,
-                    required_subtypes: vec![],
-                    min_colors: None,
-                    max_colors: None,
                     exclude_source: false,
+                    matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                        kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
+                        permanent_types: vec![
+                            tricerules_card_model::primitives::PermanentTypeFilter::Land,
+                        ],
+                        ..tricerules_card_model::primitives::TargetFilter::default()
+                    }),
                 },
                 BattlefieldPermanentFilter {
-                    required_supertypes: Vec::new(),
-                    token: None,
                     any_of: None,
                     controllers: RelativePlayerSet::Controller,
-                    card_type: Some(CardTypeFilter::BasicLand),
-                    color: None,
-                    name: None,
-                    required_subtypes: vec![],
-                    min_colors: None,
-                    max_colors: None,
                     exclude_source: false,
+                    matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                        kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
+                        permanent_types: vec![
+                            tricerules_card_model::primitives::PermanentTypeFilter::Land,
+                        ],
+                        required_supertypes: vec!["Basic".into()],
+                        ..tricerules_card_model::primitives::TargetFilter::default()
+                    }),
                 },
             ]),
             controllers: RelativePlayerSet::Controller,
-            card_type: None,
-            color: None,
-            name: None,
-            required_subtypes: vec![],
-            min_colors: None,
-            max_colors: None,
             exclude_source: false,
+            matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
+                ..tricerules_card_model::primitives::TargetFilter::default()
+            }),
         };
         assert_eq!(
             engine.battlefield_aggregate_value(&union, BattlefieldAggregate::Count, context),
@@ -4757,12 +4674,12 @@ mod tests {
         let opposing_bear = move_to_battlefield(&mut engine, 1, "grizzly_bears");
         let filter = tricerules_card_model::BattlefieldCreatureCountFilter {
             controllers: RelativePlayerSet::Controller,
-            subtype: None,
-            required_keywords: vec![],
-            tapped: None,
-            requires_any_counter: true,
-            required_counter: None,
             exclude_source: false,
+            matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                kind: tricerules_card_model::primitives::TargetKind::Creature,
+                requires_any_counter: true,
+                ..tricerules_card_model::primitives::TargetFilter::default()
+            }),
         };
         let condition = GameCondition::BattlefieldCreatureCount {
             filter: filter.clone(),
@@ -4857,12 +4774,13 @@ mod tests {
             .unwrap_or(0);
         let filter = tricerules_card_model::BattlefieldCreatureCountFilter {
             controllers: RelativePlayerSet::Controller,
-            subtype: Some("Elf".into()),
-            required_keywords: vec![],
-            tapped: Some(false),
-            requires_any_counter: false,
-            required_counter: None,
             exclude_source: true,
+            matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                kind: tricerules_card_model::primitives::TargetKind::Creature,
+                required_subtypes: vec!["Elf".into()],
+                tapped: Some(false),
+                ..tricerules_card_model::primitives::TargetFilter::default()
+            }),
         };
         let condition = GameCondition::BattlefieldCreatureCount {
             filter: filter.clone(),
@@ -4965,17 +4883,13 @@ mod tests {
         let bear = move_to_battlefield(&mut engine, 0, "grizzly_bears");
         let angel = move_to_battlefield(&mut engine, 0, "serra_angel");
         let filter = BattlefieldPermanentFilter {
-            required_supertypes: Vec::new(),
-            token: None,
             any_of: None,
             controllers: RelativePlayerSet::Controller,
-            card_type: Some(CardTypeFilter::Creature),
-            color: None,
-            name: None,
-            required_subtypes: vec![],
-            min_colors: None,
-            max_colors: None,
             exclude_source: true,
+            matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                kind: tricerules_card_model::primitives::TargetKind::Creature,
+                ..tricerules_card_model::primitives::TargetFilter::default()
+            }),
         };
         let context = ConditionContext {
             controller: 0,
@@ -5046,17 +4960,13 @@ mod tests {
         );
 
         let filter = BattlefieldPermanentFilter {
-            required_supertypes: Vec::new(),
-            token: None,
             any_of: None,
             controllers: RelativePlayerSet::Controller,
-            card_type: Some(CardTypeFilter::Creature),
-            color: None,
-            name: None,
-            required_subtypes: Vec::new(),
-            min_colors: None,
-            max_colors: None,
             exclude_source: false,
+            matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                kind: tricerules_card_model::primitives::TargetKind::Creature,
+                ..tricerules_card_model::primitives::TargetFilter::default()
+            }),
         };
         let condition = GameCondition::BattlefieldAggregate {
             filter: filter.clone(),
@@ -5083,6 +4993,98 @@ mod tests {
             9
         );
         assert!(!engine.condition_holds(&condition, condition_context));
+    }
+
+    /// Issue #534: battlefield counts evaluate the shared object predicate against live derived
+    /// characteristics, so predicates that only targets could express before (current power,
+    /// tapped status) now narrow counts and creature-count conditions too.
+    #[test]
+    fn issue_534_battlefield_counts_use_the_shared_object_predicate() {
+        use tricerules_card_model::primitives::{PowerComparison, TargetFilter, TargetKind};
+
+        let deck = deck_with_cards(
+            &["grizzly_bears", "grizzly_bears", "grizzly_bears"],
+            "forest",
+        );
+        let mut engine = GameEngine::new(
+            tricerules_cards::registry::global(),
+            67_534,
+            &[0, 1],
+            20,
+            Some(vec![deck, deck_with_cards(&[], "island")]),
+            true,
+        )
+        .expect("engine");
+        let bears: Vec<_> = (0..3)
+            .map(|_| move_to_battlefield(&mut engine, 0, "grizzly_bears"))
+            .collect();
+        engine.state.continuous_effects.push(ContinuousEffect {
+            source_id: None,
+            trigger_grant_origin: None,
+            affected: AffectedScope::Single(bears[0]),
+            kind: ContinuousEffectKind::PtModify {
+                delta_power: 2,
+                delta_toughness: 0,
+            },
+            condition: None,
+            duration: EffectDuration::Indefinite,
+            timestamp: 1,
+        });
+        engine.state.objects.get_mut(&bears[1]).unwrap().tapped = true;
+        let context = ConditionContext {
+            controller: 0,
+            source_object_id: bears[2],
+            source_zone_change: 0,
+            resolving_spell_id: None,
+            stack_item: None,
+            previous_effect_result: None,
+        };
+
+        let big = BattlefieldPermanentFilter::matching(
+            RelativePlayerSet::Controller,
+            TargetFilter {
+                kind: TargetKind::Creature,
+                power: Some(PowerComparison::AtLeast(4)),
+                ..TargetFilter::default()
+            },
+        );
+        assert_eq!(
+            engine.battlefield_aggregate_value(&big, BattlefieldAggregate::Count, context),
+            1
+        );
+        let lands = BattlefieldPermanentFilter::matching(
+            RelativePlayerSet::Controller,
+            TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                permanent_types: vec![tricerules_card_model::PermanentTypeFilter::Land],
+                ..TargetFilter::default()
+            },
+        );
+        assert_eq!(
+            engine.battlefield_aggregate_value(&lands, BattlefieldAggregate::Count, context),
+            0
+        );
+
+        let untapped_others = tricerules_card_model::BattlefieldCreatureCountFilter {
+            controllers: RelativePlayerSet::Controller,
+            exclude_source: true,
+            matching: Box::new(TargetFilter {
+                tapped: Some(false),
+                ..TargetFilter::default_creature()
+            }),
+        };
+        assert_eq!(
+            engine.battlefield_creature_count(&untapped_others, context),
+            1
+        );
+        let opponents_creatures = tricerules_card_model::BattlefieldCreatureCountFilter {
+            controllers: RelativePlayerSet::Opponents,
+            ..Default::default()
+        };
+        assert_eq!(
+            engine.battlefield_creature_count(&opponents_creatures, context),
+            0
+        );
     }
 
     #[test]

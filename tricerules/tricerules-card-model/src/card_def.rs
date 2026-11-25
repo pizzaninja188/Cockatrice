@@ -2144,17 +2144,14 @@ mod tests {
     fn count_defined_pt_requires_a_supported_count_and_nonzero_axis() {
         let lands = CountExpression::BattlefieldPermanents {
             filter: crate::primitives::BattlefieldPermanentFilter {
-                required_supertypes: Vec::new(),
-                token: None,
                 any_of: None,
                 controllers: crate::primitives::RelativePlayerSet::Controller,
-                card_type: Some(CardTypeFilter::Land),
-                color: None,
-                name: None,
-                required_subtypes: vec![],
-                min_colors: None,
-                max_colors: None,
                 exclude_source: false,
+                matching: Box::new(crate::primitives::TargetFilter {
+                    kind: crate::primitives::TargetKind::AnyPermanent,
+                    permanent_types: vec![crate::primitives::PermanentTypeFilter::Land],
+                    ..crate::primitives::TargetFilter::default()
+                }),
             },
         };
         assert!(CharacteristicDefiningAbility::CountScaledPowerToughness {

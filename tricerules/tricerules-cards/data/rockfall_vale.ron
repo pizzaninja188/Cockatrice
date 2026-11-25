@@ -26,7 +26,7 @@
         affected: Self_,
         condition: Some(
           BattlefieldAggregate(
-            filter: (controllers: Controller, card_type: Some(Land), name: None, exclude_source: true),
+            filter: (controllers: Controller, exclude_source: true, matching: (kind: AnyPermanent, permanent_types: [Land])),
             aggregate: Count,
             max: Some(1),
           ),

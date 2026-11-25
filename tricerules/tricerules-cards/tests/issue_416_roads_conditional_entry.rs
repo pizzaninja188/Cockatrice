@@ -65,8 +65,8 @@ fn issue_416_generated_roads_payload_is_rejected_without_the_pilot_token() {
                     filter: (
                         controllers: Controller,
                         any_of: Some([
-                            (controllers: Controller, required_subtypes: ["Mount"]),
-                            (controllers: Controller, required_subtypes: ["Vehicle"]),
+                            (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Mount"])),
+                            (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Vehicle"])),
                         ]),
                     ),
                     aggregate: Count,

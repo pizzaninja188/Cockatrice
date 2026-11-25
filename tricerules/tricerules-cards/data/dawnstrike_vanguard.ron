@@ -17,7 +17,7 @@
     presentation: OracleLines([2]),
     trigger: AtBeginningOfEndStep(),
     intervening_if: Some(BattlefieldCreatureCount(
-      filter: (controllers: Controller, tapped: Some(true)),
+      filter: (controllers: Controller, matching: (kind: Creature, tapped: Some(true))),
       min: Some(2),
     )),
     effect: [PutCountersAll(

@@ -1396,6 +1396,27 @@ emblem keyword grants cannot read keywords, and no continuous scope can read pow
 (CR 613.8 dependencies are not implemented). Retired flat fields (`subtype`, `color`,
 `required_keyword`, `name`, `attacking`, counters) are rejected, never ignored.
 
+### Battlefield count and condition filters
+
+`BattlefieldPermanentFilter` (`BattlefieldAggregate`, `BattlefieldPermanents`, `BattlefieldMaximum`,
+`BattlefieldPowerSum`, `BattlefieldCountGenericReduction`) and `BattlefieldCreatureCountFilter`
+(`BattlefieldCreatures`, `BattlefieldCreatureCount`) follow the same split. The wrapper holds only the
+relations: `controllers` (relative to the condition's controller), `exclude_source` ("another", the
+exact source generation) and, for permanents, an outer `any_of` whose branches are whole filters
+AND-ed with the outer node. Every descriptive predicate goes in `matching`, the shared `TargetFilter`
+vocabulary. Permanent filters use `kind: AnyPermanent` or `kind: Creature`; creature counts use
+`kind: Creature`. Omit `matching` for every permanent or creature. Examples:
+`(controllers: Controller, exclude_source: true, matching: (kind: AnyPermanent, permanent_types: [Land],
+required_subtypes: ["Mountain"]))`; basic lands are `permanent_types: [Land], required_supertypes:
+["Basic"]`; multicolored is `min_colors: Some(2)` (`max_colors` bounds the other side). Validation
+rejects `controller`, `owner` and `excluded_objects` inside `matching`, and the retired flat fields
+(`card_type`, `color`, `subtype`, `required_subtypes`, `name`, `token`, `tapped`, counters, color
+bounds) are rejected. Counts read when an effect resolves or a condition is checked may use any
+predicate, including keywords (Winged Words) and power. Continuous consumers may not: static count
+scaling (`CountScaledSelfPt` and other static P/T counts) and conditions on conditional anthems,
+conditional self modifiers and conditional attached characteristics reject counts that read keywords
+or power/toughness, because they are evaluated before layer 6 (CR 613.8).
+
 ### Printed-card filters and graveyard targets
 
 Use `ZoneCardFilter` for printed characteristics outside the battlefield and stack: searches,

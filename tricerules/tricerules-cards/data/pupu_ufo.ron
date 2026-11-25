@@ -22,8 +22,7 @@
       costs: [Mana("{3}")],
       effect: [SetSourceBasePower(amount: Count(BattlefieldPermanents(filter: (
         controllers: Controller,
-        card_type: Some(Land),
-        required_subtypes: ["Town"],
+        matching: (kind: AnyPermanent, permanent_types: [Land], required_subtypes: ["Town"]),
       ))))],
     ),
   ],

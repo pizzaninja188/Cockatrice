@@ -5,8 +5,8 @@
 //! ability. Each fingerprint is SHA-256 of the exact pinned Oracle lines.
 
 use tricerules_cards::primitives::{
-    AbilityCost, BattlefieldAggregate, CardTypeFilter, EntersTappedAffected, GameCondition,
-    RelativePlayerSet, SpellEffectKind, StaticAbilityDef,
+    AbilityCost, BattlefieldAggregate, EntersTappedAffected, GameCondition, RelativePlayerSet,
+    SpellEffectKind, StaticAbilityDef,
 };
 use tricerules_cards::{AbilityPresentation, Layout};
 
@@ -120,7 +120,12 @@ fn slow_lands_batch_maps_definitions() {
             "{}",
             card.id
         );
-        assert_eq!(filter.card_type, Some(CardTypeFilter::Land), "{}", card.id);
+        assert!(
+            filter.matching.permanent_types
+                == [tricerules_cards::primitives::PermanentTypeFilter::Land],
+            "{}",
+            card.id
+        );
         assert!(filter.exclude_source, "{}", card.id);
         assert_eq!((*min, *max), (None, Some(1)), "{}", card.id);
 

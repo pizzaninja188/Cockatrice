@@ -227,7 +227,7 @@ fn choice_engine_players(players: &[PlayerId]) -> (GameEngine, rv1::ActivateAbil
     let reduced = OPPONENT_CHOICE_LAND
         .replace("opponent_choice_land", "reduced_choice_land")
         .replace("Opponent Choice Land", "Reduced Choice Land")
-        .replace(r#"costs: [Mana("{3}"), Tap],"#, r#"costs: [Mana("{3}"), Tap], cost_modifiers: [ConditionalGenericReduction(amount: 2, condition: BattlefieldCreatureCount(filter: (controllers: Controller, required_counter: Some(PlusOnePlusOne)), min: Some(1)))],"#);
+        .replace(r#"costs: [Mana("{3}"), Tap],"#, r#"costs: [Mana("{3}"), Tap], cost_modifiers: [ConditionalGenericReduction(amount: 2, condition: BattlefieldCreatureCount(filter: (controllers: Controller, matching: (kind: Creature, required_counter: Some(PlusOnePlusOne))), min: Some(1)))],"#);
     let snapshot = PAYMENT_CREATURE
         .replace("payment_creature", "snapshot_payment_creature")
         .replace("Payment Creature", "Snapshot Payment Creature")

@@ -13,8 +13,7 @@ use crate::common;
 
 use common::FaceExpectation;
 use tricerules_cards::primitives::{
-    BattlefieldAggregate, BattlefieldPermanentFilter, CardTypeFilter, GameCondition,
-    PermanentEventFilter,
+    BattlefieldAggregate, BattlefieldPermanentFilter, GameCondition, PermanentEventFilter,
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, AbilitySourceZone, ActivatedAbilityDef, ActivationTiming,
@@ -88,17 +87,15 @@ fn hidden_lair_condition() -> GameCondition {
         },
         GameCondition::BattlefieldAggregate {
             filter: BattlefieldPermanentFilter {
-                required_supertypes: Vec::new(),
-                token: None,
                 any_of: None,
                 controllers: RelativePlayerSet::Controller,
-                card_type: Some(CardTypeFilter::BasicLand),
-                color: None,
-                name: None,
-                required_subtypes: Vec::new(),
-                min_colors: None,
-                max_colors: None,
                 exclude_source: false,
+                matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                    kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
+                    permanent_types: vec![tricerules_cards::primitives::PermanentTypeFilter::Land],
+                    required_supertypes: vec!["Basic".into()],
+                    ..tricerules_cards::primitives::TargetFilter::default()
+                }),
             },
             aggregate: BattlefieldAggregate::Count,
             min: Some(1),

@@ -532,6 +532,72 @@ mod tests {
         }
     }
 
+    /// Issue #534: battlefield counts share the object predicate, so a continuous consumer must
+    /// reject counts that read keywords (layer 6) or power/toughness (layer 7), while resolution-
+    /// time consumers keep reading them.
+    #[test]
+    fn issue_534_continuous_battlefield_counts_reject_layered_predicates() {
+        let card = |types: &str, body: &str| {
+            format!(
+                r#"(
+            id: "layered_count",
+            name: "Layered Count",
+            face_id: "layered_count",
+            mana_cost: "{{G}}",
+            types: [{types}],
+            power: 1,
+            toughness: 1,
+            {body}
+        )"#
+            )
+        };
+        let flyers =
+            "(controllers: Controller, matching: (kind: Creature, required_keywords: [Flying]))";
+        let big =
+            "(controllers: Controller, matching: (kind: AnyPermanent, power: Some(AtLeast(4))))";
+        for (label, body, reason) in [
+            (
+                "static scaling by a keyword creature count",
+                format!("static_abilities: [(ability_id: \"static_01\", presentation: Fallback, definition: CountScaledSelfPt(count: BattlefieldCreatures(filter: {flyers}), power_per_match: 1, toughness_per_match: 0))],"),
+                "static P/T scaling",
+            ),
+            (
+                "static scaling by a power permanent count",
+                format!("static_abilities: [(ability_id: \"static_01\", presentation: Fallback, definition: CountScaledSelfPt(count: BattlefieldPermanents(filter: {big}), power_per_match: 1, toughness_per_match: 0))],"),
+                "static P/T scaling",
+            ),
+            (
+                "conditional self modifier counting flyers",
+                format!("static_abilities: [(ability_id: \"static_01\", presentation: Fallback, definition: ConditionalSelfModifier(condition: BattlefieldCreatureCount(filter: {flyers}, min: Some(1)), delta_power: 1, delta_toughness: 1))],"),
+                "",
+            ),
+            (
+                "conditional self modifier counting big permanents",
+                format!("static_abilities: [(ability_id: \"static_01\", presentation: Fallback, definition: ConditionalSelfModifier(condition: BattlefieldAggregate(filter: {big}, aggregate: Count, min: Some(1)), delta_power: 1, delta_toughness: 1))],"),
+                "CR 613.8",
+            ),
+            (
+                "conditional anthem counting flyers",
+                "static_abilities: [(ability_id: \"static_01\", presentation: Fallback, definition: AnthemPt(filter: (controller: Some(YouControl)), delta_power: 1, delta_toughness: 1, condition: Some(BattlefieldAggregate(filter: (controllers: Controller, matching: (kind: AnyPermanent, required_keywords: [Flying])), aggregate: Count, min: Some(2)))))],".to_string(),
+                "CR 613.8",
+            ),
+        ] {
+            let source = card("\"Creature\"", &body);
+            let error = super::from_chunks(&[source.as_str()])
+                .expect_err(label)
+                .to_string();
+            assert!(error.contains(reason), "{label}: unexpected rejection: {error}");
+        }
+
+        // A resolution-time count still reads current keywords (Winged Words-style).
+        let draw = card(
+            "\"Sorcery\"",
+            &format!("spell_effect: [Draw(count: Count(BattlefieldCreatures(filter: {flyers})))],"),
+        )
+        .replace("power: 1,\n            toughness: 1,", "");
+        super::from_chunks(&[draw.as_str()]).expect("a resolving count may read layer-6 keywords");
+    }
+
     #[test]
     fn issue_171_keyword_choices_are_validated() {
         for (choices, valid) in [
@@ -1066,7 +1132,7 @@ mod tests {
             cost_modifiers: [ConditionalGenericReduction(
                 amount: 1,
                 condition: BattlefieldCreatureCount(
-                    filter: (controllers: Controller, required_keywords: [Flying]),
+                    filter: (controllers: Controller, matching: (kind: Creature, required_keywords: [Flying])),
                     min: Some(1),
                 ),
             )],
@@ -1083,7 +1149,7 @@ mod tests {
             cost_modifiers: [ConditionalGenericReduction(
                 amount: 1,
                 condition: BattlefieldCreatureCount(
-                    filter: (controllers: Controller, required_keywords: [Flying]),
+                    filter: (controllers: Controller, matching: (kind: Creature, required_keywords: [Flying])),
                     min: Some(1),
                 ),
             )],
@@ -1512,8 +1578,10 @@ mod tests {
                         presentation: Fallback,
                         trigger: {trigger},
                         intervening_if: Some(BattlefieldAggregate(
-                            filter: (controllers: Controller, card_type: Some(Land),
-                                required_subtypes: ["Mountain"]),
+                            filter: (
+                                controllers: Controller,
+                                matching: (kind: AnyPermanent, permanent_types: [Land], required_subtypes: ["Mountain"]),
+                                ),
                             aggregate: Count,
                             min: Some(5),
                             exclude_observed_object: true,
@@ -1687,7 +1755,7 @@ mod tests {
             toughness: 1,
             static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
                 condition: BattlefieldAggregate(
-                    filter: (controllers: Controller, card_type: Some(Creature)),
+                    filter: (controllers: Controller, matching: (kind: Creature)),
                     aggregate: MaximumPower,
                     min: Some(4),
                 ),
@@ -1733,7 +1801,7 @@ mod tests {
                 condition: AnyOf([
                     ActivePlayer(players: Controller),
                     BattlefieldAggregate(
-                        filter: (controllers: Controller, card_type: Some(Creature)),
+                        filter: (controllers: Controller, matching: (kind: Creature)),
                         aggregate: MaximumPower,
                         min: Some(4),
                     ),
@@ -1847,7 +1915,7 @@ mod tests {
             types: ["Artifact", "Equipment"],
             static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(
                 condition: Some(BattlefieldAggregate(
-                    filter: (controllers: Controller, card_type: Some(Creature)),
+                    filter: (controllers: Controller, matching: (kind: Creature)),
                     aggregate: MaximumPower,
                     min: Some(4),
                 )),
@@ -1894,7 +1962,7 @@ mod tests {
             static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AnthemKeyword(
                 filter: (controller: YouControl),
                 condition: BattlefieldAggregate(
-                    filter: (controllers: Controller, card_type: Some(Creature)),
+                    filter: (controllers: Controller, matching: (kind: Creature)),
                     aggregate: MaximumPower,
                     min: Some(4),
                 ),
@@ -3623,12 +3691,8 @@ mod tests {
         let controlled_creatures = Amount::Count(CountExpression::BattlefieldCreatures {
             filter: BattlefieldCreatureCountFilter {
                 controllers: RelativePlayerSet::Controller,
-                subtype: None,
-                required_keywords: vec![],
-                tapped: None,
-                requires_any_counter: false,
-                required_counter: None,
                 exclude_source: false,
+                ..Default::default()
             },
         });
 
@@ -3653,12 +3717,8 @@ mod tests {
             Amount::Count(CountExpression::BattlefieldCreatures {
                 filter: BattlefieldCreatureCountFilter {
                     controllers: RelativePlayerSet::Controller,
-                    subtype: None,
-                    required_keywords: vec![],
-                    tapped: None,
-                    requires_any_counter: false,
-                    required_counter: None,
                     exclude_source: true,
+                    ..Default::default()
                 },
             })
         );

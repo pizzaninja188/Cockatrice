@@ -8,7 +8,7 @@
   power: 2,
   toughness: 3,
   static_abilities: [(ability_id: "static_01", presentation: OracleLines([1]), definition: ConditionalSelfModifier(
-    condition: BattlefieldAggregate(filter: (controllers: Controller, token: Some(true)), aggregate: Count, min: Some(1)),
+    condition: BattlefieldAggregate(filter: (controllers: Controller, matching: (kind: AnyPermanent, token: Some(true))), aggregate: Count, min: Some(1)),
     delta_power: 2,
     keywords: [Trample],
   ))],

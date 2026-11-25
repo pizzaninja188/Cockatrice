@@ -7,9 +7,9 @@
 //! refreshed from the pinned Oracle text.
 
 use tricerules_cards::primitives::{
-    AbilityCost, Amount, BattlefieldAggregate, CardTypeFilter, EffectSubject, GameCondition,
-    Keyword, LifeAmount, PermanentTypeFilter, PlayerRecipient, RelativePlayerSet, SpellEffectKind,
-    StaticAbilityDef, TargetFilter, TargetKind,
+    AbilityCost, Amount, BattlefieldAggregate, EffectSubject, GameCondition, Keyword, LifeAmount,
+    PermanentTypeFilter, PlayerRecipient, RelativePlayerSet, SpellEffectKind, StaticAbilityDef,
+    TargetFilter, TargetKind,
 };
 use tricerules_cards::{registry, CardFace, Color, Layout};
 
@@ -213,10 +213,14 @@ fn q63_conditional_pump_map_definitions() {
         assert_eq!(*aggregate, BattlefieldAggregate::Count, "{id}");
         match id {
             "crimson_muckwader" | "sedge_troll" => {
-                assert_eq!(filter.required_subtypes, ["Swamp"], "{id}")
+                assert_eq!(filter.matching.required_subtypes, ["Swamp"], "{id}")
             }
-            "prized_elephant" => assert_eq!(filter.required_subtypes, ["Forest"], "{id}"),
-            _ => assert_eq!(filter.card_type, Some(CardTypeFilter::Artifact), "{id}"),
+            "prized_elephant" => assert_eq!(filter.matching.required_subtypes, ["Forest"], "{id}"),
+            _ => assert_eq!(
+                filter.matching.permanent_types,
+                [tricerules_cards::primitives::PermanentTypeFilter::Artifact],
+                "{id}"
+            ),
         }
         match keyword {
             Some(keyword) => assert_eq!(keywords.as_slice(), [keyword], "{id}"),

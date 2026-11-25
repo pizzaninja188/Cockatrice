@@ -9,7 +9,7 @@
   toughness: 5,
   cost_modifiers: [BattlefieldCountGenericReduction(
     amount_per_match: 1,
-    filter: (controllers: Controller, card_type: Some(Land)),
+    filter: (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Land])),
     aggregate: DistinctNames,
   )],
 )

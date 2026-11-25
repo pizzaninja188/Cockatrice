@@ -16,7 +16,7 @@
     presentation: OracleLines([1]),
     definition: ConditionalSelfModifier(
       condition: BattlefieldAggregate(
-        filter: (controllers: Controller, required_subtypes: ["Swamp"]),
+        filter: (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Swamp"])),
         aggregate: Count,
         min: Some(1),
       ),

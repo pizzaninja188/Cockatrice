@@ -37,7 +37,7 @@
       effect: [
         DamageTarget(
           amount: Count(
-            BattlefieldPermanents(filter: (controllers: Controller, card_type: Some(Artifact), name: None)),
+            BattlefieldPermanents(filter: (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Artifact]))),
           ),
           target: (kind: Creature, controller: Opponent),
         ),

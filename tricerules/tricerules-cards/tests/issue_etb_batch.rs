@@ -286,16 +286,18 @@ fn issue_etb_batch_maps_definitions() {
         filter.controllers,
         tricerules_cards::RelativePlayerSet::Controller
     );
-    assert!(filter.required_supertypes.is_empty());
-    assert!(filter.token.is_none());
+    assert!(filter.matching.required_supertypes.is_empty());
+    assert!(filter.matching.token.is_none());
     assert!(filter.any_of.is_none());
     assert_eq!(
-        filter.card_type, None,
+        filter.matching.kind,
+        tricerules_cards::primitives::TargetKind::AnyPermanent,
         "Kindred Hero need not be a Creature"
     );
-    assert!(filter.color.is_none());
-    assert!(filter.name.is_none());
-    assert_eq!(filter.required_subtypes, ["Hero"]);
+    assert!(filter.matching.permanent_types.is_empty());
+    assert!(filter.matching.is_color.is_none());
+    assert!(filter.matching.name.is_none());
+    assert_eq!(filter.matching.required_subtypes, ["Hero"]);
     assert!(filter.exclude_source, "exclude only the source generation");
     assert_eq!(*min, Some(1));
     assert_eq!(*max, None);

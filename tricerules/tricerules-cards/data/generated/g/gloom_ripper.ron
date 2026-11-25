@@ -24,7 +24,7 @@
                     terms: [
                       (
                         coefficient: 1,
-                        quantity: BattlefieldCreatures(filter: (controllers: Controller, subtype: Some("Elf"))),
+                        quantity: BattlefieldCreatures(filter: (controllers: Controller, matching: (kind: Creature, required_subtypes: ["Elf"]))),
                       ),
                       (
                         coefficient: 1,
@@ -51,7 +51,7 @@
                     terms: [
                       (
                         coefficient: 1,
-                        quantity: BattlefieldCreatures(filter: (controllers: Controller, subtype: Some("Elf"))),
+                        quantity: BattlefieldCreatures(filter: (controllers: Controller, matching: (kind: Creature, required_subtypes: ["Elf"]))),
                       ),
                       (
                         coefficient: 1,

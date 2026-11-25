@@ -19,8 +19,7 @@
       costs: [Mana("{1}{G}"), DiscardSelf],
       cost_modifiers: [GenericReduction(amount: Count(BattlefieldPermanents(filter: (
         controllers: Controller,
-        card_type: Some(Creature),
-        required_supertypes: ["Legendary"],
+        matching: (kind: Creature, required_supertypes: ["Legendary"]),
       ))))],
       effect: [
         Destroy(subject: Chosen((any_of: Some([

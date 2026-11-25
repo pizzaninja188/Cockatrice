@@ -10330,33 +10330,26 @@ mod attached_subject_tests {
                 let quantity = if spend_treasures {
                     CountExpression::BattlefieldPermanents {
                         filter: BattlefieldPermanentFilter {
-                            required_supertypes: Vec::new(),
-                            token: None,
                             controllers: RelativePlayerSet::Opponents,
-                            card_type: Some(CardTypeFilter::Artifact),
                             any_of: None,
-                            color: None,
-                            name: None,
-                            required_subtypes: vec![],
-                            min_colors: None,
-                            max_colors: None,
                             exclude_source: false,
+                            matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                                kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
+                                permanent_types: vec![tricerules_card_model::primitives::PermanentTypeFilter::Artifact],
+                                ..tricerules_card_model::primitives::TargetFilter::default()
+                            }),
                         },
                     }
                 } else {
                     CountExpression::BattlefieldMaximum {
                         filter: BattlefieldPermanentFilter {
-                            required_supertypes: Vec::new(),
-                            token: None,
                             controllers: RelativePlayerSet::Controller,
-                            card_type: Some(CardTypeFilter::Creature),
                             any_of: None,
-                            color: None,
-                            name: None,
-                            required_subtypes: vec![],
-                            min_colors: None,
-                            max_colors: None,
                             exclude_source: false,
+                            matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                                kind: tricerules_card_model::primitives::TargetKind::Creature,
+                                ..tricerules_card_model::primitives::TargetFilter::default()
+                            }),
                         },
                         characteristic:
                             tricerules_card_model::BattlefieldQuantityCharacteristic::Power,

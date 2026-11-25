@@ -108,7 +108,11 @@ fn issue_336_arcane_epiphany_reduces_only_with_a_controlled_wizard() {
             condition: GameCondition::BattlefieldCreatureCount {
                 filter: BattlefieldCreatureCountFilter {
                     controllers: RelativePlayerSet::Controller,
-                    subtype: Some("Wizard".into()),
+                    matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                        kind: tricerules_cards::primitives::TargetKind::Creature,
+                        required_subtypes: vec!["Wizard".into()],
+                        ..tricerules_cards::primitives::TargetFilter::default()
+                    }),
                     ..BattlefieldCreatureCountFilter::default()
                 },
                 min: Some(1),

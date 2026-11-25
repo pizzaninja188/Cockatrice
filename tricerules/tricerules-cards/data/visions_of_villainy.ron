@@ -5,7 +5,7 @@
   cost_modifiers: [ConditionalGenericReduction(
     amount: 1,
     condition: BattlefieldAggregate(
-      filter: (controllers: Controller, required_subtypes: ["Villain"]),
+      filter: (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Villain"])),
       aggregate: Count,
       min: Some(1),
     ),

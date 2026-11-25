@@ -100,8 +100,8 @@ fn q31_turbulent_lands_batch_maps_definitions() {
             card.id
         );
         assert_eq!(
-            filter.card_type,
-            Some(tricerules_cards::primitives::CardTypeFilter::Land),
+            filter.matching.permanent_types,
+            [tricerules_cards::primitives::PermanentTypeFilter::Land],
             "{}",
             card.id
         );

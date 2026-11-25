@@ -148,17 +148,14 @@ fn issue_370_gargantuan_leech_cost_modifier_payload_is_exact() {
                         coefficient: 1,
                         quantity: CountExpression::BattlefieldPermanents {
                             filter: BattlefieldPermanentFilter {
-                                required_supertypes: Vec::new(),
-                                token: None,
                                 any_of: None,
                                 controllers: RelativePlayerSet::Controller,
-                                card_type: None,
-                                color: None,
-                                name: None,
-                                required_subtypes: vec!["Cave".to_string()],
-                                min_colors: None,
-                                max_colors: None,
                                 exclude_source: false,
+                                matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                                    kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
+                                    required_subtypes: vec!["Cave".to_string()],
+                                    ..tricerules_cards::primitives::TargetFilter::default()
+                                }),
                             },
                         },
                     },
@@ -282,9 +279,9 @@ fn issue_370_unretained_recipe_payloads_validate_in_the_registry() {
     }
 
     let caves_amount = "Count(Affine(constant: 0, terms: [\
-        (coefficient: 1, quantity: BattlefieldPermanents(filter: (token: None, any_of: None, \
-            controllers: Controller, card_type: None, color: None, name: None, \
-            required_subtypes: [\"Cave\"], exclude_source: false))), \
+        (coefficient: 1, quantity: BattlefieldPermanents(filter: (any_of: None, \
+            controllers: Controller, exclude_source: false, \
+            matching: (kind: AnyPermanent, required_subtypes: [\"Cave\"])))), \
         (coefficient: 1, quantity: GraveyardCards(owners: Controller, \
             filter: Some((required_subtypes: [\"Cave\"]))))\
         ]))";
@@ -309,17 +306,14 @@ fn issue_370_unretained_recipe_payloads_validate_in_the_registry() {
                         coefficient: 1,
                         quantity: CountExpression::BattlefieldPermanents {
                             filter: BattlefieldPermanentFilter {
-                                required_supertypes: Vec::new(),
-                                token: None,
                                 any_of: None,
                                 controllers: RelativePlayerSet::Controller,
-                                card_type: None,
-                                color: None,
-                                name: None,
-                                required_subtypes: vec!["Cave".to_string()],
-                                min_colors: None,
-                                max_colors: None,
                                 exclude_source: false,
+                                matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                                    kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
+                                    required_subtypes: vec!["Cave".to_string()],
+                                    ..tricerules_cards::primitives::TargetFilter::default()
+                                }),
                             },
                         },
                     },

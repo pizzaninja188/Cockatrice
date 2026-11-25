@@ -338,17 +338,16 @@ fn issue_351_gravblade_heavy_keeps_the_artifact_condition() {
         StaticAbilityDef::ConditionalSelfModifier {
             condition: GameCondition::BattlefieldAggregate {
                 filter: BattlefieldPermanentFilter {
-                    required_supertypes: Vec::new(),
-                    token: None,
                     any_of: None,
                     controllers: RelativePlayerSet::Controller,
-                    card_type: Some(CardTypeFilter::Artifact),
-                    color: None,
-                    name: None,
-                    required_subtypes: Vec::new(),
-                    min_colors: None,
-                    max_colors: None,
                     exclude_source: false,
+                    matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                        kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
+                        permanent_types: vec![
+                            tricerules_cards::primitives::PermanentTypeFilter::Artifact
+                        ],
+                        ..tricerules_cards::primitives::TargetFilter::default()
+                    }),
                 },
                 aggregate: BattlefieldAggregate::Count,
                 min: Some(1),

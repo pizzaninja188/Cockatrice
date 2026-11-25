@@ -8508,17 +8508,13 @@ mod pupu_ufo_effect_validation_tests {
     fn source_base_power_accepts_any_valid_battlefield_count_filter() {
         let effect = source_power(Amount::Count(CountExpression::BattlefieldPermanents {
             filter: BattlefieldPermanentFilter {
-                required_supertypes: vec![],
-                token: None,
                 any_of: None,
                 controllers: RelativePlayerSet::Opponents,
-                card_type: Some(CardTypeFilter::Creature),
-                color: None,
-                name: None,
-                required_subtypes: vec![],
-                min_colors: None,
-                max_colors: None,
                 exclude_source: false,
+                matching: Box::new(crate::primitives::TargetFilter {
+                    kind: crate::primitives::TargetKind::Creature,
+                    ..crate::primitives::TargetFilter::default()
+                }),
             },
         }));
 
@@ -8800,44 +8796,34 @@ mod issue_158_predicate_tests {
     fn richer_public_predicates_validate_composable_filters() {
         let union = GameCondition::BattlefieldAggregate {
             filter: BattlefieldPermanentFilter {
-                required_supertypes: Vec::new(),
-                token: None,
                 any_of: Some(vec![
                     BattlefieldPermanentFilter {
-                        required_supertypes: Vec::new(),
-                        token: None,
                         any_of: None,
                         controllers: RelativePlayerSet::Controller,
-                        card_type: Some(CardTypeFilter::Land),
-                        color: None,
-                        name: None,
-                        required_subtypes: vec![],
-                        min_colors: None,
-                        max_colors: None,
                         exclude_source: false,
+                        matching: Box::new(crate::primitives::TargetFilter {
+                            kind: crate::primitives::TargetKind::AnyPermanent,
+                            permanent_types: vec![crate::primitives::PermanentTypeFilter::Land],
+                            ..crate::primitives::TargetFilter::default()
+                        }),
                     },
                     BattlefieldPermanentFilter {
-                        required_supertypes: Vec::new(),
-                        token: None,
                         any_of: None,
                         controllers: RelativePlayerSet::Controller,
-                        card_type: None,
-                        color: None,
-                        name: None,
-                        required_subtypes: vec!["Treefolk".into()],
-                        min_colors: None,
-                        max_colors: None,
                         exclude_source: false,
+                        matching: Box::new(crate::primitives::TargetFilter {
+                            kind: crate::primitives::TargetKind::AnyPermanent,
+                            required_subtypes: vec!["Treefolk".into()],
+                            ..crate::primitives::TargetFilter::default()
+                        }),
                     },
                 ]),
                 controllers: RelativePlayerSet::Controller,
-                card_type: None,
-                color: None,
-                name: None,
-                required_subtypes: vec![],
-                min_colors: None,
-                max_colors: None,
                 exclude_source: false,
+                matching: Box::new(crate::primitives::TargetFilter {
+                    kind: crate::primitives::TargetKind::AnyPermanent,
+                    ..crate::primitives::TargetFilter::default()
+                }),
             },
             aggregate: BattlefieldAggregate::DistinctNames,
             min: Some(7),
@@ -8861,7 +8847,11 @@ mod issue_158_predicate_tests {
         let tapped = GameCondition::BattlefieldCreatureCount {
             filter: BattlefieldCreatureCountFilter {
                 controllers: RelativePlayerSet::Controller,
-                tapped: Some(true),
+                matching: Box::new(crate::primitives::TargetFilter {
+                    kind: crate::primitives::TargetKind::Creature,
+                    tapped: Some(true),
+                    ..crate::primitives::TargetFilter::default()
+                }),
                 ..Default::default()
             },
             min: Some(2),

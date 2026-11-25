@@ -7,7 +7,7 @@
   mana_cost: "{5}{W}",
   cost_modifiers: [BattlefieldCountGenericReduction(
     amount_per_match: 1,
-    filter: (controllers: Controller, card_type: Some(Creature)),
+    filter: (controllers: Controller, matching: (kind: Creature)),
   )],
   types: ["Creature", "Beast"],
   power: 4,

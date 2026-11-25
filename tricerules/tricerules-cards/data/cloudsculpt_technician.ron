@@ -10,7 +10,7 @@
   keywords: [Flying],
   static_abilities: [(ability_id: "static_01", presentation: OracleLines([2]), definition: ConditionalSelfModifier(
     condition: BattlefieldAggregate(
-      filter: (controllers: Controller, card_type: Some(Artifact)),
+      filter: (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Artifact])),
       aggregate: Count,
       min: Some(1),
     ),

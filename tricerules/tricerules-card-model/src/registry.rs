@@ -1655,6 +1655,12 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                         id: card.id.clone(),
                         reason,
                     })?;
+                if condition.reads_layered_battlefield_characteristics() {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "continuous-effect conditions cannot count battlefield objects by keywords, power or toughness until CR 613.8 dependency ordering is implemented".into(),
+                    });
+                }
                 if condition.any_node_matches(|node| {
                     matches!(
                         node,
@@ -1766,6 +1772,12 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                     id: card.id.clone(),
                     reason,
                 })?;
+            if condition.reads_layered_battlefield_characteristics() {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "continuous-effect conditions cannot count battlefield objects by keywords, power or toughness until CR 613.8 dependency ordering is implemented".into(),
+                });
+            }
             if condition.any_node_matches(|node| {
                 matches!(
                     node,
@@ -2140,6 +2152,12 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                         id: card.id.clone(),
                         reason,
                     })?;
+                if condition.reads_layered_battlefield_characteristics() {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "continuous-effect conditions cannot count battlefield objects by keywords, power or toughness until CR 613.8 dependency ordering is implemented".into(),
+                    });
+                }
                 if condition.any_node_matches(|node| {
                     matches!(
                         node,

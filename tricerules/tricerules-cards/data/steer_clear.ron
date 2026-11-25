@@ -7,7 +7,7 @@
   mana_cost: "{W}",
   types: ["Instant"],
   cast_conditions: [BattlefieldAggregate(
-    filter: (controllers: Controller, required_subtypes: ["Mount"]),
+    filter: (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Mount"])),
     aggregate: Count,
     min: Some(1),
   )],

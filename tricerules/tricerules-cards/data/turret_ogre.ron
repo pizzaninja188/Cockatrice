@@ -18,8 +18,8 @@
       intervening_if: Some(BattlefieldAggregate(
         filter: (
           controllers: Controller,
-          card_type: Some(Creature),
           exclude_source: true,
+          matching: (kind: Creature),
         ),
         aggregate: MaximumPower,
         min: Some(4),

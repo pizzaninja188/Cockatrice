@@ -11,6 +11,6 @@
   toughness: 12,
   keywords: [Trample],
   cost_modifiers: [GenericReduction(amount: Count(BattlefieldPowerSum(
-    filter: (controllers: Controller, card_type: Some(Creature)),
+    filter: (controllers: Controller, matching: (kind: Creature)),
   )))],
 )

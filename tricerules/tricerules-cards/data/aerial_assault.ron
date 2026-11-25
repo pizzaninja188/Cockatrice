@@ -9,7 +9,7 @@
     Destroy(subject: Chosen((kind: Creature, tapped: true))),
     GainLife(
       amount: Count(BattlefieldCreatures(
-        filter: (controllers: Controller, required_keywords: [Flying]),
+        filter: (controllers: Controller, matching: (kind: Creature, required_keywords: [Flying])),
       )),
     ),
   ],

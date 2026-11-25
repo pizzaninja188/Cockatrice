@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    BattlefieldAggregate, CardTypeFilter, GameCondition, PlayerLifeAggregate, StaticAbilityDef,
+    BattlefieldAggregate, GameCondition, PlayerLifeAggregate, StaticAbilityDef,
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, LibraryPartitionKind, ManaCost, RelativePlayerSet,
@@ -142,7 +142,11 @@ fn issue_258_conditional_lands_preserve_exact_public_predicates() {
             };
             assert_eq!(*aggregate, BattlefieldAggregate::Count, "{id}");
             assert_eq!(filter.controllers, RelativePlayerSet::Controller, "{id}");
-            assert_eq!(filter.card_type, Some(CardTypeFilter::Land), "{id}");
+            assert!(
+                filter.matching.permanent_types
+                    == [tricerules_cards::primitives::PermanentTypeFilter::Land],
+                "{id}"
+            );
             assert!(filter.exclude_source, "{id}");
             assert_eq!((*actual_min, *actual_max), (min, max), "{id}");
         }

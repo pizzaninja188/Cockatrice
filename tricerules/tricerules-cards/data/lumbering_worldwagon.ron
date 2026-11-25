@@ -12,7 +12,7 @@
     ability_id: "characteristic_01",
     presentation: OracleLines([1]),
     definition: CountScaledPowerToughness(
-      count: BattlefieldPermanents(filter: (controllers: Controller, card_type: Some(Land))),
+      count: BattlefieldPermanents(filter: (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Land]))),
       power_per_match: 1,
       toughness_per_match: 0,
     ),

@@ -10,13 +10,16 @@
     PumpTarget(power: -1, toughness: 0, subject: Chosen((kind: Creature)), scale: (
       basis: Amount(Conditional(
         condition: BattlefieldAggregate(
-          filter: (controllers: Controller, any_of: Some([
-            (controllers: Controller, required_subtypes: ["Assassin"]),
-            (controllers: Controller, required_subtypes: ["Mercenary"]),
-            (controllers: Controller, required_subtypes: ["Pirate"]),
-            (controllers: Controller, required_subtypes: ["Rogue"]),
-            (controllers: Controller, required_subtypes: ["Warlock"]),
-          ])),
+          filter: (
+            controllers: Controller,
+            any_of: Some([
+            (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Assassin"])),
+            (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Mercenary"])),
+            (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Pirate"])),
+            (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Rogue"])),
+            (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Warlock"])),
+          ]),
+          ),
           aggregate: Count, min: Some(1),
         ),
         when_true: 3, otherwise: 0,

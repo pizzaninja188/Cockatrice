@@ -2,8 +2,8 @@ use crate::common;
 
 use common::FaceExpectation;
 use tricerules_cards::primitives::{
-    Amount, BattlefieldAggregate, CardTypeFilter, EffectSubject, GameCondition,
-    LibraryPartitionKind, PermanentTypeFilter, RelativePlayerSet, SpellEffectKind, TargetKind,
+    Amount, BattlefieldAggregate, EffectSubject, GameCondition, LibraryPartitionKind,
+    PermanentTypeFilter, RelativePlayerSet, SpellEffectKind, TargetKind,
 };
 use tricerules_cards::{CardFace, Keyword};
 
@@ -17,7 +17,7 @@ const TAKEN_BY_NIGHTMARES_DRAFT: &str = r#"
   spell_effect: [
     Conditional(
       condition: BattlefieldAggregate(
-        filter: (controllers: Controller, card_type: Some(Enchantment)),
+        filter: (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Enchantment])),
         aggregate: Count,
         min: Some(1),
       ),
@@ -39,8 +39,7 @@ const FAILED_FORDING_DRAFT: &str = r#"
       condition: BattlefieldAggregate(
         filter: (
           controllers: Controller,
-          card_type: Some(Land),
-          required_subtypes: ["Desert"],
+          matching: (kind: AnyPermanent, permanent_types: [Land], required_subtypes: ["Desert"]),
         ),
         aggregate: Count,
         min: Some(1),
@@ -126,7 +125,10 @@ fn issue_481_registers_both_complete_cards_and_exact_conditional_effects() {
     };
     assert_eq!(target.kind, TargetKind::Creature);
     assert_eq!(filter.controllers, RelativePlayerSet::Controller);
-    assert_eq!(filter.card_type, Some(CardTypeFilter::Enchantment));
+    assert!(
+        filter.matching.permanent_types
+            == [tricerules_cards::primitives::PermanentTypeFilter::Enchantment]
+    );
     assert!(matches!(
         effect.as_ref(),
         SpellEffectKind::Scry {
@@ -157,8 +159,11 @@ fn issue_481_registers_both_complete_cards_and_exact_conditional_effects() {
     assert_eq!(target.kind, TargetKind::AnyPermanent);
     assert_eq!(target.excluded_permanent_types, [PermanentTypeFilter::Land]);
     assert_eq!(filter.controllers, RelativePlayerSet::Controller);
-    assert_eq!(filter.card_type, Some(CardTypeFilter::Land));
-    assert_eq!(filter.required_subtypes, ["Desert"]);
+    assert!(
+        filter.matching.permanent_types
+            == [tricerules_cards::primitives::PermanentTypeFilter::Land]
+    );
+    assert_eq!(filter.matching.required_subtypes, ["Desert"]);
     assert!(matches!(
         effect.as_ref(),
         SpellEffectKind::LibraryPartition {

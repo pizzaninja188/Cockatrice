@@ -43,8 +43,8 @@ fn boseiju_exact_identity_maps_printed_mana_and_complete_channel() {
         panic!("counted reduction")
     };
     assert_eq!(filter.controllers, RelativePlayerSet::Controller);
-    assert_eq!(filter.card_type, Some(CardTypeFilter::Creature));
-    assert_eq!(filter.required_supertypes, ["Legendary"]);
+    assert!(filter.matching.kind == tricerules_cards::primitives::TargetKind::Creature);
+    assert_eq!(filter.matching.required_supertypes, ["Legendary"]);
     let [SpellEffectKind::Destroy { .. }, SpellEffectKind::SearchLibrary {
         who,
         optional,

@@ -3,8 +3,8 @@ use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::{
-    Amount, BattlefieldPermanentFilter, CardTypeFilter, ContinuousEffectKind, CountExpression,
-    RelativePlayerSet, SpellEffectKind,
+    Amount, BattlefieldPermanentFilter, ContinuousEffectKind, CountExpression, RelativePlayerSet,
+    SpellEffectKind,
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, AbilitySourceZone, CounterKind, Keyword, Layout, ManaCost,
@@ -95,8 +95,11 @@ fn pupu_ufo_registers_its_complete_printed_identity() {
         panic!("PuPu UFO must use the shared battlefield count as its amount");
     };
     assert_eq!(filter.controllers, RelativePlayerSet::Controller);
-    assert_eq!(filter.card_type, Some(CardTypeFilter::Land));
-    assert_eq!(filter.required_subtypes, vec!["Town".to_string()]);
+    assert!(
+        filter.matching.permanent_types
+            == [tricerules_card_model::primitives::PermanentTypeFilter::Land]
+    );
+    assert_eq!(filter.matching.required_subtypes, vec!["Town".to_string()]);
 }
 
 #[test]
@@ -267,17 +270,13 @@ fn pupu_ufo_source_setter_resolves_a_different_valid_battlefield_filter() {
     ability.effect[0] = SpellEffectKind::SetSourceBasePower {
         amount: Amount::Count(CountExpression::BattlefieldPermanents {
             filter: BattlefieldPermanentFilter {
-                required_supertypes: vec![],
-                token: None,
                 any_of: None,
                 controllers: RelativePlayerSet::Opponents,
-                card_type: Some(CardTypeFilter::Creature),
-                color: None,
-                name: None,
-                required_subtypes: vec![],
-                min_colors: None,
-                max_colors: None,
                 exclude_source: false,
+                matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                    kind: tricerules_card_model::primitives::TargetKind::Creature,
+                    ..tricerules_card_model::primitives::TargetFilter::default()
+                }),
             },
         }),
     };

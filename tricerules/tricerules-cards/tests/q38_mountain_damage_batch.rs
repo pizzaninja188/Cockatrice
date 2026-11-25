@@ -72,8 +72,8 @@ fn q38_mountain_damage_batch_maps_definitions() {
             [SpellEffectKind::DamageTarget { amount: Amount::Count(
                 CountExpression::BattlefieldPermanents { filter }), target }]
                 if target.kind == TargetKind::Creature
-                    && filter.card_type == Some(tricerules_cards::primitives::CardTypeFilter::Land)
-                    && filter.required_subtypes == ["Mountain"]
+                    && filter.matching.permanent_types == [tricerules_cards::primitives::PermanentTypeFilter::Land]
+                    && filter.matching.required_subtypes == ["Mountain"]
         ));
     }
 }

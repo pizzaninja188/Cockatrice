@@ -16,7 +16,7 @@
     definition: EntersTapped(
       affected: Self_,
       condition: Some(BattlefieldAggregate(
-        filter: (controllers: Controller, card_type: Some(BasicLand)),
+        filter: (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Land], required_supertypes: ["Basic"])),
         aggregate: Count,
         max: Some(0),
       )),

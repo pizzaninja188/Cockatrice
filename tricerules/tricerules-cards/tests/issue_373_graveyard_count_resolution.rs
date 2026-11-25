@@ -222,7 +222,7 @@ fn issue_373_gloom_ripper_shares_one_affine_count_between_two_pumps() {
     let CountExpression::BattlefieldCreatures { filter } = &terms[0].quantity else {
         panic!("the battlefield term must count creatures");
     };
-    assert_eq!(filter.subtype.as_deref(), Some("Elf"));
+    assert_eq!(filter.matching.required_subtypes, ["Elf"]);
     assert_eq!(filter.controllers, RelativePlayerSet::Controller);
     assert_eq!(terms[1].quantity, second_elf_graveyard_term());
     let groups = &ability.targeting.as_ref().expect("targeting").groups;
@@ -512,17 +512,16 @@ fn issue_373_lasyd_prowler_mills_per_land_and_renews_from_the_graveyard() {
         [SpellEffectKind::Mill {
             count: Amount::Count(CountExpression::BattlefieldPermanents {
                 filter: BattlefieldPermanentFilter {
-                    required_supertypes: Vec::new(),
-                    token: None,
                     any_of: None,
                     controllers: RelativePlayerSet::Controller,
-                    card_type: Some(CardTypeFilter::Land),
-                    color: None,
-                    name: None,
-                    required_subtypes: Vec::new(),
-                    min_colors: None,
-                    max_colors: None,
                     exclude_source: false,
+                    matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                        kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
+                        permanent_types: vec![
+                            tricerules_cards::primitives::PermanentTypeFilter::Land
+                        ],
+                        ..tricerules_cards::primitives::TargetFilter::default()
+                    }),
                 },
             }),
             who: PlayerRecipient::Controller,

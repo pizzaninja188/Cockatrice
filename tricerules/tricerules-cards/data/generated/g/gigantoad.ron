@@ -13,7 +13,7 @@
       presentation: OracleLines([1]),
       definition: ConditionalSelfModifier(
         condition: BattlefieldAggregate(
-          filter: (controllers: Controller, card_type: Some(Land), name: None),
+          filter: (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Land])),
           aggregate: Count,
           min: Some(7),
         ),

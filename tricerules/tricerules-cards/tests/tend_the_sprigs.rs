@@ -99,12 +99,12 @@ fn tend_the_sprigs_has_the_exact_post_search_land_or_treefolk_program() {
     };
     assert_eq!(*aggregate, BattlefieldAggregate::Count);
     assert_eq!(filter.controllers, RelativePlayerSet::Controller);
-    assert!(filter.required_supertypes.is_empty());
-    assert!(filter.token.is_none());
-    assert!(filter.card_type.is_none());
-    assert!(filter.required_subtypes.is_empty());
-    assert!(filter.color.is_none());
-    assert!(filter.name.is_none());
+    assert!(filter.matching.required_supertypes.is_empty());
+    assert!(filter.matching.token.is_none());
+    assert!(filter.matching.permanent_types.is_empty());
+    assert!(filter.matching.required_subtypes.is_empty());
+    assert!(filter.matching.is_color.is_none());
+    assert!(filter.matching.name.is_none());
     assert!(!filter.exclude_source);
     assert_eq!(*min, Some(7));
     assert_eq!(*max, None);
@@ -119,21 +119,24 @@ fn tend_the_sprigs_has_the_exact_post_search_land_or_treefolk_program() {
         panic!("Tend has exactly two union branches");
     };
     assert_eq!(land_filter.controllers, RelativePlayerSet::Controller);
-    assert!(land_filter.required_supertypes.is_empty());
-    assert!(land_filter.token.is_none());
-    assert_eq!(land_filter.card_type, Some(CardTypeFilter::Land));
-    assert!(land_filter.color.is_none());
-    assert!(land_filter.name.is_none());
-    assert!(land_filter.required_subtypes.is_empty());
+    assert!(land_filter.matching.required_supertypes.is_empty());
+    assert!(land_filter.matching.token.is_none());
+    assert!(
+        land_filter.matching.permanent_types
+            == [tricerules_cards::primitives::PermanentTypeFilter::Land]
+    );
+    assert!(land_filter.matching.is_color.is_none());
+    assert!(land_filter.matching.name.is_none());
+    assert!(land_filter.matching.required_subtypes.is_empty());
     assert!(land_filter.any_of.is_none());
     assert!(!land_filter.exclude_source);
     assert_eq!(treefolk_filter.controllers, RelativePlayerSet::Controller);
-    assert!(treefolk_filter.required_supertypes.is_empty());
-    assert!(treefolk_filter.token.is_none());
-    assert!(treefolk_filter.card_type.is_none());
-    assert!(treefolk_filter.color.is_none());
-    assert!(treefolk_filter.name.is_none());
-    assert_eq!(treefolk_filter.required_subtypes, ["Treefolk"]);
+    assert!(treefolk_filter.matching.required_supertypes.is_empty());
+    assert!(treefolk_filter.matching.token.is_none());
+    assert!(treefolk_filter.matching.permanent_types.is_empty());
+    assert!(treefolk_filter.matching.is_color.is_none());
+    assert!(treefolk_filter.matching.name.is_none());
+    assert_eq!(treefolk_filter.matching.required_subtypes, ["Treefolk"]);
     assert!(treefolk_filter.any_of.is_none());
     assert!(!treefolk_filter.exclude_source);
 

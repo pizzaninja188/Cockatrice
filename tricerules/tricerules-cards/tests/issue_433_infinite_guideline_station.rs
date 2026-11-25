@@ -18,17 +18,14 @@ const FINGERPRINT: &str = "4ab14b01e16f40fa6b093d5a934ae4b1fd5ffe477dd9900f9fab5
 fn multicolored_you_control() -> Amount {
     Amount::Count(CountExpression::BattlefieldPermanents {
         filter: BattlefieldPermanentFilter {
-            required_supertypes: Vec::new(),
-            token: None,
             any_of: None,
             controllers: RelativePlayerSet::Controller,
-            card_type: None,
-            color: None,
-            min_colors: Some(2),
-            max_colors: None,
-            name: None,
-            required_subtypes: Vec::new(),
             exclude_source: false,
+            matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
+                min_colors: Some(2),
+                ..tricerules_cards::primitives::TargetFilter::default()
+            }),
         },
     })
 }

@@ -9,7 +9,7 @@
     ConditionalGenericReduction(
       amount: 1,
       condition: BattlefieldCreatureCount(
-        filter: (controllers: Controller, required_keywords: [Flying]),
+        filter: (controllers: Controller, matching: (kind: Creature, required_keywords: [Flying])),
         min: Some(1),
       ),
     ),

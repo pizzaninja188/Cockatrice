@@ -20,8 +20,10 @@
               filter: Some((card_type: Some(BasicLand))),
               zones: Fixed([Library]), destination: TopOfLibrary,
               conditional_destination: Some((condition: BattlefieldAggregate(
-                filter: (controllers: Controller,
-                  required_subtypes: ["Dragon"]),
+                filter: (
+                  controllers: Controller,
+                  matching: (kind: AnyPermanent, required_subtypes: ["Dragon"]),
+                  ),
                 aggregate: Count, min: Some(1),
               ), destination: Battlefield(tapped: true))),
                reveal: true,

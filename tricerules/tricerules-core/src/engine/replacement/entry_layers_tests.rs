@@ -2422,7 +2422,7 @@ fn entry_early_layers_provisional_entrant_does_not_satisfy_battlefield_count() {
     let source = r#"(id: "count_entry_land", name: "Count Entry Land", face_id: "count_entry_land", types: ["Land"],
         static_abilities: [(ability_id: "static_01", presentation: Fallback,
             definition: ConditionalSelfModifier(condition: BattlefieldAggregate(
-                filter: (controllers: All, card_type: Some(Land)), aggregate: Count, min: Some(1)),
+                filter: (controllers: All, matching: (kind: AnyPermanent, permanent_types: [Land])), aggregate: Count, min: Some(1)),
                 add_types: (card_types: [Artifact])))])"#;
     let face = CardRegistry::from_chunks_and_tokens(&[source], &[])
         .unwrap()
@@ -2502,7 +2502,7 @@ fn entry_early_layers_own_global_static_is_restricted_to_entrant_during_preview(
             (ability_id: "static_01", presentation: Fallback, definition: AddTypesToPermanents(
                 filter: (kind: AnyPermanent, permanent_types: [Land]), addition: (card_types: [Artifact]))),
             (ability_id: "static_02", presentation: Fallback, definition: ConditionalSelfModifier(
-                condition: BattlefieldAggregate(filter: (controllers: All, card_type: Some(Artifact)),
+                condition: BattlefieldAggregate(filter: (controllers: All, matching: (kind: AnyPermanent, permanent_types: [Artifact])),
                     aggregate: Count, min: Some(1)), add_types: (card_types: [Enchantment])))])"#;
     copy_face(&mut engine, oid, source, "global_entry_land");
     let entry = event(&engine, oid);

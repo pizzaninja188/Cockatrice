@@ -25,7 +25,7 @@ fn celestial_enforcer_requires_a_controlled_flying_creature() {
         ability.conditions.as_slice(),
         [GameCondition::BattlefieldCreatureCount { filter, min: Some(1), max: None }]
             if filter.controllers == RelativePlayerSet::Controller
-                && filter.required_keywords == [Keyword::Flying]
+                && filter.matching.required_keywords == [Keyword::Flying]
     ));
     assert!(matches!(
         ability.effect.as_slice(),
@@ -47,7 +47,7 @@ fn goblin_bird_grabber_grants_flying_to_itself_without_a_target() {
         ability.conditions.as_slice(),
         [GameCondition::BattlefieldCreatureCount { filter, min: Some(1), max: None }]
             if filter.controllers == RelativePlayerSet::Controller
-                && filter.required_keywords == [Keyword::Flying]
+                && filter.matching.required_keywords == [Keyword::Flying]
     ));
     assert_eq!(
         ability.effect,

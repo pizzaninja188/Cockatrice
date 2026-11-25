@@ -1,4 +1,4 @@
-use tricerules_cards::primitives::{CardTypeFilter, RelativePlayerSet};
+use tricerules_cards::primitives::RelativePlayerSet;
 use tricerules_cards::{
     AbilityPresentation, BattlefieldAggregate, SpellCostModifier, SpellEffectKind, TriggerCondition,
 };
@@ -57,7 +57,10 @@ fn assert_affinity_for_artifacts(modifiers: &[SpellCostModifier]) {
     };
     assert_eq!(*amount_per_match, 1);
     assert_eq!(filter.controllers, RelativePlayerSet::Controller);
-    assert_eq!(filter.card_type, Some(CardTypeFilter::Artifact));
+    assert!(
+        filter.matching.permanent_types
+            == [tricerules_cards::primitives::PermanentTypeFilter::Artifact]
+    );
     assert_eq!(*aggregate, BattlefieldAggregate::Count);
-    assert!(filter.required_subtypes.is_empty());
+    assert!(filter.matching.required_subtypes.is_empty());
 }

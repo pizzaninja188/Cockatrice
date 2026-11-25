@@ -78,12 +78,12 @@ fn issue_84_cards_have_complete_oracle_characteristics_and_shared_amounts() {
                 amount: Amount::Count(CountExpression::BattlefieldCreatures {
                     filter: BattlefieldCreatureCountFilter {
                         controllers: RelativePlayerSet::Controller,
-                        subtype: None,
-                        required_keywords: vec![Keyword::Flying],
-                        tapped: None,
-                        requires_any_counter: false,
-                        required_counter: None,
                         exclude_source: false,
+                        matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                            kind: tricerules_cards::primitives::TargetKind::Creature,
+                            required_keywords: vec![Keyword::Flying],
+                            ..tricerules_cards::primitives::TargetFilter::default()
+                        }),
                     },
                 }),
                 who: tricerules_cards::primitives::PlayerRecipient::Controller,
@@ -130,12 +130,12 @@ fn issue_84_cards_have_complete_oracle_characteristics_and_shared_amounts() {
                 basis: PtScaleBasis::Amount(Amount::Count(CountExpression::BattlefieldCreatures {
                     filter: BattlefieldCreatureCountFilter {
                         controllers: RelativePlayerSet::Controller,
-                        subtype: Some("Elemental".into()),
-                        required_keywords: vec![],
-                        tapped: None,
-                        requires_any_counter: false,
-                        required_counter: None,
                         exclude_source: false,
+                        matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                            kind: tricerules_cards::primitives::TargetKind::Creature,
+                            required_subtypes: vec!["Elemental".into()],
+                            ..tricerules_cards::primitives::TargetFilter::default()
+                        }),
                     },
                 },)),
                 power_per_unit: 1,

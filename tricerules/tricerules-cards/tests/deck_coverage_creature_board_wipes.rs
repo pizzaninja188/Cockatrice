@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    BattlefieldPermanentFilter, CardTypeFilter, MassPlayerSet, RelativePlayerSet, TargetFilter,
+    BattlefieldPermanentFilter, MassPlayerSet, RelativePlayerSet, TargetFilter,
 };
 use tricerules_cards::{
     Amount, BattlefieldAggregate, Color, Layout, SpellCostModifier, SpellEffectKind,
@@ -70,17 +70,13 @@ fn assert_battlefield_creature_reduction(modifiers: &[SpellCostModifier]) {
     assert_eq!(
         filter,
         &BattlefieldPermanentFilter {
-            required_supertypes: Vec::new(),
-            token: None,
             any_of: None,
             controllers: RelativePlayerSet::All,
-            card_type: Some(CardTypeFilter::Creature),
-            color: None,
-            name: None,
-            required_subtypes: Vec::new(),
-            min_colors: None,
-            max_colors: None,
             exclude_source: false,
+            matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                kind: tricerules_cards::primitives::TargetKind::Creature,
+                ..tricerules_cards::primitives::TargetFilter::default()
+            }),
         }
     );
     assert_eq!(*aggregate, BattlefieldAggregate::Count);

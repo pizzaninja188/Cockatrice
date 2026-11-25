@@ -63,7 +63,7 @@ fn issue_218_sapling_nursery_has_exact_affinity_landfall_and_activation_shape() 
     };
     assert_eq!(*amount_per_match, 1);
     assert_eq!(filter.controllers, RelativePlayerSet::Controller);
-    assert_eq!(filter.required_subtypes, ["Forest"]);
+    assert_eq!(filter.matching.required_subtypes, ["Forest"]);
     assert_eq!(*aggregate, BattlefieldAggregate::Count);
 
     let [trigger] = face.triggered_abilities.as_slice() else {

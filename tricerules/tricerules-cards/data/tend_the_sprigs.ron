@@ -21,8 +21,8 @@
             filter: (
               controllers: Controller,
               any_of: Some([
-                (controllers: Controller, card_type: Some(Land)),
-                (controllers: Controller, required_subtypes: ["Treefolk"]),
+                (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Land])),
+                (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Treefolk"])),
               ]),
             ),
             aggregate: Count,

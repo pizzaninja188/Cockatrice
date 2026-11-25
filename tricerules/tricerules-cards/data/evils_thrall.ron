@@ -8,7 +8,7 @@
   spell_effect: [
     GainControl(
       duration: UntilEndOfControllerNextTurnIfBattlefieldMaximumGreaterThanTargetManaValue(
-        filter: (controllers: Controller, required_subtypes: ["Villain"]),
+        filter: (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Villain"])),
       ),
     ),
     Untap(subject: Chosen((kind: Creature))),

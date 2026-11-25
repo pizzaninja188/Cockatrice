@@ -25,7 +25,7 @@
           requirement: GameCondition(BattlefieldCreatureCount(
             filter: (
               controllers: Controller,
-              requires_any_counter: true,
+              matching: (kind: Creature, requires_any_counter: true),
             ),
             min: Some(1),
           )),

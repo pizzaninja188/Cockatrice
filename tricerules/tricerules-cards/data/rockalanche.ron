@@ -10,6 +10,6 @@
   types: ["Sorcery", "Lesson"],
   spell_effect: [Earthbend(count: Count(BattlefieldPermanents(filter: (
     controllers: Controller,
-    required_subtypes: ["Forest"],
+    matching: (kind: AnyPermanent, required_subtypes: ["Forest"]),
   ))))],
 )

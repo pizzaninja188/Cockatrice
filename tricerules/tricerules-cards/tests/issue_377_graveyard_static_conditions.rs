@@ -363,7 +363,7 @@ fn issue_377_control_clause_payloads_are_exact() {
     };
     assert_eq!(*aggregate, BattlefieldAggregate::Count);
     assert_eq!((*min, *max), (Some(1), None));
-    assert_eq!(filter.required_subtypes, ["Villain"]);
+    assert_eq!(filter.matching.required_subtypes, ["Villain"]);
     assert!(
         filter.exclude_source,
         "the printed wording is another Villain"

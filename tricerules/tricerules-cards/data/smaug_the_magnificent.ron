@@ -9,7 +9,7 @@
       ability_id: "triggered_01", presentation: OracleLines([2]),
       trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
       effect: [DamageTarget(
-        amount: Count(BattlefieldPermanents(filter: (controllers: Controller, required_subtypes: ["Treasure"]))),
+        amount: Count(BattlefieldPermanents(filter: (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Treasure"])))),
         target: (),
       )],
     ),

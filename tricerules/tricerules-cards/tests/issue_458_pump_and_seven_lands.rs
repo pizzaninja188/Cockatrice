@@ -17,7 +17,7 @@ use crate::common;
 
 use common::FaceExpectation;
 use tricerules_cards::primitives::{
-    BattlefieldAggregate, BattlefieldPermanentFilter, CardTypeFilter, EffectSubject, GameCondition,
+    BattlefieldAggregate, BattlefieldPermanentFilter, EffectSubject, GameCondition,
     RelativePlayerSet, SpellEffectKind, StaticAbilityDef, TargetFilter, TargetKind,
     TypeLineAddition,
 };
@@ -99,17 +99,14 @@ fn face(id: &str) -> &'static CardFace {
 fn seven_lands_condition() -> GameCondition {
     GameCondition::BattlefieldAggregate {
         filter: BattlefieldPermanentFilter {
-            required_supertypes: Vec::new(),
-            token: None,
             any_of: None,
             controllers: RelativePlayerSet::Controller,
-            card_type: Some(CardTypeFilter::Land),
-            color: None,
-            name: None,
-            required_subtypes: Vec::new(),
-            min_colors: None,
-            max_colors: None,
             exclude_source: false,
+            matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
+                permanent_types: vec![tricerules_cards::primitives::PermanentTypeFilter::Land],
+                ..tricerules_cards::primitives::TargetFilter::default()
+            }),
         },
         aggregate: BattlefieldAggregate::Count,
         min: Some(7),

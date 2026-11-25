@@ -13,7 +13,7 @@
     definition: EntersTapped(
       affected: Self_,
       condition: Some(BattlefieldAggregate(
-        filter: (controllers: Controller, card_type: Some(BasicLand), exclude_source: true),
+        filter: (controllers: Controller, exclude_source: true, matching: (kind: AnyPermanent, permanent_types: [Land], required_supertypes: ["Basic"])),
         aggregate: Count,
         max: Some(1),
       )),

@@ -17,14 +17,11 @@
             amount: Count(
               BattlefieldPermanents(
                 filter: (
-                  any_of: Some(
-                    [
-                      (controllers: Controller, card_type: Some(Creature), name: None),
-                      (controllers: Controller, name: None, required_subtypes: ["Vehicle"]),
-                    ],
-                  ),
+                  any_of: Some([
+                      (controllers: Controller, matching: (kind: Creature)),
+                      (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Vehicle"])),
+                    ]),
                   controllers: Controller,
-                  name: None,
                 ),
               ),
             ),

@@ -2452,7 +2452,7 @@ pub(super) fn basic_land_type_setting(
         .max_by_key(|(timestamp, index, _)| (*timestamp, *index))
 }
 
-fn permanent_matches_target_scope(
+pub(super) fn permanent_matches_target_scope(
     state: &GameState,
     filter: &TargetFilter,
     reference_player: PlayerId,
@@ -2657,6 +2657,24 @@ pub(super) fn permanent_matches_filter_characteristics(
         .is_some_and(|color| !characteristics.colors.contains(&color))
     {
         return false;
+    }
+    if filter.min_colors.is_some() || filter.max_colors.is_some() {
+        // CR 105.2/105.2b: count distinct derived colors after copy and color-setting effects.
+        let count = [
+            Color::White,
+            Color::Blue,
+            Color::Black,
+            Color::Red,
+            Color::Green,
+        ]
+        .iter()
+        .filter(|color| characteristics.colors.contains(color))
+        .count() as u8;
+        if filter.min_colors.is_some_and(|min| count < min)
+            || filter.max_colors.is_some_and(|max| count > max)
+        {
+            return false;
+        }
     }
     if let Some(role) = filter.combat_role {
         use tricerules_card_model::CombatRole;
@@ -4026,7 +4044,7 @@ mod tests {
             types: ["Creature"], power: 1, toughness: 1,
             static_abilities: [(ability_id: "static_01", presentation: Fallback,
                 definition: ConditionalSelfModifier(
-                    condition: BattlefieldAggregate(filter: (controllers: All, card_type: Some(Land)),
+                    condition: BattlefieldAggregate(filter: (controllers: All, matching: (kind: AnyPermanent, permanent_types: [Land])),
                         aggregate: Count, min: Some(1)), add_types: (card_types: [Artifact])))],
         )"#;
         let second = first

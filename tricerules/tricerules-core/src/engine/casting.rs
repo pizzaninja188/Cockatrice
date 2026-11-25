@@ -6250,7 +6250,7 @@ mod cast_snapshot_tests {
         }
     }
 
-    const FAERIE: &str = r#"BattlefieldAggregate(filter: (controllers: Controller, required_subtypes: ["Faerie"]), aggregate: Count, min: Some(1))"#;
+    const FAERIE: &str = r#"BattlefieldAggregate(filter: (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Faerie"])), aggregate: Count, min: Some(1))"#;
 
     #[test]
     fn issue_173_payment_and_cast_history_are_committed_before_capture() {

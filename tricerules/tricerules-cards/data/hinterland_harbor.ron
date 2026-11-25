@@ -20,11 +20,11 @@
         filter: (
           controllers: Controller,
           any_of: Some([
-            (controllers: Controller, required_subtypes: ["Forest"]),
-            (controllers: Controller, required_subtypes: ["Island"]),
+            (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Forest"])),
+            (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Island"])),
           ]),
-          card_type: Some(Land),
           exclude_source: true,
+          matching: (kind: AnyPermanent, permanent_types: [Land]),
         ),
         aggregate: Count,
         max: Some(0),

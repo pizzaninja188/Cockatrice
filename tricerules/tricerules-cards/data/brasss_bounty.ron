@@ -3,5 +3,5 @@
 (
   id: "brasss_bounty", name: "Brass's Bounty", face_id: "brasss_bounty",
   mana_cost: "{6}{R}", types: ["Sorcery"],
-  spell_effect: [CreateTokens(token: "treasure", count: Count(BattlefieldPermanents(filter: (controllers: Controller, card_type: Some(Land)))))],
+  spell_effect: [CreateTokens(token: "treasure", count: Count(BattlefieldPermanents(filter: (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Land])))))],
 )

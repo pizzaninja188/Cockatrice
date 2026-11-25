@@ -5572,7 +5572,7 @@ mod invariant_rollback_tests {
                     choice: "choose", chooser: Controller, optional: true,
                     branches: [(branch_id: "eligible", presentation: Fallback, cost: None,
                         requirement: GameCondition(BattlefieldAggregate(
-                            filter: (controllers: Controller, card_type: Some(Creature)),
+                            filter: (controllers: Controller, matching: (kind: Creature)),
                             aggregate: TotalPower, min: Some(10), max: None,
                             exclude_observed_object: false,
                         )), body: (steps: [], yields: []))],

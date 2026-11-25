@@ -9,7 +9,7 @@
   toughness: 4,
   keywords: [Flying],
   cost_modifiers: [
-    BattlefieldCountGenericReduction(amount_per_match: 1, filter: (controllers: Controller, card_type: Some(Artifact), name: None)),
+    BattlefieldCountGenericReduction(amount_per_match: 1, filter: (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Artifact]))),
   ],
   triggered_abilities: [
     (

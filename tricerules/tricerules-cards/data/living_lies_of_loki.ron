@@ -17,7 +17,7 @@
       ability_id: "static_01",
       presentation: OracleLines([1]),
       definition: CountScaledSelfPt(
-        count: BattlefieldCreatures(filter: (controllers: Controller, subtype: Some("Illusion"), exclude_source: true)),
+        count: BattlefieldCreatures(filter: (controllers: Controller, exclude_source: true, matching: (kind: Creature, required_subtypes: ["Illusion"]))),
         power_per_match: 1,
         toughness_per_match: 0,
       ),

@@ -10,7 +10,7 @@
     GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Trample]),
     PumpTarget(power: 0, toughness: 0, subject: Chosen((kind: Creature)), scale: (
       basis: Amount(Conditional(
-        condition: BattlefieldAggregate(filter: (controllers: Controller, required_subtypes: ["Mouse"]), aggregate: Count, min: Some(1)),
+        condition: BattlefieldAggregate(filter: (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Mouse"])), aggregate: Count, min: Some(1)),
         when_true: 1, otherwise: 0,
       )),
       power_per_unit: 1, toughness_per_unit: 0,

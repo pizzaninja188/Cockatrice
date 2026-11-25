@@ -147,6 +147,8 @@ fn battlefield(
         combat_role,
         not_color,
         is_color,
+        min_colors,
+        max_colors,
         controller,
         owner,
         excluded_objects,
@@ -196,6 +198,22 @@ fn battlefield(
     }
     adjectives.extend(is_color.map(|color| color_name(color).to_owned()));
     adjectives.extend(not_color.map(|color| format!("non{}", color_name(color))));
+    let mut phrase_color_count = None;
+    match (min_colors, max_colors) {
+        (None, None) => {}
+        (Some(2), None) => adjectives.push("multicolored".to_owned()),
+        (None, Some(0)) => adjectives.push("colorless".to_owned()),
+        (Some(1), Some(1)) => adjectives.push("monocolored".to_owned()),
+        (min, max) => {
+            let min = min.unwrap_or(0);
+            let max = max.unwrap_or(5);
+            phrase_color_count = Some(if min == max {
+                format!("with exactly {min} colors")
+            } else {
+                format!("with {min} to {max} colors")
+            });
+        }
+    }
     adjectives.extend(
         required_supertypes
             .iter()
@@ -334,6 +352,9 @@ fn battlefield(
     }
     if let Some(name) = name {
         phrase.add(format!("named {name}"));
+    }
+    if let Some(color_count) = phrase_color_count {
+        phrase.add(color_count);
     }
     if let Some(counter) = required_counter {
         phrase.add(format!("with a {} counter", counter.label()));

@@ -31,7 +31,7 @@
       effect: [
         Mill(
           count: Count(
-            BattlefieldPermanents(filter: (controllers: Controller, card_type: Some(Land), name: None)),
+            BattlefieldPermanents(filter: (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Land]))),
           ),
         ),
       ],

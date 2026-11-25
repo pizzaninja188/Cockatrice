@@ -17,7 +17,7 @@
     presentation: OracleLines([2]),
     definition: ConditionalSelfModifier(
       condition: BattlefieldAggregate(
-        filter: (controllers: Controller, card_type: Some(Creature)),
+        filter: (controllers: Controller, matching: (kind: Creature)),
         aggregate: MaximumPower,
         min: Some(4),
       ),

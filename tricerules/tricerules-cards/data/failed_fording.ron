@@ -11,7 +11,7 @@
     ReturnToOwnersHand(subject: Chosen((kind: AnyPermanent, excluded_permanent_types: [Land]))),
     Conditional(
       condition: BattlefieldAggregate(
-        filter: (controllers: Controller, card_type: Some(Land), required_subtypes: ["Desert"]),
+        filter: (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Land], required_subtypes: ["Desert"])),
         aggregate: Count,
         min: Some(1),
       ),

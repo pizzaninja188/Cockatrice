@@ -2,7 +2,7 @@
 //!
 //! Every included card is a normal-layout artifact-affinity spell with flying and a
 //! printed generic cost reduced by one for each artifact its controller controls.
-use tricerules_cards::primitives::{CardTypeFilter, RelativePlayerSet};
+use tricerules_cards::primitives::RelativePlayerSet;
 use tricerules_cards::{BattlefieldAggregate, Keyword, Layout, SpellCostModifier};
 
 struct ExpectedCard {
@@ -75,9 +75,13 @@ fn affinity_flying_batch_maps_definitions() {
         };
         assert_eq!(*amount_per_match, 1, "{id}");
         assert_eq!(filter.controllers, RelativePlayerSet::Controller, "{id}");
-        assert_eq!(filter.card_type, Some(CardTypeFilter::Artifact), "{id}");
+        assert!(
+            filter.matching.permanent_types
+                == [tricerules_cards::primitives::PermanentTypeFilter::Artifact],
+            "{id}"
+        );
         assert_eq!(*aggregate, BattlefieldAggregate::Count, "{id}");
-        assert!(filter.required_subtypes.is_empty(), "{id}");
+        assert!(filter.matching.required_subtypes.is_empty(), "{id}");
     }
 }
 

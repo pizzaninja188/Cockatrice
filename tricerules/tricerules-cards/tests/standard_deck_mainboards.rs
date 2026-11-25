@@ -402,7 +402,7 @@ fn dimir_cohort_uses_authoritative_cost_target_and_trigger_shapes() {
             },
         ] if filter.source_only
             && basic_filter.controllers == tricerules_cards::RelativePlayerSet::Controller
-            && basic_filter.card_type == Some(CardTypeFilter::BasicLand)
+            && basic_filter.matching.permanent_types == [tricerules_cards::primitives::PermanentTypeFilter::Land] && basic_filter.matching.required_supertypes == ["Basic"]
     ));
 
     let hex = registry.get("requiting_hex").unwrap().primary_face();

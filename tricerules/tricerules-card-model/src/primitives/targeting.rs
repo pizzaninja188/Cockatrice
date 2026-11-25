@@ -2081,6 +2081,14 @@ pub struct TargetFilter {
     /// the untargeted side; Hydroblast / Pyroblast ("target red permanent") on the targeted side.
     #[serde(default)]
     pub is_color: Option<Color>,
+    /// Inclusive lower bound on the number of distinct derived colors (CR 105.2). Multicolored
+    /// (CR 105.2b, Infinite Guideline Station) is `Some(2)`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_colors: Option<u8>,
+    /// Inclusive upper bound on the number of distinct derived colors. "Exactly two colors"
+    /// (Niv-Mizzet, Guildpact) pairs `Some(2)` with `min_colors: Some(2)`; colorless is `Some(0)`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_colors: Option<u8>,
     /// Controller relationship for a permanent target, relative to the spell or ability's
     /// controller. Covers "you control" (Equipment, regeneration) and "an opponent controls"
     /// (Glaring Aegis, Rambunctious Mutt) while composing with every other filter field.
@@ -2292,6 +2300,20 @@ impl TargetFilter {
                 self.kind
             ));
         }
+        if self.min_colors == Some(0) {
+            return Err("target filter min_colors must be at least one".into());
+        }
+        if self.min_colors.is_some_and(|min| min > 5) || self.max_colors.is_some_and(|max| max > 5)
+        {
+            return Err("target filter color bounds cannot exceed five".into());
+        }
+        if self
+            .min_colors
+            .zip(self.max_colors)
+            .is_some_and(|(min, max)| min > max)
+        {
+            return Err("target filter min_colors cannot exceed max_colors".into());
+        }
         if self.is_color.is_some() && self.is_color == self.not_color {
             return Err("target filter cannot both require and exclude the same color".into());
         }
@@ -2372,6 +2394,8 @@ impl TargetFilter {
             || self.combat_role.is_some()
             || self.not_color.is_some()
             || self.is_color.is_some()
+            || self.min_colors.is_some()
+            || self.max_colors.is_some()
             || self.controller != TargetController::Any
             || self.owner != TargetOwner::Any
             || !self.excluded_objects.is_empty()
@@ -2428,6 +2452,30 @@ impl TargetFilter {
                     .any(|branch| branch.any_terminal_filter_matches(predicate))
             },
         )
+    }
+
+    /// True when matching depends on current keywords. Continuous consumers evaluated before or
+    /// within layer 6 must reject this until CR 613.8 dependency ordering exists.
+    pub fn reads_keywords(&self) -> bool {
+        self.any_terminal_filter_matches(|leaf| {
+            !leaf.required_keywords.is_empty() || !leaf.excluded_keywords.is_empty()
+        })
+    }
+
+    /// True when matching depends on current power or toughness, which are only final after
+    /// layer 7. Continuous layer consumers must reject this.
+    pub fn reads_power_or_toughness(&self) -> bool {
+        self.any_terminal_filter_matches(|leaf| leaf.power.is_some() || leaf.toughness.is_some())
+    }
+
+    /// True when every terminal predicate leaves controller, owner and object exclusions at
+    /// their defaults. Untargeted wrappers that own those relations themselves require this.
+    pub fn leaves_relations_to_wrapper(&self) -> bool {
+        self.all_terminal_filters_match(|leaf| {
+            leaf.controller == TargetController::Any
+                && leaf.owner == TargetOwner::Any
+                && leaf.excluded_objects.is_empty()
+        })
     }
 
     /// True for player-only kinds (used by startup validation).

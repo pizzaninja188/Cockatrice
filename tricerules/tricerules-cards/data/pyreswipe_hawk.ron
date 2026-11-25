@@ -20,7 +20,7 @@
         toughness: 0,
         scale: Some((
           basis: Amount(Count(BattlefieldMaximum(
-            filter: (controllers: Controller, card_type: Some(Artifact)),
+            filter: (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Artifact])),
             characteristic: ManaValue,
           ))),
           power_per_unit: 1,

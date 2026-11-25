@@ -9,8 +9,8 @@
 //! CR 702.3b (defender exception), CR 702.10 (haste), CR 702.17 (reach), and CR 702.19 (trample).
 
 use tricerules_cards::primitives::{
-    Amount, BattlefieldAggregate, CardTypeFilter, GameCondition, PermanentTypeFilter,
-    RelativePlayerSet, SpellEffectKind, StaticAbilityDef, TargetController, TriggerCondition,
+    Amount, BattlefieldAggregate, GameCondition, PermanentTypeFilter, RelativePlayerSet,
+    SpellEffectKind, StaticAbilityDef, TargetController, TriggerCondition,
 };
 use tricerules_cards::{CardRegistry, Keyword, Layout};
 
@@ -114,7 +114,7 @@ fn issue_misc14_batch_maps_definitions() {
         panic!("{:?}", static_def(registry, "bristlepack_sentry"));
     };
     assert_eq!(filter.controllers, RelativePlayerSet::Controller);
-    assert_eq!(filter.card_type, Some(CardTypeFilter::Creature));
+    assert!(filter.matching.kind == tricerules_cards::primitives::TargetKind::Creature);
 
     // Child of the Volcano: descended end-step counter.
     let child = primary(registry, "child_of_the_volcano");

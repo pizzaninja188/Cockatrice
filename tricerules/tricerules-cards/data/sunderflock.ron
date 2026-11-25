@@ -4,7 +4,7 @@
   mana_cost: "{7}{U}{U}", types: ["Creature", "Elemental"],
   power: 5, toughness: 5, keywords: [Flying],
   cost_modifiers: [GenericReduction(amount: Count(BattlefieldMaximum(
-    filter: (controllers: Controller, required_subtypes: ["Elemental"]),
+    filter: (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Elemental"])),
     characteristic: ManaValue,
   )))],
   triggered_abilities: [(

@@ -9,7 +9,7 @@
   types: ["Enchantment"],
   cost_modifiers: [BattlefieldCountGenericReduction(
     amount_per_match: 1,
-    filter: (controllers: Controller, required_subtypes: ["Forest"]),
+    filter: (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Forest"])),
   )],
   triggered_abilities: [(
     ability_id: "triggered_01",

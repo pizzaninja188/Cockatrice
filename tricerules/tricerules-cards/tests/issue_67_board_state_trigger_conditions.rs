@@ -1,6 +1,6 @@
 use tricerules_cards::primitives::{
-    BattlefieldAggregate, BattlefieldPermanentFilter, CardTypeFilter, GameCondition,
-    PlayerRecipient, RelativePlayerSet, SpellEffectKind, TriggerCondition,
+    BattlefieldAggregate, BattlefieldPermanentFilter, GameCondition, PlayerRecipient,
+    RelativePlayerSet, SpellEffectKind, TriggerCondition,
 };
 use tricerules_cards::Keyword;
 
@@ -34,48 +34,46 @@ fn issue_67_cards_use_one_validated_battlefield_condition_vocabulary() {
         battlefield_condition("scholar_of_stars"),
         GameCondition::BattlefieldAggregate {
             filter: BattlefieldPermanentFilter {
-                token: None,
                 controllers: RelativePlayerSet::Controller,
-                card_type: Some(CardTypeFilter::Artifact),
-                color: None,
-                name: None,
-                min_colors: None,
-                max_colors: None,
+                any_of: None,
                 exclude_source: false,
-                ..
+                matching,
             },
             aggregate: BattlefieldAggregate::Count,
             min: Some(1),
             max: None,
             ..
+        } if **matching == tricerules_cards::primitives::TargetFilter {
+            kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
+            permanent_types: vec![tricerules_cards::primitives::PermanentTypeFilter::Artifact],
+            ..Default::default()
         }
     ));
     assert!(matches!(
         battlefield_condition("faerie_miscreant"),
         GameCondition::BattlefieldAggregate {
             filter: BattlefieldPermanentFilter {
-                token: None,
-                card_type: Some(CardTypeFilter::Creature),
-                name: Some(name),
-                min_colors: None,
-                max_colors: None,
                 exclude_source: true,
+                any_of: None,
+                matching,
                 ..
             },
             aggregate: BattlefieldAggregate::Count,
             min: Some(1),
             max: None,
             ..
-        } if name == "Faerie Miscreant"
+        } if **matching == tricerules_cards::primitives::TargetFilter {
+            kind: tricerules_cards::primitives::TargetKind::Creature,
+            name: Some("Faerie Miscreant".into()),
+            ..Default::default()
+        }
     ));
     assert!(matches!(
         battlefield_condition("ornery_dilophosaur"),
         GameCondition::BattlefieldAggregate {
             filter: BattlefieldPermanentFilter {
-                token: None,
-                min_colors: None,
-                max_colors: None,
                 exclude_source: false,
+                any_of: None,
                 ..
             },
             aggregate: BattlefieldAggregate::MaximumPower,
@@ -88,10 +86,8 @@ fn issue_67_cards_use_one_validated_battlefield_condition_vocabulary() {
         battlefield_condition("turret_ogre"),
         GameCondition::BattlefieldAggregate {
             filter: BattlefieldPermanentFilter {
-                token: None,
-                min_colors: None,
-                max_colors: None,
                 exclude_source: true,
+                any_of: None,
                 ..
             },
             aggregate: BattlefieldAggregate::MaximumPower,
@@ -145,17 +141,14 @@ fn issue_67_card_characteristics_and_effects_match_oracle() {
 fn battlefield_aggregate_conditions_reject_invalid_bounds_and_names() {
     let condition = |name: Option<&str>, min, max| GameCondition::BattlefieldAggregate {
         filter: BattlefieldPermanentFilter {
-            required_supertypes: Vec::new(),
-            token: None,
             any_of: None,
             controllers: RelativePlayerSet::Controller,
-            card_type: None,
-            color: None,
-            name: name.map(str::to_string),
-            required_subtypes: vec![],
-            min_colors: None,
-            max_colors: None,
             exclude_source: false,
+            matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
+                name: name.map(str::to_string),
+                ..tricerules_cards::primitives::TargetFilter::default()
+            }),
         },
         aggregate: BattlefieldAggregate::TotalPower,
         min,

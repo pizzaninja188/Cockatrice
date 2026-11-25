@@ -8,7 +8,7 @@
   cost_modifiers: [ConditionalGenericReduction(
     amount: 1,
     condition: BattlefieldCreatureCount(
-      filter: (controllers: Controller, subtype: Some("Kithkin")),
+      filter: (controllers: Controller, matching: (kind: Creature, required_subtypes: ["Kithkin"])),
       min: Some(1),
     ),
   )],

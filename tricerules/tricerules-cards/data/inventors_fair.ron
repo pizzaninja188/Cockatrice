@@ -11,7 +11,7 @@
     presentation: OracleLines([1]),
     trigger: AtBeginningOfUpkeep(),
     intervening_if: Some(BattlefieldAggregate(
-      filter: (controllers: Controller, card_type: Some(Artifact)),
+      filter: (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Artifact])),
       aggregate: Count,
       min: Some(3),
     )),
@@ -29,7 +29,7 @@
       presentation: OracleLines([3]),
       costs: [Mana("{4}"), Tap, SacrificeSelf],
       conditions: [BattlefieldAggregate(
-        filter: (controllers: Controller, card_type: Some(Artifact)),
+        filter: (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Artifact])),
         aggregate: Count,
         min: Some(3),
       )],

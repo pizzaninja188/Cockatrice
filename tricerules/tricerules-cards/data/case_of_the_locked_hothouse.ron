@@ -32,7 +32,7 @@
         intervening_if: Some(AllOf([
             CaseSolved(solved: false),
             BattlefieldAggregate(
-                filter: (controllers: Controller, card_type: Some(Land)),
+                filter: (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Land])),
                 aggregate: Count,
                 min: Some(7),
             ),

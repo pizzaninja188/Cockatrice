@@ -193,30 +193,23 @@ fn issue_426_modes_expose_exact_effects_and_target_prompts() {
     assert_modal_schema("cerebral_confiscation", &cerebral);
 
     let creature = BattlefieldPermanentFilter {
-        required_supertypes: Vec::new(),
-        token: None,
         any_of: None,
         controllers: RelativePlayerSet::Controller,
-        card_type: Some(CardTypeFilter::Creature),
-        color: None,
-        name: None,
-        required_subtypes: Vec::new(),
-        min_colors: None,
-        max_colors: None,
         exclude_source: false,
+        matching: Box::new(tricerules_cards::primitives::TargetFilter {
+            kind: tricerules_cards::primitives::TargetKind::Creature,
+            ..tricerules_cards::primitives::TargetFilter::default()
+        }),
     };
     let vehicle = BattlefieldPermanentFilter {
-        required_supertypes: Vec::new(),
-        token: None,
         any_of: None,
         controllers: RelativePlayerSet::Controller,
-        card_type: None,
-        color: None,
-        name: None,
-        required_subtypes: vec!["Vehicle".into()],
-        min_colors: None,
-        max_colors: None,
         exclude_source: false,
+        matching: Box::new(tricerules_cards::primitives::TargetFilter {
+            kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
+            required_subtypes: vec!["Vehicle".into()],
+            ..tricerules_cards::primitives::TargetFilter::default()
+        }),
     };
     let collision = modal("collision_course");
     assert_eq!(
@@ -224,17 +217,13 @@ fn issue_426_modes_expose_exact_effects_and_target_prompts() {
         [SpellEffectKind::DamageTarget {
             amount: Amount::Count(CountExpression::BattlefieldPermanents {
                 filter: BattlefieldPermanentFilter {
-                    required_supertypes: Vec::new(),
-                    token: None,
                     any_of: Some(vec![creature, vehicle]),
                     controllers: RelativePlayerSet::Controller,
-                    card_type: None,
-                    color: None,
-                    name: None,
-                    required_subtypes: Vec::new(),
-                    min_colors: None,
-                    max_colors: None,
                     exclude_source: false,
+                    matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                        kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
+                        ..tricerules_cards::primitives::TargetFilter::default()
+                    }),
                 },
             }),
             target: TargetFilter::default_creature(),

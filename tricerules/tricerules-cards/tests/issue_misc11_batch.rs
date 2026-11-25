@@ -260,7 +260,11 @@ fn issue_misc11_batch_maps_definitions() {
         panic!("{:?}", agna_static.definition);
     };
     assert_eq!(filter.controllers, RelativePlayerSet::Controller);
-    assert_eq!(filter.card_type, Some(CardTypeFilter::BasicLand));
+    assert!(
+        filter.matching.permanent_types
+            == [tricerules_cards::primitives::PermanentTypeFilter::Land]
+            && filter.matching.required_supertypes == ["Basic"]
+    );
     let agna_mana = activated(registry, "agna_qela", 0);
     assert!(
         matches!(agna_mana.effect.as_slice(), [SpellEffectKind::ProduceMana { options, .. }]

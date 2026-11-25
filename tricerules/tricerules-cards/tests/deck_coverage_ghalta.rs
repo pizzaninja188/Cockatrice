@@ -1,4 +1,3 @@
-use tricerules_cards::primitives::CardTypeFilter;
 use tricerules_cards::{Amount, CountExpression, Keyword, RelativePlayerSet, SpellCostModifier};
 
 #[test]
@@ -21,12 +20,12 @@ fn ghalta_exact_printed_definition_and_generic_only_current_creature_power_cost(
         panic!("exact generic reduction expression required")
     };
     assert_eq!(filter.controllers, RelativePlayerSet::Controller);
-    assert_eq!(filter.card_type, Some(CardTypeFilter::Creature));
+    assert!(filter.matching.kind == tricerules_cards::primitives::TargetKind::Creature);
     assert!(
         filter.any_of.is_none()
-            && filter.token.is_none()
-            && filter.color.is_none()
-            && filter.name.is_none()
+            && filter.matching.token.is_none()
+            && filter.matching.is_color.is_none()
+            && filter.matching.name.is_none()
     );
-    assert!(filter.required_subtypes.is_empty() && !filter.exclude_source);
+    assert!(filter.matching.required_subtypes.is_empty() && !filter.exclude_source);
 }

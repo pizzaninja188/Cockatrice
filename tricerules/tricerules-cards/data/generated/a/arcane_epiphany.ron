@@ -8,7 +8,7 @@
   cost_modifiers: [
     ConditionalGenericReduction(
       amount: 1,
-      condition: BattlefieldCreatureCount(filter: (controllers: Controller, subtype: Some("Wizard")), min: Some(1)),
+      condition: BattlefieldCreatureCount(filter: (controllers: Controller, matching: (kind: Creature, required_subtypes: ["Wizard"])), min: Some(1)),
     ),
   ],
   spell_effect: [Draw(count: 3)],

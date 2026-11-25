@@ -206,9 +206,14 @@ impl CountExpression {
     /// resolving event or need layer-7 ordering.
     fn is_static_scaling_safe(&self) -> bool {
         match self {
-            Self::BattlefieldPermanents { .. } => true,
-            // A keyword-dependent creature scope would need CR 613 dependency ordering in layer 6.
-            Self::BattlefieldCreatures { filter } => filter.required_keywords.is_empty(),
+            // These counts read characteristics through layer 5, so a keyword (layer 6) or
+            // power/toughness (layer 7) predicate would need CR 613.8 dependency ordering.
+            Self::BattlefieldPermanents { filter } => {
+                !filter.reads_keywords() && !filter.reads_power_or_toughness()
+            }
+            Self::BattlefieldCreatures { filter } => {
+                !filter.reads_keywords() && !filter.reads_power_or_toughness()
+            }
             Self::GraveyardCards { .. } => true,
             Self::CardsInHand {
                 players: ConditionPlayerSet::Relative(RelativePlayerSet::Controller),
@@ -1261,7 +1266,7 @@ mod hand_size_count_tests {
 
     #[test]
     fn ghalta_power_sum_schema_rejects_static_scaling_and_invalid_filters() {
-        let text = "BattlefieldPowerSum(filter:(controllers:Controller,card_type:Some(Creature)))";
+        let text = "BattlefieldPowerSum(filter:(controllers:Controller,matching:(kind: Creature)))";
         let quantity: CountExpression = ron::from_str(text).unwrap();
         assert!(quantity.validate().is_ok());
         assert!(quantity.validate_static_count().is_err());
@@ -1279,7 +1284,7 @@ mod hand_size_count_tests {
         assert!(affine.validate().is_ok());
         assert!(affine.validate_static_count().is_err());
         let invalid: CountExpression = ron::from_str(
-            "BattlefieldPowerSum(filter:(controllers:Controller,required_subtypes:[\"\"]))",
+            "BattlefieldPowerSum(filter:(controllers:Controller,matching:(kind: AnyPermanent, required_subtypes: [\"\"])))",
         )
         .unwrap();
         assert!(invalid.validate().is_err());

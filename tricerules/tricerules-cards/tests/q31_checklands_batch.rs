@@ -87,12 +87,12 @@ fn condition_subtypes(condition: &GameCondition) -> Option<Vec<String>> {
     );
     assert_eq!(*max, Some(0));
     assert_eq!(
-        filter.card_type,
-        Some(tricerules_cards::primitives::CardTypeFilter::Land)
+        filter.matching.permanent_types,
+        [tricerules_cards::primitives::PermanentTypeFilter::Land]
     );
     let mut out = Vec::new();
     for branch in filter.any_of.as_ref()? {
-        out.extend(branch.required_subtypes.iter().cloned());
+        out.extend(branch.matching.required_subtypes.iter().cloned());
     }
     Some(out)
 }

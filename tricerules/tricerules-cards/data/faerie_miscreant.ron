@@ -18,9 +18,8 @@
       intervening_if: Some(BattlefieldAggregate(
         filter: (
           controllers: Controller,
-          card_type: Some(Creature),
-          name: Some("Faerie Miscreant"),
           exclude_source: true,
+          matching: (kind: Creature, name: Some("Faerie Miscreant")),
         ),
         aggregate: Count,
         min: Some(1),

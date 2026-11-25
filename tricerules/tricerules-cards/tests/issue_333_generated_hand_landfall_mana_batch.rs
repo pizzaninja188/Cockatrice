@@ -26,19 +26,14 @@ const ISSUE_333_CARDS: &[(&str, &str)] = &[
 ];
 
 fn artifact_count_filter() -> BattlefieldPermanentFilter {
-    BattlefieldPermanentFilter {
-        required_supertypes: Vec::new(),
-        token: None,
-        any_of: None,
-        controllers: RelativePlayerSet::Controller,
-        card_type: Some(CardTypeFilter::Artifact),
-        color: None,
-        name: None,
-        required_subtypes: Vec::new(),
-        min_colors: None,
-        max_colors: None,
-        exclude_source: false,
-    }
+    BattlefieldPermanentFilter::matching(
+        RelativePlayerSet::Controller,
+        tricerules_cards::primitives::TargetFilter {
+            kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
+            permanent_types: vec![tricerules_cards::primitives::PermanentTypeFilter::Artifact],
+            ..Default::default()
+        },
+    )
 }
 
 fn any_one_color_options(per_color: u32) -> Vec<ManaAmount> {

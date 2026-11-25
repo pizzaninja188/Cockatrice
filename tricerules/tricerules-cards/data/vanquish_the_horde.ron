@@ -6,7 +6,7 @@
   types: ["Sorcery"],
   cost_modifiers: [BattlefieldCountGenericReduction(
     amount_per_match: 1,
-    filter: (controllers: All, card_type: Some(Creature)),
+    filter: (controllers: All, matching: (kind: Creature)),
   )],
   spell_effect: [DestroyAll()],
 )

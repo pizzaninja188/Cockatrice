@@ -25,9 +25,8 @@
         condition: BattlefieldAggregate(
           filter: (
             controllers: Controller,
-            name: None,
-            required_subtypes: ["Villain"],
             exclude_source: true,
+            matching: (kind: AnyPermanent, required_subtypes: ["Villain"]),
           ),
           aggregate: Count,
           min: Some(1),

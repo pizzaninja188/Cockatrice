@@ -148,8 +148,8 @@ fn engine_with_giant_count_cda() -> tricerules_core::GameEngine {
             definition: CountScaledPowerToughness(
                 count: BattlefieldCreatures(filter: (
                     controllers: Controller,
-                    subtype: Some("Giant"),
                     exclude_source: true,
+                    matching: (kind: Creature, required_subtypes: ["Giant"]),
                 )),
                 power_per_match: 1,
                 toughness_per_match: 1,

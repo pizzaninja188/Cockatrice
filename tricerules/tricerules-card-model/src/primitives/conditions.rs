@@ -444,6 +444,21 @@ impl GameCondition {
             }
     }
 
+    /// Whether a battlefield count in this condition reads keywords (layer 6) or power and
+    /// toughness (layer 7). Conditions driving continuous characteristic effects are evaluated
+    /// before those layers, so registry consumers reject this until CR 613.8 ordering exists.
+    pub(crate) fn reads_layered_battlefield_characteristics(&self) -> bool {
+        self.any_node_matches(|node| match node {
+            Self::BattlefieldAggregate { filter, .. } => {
+                filter.reads_keywords() || filter.reads_power_or_toughness()
+            }
+            Self::BattlefieldCreatureCount { filter, .. } => {
+                filter.reads_keywords() || filter.reads_power_or_toughness()
+            }
+            _ => false,
+        })
+    }
+
     pub(crate) fn validate_cast_snapshot_reference(&self, count: usize) -> Result<(), String> {
         match self {
             Self::CastSnapshot { index } if *index as usize >= count => {
@@ -761,68 +776,76 @@ pub enum PlayerQuantifier {
     All,
 }
 
-/// Public characteristics used to select battlefield permanents for a [`GameCondition`].
-/// All fields compose with logical AND. Controller, type, and power are derived values; `name`
-/// uses the effective copiable face name.
+/// Public battlefield permanents selected for a [`GameCondition`] or count. Not a target
+/// (CR 115): nothing is chosen and targeting legality never applies.
+///
+/// This wrapper owns only the relations to the consumer: `controllers` relative to the
+/// condition's controller, `exclude_source` ("another") and the outer `any_of` disjunction. Every
+/// descriptive predicate lives in the shared [`TargetFilter`] vocabulary in `matching`, evaluated
+/// by the same engine matcher as targets and creature scopes. `matching` must use kind
+/// `AnyPermanent` or `Creature` and may not carry target-relative controller, owner or object
+/// exclusions.
+///
+/// Example RON: `(controllers: Controller, exclude_source: true, matching: (kind: AnyPermanent,
+/// permanent_types: [Land], required_subtypes: ["Mountain"]))`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct BattlefieldPermanentFilter {
-    /// Every listed derived supertype must be present (Boseiju and Otawara).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub required_supertypes: Vec<String>,
-    /// Druid of the Spade and token-based sacrifice/activation cohorts use real token identity.
-    #[serde(default)]
-    pub token: Option<bool>,
-    /// Optional recursive disjunction. The leaf predicates on this node still apply to every
-    /// branch; a permanent that matches more than one branch is returned only once.
+    pub controllers: RelativePlayerSet,
+    /// Optional recursive disjunction. This node's `controllers`, `exclude_source` and `matching`
+    /// still apply to every branch; a permanent that matches more than one branch is returned
+    /// only once.
     #[serde(default)]
     pub any_of: Option<Vec<Self>>,
-    pub controllers: RelativePlayerSet,
-    #[serde(default)]
-    pub card_type: Option<CardTypeFilter>,
-    /// Derived color after copy and color-changing effects. Gearsmith Guardian uses `Blue`.
-    #[serde(default)]
-    pub color: Option<Color>,
-    /// Inclusive lower bound on the number of distinct derived colors (CR 105.2). Multicolored
-    /// (CR 105.2b, Infinite Guideline Station) is `Some(2)`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub min_colors: Option<u8>,
-    /// Inclusive upper bound on the number of distinct derived colors. "Exactly two colors"
-    /// (Niv-Mizzet, Guildpact) pairs `Some(2)` with `min_colors: Some(2)`; colorless is `Some(0)`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub max_colors: Option<u8>,
-    #[serde(default)]
-    pub name: Option<String>,
-    /// Every listed derived subtype must be present.
-    #[serde(default)]
-    pub required_subtypes: Vec<String>,
     /// "Another" excludes only the source object generation that created the condition.
     #[serde(default)]
     pub exclude_source: bool,
+    /// Shared descriptive predicate. Omitted means every permanent.
+    #[serde(
+        default = "battlefield_permanent_matching",
+        skip_serializing_if = "is_battlefield_permanent_matching"
+    )]
+    pub matching: Box<TargetFilter>,
+}
+
+fn battlefield_permanent_matching() -> Box<TargetFilter> {
+    Box::new(TargetFilter {
+        kind: TargetKind::AnyPermanent,
+        ..TargetFilter::default()
+    })
+}
+
+fn is_battlefield_permanent_matching(filter: &TargetFilter) -> bool {
+    *filter == *battlefield_permanent_matching()
 }
 
 impl BattlefieldPermanentFilter {
+    /// Every permanent the selected players control, with no other predicate.
+    pub fn controlled_by(controllers: RelativePlayerSet) -> Self {
+        Self {
+            controllers,
+            any_of: None,
+            exclude_source: false,
+            matching: battlefield_permanent_matching(),
+        }
+    }
+
+    /// The selected players' permanents matching `matching`.
+    pub fn matching(controllers: RelativePlayerSet, matching: TargetFilter) -> Self {
+        Self {
+            matching: Box::new(matching),
+            ..Self::controlled_by(controllers)
+        }
+    }
+
     pub(crate) fn validate(&self) -> Result<(), String> {
-        let mut seen = std::collections::BTreeSet::new();
-        for supertype in &self.required_supertypes {
-            if supertype.trim().is_empty() || !seen.insert(supertype) {
-                return Err(
-                    "battlefield permanent filter supertypes must be nonblank and unique".into(),
-                );
-            }
-        }
-        if self.min_colors == Some(0) {
-            return Err("battlefield permanent filter min_colors must be at least one".into());
-        }
-        if self.min_colors.is_some_and(|min| min > 5) || self.max_colors.is_some_and(|max| max > 5)
-        {
-            return Err("battlefield permanent filter color bounds cannot exceed five".into());
-        }
-        if let (Some(min), Some(max)) = (self.min_colors, self.max_colors) {
-            if min > max {
-                return Err(
-                    "battlefield permanent filter min_colors cannot exceed max_colors".into(),
-                );
-            }
+        self.matching.validate_characteristic_constraints()?;
+        if !self.matching.is_permanent_only() || !self.matching.leaves_relations_to_wrapper() {
+            return Err(
+                "battlefield permanent filter matching must use kind AnyPermanent or Creature and \
+                 leave controller, owner and object exclusions to the filter"
+                    .into(),
+            );
         }
         if let Some(branches) = &self.any_of {
             if branches.len() < 2 {
@@ -834,21 +857,25 @@ impl BattlefieldPermanentFilter {
                 branch.validate()?;
             }
         }
-        if self
-            .name
-            .as_ref()
-            .is_some_and(|name| name.trim().is_empty())
-        {
-            return Err("battlefield permanent filter name cannot be empty".into());
-        }
-        if self
-            .required_subtypes
-            .iter()
-            .any(|subtype| subtype.trim().is_empty())
-        {
-            return Err("battlefield permanent filter subtype cannot be empty".into());
-        }
         Ok(())
+    }
+
+    /// True when membership depends on current keywords (layer 6).
+    pub fn reads_keywords(&self) -> bool {
+        self.matching.reads_keywords()
+            || self
+                .any_of
+                .as_ref()
+                .is_some_and(|branches| branches.iter().any(Self::reads_keywords))
+    }
+
+    /// True when membership depends on current power or toughness (layer 7).
+    pub fn reads_power_or_toughness(&self) -> bool {
+        self.matching.reads_power_or_toughness()
+            || self
+                .any_of
+                .as_ref()
+                .is_some_and(|branches| branches.iter().any(Self::reads_power_or_toughness))
     }
 }
 
@@ -952,65 +979,73 @@ pub enum ConditionObjectRef {
     TargetAlias(String),
 }
 
-/// Which battlefield creatures contribute to a [`CountExpression`]. This is deliberately separate
-/// from [`CreatureScopeFilter`]: count predicates may inspect derived keywords, while a keyword-dependent
-/// continuous-effect scope would need CR 613 dependency ordering inside layer 6.
+/// Which battlefield creatures contribute to a [`CountExpression`] or creature-count condition.
+/// The wrapper owns `controllers` and `exclude_source`; every descriptive predicate lives in the
+/// shared [`TargetFilter`] vocabulary in `matching`, which must use `kind: Creature`.
+///
+/// Counts evaluated as an effect resolves or a condition is checked may read derived keywords
+/// (Winged Words) and power. A continuous effect may not depend on a same- or later-layer value:
+/// static count scaling and conditional layer-6/7 effects reject such filters at registry load
+/// until CR 613.8 dependency ordering exists.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct BattlefieldCreatureCountFilter {
     /// Whose controlled creatures are counted, relative to the resolving spell or ability.
     pub controllers: RelativePlayerSet,
-    /// If present, the creature must have this derived subtype.
-    #[serde(default)]
-    pub subtype: Option<String>,
-    /// Every listed keyword must be present in the creature's derived characteristics.
-    #[serde(default)]
-    pub required_keywords: Vec<Keyword>,
-    /// If present, the creature must have the matching current tapped status.
-    #[serde(default)]
-    pub tapped: Option<bool>,
-    /// If true, the creature must currently have at least one counter of any kind. This is a
-    /// live physical-object predicate used by mechanics such as Delta Bloodflies, rather than a
-    /// derived-characteristic inference from a specific counter vocabulary.
-    #[serde(default)]
-    pub requires_any_counter: bool,
-    /// If present, the creature must currently have at least one counter of this kind.
-    #[serde(default)]
-    pub required_counter: Option<CounterKind>,
     /// Exclude the resolving spell or ability's physical source object.
     #[serde(default)]
     pub exclude_source: bool,
+    /// Shared descriptive predicate. Omitted means every creature.
+    #[serde(
+        default = "battlefield_creature_matching",
+        skip_serializing_if = "is_battlefield_creature_matching"
+    )]
+    pub matching: Box<TargetFilter>,
+}
+
+fn battlefield_creature_matching() -> Box<TargetFilter> {
+    Box::new(TargetFilter::default_creature())
+}
+
+fn is_battlefield_creature_matching(filter: &TargetFilter) -> bool {
+    *filter == TargetFilter::default_creature()
 }
 
 impl Default for BattlefieldCreatureCountFilter {
     fn default() -> Self {
         Self {
             controllers: RelativePlayerSet::Controller,
-            subtype: None,
-            required_keywords: Vec::new(),
-            tapped: None,
-            requires_any_counter: false,
-            required_counter: None,
             exclude_source: false,
+            matching: battlefield_creature_matching(),
         }
     }
 }
 
 impl BattlefieldCreatureCountFilter {
     pub(crate) fn validate(&self) -> Result<(), String> {
-        if self
-            .subtype
-            .as_ref()
-            .is_some_and(|value| value.trim().is_empty())
+        self.matching.validate_characteristic_constraints()?;
+        if !self
+            .matching
+            .all_terminal_filters_match(|leaf| leaf.kind == TargetKind::Creature)
+            || !self.matching.leaves_relations_to_wrapper()
         {
-            return Err("battlefield creature count subtype cannot be empty".into());
-        }
-        if self.requires_any_counter && self.required_counter.is_some() {
             return Err(
-                "battlefield creature count filter cannot combine any-counter and specific-counter requirements"
+                "battlefield creature count matching must use kind: Creature and leave \
+                 controller, owner and object exclusions to the filter"
                     .into(),
             );
         }
         Ok(())
+    }
+
+    /// True when membership depends on current keywords (layer 6).
+    pub fn reads_keywords(&self) -> bool {
+        self.matching.reads_keywords()
+    }
+
+    /// True when membership depends on current power or toughness (layer 7).
+    pub fn reads_power_or_toughness(&self) -> bool {
+        self.matching.reads_power_or_toughness()
     }
 }
 
@@ -1051,17 +1086,15 @@ mod observed_object_aggregate_tests {
     fn count(exclude_observed_object: bool) -> GameCondition {
         GameCondition::BattlefieldAggregate {
             filter: BattlefieldPermanentFilter {
-                required_supertypes: Vec::new(),
-                token: None,
                 any_of: None,
                 controllers: RelativePlayerSet::Controller,
-                card_type: Some(CardTypeFilter::Land),
-                color: None,
-                name: None,
-                required_subtypes: vec!["Mountain".into()],
-                min_colors: None,
-                max_colors: None,
                 exclude_source: false,
+                matching: Box::new(crate::primitives::TargetFilter {
+                    kind: crate::primitives::TargetKind::AnyPermanent,
+                    permanent_types: vec![crate::primitives::PermanentTypeFilter::Land],
+                    required_subtypes: vec!["Mountain".into()],
+                    ..crate::primitives::TargetFilter::default()
+                }),
             },
             aggregate: BattlefieldAggregate::Count,
             min: Some(5),

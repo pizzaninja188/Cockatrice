@@ -19,7 +19,7 @@
       presentation: Fallback,
       costs: [Tap],
       conditions: [BattlefieldAggregate(
-        filter: (controllers: Controller, card_type: Some(Creature)),
+        filter: (controllers: Controller, matching: (kind: Creature)),
         aggregate: MaximumPower,
         min: Some(4),
       )],

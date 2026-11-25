@@ -4125,7 +4125,7 @@ fn issue_165_dynamic_consumers_accept_quantities() {
     for effect in [
         "Scry(count: Count(SourcePower))",
         "DamageAll(amount: Count(GraveyardCards(owners: Controller)))",
-        "CounterTargetSpell(unless_controller_pays: Some(Count(BattlefieldMaximum(filter: (controllers: Controller, card_type: Some(Creature)), characteristic: Power))))",
+        "CounterTargetSpell(unless_controller_pays: Some(Count(BattlefieldMaximum(filter: (controllers: Controller, matching: (kind: Creature)), characteristic: Power))))",
     ] {
         let effect: super::SpellEffectKind = ron::from_str(effect).expect("dynamic consumer");
         effect.validate(super::EffectContext::Ability).expect("valid dynamic consumer");
@@ -4185,16 +4185,16 @@ fn issue_229_cast_entry_condition_is_limited_to_self_entry_intervening_if() {
 #[test]
 fn issue_165_static_quantity_accepts_permanents_without_pt_recursion() {
     let card = r#"(id: "test", name: "Test", face_id: "test", types: ["Creature"], power: 1, toughness: 2,
-        static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: CountScaledSelfPt(count: BattlefieldPermanents(filter: (controllers: Controller, required_subtypes: ["Desert"])),
+        static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: CountScaledSelfPt(count: BattlefieldPermanents(filter: (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Desert"]))),
             power_per_match: 1, toughness_per_match: 1))])"#;
     assert!(crate::CardRegistry::from_chunks_and_tokens(&[card], &[]).is_ok());
 }
 #[test]
 fn issue_165_public_quantities_roundtrip() {
     for source in [
-        "Count(BattlefieldPermanents(filter: (controllers: Controller, required_subtypes: [\"Island\"])))",
+        "Count(BattlefieldPermanents(filter: (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: [\"Island\"]))))",
         "Count(GraveyardCards(owners: Controller, filter: Some((required_subtypes: [\"Cave\"]))))",
-        "Count(BattlefieldMaximum(filter: (controllers: Controller, card_type: Some(Creature)), characteristic: Toughness))",
+        "Count(BattlefieldMaximum(filter: (controllers: Controller, matching: (kind: Creature)), characteristic: Toughness))",
         "Count(SourcePower)",
         "Count(DeclaredAttackers(players: All))",
         "Count(Affine(constant: 2, terms: [(coefficient: 2, quantity: SourcePower)]))",
@@ -5563,12 +5563,8 @@ fn amount_serde_preserves_literals_x_and_named_conditionals() {
         Amount::Count(CountExpression::BattlefieldCreatures {
             filter: BattlefieldCreatureCountFilter {
                 controllers: RelativePlayerSet::Controller,
-                subtype: None,
-                required_keywords: vec![],
-                tapped: None,
-                requires_any_counter: false,
-                required_counter: None,
                 exclude_source: false,
+                ..Default::default()
             },
         }),
         Amount::Count(CountExpression::GraveyardCards {
@@ -5626,12 +5622,12 @@ fn counted_amounts_reject_empty_authored_filters() {
     assert!(Amount::Count(CountExpression::BattlefieldCreatures {
         filter: BattlefieldCreatureCountFilter {
             controllers: RelativePlayerSet::Controller,
-            subtype: Some(" ".into()),
-            required_keywords: vec![],
-            tapped: None,
-            requires_any_counter: false,
-            required_counter: None,
             exclude_source: false,
+            matching: Box::new(crate::primitives::TargetFilter {
+                kind: crate::primitives::TargetKind::Creature,
+                required_subtypes: vec![" ".into()],
+                ..crate::primitives::TargetFilter::default()
+            }),
         },
     })
     .validate()
@@ -6254,12 +6250,12 @@ fn activation_conditions_require_valid_count_bounds() {
     let condition = |min, max| GameCondition::BattlefieldCreatureCount {
         filter: BattlefieldCreatureCountFilter {
             controllers: RelativePlayerSet::Controller,
-            subtype: None,
-            required_keywords: vec![Keyword::Flying],
-            tapped: None,
-            requires_any_counter: false,
-            required_counter: None,
             exclude_source: false,
+            matching: Box::new(crate::primitives::TargetFilter {
+                kind: crate::primitives::TargetKind::Creature,
+                required_keywords: vec![Keyword::Flying],
+                ..crate::primitives::TargetFilter::default()
+            }),
         },
         min,
         max,
@@ -6274,12 +6270,12 @@ fn spell_cost_conditions_require_valid_counts_and_nonzero_reductions() {
     let condition = |min, max| GameCondition::BattlefieldCreatureCount {
         filter: BattlefieldCreatureCountFilter {
             controllers: RelativePlayerSet::Controller,
-            subtype: None,
-            required_keywords: vec![Keyword::Flying],
-            tapped: None,
-            requires_any_counter: false,
-            required_counter: None,
             exclude_source: false,
+            matching: Box::new(crate::primitives::TargetFilter {
+                kind: crate::primitives::TargetKind::Creature,
+                required_keywords: vec![Keyword::Flying],
+                ..crate::primitives::TargetFilter::default()
+            }),
         },
         min,
         max,
@@ -7326,11 +7322,11 @@ fn issue_433_battlefield_filter_color_count_bounds_parse_and_validate() {
     use crate::primitives::BattlefieldPermanentFilter;
 
     let multicolored = ron::from_str::<BattlefieldPermanentFilter>(
-        "(controllers: Controller, min_colors: Some(2))",
+        "(controllers: Controller, matching: (kind: AnyPermanent, min_colors: Some(2)))",
     )
     .unwrap();
-    assert_eq!(multicolored.min_colors, Some(2));
-    assert_eq!(multicolored.max_colors, None);
+    assert_eq!(multicolored.matching.min_colors, Some(2));
+    assert_eq!(multicolored.matching.max_colors, None);
     assert_eq!(multicolored.validate(), Ok(()));
     let serialized = ron::to_string(&multicolored).unwrap();
     assert!(serialized.contains("min_colors"));
@@ -7338,24 +7334,24 @@ fn issue_433_battlefield_filter_color_count_bounds_parse_and_validate() {
 
     for valid in [
         // Niv-Mizzet, Guildpact: exactly two colors.
-        "(controllers: Controller, min_colors: Some(2), max_colors: Some(2))",
+        "(controllers: Controller, matching: (kind: AnyPermanent, min_colors: Some(2), max_colors: Some(2)))",
         // Colorless.
-        "(controllers: Controller, max_colors: Some(0))",
-        "(controllers: Controller, color: Some(Red), min_colors: Some(2))",
+        "(controllers: Controller, matching: (kind: AnyPermanent, max_colors: Some(0)))",
+        "(controllers: Controller, matching: (kind: AnyPermanent, is_color: Some(Red), min_colors: Some(2)))",
     ] {
         let parsed = ron::from_str::<BattlefieldPermanentFilter>(valid).unwrap();
         assert_eq!(parsed.validate(), Ok(()), "{valid}");
     }
     for (invalid, reason) in [
-        ("(controllers: Controller, min_colors: Some(0))", "at least one"),
-        ("(controllers: Controller, min_colors: Some(6))", "cannot exceed five"),
-        ("(controllers: Controller, max_colors: Some(6))", "cannot exceed five"),
+        ("(controllers: Controller, matching: (kind: AnyPermanent, min_colors: Some(0)))", "at least one"),
+        ("(controllers: Controller, matching: (kind: AnyPermanent, min_colors: Some(6)))", "cannot exceed five"),
+        ("(controllers: Controller, matching: (kind: AnyPermanent, max_colors: Some(6)))", "cannot exceed five"),
         (
-            "(controllers: Controller, min_colors: Some(3), max_colors: Some(2))",
+            "(controllers: Controller, matching: (kind: AnyPermanent, min_colors: Some(3), max_colors: Some(2)))",
             "min_colors cannot exceed max_colors",
         ),
         (
-            "(controllers: Controller, any_of: Some([(controllers: Controller, min_colors: Some(0)), (controllers: Controller)]))",
+            "(controllers: Controller, any_of: Some([(controllers: Controller, matching: (kind: AnyPermanent, min_colors: Some(0))), (controllers: Controller)]))",
             "at least one",
         ),
     ] {
@@ -7363,6 +7359,80 @@ fn issue_433_battlefield_filter_color_count_bounds_parse_and_validate() {
         let error = parsed.validate().expect_err(invalid);
         assert!(error.contains(reason), "{invalid}: {error}");
     }
+}
+
+#[test]
+fn issue_534_battlefield_filters_describe_objects_with_the_shared_predicate() {
+    use crate::primitives::{BattlefieldCreatureCountFilter, BattlefieldPermanentFilter};
+
+    // Retired flat predicates fail loudly instead of silently widening the filter.
+    for retired in [
+        "(controllers: Controller, card_type: Some(Land))",
+        "(controllers: Controller, color: Some(Blue))",
+        "(controllers: Controller, required_subtypes: [\"Mountain\"])",
+    ] {
+        assert!(
+            ron::from_str::<BattlefieldPermanentFilter>(retired).is_err(),
+            "{retired}"
+        );
+    }
+    for retired in [
+        "(controllers: Controller, subtype: Some(\"Elf\"))",
+        "(controllers: Controller, required_keywords: [Flying])",
+        "(controllers: Controller, tapped: Some(true))",
+    ] {
+        assert!(
+            ron::from_str::<BattlefieldCreatureCountFilter>(retired).is_err(),
+            "{retired}"
+        );
+    }
+
+    // Omitted `matching` is every permanent / every creature and is not serialized back.
+    let lands = ron::from_str::<BattlefieldPermanentFilter>("(controllers: Controller)").unwrap();
+    assert_eq!(lands.matching.kind, TargetKind::AnyPermanent);
+    assert!(!ron::to_string(&lands).unwrap().contains("matching"));
+    let creatures =
+        ron::from_str::<BattlefieldCreatureCountFilter>("(controllers: Opponents)").unwrap();
+    assert_eq!(*creatures.matching, TargetFilter::default_creature());
+    assert!(!ron::to_string(&creatures).unwrap().contains("matching"));
+
+    // Predicates that were unreachable before now come from the shared vocabulary.
+    for valid in [
+        "(controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Land], excluded_subtypes: [\"Forest\"]))",
+        "(controllers: All, matching: (kind: Creature, power: Some(AtLeast(4))))",
+        "(controllers: Controller, matching: (any_of: Some([(kind: Creature), (kind: AnyPermanent, permanent_types: [Artifact])])))",
+    ] {
+        let parsed = ron::from_str::<BattlefieldPermanentFilter>(valid).unwrap();
+        assert_eq!(parsed.validate(), Ok(()), "{valid}");
+    }
+
+    // The wrapper owns the relations; the predicate may not restate them.
+    for invalid in [
+        "(controllers: Controller, matching: (kind: AnyTarget))",
+        "(controllers: Controller, matching: (kind: AnyPlayer))",
+        "(controllers: Controller, matching: (kind: AnyPermanent, controller: You))",
+        "(controllers: Controller, matching: (kind: AnyPermanent, owner: You))",
+        "(controllers: Controller, matching: (kind: AnyPermanent, excluded_objects: [Source]))",
+    ] {
+        let parsed = ron::from_str::<BattlefieldPermanentFilter>(invalid).unwrap();
+        assert!(parsed.validate().is_err(), "{invalid}");
+    }
+    for invalid in [
+        "(controllers: Controller, matching: (kind: AnyPermanent))",
+        "(controllers: Controller, matching: (kind: Creature, controller: Opponent))",
+        "(controllers: Controller, matching: (kind: Creature, requires_any_counter: true, required_counter: Some(PlusOnePlusOne)))",
+    ] {
+        let parsed = ron::from_str::<BattlefieldCreatureCountFilter>(invalid).unwrap();
+        assert!(parsed.validate().is_err(), "{invalid}");
+    }
+
+    // Layer reads recurse through the outer disjunction.
+    let nested = ron::from_str::<BattlefieldPermanentFilter>(
+        "(controllers: Controller, any_of: Some([(controllers: Controller), (controllers: Opponents, matching: (kind: Creature, required_keywords: [Flying]))]))",
+    )
+    .unwrap();
+    assert!(nested.reads_keywords());
+    assert!(!nested.reads_power_or_toughness());
 }
 
 #[test]
@@ -7703,7 +7773,7 @@ fn boseiju_counted_activation_reduction_validates_cost_time_predicates() {
         ))
         .expect("counted activation reduction must be expressible")
     };
-    modifier("Count(BattlefieldPermanents(filter: (controllers: Controller, card_type: Some(Creature), required_supertypes: [\"Legendary\"])))")
+    modifier("Count(BattlefieldPermanents(filter: (controllers: Controller, matching: (kind: Creature, required_supertypes: [\"Legendary\"]))))")
         .validate()
         .expect("Boseiju and Otawara count derived legendary creatures");
     for invalid in [
@@ -7712,8 +7782,8 @@ fn boseiju_counted_activation_reduction_validates_cost_time_predicates() {
         "EventCount",
         "Count(SourcePower)",
         "Count(CardsMatchingResult(filter: (source: PreviousEffect, action: Discard, players: Controller)))",
-        "Count(BattlefieldPermanents(filter: (controllers: Controller, required_supertypes: [\"\"])))",
-        "Count(BattlefieldPermanents(filter: (controllers: Controller, required_supertypes: [\"Legendary\", \"Legendary\"])))",
+        "Count(BattlefieldPermanents(filter: (controllers: Controller, matching: (kind: AnyPermanent, required_supertypes: [\"\"]))))",
+        "Count(BattlefieldPermanents(filter: (controllers: Controller, matching: (kind: AnyPermanent, required_supertypes: [\"Legendary\", \"Legendary\"]))))",
     ] {
         assert!(modifier(invalid).validate().is_err(), "accepted {invalid}");
     }
@@ -8805,8 +8875,8 @@ fn resultless_conditional_top_search_program() -> String {
                             selection_constraint: None, slots: [],
                             zones: Fixed([Library]), destination: TopOfLibrary,
                             conditional_destination: Some((condition: BattlefieldAggregate(
-                                filter: (controllers: Controller, card_type: None,
-                                    required_subtypes: ["Dragon"], exclude_source: false),
+                                filter: (controllers: Controller, exclude_source: false,
+                                    matching: (kind: AnyPermanent, required_subtypes: ["Dragon"])),
                                 aggregate: Count, min: Some(1), max: None,
                                 exclude_observed_object: false,
                             ), destination: Battlefield(tapped: true))),
@@ -8933,7 +9003,7 @@ fn program_scry_rejects_dynamic_counts_captured_inputs_and_output_bindings() {
     let definition = |body: &str| program_fixture(body);
     let dynamic_count = definition(
         r#"(steps: [(id: "scry", bind: [], input: None, kind: Perform(Scry(count: Count(
-            BattlefieldPermanents(filter: (controllers: Controller, required_subtypes: ["Island"]))
+            BattlefieldPermanents(filter: (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Island"])))
         ))))], yields: [])"#,
     );
     let captured_input = definition(
@@ -9068,7 +9138,7 @@ fn program_reusable_operation_contract() {
                 AnyOf([
                     CardsInHand(players: Relative(Controller), min: Some(1)),
                     BattlefieldAggregate(
-                        filter: (controllers: Controller, card_type: Some(Creature)),
+                        filter: (controllers: Controller, matching: (kind: Creature)),
                         aggregate: Count, min: Some(1), max: None,
                         exclude_observed_object: false,
                     ),
@@ -9283,17 +9353,14 @@ fn authored_choose_accepts_the_closed_resultless_conditional_top_search() {
             && filter.validate().is_ok()
             && conditional.condition == crate::primitives::GameCondition::BattlefieldAggregate {
                 filter: crate::primitives::BattlefieldPermanentFilter {
-                    required_supertypes: Vec::new(),
-                    token: None,
                     any_of: None,
                     controllers: crate::primitives::RelativePlayerSet::Controller,
-                    card_type: None,
-                    color: None,
-                    name: None,
-                    required_subtypes: vec!["Dragon".into()],
-                    min_colors: None,
-                    max_colors: None,
                     exclude_source: false,
+                    matching: Box::new(crate::primitives::TargetFilter {
+                        kind: crate::primitives::TargetKind::AnyPermanent,
+                        required_subtypes: vec!["Dragon".into()],
+                        ..crate::primitives::TargetFilter::default()
+                    }),
                 },
                 aggregate: crate::primitives::BattlefieldAggregate::Count,
                 min: Some(1),
@@ -9328,8 +9395,8 @@ fn authored_choose_accepts_the_closed_resultless_conditional_top_search() {
         (
             "the predicate excludes unresolved target groups",
             definition.replace(
-                "controllers: Controller, card_type: None",
-                "controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer), card_type: None",
+                "filter: (controllers: Controller, exclude_source: false,",
+                "filter: (controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer), exclude_source: false,",
             ),
         ),
         (
@@ -9367,7 +9434,7 @@ fn authored_choose_accepts_the_closed_resultless_conditional_top_search() {
 fn conditional_top_search_rejects_void_as_its_predicate() {
     let definition = resultless_conditional_top_search_program();
     let void_condition = definition.replace(
-        "condition: BattlefieldAggregate(\n                                filter: (controllers: Controller, card_type: None,\n                                    required_subtypes: [\"Dragon\"], exclude_source: false),\n                                aggregate: Count, min: Some(1), max: None,\n                                exclude_observed_object: false,\n                            ), destination:",
+        "condition: BattlefieldAggregate(\n                                filter: (controllers: Controller, exclude_source: false,\n                                    matching: (kind: AnyPermanent, required_subtypes: [\"Dragon\"])),\n                                aggregate: Count, min: Some(1), max: None,\n                                exclude_observed_object: false,\n                            ), destination:",
         "condition: Void, destination:",
     );
     assert_ne!(
@@ -9385,8 +9452,8 @@ fn conditional_top_search_rejects_void_as_its_predicate() {
 fn conditional_top_search_accepts_shared_battlefield_creature_count_conditions() {
     let definition = resultless_conditional_top_search_program();
     let condition = definition.replace(
-        "condition: BattlefieldAggregate(\n                                filter: (controllers: Controller, card_type: None,\n                                    required_subtypes: [\"Dragon\"], exclude_source: false),\n                                aggregate: Count, min: Some(1), max: None,\n                                exclude_observed_object: false,\n                            ), destination:",
-        "condition: BattlefieldCreatureCount(filter: (controllers: Opponents, requires_any_counter: true), min: Some(1), max: None), destination:",
+        "condition: BattlefieldAggregate(\n                                filter: (controllers: Controller, exclude_source: false,\n                                    matching: (kind: AnyPermanent, required_subtypes: [\"Dragon\"])),\n                                aggregate: Count, min: Some(1), max: None,\n                                exclude_observed_object: false,\n                            ), destination:",
+        "condition: BattlefieldCreatureCount(filter: (controllers: Opponents, matching: (kind: Creature, requires_any_counter: true)), min: Some(1), max: None), destination:",
     );
     assert_ne!(
         condition, definition,
@@ -9753,7 +9820,7 @@ fn direct_battlefield_basic_land_search_result_flows_through_dominating_nested_s
         (id: "intervening", bind: [], input: None, kind: Perform(Scry(count: 1))),
         (id: "threshold", bind: [], input: None, kind: If(
             condition: BattlefieldAggregate(
-                filter: (controllers: Controller, card_type: Some(Land)),
+                filter: (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Land])),
                 aggregate: Count, min: Some(4),
             ),
             yes: (steps: [
@@ -10763,7 +10830,7 @@ fn program_if_accepts_supported_battlefield_aggregate_conditions() {
         (
             "Controller Count with a subtype filter",
             r#"BattlefieldAggregate(
-                filter: (controllers: Controller, required_subtypes: ["Hero"]),
+                filter: (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Hero"])),
                 aggregate: Count, min: Some(1), max: None,
                 exclude_observed_object: false,
             )"#,
@@ -10771,10 +10838,13 @@ fn program_if_accepts_supported_battlefield_aggregate_conditions() {
         (
             "All cohort and mixed-player recursive Count filters",
             r#"BattlefieldAggregate(
-                filter: (controllers: All, any_of: Some([
-                    (controllers: Opponents, card_type: Some(Land)),
-                    (controllers: All, required_subtypes: ["Treefolk"]),
-                ])),
+                filter: (
+                    controllers: All,
+                    any_of: Some([
+                    (controllers: Opponents, matching: (kind: AnyPermanent, permanent_types: [Land])),
+                    (controllers: All, matching: (kind: AnyPermanent, required_subtypes: ["Treefolk"])),
+                ]),
+                ),
                 aggregate: Count, min: None, max: Some(7),
                 exclude_observed_object: false,
             )"#,
@@ -10782,11 +10852,15 @@ fn program_if_accepts_supported_battlefield_aggregate_conditions() {
         (
             "TotalPower with an Opponents cohort, source exclusion, recursive filter, and max only",
             r#"BattlefieldAggregate(
-                filter: (controllers: Opponents, card_type: Some(Creature),
+                filter: (
+                    controllers: Opponents,
                     any_of: Some([
-                        (controllers: All, required_subtypes: ["Elf"]),
-                        (controllers: Opponents, color: Some(Green)),
-                    ]), exclude_source: true),
+                        (controllers: All, matching: (kind: AnyPermanent, required_subtypes: ["Elf"])),
+                        (controllers: Opponents, matching: (kind: AnyPermanent, is_color: Some(Green))),
+                    ]),
+                    exclude_source: true,
+                    matching: (kind: Creature),
+                    ),
                 aggregate: TotalPower, min: None, max: Some(0),
                 exclude_observed_object: false,
             )"#,
@@ -10794,8 +10868,10 @@ fn program_if_accepts_supported_battlefield_aggregate_conditions() {
         (
             "TotalPower with a zero minimum and an inclusive upper bound",
             r#"BattlefieldAggregate(
-                filter: (controllers: Controller, card_type: Some(Creature),
-                    required_subtypes: ["Elf"], token: Some(false)),
+                filter: (
+                    controllers: Controller,
+                    matching: (kind: Creature, required_subtypes: ["Elf"], token: Some(false)),
+                    ),
                 aggregate: TotalPower, min: Some(0), max: Some(10),
                 exclude_observed_object: false,
             )"#,
@@ -10803,13 +10879,15 @@ fn program_if_accepts_supported_battlefield_aggregate_conditions() {
         (
             "MaximumPower with a positive minimum, optional maximum, and full filter",
             r#"BattlefieldAggregate(
-                filter: (controllers: All, card_type: Some(Creature),
-                    token: Some(true), color: Some(Green), name: Some("test creature"),
-                    required_subtypes: ["Elf"], exclude_source: true,
+                filter: (
+                    controllers: All,
+                    exclude_source: true,
                     any_of: Some([
-                        (controllers: Opponents, card_type: Some(Creature)),
-                        (controllers: All, required_supertypes: ["Legendary"]),
-                    ])),
+                        (controllers: Opponents, matching: (kind: Creature)),
+                        (controllers: All, matching: (kind: AnyPermanent, required_supertypes: ["Legendary"])),
+                    ]),
+                    matching: (kind: Creature, is_color: Some(Green), required_subtypes: ["Elf"], name: Some("test creature"), token: Some(true)),
+                    ),
                 aggregate: MaximumPower, min: Some(1), max: Some(5),
                 exclude_observed_object: false,
             )"#,
@@ -10819,10 +10897,13 @@ fn program_if_accepts_supported_battlefield_aggregate_conditions() {
             r#"AllOf([
                 ControllerLibraryEmpty,
                 BattlefieldAggregate(
-                    filter: (controllers: Controller, any_of: Some([
-                        (controllers: Controller, card_type: Some(Land)),
-                        (controllers: Controller, required_subtypes: ["Treefolk"]),
-                    ])),
+                    filter: (
+                        controllers: Controller,
+                        any_of: Some([
+                        (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Land])),
+                        (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Treefolk"])),
+                    ]),
+                    ),
                     aggregate: Count, min: Some(7), max: None,
                     exclude_observed_object: false,
                 ),
@@ -10863,14 +10944,14 @@ fn program_if_accepts_battlefield_creature_count_for_spell_and_ability_programs(
         (
             "Controller creatures carrying any counter",
             r#"BattlefieldCreatureCount(
-                filter: (controllers: Controller, requires_any_counter: true),
+                filter: (controllers: Controller, matching: (kind: Creature, requires_any_counter: true)),
                 min: Some(1), max: None,
             )"#,
         ),
         (
             "All players' filtered creatures with a maximum only",
             r#"BattlefieldCreatureCount(
-                filter: (controllers: All, subtype: Some("Elf"), tapped: Some(false)),
+                filter: (controllers: All, matching: (kind: Creature, required_subtypes: ["Elf"], tapped: Some(false))),
                 min: None, max: Some(8),
             )"#,
         ),
@@ -10879,8 +10960,11 @@ fn program_if_accepts_battlefield_creature_count_for_spell_and_ability_programs(
             r#"AllOf([
                 ControllerLibraryEmpty,
                 BattlefieldCreatureCount(
-                    filter: (controllers: Opponents, required_keywords: [Flying],
-                        required_counter: Some(PlusOnePlusOne), exclude_source: true),
+                    filter: (
+                        controllers: Opponents,
+                        exclude_source: true,
+                        matching: (kind: Creature, required_keywords: [Flying], required_counter: Some(PlusOnePlusOne)),
+                        ),
                     min: Some(2), max: Some(4),
                 ),
             ])"#,
@@ -11126,7 +11210,7 @@ fn program_if_rejects_unsupported_battlefield_condition_contexts() {
         (
             "TargetedPlayer at the root",
             r#"BattlefieldAggregate(
-                filter: (controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer), required_subtypes: ["Hero"]),
+                filter: (controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer), matching: (kind: AnyPermanent, required_subtypes: ["Hero"])),
                 aggregate: Count, min: Some(1), exclude_observed_object: false,
             )"#,
             "TargetedPlayer",
@@ -11134,10 +11218,13 @@ fn program_if_rejects_unsupported_battlefield_condition_contexts() {
         (
             "TargetedPlayer inside any_of",
             r#"BattlefieldAggregate(
-                filter: (controllers: Controller, any_of: Some([
-                    (controllers: Controller, card_type: Some(Land)),
-                    (controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer), required_subtypes: ["Treefolk"]),
-                ])),
+                filter: (
+                    controllers: Controller,
+                    any_of: Some([
+                    (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Land])),
+                    (controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer), matching: (kind: AnyPermanent, required_subtypes: ["Treefolk"])),
+                ]),
+                ),
                 aggregate: Count, min: Some(1), exclude_observed_object: false,
             )"#,
             "TargetedPlayer",
@@ -11191,9 +11278,12 @@ fn program_if_rejects_unsupported_battlefield_condition_contexts() {
         (
             "malformed filter union",
             r#"BattlefieldAggregate(
-                filter: (controllers: Controller, any_of: Some([
-                    (controllers: Controller, card_type: Some(Land)),
-                ])),
+                filter: (
+                    controllers: Controller,
+                    any_of: Some([
+                    (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Land])),
+                ]),
+                ),
                 aggregate: Count, min: Some(1), exclude_observed_object: false,
             )"#,
             "battlefield permanent filter any_of requires at least two branches",
@@ -11221,7 +11311,7 @@ fn program_if_rejects_unsupported_battlefield_condition_contexts() {
 fn program_if_accepts_controller_creature_maximum_power_conditions() {
     let body = r#"(steps: [(id: "qualifying_creature", kind: If(
         condition: BattlefieldAggregate(
-            filter: (controllers: Controller, card_type: Some(Creature)),
+            filter: (controllers: Controller, matching: (kind: Creature)),
             aggregate: MaximumPower, min: Some(4), max: None,
             exclude_observed_object: false,
         ),
@@ -11240,17 +11330,13 @@ fn program_if_accepts_controller_creature_maximum_power_conditions() {
     let expected = crate::primitives::CompiledProgramCondition::Game(
         crate::primitives::GameCondition::BattlefieldAggregate {
             filter: crate::primitives::BattlefieldPermanentFilter {
-                required_supertypes: Vec::new(),
-                token: None,
                 any_of: None,
                 controllers: crate::primitives::RelativePlayerSet::Controller,
-                card_type: Some(crate::primitives::CardTypeFilter::Creature),
-                color: None,
-                name: None,
-                required_subtypes: Vec::new(),
-                min_colors: None,
-                max_colors: None,
                 exclude_source: false,
+                matching: Box::new(crate::primitives::TargetFilter {
+                    kind: crate::primitives::TargetKind::Creature,
+                    ..crate::primitives::TargetFilter::default()
+                }),
             },
             aggregate: crate::primitives::BattlefieldAggregate::MaximumPower,
             min: Some(4),
@@ -11269,7 +11355,7 @@ fn program_choose_accepts_exact_controller_creature_total_power_ten_condition() 
     };
 
     let condition = r#"BattlefieldAggregate(
-        filter: (controllers: Controller, card_type: Some(Creature)),
+        filter: (controllers: Controller, matching: (kind: Creature)),
         aggregate: TotalPower, min: Some(10), max: None,
         exclude_observed_object: false,
     )"#;
@@ -11304,13 +11390,13 @@ fn program_choose_accepts_exact_controller_creature_total_power_ten_condition() 
             max: None,
             exclude_observed_object: false,
         }) if filter.controllers == RelativePlayerSet::Controller
-            && filter.card_type == Some(crate::primitives::CardTypeFilter::Creature)
-            && filter.required_supertypes.is_empty()
-            && filter.token.is_none()
+            && filter.matching.kind == crate::primitives::TargetKind::Creature
+            && filter.matching.required_supertypes.is_empty()
+            && filter.matching.token.is_none()
             && filter.any_of.is_none()
-            && filter.color.is_none()
-            && filter.name.is_none()
-            && filter.required_subtypes.is_empty()
+            && filter.matching.is_color.is_none()
+            && filter.matching.name.is_none()
+            && filter.matching.required_subtypes.is_empty()
             && !filter.exclude_source
     ));
 }
@@ -11334,7 +11420,7 @@ fn program_choose_accepts_controller_creature_total_power_thresholds() {
     for minimum in [0, 9, u32::MAX] {
         let condition = format!(
             "BattlefieldAggregate(\
-                filter: (controllers: Controller, card_type: Some(Creature)),\
+                filter: (controllers: Controller, matching: (kind: Creature)),\
                 aggregate: TotalPower, min: Some({minimum}), max: None,\
                 exclude_observed_object: false,\
             )"
@@ -11376,7 +11462,7 @@ fn program_choose_accepts_trade_route_envoy_live_countered_creature_branch() {
     };
 
     let condition = r#"BattlefieldCreatureCount(
-        filter: (controllers: Controller, requires_any_counter: true, exclude_source: false),
+        filter: (controllers: Controller, exclude_source: false, matching: (kind: Creature, requires_any_counter: true)),
         min: Some(1), max: None,
     )"#;
     let body = trade_route_envoy_counter_choose_body(condition);
@@ -11410,11 +11496,11 @@ fn program_choose_accepts_trade_route_envoy_live_countered_creature_branch() {
                 max: None,
             }
         ) if filter.controllers == RelativePlayerSet::Controller
-            && filter.subtype.is_none()
-            && filter.required_keywords.is_empty()
-            && filter.tapped.is_none()
-            && filter.requires_any_counter
-            && filter.required_counter.is_none()
+            && filter.matching.required_subtypes.is_empty()
+            && filter.matching.required_keywords.is_empty()
+            && filter.matching.tapped.is_none()
+            && filter.matching.requires_any_counter
+            && filter.matching.required_counter.is_none()
             && !filter.exclude_source
     ));
     assert_eq!(branch.body.steps.len(), 1, "the branch draws one card");
@@ -11447,12 +11533,8 @@ fn program_choose_accepts_valid_battlefield_creature_count_profiles() {
             r#"BattlefieldCreatureCount(
                 filter: (
                     controllers: Opponents,
-                    subtype: Some("Elf"),
-                    required_keywords: [Flying],
-                    tapped: Some(false),
-                    requires_any_counter: false,
-                    required_counter: Some(PlusOnePlusOne),
                     exclude_source: true,
+                    matching: (kind: Creature, required_subtypes: ["Elf"], required_keywords: [Flying], tapped: Some(false), required_counter: Some(PlusOnePlusOne)),
                 ),
                 min: Some(2), max: Some(4),
             )"#,
@@ -11460,14 +11542,14 @@ fn program_choose_accepts_valid_battlefield_creature_count_profiles() {
         (
             "All players and an any-counter cohort with a maximum only",
             r#"BattlefieldCreatureCount(
-                filter: (controllers: All, requires_any_counter: true),
+                filter: (controllers: All, matching: (kind: Creature, requires_any_counter: true)),
                 min: None, max: Some(3),
             )"#,
         ),
         (
             "zero lower bound",
             r#"BattlefieldCreatureCount(
-                filter: (controllers: Controller, subtype: Some("Elf")),
+                filter: (controllers: Controller, matching: (kind: Creature, required_subtypes: ["Elf"])),
                 min: Some(0), max: None,
             )"#,
         ),
@@ -11533,7 +11615,7 @@ fn program_choose_rejects_targeted_or_malformed_battlefield_creature_count_condi
 #[test]
 fn program_if_accepts_trade_route_envoy_counter_condition() {
     let condition = r#"BattlefieldCreatureCount(
-        filter: (controllers: Controller, requires_any_counter: true, exclude_source: false),
+        filter: (controllers: Controller, exclude_source: false, matching: (kind: Creature, requires_any_counter: true)),
         min: Some(1), max: None,
     )"#;
     let body = format!(
@@ -11550,7 +11632,7 @@ fn program_if_accepts_trade_route_envoy_counter_condition() {
 #[test]
 fn program_choose_rejects_invalid_or_context_dependent_total_power_conditions() {
     let base = r#"BattlefieldAggregate(
-        filter: (controllers: Controller, card_type: Some(Creature)),
+        filter: (controllers: Controller, matching: (kind: Creature)),
         aggregate: TotalPower, min: Some(10), max: None,
         exclude_observed_object: false,
     )"#;
@@ -11573,17 +11655,17 @@ fn program_choose_rejects_invalid_or_context_dependent_total_power_conditions() 
         (
             "TargetedPlayer in the aggregate filter",
             base.replace(
-                "controllers: Controller, card_type: Some(Creature)",
-                "controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer), card_type: Some(Creature)",
+                "controllers: Controller, matching: (kind: Creature)",
+                "controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer), matching: (kind: Creature)",
             ),
         ),
         (
             "TargetedPlayer nested in any_of",
             base.replace(
-                "filter: (controllers: Controller, card_type: Some(Creature))",
+                "filter: (controllers: Controller, matching: (kind: Creature))",
                 "filter: (controllers: Controller, any_of: Some([\
-                    (controllers: Opponents, card_type: Some(Creature)),\
-                    (controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer), required_subtypes: [\"Elf\"]),\
+                    (controllers: Opponents, matching: (kind: Creature)),\
+                    (controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer), matching: (kind: AnyPermanent, required_subtypes: [\"Elf\"])),\
                 ]))",
             ),
         ),
@@ -11602,7 +11684,7 @@ const MOSSWORT_LINKED_PLAY_BODY: &str = r#"(steps: [(id: "choose_linked_play", k
     choice: "choose_linked_play", chooser: Controller, optional: true,
     branches: [(branch_id: "play_linked_card", presentation: Fallback, cost: None,
         requirement: GameCondition(BattlefieldAggregate(
-            filter: (controllers: Controller, card_type: Some(Creature)),
+            filter: (controllers: Controller, matching: (kind: Creature)),
             aggregate: TotalPower, min: Some(10), max: None,
             exclude_observed_object: false,
         )),
@@ -11823,17 +11905,21 @@ fn program_if_rejects_unsupported_maximum_power_shapes() {
         (
             "TargetedPlayer cohort",
             r#"BattlefieldAggregate(
-                filter: (controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer), card_type: Some(Creature)), aggregate: MaximumPower,
+                filter: (controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer), matching: (kind: Creature)), aggregate: MaximumPower,
                 min: Some(4), max: None, exclude_observed_object: false,
             )"#,
         ),
         (
             "TargetedPlayer nested in any_of",
             r#"BattlefieldAggregate(
-                filter: (controllers: All, card_type: Some(Creature), any_of: Some([
-                    (controllers: Opponents, card_type: Some(Creature)),
-                    (controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer), required_subtypes: ["Dinosaur"]),
-                ])),
+                filter: (
+                    controllers: All,
+                    any_of: Some([
+                    (controllers: Opponents, matching: (kind: Creature)),
+                    (controllers: TargetedPlayer(group_index: 0, kind: AnyPlayer), matching: (kind: AnyPermanent, required_subtypes: ["Dinosaur"])),
+                ]),
+                    matching: (kind: Creature),
+                ),
                 aggregate: MaximumPower, min: Some(4), max: None,
                 exclude_observed_object: false,
             )"#,
@@ -11841,7 +11927,7 @@ fn program_if_rejects_unsupported_maximum_power_shapes() {
         (
             "observed-object exclusion",
             r#"BattlefieldAggregate(
-                filter: (controllers: Controller, card_type: Some(Creature)),
+                filter: (controllers: Controller, matching: (kind: Creature)),
                 aggregate: MaximumPower, min: Some(4), max: None,
                 exclude_observed_object: true,
             )"#,
@@ -11849,7 +11935,7 @@ fn program_if_rejects_unsupported_maximum_power_shapes() {
         (
             "zero threshold",
             r#"BattlefieldAggregate(
-                filter: (controllers: Controller, card_type: Some(Creature)),
+                filter: (controllers: Controller, matching: (kind: Creature)),
                 aggregate: MaximumPower, min: Some(0), max: None,
                 exclude_observed_object: false,
             )"#,
@@ -11857,7 +11943,7 @@ fn program_if_rejects_unsupported_maximum_power_shapes() {
         (
             "maximum-only threshold",
             r#"BattlefieldAggregate(
-                filter: (controllers: Controller, card_type: Some(Creature)),
+                filter: (controllers: Controller, matching: (kind: Creature)),
                 aggregate: MaximumPower, min: None, max: Some(5),
                 exclude_observed_object: false,
             )"#,
@@ -11865,7 +11951,7 @@ fn program_if_rejects_unsupported_maximum_power_shapes() {
         (
             "inverted bounds",
             r#"BattlefieldAggregate(
-                filter: (controllers: Controller, card_type: Some(Creature)),
+                filter: (controllers: Controller, matching: (kind: Creature)),
                 aggregate: MaximumPower, min: Some(5), max: Some(4),
                 exclude_observed_object: false,
             )"#,
@@ -11873,9 +11959,13 @@ fn program_if_rejects_unsupported_maximum_power_shapes() {
         (
             "malformed filter",
             r#"BattlefieldAggregate(
-                filter: (controllers: Controller, card_type: Some(Creature), any_of: Some([
-                    (controllers: Controller, card_type: Some(Creature)),
-                ])),
+                filter: (
+                    controllers: Controller,
+                    any_of: Some([
+                    (controllers: Controller, matching: (kind: Creature)),
+                ]),
+                    matching: (kind: Creature),
+                ),
                 aggregate: MaximumPower, min: Some(4), max: None,
                 exclude_observed_object: false,
             )"#,

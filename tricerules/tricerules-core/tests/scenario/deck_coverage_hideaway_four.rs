@@ -335,13 +335,13 @@ fn mosswort_bridge_and_smugglers_buggy_register_their_exact_rules_shapes() {
             max: None,
             exclude_observed_object: false,
         }) if filter.controllers == RelativePlayerSet::Controller
-            && filter.card_type == Some(CardTypeFilter::Creature)
-            && filter.required_supertypes.is_empty()
-            && filter.token.is_none()
+            && filter.matching.kind == tricerules_card_model::primitives::TargetKind::Creature
+            && filter.matching.required_supertypes.is_empty()
+            && filter.matching.token.is_none()
             && filter.any_of.is_none()
-            && filter.color.is_none()
-            && filter.name.is_none()
-            && filter.required_subtypes.is_empty()
+            && filter.matching.is_color.is_none()
+            && filter.matching.name.is_none()
+            && filter.matching.required_subtypes.is_empty()
             && !filter.exclude_source
     ));
     assert!(branch.body.yields.is_empty());

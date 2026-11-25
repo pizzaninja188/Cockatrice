@@ -170,7 +170,7 @@ fn issue_342_affine_static_scaling_rejects_unsafe_leaves() {
 #[test]
 fn issue_342_keyword_dependent_creature_scopes_stay_out_of_static_scaling() {
     let card = self_scaling(
-        "BattlefieldCreatures(filter: (controllers: Controller, required_keywords: [Flying]))",
+        "BattlefieldCreatures(filter: (controllers: Controller, matching: (kind: Creature, required_keywords: [Flying])))",
     );
     assert!(
         registry_with(&card).is_err(),

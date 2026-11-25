@@ -35,8 +35,8 @@ fn roads_fixture_face() -> CardFace {
                     filter: (
                         controllers: Controller,
                         any_of: Some([
-                            (controllers: Controller, required_subtypes: ["Mount"]),
-                            (controllers: Controller, required_subtypes: ["Vehicle"]),
+                            (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Mount"])),
+                            (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Vehicle"])),
                         ]),
                     ),
                     aggregate: Count,
@@ -221,44 +221,34 @@ fn issue_416_roads_fixture_matches_the_emitted_definition() {
                 affected: EntersTappedAffected::Self_,
                 condition: Some(GameCondition::BattlefieldAggregate {
                     filter: BattlefieldPermanentFilter {
-                        required_supertypes: Vec::new(),
-                        token: None,
                         any_of: Some(vec![
                             BattlefieldPermanentFilter {
-                                required_supertypes: Vec::new(),
-                                token: None,
                                 any_of: None,
                                 controllers: RelativePlayerSet::Controller,
-                                card_type: None,
-                                color: None,
-                                name: None,
-                                required_subtypes: vec!["Mount".into()],
-                                min_colors: None,
-                                max_colors: None,
                                 exclude_source: false,
+                                matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                                    kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
+                                    required_subtypes: vec!["Mount".into()],
+                                    ..tricerules_card_model::primitives::TargetFilter::default()
+                                }),
                             },
                             BattlefieldPermanentFilter {
-                                required_supertypes: Vec::new(),
-                                token: None,
                                 any_of: None,
                                 controllers: RelativePlayerSet::Controller,
-                                card_type: None,
-                                color: None,
-                                name: None,
-                                required_subtypes: vec!["Vehicle".into()],
-                                min_colors: None,
-                                max_colors: None,
                                 exclude_source: false,
+                                matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                                    kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
+                                    required_subtypes: vec!["Vehicle".into()],
+                                    ..tricerules_card_model::primitives::TargetFilter::default()
+                                }),
                             },
                         ]),
                         controllers: RelativePlayerSet::Controller,
-                        card_type: None,
-                        color: None,
-                        name: None,
-                        required_subtypes: Vec::new(),
-                        min_colors: None,
-                        max_colors: None,
                         exclude_source: false,
+                        matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                            kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
+                            ..tricerules_card_model::primitives::TargetFilter::default()
+                        }),
                     },
                     aggregate: BattlefieldAggregate::Count,
                     min: None,

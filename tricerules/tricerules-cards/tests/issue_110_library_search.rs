@@ -277,18 +277,19 @@ fn issue_110_conditional_and_owner_choice_cards_are_complete() {
                 tricerules_cards::primitives::GameCondition::BattlefieldAggregate {
                     filter: tricerules_cards::primitives::BattlefieldPermanentFilter {
                         controllers: tricerules_cards::primitives::RelativePlayerSet::Controller,
-                        card_type: None,
-                        required_subtypes,
-                        min_colors: None,
-                        max_colors: None,
+                        any_of: None,
                         exclude_source: false,
-                        ..
+                        matching,
                     },
                     aggregate: tricerules_cards::primitives::BattlefieldAggregate::Count,
                     min: Some(1),
                     max: None,
                     exclude_observed_object: false,
-                } if required_subtypes == &["Dragon".to_owned()]
+                } if **matching == tricerules_cards::primitives::TargetFilter {
+                    kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
+                    required_subtypes: vec!["Dragon".to_owned()],
+                    ..Default::default()
+                }
             )
     ));
 

@@ -1,6 +1,6 @@
 //! Registry conformance for the queue-v31 metalcraft cohort.
 use tricerules_cards::primitives::{
-    BattlefieldAggregate, CardTypeFilter, GameCondition, RelativePlayerSet, StaticAbilityDef,
+    BattlefieldAggregate, GameCondition, RelativePlayerSet, StaticAbilityDef,
 };
 use tricerules_cards::Layout;
 
@@ -103,7 +103,10 @@ fn q31_metalcraft_batch_maps_definitions() {
         assert_eq!(*aggregate, BattlefieldAggregate::Count);
         assert_eq!(*min, Some(3));
         assert_eq!(filter.controllers, RelativePlayerSet::Controller);
-        assert_eq!(filter.card_type, Some(CardTypeFilter::Artifact));
+        assert!(
+            filter.matching.permanent_types
+                == [tricerules_cards::primitives::PermanentTypeFilter::Artifact]
+        );
     }
 }
 

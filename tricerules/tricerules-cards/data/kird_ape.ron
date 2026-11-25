@@ -16,7 +16,7 @@
     presentation: OracleLines([1]),
     definition: ConditionalSelfModifier(
       condition: BattlefieldAggregate(
-        filter: (controllers: Controller, required_subtypes: ["Forest"]),
+        filter: (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Forest"])),
         aggregate: Count,
         min: Some(1),
       ),

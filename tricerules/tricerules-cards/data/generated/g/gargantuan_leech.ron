@@ -15,7 +15,7 @@
           terms: [
             (
               coefficient: 1,
-              quantity: BattlefieldPermanents(filter: (controllers: Controller, name: None, required_subtypes: ["Cave"])),
+              quantity: BattlefieldPermanents(filter: (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Cave"]))),
             ),
             (
               coefficient: 1,

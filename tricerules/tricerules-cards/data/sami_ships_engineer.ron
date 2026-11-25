@@ -16,7 +16,7 @@
     presentation: OracleLines([1]),
     trigger: AtBeginningOfEndStep(),
     intervening_if: Some(BattlefieldCreatureCount(
-      filter: (controllers: Controller, tapped: Some(true)),
+      filter: (controllers: Controller, matching: (kind: Creature, tapped: Some(true))),
       min: Some(2),
     )),
     effect: [CreateTokens(token: "robot_c_2_2", count: 1, tapped: true)],

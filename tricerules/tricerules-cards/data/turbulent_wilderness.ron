@@ -28,7 +28,7 @@
       definition: EntersTapped(
         affected: Self_,
         condition: Some(BattlefieldAggregate(
-          filter: (controllers: Opponents, card_type: Some(Land)),
+          filter: (controllers: Opponents, matching: (kind: AnyPermanent, permanent_types: [Land])),
           aggregate: Count,
           max: Some(7),
         )),

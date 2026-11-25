@@ -16,7 +16,7 @@
     program: Some((body: (steps: [
       (id: "create_dinosaur_if_power_4", kind: If(
         condition: BattlefieldAggregate(
-          filter: (controllers: Controller, card_type: Some(Creature)),
+          filter: (controllers: Controller, matching: (kind: Creature)),
           aggregate: MaximumPower,
           min: Some(4),
         ),

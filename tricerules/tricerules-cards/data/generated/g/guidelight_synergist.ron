@@ -13,7 +13,7 @@
       ability_id: "static_01",
       presentation: OracleLines([2]),
       definition: CountScaledSelfPt(
-        count: BattlefieldPermanents(filter: (controllers: Controller, card_type: Some(Artifact), name: None)),
+        count: BattlefieldPermanents(filter: (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Artifact]))),
         power_per_match: 1,
         toughness_per_match: 0,
       ),

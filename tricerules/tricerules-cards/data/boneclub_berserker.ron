@@ -8,7 +8,7 @@
   power: 2,
   toughness: 4,
   static_abilities: [(ability_id: "static_01", presentation: OracleLines([1]), definition: CountScaledSelfPt(
-    count: BattlefieldCreatures(filter: (controllers: Controller, subtype: Some("Goblin"), exclude_source: true)),
+    count: BattlefieldCreatures(filter: (controllers: Controller, exclude_source: true, matching: (kind: Creature, required_subtypes: ["Goblin"]))),
     power_per_match: 2,
     toughness_per_match: 0,
   ))],

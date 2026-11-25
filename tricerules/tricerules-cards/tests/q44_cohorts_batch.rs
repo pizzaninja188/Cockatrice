@@ -143,7 +143,7 @@ fn q44_tainted_lands_maps_definitions() {
                 &colored.conditions[0],
                 tricerules_cards::primitives::GameCondition::BattlefieldAggregate { filter, .. }
                     if filter.controllers == RelativePlayerSet::Controller
-                        && filter.required_subtypes == ["Swamp"]
+                        && filter.matching.required_subtypes == ["Swamp"]
             ),
             "{id}: requires a Swamp"
         );
@@ -453,7 +453,7 @@ fn q44_basic_land_pump_maps_definitions() {
                     delta_toughness,
                     ..
                 } if filter.controllers == RelativePlayerSet::Controller
-                    && filter.required_subtypes == [subtype]
+                    && filter.matching.required_subtypes == [subtype]
                     && (*delta_power, *delta_toughness) == (dp, dt)
             ),
             "{id}: printed subtype pump"

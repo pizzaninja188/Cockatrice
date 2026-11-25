@@ -3,7 +3,7 @@
   id: "flow_of_knowledge", name: "Flow of Knowledge", face_id: "flow_of_knowledge", mana_cost: "{4}{U}",
   types: ["Instant"],
   spell_effect: [
-    Draw(count: Count(BattlefieldPermanents(filter: (controllers: Controller, required_subtypes: ["Island"])))),
+    Draw(count: Count(BattlefieldPermanents(filter: (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Island"]))))),
     Discard(quantity: Exact(2)),
   ],
 )

@@ -8,8 +8,8 @@
 //! resolves).
 
 use tricerules_cards::primitives::{
-    Amount, BattlefieldAggregate, CardTypeFilter, GameCondition, PlayerRecipient,
-    RelativePlayerSet, SpellEffectKind, StaticAbilityDef, TriggerCondition,
+    Amount, BattlefieldAggregate, GameCondition, PlayerRecipient, RelativePlayerSet,
+    SpellEffectKind, StaticAbilityDef, TriggerCondition,
 };
 use tricerules_cards::{Color, Layout};
 
@@ -180,13 +180,13 @@ fn issue_465_token_blockers_maps_definitions() {
                 max: None,
                 exclude_observed_object: false,
             } if filter.controllers == RelativePlayerSet::Controller
-                && filter.card_type == Some(CardTypeFilter::Creature)
-                && filter.required_supertypes.is_empty()
-                && filter.token.is_none()
+                && filter.matching.kind == tricerules_cards::primitives::TargetKind::Creature
+                && filter.matching.required_supertypes.is_empty()
+                && filter.matching.token.is_none()
                 && filter.any_of.is_none()
-                && filter.color.is_none()
-                && filter.name.is_none()
-                && filter.required_subtypes.is_empty()
+                && filter.matching.is_color.is_none()
+                && filter.matching.name.is_none()
+                && filter.matching.required_subtypes.is_empty()
                 && !filter.exclude_source
         ),
         "power-4 condition, got {:?}",

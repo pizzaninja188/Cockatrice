@@ -2721,17 +2721,14 @@ mod static_permanent_keyword_grant_tests {
         };
         *condition = Some(GameCondition::BattlefieldAggregate {
             filter: BattlefieldPermanentFilter {
-                required_supertypes: Vec::new(),
-                token: None,
                 any_of: None,
                 controllers: RelativePlayerSet::Controller,
-                card_type: None,
-                color: None,
-                name: Some("Grizzly Bears".into()),
-                required_subtypes: vec![],
-                min_colors: None,
-                max_colors: None,
                 exclude_source: false,
+                matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                    kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
+                    name: Some("Grizzly Bears".into()),
+                    ..tricerules_card_model::primitives::TargetFilter::default()
+                }),
             },
             aggregate: BattlefieldAggregate::Count,
             min: Some(1),

@@ -11,7 +11,7 @@
     Exile(subject: Chosen((kind: Creature))),
     Conditional(
       condition: BattlefieldAggregate(
-        filter: (controllers: Controller, card_type: Some(Enchantment)),
+        filter: (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Enchantment])),
         aggregate: Count,
         min: Some(1),
       ),

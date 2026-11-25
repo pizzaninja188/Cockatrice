@@ -6,8 +6,8 @@
 //! Each fingerprint is SHA-256 of the exact pinned normalized Oracle text.
 
 use tricerules_cards::primitives::{
-    AbilityCost, BattlefieldAggregate, CardTypeFilter, EntersTappedAffected, GameCondition,
-    RelativePlayerSet, SpellEffectKind, StaticAbilityDef,
+    AbilityCost, BattlefieldAggregate, EntersTappedAffected, GameCondition, RelativePlayerSet,
+    SpellEffectKind, StaticAbilityDef,
 };
 use tricerules_cards::{AbilityPresentation, Layout, ManaAmount};
 
@@ -152,7 +152,12 @@ fn battle_land_cycle_batch_maps_definitions() {
             panic!("{id}: conditional self enters tapped")
         };
         assert_eq!(filter.controllers, RelativePlayerSet::Controller, "{id}");
-        assert_eq!(filter.card_type, Some(CardTypeFilter::BasicLand), "{id}");
+        assert!(
+            filter.matching.permanent_types
+                == [tricerules_cards::primitives::PermanentTypeFilter::Land]
+                && filter.matching.required_supertypes == ["Basic"],
+            "{id}"
+        );
         assert!(filter.exclude_source, "{id}");
     }
 }

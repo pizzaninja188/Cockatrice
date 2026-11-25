@@ -171,8 +171,11 @@ const CONDITIONAL_BATTLEFIELD_SEARCH_TAIL_FIXTURE: &str = r#"(
               filter: Some((card_type: Some(BasicLand))), selection_constraint: None, slots: [],
               zones: Fixed([Library]), destination: TopOfLibrary,
               conditional_destination: Some((condition: BattlefieldAggregate(
-                filter: (controllers: Controller, card_type: None,
-                  required_subtypes: ["Dragon"], exclude_source: false),
+                filter: (
+                  controllers: Controller,
+                  exclude_source: false,
+                  matching: (kind: AnyPermanent, required_subtypes: ["Dragon"]),
+                  ),
                 aggregate: Count, min: Some(1), max: None, exclude_observed_object: false,
               ), destination: Battlefield(tapped: true))),
               shuffle: true, reveal: true,
@@ -218,7 +221,7 @@ const RECURSIVE_CONDITION_SEARCH_FIXTURE: &str = r#"(
                 CardsInHand(players: Relative(Controller), min: Some(1)),
                 AnyOf([
                   BattlefieldAggregate(
-                    filter: (controllers: Controller, required_subtypes: ["Dragon"]),
+                    filter: (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Dragon"])),
                     aggregate: Count, min: Some(1), max: None,
                     exclude_observed_object: false,
                   ),

@@ -19,7 +19,7 @@
           toughness: 0,
           scale: Some((
             basis: Amount(Count(BattlefieldCreatures(
-              filter: (controllers: Controller, subtype: "Elemental"),
+              filter: (controllers: Controller, matching: (kind: Creature, required_subtypes: ["Elemental"])),
             ))),
             power_per_unit: 1,
             toughness_per_unit: 0,

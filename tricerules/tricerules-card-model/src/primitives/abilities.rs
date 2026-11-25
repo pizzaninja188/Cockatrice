@@ -2737,14 +2737,13 @@ fn is_creature_scope_matching(filter: &TargetFilter) -> bool {
 impl CreatureScopeFilter {
     pub fn validate(&self) -> Result<(), String> {
         self.matching.validate_characteristic_constraints()?;
-        if !self.matching.all_terminal_filters_match(|leaf| {
-            leaf.kind == TargetKind::Creature
-                && leaf.controller == TargetController::Any
-                && leaf.owner == super::TargetOwner::Any
-                && leaf.excluded_objects.is_empty()
-        }) {
+        if !self
+            .matching
+            .all_terminal_filters_match(|leaf| leaf.kind == TargetKind::Creature)
+            || !self.matching.leaves_relations_to_wrapper()
+        {
             return Err(
-                "creature scope matching must use kind: Creature and leave target-relative                  controller, owner and object exclusions to the scope"
+                "creature scope matching must use kind: Creature and leave target-relative controller, owner and object exclusions to the scope"
                     .into(),
             );
         }
@@ -2754,16 +2753,13 @@ impl CreatureScopeFilter {
     /// True when membership depends on current keywords. Layer-6 consumers must reject this
     /// until CR 613.8 dependency ordering exists.
     pub fn reads_keywords(&self) -> bool {
-        self.matching.any_terminal_filter_matches(|leaf| {
-            !leaf.required_keywords.is_empty() || !leaf.excluded_keywords.is_empty()
-        })
+        self.matching.reads_keywords()
     }
 
     /// True when membership depends on current power or toughness, which are only final after
     /// layer 7. Continuous layer-6/7 consumers must reject this.
     pub fn reads_power_or_toughness(&self) -> bool {
-        self.matching
-            .any_terminal_filter_matches(|leaf| leaf.power.is_some() || leaf.toughness.is_some())
+        self.matching.reads_power_or_toughness()
     }
 }
 

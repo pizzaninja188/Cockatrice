@@ -4612,17 +4612,17 @@ mod tests {
         let generation = engine.state.zone_change_generation[&observed];
         let condition = GameCondition::BattlefieldAggregate {
             filter: BattlefieldPermanentFilter {
-                required_supertypes: Vec::new(),
-                token: None,
                 any_of: None,
                 controllers: RelativePlayerSet::Controller,
-                card_type: Some(CardTypeFilter::Land),
-                color: None,
-                name: None,
-                required_subtypes: vec!["Mountain".into()],
-                min_colors: None,
-                max_colors: None,
                 exclude_source: false,
+                matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                    kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
+                    permanent_types: vec![
+                        tricerules_card_model::primitives::PermanentTypeFilter::Land,
+                    ],
+                    required_subtypes: vec!["Mountain".into()],
+                    ..tricerules_card_model::primitives::TargetFilter::default()
+                }),
             },
             aggregate: BattlefieldAggregate::Count,
             min: Some(5),

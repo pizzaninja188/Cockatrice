@@ -21,7 +21,7 @@
           [
             PermanentsEnteredThisTurn(controllers: All, filter: (source_only: true), min: Some(1)),
             BattlefieldAggregate(
-              filter: (controllers: Controller, card_type: Some(BasicLand), name: None),
+              filter: (controllers: Controller, matching: (kind: AnyPermanent, permanent_types: [Land], required_supertypes: ["Basic"])),
               aggregate: Count,
               min: Some(1),
             ),

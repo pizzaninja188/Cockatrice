@@ -7,7 +7,7 @@
   types: ["Instant"],
   spell_effect: [DamageTarget(
     amount: Conditional(
-      condition: BattlefieldAggregate(filter: (controllers: Controller, required_subtypes: ["Spacecraft"]), aggregate: Count, min: Some(1)),
+      condition: BattlefieldAggregate(filter: (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Spacecraft"])), aggregate: Count, min: Some(1)),
       when_true: 5,
       otherwise: 3,
     ),

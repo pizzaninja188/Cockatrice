@@ -7,7 +7,7 @@
   mana_cost: "{X}{B}",
   types: ["Instant"],
   cast_conditions: [BattlefieldAggregate(
-    filter: (controllers: Controller, required_subtypes: ["Faerie"]),
+    filter: (controllers: Controller, matching: (kind: AnyPermanent, required_subtypes: ["Faerie"])),
     aggregate: Count,
     min: Some(1),
   )],
