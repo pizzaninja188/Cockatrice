@@ -2684,3 +2684,12 @@ mod q83_heroic_counter;
 
 #[path = "scenario/q83_etb_lose_life.rs"]
 mod q83_etb_lose_life;
+
+#[path = "scenario/q84_etb_scry_riders.rs"]
+mod q84_etb_scry_riders;
+
+#[path = "scenario/q84_dies_draw_riders.rs"]
+mod q84_dies_draw_riders;
+
+#[path = "scenario/q84_etb_gain_life_riders.rs"]
+mod q84_etb_gain_life_riders;

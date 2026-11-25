@@ -1,0 +1,26 @@
+// Oracle 77eb2374-44a0-4383-b229-edc116c7d835; source/rulings checked 2026-11-25 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.51a-c (convoke pays each colored mana with a creature of that color and each generic mana
+// with any untapped creature you control, applied after the total cost is determined), 603.6a
+// (enters trigger) and 119.3 (life gain). Pinned 2024-01-12 rulings: any untapped creature you
+// control may be tapped for convoke, a multicolored creature pays {1} or one mana of any of its
+// colors, and convoke never changes the mana cost. Copy of Shu Soldier-Farmers' four-life entry
+// trigger plus Convoke.
+(
+  id: "loxodon_restorer",
+  name: "Loxodon Restorer",
+  face_id: "loxodon_restorer",
+  mana_cost: "{4}{W}{W}",
+  types: ["Creature", "Elephant", "Cleric"],
+  power: 3,
+  toughness: 4,
+  keywords: [Convoke],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [GainLife(amount: 4)],
+    ),
+  ],
+)

@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "77eb2374-44a0-4383-b229-edc116c7d835",
+  "spans": [
+    {
+      "face_id": "loxodon_restorer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "loxodon_restorer",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Convoke",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q84_etb_gain_life_riders::q84_gain_life_canary_hardest_loxodon_restorer_convokes_and_gains_four",
+      "covers": "canary hardest: four convoked creatures tap for the generic portion, two white mana pay the pips, and the entry gains four life"
+    },
+    {
+      "test": "scenario q84_etb_gain_life_riders::q84_loxodon_restorer_convoke_needs_white_creatures_for_white_pips",
+      "covers": "convoke needs white creatures for the two white pips; six green creatures cannot pay them and the rejected cast leaves state unchanged"
+    },
+    {
+      "test": "scenario q84_etb_gain_life_riders::q84_gain_life_cards_apply_printed_amount_and_controller_scope",
+      "covers": "the actual card gains exactly its printed life for its controller only"
+    },
+    {
+      "test": "mechanic_registry::q84_batch_a::q84_etb_gain_life_riders_map_definitions",
+      "covers": "reviewed identity, Oracle line mapping, Convoke and the four-life entry trigger"
+    },
+    {
+      "test": "mechanic_registry::q84_batch_a::q84_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

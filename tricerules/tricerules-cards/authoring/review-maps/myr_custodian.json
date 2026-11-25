@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "43923f24-7e95-4934-9a5c-8d9a5e06ddea",
+  "spans": [
+    {
+      "face_id": "myr_custodian",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::EachOpponentMayScry",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q84_etb_scry_riders::q84_scry_canary_myr_custodian_orders_controller_then_opponent_scry",
+      "covers": "canary hardest: controller Scry 2 resolves first, then the opponent's ordered optional Scry 1 stages a private look event addressed only to that opponent and offers only that opponent's top card"
+    },
+    {
+      "test": "scenario q84_etb_scry_riders::q84_myr_custodian_opponent_may_decline_scry",
+      "covers": "a declining opponent's library is unchanged and the ability ends"
+    },
+    {
+      "test": "scenario q84_etb_scry_riders::q84_scry_cards_offer_their_exact_printed_counts",
+      "covers": "the actual card offers exactly its printed two controller cards"
+    },
+    {
+      "test": "mechanic_registry::q84_batch_a::q84_etb_scry_riders_map_definitions",
+      "covers": "reviewed identity, Oracle line mapping, controller Scry 2 then EachOpponentMayScry 1"
+    },
+    {
+      "test": "mechanic_registry::q84_batch_a::q84_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

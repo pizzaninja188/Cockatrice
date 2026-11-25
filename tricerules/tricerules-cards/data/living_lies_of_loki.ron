@@ -1,0 +1,34 @@
+// Oracle cbbf61b0-5dd2-4643-8857-b7a10ec76ec8; source/rulings checked 2026-11-25 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 613.4c (layer 7c self pump), 611.3a (the static effect applies while the source is on the
+// battlefield), 109.5 ("you" is the controller) and 603.6c/121.1 (dies draw). The card has no pinned
+// ruling. Copy of Boneclub Berserker's counted self pump with the Illusion count and no toughness
+// bonus, plus Darkslick Drake's dies draw.
+(
+  id: "living_lies_of_loki",
+  name: "Living Lies of Loki",
+  face_id: "living_lies_of_loki",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Illusion", "Villain"],
+  power: 1,
+  toughness: 3,
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: CountScaledSelfPt(
+        count: BattlefieldCreatures(filter: (controllers: Controller, subtype: Some("Illusion"), exclude_source: true)),
+        power_per_match: 1,
+        toughness_per_match: 0,
+      ),
+    ),
+  ],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfDies,
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

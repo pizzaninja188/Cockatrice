@@ -1,0 +1,30 @@
+// Oracle 8e514bc9-7c8c-4257-9dbc-19a78f61df05; source/rulings checked 2026-11-25 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 603.2 (the becomes-target trigger fires), 603.3/608.1 (it resolves above the targeting spell),
+// 701.21a (sacrifice), 608.2b (a spell whose only target left is removed) and 603.6c (dies trigger).
+// Pinned 2024-11-08 rulings: the sacrifice resolves even if the targeting spell is countered or
+// leaves the stack, and the spell is then removed on resolution without its effects. Copy of
+// Phantasmal Bear's sacrifice trigger plus Darkslick Drake's dies draw.
+(
+  id: "phantasmal_shieldback",
+  name: "Phantasmal Shieldback",
+  face_id: "phantasmal_shieldback",
+  mana_cost: "{U}",
+  types: ["Creature", "Turtle", "Illusion"],
+  power: 1,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: AnyPlayer),
+      effect: [Sacrifice(subject: Source)],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfDies,
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

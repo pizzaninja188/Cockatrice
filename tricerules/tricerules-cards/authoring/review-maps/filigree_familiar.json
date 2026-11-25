@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "b544f690-e4bf-4a5b-984d-9256518fd574",
+  "spans": [
+    {
+      "face_id": "filigree_familiar",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "filigree_familiar",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q84_dies_draw_riders::q84_dies_draw_canary_simplest_filigree_familiar_gains_and_draws",
+      "covers": "canary simplest: exact generic mana, printed 2/2 body, entry two life, and the dies draw when destroyed"
+    },
+    {
+      "test": "scenario q84_dies_draw_riders::q84_dies_draw_cards_do_not_draw_when_exiled",
+      "covers": "an exile is not dying and does not draw"
+    },
+    {
+      "test": "scenario q84_dies_draw_riders::q84_filigree_familiar_has_no_keywords_and_pays_exact_generic_mana",
+      "covers": "the printed card has no keyword and its generic cost is paid exactly"
+    },
+    {
+      "test": "mechanic_registry::q84_batch_a::q84_dies_draw_riders_map_definitions",
+      "covers": "reviewed identity, Oracle line mapping, entry life gain and dies draw"
+    },
+    {
+      "test": "mechanic_registry::q84_batch_a::q84_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

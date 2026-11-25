@@ -1,0 +1,22 @@
+// Oracle 14291205-1ac2-4804-b365-4f65377d5803; source/rulings checked 2026-11-25 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.8 (flash permits instant timing), 603.6a (enters trigger) and 701.22 (Scry). The card has
+// no pinned ruling. Copy of Augury Owl's entry trigger with Flash instead of Flying.
+(
+  id: "grey_havens_navigator",
+  name: "Grey Havens Navigator",
+  face_id: "grey_havens_navigator",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Elf", "Pilot"],
+  power: 3,
+  toughness: 2,
+  keywords: [Flash],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Scry(count: 1)],
+    ),
+  ],
+)

@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "8e514bc9-7c8c-4257-9dbc-19a78f61df05",
+  "spans": [
+    {
+      "face_id": "phantasmal_shieldback",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "phantasmal_shieldback",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfBecomesTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Sacrifice",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q84_dies_draw_riders::q84_dies_draw_canary_hardest_phantasmal_shieldback_sacrifices_before_bolt",
+      "covers": "canary hardest: the becomes-target trigger sacrifices the creature before the targeting Bolt resolves, the Bolt deals no damage, and the dies draw resolves"
+    },
+    {
+      "test": "mechanic_registry::q84_batch_a::q84_phantasmal_shieldback_target_trigger_scope",
+      "covers": "the becomes-target trigger accepts any player's spell or ability and sacrifices only the source"
+    },
+    {
+      "test": "mechanic_registry::q84_batch_a::q84_dies_draw_riders_map_definitions",
+      "covers": "reviewed identity, Oracle line mapping, sacrifice trigger and dies draw"
+    },
+    {
+      "test": "mechanic_registry::q84_batch_a::q84_batch_a_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
