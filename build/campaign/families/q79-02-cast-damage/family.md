@@ -74,5 +74,6 @@ Independent review: initial bundle `q79-batch-a` patch `6d8e293c…` (changes re
 sacrifice-payment owner scope and missing evidence); corrected bundle `q79-batch-a-v2` patch
 `57c1d846…` (approved for semantics); evidence bundle `q79-batch-a-v3` patch `f88d3795…`
 (approved, v2 carries forward). Full batch gate
-`verify-d9f48957-0477-404b-9cba-4820d02bbb65` exit 0 on the final product bytes; see `status.tsv`
-for the product and remote commits.
+`verify-d9f48957-0477-404b-9cba-4820d02bbb65` exit 0 on the final product bytes. Batch queue-v79 batch A covering 01-gain-life-drain..03-counter-riders (10 cards) used gate
+`verify-d9f48957-0477-404b-9cba-4820d02bbb65` exit 0.
+See `status.tsv` for the product and remote commits.
