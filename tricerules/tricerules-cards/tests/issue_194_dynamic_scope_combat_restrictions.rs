@@ -63,7 +63,7 @@ fn issue_194_consumers_are_registered() {
 #[test]
 fn creature_scope_counter_predicates_are_mutually_exclusive() {
     assert!(CreatureScopeFilter {
-        matching: Box::new(tricerules_cards::primitives::TargetFilter {
+        matching: Box::new(tricerules_cards::primitives::ObjectFilter {
             kind: tricerules_cards::primitives::TargetKind::Creature,
             requires_any_counter: true,
             required_counter: Some(CounterKind::PlusOnePlusOne),
@@ -74,7 +74,7 @@ fn creature_scope_counter_predicates_are_mutually_exclusive() {
     .validate()
     .is_err());
     assert!(CreatureScopeFilter {
-        matching: Box::new(tricerules_cards::primitives::TargetFilter {
+        matching: Box::new(tricerules_cards::primitives::ObjectFilter {
             kind: tricerules_cards::primitives::TargetKind::Creature,
             requires_any_counter: true,
             ..Default::default()
@@ -84,7 +84,7 @@ fn creature_scope_counter_predicates_are_mutually_exclusive() {
     .validate()
     .is_ok());
     assert!(CreatureScopeFilter {
-        matching: Box::new(tricerules_cards::primitives::TargetFilter {
+        matching: Box::new(tricerules_cards::primitives::ObjectFilter {
             kind: tricerules_cards::primitives::TargetKind::Creature,
             required_counter: Some(CounterKind::PlusOnePlusOne),
             ..Default::default()

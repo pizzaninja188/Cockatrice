@@ -17,7 +17,7 @@ use crate::common;
 use common::FaceExpectation;
 use tricerules_cards::primitives::{
     BeholdCriterion, CastCostGroupDef, CastCostOptionDef, ManaCostChoiceKind, ObjectCastCostKind,
-    ObjectPaymentConstraint, PermanentTypeFilter, TargetController, TargetFilter, TargetKind,
+    ObjectFilter, ObjectPaymentConstraint, PermanentTypeFilter, TargetController, TargetKind,
 };
 use tricerules_cards::{AbilityPresentation, CardFace, ChoiceId, Keyword, ManaCost};
 
@@ -43,33 +43,33 @@ fn group(id: &str) -> &'static CastCostGroupDef {
     group
 }
 
-fn creature() -> TargetFilter {
-    TargetFilter {
+fn creature() -> ObjectFilter {
+    ObjectFilter {
         kind: TargetKind::Creature,
         controller: TargetController::You,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }
 }
 
-fn artifact() -> TargetFilter {
-    TargetFilter {
+fn artifact() -> ObjectFilter {
+    ObjectFilter {
         kind: TargetKind::AnyPermanent,
         controller: TargetController::You,
         permanent_types: vec![PermanentTypeFilter::Artifact],
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }
 }
 
-fn land() -> TargetFilter {
-    TargetFilter {
+fn land() -> ObjectFilter {
+    ObjectFilter {
         kind: TargetKind::AnyPermanent,
         controller: TargetController::You,
         permanent_types: vec![PermanentTypeFilter::Land],
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }
 }
 
-fn sacrifice(option_id: &str, filter: TargetFilter) -> CastCostOptionDef {
+fn sacrifice(option_id: &str, filter: ObjectFilter) -> CastCostOptionDef {
     CastCostOptionDef::SacrificePermanent {
         option_id: ChoiceId::new(option_id).unwrap(),
         presentation: AbilityPresentation::OracleLines(vec![1]),
@@ -94,7 +94,7 @@ fn mana(option_id: &str, cost: &str) -> CastCostOptionDef {
     }
 }
 
-fn tap(option_id: &str, count: u32, filter: TargetFilter) -> CastCostOptionDef {
+fn tap(option_id: &str, count: u32, filter: ObjectFilter) -> CastCostOptionDef {
     CastCostOptionDef::TapPermanents {
         option_id: ChoiceId::new(option_id).unwrap(),
         presentation: AbilityPresentation::OracleLines(vec![1]),
@@ -253,17 +253,17 @@ fn issue_338_emits_the_reviewed_cast_cost_groups() {
         group("final_vengeance").options,
         [sacrifice(
             "sacrifice_creature_or_enchantment",
-            TargetFilter {
+            ObjectFilter {
                 any_of: Some(vec![
                     creature(),
-                    TargetFilter {
+                    ObjectFilter {
                         kind: TargetKind::AnyPermanent,
                         controller: TargetController::You,
                         permanent_types: vec![PermanentTypeFilter::Enchantment],
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     },
                 ]),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             }
         )]
     );
@@ -318,9 +318,9 @@ fn issue_338_emits_the_reviewed_cast_cost_groups() {
             mana("pay_mana", "{4}"),
             sacrifice(
                 "sacrifice_artifact_or_creature",
-                TargetFilter {
+                ObjectFilter {
                     any_of: Some(vec![artifact(), creature()]),
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 }
             ),
         ]
@@ -330,9 +330,9 @@ fn issue_338_emits_the_reviewed_cast_cost_groups() {
         [tap(
             "tap_permanents",
             2,
-            TargetFilter {
+            ObjectFilter {
                 any_of: Some(vec![creature(), land()]),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             }
         )]
     );
@@ -341,9 +341,9 @@ fn issue_338_emits_the_reviewed_cast_cost_groups() {
         [tap(
             "tap_permanents",
             4,
-            TargetFilter {
+            ObjectFilter {
                 any_of: Some(vec![artifact(), creature(), land()]),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             }
         )]
     );

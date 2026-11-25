@@ -9,7 +9,7 @@
 
 use tricerules_cards::primitives::{
     Amount, CastCostConditionalAmount, CastCostOptionDef, CastCostReceiptCondition, EffectSubject,
-    ManaCostChoiceKind, PermanentTypeFilter, PlayerRecipient, SpellEffectKind, TargetFilter,
+    ManaCostChoiceKind, ObjectFilter, PermanentTypeFilter, PlayerRecipient, SpellEffectKind,
     TargetGroupDef, TargetKind, TargetingDef,
 };
 use tricerules_cards::{AbilityPresentation, ChoiceId, Color, Layout};
@@ -79,10 +79,10 @@ fn issue_294_direct_ron_registers_both_reviewed_handwritten_cards() {
             face.spell_effect,
             [
                 SpellEffectKind::ReturnToOwnersHand {
-                    subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                         kind: TargetKind::AnyPermanent,
                         excluded_permanent_types: vec![PermanentTypeFilter::Land],
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     })),
                 },
                 SpellEffectKind::Draw {

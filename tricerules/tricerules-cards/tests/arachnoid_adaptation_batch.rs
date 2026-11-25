@@ -5,7 +5,7 @@
 //! numbers are printed data; the shared scenario executes every card. Each fingerprint
 //! is SHA-256 of the exact pinned normalized Oracle text.
 
-use tricerules_cards::primitives::{EffectSubject, SpellEffectKind, TargetFilter};
+use tricerules_cards::primitives::{EffectSubject, ObjectFilter, SpellEffectKind};
 use tricerules_cards::{Keyword, Layout};
 
 type Card = (&'static str, &'static str, &'static str, i32, i32);
@@ -57,7 +57,7 @@ fn arachnoid_adaptation_batch_maps_definitions() {
         );
         assert!(f.static_abilities.is_empty(), "{id} has no static ability");
 
-        let chosen = EffectSubject::Chosen(Box::new(TargetFilter::default_creature()));
+        let chosen = EffectSubject::Chosen(Box::new(ObjectFilter::default_creature()));
         assert_eq!(
             f.spell_effect,
             [

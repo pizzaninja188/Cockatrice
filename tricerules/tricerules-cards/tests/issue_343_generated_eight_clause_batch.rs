@@ -9,8 +9,8 @@
 
 use tricerules_cards::primitives::{
     CastTriggerPlayer, DiscardQuantity, EffectSubject, GraveyardDestination, GraveyardFilter,
-    GraveyardOwner, PermanentEventFilter, PermanentTypeFilter, PlayerRecipient, SpellCastFilter,
-    TargetController, TargetFilter, TargetKind,
+    GraveyardOwner, ObjectFilter, PermanentEventFilter, PermanentTypeFilter, PlayerRecipient,
+    SpellCastFilter, TargetController, TargetKind,
 };
 use tricerules_cards::{
     AbilityPresentation, Amount, Color, CounterKind, Keyword, SpellEffectKind, TriggerCondition,
@@ -60,11 +60,11 @@ fn issue_343_stingblade_assassin_destroys_a_damage_marked_opposing_creature() {
     assert_eq!(
         ability.effect,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::Opponent,
                 was_dealt_damage_this_turn: Some(true),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
@@ -89,7 +89,7 @@ fn issue_343_give_in_to_violence_pumps_and_grants_lifelink() {
     assert_eq!(face.mana_cost.to_string(), "{1}{B}");
     assert_eq!(face.types, ["Instant"]);
     assert_eq!(face.colors(), vec![Color::Black]);
-    let chosen = EffectSubject::Chosen(Box::new(TargetFilter::default_creature()));
+    let chosen = EffectSubject::Chosen(Box::new(ObjectFilter::default_creature()));
     assert_eq!(
         face.spell_effect,
         [
@@ -269,11 +269,11 @@ fn issue_343_white_auracite_linked_exiles_an_opposing_nonland() {
     assert_eq!(
         ability.effect,
         [SpellEffectKind::ExileUntilSourceLeaves {
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 controller: TargetController::Opponent,
                 excluded_permanent_types: vec![PermanentTypeFilter::Land],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );
@@ -403,10 +403,10 @@ fn issue_343_adventuring_gear_keeps_equip_and_landfall_pump() {
     assert_eq!(
         equip.effect,
         [SpellEffectKind::Equip {
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );

@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    EffectSubject, PlayerRecipient, SpellEffectKind, TargetController, TargetFilter, TargetKind,
+    EffectSubject, ObjectFilter, PlayerRecipient, SpellEffectKind, TargetController, TargetKind,
 };
 use tricerules_cards::{
     AbilityPresentation, Amount, CardRegistry, LibraryPartitionKind, TriggerCondition,
@@ -80,10 +80,10 @@ fn issue_260_registers_all_ten_generated_cards_with_exact_typed_triggers() {
         assert_eq!(
             ability.effect,
             [SpellEffectKind::ReturnToOwnersHand {
-                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                     kind: TargetKind::Creature,
                     controller: TargetController::Opponent,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 })),
             }]
         );

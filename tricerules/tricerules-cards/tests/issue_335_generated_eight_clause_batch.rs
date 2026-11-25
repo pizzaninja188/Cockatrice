@@ -12,8 +12,8 @@ use crate::common::draw_discard_program::{
     assert_ability_draw_discard_steps, AuthoredDrawDiscardExpectation, AuthoredDrawDiscardOrder,
 };
 use tricerules_cards::primitives::{
-    CreatureScopeController, CreatureScopeFilter, EffectSubject, LifeAmount, PermanentEventFilter,
-    PermanentTypeFilter, PlayerRecipient, StaticAbilityDef, TargetFilter, TargetKind,
+    CreatureScopeController, CreatureScopeFilter, EffectSubject, LifeAmount, ObjectFilter,
+    PermanentEventFilter, PermanentTypeFilter, PlayerRecipient, StaticAbilityDef, TargetKind,
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, Amount, CastTriggerPlayer, Color, CounterKind, Keyword,
@@ -187,13 +187,13 @@ fn issue_335_angelic_edict_exiles_a_creature_or_enchantment_union() {
         face.spell_effect,
         [SpellEffectKind::Exile {
             linked_exile_id: None,
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![
                     PermanentTypeFilter::Creature,
                     PermanentTypeFilter::Enchantment,
                 ],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
@@ -288,7 +288,7 @@ fn issue_335_drix_fatemaker_keeps_its_warp_counter_and_counter_filtered_anthem()
         [SpellEffectKind::PutCounters {
             counter: CounterKind::PlusOnePlusOne,
             count: Amount::Fixed(1),
-            subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
         }]
     );
     let targeting = trigger.targeting.as_ref().expect("Drix ETB target group");
@@ -314,7 +314,7 @@ fn issue_335_drix_fatemaker_keeps_its_warp_counter_and_counter_filtered_anthem()
         StaticAbilityDef::AnthemKeyword {
             filter: CreatureScopeFilter {
                 controller: Some(CreatureScopeController::YouControl),
-                matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                matching: Box::new(tricerules_cards::primitives::ObjectFilter {
                     kind: tricerules_cards::primitives::TargetKind::Creature,
                     required_counter: Some(CounterKind::PlusOnePlusOne),
                     ..Default::default()

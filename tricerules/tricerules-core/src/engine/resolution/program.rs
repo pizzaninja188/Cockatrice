@@ -16,8 +16,8 @@ use tricerules_card_model::primitives::{
     Cardinality, ChooseDeparturePolicy, CompiledBlock, CompiledChooseBranch,
     CompiledChooseRequirement, CompiledInstructionKind, CompiledProgram, CompiledProgramCondition,
     CompiledProgramResultCondition, CounterKind, HandCardAction, HandCardChooser,
-    HandChoiceVisibility, PermanentTypeFilter, ProgramRequiredInput, ResolutionCost, ResultSlotId,
-    ResultType, SpellEffectKind, TargetFilter, TargetKind,
+    HandChoiceVisibility, ObjectFilter, PermanentTypeFilter, ProgramRequiredInput, ResolutionCost,
+    ResultSlotId, ResultType, SpellEffectKind, TargetKind,
 };
 
 #[cfg(test)]
@@ -380,9 +380,9 @@ impl GameEngine {
                 visibility: HandChoiceVisibility::PrivateLook,
             } if *count > 0
                 && target
-                    == &(TargetFilter {
+                    == &(ObjectFilter {
                         kind: TargetKind::AnyPlayer,
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     }) =>
             {
                 *count
@@ -2978,14 +2978,14 @@ fn program_result_condition_holds(
             {
                 return Ok(false);
             }
-            let filter = TargetFilter {
+            let filter = ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![
                     PermanentTypeFilter::Artifact,
                     PermanentTypeFilter::Creature,
                     PermanentTypeFilter::Planeswalker,
                 ],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             };
             Ok(super::super::targeting::object_matches_mass_filter(
                 engine,

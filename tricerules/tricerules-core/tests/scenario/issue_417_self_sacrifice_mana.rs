@@ -11,7 +11,7 @@ use crate::helpers::ScenarioCommandExt;
 
 use super::helpers::*;
 use tricerules_cards::primitives::{
-    Amount, EffectSubject, PermanentTypeFilter, PlayerRecipient, TargetController, TargetFilter,
+    Amount, EffectSubject, ObjectFilter, PermanentTypeFilter, PlayerRecipient, TargetController,
     TargetKind, TargetObjectExclusion, TypeLineAddition,
 };
 use tricerules_cards::{AbilityCost, ActivationTiming, Keyword, ManaCost};
@@ -562,23 +562,23 @@ fn issue_417_registry_identities_types_keywords_and_payloads() {
             AbilityCost::Mana(ManaCost::parse("{2}").expect("printed cost")),
             AbilityCost::SacrificePermanent {
                 count: 1,
-                filter: TargetFilter {
+                filter: ObjectFilter {
                     any_of: Some(vec![
-                        TargetFilter {
+                        ObjectFilter {
                             kind: TargetKind::Creature,
                             controller: TargetController::You,
                             excluded_objects: vec![TargetObjectExclusion::Source],
-                            ..TargetFilter::default()
+                            ..ObjectFilter::default()
                         },
-                        TargetFilter {
+                        ObjectFilter {
                             kind: TargetKind::AnyPermanent,
                             controller: TargetController::You,
                             token: Some(true),
                             excluded_objects: vec![TargetObjectExclusion::Source],
-                            ..TargetFilter::default()
+                            ..ObjectFilter::default()
                         },
                     ]),
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
             },
         ]
@@ -599,12 +599,12 @@ fn issue_417_registry_identities_types_keywords_and_payloads() {
     assert_eq!(
         animation.effect[0],
         tricerules_cards::SpellEffectKind::SetBasePowerToughness {
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![PermanentTypeFilter::Artifact],
                 excluded_permanent_types: vec![PermanentTypeFilter::Creature],
                 controller: TargetController::You,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             power: tricerules_cards::primitives::BasePowerToughnessValue::Fixed(4),
             toughness: tricerules_cards::primitives::BasePowerToughnessValue::Fixed(4),
@@ -613,12 +613,12 @@ fn issue_417_registry_identities_types_keywords_and_payloads() {
     assert_eq!(
         animation.effect[1],
         tricerules_cards::SpellEffectKind::AddTypes {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![PermanentTypeFilter::Artifact],
                 excluded_permanent_types: vec![PermanentTypeFilter::Creature],
                 controller: TargetController::You,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
             addition: TypeLineAddition {
                 land_types: Vec::new(),

@@ -346,7 +346,7 @@ fn q47_basic_landcycling_spells_maps_definitions() {
                 [
                     SpellEffectKind::TargetPlayerLosesLife {
                         amount: 4,
-                        target: tricerules_cards::primitives::TargetFilter {
+                        target: tricerules_cards::primitives::ObjectFilter {
                             kind: TargetKind::AnyPlayer,
                             ..
                         },
@@ -361,7 +361,7 @@ fn q47_basic_landcycling_spells_maps_definitions() {
                 f.spell_effect.as_slice(),
                 [SpellEffectKind::DamageTarget {
                     amount: Amount::Fixed(5),
-                    target: tricerules_cards::primitives::TargetFilter {
+                    target: tricerules_cards::primitives::ObjectFilter {
                         kind: TargetKind::Creature,
                         ..
                     },
@@ -378,7 +378,7 @@ fn q47_basic_landcycling_spells_maps_definitions() {
                 f.spell_effect.as_slice(),
                 [SpellEffectKind::TargetPlayerGainsLife {
                     amount: Amount::Fixed(8),
-                    target: tricerules_cards::primitives::TargetFilter {
+                    target: tricerules_cards::primitives::ObjectFilter {
                         kind: TargetKind::AnyPlayer,
                         ..
                     },
@@ -425,7 +425,7 @@ fn q47_pinger_aura_maps_definitions() {
                     if restrict_own
                         == matches!(
                             target,
-                            tricerules_cards::primitives::TargetFilter {
+                            tricerules_cards::primitives::ObjectFilter {
                                 kind: TargetKind::Creature,
                                 controller: tricerules_cards::primitives::TargetController::You,
                                 ..
@@ -459,7 +459,7 @@ fn q47_pinger_aura_maps_definitions() {
                     activated_abilities[0].effect.as_slice(),
                     [SpellEffectKind::DamageTarget {
                         amount: Amount::Fixed(1),
-                        target: tricerules_cards::primitives::TargetFilter {
+                        target: tricerules_cards::primitives::ObjectFilter {
                             kind: TargetKind::AnyTarget,
                             ..
                         },
@@ -677,7 +677,7 @@ fn q47_bite_spells_maps_definitions() {
         assert!(
             matches!(
                 source,
-                tricerules_cards::primitives::TargetFilter {
+                tricerules_cards::primitives::ObjectFilter {
                     kind: TargetKind::Creature,
                     controller: tricerules_cards::primitives::TargetController::You,
                     ..
@@ -689,7 +689,7 @@ fn q47_bite_spells_maps_definitions() {
             "masters_rebuke" => assert!(
                 matches!(
                     target,
-                    tricerules_cards::primitives::TargetFilter {
+                    tricerules_cards::primitives::ObjectFilter {
                         kind: TargetKind::AnyPermanent,
                         controller: tricerules_cards::primitives::TargetController::NotYou,
                         permanent_types,
@@ -701,7 +701,7 @@ fn q47_bite_spells_maps_definitions() {
             _ => assert!(
                 matches!(
                     target,
-                    tricerules_cards::primitives::TargetFilter {
+                    tricerules_cards::primitives::ObjectFilter {
                         kind: TargetKind::Creature,
                         controller: tricerules_cards::primitives::TargetController::NotYou,
                         ..

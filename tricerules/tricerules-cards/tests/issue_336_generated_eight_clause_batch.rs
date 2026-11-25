@@ -9,8 +9,8 @@
 
 use tricerules_cards::primitives::{
     BattlefieldCreatureCountFilter, CardTypeFilter, EffectSubject, GameCondition,
-    GraveyardDestination, GraveyardFilter, GraveyardOwner, PermanentTypeFilter, PlayerRecipient,
-    RelativePlayerSet, SpellCostModifier, StaticAbilityDef, TargetController, TargetFilter,
+    GraveyardDestination, GraveyardFilter, GraveyardOwner, ObjectFilter, PermanentTypeFilter,
+    PlayerRecipient, RelativePlayerSet, SpellCostModifier, StaticAbilityDef, TargetController,
     TargetKind, ZoneCardFilter,
 };
 use tricerules_cards::{
@@ -83,7 +83,7 @@ fn issue_336_desperate_parry_carries_the_minus_four_minus_zero_pump() {
             power: -4,
             toughness: 0,
             scale: None,
-            subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
         }]
     );
     assert!(
@@ -108,10 +108,10 @@ fn issue_336_arcane_epiphany_reduces_only_with_a_controlled_wizard() {
             condition: GameCondition::BattlefieldCreatureCount {
                 filter: BattlefieldCreatureCountFilter {
                     controllers: RelativePlayerSet::Controller,
-                    matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                    matching: Box::new(tricerules_cards::primitives::ObjectFilter {
                         kind: tricerules_cards::primitives::TargetKind::Creature,
                         required_subtypes: vec!["Wizard".into()],
-                        ..tricerules_cards::primitives::TargetFilter::default()
+                        ..tricerules_cards::primitives::ObjectFilter::default()
                     }),
                     ..BattlefieldCreatureCountFilter::default()
                 },
@@ -264,10 +264,10 @@ fn issue_336_affectionate_indrik_may_fight_a_creature_you_dont_control() {
         ability.effect,
         [SpellEffectKind::Fight {
             first: EffectSubject::Source,
-            second: EffectSubject::Chosen(Box::new(TargetFilter {
+            second: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::NotYou,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
@@ -366,13 +366,13 @@ fn issue_336_reclamation_sage_may_destroy_an_artifact_or_enchantment() {
     assert_eq!(
         ability.effect,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![
                     PermanentTypeFilter::Artifact,
                     PermanentTypeFilter::Enchantment,
                 ],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
@@ -449,10 +449,10 @@ fn issue_336_gold_pan_keeps_treasure_anthem_and_equip() {
     assert_eq!(
         equip.effect,
         [SpellEffectKind::Equip {
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );

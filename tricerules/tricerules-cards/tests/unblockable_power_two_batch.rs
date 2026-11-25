@@ -5,8 +5,8 @@
 //! restriction for the turn. Each fingerprint is SHA-256 of the pinned lines.
 
 use tricerules_cards::primitives::{
-    AbilityCost, CombatRestriction, CombatRestrictionScope, PowerComparison, SpellEffectKind,
-    TargetFilter, TargetKind,
+    AbilityCost, CombatRestriction, CombatRestrictionScope, ObjectFilter, PowerComparison,
+    SpellEffectKind, TargetKind,
 };
 use tricerules_cards::{AbilityPresentation, CardRegistry, Layout};
 
@@ -129,10 +129,10 @@ fn unblockable_power_two_batch_maps_definitions() {
         assert_eq!(
             ability.effect,
             [SpellEffectKind::ApplyCombatRestriction {
-                scope: CombatRestrictionScope::Chosen(TargetFilter {
+                scope: CombatRestrictionScope::Chosen(ObjectFilter {
                     kind: TargetKind::Creature,
                     power: Some(PowerComparison::AtMost(2)),
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 }),
                 restriction: CombatRestriction {
                     cant_be_blocked: true,

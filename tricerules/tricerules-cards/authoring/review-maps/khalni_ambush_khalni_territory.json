@@ -31,7 +31,7 @@
       "typed_path": "/faces/0/spell_effect/0"
     },
     {
-      "symbol": "EffectSubject::Chosen(TargetFilter)",
+      "symbol": "EffectSubject::Chosen(ObjectFilter)",
       "typed_path": "/faces/0/spell_effect/0/Fight/first"
     },
     {

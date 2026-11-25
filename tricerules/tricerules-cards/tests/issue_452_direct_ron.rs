@@ -6,7 +6,7 @@
 //! that an illegal target on resolution means none of its effects happen.
 
 use tricerules_cards::primitives::{
-    Amount, EffectSubject, SpellEffectKind, TargetFilter, TargetKind,
+    Amount, EffectSubject, ObjectFilter, SpellEffectKind, TargetKind,
 };
 use tricerules_cards::{Color, Layout};
 
@@ -47,10 +47,10 @@ fn issue_452_direct_ron_registers_both_reviewed_handwritten_cards() {
     assert_eq!(
         face.spell_effect,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 power: Some(tricerules_cards::primitives::PowerComparison::AtLeast(3)),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
@@ -91,10 +91,10 @@ fn issue_452_direct_ron_registers_both_reviewed_handwritten_cards() {
                 power: 1,
                 toughness: 1,
                 scale: None,
-                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                     kind: TargetKind::Creature,
                     controller: tricerules_cards::primitives::TargetController::You,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 })),
             },
             SpellEffectKind::Draw {

@@ -1,4 +1,4 @@
-use tricerules_cards::primitives::{EffectContext, TargetController, TargetFilter, TargetKind};
+use tricerules_cards::primitives::{EffectContext, ObjectFilter, TargetController, TargetKind};
 use tricerules_cards::{Color, MassPlayerSet, SpellEffectKind};
 
 #[test]
@@ -34,15 +34,15 @@ fn all_is_dust_exact_printed_kindred_eldrazi_definition_and_five_color_union() {
 #[test]
 fn mass_sacrifice_rejects_player_and_relative_controller_filters() {
     for filter in [
-        TargetFilter {
+        ObjectFilter {
             kind: TargetKind::AnyPlayer,
             ..Default::default()
         },
-        TargetFilter {
+        ObjectFilter {
             kind: TargetKind::AnyTarget,
             ..Default::default()
         },
-        TargetFilter {
+        ObjectFilter {
             kind: TargetKind::Creature,
             controller: TargetController::You,
             ..Default::default()
@@ -60,7 +60,7 @@ fn mass_sacrifice_rejects_player_and_relative_controller_filters() {
             group_index: 0,
             kind: TargetKind::AnyPlayer
         },
-        filter: TargetFilter {
+        filter: ObjectFilter {
             kind: TargetKind::Creature,
             ..Default::default()
         },
@@ -72,7 +72,7 @@ fn mass_sacrifice_rejects_player_and_relative_controller_filters() {
             group_index: 0,
             kind: TargetKind::Creature
         },
-        filter: TargetFilter {
+        filter: ObjectFilter {
             kind: TargetKind::Creature,
             ..Default::default()
         },

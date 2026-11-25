@@ -5,7 +5,7 @@
 //! Each fingerprint is SHA-256 of the exact pinned normalized Oracle text.
 
 use tricerules_cards::primitives::{
-    CombatRestrictionScope, SpellEffectKind, TargetFilter, TargetKind,
+    CombatRestrictionScope, ObjectFilter, SpellEffectKind, TargetKind,
 };
 use tricerules_cards::{AbilityPresentation, Layout, TriggerCondition};
 
@@ -93,9 +93,9 @@ fn check_card(expected: &ExpectedCard) {
     };
     assert_eq!(
         *scope,
-        CombatRestrictionScope::Chosen(TargetFilter {
+        CombatRestrictionScope::Chosen(ObjectFilter {
             kind: TargetKind::Creature,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         }),
         "{id}: target creature"
     );

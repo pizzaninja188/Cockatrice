@@ -762,7 +762,7 @@ fn face_down_granted_damage_fixture() -> (GameEngine, ObjectId) {
     ability.intrinsic_land_mana = false;
     ability.effect = vec![SpellEffectKind::DamageTarget {
         amount: tricerules_card_model::Amount::Fixed(1),
-        target: tricerules_card_model::primitives::TargetFilter {
+        target: tricerules_card_model::primitives::ObjectFilter {
             kind: tricerules_card_model::primitives::TargetKind::AnyTarget,
             ..Default::default()
         },
@@ -887,7 +887,7 @@ fn intrinsic_land_mana_targeted_granted_trigger_captures_concealed_label_before_
     let mut ability = triggered_abilities[0].clone();
     ability.effect = vec![SpellEffectKind::DamageTarget {
         amount: tricerules_card_model::Amount::Fixed(1),
-        target: tricerules_card_model::primitives::TargetFilter {
+        target: tricerules_card_model::primitives::ObjectFilter {
             kind: tricerules_card_model::primitives::TargetKind::AnyTarget,
             ..Default::default()
         },
@@ -1494,7 +1494,7 @@ fn lantern_scoped_producer_uses_live_controller_and_source_exclusions() {
         .clone();
     child.intrinsic_land_mana = false;
     static_ability.definition = StaticAbilityDef::GrantActivatedAbilityToPermanents {
-        filter: TargetFilter {
+        filter: ObjectFilter {
             kind: TargetKind::AnyPermanent,
             controller: tricerules_card_model::primitives::TargetController::You,
             permanent_types: vec![PermanentTypeFilter::Land],
@@ -1572,7 +1572,7 @@ fn lantern_rite_shaped_creature_grant_obeys_sickness_and_explicit_source_exclusi
         .clone();
     child.intrinsic_land_mana = false;
     parent.definition = StaticAbilityDef::GrantActivatedAbilityToPermanents {
-        filter: TargetFilter {
+        filter: ObjectFilter {
             kind: TargetKind::Creature,
             controller: tricerules_card_model::primitives::TargetController::You,
             excluded_objects: vec![tricerules_card_model::TargetObjectExclusion::Source],
@@ -1696,7 +1696,7 @@ fn lantern_nonmana_grants_capture_occurrence_and_presentation_before_source_cost
     child.intrinsic_land_mana = false;
     child.costs = vec![AbilityCost::SacrificePermanent {
         count: 1,
-        filter: TargetFilter {
+        filter: ObjectFilter {
             kind: TargetKind::AnyPermanent,
             controller: TargetController::You,
             permanent_types: vec![PermanentTypeFilter::Enchantment],

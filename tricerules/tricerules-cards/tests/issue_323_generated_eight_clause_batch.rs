@@ -8,8 +8,9 @@
 
 use tricerules_cards::primitives::{
     CombatRestriction, CombatRestrictionScope, CreatureScopeController, CreatureScopeFilter,
-    EffectSubject, PlayerRecipient, SearchDestination, SearchZoneSelection, SpellEffectKind,
-    StackSpellFilter, StaticAbilityDef, TargetFilter, TargetGroupDef, TargetSchema, ZoneCardFilter,
+    EffectSubject, ObjectFilter, PlayerRecipient, SearchDestination, SearchZoneSelection,
+    SpellEffectKind, StackSpellFilter, StaticAbilityDef, TargetGroupDef, TargetSchema,
+    ZoneCardFilter,
 };
 use tricerules_cards::{AbilityPresentation, Amount, Color, Keyword, Layout, TriggerCondition};
 
@@ -102,7 +103,7 @@ fn issue_323_day_of_judgment_is_the_untargeted_mass_destroy() {
     assert_eq!(
         face.spell_effect,
         [SpellEffectKind::DestroyAll {
-            kind: TargetFilter::default_creature(),
+            kind: ObjectFilter::default_creature(),
             prevent_regeneration: false,
         }]
     );
@@ -157,7 +158,7 @@ fn issue_323_twice_the_rage_grants_double_strike() {
     assert_eq!(
         adventure.spell_effect,
         [SpellEffectKind::GrantKeywords {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
             keywords: vec![Keyword::DoubleStrike],
         }]
     );
@@ -190,10 +191,10 @@ fn issue_323_ancestors_aid_pumps_and_creates_a_treasure() {
                 power: 2,
                 toughness: 0,
                 scale: None,
-                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
             },
             SpellEffectKind::GrantKeywords {
-                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
                 keywords: vec![Keyword::FirstStrike],
             },
             treasure_effect(),
@@ -273,7 +274,7 @@ fn issue_323_enter_the_enigma_makes_a_creature_unblockable_and_draws() {
         face.spell_effect,
         [
             SpellEffectKind::ApplyCombatRestriction {
-                scope: CombatRestrictionScope::Chosen(TargetFilter::default_creature()),
+                scope: CombatRestrictionScope::Chosen(ObjectFilter::default_creature()),
                 restriction: CombatRestriction {
                     cant_be_blocked: true,
                     ..CombatRestriction::default()

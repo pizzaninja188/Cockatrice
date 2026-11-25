@@ -1,6 +1,6 @@
 //! Registry conformance for the queue-v30 optional enters-destroy cohort.
 use tricerules_cards::primitives::{
-    EffectSubject, PermanentTypeFilter, SpellEffectKind, TargetFilter, TargetKind,
+    EffectSubject, ObjectFilter, PermanentTypeFilter, SpellEffectKind, TargetKind,
 };
 use tricerules_cards::Layout;
 
@@ -90,10 +90,10 @@ fn q30_etb_naturalize_batch_maps_definitions() {
         };
         assert_eq!(
             **target,
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![card.permanent],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             "{}",
             card.id

@@ -84,7 +84,7 @@
       "typed_path": "/faces/0/class_level_bars/0/static_abilities/0/definition"
     },
     {
-      "symbol": "TargetFilter::requires_any_counter",
+      "symbol": "ObjectFilter::requires_any_counter",
       "typed_path": "/faces/0/class_level_bars/0/static_abilities/0/definition/GrantTriggeredAbilityToPermanents/filter/requires_any_counter"
     },
     {

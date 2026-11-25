@@ -367,7 +367,7 @@ fn q57_static_anthems_map_definitions() {
                 assert_eq!(
                     filter,
                     &CreatureScopeFilter {
-                        matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                        matching: Box::new(tricerules_cards::primitives::ObjectFilter {
                             kind: tricerules_cards::primitives::TargetKind::Creature,
                             combat_role: Some(tricerules_cards::primitives::CombatRole::Attacking),
                             ..Default::default()
@@ -391,7 +391,7 @@ fn q57_static_anthems_map_definitions() {
                 assert_eq!(
                     filter,
                     &CreatureScopeFilter {
-                        matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                        matching: Box::new(tricerules_cards::primitives::ObjectFilter {
                             kind: tricerules_cards::primitives::TargetKind::Creature,
                             required_keywords: vec![Keyword::Flying],
                             ..Default::default()
@@ -415,7 +415,7 @@ fn q57_static_anthems_map_definitions() {
                 assert_eq!(
                     filter,
                     &CreatureScopeFilter {
-                        matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                        matching: Box::new(tricerules_cards::primitives::ObjectFilter {
                             kind: tricerules_cards::primitives::TargetKind::Creature,
                             combat_role: Some(tricerules_cards::primitives::CombatRole::Attacking),
                             ..Default::default()

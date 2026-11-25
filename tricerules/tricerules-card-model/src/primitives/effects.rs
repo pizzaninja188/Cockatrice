@@ -5,11 +5,11 @@ use super::{
     BattlefieldPermanentFilter, BattlefieldQuantityCharacteristic, CardTypeFilter,
     CastCostReceiptCondition, CastTriggerPlayer, Color, CombatDamageTriggerCardinality,
     ConditionObjectRef, CountExpression, CreatureScopeFilter, DamageDivision, EventZone,
-    GameCondition, GraveyardDestination, GraveyardFilter, Keyword, LifeAmount, PermanentTypeFilter,
-    PowerComparison, PowerToughnessCharacteristic, ProtectionQuality, ReflexiveTriggeredAbilityDef,
-    ResultType, SpecialActionKind, SpellKeyword, StackSpellFilter, TargetController, TargetFilter,
-    TargetKind, TargetRole, TriggerCondition, TriggeredAbilityDef, TypeLineAddition,
-    TypeLineReplacement,
+    GameCondition, GraveyardDestination, GraveyardFilter, Keyword, LifeAmount, ObjectFilter,
+    PermanentTypeFilter, PowerComparison, PowerToughnessCharacteristic, ProtectionQuality,
+    ReflexiveTriggeredAbilityDef, ResultType, SpecialActionKind, SpellKeyword, StackSpellFilter,
+    TargetController, TargetKind, TargetRole, TriggerCondition, TriggeredAbilityDef,
+    TypeLineAddition, TypeLineReplacement,
 };
 #[cfg(test)]
 use super::{
@@ -23,16 +23,16 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
 
-static ANY_PLAYER_MASS_TARGET: LazyLock<TargetFilter> = LazyLock::new(|| TargetFilter {
+static ANY_PLAYER_MASS_TARGET: LazyLock<ObjectFilter> = LazyLock::new(|| ObjectFilter {
     kind: TargetKind::AnyPlayer,
-    ..TargetFilter::default()
+    ..ObjectFilter::default()
 });
-static OPPONENT_PLAYER_MASS_TARGET: LazyLock<TargetFilter> = LazyLock::new(|| TargetFilter {
+static OPPONENT_PLAYER_MASS_TARGET: LazyLock<ObjectFilter> = LazyLock::new(|| ObjectFilter {
     kind: TargetKind::OpponentPlayer,
-    ..TargetFilter::default()
+    ..ObjectFilter::default()
 });
 
-fn mass_player_target(kind: TargetKind) -> Option<&'static TargetFilter> {
+fn mass_player_target(kind: TargetKind) -> Option<&'static ObjectFilter> {
     match kind {
         TargetKind::AnyPlayer => Some(&ANY_PLAYER_MASS_TARGET),
         TargetKind::OpponentPlayer => Some(&OPPONENT_PLAYER_MASS_TARGET),
@@ -227,7 +227,7 @@ pub enum EffectSubject {
     /// token-copy instruction. Only the approved Haste modifier and one delayed cohort Exile use
     /// this subject; single-object references keep using `PreviousEffectObject`.
     PreviousEffectObjects,
-    Chosen(Box<TargetFilter>),
+    Chosen(Box<ObjectFilter>),
     /// Source-only name resolved against the declaring CardProgram's target-alias table.
     /// The Program compiler consumes this marker before producing executable instructions.
     TargetAlias(String),
@@ -249,7 +249,7 @@ pub enum TokenCopySource {
         producer_ability_id: AbilityId,
         linked_exile_id: AbilityLinkId,
     },
-    Chosen(Box<TargetFilter>),
+    Chosen(Box<ObjectFilter>),
 }
 
 /// Which finite creature-subtype operation a copy exception applies after copying.
@@ -368,7 +368,7 @@ impl TokenCopyException {
 }
 
 /// Additional legality applied to a public battlefield-permanent choice. The ordinary
-/// [`TargetFilter`] still owns characteristics and controller scope; constraints compose facts
+/// [`ObjectFilter`] still owns characteristics and controller scope; constraints compose facts
 /// involving another object already bound to the resolving stack item.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PermanentChoiceConstraint {
@@ -478,7 +478,7 @@ pub enum FaceChangeAction {
 
 impl Default for EffectSubject {
     fn default() -> Self {
-        Self::Chosen(Box::new(TargetFilter::default_creature()))
+        Self::Chosen(Box::new(ObjectFilter::default_creature()))
     }
 }
 
@@ -498,9 +498,9 @@ pub struct CombatRestriction {
     #[serde(default)]
     pub cant_be_blocked: bool,
     #[serde(default)]
-    pub cant_be_blocked_by: Vec<TargetFilter>,
+    pub cant_be_blocked_by: Vec<ObjectFilter>,
     #[serde(default)]
-    pub cant_block_creatures_matching: Vec<TargetFilter>,
+    pub cant_block_creatures_matching: Vec<ObjectFilter>,
     /// Bounds apply only to nonempty blocker groups. Menace contributes a minimum of two.
     #[serde(default)]
     pub minimum_blockers: Option<u32>,
@@ -620,7 +620,7 @@ impl CombatRestriction {
     }
 }
 
-fn combat_creature_description(filter: &TargetFilter) -> String {
+fn combat_creature_description(filter: &ObjectFilter) -> String {
     if let Some(branches) = &filter.any_of {
         return branches
             .iter()
@@ -681,8 +681,8 @@ fn combat_creature_description(filter: &TargetFilter) -> String {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CombatRestrictionScope {
     Source,
-    Chosen(TargetFilter),
-    Matching(TargetFilter),
+    Chosen(ObjectFilter),
+    Matching(ObjectFilter),
 }
 
 /// Where a battlefield permanent is placed in its owner's library.
@@ -837,7 +837,7 @@ pub enum ResolutionCost {
     /// the payer's hand goes to the bottom of its owner's library (CR 118.12).
     PutHandCardOnLibraryBottom,
     SacrificePermanent {
-        filter: TargetFilter,
+        filter: ObjectFilter,
         /// Servant of the Stinger pays with its own incarnation; Crypt Lurker can pay with
         /// any matching permanent. This is a payment restriction, never a target.
         #[serde(default)]
@@ -845,7 +845,7 @@ pub enum ResolutionCost {
     },
     TapPermanents {
         count: u32,
-        filter: TargetFilter,
+        filter: ObjectFilter,
         #[serde(default)]
         exclude_source: bool,
     },
@@ -1206,21 +1206,21 @@ pub enum SpellEffectKind {
     CastLegendarySpellFromHandGraveyardOrOwnedExile,
     DamageTarget {
         amount: Amount,
-        target: TargetFilter,
+        target: ObjectFilter,
     },
     /// Create a turn-scoped CR 614 replacement for the exact targeted permanent generation:
     /// if it would be put into a graveyard from the battlefield, exile it instead. This is a
     /// separate instruction from damage because the replacement still exists when all damage is
     /// prevented. Cards: Lava Coil and Scorching Dragonfire.
     ExileIfWouldDieThisTurn {
-        target: TargetFilter,
+        target: ObjectFilter,
     },
     /// A chosen creature deals noncombat damage equal to its current power to another chosen
     /// creature. Both roles are targets, but the selected creature rather than the resolving
     /// spell is the damage source. Cards: Rabid Bite and Hunter's Edge.
     CreatureDealsDamageEqualToPower {
-        source: TargetFilter,
-        target: TargetFilter,
+        source: ObjectFilter,
+        target: ObjectFilter,
     },
     /// CR 701.14: two creatures deal noncombat damage equal to their current power to each
     /// other simultaneously. A chosen subject is a genuine CR 115 target; source, attachment,
@@ -1264,7 +1264,7 @@ pub enum SpellEffectKind {
     /// mana for each target beyond the first (CR 601.2f). All recipients share one damage batch.
     DamageTargets {
         amount: Amount,
-        target: TargetFilter,
+        target: ObjectFilter,
         #[serde(default)]
         division: DamageDivision,
         #[serde(default)]
@@ -1295,7 +1295,7 @@ pub enum SpellEffectKind {
     /// this targeted form; untargeted draws continue to use [`Self::Draw`].
     TargetPlayerDraws {
         count: Amount,
-        target: TargetFilter,
+        target: ObjectFilter,
     },
     /// Audacious Reshapers reveals its controller's library through the first artifact, puts that
     /// card onto the battlefield, and randomizes the rest of the revealed prefix to the bottom.
@@ -1328,7 +1328,7 @@ pub enum SpellEffectKind {
     ChoosePermanents {
         #[serde(default)]
         chooser: PlayerRecipient,
-        filter: TargetFilter,
+        filter: ObjectFilter,
         min: u32,
         max: u32,
         #[serde(default)]
@@ -1472,8 +1472,8 @@ pub enum SpellEffectKind {
     /// is revalidated normally under CR 608.2b; the untargeted attachment cohort is determined
     /// once when this instruction is applied (CR 608.2h). Turn to Slag uses `Equipment`.
     DestroyAttached {
-        #[serde(default = "TargetFilter::default_creature")]
-        target: TargetFilter,
+        #[serde(default = "ObjectFilter::default_creature")]
+        target: ObjectFilter,
         attachments: AttachmentFilter,
     },
     /// Give +power/+toughness until end of turn to `subject`. The default is a chosen creature
@@ -1489,7 +1489,7 @@ pub enum SpellEffectKind {
     /// CR 611.2d / 613.4b: set one target permanent's base P/T until end of turn. `power` and
     /// `toughness` are independent so Galion can snapshot unequal source characteristics.
     SetBasePowerToughness {
-        target: TargetFilter,
+        target: ObjectFilter,
         power: BasePowerToughnessValue,
         toughness: BasePowerToughnessValue,
     },
@@ -1510,10 +1510,10 @@ pub enum SpellEffectKind {
     /// change. Crippling Chill and Frost Breath share this primitive.
     /// Rejoinder and Twiddle choose tap, untap, or neither during resolution.
     TapOrUntap {
-        target: TargetFilter,
+        target: ObjectFilter,
     },
     SkipNextUntap {
-        target: TargetFilter,
+        target: ObjectFilter,
     },
     /// CR 701.26: tap every permanent matching `filter` controlled by `players`. Untargeted,
     /// with the cohort snapshotted at resolution using current characteristics. Cryptic Command
@@ -1521,8 +1521,8 @@ pub enum SpellEffectKind {
     /// controller scope belongs in `players`, not in the filter's controller relationship.
     TapAll {
         players: MassPlayerSet,
-        #[serde(default = "TargetFilter::default_creature")]
-        filter: TargetFilter,
+        #[serde(default = "ObjectFilter::default_creature")]
+        filter: ObjectFilter,
     },
     /// CR 701.26: untap `subject`. `Chosen` preserves ordinary permanent targeting for Seeker of
     /// Skybreak and Aphetto Alchemist; `Source` is the untargeted self-reference used by
@@ -1552,15 +1552,15 @@ pub enum SpellEffectKind {
     /// compare against. Vitalize (`Controller` + creature) and mass tapping share this selection.
     UntapAll {
         players: MassPlayerSet,
-        #[serde(default = "TargetFilter::default_creature")]
-        filter: TargetFilter,
+        #[serde(default = "ObjectFilter::default_creature")]
+        filter: ObjectFilter,
     },
     /// CR 611.2a / 613.1b: the resolving spell's controller gains control of target permanent for
     /// the authored duration. Act of Treason and Threaten use the ordinary turn duration; Evil's
     /// Thrall can extend it after comparing derived battlefield mana values during resolution.
     GainControl {
-        #[serde(default = "TargetFilter::default_creature")]
-        target: TargetFilter,
+        #[serde(default = "ObjectFilter::default_creature")]
+        target: ObjectFilter,
         duration: GainControlDuration,
     },
     /// CR 611.2a / 613.1b: the attacking player from Coveted Jewel's post-blocker attack-group
@@ -1620,7 +1620,7 @@ pub enum SpellEffectKind {
     /// equals this activated ability's announced X. The target filter carries the printed
     /// "artifact you control" restriction; engine target publication and resolution also bind X.
     CopyTargetArtifactWithManaValueX {
-        target: TargetFilter,
+        target: ObjectFilter,
     },
     /// Striking Palette and Doublecast: a one-shot delayed copy trigger, expiring this turn.
     CopyNextSpellThisTurn,
@@ -1662,16 +1662,16 @@ pub enum SpellEffectKind {
     /// `target` filter mirrors the card's "Enchant [type]" line; default is any creature. Validated
     /// at registry load to reject player-kind filters (auras enchant permanents, CR 303.4a).
     AuraAttach {
-        #[serde(default = "TargetFilter::default_creature")]
-        target: TargetFilter,
+        #[serde(default = "ObjectFilter::default_creature")]
+        target: ObjectFilter,
     },
     /// CR 701.3 / 301.5: attach the exact Equipment source to a chosen permanent. Unlike Equip,
     /// this is an ordinary one-shot instruction and does not impose sorcery timing. Illvoi Light
     /// Jammer, Squire's Lightblade, Meltstrider's Gear, and Barbed Bloodletter share this ETB
     /// primitive.
     AttachSource {
-        #[serde(default = "TargetFilter::default_creature")]
-        target: TargetFilter,
+        #[serde(default = "ObjectFilter::default_creature")]
+        target: ObjectFilter,
     },
     /// CR 301.5 / 701.3: attach one independently selected Equipment to one selected creature.
     /// Swordsman, Sharp Scoundrel binds both subjects as targets; Vow to Erebor consumes a
@@ -1788,7 +1788,7 @@ pub enum SpellEffectKind {
     /// Tamiyo, Field Researcher's necessary specialized target-bound repeating draw. This
     /// closed direct activated profile is distinct from Jace's per-player grouped loot watch.
     CreateWatchedCombatDamageDrawUntilNextTurn {
-        target: TargetFilter,
+        target: ObjectFilter,
         ability: Box<TriggeredAbilityDef>,
     },
     /// Sacrifice the exact generation-bound cohort captured by an engine-created delayed
@@ -1810,7 +1810,7 @@ pub enum SpellEffectKind {
     /// battlefield. Banishing Light and Stormplain Detainment share the nonland form; Trapped in
     /// the Screen narrows it to artifact, creature, or enchantment.
     ExileUntilSourceLeaves {
-        target: TargetFilter,
+        target: ObjectFilter,
     },
     /// CR 205.1b / 613.1d: add card types or creature subtypes until end of turn without
     /// replacing the permanent's existing type line. Liquimetal Coating uses a chosen permanent;
@@ -1824,7 +1824,7 @@ pub enum SpellEffectKind {
     /// The affected set is snapshotted as this effect resolves, rather than remaining dynamic.
     /// Covers Boros Charm and Heroic Intervention.
     GrantKeywordsAllPermanents {
-        filter: TargetFilter,
+        filter: ObjectFilter,
         keywords: Vec<Keyword>,
     },
     /// Mutational Advantage's counter-based protection. Capture the controller's current
@@ -1860,22 +1860,22 @@ pub enum SpellEffectKind {
     },
     TargetPlayerGainsLife {
         amount: Amount,
-        target: TargetFilter,
+        target: ObjectFilter,
     },
     TargetPlayerLosesLife {
         amount: u32,
-        target: TargetFilter,
+        target: ObjectFilter,
     },
     /// Vraska's fixed-nine poison difference. The count is snapshotted at resolution and
     /// routed through counter replacements; it is neither assignment nor proliferation.
     PoisonTargetUpToNine {
-        target: TargetFilter,
+        target: ObjectFilter,
     },
     /// Fixed poison placement through the shared player-counter planner (Ajani's emblem and
     /// Caress of Phyrexia's poison instruction). This is not a distributed counter announcement.
     PutPoisonCountersOnTargetPlayer {
         count: u32,
-        target: TargetFilter,
+        target: ObjectFilter,
     },
     EachOpponentLosesLifeYouGainEqual {
         amount: u32,
@@ -1944,8 +1944,8 @@ pub enum SpellEffectKind {
     /// Sunderflock's filtered return and Evacuation's unconditional mass creature return.
     /// Selection uses current battlefield characteristics; all departures share one snapshot.
     ReturnAllToOwnersHand {
-        #[serde(default = "TargetFilter::default_creature")]
-        kind: TargetFilter,
+        #[serde(default = "ObjectFilter::default_creature")]
+        kind: ObjectFilter,
     },
     /// Move a permanent-valued subject to its owner's library (CR 400.3). Chosen subjects retain
     /// ordinary target legality; Watery Grasp uses the exact attached object untargeted.
@@ -2075,7 +2075,7 @@ pub enum SpellEffectKind {
     },
     MillTargetPlayer {
         count: u32,
-        target: TargetFilter,
+        target: ObjectFilter,
     },
     /// CR 701.17: mill the players named by `who` without targeting them. Gorging Vulture and
     /// Tribune of Rot use the default `Controller`; player-relative trigger effects can reuse the
@@ -2094,7 +2094,7 @@ pub enum SpellEffectKind {
     ChooseHandCards {
         action: HandCardAction,
         count: u32,
-        target: TargetFilter,
+        target: ObjectFilter,
         #[serde(default)]
         chooser: HandCardChooser,
         /// Optional card-type restriction on the chosen cards. The complete hand remains visible
@@ -2127,15 +2127,15 @@ pub enum SpellEffectKind {
     /// `prevent_regeneration: true` means regeneration shields are bypassed (Wrath of God:
     /// "they can't be regenerated", CR 701.19c).
     DestroyAll {
-        #[serde(default = "TargetFilter::default_creature")]
-        kind: TargetFilter,
+        #[serde(default = "ObjectFilter::default_creature")]
+        kind: ObjectFilter,
         #[serde(default)]
         prevent_regeneration: bool,
     },
     /// CR 701.13a: exile the simultaneous current battlefield cohort, without targeting.
     /// Farewell selects artifacts/creatures/enchantments; Final Judgment selects creatures.
     ExileAll {
-        kind: TargetFilter,
+        kind: ObjectFilter,
         /// Dynamic cohort ceiling supplied by one announced activated-ability X value.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         max_mana_value_limit: Option<ManaValueLimit>,
@@ -2149,7 +2149,7 @@ pub enum SpellEffectKind {
     SacrificeAll {
         #[serde(default, skip_serializing_if = "mass_player_set_is_all")]
         players: MassPlayerSet,
-        filter: TargetFilter,
+        filter: ObjectFilter,
     },
     /// CR 701.19: put a regeneration shield on target creature. The next time that creature would
     /// be destroyed this turn, instead tap it, remove it from combat, and clear all damage from it.
@@ -2171,8 +2171,8 @@ pub enum SpellEffectKind {
         /// mass-damage vocabulary without smuggling controller relationships into `kind`.
         #[serde(default, skip_serializing_if = "mass_player_set_is_all")]
         players: MassPlayerSet,
-        #[serde(default = "TargetFilter::default_creature")]
-        kind: TargetFilter,
+        #[serde(default = "ObjectFilter::default_creature")]
+        kind: ObjectFilter,
     },
     /// CR 111 / 707: create `count` tokens copying the specified permanent under the
     /// resolving object's controller (Cackling Counterpart, Colorstorm Stallion).
@@ -2309,7 +2309,7 @@ pub enum SpellEffectKind {
     /// CR 701.10e: add the current amount of every counter kind on each legal target.
     /// Deepglow Skate and Vorel of the Hull Clade share ordinary effect-origin placement.
     DoubleCounters {
-        target: TargetFilter,
+        target: ObjectFilter,
     },
     /// Aetheric Amplifier doubles counters on the player controlling the resolving ability.
     /// Model admission is limited to a direct legacy leaf in the supported activated-modal owner.
@@ -2349,7 +2349,7 @@ pub enum SpellEffectKind {
     /// Falkenrath Noble, and drain-life spells like Vampire's Kiss. The target must be a player.
     DrainTarget {
         amount: u32,
-        target: TargetFilter,
+        target: ObjectFilter,
     },
     /// CR 605 mana ability: add mana to the activating player's pool. Legal only as an
     /// activated ability's `effect` (never a spell `spell_effect`) — the engine classifies an
@@ -2496,14 +2496,14 @@ pub enum SpellEffectKind {
     /// ability's `effect`, never a spell effect; equip only as a sorcery (CR 702.6a).
     /// Covers Bonesplitter (equip {1}) and Vulshok Morningstar (equip {2}).
     Equip {
-        #[serde(default = "TargetFilter::default_equip")]
-        target: TargetFilter,
+        #[serde(default = "ObjectFilter::default_equip")]
+        target: ObjectFilter,
     },
     /// Luxior's specialized Equipment activation: attach this source to exactly one planeswalker
     /// controlled by the activating player. It is a direct battlefield activated effect, never a
     /// spell, trigger, nested wrapper, modal mode, or Program operation, and is sorcery-speed.
     EquipPlaneswalker {
-        target: TargetFilter,
+        target: ObjectFilter,
     },
     /// CR 701.17: force the targeted player to sacrifice a permanent matching `filter` (default:
     /// any creature). The target is specified by `target` (kind must be AnyPlayer or
@@ -2512,10 +2512,10 @@ pub enum SpellEffectKind {
     /// (opponent sacrifices a creature) and Plaguecrafter (target player sacrifices a creature).
     TargetPlayerSacrifices {
         /// Who must sacrifice — kind must be AnyPlayer or OpponentPlayer.
-        target: TargetFilter,
+        target: ObjectFilter,
         /// What kind of permanent may be sacrificed (default: Creature).
-        #[serde(default = "TargetFilter::default_creature")]
-        filter: TargetFilter,
+        #[serde(default = "ObjectFilter::default_creature")]
+        filter: ObjectFilter,
     },
     /// CR 101.4/101.4b and 701.21a: each recipient chooses up to `count` matching permanents,
     /// then all chosen permanents are sacrificed simultaneously. Portal to Phyrexia uses
@@ -2523,8 +2523,8 @@ pub enum SpellEffectKind {
     ChooseAndSacrifice {
         players: PlayerRecipient,
         count: u32,
-        #[serde(default = "TargetFilter::default_creature")]
-        filter: TargetFilter,
+        #[serde(default = "ObjectFilter::default_creature")]
+        filter: ObjectFilter,
         #[serde(default, skip_serializing_if = "SacrificeRestriction::is_none")]
         restriction: SacrificeRestriction,
     },
@@ -2545,19 +2545,19 @@ pub enum SpellEffectKind {
     /// before recording the damage; the shield expires when fully consumed or at cleanup.
     PreventNextDamage {
         amount: u32,
-        target: TargetFilter,
+        target: ObjectFilter,
     },
     /// CR 615: prevent all combat damage that would be dealt to the targeted creature this turn.
     /// Unlike [`Self::PreventAllCombatDamageTurn`], this effect is the conjunction of one exact
     /// creature recipient and combat damage. Covers Fleeting Flight and the incoming-damage
     /// instruction of Azorius Ploy.
     PreventAllCombatDamageToTargetTurn {
-        target: TargetFilter,
+        target: ObjectFilter,
     },
     /// CR 615: prevent combat damage dealt by one chosen creature's captured incarnation.
     /// Complements incoming prevention for Maze of Ith; outgoing-only use: Kor Haven.
     PreventAllCombatDamageByTargetTurn {
-        target: TargetFilter,
+        target: ObjectFilter,
     },
     /// CR 614.1a: prevent all combat damage that would be dealt this turn (Fog, Holy Day,
     /// Safe Passage partial). Untargeted — sets a global flag checked when combat damage resolves.
@@ -2594,7 +2594,7 @@ fn default_true() -> bool {
 }
 
 fn default_destroy_subject() -> EffectSubject {
-    EffectSubject::Chosen(Box::new(TargetFilter::default_creature()))
+    EffectSubject::Chosen(Box::new(ObjectFilter::default_creature()))
 }
 
 /// Printed characteristics required of a card in a nonbattlefield zone. Leaf predicates compose
@@ -2662,12 +2662,12 @@ impl BeholdCriterion {
     }
 
     /// Existing permanent-selection predicate used by Behold's battlefield choice.
-    pub fn permanent_filter(&self) -> TargetFilter {
-        TargetFilter {
+    pub fn permanent_filter(&self) -> ObjectFilter {
+        ObjectFilter {
             kind: TargetKind::AnyPermanent,
             controller: TargetController::You,
             required_subtypes: vec![self.required_subtype.clone()],
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         }
     }
 
@@ -3238,7 +3238,7 @@ impl From<RelativePlayerSet> for MassPlayerSet {
 
 /// Which player an **untargeted** effect affects.
 ///
-/// Sibling of [`RelativePlayerSet`], and kept out of `TargetFilter` for the same reason: naming a
+/// Sibling of [`RelativePlayerSet`], and kept out of `ObjectFilter` for the same reason: naming a
 /// player is not targeting it (CR 115.1), and borrowing
 /// targeting vocabulary for effects that do not target is what forced source-bound effects to
 /// masquerade as targets before [`EffectSubject`] separated the concepts. Sulfuric Vortex never
@@ -3298,27 +3298,27 @@ impl PlayerRecipient {
 }
 
 /// The fixed target contract of Earthbend (Badgermole and Dai Li Indoctrination).
-pub fn earthbend_target_filter() -> &'static TargetFilter {
-    static FILTER: std::sync::LazyLock<TargetFilter> = std::sync::LazyLock::new(|| TargetFilter {
+pub fn earthbend_target_filter() -> &'static ObjectFilter {
+    static FILTER: std::sync::LazyLock<ObjectFilter> = std::sync::LazyLock::new(|| ObjectFilter {
         kind: TargetKind::AnyPermanent,
         controller: TargetController::You,
         permanent_types: vec![PermanentTypeFilter::Land],
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     });
     &FILTER
 }
 
 /// The specialized Chaos Warp instruction targets exactly one permanent.
-pub fn chaos_warp_target_filter() -> &'static TargetFilter {
-    static FILTER: LazyLock<TargetFilter> = LazyLock::new(|| TargetFilter {
+pub fn chaos_warp_target_filter() -> &'static ObjectFilter {
+    static FILTER: LazyLock<ObjectFilter> = LazyLock::new(|| ObjectFilter {
         kind: TargetKind::AnyPermanent,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     });
     &FILTER
 }
 
-fn artifact_exchange_permanent_filter() -> &'static TargetFilter {
-    static FILTER: LazyLock<TargetFilter> = LazyLock::new(|| TargetFilter {
+fn artifact_exchange_permanent_filter() -> &'static ObjectFilter {
+    static FILTER: LazyLock<ObjectFilter> = LazyLock::new(|| ObjectFilter {
         kind: TargetKind::AnyPermanent,
         permanent_types: vec![PermanentTypeFilter::Artifact],
         ..Default::default()
@@ -3338,33 +3338,33 @@ fn artifact_exchange_graveyard_filter() -> &'static GraveyardFilter {
     &FILTER
 }
 
-fn counter_move_source_target_filter() -> &'static TargetFilter {
-    static FILTER: LazyLock<TargetFilter> = LazyLock::new(|| TargetFilter {
+fn counter_move_source_target_filter() -> &'static ObjectFilter {
+    static FILTER: LazyLock<ObjectFilter> = LazyLock::new(|| ObjectFilter {
         kind: TargetKind::AnyPermanent,
         controller: TargetController::You,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     });
     &FILTER
 }
 
-fn counter_move_destination_target_filter() -> &'static TargetFilter {
-    static FILTER: LazyLock<TargetFilter> = LazyLock::new(|| TargetFilter {
+fn counter_move_destination_target_filter() -> &'static ObjectFilter {
+    static FILTER: LazyLock<ObjectFilter> = LazyLock::new(|| ObjectFilter {
         kind: TargetKind::AnyPermanent,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     });
     &FILTER
 }
 
-fn chosen_counter_add_target_filter() -> &'static TargetFilter {
-    static FILTER: LazyLock<TargetFilter> = LazyLock::new(|| TargetFilter {
+fn chosen_counter_add_target_filter() -> &'static ObjectFilter {
+    static FILTER: LazyLock<ObjectFilter> = LazyLock::new(|| ObjectFilter {
         kind: TargetKind::AnyPermanent,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     });
     &FILTER
 }
 
 pub(super) fn validate_resolution_sacrifice_cost(
-    filter: &TargetFilter,
+    filter: &ObjectFilter,
     source_only: bool,
 ) -> Result<(), String> {
     filter.validate_target_constraints()?;
@@ -4548,7 +4548,7 @@ impl SpellEffectKind {
         }
     }
 
-    pub fn target_filters(&self) -> Vec<&TargetFilter> {
+    pub fn target_filters(&self) -> Vec<&ObjectFilter> {
         self.target_roles()
             .into_iter()
             .filter_map(|role| match role {
@@ -4661,12 +4661,12 @@ impl SpellEffectKind {
     pub(crate) fn is_delayed_planeswalker_phase_out(&self) -> bool {
         matches!(self, Self::CreateDelayedTrigger {
             subject: Some(EffectSubject::Chosen(filter)), affected_player: None, ability,
-        } if filter.as_ref() == &TargetFilter {
+        } if filter.as_ref() == &ObjectFilter {
             kind: TargetKind::AnyPermanent,
             controller: TargetController::You,
             permanent_types: vec![PermanentTypeFilter::Planeswalker],
             excluded_objects: vec![super::TargetObjectExclusion::Source],
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         } && ability.is_delayed_phase_out_child())
     }
 
@@ -5061,11 +5061,11 @@ impl SpellEffectKind {
             };
         }
         if let Self::EquipPlaneswalker { target } = self {
-            let expected = TargetFilter {
+            let expected = ObjectFilter {
                 kind: super::TargetKind::AnyPermanent,
                 controller: super::TargetController::You,
                 permanent_types: vec![super::PermanentTypeFilter::Planeswalker],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             };
             return if target == &expected {
                 Ok(())
@@ -5149,10 +5149,10 @@ impl SpellEffectKind {
 
         Some(ResultType::PermanentSelection {
             chooser: PlayerRecipient::Controller,
-            filter: Box::new(TargetFilter {
+            filter: Box::new(ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 controller: TargetController::You,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             }),
             cardinality: super::Cardinality {
                 min: 0,
@@ -5668,7 +5668,7 @@ impl SpellEffectKind {
             };
             let fixed_poison_emblem = creature_or_planeswalker
                 && matches!(ability.effect.as_slice(), [SpellEffectKind::PutPoisonCountersOnTargetPlayer {count: 2,target}]
-                    if target == &TargetFilter {kind: super::TargetKind::OpponentPlayer,..Default::default()});
+                    if target == &ObjectFilter {kind: super::TargetKind::OpponentPlayer,..Default::default()});
             let supported_profile = fixed_poison_emblem
                 || kaya_upkeep
                 || (ability.trigger == expected_trigger && child_is_valid)
@@ -6030,10 +6030,10 @@ impl SpellEffectKind {
             if context != EffectContext::Ability {
                 return Err("PhaseOut requires a direct ability effect".into());
             }
-            let expected = TargetFilter {
+            let expected = ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::NotYou,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             };
             if !matches!(subject, EffectSubject::Chosen(filter) if filter.as_ref() == &expected) {
                 return Err(
@@ -6794,7 +6794,7 @@ impl SpellEffectKind {
                     return Err("ChooseAndSacrifice.count must be positive".into());
                 }
                 if *restriction == SacrificeRestriction::GreatestPower
-                    && (*count != 1 || *filter != TargetFilter::default_creature())
+                    && (*count != 1 || *filter != ObjectFilter::default_creature())
                 {
                     return Err("GreatestPower sacrifice requires count 1 and the unrestricted Creature filter".into());
                 }
@@ -7067,7 +7067,7 @@ impl SpellEffectKind {
                 }
             }
             SpellEffectKind::CreateWatchedCombatDamageDrawUntilNextTurn { target, ability } => {
-                let expected = TargetFilter {
+                let expected = ObjectFilter {
                     kind: TargetKind::Creature,
                     ..Default::default()
                 };
@@ -7992,7 +7992,7 @@ mod conditional_mass_untap_tests {
             },
             effect: Box::new(SpellEffectKind::UntapAll {
                 players: MassPlayerSet::Controller,
-                filter: TargetFilter::default_creature(),
+                filter: ObjectFilter::default_creature(),
             }),
         };
 
@@ -8082,11 +8082,11 @@ mod program_input_count_flat_admission_tests {
             );
             assert_eq!(
                 criterion.permanent_filter(),
-                super::TargetFilter {
+                super::ObjectFilter {
                     kind: super::TargetKind::AnyPermanent,
                     controller: super::TargetController::You,
                     required_subtypes: vec![subtype.to_string()],
-                    ..super::TargetFilter::default()
+                    ..super::ObjectFilter::default()
                 }
             );
             criterion.validate().expect("both derived filters validate");
@@ -8413,7 +8413,7 @@ mod issue_187_base_pt_tests {
     #[test]
     fn source_relative_base_pt_requires_an_ability_source() {
         let effect = SpellEffectKind::SetBasePowerToughness {
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::Creature,
                 ..Default::default()
             },
@@ -8511,9 +8511,9 @@ mod pupu_ufo_effect_validation_tests {
                 any_of: None,
                 controllers: RelativePlayerSet::Opponents,
                 exclude_source: false,
-                matching: Box::new(crate::primitives::TargetFilter {
+                matching: Box::new(crate::primitives::ObjectFilter {
                     kind: crate::primitives::TargetKind::Creature,
-                    ..crate::primitives::TargetFilter::default()
+                    ..crate::primitives::ObjectFilter::default()
                 }),
             },
         }));
@@ -8643,7 +8643,7 @@ mod pupu_ufo_effect_validation_tests {
         let effect = SpellEffectKind::ChooseHandCards {
             action: HandCardAction::PutOntoBattlefield,
             count: 1,
-            target: TargetFilter::default(),
+            target: ObjectFilter::default(),
             chooser: HandCardChooser::AffectedPlayer,
             card_filter: Some(CardTypeFilter::Land),
             optional: true,
@@ -8728,9 +8728,9 @@ mod issue_513_graveyard_return_context_tests {
 mod issue_276_power_damage_tests {
     use super::*;
 
-    fn power_damage_effect(target: TargetFilter) -> SpellEffectKind {
+    fn power_damage_effect(target: ObjectFilter) -> SpellEffectKind {
         SpellEffectKind::CreatureDealsDamageEqualToPower {
-            source: TargetFilter {
+            source: ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
                 ..Default::default()
@@ -8741,7 +8741,7 @@ mod issue_276_power_damage_tests {
 
     #[test]
     fn power_damage_allows_exact_creature_or_planeswalker_target_union() {
-        let target = TargetFilter {
+        let target = ObjectFilter {
             kind: TargetKind::AnyPermanent,
             controller: TargetController::NotYou,
             permanent_types: vec![
@@ -8758,12 +8758,12 @@ mod issue_276_power_damage_tests {
     #[test]
     fn power_damage_rejects_non_exact_target_unions() {
         for target in [
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![PermanentTypeFilter::Creature],
                 ..Default::default()
             },
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![
                     PermanentTypeFilter::Planeswalker,
@@ -8771,7 +8771,7 @@ mod issue_276_power_damage_tests {
                 ],
                 ..Default::default()
             },
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![
                     PermanentTypeFilter::Creature,
@@ -8801,28 +8801,28 @@ mod issue_158_predicate_tests {
                         any_of: None,
                         controllers: RelativePlayerSet::Controller,
                         exclude_source: false,
-                        matching: Box::new(crate::primitives::TargetFilter {
+                        matching: Box::new(crate::primitives::ObjectFilter {
                             kind: crate::primitives::TargetKind::AnyPermanent,
                             permanent_types: vec![crate::primitives::PermanentTypeFilter::Land],
-                            ..crate::primitives::TargetFilter::default()
+                            ..crate::primitives::ObjectFilter::default()
                         }),
                     },
                     BattlefieldPermanentFilter {
                         any_of: None,
                         controllers: RelativePlayerSet::Controller,
                         exclude_source: false,
-                        matching: Box::new(crate::primitives::TargetFilter {
+                        matching: Box::new(crate::primitives::ObjectFilter {
                             kind: crate::primitives::TargetKind::AnyPermanent,
                             required_subtypes: vec!["Treefolk".into()],
-                            ..crate::primitives::TargetFilter::default()
+                            ..crate::primitives::ObjectFilter::default()
                         }),
                     },
                 ]),
                 controllers: RelativePlayerSet::Controller,
                 exclude_source: false,
-                matching: Box::new(crate::primitives::TargetFilter {
+                matching: Box::new(crate::primitives::ObjectFilter {
                     kind: crate::primitives::TargetKind::AnyPermanent,
-                    ..crate::primitives::TargetFilter::default()
+                    ..crate::primitives::ObjectFilter::default()
                 }),
             },
             aggregate: BattlefieldAggregate::DistinctNames,
@@ -8847,10 +8847,10 @@ mod issue_158_predicate_tests {
         let tapped = GameCondition::BattlefieldCreatureCount {
             filter: BattlefieldCreatureCountFilter {
                 controllers: RelativePlayerSet::Controller,
-                matching: Box::new(crate::primitives::TargetFilter {
+                matching: Box::new(crate::primitives::ObjectFilter {
                     kind: crate::primitives::TargetKind::Creature,
                     tapped: Some(true),
-                    ..crate::primitives::TargetFilter::default()
+                    ..crate::primitives::ObjectFilter::default()
                 }),
                 ..Default::default()
             },
@@ -8908,7 +8908,7 @@ mod issue_158_predicate_tests {
 
 #[cfg(test)]
 mod activated_x_mana_value_limit_tests {
-    use super::{EffectContext, ManaValueLimit, SpellEffectKind, TargetFilter};
+    use super::{EffectContext, ManaValueLimit, ObjectFilter, SpellEffectKind};
 
     #[test]
     fn old_exile_all_ron_defaults_the_new_limit_to_none() {
@@ -8927,7 +8927,7 @@ mod activated_x_mana_value_limit_tests {
     #[test]
     fn dynamic_limit_variants_remain_closed_to_their_own_effect_consumers() {
         let exile = |limit| SpellEffectKind::ExileAll {
-            kind: TargetFilter::default_creature(),
+            kind: ObjectFilter::default_creature(),
             max_mana_value_limit: Some(limit),
             until_source_leaves: false,
         };

@@ -3010,9 +3010,9 @@ mod tests {
                 any_of: None,
                 controllers: RelativePlayerSet::Controller,
                 exclude_source: false,
-                matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                matching: Box::new(tricerules_card_model::primitives::ObjectFilter {
                     kind: tricerules_card_model::primitives::TargetKind::Creature,
-                    ..tricerules_card_model::primitives::TargetFilter::default()
+                    ..tricerules_card_model::primitives::ObjectFilter::default()
                 }),
             },
         };
@@ -3078,9 +3078,9 @@ mod tests {
             any_of: None,
             controllers: RelativePlayerSet::Controller,
             exclude_source: false,
-            matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+            matching: Box::new(tricerules_card_model::primitives::ObjectFilter {
                 kind: tricerules_card_model::primitives::TargetKind::Creature,
-                ..tricerules_card_model::primitives::TargetFilter::default()
+                ..tricerules_card_model::primitives::ObjectFilter::default()
             }),
         };
         let maximum = |filter, characteristic| {
@@ -3438,10 +3438,10 @@ mod tests {
             any_of: None,
             controllers: RelativePlayerSet::Controller,
             exclude_source: false,
-            matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+            matching: Box::new(tricerules_card_model::primitives::ObjectFilter {
                 kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
                 permanent_types: vec![tricerules_card_model::primitives::PermanentTypeFilter::Land],
-                ..tricerules_card_model::primitives::TargetFilter::default()
+                ..tricerules_card_model::primitives::ObjectFilter::default()
             }),
         };
         let mut union = filter.clone();
@@ -3614,7 +3614,7 @@ mod tests {
         let source = move_to_battlefield(&mut engine, 0, "grizzly_bears");
         move_to_battlefield(&mut engine, 0, "hill_giant");
         let cost = tricerules_card_model::primitives::ResolutionCost::SacrificePermanent {
-            filter: tricerules_card_model::primitives::TargetFilter {
+            filter: tricerules_card_model::primitives::ObjectFilter {
                 kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
                 controller: tricerules_card_model::primitives::TargetController::You,
                 ..Default::default()
@@ -3651,7 +3651,7 @@ mod tests {
         let source = move_to_battlefield(&mut engine, 0, "grizzly_bears");
         let other = move_to_battlefield(&mut engine, 0, "hill_giant");
         let cost = tricerules_card_model::primitives::ResolutionCost::SacrificePermanent {
-            filter: tricerules_card_model::primitives::TargetFilter {
+            filter: tricerules_card_model::primitives::ObjectFilter {
                 kind: tricerules_card_model::primitives::TargetKind::Creature,
                 controller: tricerules_card_model::primitives::TargetController::You,
                 excluded_objects: vec![
@@ -4416,33 +4416,33 @@ mod tests {
                     any_of: None,
                     controllers: RelativePlayerSet::Controller,
                     exclude_source: false,
-                    matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                    matching: Box::new(tricerules_card_model::primitives::ObjectFilter {
                         kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
                         permanent_types: vec![
                             tricerules_card_model::primitives::PermanentTypeFilter::Land,
                         ],
-                        ..tricerules_card_model::primitives::TargetFilter::default()
+                        ..tricerules_card_model::primitives::ObjectFilter::default()
                     }),
                 },
                 BattlefieldPermanentFilter {
                     any_of: None,
                     controllers: RelativePlayerSet::Controller,
                     exclude_source: false,
-                    matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                    matching: Box::new(tricerules_card_model::primitives::ObjectFilter {
                         kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
                         permanent_types: vec![
                             tricerules_card_model::primitives::PermanentTypeFilter::Land,
                         ],
                         required_supertypes: vec!["Basic".into()],
-                        ..tricerules_card_model::primitives::TargetFilter::default()
+                        ..tricerules_card_model::primitives::ObjectFilter::default()
                     }),
                 },
             ]),
             controllers: RelativePlayerSet::Controller,
             exclude_source: false,
-            matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+            matching: Box::new(tricerules_card_model::primitives::ObjectFilter {
                 kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
-                ..tricerules_card_model::primitives::TargetFilter::default()
+                ..tricerules_card_model::primitives::ObjectFilter::default()
             }),
         };
         assert_eq!(
@@ -4675,10 +4675,10 @@ mod tests {
         let filter = tricerules_card_model::BattlefieldCreatureCountFilter {
             controllers: RelativePlayerSet::Controller,
             exclude_source: false,
-            matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+            matching: Box::new(tricerules_card_model::primitives::ObjectFilter {
                 kind: tricerules_card_model::primitives::TargetKind::Creature,
                 requires_any_counter: true,
-                ..tricerules_card_model::primitives::TargetFilter::default()
+                ..tricerules_card_model::primitives::ObjectFilter::default()
             }),
         };
         let condition = GameCondition::BattlefieldCreatureCount {
@@ -4775,11 +4775,11 @@ mod tests {
         let filter = tricerules_card_model::BattlefieldCreatureCountFilter {
             controllers: RelativePlayerSet::Controller,
             exclude_source: true,
-            matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+            matching: Box::new(tricerules_card_model::primitives::ObjectFilter {
                 kind: tricerules_card_model::primitives::TargetKind::Creature,
                 required_subtypes: vec!["Elf".into()],
                 tapped: Some(false),
-                ..tricerules_card_model::primitives::TargetFilter::default()
+                ..tricerules_card_model::primitives::ObjectFilter::default()
             }),
         };
         let condition = GameCondition::BattlefieldCreatureCount {
@@ -4886,9 +4886,9 @@ mod tests {
             any_of: None,
             controllers: RelativePlayerSet::Controller,
             exclude_source: true,
-            matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+            matching: Box::new(tricerules_card_model::primitives::ObjectFilter {
                 kind: tricerules_card_model::primitives::TargetKind::Creature,
-                ..tricerules_card_model::primitives::TargetFilter::default()
+                ..tricerules_card_model::primitives::ObjectFilter::default()
             }),
         };
         let context = ConditionContext {
@@ -4963,9 +4963,9 @@ mod tests {
             any_of: None,
             controllers: RelativePlayerSet::Controller,
             exclude_source: false,
-            matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+            matching: Box::new(tricerules_card_model::primitives::ObjectFilter {
                 kind: tricerules_card_model::primitives::TargetKind::Creature,
-                ..tricerules_card_model::primitives::TargetFilter::default()
+                ..tricerules_card_model::primitives::ObjectFilter::default()
             }),
         };
         let condition = GameCondition::BattlefieldAggregate {
@@ -5000,7 +5000,7 @@ mod tests {
     /// tapped status) now narrow counts and creature-count conditions too.
     #[test]
     fn issue_534_battlefield_counts_use_the_shared_object_predicate() {
-        use tricerules_card_model::primitives::{PowerComparison, TargetFilter, TargetKind};
+        use tricerules_card_model::primitives::{ObjectFilter, PowerComparison, TargetKind};
 
         let deck = deck_with_cards(
             &["grizzly_bears", "grizzly_bears", "grizzly_bears"],
@@ -5042,10 +5042,10 @@ mod tests {
 
         let big = BattlefieldPermanentFilter::matching(
             RelativePlayerSet::Controller,
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::Creature,
                 power: Some(PowerComparison::AtLeast(4)),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         );
         assert_eq!(
@@ -5054,10 +5054,10 @@ mod tests {
         );
         let lands = BattlefieldPermanentFilter::matching(
             RelativePlayerSet::Controller,
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![tricerules_card_model::PermanentTypeFilter::Land],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         );
         assert_eq!(
@@ -5068,9 +5068,9 @@ mod tests {
         let untapped_others = tricerules_card_model::BattlefieldCreatureCountFilter {
             controllers: RelativePlayerSet::Controller,
             exclude_source: true,
-            matching: Box::new(TargetFilter {
+            matching: Box::new(ObjectFilter {
                 tapped: Some(false),
-                ..TargetFilter::default_creature()
+                ..ObjectFilter::default_creature()
             }),
         };
         assert_eq!(

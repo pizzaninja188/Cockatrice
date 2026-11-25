@@ -118,11 +118,11 @@ pub(super) enum CounterDebitSource {
     Source,
     SelectedPermanent {
         ability_source: rv1::CostObjectRef,
-        filter: Box<TargetFilter>,
+        filter: Box<ObjectFilter>,
     },
     AggregatePermanent {
         ability_source: rv1::CostObjectRef,
-        filter: Box<TargetFilter>,
+        filter: Box<ObjectFilter>,
     },
 }
 
@@ -3327,7 +3327,7 @@ impl GameEngine {
         player: PlayerId,
         source: Option<ObjectId>,
         oid: ObjectId,
-        filter: &TargetFilter,
+        filter: &ObjectFilter,
     ) -> bool {
         if let Some(branches) = &filter.any_of {
             return branches
@@ -3374,7 +3374,7 @@ impl GameEngine {
         player: PlayerId,
         source: ObjectId,
         oid: ObjectId,
-        filter: &TargetFilter,
+        filter: &ObjectFilter,
     ) -> bool {
         if let Some(branches) = &filter.any_of {
             return branches
@@ -3427,7 +3427,7 @@ impl GameEngine {
         player: PlayerId,
         source: rv1::CostObjectRef,
         oid: ObjectId,
-        filter: &TargetFilter,
+        filter: &ObjectFilter,
     ) -> bool {
         if let Some(branches) = &filter.any_of {
             return branches.iter().any(|branch| {
@@ -3490,7 +3490,7 @@ impl GameEngine {
         source: rv1::CostObjectRef,
         required_count: u32,
         fixed_kind: Option<CounterKind>,
-        filter: &TargetFilter,
+        filter: &ObjectFilter,
         selection: &rv1::CounterRemovalGroupSelection,
         inventory: &super::super::counters::CounterInventory,
     ) -> Result<Vec<(super::super::counters::CounterInventoryKey, u32)>, EngineError> {
@@ -3841,7 +3841,7 @@ mod convoke_transaction_tests {
             .map(|oid| engine.state.zone_change_generation[oid])
             .collect();
         let cost = [AbilityCost::SacrificePermanent {
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 controller: TargetController::You,
                 ..Default::default()
@@ -3998,7 +3998,7 @@ mod convoke_transaction_tests {
         .unwrap();
         let cost = AbilityCost::SacrificePermanent {
             count: 1,
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
                 ..Default::default()
@@ -4054,7 +4054,7 @@ mod convoke_transaction_tests {
         let (mut engine, source, _) = battlefield_self_exile_fixture();
         let reference = object_ref(&engine, source);
         let cost = ResolutionCost::SacrificePermanent {
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 ..Default::default()
             },
@@ -4080,7 +4080,7 @@ mod convoke_transaction_tests {
         let (mut engine, source, _) = battlefield_self_exile_fixture();
         let reference = object_ref(&engine, source);
         let cost = ResolutionCost::SacrificePermanent {
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 ..Default::default()
             },
@@ -4104,7 +4104,7 @@ mod convoke_transaction_tests {
             let (mut engine, source, _) = battlefield_self_exile_fixture();
             let reference = object_ref(&engine, source);
             let cost = ResolutionCost::SacrificePermanent {
-                filter: TargetFilter {
+                filter: ObjectFilter {
                     kind: TargetKind::Creature,
                     ..Default::default()
                 },
@@ -4150,7 +4150,7 @@ mod convoke_transaction_tests {
         .unwrap();
         let reference = object_ref(&engine, source);
         let cost = ResolutionCost::SacrificePermanent {
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 ..Default::default()
             },
@@ -4212,7 +4212,7 @@ mod convoke_transaction_tests {
             for resolution in [false, true] {
                 let (mut engine, source, _) = battlefield_self_exile_fixture();
                 let source_ref = object_ref(&engine, source);
-                let filter = TargetFilter {
+                let filter = ObjectFilter {
                     kind: TargetKind::Creature,
                     ..Default::default()
                 };
@@ -4347,7 +4347,7 @@ mod convoke_transaction_tests {
         let captured_source = engine.payment_object_ref(source);
         let cost = tricerules_card_model::primitives::ResolutionCost::TapPermanents {
             count: 1,
-            filter: tricerules_card_model::primitives::TargetFilter {
+            filter: tricerules_card_model::primitives::ObjectFilter {
                 kind: tricerules_card_model::primitives::TargetKind::Creature,
                 controller: tricerules_card_model::primitives::TargetController::You,
                 ..Default::default()
@@ -4611,7 +4611,7 @@ mod convoke_transaction_tests {
                     minimum: 4,
                     contribution: ObjectContributionKind::CurrentPower,
                 },
-                filter: Box::new(TargetFilter {
+                filter: Box::new(ObjectFilter {
                     kind: TargetKind::Creature,
                     controller: TargetController::You,
                     ..Default::default()
@@ -4701,7 +4701,7 @@ mod convoke_transaction_tests {
                 minimum: 5,
                 contribution: ObjectContributionKind::CurrentPower,
             },
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
                 ..Default::default()
@@ -5056,7 +5056,7 @@ mod convoke_transaction_tests {
                 counter: Some(CounterKind::PlusOnePlusOne),
                 count: 1,
                 payment_source: CounterRemovalPaymentSource::SelectedPermanent(Box::new(
-                    TargetFilter {
+                    ObjectFilter {
                         kind: TargetKind::Creature,
                         controller: TargetController::You,
                         ..Default::default()
@@ -5689,8 +5689,8 @@ mod convoke_transaction_tests {
         (engine, source, artifact, creature)
     }
 
-    fn aggregate_test_filter() -> Box<TargetFilter> {
-        Box::new(TargetFilter {
+    fn aggregate_test_filter() -> Box<ObjectFilter> {
+        Box::new(ObjectFilter {
             kind: TargetKind::AnyPermanent,
             controller: TargetController::You,
             owner: TargetOwner::You,
@@ -5700,7 +5700,7 @@ mod convoke_transaction_tests {
                 PermanentTypeFilter::Creature,
                 PermanentTypeFilter::Planeswalker,
             ],
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         })
     }
 
@@ -5709,7 +5709,7 @@ mod convoke_transaction_tests {
         object: rv1::CostObjectRef,
         kind: CounterKind,
         count: u32,
-        filter: &TargetFilter,
+        filter: &ObjectFilter,
     ) -> CostDebit {
         CostDebit::RemoveCounters {
             object,
@@ -5840,12 +5840,12 @@ mod convoke_transaction_tests {
             aggregate_transaction_fixture(602_433, 20);
         selected.state.players[0].mana_pool.green = 1;
         let selected_creature_ref = selected.payment_object_ref(selected_creature);
-        let selected_filter = Box::new(TargetFilter {
+        let selected_filter = Box::new(ObjectFilter {
             kind: TargetKind::AnyPermanent,
             controller: TargetController::You,
             owner: TargetOwner::You,
             permanent_types: vec![PermanentTypeFilter::Creature],
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         });
         let selected_costs = [
             AbilityCost::PayLife { amount: 2 },
@@ -6089,12 +6089,12 @@ mod convoke_transaction_tests {
             .counters
             .insert(CounterKind::Loyalty, 1);
         let walker_ref = loyalty_conflict.payment_object_ref(walker);
-        let loyalty_filter = TargetFilter {
+        let loyalty_filter = ObjectFilter {
             kind: TargetKind::AnyPermanent,
             controller: TargetController::You,
             owner: TargetOwner::You,
             permanent_types: vec![PermanentTypeFilter::Planeswalker],
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         };
         let loyalty_plan = ability_transaction(vec![
             aggregate_counter_debit(
@@ -6139,12 +6139,12 @@ mod convoke_transaction_tests {
             .insert(CounterKind::Loyalty, 1);
         let walker_ref = independent_kinds.payment_object_ref(walker);
         let artifact_ref = independent_kinds.payment_object_ref(artifact);
-        let artifact_filter = TargetFilter {
+        let artifact_filter = ObjectFilter {
             kind: TargetKind::AnyPermanent,
             controller: TargetController::You,
             owner: TargetOwner::You,
             permanent_types: vec![PermanentTypeFilter::Artifact],
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         };
         independent_kinds
             .commit_cost_transaction(ability_transaction(vec![
@@ -6187,12 +6187,12 @@ mod convoke_transaction_tests {
             .counters
             .remove(&CounterKind::Loyalty);
         let walker_ref = positive_does_not_finance.payment_object_ref(walker);
-        let source_allowed_filter = TargetFilter {
+        let source_allowed_filter = ObjectFilter {
             kind: TargetKind::AnyPermanent,
             controller: TargetController::You,
             owner: TargetOwner::You,
             permanent_types: vec![PermanentTypeFilter::Planeswalker],
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         };
         let positive_plan = ability_transaction(vec![
             aggregate_counter_debit(
@@ -6947,7 +6947,7 @@ mod convoke_transaction_tests {
             zone_change_generation: engine.state.zone_change_generation[&bear],
         };
         let costs = [AdditionalCost::SacrificePermanent {
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 ..Default::default()
             },

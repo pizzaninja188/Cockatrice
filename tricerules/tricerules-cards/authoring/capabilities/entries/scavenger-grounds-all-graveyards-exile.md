@@ -23,7 +23,7 @@
 - **Status:** `Supported` for the tested all-player exile and controlled-Desert cost.
 - **Typed symbols:** `AbilityCost::Mana`, `AbilityCost::Tap`, and
   `AbilityCost::SacrificePermanent` in `tricerules/tricerules-card-model/src/primitives/costs.rs`;
-  `TargetFilter.required_subtypes` and `TargetController::You` in
+  `ObjectFilter.required_subtypes` and `TargetController::You` in
   `tricerules/tricerules-card-model/src/primitives/targeting.rs`; `SpellEffectKind::ExileGraveyards` and
   `RelativePlayerSet::All` in `tricerules/tricerules-card-model/src/primitives/effects.rs`.
 - **Implementation references:** Loader: `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_embedded`

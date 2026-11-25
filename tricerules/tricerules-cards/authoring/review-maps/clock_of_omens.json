@@ -19,15 +19,15 @@
       "typed_path": "/faces/0/activated_abilities/0/costs/0/TapPermanents/constraint/ExactCount"
     },
     {
-      "symbol": "TargetFilter.kind",
+      "symbol": "ObjectFilter.kind",
       "typed_path": "/faces/0/activated_abilities/0/costs/0/TapPermanents/filter/kind"
     },
     {
-      "symbol": "TargetFilter.controller",
+      "symbol": "ObjectFilter.controller",
       "typed_path": "/faces/0/activated_abilities/0/costs/0/TapPermanents/filter/controller"
     },
     {
-      "symbol": "TargetFilter.permanent_types",
+      "symbol": "ObjectFilter.permanent_types",
       "typed_path": "/faces/0/activated_abilities/0/costs/0/TapPermanents/filter/permanent_types"
     },
     {
@@ -39,11 +39,11 @@
       "typed_path": "/faces/0/activated_abilities/0/effect/0/Untap/subject/Chosen"
     },
     {
-      "symbol": "TargetFilter.kind",
+      "symbol": "ObjectFilter.kind",
       "typed_path": "/faces/0/activated_abilities/0/effect/0/Untap/subject/Chosen/kind"
     },
     {
-      "symbol": "TargetFilter.permanent_types",
+      "symbol": "ObjectFilter.permanent_types",
       "typed_path": "/faces/0/activated_abilities/0/effect/0/Untap/subject/Chosen/permanent_types"
     }
   ],

@@ -1,6 +1,6 @@
 //! Registry conformance for the queue-v30 enters-bounce cohort.
 use tricerules_cards::primitives::{
-    EffectSubject, SpellEffectKind, TargetFilter, TargetKind, TriggerCondition,
+    EffectSubject, ObjectFilter, SpellEffectKind, TargetKind, TriggerCondition,
 };
 use tricerules_cards::Layout;
 
@@ -96,9 +96,9 @@ fn q30_etb_bounce_batch_maps_definitions() {
         };
         assert_eq!(
             **target,
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::Creature,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             "{}",
             card.id

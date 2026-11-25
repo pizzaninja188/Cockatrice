@@ -1,6 +1,6 @@
 use tricerules_cards::primitives::{
     AbilityCost, CastTriggerPlayer, CreatureScopeController, CreatureScopeFilter, EffectSubject,
-    PermanentTypeFilter, PlayerRecipient, SpellEffectKind, StaticAbilityDef, TargetFilter,
+    ObjectFilter, PermanentTypeFilter, PlayerRecipient, SpellEffectKind, StaticAbilityDef,
     TargetKind, TriggerCondition,
 };
 use tricerules_cards::{AbilityPresentation, CardRegistry, Color, GameCondition, Keyword};
@@ -107,7 +107,7 @@ fn devotion_gods_register_exact_faces_costs_types_keywords_and_oracle_lines() {
                     power: 2,
                     toughness: 2,
                     scale: None,
-                    subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                         kind: TargetKind::Creature,
                         ..Default::default()
                     })),

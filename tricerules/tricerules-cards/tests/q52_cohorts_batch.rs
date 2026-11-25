@@ -31,7 +31,7 @@ fn identity(id: &str, name: &str, mana: &str, types: &[&str]) -> &'static CardFa
     f
 }
 
-fn artifact_or_land(filter: &tricerules_cards::primitives::TargetFilter) -> bool {
+fn artifact_or_land(filter: &tricerules_cards::primitives::ObjectFilter) -> bool {
     let branches = filter.any_of.as_ref().expect("disjunctive target filter");
     branches.len() == 2
         && branches.iter().any(|branch| {

@@ -3,7 +3,7 @@
 use crate::common;
 
 use common::FaceExpectation;
-use tricerules_cards::primitives::{EffectSubject, SpellEffectKind, TargetFilter, TargetKind};
+use tricerules_cards::primitives::{EffectSubject, ObjectFilter, SpellEffectKind, TargetKind};
 
 #[test]
 fn issue_523_registers_regenerate_target_creature_instants() {
@@ -31,7 +31,7 @@ fn issue_523_registers_regenerate_target_creature_instants() {
         };
         assert_eq!(
             **filter,
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::Creature,
                 ..Default::default()
             },

@@ -10,8 +10,8 @@
 use tricerules_cards::primitives::{
     BattlefieldAggregate, BattlefieldPermanentFilter, CardTypeFilter, CombatRestriction,
     CombatRestrictionScope, CreatureScopeFilter, EffectSubject, GameCondition, LifeAmount,
-    PlayerRecipient, PowerComparison, RelativePlayerSet, SpellCastFilter, StaticAbilityDef,
-    TargetFilter, TargetKind, TypeLineAddition,
+    ObjectFilter, PlayerRecipient, PowerComparison, RelativePlayerSet, SpellCastFilter,
+    StaticAbilityDef, TargetKind, TypeLineAddition,
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, Amount, CastTriggerPlayer, Color, CounterKind, Keyword,
@@ -48,7 +48,7 @@ fn issue_351_pillar_launch_pumps_reach_and_untaps() {
     assert_eq!(face.mana_cost.to_string(), "{G}");
     assert_eq!(face.types, ["Instant"]);
     assert_eq!(face.colors(), vec![Color::Green]);
-    let chosen = EffectSubject::Chosen(Box::new(TargetFilter::default_creature()));
+    let chosen = EffectSubject::Chosen(Box::new(ObjectFilter::default_creature()));
     assert_eq!(
         face.spell_effect,
         [
@@ -80,7 +80,7 @@ fn issue_351_smaugs_fury_pumps_reach_and_first_strike() {
     assert_eq!(face.mana_cost.to_string(), "{1}{R}");
     assert_eq!(face.types, ["Instant"]);
     assert_eq!(face.colors(), vec![Color::Red]);
-    let chosen = EffectSubject::Chosen(Box::new(TargetFilter::default_creature()));
+    let chosen = EffectSubject::Chosen(Box::new(ObjectFilter::default_creature()));
     assert_eq!(
         face.spell_effect,
         [
@@ -243,10 +243,10 @@ fn issue_351_ragged_playmate_activates_the_unblockable_grant() {
     assert_eq!(
         ability.effect,
         [SpellEffectKind::ApplyCombatRestriction {
-            scope: CombatRestrictionScope::Chosen(TargetFilter {
+            scope: CombatRestrictionScope::Chosen(ObjectFilter {
                 kind: TargetKind::Creature,
                 power: Some(PowerComparison::AtMost(2)),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             }),
             restriction: CombatRestriction {
                 cant_be_blocked: true,
@@ -341,12 +341,12 @@ fn issue_351_gravblade_heavy_keeps_the_artifact_condition() {
                     any_of: None,
                     controllers: RelativePlayerSet::Controller,
                     exclude_source: false,
-                    matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                    matching: Box::new(tricerules_cards::primitives::ObjectFilter {
                         kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
                         permanent_types: vec![
                             tricerules_cards::primitives::PermanentTypeFilter::Artifact
                         ],
-                        ..tricerules_cards::primitives::TargetFilter::default()
+                        ..tricerules_cards::primitives::ObjectFilter::default()
                     }),
                 },
                 aggregate: BattlefieldAggregate::Count,

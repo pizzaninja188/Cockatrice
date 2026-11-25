@@ -864,7 +864,7 @@ impl GameEngine {
         &self,
         event: &BattlefieldEntryEvent,
         effect_id: &EntryReplacementEffectId,
-    ) -> Option<TargetFilter> {
+    ) -> Option<ObjectFilter> {
         self.entry_copy_definition(event, effect_id)
             .map(|(filter, _, _)| filter)
     }
@@ -873,7 +873,7 @@ impl GameEngine {
         &self,
         event: &BattlefieldEntryEvent,
         effect_id: &EntryReplacementEffectId,
-    ) -> Option<(TargetFilter, bool, bool)> {
+    ) -> Option<(ObjectFilter, bool, bool)> {
         let EntryReplacementEffectId::Intrinsic {
             object_id,
             copy_revision,
@@ -2174,7 +2174,7 @@ impl GameEngine {
     fn copy_source_candidates(
         &self,
         event: &BattlefieldEntryEvent,
-        filter: &TargetFilter,
+        filter: &ObjectFilter,
     ) -> Vec<ObjectId> {
         let candidates = battlefield_objects_matching(self, filter);
         candidates
@@ -2183,7 +2183,7 @@ impl GameEngine {
             .collect()
     }
 
-    fn copy_source_description(filter: &TargetFilter) -> String {
+    fn copy_source_description(filter: &ObjectFilter) -> String {
         use tricerules_card_model::primitives::{PermanentTypeFilter, TargetKind};
 
         let noun = match filter.permanent_types.as_slice() {
@@ -2558,7 +2558,7 @@ impl GameEngine {
         object_id: ObjectId,
         controller: PlayerId,
         values: &CopiableValues,
-        filter: &TargetFilter,
+        filter: &ObjectFilter,
     ) -> Vec<ObjectId> {
         let Some(object) = self.state.objects.get_mut(&object_id) else {
             return Vec::new();
@@ -2630,7 +2630,7 @@ impl GameEngine {
         stack: ParkedStackResolution,
         event: BattlefieldEntryEvent,
         completion: BattlefieldEntryCompletion,
-        filter: TargetFilter,
+        filter: ObjectFilter,
         recipients: Vec<ObjectId>,
         events: &mut Vec<rv1::RuledEvent>,
     ) {

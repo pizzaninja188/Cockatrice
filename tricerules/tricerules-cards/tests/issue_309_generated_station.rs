@@ -4,8 +4,8 @@ use tricerules_cards::mana::ManaCost;
 use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, ActivationTiming, Amount, BattlefieldQuantityCharacteristic,
     CardResultAction, CardResultFilter, CardResultSource, CardTypeFilter, CountExpression,
-    EffectSubject, GameCondition, InstructionKind, ObjectPaymentConstraint, PlayerRecipient,
-    SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
+    EffectSubject, GameCondition, InstructionKind, ObjectFilter, ObjectPaymentConstraint,
+    PlayerRecipient, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind,
 };
 use tricerules_cards::{AbilityPresentation, CounterKind, Keyword};
 
@@ -104,10 +104,10 @@ fn issue_309_cards_preserve_exact_faces_abilities_and_presentation_fingerprints(
             station.costs,
             [AbilityCost::TapPermanents {
                 constraint: ObjectPaymentConstraint::ExactCount(1),
-                filter: TargetFilter {
+                filter: ObjectFilter {
                     kind: TargetKind::Creature,
                     controller: TargetController::You,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
                 exclude_source: true,
             }]
@@ -200,9 +200,9 @@ fn issue_309_cards_preserve_exact_faces_abilities_and_presentation_fingerprints(
                 trigger.effect,
                 [SpellEffectKind::DamageTarget {
                     amount: Amount::Fixed(3),
-                    target: TargetFilter {
+                    target: ObjectFilter {
                         kind: TargetKind::AnyTarget,
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     },
                 }]
             );

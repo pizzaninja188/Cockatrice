@@ -638,7 +638,7 @@ mod damage_source_tests {
             &mut cx,
             SpellEffectKind::Fight {
                 first: EffectSubject::Source,
-                second: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                second: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
             },
         )
     }
@@ -704,8 +704,8 @@ mod damage_source_tests {
         creature_deals_damage_equal_to_power(
             &mut cx,
             SpellEffectKind::CreatureDealsDamageEqualToPower {
-                source: TargetFilter::default_creature(),
-                target: TargetFilter::default_creature(),
+                source: ObjectFilter::default_creature(),
+                target: ObjectFilter::default_creature(),
             },
         )
     }

@@ -2206,7 +2206,7 @@ fn land_scope(controller: tricerules_card_model::primitives::TargetController) -
     AffectedScope::PermanentsMatching {
         reference_player: 1,
         exclude: None,
-        filter: Box::new(tricerules_card_model::primitives::TargetFilter {
+        filter: Box::new(tricerules_card_model::primitives::ObjectFilter {
             kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
             controller,
             permanent_types: vec![PermanentTypeFilter::Land],

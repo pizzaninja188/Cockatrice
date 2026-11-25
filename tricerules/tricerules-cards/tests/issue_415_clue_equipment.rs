@@ -8,9 +8,8 @@
 //! child nodes of their owning static with intentional presentation fallback.
 
 use tricerules_cards::primitives::{
-    CombatRestriction, GameCondition, LifeAmount, PlayerRecipient, RelativePlayerSet,
-    SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
-    TypeLineAddition,
+    CombatRestriction, GameCondition, LifeAmount, ObjectFilter, PlayerRecipient, RelativePlayerSet,
+    SpellEffectKind, StaticAbilityDef, TargetController, TargetKind, TypeLineAddition,
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, AbilitySourceZone, ActivationTiming, Amount, Keyword,
@@ -85,10 +84,10 @@ fn issue_415_equip_abilities_match_the_printed_costs() {
         assert_eq!(
             ability.effect,
             [SpellEffectKind::Equip {
-                target: TargetFilter {
+                target: ObjectFilter {
                     kind: TargetKind::Creature,
                     controller: TargetController::You,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
             }],
             "{name} equip effect"
@@ -387,9 +386,9 @@ fn issue_415_wrench_static_grants_vigilance_and_the_tap_ability() {
     assert_eq!(
         granted.effect,
         [SpellEffectKind::Tap {
-            subject: tricerules_cards::primitives::EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: tricerules_cards::primitives::EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );

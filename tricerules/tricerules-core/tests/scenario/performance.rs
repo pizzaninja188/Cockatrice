@@ -117,7 +117,7 @@ fn big_board_characteristics_full_turn_stays_bounded() {
 #[test]
 fn early_layer_board_characteristics_stays_bounded() {
     use tricerules_cards::primitives::{
-        BasicLandType, PermanentTypeFilter, TargetFilter, TargetKind, TypeLineAddition,
+        BasicLandType, ObjectFilter, PermanentTypeFilter, TargetKind, TypeLineAddition,
         TypeLineReplacement,
     };
     let mut engine = GameEngine::new(
@@ -152,7 +152,7 @@ fn early_layer_board_characteristics_stays_bounded() {
     add_effect(
         AffectedScope::PermanentsMatching {
             reference_player: 0,
-            filter: Box::new(TargetFilter {
+            filter: Box::new(ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![PermanentTypeFilter::Land],
                 ..Default::default()

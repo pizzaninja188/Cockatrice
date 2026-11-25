@@ -6,7 +6,7 @@
 //! SHA-256 of the exact pinned normalized Oracle text.
 
 use tricerules_cards::primitives::{
-    EffectSubject, Keyword, SpellEffectKind, TargetController, TargetFilter, TargetKind,
+    EffectSubject, Keyword, ObjectFilter, SpellEffectKind, TargetController, TargetKind,
 };
 use tricerules_cards::Layout;
 
@@ -57,10 +57,10 @@ fn face<'a>(
 }
 
 fn chosen_creature_you() -> EffectSubject {
-    EffectSubject::Chosen(Box::new(TargetFilter {
+    EffectSubject::Chosen(Box::new(ObjectFilter {
         kind: TargetKind::Creature,
         controller: TargetController::You,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }))
 }
 

@@ -4,8 +4,8 @@
 //! only effect is life gain. Fingerprints are checked after the presentation metadata refresh.
 
 use tricerules_cards::primitives::{
-    AbilityCost, Amount, PermanentTypeFilter, PlayerRecipient, SpellEffectKind, TargetController,
-    TargetFilter, TargetKind,
+    AbilityCost, Amount, ObjectFilter, PermanentTypeFilter, PlayerRecipient, SpellEffectKind,
+    TargetController, TargetKind,
 };
 use tricerules_cards::{AbilityPresentation, Layout};
 
@@ -108,7 +108,7 @@ fn q77_land_sac_life_map_definitions() {
             panic!("{}: exactly one sacrifice cost", card.id);
         };
         assert_eq!(*count, 1, "{}", card.id);
-        let expected = TargetFilter {
+        let expected = ObjectFilter {
             kind: TargetKind::AnyPermanent,
             controller: TargetController::You,
             permanent_types: vec![PermanentTypeFilter::Land],

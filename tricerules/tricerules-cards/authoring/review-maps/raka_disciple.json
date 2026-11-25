@@ -33,7 +33,7 @@
       "typed_path": "/faces/0/activated_abilities/0/effect/0"
     },
     {
-      "symbol": "TargetFilter.any target",
+      "symbol": "ObjectFilter.any target",
       "typed_path": "/faces/0/activated_abilities/0/effect/0/PreventNextDamage/target"
     },
     {

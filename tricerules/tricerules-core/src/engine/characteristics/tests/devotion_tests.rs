@@ -760,7 +760,7 @@ fn devotion_payment_removes_god_before_cost_triggers_or_payment_continuation() {
         zone_change_generation: 0,
     };
     let cost = tricerules_card_model::primitives::ResolutionCost::SacrificePermanent {
-        filter: TargetFilter {
+        filter: ObjectFilter {
             kind: TargetKind::AnyPermanent,
             ..Default::default()
         },

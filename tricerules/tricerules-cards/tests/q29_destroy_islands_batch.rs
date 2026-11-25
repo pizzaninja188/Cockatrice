@@ -1,6 +1,6 @@
 //! Registry conformance for the queue-v29 "Destroy all Islands" cohort.
 use tricerules_cards::primitives::{
-    PermanentTypeFilter, SpellEffectKind, TargetFilter, TargetKind,
+    ObjectFilter, PermanentTypeFilter, SpellEffectKind, TargetKind,
 };
 use tricerules_cards::Layout;
 
@@ -63,11 +63,11 @@ fn q29_destroy_islands_batch_maps_definitions() {
         };
         assert_eq!(
             *kind,
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![PermanentTypeFilter::Land],
                 required_subtypes: vec!["Island".to_string()],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             "{}",
             card.id

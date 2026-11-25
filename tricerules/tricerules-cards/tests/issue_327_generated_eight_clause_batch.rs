@@ -8,9 +8,9 @@
 //! excluding the source; and CR 603.6c/700.4 the another-creature-dies counter trigger.
 
 use tricerules_cards::primitives::{
-    CastTriggerPlayer, CreatureScopeController, CreatureScopeFilter, EffectSubject,
+    CastTriggerPlayer, CreatureScopeController, CreatureScopeFilter, EffectSubject, ObjectFilter,
     PermanentEventFilter, PermanentTypeFilter, PlayerRecipient, SpellEffectKind, StaticAbilityDef,
-    TargetFilter, TargetGroupDef, TargetingDef,
+    TargetGroupDef, TargetingDef,
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, Amount, Color, CounterKind, Keyword, Layout, ManaCost,
@@ -68,7 +68,7 @@ fn issue_327_honor_counters_one_target_and_draws() {
             SpellEffectKind::PutCounters {
                 counter: CounterKind::PlusOnePlusOne,
                 count: Amount::Fixed(1),
-                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
             },
             SpellEffectKind::Draw {
                 who: PlayerRecipient::Controller,
@@ -141,7 +141,7 @@ fn issue_327_dark_deed_pumps_minus_four_minus_four() {
             power: -4,
             toughness: -4,
             scale: None,
-            subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
         }]
     );
     assert!(face.targeting.is_none());
@@ -171,7 +171,7 @@ fn issue_327_goblin_oriflamme_anthems_attacking_creatures_only() {
         StaticAbilityDef::AnthemPt {
             filter: CreatureScopeFilter {
                 controller: Some(CreatureScopeController::YouControl),
-                matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                matching: Box::new(tricerules_cards::primitives::ObjectFilter {
                     kind: tricerules_cards::primitives::TargetKind::Creature,
                     combat_role: Some(tricerules_cards::primitives::CombatRole::Attacking),
                     ..Default::default()

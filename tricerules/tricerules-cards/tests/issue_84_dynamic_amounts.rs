@@ -1,13 +1,13 @@
 use tricerules_cards::primitives::{
-    Amount, BattlefieldCreatureCountFilter, CountExpression, EffectSubject, Keyword,
-    PlayerRecipient, PtScale, PtScaleBasis, RelativePlayerSet, SpellEffectKind, TargetFilter,
-    TargetKind, TriggerCondition, ZoneCardFilter,
+    Amount, BattlefieldCreatureCountFilter, CountExpression, EffectSubject, Keyword, ObjectFilter,
+    PlayerRecipient, PtScale, PtScaleBasis, RelativePlayerSet, SpellEffectKind, TargetKind,
+    TriggerCondition, ZoneCardFilter,
 };
 
-fn creature_target() -> TargetFilter {
-    TargetFilter {
+fn creature_target() -> ObjectFilter {
+    ObjectFilter {
         kind: TargetKind::Creature,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }
 }
 
@@ -68,10 +68,10 @@ fn issue_84_cards_have_complete_oracle_characteristics_and_shared_amounts() {
         aerial.spell_effect,
         [
             SpellEffectKind::Destroy {
-                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                     kind: TargetKind::Creature,
                     tapped: Some(true),
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 })),
             },
             SpellEffectKind::GainLife {
@@ -79,10 +79,10 @@ fn issue_84_cards_have_complete_oracle_characteristics_and_shared_amounts() {
                     filter: BattlefieldCreatureCountFilter {
                         controllers: RelativePlayerSet::Controller,
                         exclude_source: false,
-                        matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                        matching: Box::new(tricerules_cards::primitives::ObjectFilter {
                             kind: tricerules_cards::primitives::TargetKind::Creature,
                             required_keywords: vec![Keyword::Flying],
-                            ..tricerules_cards::primitives::TargetFilter::default()
+                            ..tricerules_cards::primitives::ObjectFilter::default()
                         }),
                     },
                 }),
@@ -131,10 +131,10 @@ fn issue_84_cards_have_complete_oracle_characteristics_and_shared_amounts() {
                     filter: BattlefieldCreatureCountFilter {
                         controllers: RelativePlayerSet::Controller,
                         exclude_source: false,
-                        matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                        matching: Box::new(tricerules_cards::primitives::ObjectFilter {
                             kind: tricerules_cards::primitives::TargetKind::Creature,
                             required_subtypes: vec!["Elemental".into()],
-                            ..tricerules_cards::primitives::TargetFilter::default()
+                            ..tricerules_cards::primitives::ObjectFilter::default()
                         }),
                     },
                 },)),

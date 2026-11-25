@@ -1,8 +1,8 @@
 //! Exact production identity, Oracle-line ownership and typed roles for Luxior, Giada's Gift.
 
 use tricerules_cards::primitives::{
-    AbilityCost, CountExpression, SpellEffectKind, StaticAbilityDef, TargetController,
-    TargetFilter, TargetKind, TypeLineAddition,
+    AbilityCost, CountExpression, ObjectFilter, SpellEffectKind, StaticAbilityDef,
+    TargetController, TargetKind, TypeLineAddition,
 };
 use tricerules_cards::{
     AbilityPresentation, AbilitySourceZone, ActivationTiming, ManaCost, PermanentTypeFilter,
@@ -99,11 +99,11 @@ fn luxior_has_exact_identity_and_four_oracle_mapped_abilities() {
     assert_eq!(
         planeswalker_equip.effect,
         [SpellEffectKind::EquipPlaneswalker {
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 controller: TargetController::You,
                 permanent_types: vec![PermanentTypeFilter::Planeswalker],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             }
         }]
     );
@@ -125,10 +125,10 @@ fn luxior_has_exact_identity_and_four_oracle_mapped_abilities() {
     assert_eq!(
         creature_equip.effect,
         [SpellEffectKind::Equip {
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             }
         }]
     );

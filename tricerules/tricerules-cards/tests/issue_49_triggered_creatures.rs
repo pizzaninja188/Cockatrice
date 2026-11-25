@@ -1,6 +1,6 @@
 use tricerules_cards::primitives::{
     CardTypeFilter, CreatureScopeController, CreatureScopeFilter, EffectSubject, LifeAmount,
-    PlayerRecipient, SpellEffectKind, TargetController, TargetFilter, TargetKind,
+    ObjectFilter, PlayerRecipient, SpellEffectKind, TargetController, TargetKind,
 };
 use tricerules_cards::{
     AbilityCost, Amount, CastTriggerPlayer, CounterKind, Keyword, ManaAmount, PermanentTypeFilter,
@@ -230,11 +230,11 @@ fn trigger(card_id: &str) -> &'static TriggeredAbilityDef {
     &face.triggered_abilities[0]
 }
 
-fn creature_target(controller: TargetController) -> TargetFilter {
-    TargetFilter {
+fn creature_target(controller: TargetController) -> ObjectFilter {
+    ObjectFilter {
         kind: TargetKind::Creature,
         controller,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }
 }
 
@@ -357,9 +357,9 @@ fn issue_49_targeted_etbs_use_one_existing_target_group() {
         trigger("skymarch_bloodletter").effect,
         [SpellEffectKind::DrainTarget {
             amount: 1,
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::OpponentPlayer,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );

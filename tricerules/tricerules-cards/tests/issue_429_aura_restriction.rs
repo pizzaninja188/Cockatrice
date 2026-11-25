@@ -18,10 +18,9 @@ use crate::common;
 
 use common::FaceExpectation;
 use tricerules_cards::primitives::{
-    AbilitySourceZone, Amount, CombatRestriction, CountExpression, EffectSubject,
+    AbilitySourceZone, Amount, CombatRestriction, CountExpression, EffectSubject, ObjectFilter,
     PermanentTypeFilter, PlayerRecipient, PtScale, PtScaleBasis, RelativePlayerSet,
-    SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
-    TriggerCondition,
+    SpellEffectKind, StaticAbilityDef, TargetController, TargetKind, TriggerCondition,
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, ActivatedAbilityDef, ActivationTiming, CardFace, CounterKind,
@@ -35,11 +34,11 @@ fn face(id: &str) -> &'static CardFace {
         .primary_face()
 }
 
-fn creature_filter(controller: TargetController) -> TargetFilter {
-    TargetFilter {
+fn creature_filter(controller: TargetController) -> ObjectFilter {
+    ObjectFilter {
         kind: TargetKind::Creature,
         controller,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }
 }
 
@@ -183,10 +182,10 @@ fn issue_429_attach_targets_match_the_printed_enchant_lines() {
     assert_eq!(
         face("new_horizons").spell_effect,
         [SpellEffectKind::AuraAttach {
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![PermanentTypeFilter::Land],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );
@@ -197,55 +196,55 @@ fn issue_429_attach_targets_match_the_printed_enchant_lines() {
     assert_eq!(
         face("stop_cold").spell_effect,
         [SpellEffectKind::AuraAttach {
-            target: TargetFilter {
+            target: ObjectFilter {
                 any_of: Some(vec![
-                    TargetFilter {
+                    ObjectFilter {
                         kind: TargetKind::AnyPermanent,
                         permanent_types: vec![PermanentTypeFilter::Artifact],
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     },
-                    TargetFilter {
+                    ObjectFilter {
                         kind: TargetKind::Creature,
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     },
                 ]),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );
     assert_eq!(
         face("flood_the_engine").spell_effect,
         [SpellEffectKind::AuraAttach {
-            target: TargetFilter {
+            target: ObjectFilter {
                 any_of: Some(vec![
-                    TargetFilter {
+                    ObjectFilter {
                         kind: TargetKind::Creature,
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     },
-                    TargetFilter {
+                    ObjectFilter {
                         kind: TargetKind::AnyPermanent,
                         required_subtypes: vec!["Vehicle".to_string()],
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     },
                 ]),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );
     let artifact_or_creature = [SpellEffectKind::AuraAttach {
-        target: TargetFilter {
+        target: ObjectFilter {
             any_of: Some(vec![
-                TargetFilter {
+                ObjectFilter {
                     kind: TargetKind::AnyPermanent,
                     permanent_types: vec![PermanentTypeFilter::Artifact],
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
-                TargetFilter {
+                ObjectFilter {
                     kind: TargetKind::Creature,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
             ]),
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         },
     }];
     assert_eq!(
@@ -488,7 +487,7 @@ fn issue_429_friendly_neighborhood_creates_citizens_and_pumps_per_creature() {
                         power_per_unit: 1,
                         toughness_per_unit: 1,
                     }),
-                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
                 }],
                 targeting: Some(tricerules_cards::primitives::TargetingDef {
                     groups: vec![tricerules_cards::primitives::TargetGroupDef {

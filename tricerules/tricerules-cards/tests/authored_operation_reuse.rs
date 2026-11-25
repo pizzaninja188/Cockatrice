@@ -6,10 +6,10 @@ use tricerules_cards::primitives::{
     CompiledChooseBranch, CompiledChooseRequirement, CompiledInstruction, CompiledInstructionKind,
     CompiledProgram, CompiledProgramCondition, CompiledProgramResultCondition, CountExpression,
     DiscardQuantity, DiscardResultOutcome, EntersTappedAffected, GameCondition, GraveyardAggregate,
-    LibraryBottomOrder, LifeAmount, ManaAmount, PermanentTypeFilter, PlayerRecipient,
+    LibraryBottomOrder, LifeAmount, ManaAmount, ObjectFilter, PermanentTypeFilter, PlayerRecipient,
     RelativePlayerSet, ResolutionCost, ResultType, SearchDestination, SearchSelectionBounds,
-    SearchZoneSelection, SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter,
-    TargetKind, TriggerCondition, ZoneCardFilter,
+    SearchZoneSelection, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind,
+    TriggerCondition, ZoneCardFilter,
 };
 use tricerules_cards::{
     AbilityDefinitionId, CardProgram, EffectContext, InstructionKind, ProgramOwnerId,
@@ -469,11 +469,11 @@ fn authored_osseous_exhale_uses_owned_behold_receipt_program() {
     );
     assert_eq!(
         criterion.permanent_filter(),
-        TargetFilter {
+        ObjectFilter {
             kind: TargetKind::AnyPermanent,
             controller: TargetController::You,
             required_subtypes: vec!["Dragon".to_string()],
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         }
     );
 
@@ -484,7 +484,7 @@ fn authored_osseous_exhale_uses_owned_behold_receipt_program() {
     let [damage, choose] = program.body.steps.as_slice() else {
         panic!("Osseous Exhale damages before checking its recorded Behold option");
     };
-    let expected_target = TargetFilter {
+    let expected_target = ObjectFilter {
         kind: TargetKind::Creature,
         combat_role: Some(tricerules_cards::primitives::CombatRole::AttackingOrBlocking),
         ..Default::default()
@@ -996,7 +996,7 @@ fn authored_crypt_lurker_uses_optional_creature_sacrifice_or_discard_program() {
     assert_eq!(
         sacrifice.cost,
         ResolutionCost::SacrificePermanent {
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
                 ..Default::default()
@@ -1033,7 +1033,7 @@ fn authored_crypt_lurker_uses_optional_creature_sacrifice_or_discard_program() {
 fn assert_single_sacrifice_choose<'a>(
     program: &'a CompiledProgram,
     expected_branch_id: &str,
-    expected_filter: TargetFilter,
+    expected_filter: ObjectFilter,
     expected_source_only: bool,
 ) -> &'a CompiledChooseBranch {
     assert_eq!(program.context, EffectContext::Ability);
@@ -1081,7 +1081,7 @@ fn assert_single_sacrifice_choose<'a>(
 fn assert_single_tap_choose<'a>(
     program: &'a CompiledProgram,
     expected_branch_id: &str,
-    expected_filter: TargetFilter,
+    expected_filter: ObjectFilter,
     expected_exclude_source: bool,
 ) -> (
     &'a CompiledChooseBranch,
@@ -1155,7 +1155,7 @@ fn authored_heated_argument_is_exact_typed_optional_graveyard_exile_program() {
         damage_target,
         SpellEffectKind::DamageTarget {
             amount: Amount::Fixed(6),
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::Creature,
                 ..Default::default()
             },
@@ -1346,7 +1346,7 @@ fn authored_command_bridge_and_gravelgill_tap_triggers_are_exact_programs() {
         TriggerCondition::WhenSelfEntersBattlefield
     );
     let bridge_program = ability_program("command_bridge", 0, false);
-    let bridge_filter = TargetFilter {
+    let bridge_filter = ObjectFilter {
         kind: TargetKind::AnyPermanent,
         controller: TargetController::You,
         ..Default::default()
@@ -1390,7 +1390,7 @@ fn authored_command_bridge_and_gravelgill_tap_triggers_are_exact_programs() {
         }
     );
     let gravelgill_program = ability_program("gravelgill_scoundrel", 0, false);
-    let creature_filter = TargetFilter {
+    let creature_filter = ObjectFilter {
         kind: TargetKind::Creature,
         controller: TargetController::You,
         ..Default::default()
@@ -1447,7 +1447,7 @@ fn authored_servant_and_west_wind_sacrifice_triggers_are_exact_programs() {
         })
     );
     let servant_program = ability_program("servant_of_the_stinger", 0, false);
-    let servant_filter = TargetFilter {
+    let servant_filter = ObjectFilter {
         kind: TargetKind::AnyPermanent,
         controller: TargetController::You,
         ..Default::default()
@@ -1542,15 +1542,15 @@ fn authored_servant_and_west_wind_sacrifice_triggers_are_exact_programs() {
         })
     );
 
-    let avatar_filter = TargetFilter {
+    let avatar_filter = ObjectFilter {
         any_of: Some(vec![
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 controller: TargetController::You,
                 token: Some(true),
                 ..Default::default()
             },
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 controller: TargetController::You,
                 permanent_types: vec![PermanentTypeFilter::Land],

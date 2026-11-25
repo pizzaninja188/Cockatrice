@@ -5,7 +5,7 @@
 
 use super::{
     AbilityCost, Amount, CardTypeFilter, EffectSubject, LibraryPartitionKind, LifeAmount,
-    ManaAmount, ManaRetention, PlayerRecipient, SpellEffectKind, TargetController, TargetFilter,
+    ManaAmount, ManaRetention, ObjectFilter, PlayerRecipient, SpellEffectKind, TargetController,
     TargetKind,
 };
 
@@ -41,7 +41,7 @@ fn mana_color_symbol(color: super::Color) -> &'static str {
     }
 }
 
-fn simple_target(filter: &TargetFilter) -> Option<String> {
+fn simple_target(filter: &ObjectFilter) -> Option<String> {
     let noun = match filter.kind {
         TargetKind::AnyTarget => "any target",
         TargetKind::Creature => "target creature",
@@ -58,10 +58,10 @@ fn simple_target(filter: &TargetFilter) -> Option<String> {
         _ => return None,
     };
     // Do not silently drop power, subtype, exclusion, or other constraints from a label.
-    let simple = TargetFilter {
+    let simple = ObjectFilter {
         kind: filter.kind,
         controller: filter.controller,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     };
     (*filter == simple).then(|| format!("{noun}{controller}"))
 }
@@ -300,10 +300,10 @@ pub(super) fn simple_effects(effects: &[SpellEffectKind]) -> Option<String> {
                 SpellEffectKind::SearchLibrary { .. } => "Search".into(),
                 SpellEffectKind::ReturnAllToOwnersHand { kind } => {
                     let color = kind.is_color?;
-                    let exact = TargetFilter {
+                    let exact = ObjectFilter {
                         kind: TargetKind::AnyPermanent,
                         is_color: Some(color),
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     };
                     if *kind != exact {
                         return None;

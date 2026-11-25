@@ -8,8 +8,8 @@
 
 use tricerules_cards::primitives::{
     AbilityCost, Amount, BattlefieldAggregate, EffectSubject, GameCondition, Keyword, LifeAmount,
-    PermanentTypeFilter, PlayerRecipient, RelativePlayerSet, SpellEffectKind, StaticAbilityDef,
-    TargetFilter, TargetKind,
+    ObjectFilter, PermanentTypeFilter, PlayerRecipient, RelativePlayerSet, SpellEffectKind,
+    StaticAbilityDef, TargetKind,
 };
 use tricerules_cards::{registry, CardFace, Color, Layout};
 
@@ -35,7 +35,7 @@ fn face(id: &str, name: &str, mana: &str, types: &[&str]) -> &'static CardFace {
     f
 }
 
-fn chosen<'a>(subject: &'a EffectSubject, id: &str) -> &'a TargetFilter {
+fn chosen<'a>(subject: &'a EffectSubject, id: &str) -> &'a ObjectFilter {
     let EffectSubject::Chosen(filter) = subject else {
         panic!("{id}: expected a chosen subject, got {subject:?}");
     };

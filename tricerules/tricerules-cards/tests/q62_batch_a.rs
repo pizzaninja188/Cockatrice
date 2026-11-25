@@ -8,7 +8,7 @@
 
 use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, Amount, EffectSubject, LibraryPartitionKind, LifeAmount,
-    PowerComparison, SpellEffectKind, TargetFilter, TargetKind,
+    ObjectFilter, PowerComparison, SpellEffectKind, TargetKind,
 };
 use tricerules_cards::{registry, CardFace, Layout};
 
@@ -30,7 +30,7 @@ fn face(id: &str, name: &str, mana: &str, types: &[&str]) -> &'static CardFace {
     f
 }
 
-fn chosen_creature<'a>(subject: &'a EffectSubject, id: &str) -> &'a TargetFilter {
+fn chosen_creature<'a>(subject: &'a EffectSubject, id: &str) -> &'a ObjectFilter {
     let EffectSubject::Chosen(filter) = subject else {
         panic!("{id}: expected a chosen subject, got {subject:?}");
     };

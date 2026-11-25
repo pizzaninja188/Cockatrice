@@ -4,7 +4,7 @@
 //! destroys a targeted artifact. Fingerprints are checked after the presentation metadata refresh.
 
 use tricerules_cards::primitives::{
-    AbilityCost, EffectSubject, PermanentTypeFilter, SpellEffectKind, TargetChooser, TargetFilter,
+    AbilityCost, EffectSubject, ObjectFilter, PermanentTypeFilter, SpellEffectKind, TargetChooser,
     TargetGroupDef, TargetKind, TargetingDef,
 };
 use tricerules_cards::{AbilityPresentation, Layout};
@@ -130,7 +130,7 @@ fn q77_sac_artifact_destroy_map_definitions() {
             } => {
                 assert_eq!(
                     &**filter,
-                    &TargetFilter {
+                    &ObjectFilter {
                         kind: TargetKind::AnyPermanent,
                         permanent_types: vec![PermanentTypeFilter::Artifact],
                         ..Default::default()

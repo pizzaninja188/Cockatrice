@@ -1,6 +1,6 @@
 //! Registry conformance for the queue-v30 filtered creature destruction cohort.
 use tricerules_cards::primitives::{
-    Color, EffectSubject, Keyword, PowerComparison, SpellEffectKind, TargetFilter, TargetKind,
+    Color, EffectSubject, Keyword, ObjectFilter, PowerComparison, SpellEffectKind, TargetKind,
 };
 use tricerules_cards::Layout;
 
@@ -12,8 +12,8 @@ struct Card {
     fingerprint: &'static str,
 }
 
-fn creature(filter: TargetFilter) -> TargetFilter {
-    TargetFilter {
+fn creature(filter: ObjectFilter) -> ObjectFilter {
+    ObjectFilter {
         kind: TargetKind::Creature,
         ..filter
     }
@@ -92,25 +92,25 @@ const CARDS: &[Card] = &[
     },
 ];
 
-fn expected_filter(id: &str) -> TargetFilter {
+fn expected_filter(id: &str) -> ObjectFilter {
     match id {
-        "wing_snare" | "plummet" => creature(TargetFilter {
+        "wing_snare" | "plummet" => creature(ObjectFilter {
             required_keywords: vec![Keyword::Flying],
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         }),
-        "vanquish_the_weak" | "reave_soul" => creature(TargetFilter {
+        "vanquish_the_weak" | "reave_soul" => creature(ObjectFilter {
             power: Some(PowerComparison::AtMost(3)),
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         }),
-        "sungold_barrage" | "collar_the_culprit" => creature(TargetFilter {
+        "sungold_barrage" | "collar_the_culprit" => creature(ObjectFilter {
             toughness: Some(PowerComparison::AtLeast(4)),
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         }),
-        "ghostly_visit" | "hand_of_death" => creature(TargetFilter {
+        "ghostly_visit" | "hand_of_death" => creature(ObjectFilter {
             not_color: Some(Color::Black),
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         }),
-        _ => TargetFilter::default_creature(),
+        _ => ObjectFilter::default_creature(),
     }
 }
 

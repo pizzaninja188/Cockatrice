@@ -90,11 +90,11 @@ fn hidden_lair_condition() -> GameCondition {
                 any_of: None,
                 controllers: RelativePlayerSet::Controller,
                 exclude_source: false,
-                matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                matching: Box::new(tricerules_cards::primitives::ObjectFilter {
                     kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
                     permanent_types: vec![tricerules_cards::primitives::PermanentTypeFilter::Land],
                     required_supertypes: vec!["Basic".into()],
-                    ..tricerules_cards::primitives::TargetFilter::default()
+                    ..tricerules_cards::primitives::ObjectFilter::default()
                 }),
             },
             aggregate: BattlefieldAggregate::Count,

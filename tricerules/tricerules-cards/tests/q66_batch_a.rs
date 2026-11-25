@@ -117,7 +117,7 @@ fn q66_activated_draw_map_definitions() {
 #[test]
 fn q66_control_aura_map_definitions() {
     use tricerules_cards::primitives::{
-        Keyword, SpellEffectKind, StaticAbilityDef, TargetFilter, TargetKind,
+        Keyword, ObjectFilter, SpellEffectKind, StaticAbilityDef, TargetKind,
     };
 
     for (id, name, mana) in [
@@ -128,9 +128,9 @@ fn q66_control_aura_map_definitions() {
         assert_eq!(
             f.spell_effect,
             [SpellEffectKind::AuraAttach {
-                target: TargetFilter {
+                target: ObjectFilter {
                     kind: TargetKind::Creature,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
             }],
             "{id}"
@@ -151,9 +151,9 @@ fn q66_control_aura_map_definitions() {
     assert_eq!(
         f.spell_effect,
         [SpellEffectKind::AuraAttach {
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::Creature,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );

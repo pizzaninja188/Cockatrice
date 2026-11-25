@@ -10,9 +10,9 @@ use common::FaceExpectation;
 
 use tricerules_cards::primitives::{
     CardTypeFilter, CastCostOptionDef, EffectSubject, GraveyardDestination, GraveyardFilter,
-    GraveyardOwner, LibraryPartitionKind, ObjectCastCostKind, ObjectContributionKind,
+    GraveyardOwner, LibraryPartitionKind, ObjectCastCostKind, ObjectContributionKind, ObjectFilter,
     ObjectPaymentConstraint, PermanentTypeFilter, PlayerRecipient, SpellEffectKind,
-    StackSpellFilter, TargetController, TargetFilter, TargetKind, TargetSchema,
+    StackSpellFilter, TargetController, TargetKind, TargetSchema,
 };
 use tricerules_cards::{Amount, CounterKind, Keyword, ModalDef, TriggerCondition};
 
@@ -49,30 +49,30 @@ fn assert_modal_schema(card_id: &str, modal: &ModalDef) {
     }
 }
 
-fn creature_filter(controller: TargetController) -> TargetFilter {
-    TargetFilter {
+fn creature_filter(controller: TargetController) -> ObjectFilter {
+    ObjectFilter {
         kind: TargetKind::Creature,
         controller,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }
 }
 
 fn enchantment_destroy() -> SpellEffectKind {
     SpellEffectKind::Destroy {
-        subject: EffectSubject::Chosen(Box::new(TargetFilter {
+        subject: EffectSubject::Chosen(Box::new(ObjectFilter {
             kind: TargetKind::AnyPermanent,
             permanent_types: vec![PermanentTypeFilter::Enchantment],
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         })),
     }
 }
 
 fn artifact_destroy() -> SpellEffectKind {
     SpellEffectKind::Destroy {
-        subject: EffectSubject::Chosen(Box::new(TargetFilter {
+        subject: EffectSubject::Chosen(Box::new(ObjectFilter {
             kind: TargetKind::AnyPermanent,
             permanent_types: vec![PermanentTypeFilter::Artifact],
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         })),
     }
 }
@@ -191,10 +191,10 @@ fn issue_412_two_mode_spells_expose_exact_modes_and_targets() {
     assert_eq!(
         plow.modes[1].effects,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 required_subtypes: vec!["Vehicle".into()],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
@@ -302,7 +302,7 @@ fn issue_412_teamwork_modal_spells_expose_the_cost_and_both_mode_allowance() {
             SpellEffectKind::PutCounters {
                 counter: CounterKind::PlusOnePlusOne,
                 count: Amount::Fixed(1),
-                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
             },
             SpellEffectKind::Fight {
                 first: EffectSubject::Chosen(Box::new(creature_filter(TargetController::You))),
@@ -315,11 +315,11 @@ fn issue_412_teamwork_modal_spells_expose_the_cost_and_both_mode_allowance() {
             "hulk_smash!",
             4,
             SpellEffectKind::Destroy {
-                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                     kind: TargetKind::AnyPermanent,
                     permanent_types: vec![PermanentTypeFilter::Artifact],
                     excluded_permanent_types: vec![PermanentTypeFilter::Creature],
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 })),
             },
             SpellEffectKind::CreatureDealsDamageEqualToPower {
@@ -383,13 +383,13 @@ fn issue_412_etb_modal_creatures_expose_the_triggered_mode_structure() {
     assert_eq!(
         coliseum.modes[0].effects,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![
                     PermanentTypeFilter::Artifact,
                     PermanentTypeFilter::Enchantment
                 ],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );

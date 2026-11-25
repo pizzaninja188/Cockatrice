@@ -5,8 +5,8 @@
 //! Oracle lines.
 
 use tricerules_cards::primitives::{
-    AbilityCost, EffectSubject, PermanentTypeFilter, SpellEffectKind, TargetController,
-    TargetFilter, TargetKind,
+    AbilityCost, EffectSubject, ObjectFilter, PermanentTypeFilter, SpellEffectKind,
+    TargetController, TargetKind,
 };
 use tricerules_cards::Layout;
 
@@ -70,11 +70,11 @@ fn face<'a>(
 
 fn artifact_cost() -> AbilityCost {
     AbilityCost::SacrificePermanent {
-        filter: TargetFilter {
+        filter: ObjectFilter {
             kind: TargetKind::AnyPermanent,
             controller: TargetController::You,
             permanent_types: vec![PermanentTypeFilter::Artifact],
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         },
         count: 1,
     }

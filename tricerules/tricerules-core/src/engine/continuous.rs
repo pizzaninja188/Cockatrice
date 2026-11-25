@@ -2194,10 +2194,10 @@ pub(super) fn emit_graveyard_static_abilities(
             }),
             affected: AffectedScope::PermanentsMatching {
                 reference_player: owner,
-                filter: Box::new(TargetFilter {
+                filter: Box::new(ObjectFilter {
                     kind: TargetKind::Creature,
                     controller: TargetController::You,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 }),
                 exclude: None,
             },
@@ -2724,10 +2724,10 @@ mod static_permanent_keyword_grant_tests {
                 any_of: None,
                 controllers: RelativePlayerSet::Controller,
                 exclude_source: false,
-                matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                matching: Box::new(tricerules_card_model::primitives::ObjectFilter {
                     kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
                     name: Some("Grizzly Bears".into()),
-                    ..tricerules_card_model::primitives::TargetFilter::default()
+                    ..tricerules_card_model::primitives::ObjectFilter::default()
                 }),
             },
             aggregate: BattlefieldAggregate::Count,

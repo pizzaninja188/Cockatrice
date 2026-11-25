@@ -8,8 +8,8 @@
 //! +1/+2, and Equip {2}; and CR 610.3 the linked tapped-creature exile alongside Flash.
 
 use tricerules_cards::primitives::{
-    CombatRole, EffectSubject, PlayerRecipient, SpellCostModifier, StaticAbilityDef,
-    TargetController, TargetFilter, TargetKind, TargetMatchFilter, TargetObjectExclusion,
+    CombatRole, EffectSubject, ObjectFilter, PlayerRecipient, SpellCostModifier, StaticAbilityDef,
+    TargetController, TargetKind, TargetMatchFilter, TargetObjectExclusion,
 };
 use tricerules_cards::{
     AbilityPresentation, Amount, Color, Keyword, SpellEffectKind, TriggerCondition,
@@ -45,7 +45,7 @@ fn issue_337_acrobatic_leap_pumps_grants_flying_and_untaps_one_creature() {
     assert_eq!(face.mana_cost.to_string(), "{W}");
     assert_eq!(face.types, ["Instant"]);
     assert_eq!(face.colors(), vec![Color::White]);
-    let chosen = EffectSubject::Chosen(Box::new(TargetFilter::default_creature()));
+    let chosen = EffectSubject::Chosen(Box::new(ObjectFilter::default_creature()));
     assert_eq!(
         face.spell_effect,
         [
@@ -81,10 +81,10 @@ fn issue_337_depower_reduces_two_against_an_attacking_target() {
         face.cost_modifiers,
         [SpellCostModifier::TargetMatchGenericReduction {
             amount: 2,
-            filter: TargetMatchFilter::Battlefield(TargetFilter {
+            filter: TargetMatchFilter::Battlefield(ObjectFilter {
                 kind: TargetKind::Creature,
                 combat_role: Some(CombatRole::Attacking),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             }),
         }]
     );
@@ -95,7 +95,7 @@ fn issue_337_depower_reduces_two_against_an_attacking_target() {
                 power: -4,
                 toughness: 0,
                 scale: None,
-                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
             },
             SpellEffectKind::Draw {
                 who: PlayerRecipient::Controller,
@@ -165,11 +165,11 @@ fn issue_337_blooming_stinger_grants_deathtouch_to_another_creature() {
     assert_eq!(
         ability.effect,
         [SpellEffectKind::GrantKeywords {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
                 excluded_objects: vec![TargetObjectExclusion::Source],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
             keywords: vec![Keyword::Deathtouch],
         }]
@@ -266,17 +266,17 @@ fn issue_337_super_suit_keeps_flash_modifier_equip_and_attach_untap() {
         trigger.effect,
         [
             SpellEffectKind::AttachSource {
-                target: TargetFilter {
+                target: ObjectFilter {
                     kind: TargetKind::Creature,
                     controller: TargetController::You,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
             },
             SpellEffectKind::Untap {
-                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                     kind: TargetKind::Creature,
                     controller: TargetController::You,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 })),
             },
         ]
@@ -314,10 +314,10 @@ fn issue_337_super_suit_keeps_flash_modifier_equip_and_attach_untap() {
     assert_eq!(
         equip.effect,
         [SpellEffectKind::Equip {
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );
@@ -345,11 +345,11 @@ fn issue_337_super_villain_lockup_linked_exiles_a_tapped_creature() {
     assert_eq!(
         ability.effect,
         [SpellEffectKind::ExileUntilSourceLeaves {
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::Opponent,
                 tapped: Some(true),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );

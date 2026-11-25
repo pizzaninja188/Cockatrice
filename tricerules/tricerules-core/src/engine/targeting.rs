@@ -735,7 +735,7 @@ fn object_targetable_by(
     true
 }
 
-/// Every [`TargetFilter`] characteristic restriction that reads the same whether `oid` was
+/// Every [`ObjectFilter`] characteristic restriction that reads the same whether `oid` was
 /// *targeted* (CR 115) or *selected* by an untargeted mass effect (CR 701.7). The single owner of
 /// these predicates: [`target_filter_legal`] and [`object_matches_mass_filter`] both call it, so a
 /// new filter field lands on both paths or neither.
@@ -750,7 +750,7 @@ fn object_targetable_by(
 /// - the [`TargetKind`] mapping — the two paths accept different kinds and check zone differently.
 pub(super) fn filter_characteristics_match(
     engine: &GameEngine,
-    filter: &TargetFilter,
+    filter: &ObjectFilter,
     oid: ObjectId,
 ) -> bool {
     let Some(characteristics) = engine.characteristics(oid) else {
@@ -917,7 +917,7 @@ pub(super) fn target_role_legal_at_resolution(
 /// restrictions evaluated against the Aura's current controller.
 pub(super) fn attachment_filter_legal(
     engine: &GameEngine,
-    filter: &TargetFilter,
+    filter: &ObjectFilter,
     recipient: AttachmentRecipient,
     attachment_id: ObjectId,
     attachment_controller: PlayerId,
@@ -1052,7 +1052,7 @@ pub(super) fn equipment_attachment_legal(
 /// Convert a validated Aura target into explicit attachment identity. Mixed AnyTarget Auras are
 /// rejected by card-data validation, so the filter kind unambiguously owns the conversion.
 pub(super) fn attachment_recipient_for_target(
-    filter: &TargetFilter,
+    filter: &ObjectFilter,
     target: ObjectId,
 ) -> Option<AttachmentRecipient> {
     if filter.all_terminal_filters_match(|leaf| {
@@ -1071,7 +1071,7 @@ pub(super) fn attachment_recipient_for_target(
     }
 }
 
-/// Legality of a single target against a [`TargetFilter`].
+/// Legality of a single target against a [`ObjectFilter`].
 /// `caster` supplies the reference player for hexproof and controller-relative restrictions.
 /// True if `oid` is a battlefield permanent selected by a mass effect's `kind` filter
 /// (DestroyAll / DamageAll). Unlike [`target_filter_legal`] this is **not** targeting: it
@@ -1080,7 +1080,7 @@ pub(super) fn attachment_recipient_for_target(
 pub(super) fn object_matches_mass_filter(
     engine: &GameEngine,
     oid: ObjectId,
-    filter: &TargetFilter,
+    filter: &ObjectFilter,
 ) -> bool {
     if let Some(branches) = &filter.any_of {
         return branches
@@ -1114,7 +1114,7 @@ pub(super) fn object_matches_mass_filter(
 pub(super) fn object_matches_scoped_mass_filter(
     engine: &GameEngine,
     oid: ObjectId,
-    filter: &TargetFilter,
+    filter: &ObjectFilter,
     reference_player: PlayerId,
 ) -> bool {
     if let Some(branches) = &filter.any_of {
@@ -1140,7 +1140,7 @@ pub(super) fn object_matches_scoped_mass_filter(
 /// player-then-battlefield order (no HashMap iteration, so replays stay reproducible).
 pub(super) fn battlefield_objects_matching(
     engine: &GameEngine,
-    filter: &TargetFilter,
+    filter: &ObjectFilter,
 ) -> Vec<ObjectId> {
     let mut out = Vec::new();
     for p in &engine.state.players {
@@ -1156,7 +1156,7 @@ pub(super) fn battlefield_objects_matching(
 /// Public wrapper used by resolution for per-target legality checks in `DamageTargets`.
 pub(super) fn target_filter_legal_at_resolution(
     engine: &GameEngine,
-    filter: &TargetFilter,
+    filter: &ObjectFilter,
     tid: ObjectId,
     caster: PlayerId,
     source: TargetSourceIdentity,
@@ -1170,7 +1170,7 @@ pub(super) fn target_filter_legal_at_resolution(
 /// ignores hexproof, shroud, and protection because the instruction does not target (CR 115.1).
 pub(super) fn permanent_choice_filter_legal(
     engine: &GameEngine,
-    filter: &TargetFilter,
+    filter: &ObjectFilter,
     oid: ObjectId,
     chooser: PlayerId,
     source: TargetSourceIdentity,
@@ -1192,7 +1192,7 @@ pub(super) fn permanent_choice_filter_legal(
 /// still apply.
 pub(super) fn permanent_choice_filter_legal_for_control_cohort(
     engine: &GameEngine,
-    filter: &TargetFilter,
+    filter: &ObjectFilter,
     oid: ObjectId,
     chooser: PlayerId,
     source: TargetSourceIdentity,
@@ -1203,7 +1203,7 @@ pub(super) fn permanent_choice_filter_legal_for_control_cohort(
 
 fn permanent_choice_filter_legal_inner(
     engine: &GameEngine,
-    filter: &TargetFilter,
+    filter: &ObjectFilter,
     oid: ObjectId,
     chooser: PlayerId,
     source: TargetSourceIdentity,
@@ -1253,7 +1253,7 @@ fn permanent_choice_filter_legal_inner(
 
 fn target_filter_legal_with_context(
     engine: &GameEngine,
-    filter: &TargetFilter,
+    filter: &ObjectFilter,
     tid: ObjectId,
     caster: PlayerId,
     source: TargetSourceIdentity,
@@ -1274,7 +1274,7 @@ fn target_filter_legal_with_context(
 
 fn target_filter_legal_for_ref(
     engine: &GameEngine,
-    filter: &TargetFilter,
+    filter: &ObjectFilter,
     target: &rv1::TargetRef,
     caster: PlayerId,
     source: TargetSourceIdentity,
@@ -3061,7 +3061,7 @@ mod tests {
         object.zone = Zone::Battlefield;
         object.controller = 1;
         object.base_controller = 1;
-        let filter = TargetFilter {
+        let filter = ObjectFilter {
             kind: TargetKind::Creature,
             owner: tricerules_card_model::primitives::TargetOwner::You,
             ..Default::default()
@@ -3127,7 +3127,7 @@ mod tests {
         let payment = super::super::payment::components::ObjectPaymentComponent::resolution(
             rv1::CostObjectRef::default(),
             &ResolutionCost::SacrificePermanent {
-                filter: TargetFilter {
+                filter: ObjectFilter {
                     controller: TargetController::You,
                     ..filter.clone()
                 },
@@ -3139,7 +3139,7 @@ mod tests {
             !payment.candidates(&engine, 1).contains(&oid),
             "resolution costs must also check ownership"
         );
-        let controlled_by_opponent = TargetFilter {
+        let controlled_by_opponent = ObjectFilter {
             controller: TargetController::Opponent,
             ..filter.clone()
         };
@@ -3149,7 +3149,7 @@ mod tests {
             &controlled_by_opponent,
             0
         ));
-        let controlled_by_you = TargetFilter {
+        let controlled_by_you = ObjectFilter {
             controller: TargetController::You,
             ..filter.clone()
         };
@@ -3332,7 +3332,7 @@ mod tests {
             "the death event must not exclude a later incarnation"
         );
     }
-    fn issue_176_target(source: &str) -> TargetFilter {
+    fn issue_176_target(source: &str) -> ObjectFilter {
         let card = format!(
             r#"(id: "test", name: "Test", face_id: "test", types: ["Instant"], spell_effect: [DamageTarget(target: {source}, amount: 1)])"#
         );
@@ -4036,16 +4036,16 @@ mod tests {
         let effects = vec![
             SpellEffectKind::TargetPlayerGainsLife {
                 amount: 1.into(),
-                target: TargetFilter {
+                target: ObjectFilter {
                     kind: TargetKind::AnyPlayer,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
             },
             SpellEffectKind::TargetPlayerLosesLife {
                 amount: 1,
-                target: TargetFilter {
+                target: ObjectFilter {
                     kind: TargetKind::OpponentPlayer,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
             },
         ];
@@ -4227,10 +4227,10 @@ mod tests {
         engine.state.players[0].battlefield.push(bear);
         engine.state.objects.get_mut(&bear).expect("bear").zone = Zone::Battlefield;
 
-        let opponent_only = TargetFilter {
+        let opponent_only = ObjectFilter {
             kind: TargetKind::Creature,
             controller: TargetController::Opponent,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         };
         assert!(!attachment_filter_legal(
             &engine,
@@ -4292,10 +4292,10 @@ mod tests {
         engine.state.players[0].battlefield.push(bear);
         engine.state.objects.get_mut(&bear).expect("bear").zone = Zone::Battlefield;
 
-        let filter = TargetFilter {
+        let filter = ObjectFilter {
             kind: TargetKind::Creature,
             excluded_objects: vec![tricerules_card_model::TargetObjectExclusion::Source],
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         };
         let original_source = TargetSourceIdentity::current(&engine, bear);
         assert!(!target_filter_legal_with_context(
@@ -4356,13 +4356,13 @@ mod tests {
             true,
         )
         .expect("new");
-        let any_player = TargetFilter {
+        let any_player = ObjectFilter {
             kind: TargetKind::AnyPlayer,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         };
-        let opponent = TargetFilter {
+        let opponent = ObjectFilter {
             kind: TargetKind::OpponentPlayer,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         };
 
         assert!(attachment_filter_legal(
@@ -4458,18 +4458,18 @@ mod tests {
             .counters
             .insert(CounterKind::PlusOnePlusOne, 2);
 
-        let power_four = TargetFilter {
+        let power_four = ObjectFilter {
             kind: TargetKind::Creature,
             power: Some(PowerComparison::AtLeast(4)),
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         };
         assert!(filter_characteristics_match(&engine, &power_four, bear));
         assert!(!filter_characteristics_match(&engine, &power_four, drake));
 
-        let without_flying = TargetFilter {
+        let without_flying = ObjectFilter {
             kind: TargetKind::Creature,
             excluded_keywords: vec![Keyword::Flying],
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         };
         assert!(filter_characteristics_match(&engine, &without_flying, bear));
         assert!(!filter_characteristics_match(
@@ -4523,22 +4523,22 @@ mod tests {
         let drake = deploy("wind_drake");
         let sword = deploy("short_sword");
         let ornithopter = deploy("ornithopter");
-        let filter = TargetFilter {
+        let filter = ObjectFilter {
             any_of: Some(vec![
-                TargetFilter {
+                ObjectFilter {
                     kind: TargetKind::Creature,
                     controller: TargetController::You,
                     required_keywords: vec![Keyword::Flying],
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
-                TargetFilter {
+                ObjectFilter {
                     kind: TargetKind::AnyPermanent,
                     controller: TargetController::You,
                     permanent_types: vec![PermanentTypeFilter::Artifact],
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
             ]),
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         };
 
         assert_eq!(
@@ -4620,11 +4620,11 @@ mod tests {
 
     #[test]
     fn player_only_roles_omit_physical_candidates_in_every_zone() {
-        let any_player = TargetFilter {
+        let any_player = ObjectFilter {
             kind: TargetKind::AnyPlayer,
             ..Default::default()
         };
-        let opponent = TargetFilter {
+        let opponent = ObjectFilter {
             kind: TargetKind::OpponentPlayer,
             ..Default::default()
         };
@@ -4638,7 +4638,7 @@ mod tests {
                 amount: Amount::Fixed(1),
             },
             SpellEffectKind::DamageTarget {
-                target: TargetFilter {
+                target: ObjectFilter {
                     any_of: Some(vec![any_player.clone(), opponent]),
                     ..Default::default()
                 },
@@ -4707,7 +4707,7 @@ mod tests {
             }
             // A mixed role must still offer both players and battlefield creatures.
             let mixed = [SpellEffectKind::DamageTarget {
-                target: TargetFilter::default(),
+                target: ObjectFilter::default(),
                 amount: Amount::Fixed(1),
             }];
             let targets = compute_spell_targets(&engine, 0, source, &mixed, None, &[]);

@@ -19,7 +19,7 @@
       "typed_path": "/faces/0/spell_effect/0"
     },
     {
-      "symbol": "TargetFilter.not_color",
+      "symbol": "ObjectFilter.not_color",
       "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen"
     },
     {

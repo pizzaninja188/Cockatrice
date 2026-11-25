@@ -8,8 +8,8 @@
 use tricerules_cards::primitives::{
     Amount, BattlefieldCreatureCountFilter, BattlefieldPermanentFilter, CardTypeFilter,
     CountExpression, EffectSubject, HandCardAction, HandCardChooser, HandChoiceVisibility,
-    PermanentTypeFilter, PtScale, PtScaleBasis, RelativePlayerSet, SpellEffectKind,
-    TargetController, TargetFilter, TargetKind, TargetSchema, TypeLineAddition,
+    ObjectFilter, PermanentTypeFilter, PtScale, PtScaleBasis, RelativePlayerSet, SpellEffectKind,
+    TargetController, TargetKind, TargetSchema, TypeLineAddition,
 };
 use tricerules_cards::{CounterKind, Keyword, ModalDef};
 
@@ -31,22 +31,22 @@ fn assert_modal_schema(card_id: &str, modal: &ModalDef) {
     }
 }
 
-fn creature_filter(controller: TargetController) -> TargetFilter {
-    TargetFilter {
+fn creature_filter(controller: TargetController) -> ObjectFilter {
+    ObjectFilter {
         kind: TargetKind::Creature,
         controller,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }
 }
 
-fn creature_or_planeswalker() -> TargetFilter {
-    TargetFilter {
+fn creature_or_planeswalker() -> ObjectFilter {
+    ObjectFilter {
         kind: TargetKind::AnyPermanent,
         permanent_types: vec![
             PermanentTypeFilter::Creature,
             PermanentTypeFilter::Planeswalker,
         ],
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }
 }
 
@@ -157,9 +157,9 @@ fn issue_426_modes_expose_exact_effects_and_target_prompts() {
         [SpellEffectKind::ChooseHandCards {
             action: HandCardAction::Discard,
             count: 2,
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::OpponentPlayer,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             chooser: HandCardChooser::AffectedPlayer,
             card_filter: None,
@@ -172,9 +172,9 @@ fn issue_426_modes_expose_exact_effects_and_target_prompts() {
         [SpellEffectKind::ChooseHandCards {
             action: HandCardAction::Discard,
             count: 1,
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::OpponentPlayer,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             chooser: HandCardChooser::Controller,
             card_filter: Some(CardTypeFilter::Nonland),
@@ -196,19 +196,19 @@ fn issue_426_modes_expose_exact_effects_and_target_prompts() {
         any_of: None,
         controllers: RelativePlayerSet::Controller,
         exclude_source: false,
-        matching: Box::new(tricerules_cards::primitives::TargetFilter {
+        matching: Box::new(tricerules_cards::primitives::ObjectFilter {
             kind: tricerules_cards::primitives::TargetKind::Creature,
-            ..tricerules_cards::primitives::TargetFilter::default()
+            ..tricerules_cards::primitives::ObjectFilter::default()
         }),
     };
     let vehicle = BattlefieldPermanentFilter {
         any_of: None,
         controllers: RelativePlayerSet::Controller,
         exclude_source: false,
-        matching: Box::new(tricerules_cards::primitives::TargetFilter {
+        matching: Box::new(tricerules_cards::primitives::ObjectFilter {
             kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
             required_subtypes: vec!["Vehicle".into()],
-            ..tricerules_cards::primitives::TargetFilter::default()
+            ..tricerules_cards::primitives::ObjectFilter::default()
         }),
     };
     let collision = modal("collision_course");
@@ -220,22 +220,22 @@ fn issue_426_modes_expose_exact_effects_and_target_prompts() {
                     any_of: Some(vec![creature, vehicle]),
                     controllers: RelativePlayerSet::Controller,
                     exclude_source: false,
-                    matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                    matching: Box::new(tricerules_cards::primitives::ObjectFilter {
                         kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
-                        ..tricerules_cards::primitives::TargetFilter::default()
+                        ..tricerules_cards::primitives::ObjectFilter::default()
                     }),
                 },
             }),
-            target: TargetFilter::default_creature(),
+            target: ObjectFilter::default_creature(),
         }]
     );
     assert_eq!(
         collision.modes[1].effects,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![PermanentTypeFilter::Artifact],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
@@ -266,10 +266,10 @@ fn issue_426_modes_expose_exact_effects_and_target_prompts() {
     assert_eq!(
         crash.modes[0].effects,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 required_subtypes: vec!["Vehicle".into()],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
@@ -305,7 +305,7 @@ fn issue_426_modes_expose_exact_effects_and_target_prompts() {
                 power_per_unit: 1,
                 toughness_per_unit: 1,
             }),
-            subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
         }]
     );
     assert_modal_schema("frontline_rush", &frontline);
@@ -315,10 +315,10 @@ fn issue_426_modes_expose_exact_effects_and_target_prompts() {
         keep_out.modes[0].effects,
         [SpellEffectKind::DamageTarget {
             amount: Amount::Fixed(4),
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::Creature,
                 tapped: Some(true),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );
@@ -338,16 +338,16 @@ fn issue_426_modes_expose_exact_effects_and_target_prompts() {
         moment.modes[0].effects,
         [
             SpellEffectKind::Untap {
-                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
             },
             SpellEffectKind::PumpTarget {
                 power: 1,
                 toughness: 0,
                 scale: None,
-                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
             },
             SpellEffectKind::GrantKeywords {
-                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
                 keywords: vec![Keyword::Indestructible],
             },
         ]
@@ -405,7 +405,7 @@ fn issue_426_modes_expose_exact_effects_and_target_prompts() {
     assert_modal_schema("spectacular_tactics", &tactics);
 
     let stone = modal("stone_by_sunlight");
-    let stone_target = TargetFilter::default_creature();
+    let stone_target = ObjectFilter::default_creature();
     assert_eq!(
         stone.modes[1].effects,
         [

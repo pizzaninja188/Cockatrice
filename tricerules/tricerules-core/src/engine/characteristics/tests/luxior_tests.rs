@@ -324,10 +324,10 @@ fn luxior_planeswalker_removal_precedes_a_filter_whose_membership_it_changes() {
             source_id: None,
             affected: AffectedScope::PermanentsMatching {
                 reference_player: 0,
-                filter: Box::new(TargetFilter {
+                filter: Box::new(ObjectFilter {
                     kind: TargetKind::AnyPermanent,
                     permanent_types: vec![PermanentTypeFilter::Planeswalker],
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 }),
                 exclude: None,
             },

@@ -243,7 +243,7 @@ fn invoke_copy_action(
             CopyAction::Gardens => misc::copy_target_artifact_with_mana_value_x(
                 &mut cx,
                 SpellEffectKind::CopyTargetArtifactWithManaValueX {
-                    target: TargetFilter::default(),
+                    target: ObjectFilter::default(),
                 },
             ),
             CopyAction::ChosenCreatureToken => tokens::create_token_copies(
@@ -251,7 +251,7 @@ fn invoke_copy_action(
                 SpellEffectKind::CreateTokenCopies {
                     count: tricerules_card_model::primitives::Amount::Fixed(1),
                     source: tricerules_card_model::primitives::TokenCopySource::Chosen(Box::new(
-                        TargetFilter::default_creature(),
+                        ObjectFilter::default_creature(),
                     )),
                     copy_exception: None,
                 },
@@ -276,7 +276,7 @@ fn invoke_copy_action(
                     SpellEffectKind::CreateTokenCopies {
                         count: tricerules_card_model::primitives::Amount::Fixed(1),
                         source: tricerules_card_model::primitives::TokenCopySource::Chosen(
-                            Box::new(TargetFilter::default_creature()),
+                            Box::new(ObjectFilter::default_creature()),
                         ),
                         copy_exception: Some(exception),
                     },
@@ -287,7 +287,7 @@ fn invoke_copy_action(
                 SpellEffectKind::CreateTokenCopies {
                     count: tricerules_card_model::primitives::Amount::Fixed(1),
                     source: tricerules_card_model::primitives::TokenCopySource::Chosen(Box::new(
-                        TargetFilter::default_creature(),
+                        ObjectFilter::default_creature(),
                     )),
                     copy_exception: Some(kaya_copy_exception(
                         tricerules_card_model::TokenCopySubtypeMode::Add,
@@ -299,7 +299,7 @@ fn invoke_copy_action(
                 SpellEffectKind::CreateTokenCopies {
                     count: tricerules_card_model::primitives::Amount::Fixed(1),
                     source: tricerules_card_model::primitives::TokenCopySource::Chosen(Box::new(
-                        TargetFilter::default_creature(),
+                        ObjectFilter::default_creature(),
                     )),
                     copy_exception: Some(kaya_copy_exception(
                         tricerules_card_model::TokenCopySubtypeMode::Replace,
@@ -309,7 +309,7 @@ fn invoke_copy_action(
             CopyAction::KayaMinusThree => dispatch::execute_effect(
                 &mut cx,
                 SpellEffectKind::ExileTargetAndCopyUnlessAura {
-                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
                 },
             ),
         }
@@ -535,54 +535,54 @@ fn invoke(
             ChosenAction::Fight => damage::fight(
                 &mut cx,
                 SpellEffectKind::Fight {
-                    first: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
-                    second: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    first: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
+                    second: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
                 },
             ),
             ChosenAction::Destroy => misc::destroy(
                 &mut cx,
                 SpellEffectKind::Destroy {
-                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
                 },
             ),
             ChosenAction::Sacrifice => misc::sacrifice(
                 &mut cx,
                 SpellEffectKind::Sacrifice {
-                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
                 },
             ),
             ChosenAction::Attach => misc::attach_equipment(
                 &mut cx,
                 SpellEffectKind::AttachEquipment {
-                    equipment: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
-                    creature: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    equipment: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
+                    creature: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
                 },
             ),
             ChosenAction::Shuffle => zones::shuffle_permanents_into_owners_libraries(
                 &mut cx,
                 SpellEffectKind::ShufflePermanentsIntoOwnersLibraries {
                     subjects: vec![EffectSubject::Chosen(Box::new(
-                        TargetFilter::default_creature(),
+                        ObjectFilter::default_creature(),
                     ))],
                 },
             ),
             ChosenAction::Exile => zones::exile(
                 &mut cx,
                 SpellEffectKind::Exile {
-                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
                     linked_exile_id: None,
                 },
             ),
             ChosenAction::Tap => misc::tap(
                 &mut cx,
                 SpellEffectKind::Tap {
-                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
                 },
             ),
             ChosenAction::Regenerate => misc::regenerate(
                 &mut cx,
                 SpellEffectKind::Regenerate {
-                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
                 },
             ),
             ChosenAction::Exchange => zones::exchange_artifact_with_graveyard(&mut cx),
@@ -626,7 +626,7 @@ fn invoke_explore(
         zones::explore(
             &mut cx,
             SpellEffectKind::Explore {
-                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
             },
         )
     }?;
@@ -1810,7 +1810,7 @@ fn kaya_minus_three_real_token_entry_choice_resumes_the_tail_once() {
         .clone();
     activated_ability.effect = vec![
         SpellEffectKind::ExileTargetAndCopyUnlessAura {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
         },
         SpellEffectKind::Draw {
             who: tricerules_card_model::primitives::PlayerRecipient::Controller,
@@ -1965,7 +1965,7 @@ fn kaya_minus_three_concede_during_parked_clone_entry_finishes_outer_resolution_
         .clone();
     activated_ability.effect = vec![
         SpellEffectKind::ExileTargetAndCopyUnlessAura {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
         },
         SpellEffectKind::Draw {
             who: tricerules_card_model::primitives::PlayerRecipient::EachOpponent,

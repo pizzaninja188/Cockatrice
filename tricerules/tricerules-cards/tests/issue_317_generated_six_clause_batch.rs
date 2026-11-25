@@ -8,8 +8,8 @@
 
 use tricerules_cards::primitives::{
     CardTypeFilter, EffectSubject, GraveyardDestination, GraveyardFilter, GraveyardOwner,
-    ObjectContributionKind, ObjectPaymentConstraint, PermanentTypeFilter, PlayerRecipient,
-    PowerComparison, SpellEffectKind, TargetFilter, TargetGroupDef, TargetKind, TargetSchema,
+    ObjectContributionKind, ObjectFilter, ObjectPaymentConstraint, PermanentTypeFilter,
+    PlayerRecipient, PowerComparison, SpellEffectKind, TargetGroupDef, TargetKind, TargetSchema,
     ZoneCardFilter,
 };
 use tricerules_cards::{
@@ -93,10 +93,10 @@ fn issue_317_careening_mine_cart_keeps_crew_and_attacks_for_treasure() {
                 minimum: 1,
                 contribution: ObjectContributionKind::CurrentPower,
             },
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: tricerules_cards::primitives::TargetController::You,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             exclude_source: true,
         }]
@@ -199,10 +199,10 @@ fn issue_317_springleaf_drum_taps_a_creature_for_any_color() {
             AbilityCost::Tap,
             AbilityCost::TapPermanents {
                 constraint: ObjectPaymentConstraint::ExactCount(1),
-                filter: TargetFilter {
+                filter: ObjectFilter {
                     kind: TargetKind::Creature,
                     controller: tricerules_cards::primitives::TargetController::You,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
                 exclude_source: true,
             },
@@ -261,10 +261,10 @@ fn issue_317_stormkeld_vanguard_adventure_faces_carry_both_clauses() {
         restriction.definition,
         tricerules_cards::primitives::StaticAbilityDef::SelfCombatRestriction {
             restriction: tricerules_cards::primitives::CombatRestriction {
-                cant_be_blocked_by: vec![TargetFilter {
+                cant_be_blocked_by: vec![ObjectFilter {
                     kind: TargetKind::Creature,
                     power: Some(PowerComparison::AtMost(2)),
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 }],
                 ..tricerules_cards::primitives::CombatRestriction::default()
             },
@@ -281,13 +281,13 @@ fn issue_317_stormkeld_vanguard_adventure_faces_carry_both_clauses() {
     assert_eq!(
         adventure.spell_effect,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![
                     PermanentTypeFilter::Artifact,
                     PermanentTypeFilter::Enchantment,
                 ],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
@@ -313,7 +313,7 @@ fn issue_317_cunning_maneuver_pumps_then_creates_a_clue() {
                 power: 3,
                 toughness: 1,
                 scale: None,
-                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
             },
             SpellEffectKind::CreateTokens {
                 token: "clue".into(),

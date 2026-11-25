@@ -212,7 +212,7 @@ fn flying_blocks_only_flying_batch_maps_definitions() {
                     restriction,
                     condition: None,
                 } if restriction.cant_block_creatures_matching == [
-                    tricerules_cards::primitives::TargetFilter {
+                    tricerules_cards::primitives::ObjectFilter {
                         kind: tricerules_cards::primitives::TargetKind::Creature,
                         excluded_keywords: vec![Keyword::Flying],
                         ..Default::default()

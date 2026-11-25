@@ -420,8 +420,8 @@ mod tests {
         Amount, BattlefieldCreatureCountFilter, CastTriggerPlayer, CombatRole, CountExpression,
         CounterKind, CreatureEventFilter, CreatureScopeController, CreatureScopeFilter,
         EffectSubject, EntersTappedAffected, EntersWithCountersAffected, EntryCost, GameCondition,
-        ManaAmount, PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient, PowerComparison,
-        RelativePlayerSet, SpellCostModifier, SpellEffectKind, StaticAbilityDef, TargetFilter,
+        ManaAmount, ObjectFilter, PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient,
+        PowerComparison, RelativePlayerSet, SpellCostModifier, SpellEffectKind, StaticAbilityDef,
         TargetKind, TriggerCondition,
     };
 
@@ -769,7 +769,7 @@ mod tests {
             dark_endurance.cost_modifiers.as_slice(),
             [SpellCostModifier::TargetMatchGenericReduction {
                 amount: 1,
-                filter: crate::TargetMatchFilter::Battlefield(TargetFilter {
+                filter: crate::TargetMatchFilter::Battlefield(ObjectFilter {
                     combat_role: Some(CombatRole::Blocking),
                     ..
                 }),
@@ -1064,11 +1064,11 @@ mod tests {
                 assert!(matches!(
                     damage_target.any_of.as_deref(),
                     Some([
-                        TargetFilter {
+                        ObjectFilter {
                             kind: TargetKind::Creature,
                             ..
                         },
-                        TargetFilter {
+                        ObjectFilter {
                             kind: TargetKind::AnyPermanent,
                             permanent_types,
                             ..
@@ -2064,7 +2064,7 @@ mod tests {
                 .spell_effect,
             vec![SpellEffectKind::DamageTarget {
                 amount: Amount::Fixed(3),
-                target: TargetFilter {
+                target: ObjectFilter {
                     kind: TargetKind::AnyTarget,
                     ..Default::default()
                 },
@@ -2074,7 +2074,7 @@ mod tests {
             reg.get("mind_sculpt").unwrap().primary_face().spell_effect,
             vec![SpellEffectKind::MillTargetPlayer {
                 count: 7,
-                target: TargetFilter {
+                target: ObjectFilter {
                     kind: TargetKind::OpponentPlayer,
                     ..Default::default()
                 },
@@ -2087,10 +2087,10 @@ mod tests {
                 .spell_effect,
             vec![
                 SpellEffectKind::Tap {
-                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
                 },
                 SpellEffectKind::SkipNextUntap {
-                    target: TargetFilter::default_creature(),
+                    target: ObjectFilter::default_creature(),
                 },
                 SpellEffectKind::Draw {
                     who: PlayerRecipient::Controller,

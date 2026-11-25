@@ -22,7 +22,7 @@
       "typed_path": "/faces/0/triggered_abilities/0/effect/0"
     },
     {
-      "symbol": "TargetFilter.controller",
+      "symbol": "ObjectFilter.controller",
       "typed_path": "/faces/0/triggered_abilities/0/effect/0/PumpTarget/subject/Chosen/controller"
     },
     {

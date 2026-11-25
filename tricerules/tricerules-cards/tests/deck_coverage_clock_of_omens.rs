@@ -1,6 +1,6 @@
 use tricerules_cards::primitives::{
-    AbilityCost, AbilitySourceZone, EffectSubject, ObjectPaymentConstraint, PermanentTypeFilter,
-    SpellEffectKind, TargetController, TargetFilter, TargetKind,
+    AbilityCost, AbilitySourceZone, EffectSubject, ObjectFilter, ObjectPaymentConstraint,
+    PermanentTypeFilter, SpellEffectKind, TargetController, TargetKind,
 };
 use tricerules_cards::{AbilityPresentation, Layout};
 
@@ -45,10 +45,10 @@ fn clock_of_omens_registers_its_complete_artifact_untap_ability() {
             && filter.controller == TargetController::You
             && filter.permanent_types.as_slice() == [PermanentTypeFilter::Artifact]
     ));
-    let target_filter = TargetFilter {
+    let target_filter = ObjectFilter {
         kind: TargetKind::AnyPermanent,
         permanent_types: vec![PermanentTypeFilter::Artifact],
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     };
     assert_eq!(
         ability.effect,

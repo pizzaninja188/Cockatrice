@@ -25,7 +25,7 @@ fn flying_creatures_you_control(exclude_self: bool) -> CreatureScopeFilter {
     CreatureScopeFilter {
         controller: Some(CreatureScopeController::YouControl),
         exclude_self,
-        matching: Box::new(tricerules_cards::primitives::TargetFilter {
+        matching: Box::new(tricerules_cards::primitives::ObjectFilter {
             kind: tricerules_cards::primitives::TargetKind::Creature,
             required_keywords: vec![Keyword::Flying],
             ..Default::default()

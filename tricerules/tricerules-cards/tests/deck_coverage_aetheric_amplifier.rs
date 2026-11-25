@@ -1,4 +1,4 @@
-use tricerules_cards::primitives::{SpellEffectKind, TargetFilter, TargetKind};
+use tricerules_cards::primitives::{ObjectFilter, SpellEffectKind, TargetKind};
 use tricerules_cards::{AbilityCost, AbilityPresentation, ActivationTiming, Layout, ManaCost};
 
 const AETHERIC_AMPLIFIER: &str = "aetheric_amplifier";
@@ -86,9 +86,9 @@ fn aetheric_amplifier_registers_exact_activated_mana_and_modal_counter_modes() {
     assert_eq!(
         double_permanent.effects,
         [SpellEffectKind::DoubleCounters {
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::AnyPermanent,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             }
         }]
     );

@@ -8,16 +8,16 @@
 //! keyword grants), 121.1 (draw is unused here), and 122.1 (counters).
 
 use tricerules_cards::primitives::{
-    Amount, EffectSubject, Keyword, LifeAmount, PlayerRecipient, SpellEffectKind, TargetController,
-    TargetFilter, TargetKind,
+    Amount, EffectSubject, Keyword, LifeAmount, ObjectFilter, PlayerRecipient, SpellEffectKind,
+    TargetController, TargetKind,
 };
 use tricerules_cards::{CounterKind, Layout};
 
 fn chosen(kind: TargetKind, controller: TargetController) -> EffectSubject {
-    EffectSubject::Chosen(Box::new(TargetFilter {
+    EffectSubject::Chosen(Box::new(ObjectFilter {
         kind,
         controller,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }))
 }
 
@@ -62,21 +62,21 @@ fn issue_combat_tricks_batch_maps_definitions() {
         assert_eq!(f.mana_cost.to_string(), mana);
         assert_eq!(f.types, ["Instant"]);
         let destroy = SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 any_of: Some(vec![
-                    TargetFilter {
+                    ObjectFilter {
                         kind: TargetKind::Creature,
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     },
-                    TargetFilter {
+                    ObjectFilter {
                         kind: TargetKind::AnyPermanent,
                         permanent_types: vec![
                             tricerules_cards::primitives::PermanentTypeFilter::Enchantment,
                         ],
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     },
                 ]),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         };
         if id == "mortify" {

@@ -2147,10 +2147,10 @@ mod tests {
                 any_of: None,
                 controllers: crate::primitives::RelativePlayerSet::Controller,
                 exclude_source: false,
-                matching: Box::new(crate::primitives::TargetFilter {
+                matching: Box::new(crate::primitives::ObjectFilter {
                     kind: crate::primitives::TargetKind::AnyPermanent,
                     permanent_types: vec![crate::primitives::PermanentTypeFilter::Land],
-                    ..crate::primitives::TargetFilter::default()
+                    ..crate::primitives::ObjectFilter::default()
                 }),
             },
         };

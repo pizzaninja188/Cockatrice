@@ -22,12 +22,11 @@ use super::{
     CardResultAction, CardResultFilter, CardResultSource, CardSearchZone, CardTypeFilter,
     CastCostGroupDef, CastCostReceiptCondition, ChooseCardSource, CohortPartitionSelection,
     ConditionObjectRef, CountExpression, EffectContext, EffectSubject, GameCondition,
-    GraveyardDestination, LibraryBottomOrder, LifeAmount, PermanentChoiceConstraint,
+    GraveyardDestination, LibraryBottomOrder, LifeAmount, ObjectFilter, PermanentChoiceConstraint,
     PlayerRecipient, ProgramBoundResultAggregation, QuantityTerm, RelativePlayerSet,
     ResolutionBranchRequirement, ResolutionCost, ResolvingEffectDuration, SearchDestination,
     SearchSelectionBounds, SearchSelectionConstraint, SearchZoneSelection, SpellEffectKind,
-    TargetFilter, TargetGroupSchema, TargetKind, TargetSchema, TargetingDef, TokenCopySource,
-    ZoneCardFilter,
+    TargetGroupSchema, TargetKind, TargetSchema, TargetingDef, TokenCopySource, ZoneCardFilter,
 };
 use crate::{
     choice_fallback, AbilityId, AbilityLinkId, AbilityPresentation, ChoiceId, ModeId,
@@ -55,7 +54,7 @@ pub struct CardProgram {
 pub struct ProgramTargetAlias {
     pub name: String,
     pub group_index: u32,
-    pub filter: TargetFilter,
+    pub filter: ObjectFilter,
 }
 
 /// The finite target roles that authored resolution programs may bind to target groups.
@@ -350,7 +349,7 @@ pub enum ResultType {
     },
     PermanentSelection {
         chooser: PlayerRecipient,
-        filter: Box<TargetFilter>,
+        filter: Box<ObjectFilter>,
         cardinality: Cardinality,
     },
     /// Exact-generation permanent receipts from one Program Proliferate instruction. This
@@ -1249,10 +1248,10 @@ fn targeted_opponent_singleton_choice_group(effect: &SpellEffectKind) -> Option<
     else {
         return None;
     };
-    let expected_filter = TargetFilter {
+    let expected_filter = ObjectFilter {
         kind: TargetKind::AnyPermanent,
         controller: super::TargetController::You,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     };
     (filter == &expected_filter && constraints.is_empty()).then_some(*group_index)
 }
@@ -1270,7 +1269,7 @@ fn targeted_opponent_nonland_shuffle_group(effect: &SpellEffectKind) -> Option<u
     }
 }
 
-fn single_source_chosen_shuffle_filter(subjects: &[EffectSubject]) -> Option<&TargetFilter> {
+fn single_source_chosen_shuffle_filter(subjects: &[EffectSubject]) -> Option<&ObjectFilter> {
     match subjects {
         [EffectSubject::Source, EffectSubject::Chosen(filter)]
         | [EffectSubject::Chosen(filter), EffectSubject::Source] => Some(filter),
@@ -1319,11 +1318,11 @@ fn is_spell_target_damage_history_condition(condition: &GameCondition) -> bool {
     )
 }
 
-fn is_exact_creature_target_filter(filter: &TargetFilter) -> bool {
+fn is_exact_creature_target_filter(filter: &ObjectFilter) -> bool {
     filter
-        == &TargetFilter {
+        == &ObjectFilter {
             kind: TargetKind::Creature,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         }
 }
 
@@ -3686,7 +3685,7 @@ impl<'a> OperationDependency<'a> {
     }
 }
 
-fn is_equipment_attach_filter(filter: &TargetFilter) -> bool {
+fn is_equipment_attach_filter(filter: &ObjectFilter) -> bool {
     filter.all_terminal_filters_match(|leaf| {
         leaf.kind == TargetKind::AnyPermanent
             && leaf
@@ -4335,10 +4334,10 @@ fn compile_operation(
                 subject: EffectSubject::Chosen(filter),
             } if context == EffectContext::Ability
                 && filter.as_ref()
-                    == &(TargetFilter {
+                    == &(ObjectFilter {
                         kind: TargetKind::AnyPermanent,
                         permanent_types: vec![super::PermanentTypeFilter::Artifact],
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     }) =>
             {
                 effect.validate(context)?;
@@ -5969,7 +5968,7 @@ fn validate_resultless_program_reflexive_trigger(
             kind,
         }] = ability.effect.as_slice()
         {
-            if *amount > 0 && kind == &TargetFilter::default_creature() {
+            if *amount > 0 && kind == &ObjectFilter::default_creature() {
                 return Ok(());
             }
         }
@@ -5984,10 +5983,10 @@ fn validate_resultless_program_reflexive_trigger(
         );
     }
 
-    let sentry_filter = TargetFilter {
+    let sentry_filter = ObjectFilter {
         kind: TargetKind::Creature,
         controller: super::TargetController::Opponent,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     };
     if let [SpellEffectKind::Tap {
         subject: EffectSubject::Chosen(filter),
@@ -6537,9 +6536,9 @@ fn is_ability_source_condition_family(condition: &GameCondition) -> bool {
             filter,
         } => {
             filter.as_ref()
-                == &TargetFilter {
+                == &ObjectFilter {
                     kind: TargetKind::AnyPermanent,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 }
         }
         GameCondition::AllOf(branches) | GameCondition::AnyOf(branches) => {
@@ -6581,7 +6580,7 @@ fn validate_program_battlefield_filter(
     Ok(())
 }
 
-fn validate_program_choice_filter(filter: &TargetFilter) -> Result<(), String> {
+fn validate_program_choice_filter(filter: &ObjectFilter) -> Result<(), String> {
     if filter.controller == super::TargetController::DefendingPlayer {
         return Err("ChoosePermanents filter cannot use DefendingPlayer in spell_program".into());
     }
@@ -6599,7 +6598,7 @@ fn validate_program_choice_filter(filter: &TargetFilter) -> Result<(), String> {
     filter.validate_characteristic_constraints()
 }
 
-fn validate_program_tap_permanent_cost_filter(filter: &TargetFilter) -> Result<(), String> {
+fn validate_program_tap_permanent_cost_filter(filter: &ObjectFilter) -> Result<(), String> {
     if filter.any_of.is_some() {
         return Err("filter cannot use any_of".into());
     }
@@ -6615,7 +6614,7 @@ fn validate_program_tap_permanent_cost_filter(filter: &TargetFilter) -> Result<(
     filter.validate_characteristic_constraints()
 }
 
-fn program_sacrifice_has_any_of_branch_exclusions(filter: &TargetFilter) -> bool {
+fn program_sacrifice_has_any_of_branch_exclusions(filter: &ObjectFilter) -> bool {
     let Some(branches) = &filter.any_of else {
         return false;
     };
@@ -6626,7 +6625,7 @@ fn program_sacrifice_has_any_of_branch_exclusions(filter: &TargetFilter) -> bool
     })
 }
 
-fn validate_program_target_filter(filter: &TargetFilter, role: &str) -> Result<(), String> {
+fn validate_program_target_filter(filter: &ObjectFilter, role: &str) -> Result<(), String> {
     if filter.controller == super::TargetController::DefendingPlayer {
         return Err(format!(
             "{role} cannot depend on a defending player outside its typed program inputs"
@@ -6895,10 +6894,10 @@ mod scalar_program_input_tests {
     fn choose_permanents(min: u32, max: u32) -> SpellEffectKind {
         SpellEffectKind::ChoosePermanents {
             chooser: PlayerRecipient::Controller,
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 controller: super::super::TargetController::You,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             min,
             max,
@@ -6949,10 +6948,10 @@ mod scalar_program_input_tests {
                                 group_index: 0,
                                 kind: TargetKind::OpponentPlayer,
                             },
-                            filter: TargetFilter {
+                            filter: ObjectFilter {
                                 kind: TargetKind::AnyPermanent,
                                 controller: super::super::TargetController::You,
-                                ..TargetFilter::default()
+                                ..ObjectFilter::default()
                             },
                             min: 1,
                             max: 1,
@@ -7247,10 +7246,10 @@ mod scalar_program_input_tests {
                                 group_index: 0,
                                 kind: TargetKind::OpponentPlayer,
                             },
-                            filter: TargetFilter {
+                            filter: ObjectFilter {
                                 kind: TargetKind::AnyPermanent,
                                 controller: super::super::TargetController::You,
-                                ..TargetFilter::default()
+                                ..ObjectFilter::default()
                             },
                             min: 1,
                             max: 1,
@@ -7362,9 +7361,9 @@ mod target_exile_result_tests {
                         bind: vec!["exiled".into(), "receipt".into()],
                         input: None,
                         kind: InstructionKind::Perform(Box::new(SpellEffectKind::Exile {
-                            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                                 kind: TargetKind::Creature,
-                                ..TargetFilter::default()
+                                ..ObjectFilter::default()
                             })),
                             linked_exile_id: None,
                         })),
@@ -7424,7 +7423,7 @@ mod target_exile_result_tests {
         })
     }
 
-    fn replace_exile_target_filter(program: &mut CardProgram, target_filter: TargetFilter) {
+    fn replace_exile_target_filter(program: &mut CardProgram, target_filter: ObjectFilter) {
         let InstructionKind::Perform(effect) = &mut program.body.steps[0].kind else {
             panic!("first fixture instruction is the typed Exile producer");
         };
@@ -7448,7 +7447,7 @@ mod target_exile_result_tests {
     }
 
     fn compile_gain_life_target_group(
-        filter: TargetFilter,
+        filter: ObjectFilter,
         min: u32,
         max: u32,
         recipient_group: u32,
@@ -7566,9 +7565,9 @@ mod target_exile_result_tests {
                     bind: vec!["exiled".into(), "receipt".into()],
                     input: None,
                     kind: InstructionKind::Perform(Box::new(SpellEffectKind::Exile {
-                        subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                        subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                             kind: super::super::TargetKind::AnyPermanent,
-                            ..TargetFilter::default()
+                            ..ObjectFilter::default()
                         })),
                         linked_exile_id: None,
                     })),
@@ -7687,24 +7686,24 @@ mod target_exile_result_tests {
         let (owner, mut program, targeting) = swords_power_sum_fixture(1, None);
         replace_exile_target_filter(
             &mut program,
-            TargetFilter {
+            ObjectFilter {
                 any_of: Some(vec![
-                    TargetFilter {
+                    ObjectFilter {
                         tapped: Some(true),
-                        ..TargetFilter {
+                        ..ObjectFilter {
                             kind: TargetKind::Creature,
-                            ..TargetFilter::default()
+                            ..ObjectFilter::default()
                         }
                     },
-                    TargetFilter {
+                    ObjectFilter {
                         tapped: Some(false),
-                        ..TargetFilter {
+                        ..ObjectFilter {
                             kind: TargetKind::Creature,
-                            ..TargetFilter::default()
+                            ..ObjectFilter::default()
                         }
                     },
                 ]),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         );
 
@@ -7722,18 +7721,18 @@ mod target_exile_result_tests {
         let (owner, mut program, targeting) = swords_power_sum_fixture(1, None);
         replace_exile_target_filter(
             &mut program,
-            TargetFilter {
+            ObjectFilter {
                 any_of: Some(vec![
-                    TargetFilter {
+                    ObjectFilter {
                         kind: TargetKind::Creature,
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     },
-                    TargetFilter {
+                    ObjectFilter {
                         kind: TargetKind::AnyPermanent,
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     },
                 ]),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         );
 
@@ -7776,10 +7775,10 @@ mod target_exile_result_tests {
                 bind: vec!["destroyed".into()],
                 input: None,
                 kind: InstructionKind::Perform(Box::new(SpellEffectKind::Destroy {
-                    subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                         kind: TargetKind::AnyPermanent,
                         permanent_types: vec![super::super::PermanentTypeFilter::Artifact],
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     })),
                 })),
             },
@@ -7842,9 +7841,9 @@ mod target_exile_result_tests {
                             bind: vec!["branch_object".into(), "branch_receipt".into()],
                             input: None,
                             kind: InstructionKind::Perform(Box::new(SpellEffectKind::Exile {
-                                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                                subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                                     kind: TargetKind::Creature,
-                                    ..TargetFilter::default()
+                                    ..ObjectFilter::default()
                                 })),
                                 linked_exile_id: None,
                             })),
@@ -7944,9 +7943,9 @@ mod target_exile_result_tests {
     #[test]
     fn gain_life_target_group_rejects_unknown_player_and_multitarget_groups() {
         assert!(compile_gain_life_target_group(
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::Creature,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             1,
             1,
@@ -7954,9 +7953,9 @@ mod target_exile_result_tests {
         )
         .is_err());
         assert!(compile_gain_life_target_group(
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::AnyPlayer,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             1,
             1,
@@ -7964,9 +7963,9 @@ mod target_exile_result_tests {
         )
         .is_err());
         assert!(compile_gain_life_target_group(
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::Creature,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             1,
             2,
@@ -7990,10 +7989,10 @@ mod target_exile_result_tests {
                         bind: vec!["destroyed".into()],
                         input: None,
                         kind: InstructionKind::Perform(Box::new(SpellEffectKind::Destroy {
-                            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                                 kind: TargetKind::AnyPermanent,
                                 permanent_types: vec![super::super::PermanentTypeFilter::Artifact],
-                                ..TargetFilter::default()
+                                ..ObjectFilter::default()
                             })),
                         })),
                     },
@@ -8203,7 +8202,7 @@ mod activated_x_mana_value_limit_program_rejections {
     fn exile_all_and_hand_entry_stay_outside_all_program_owner_whitelists() {
         let effects = [
             SpellEffectKind::ExileAll {
-                kind: TargetFilter::default_creature(),
+                kind: ObjectFilter::default_creature(),
                 max_mana_value_limit: Some(ManaValueLimit::ActivatedAbilityX),
                 until_source_leaves: false,
             },
@@ -8219,7 +8218,7 @@ mod activated_x_mana_value_limit_program_rejections {
                     required_subtype: "Elf".into(),
                 },
                 if_beheld: vec![SpellEffectKind::ExileAll {
-                    kind: TargetFilter::default_creature(),
+                    kind: ObjectFilter::default_creature(),
                     max_mana_value_limit: Some(ManaValueLimit::ActivatedAbilityX),
                     until_source_leaves: false,
                 }],

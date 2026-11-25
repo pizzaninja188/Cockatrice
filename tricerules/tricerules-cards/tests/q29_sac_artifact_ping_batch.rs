@@ -1,6 +1,6 @@
 //! Registry conformance for the queue-v29 artifact-sacrifice ping cohort.
 use tricerules_cards::primitives::{
-    AbilityCost, Amount, PermanentTypeFilter, SpellEffectKind, TargetController, TargetFilter,
+    AbilityCost, Amount, ObjectFilter, PermanentTypeFilter, SpellEffectKind, TargetController,
     TargetKind,
 };
 use tricerules_cards::Layout;
@@ -43,11 +43,11 @@ const CARDS: &[Card] = &[
 
 fn artifact_cost() -> AbilityCost {
     AbilityCost::SacrificePermanent {
-        filter: TargetFilter {
+        filter: ObjectFilter {
             kind: TargetKind::AnyPermanent,
             controller: TargetController::You,
             permanent_types: vec![PermanentTypeFilter::Artifact],
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         },
         count: 1,
     }

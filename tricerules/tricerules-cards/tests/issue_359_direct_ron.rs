@@ -8,8 +8,8 @@
 //! spree rulings, including mode-local targeting and mode-by-mode resolution order.
 
 use tricerules_cards::primitives::{
-    Amount, CastCostOptionDef, CastCostOptionRef, EffectSubject, ManaCostChoiceKind,
-    PermanentTypeFilter, SpellEffectKind, TargetFilter, TargetGroupDef, TargetKind, TargetingDef,
+    Amount, CastCostOptionDef, CastCostOptionRef, EffectSubject, ManaCostChoiceKind, ObjectFilter,
+    PermanentTypeFilter, SpellEffectKind, TargetGroupDef, TargetKind, TargetingDef,
 };
 use tricerules_cards::{AbilityPresentation, ChoiceId, Color, Layout, ModeId};
 
@@ -114,9 +114,9 @@ fn issue_359_explosive_derailment_maps_every_printed_clause() {
         damage_mode.effects,
         [SpellEffectKind::DamageTarget {
             amount: Amount::Fixed(4),
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::Creature,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );
@@ -148,10 +148,10 @@ fn issue_359_explosive_derailment_maps_every_printed_clause() {
     assert_eq!(
         destroy_mode.effects,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![PermanentTypeFilter::Artifact],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
@@ -234,9 +234,9 @@ fn issue_359_unfortunate_accident_maps_every_printed_clause() {
     assert_eq!(
         destroy_mode.effects,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );

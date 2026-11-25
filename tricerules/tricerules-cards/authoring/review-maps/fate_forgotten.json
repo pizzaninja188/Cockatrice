@@ -18,7 +18,7 @@
       "typed_path": "/faces/0/spell_effect/0"
     },
     {
-      "symbol": "TargetFilter.permanent_types",
+      "symbol": "ObjectFilter.permanent_types",
       "typed_path": "/faces/0/spell_effect/0/Exile/subject/Chosen/permanent_types"
     },
     {

@@ -151,10 +151,10 @@ fn issue_370_gargantuan_leech_cost_modifier_payload_is_exact() {
                                 any_of: None,
                                 controllers: RelativePlayerSet::Controller,
                                 exclude_source: false,
-                                matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                                matching: Box::new(tricerules_cards::primitives::ObjectFilter {
                                     kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
                                     required_subtypes: vec!["Cave".to_string()],
-                                    ..tricerules_cards::primitives::TargetFilter::default()
+                                    ..tricerules_cards::primitives::ObjectFilter::default()
                                 }),
                             },
                         },
@@ -309,10 +309,10 @@ fn issue_370_unretained_recipe_payloads_validate_in_the_registry() {
                                 any_of: None,
                                 controllers: RelativePlayerSet::Controller,
                                 exclude_source: false,
-                                matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                                matching: Box::new(tricerules_cards::primitives::ObjectFilter {
                                     kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
                                     required_subtypes: vec!["Cave".to_string()],
-                                    ..tricerules_cards::primitives::TargetFilter::default()
+                                    ..tricerules_cards::primitives::ObjectFilter::default()
                                 }),
                             },
                         },

@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    EffectSubject, SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
+    EffectSubject, ObjectFilter, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind,
 };
 use tricerules_cards::Keyword;
 
@@ -30,9 +30,9 @@ fn control_auras_use_the_shared_source_relative_layer_2_primitive() {
         assert_eq!(
             face.spell_effect,
             [SpellEffectKind::AuraAttach {
-                target: TargetFilter {
+                target: ObjectFilter {
                     kind,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
             }]
         );
@@ -43,7 +43,7 @@ fn control_auras_use_the_shared_source_relative_layer_2_primitive() {
 #[test]
 fn temporary_control_spells_preserve_their_oracle_effect_order() {
     let registry = tricerules_cards::registry::global();
-    let target = TargetFilter::default_creature();
+    let target = ObjectFilter::default_creature();
     let chosen = EffectSubject::Chosen(Box::new(target.clone()));
     let control = SpellEffectKind::GainControl {
         target: target.clone(),
@@ -84,10 +84,10 @@ fn cartouche_requires_a_creature_its_aura_controller_controls() {
     assert_eq!(
         face.spell_effect,
         [SpellEffectKind::AuraAttach {
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );

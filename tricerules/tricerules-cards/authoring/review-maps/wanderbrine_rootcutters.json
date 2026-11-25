@@ -21,7 +21,7 @@
       "typed_path": "/faces/0/static_abilities/0/definition/SelfCombatRestriction/restriction"
     },
     {
-      "symbol": "TargetFilter.is_color",
+      "symbol": "ObjectFilter.is_color",
       "typed_path": "/faces/0/static_abilities/0/definition/SelfCombatRestriction/restriction/cant_be_blocked_by"
     }
   ],

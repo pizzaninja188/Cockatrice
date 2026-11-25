@@ -17,7 +17,7 @@
       "typed_path": "/faces/0/spell_effect/0"
     },
     {
-      "symbol": "TargetFilter.power",
+      "symbol": "ObjectFilter.power",
       "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen/power"
     }
   ],

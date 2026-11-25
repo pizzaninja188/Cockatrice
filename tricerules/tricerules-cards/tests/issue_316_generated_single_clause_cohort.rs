@@ -6,7 +6,7 @@
 
 use tricerules_cards::primitives::{
     CastTriggerPlayer, EffectSubject, GraveyardDestination, GraveyardFilter, GraveyardOwner,
-    PermanentTypeFilter, PowerComparison, SpellCastFilter, SpellEffectKind, TargetFilter,
+    ObjectFilter, PermanentTypeFilter, PowerComparison, SpellCastFilter, SpellEffectKind,
     TargetGroupDef, TargetKind, TargetSchema,
 };
 use tricerules_cards::{
@@ -82,10 +82,10 @@ fn issue_316_rip_the_seams_adventure_face_destroys_only_tapped_creatures() {
     assert_eq!(
         adventure.spell_effect,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 tapped: Some(true),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
@@ -138,13 +138,13 @@ fn issue_316_chomping_changeling_keeps_changeling_and_optional_destroy() {
     assert_eq!(
         ability.effect,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![
                     PermanentTypeFilter::Artifact,
                     PermanentTypeFilter::Enchantment,
                 ],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
@@ -186,13 +186,13 @@ fn issue_316_stormbrood_omen_faces_carry_the_etb_and_power_bounded_destroy() {
     assert_eq!(
         ability.effect,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![
                     PermanentTypeFilter::Artifact,
                     PermanentTypeFilter::Enchantment,
                 ],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
@@ -213,10 +213,10 @@ fn issue_316_stormbrood_omen_faces_carry_the_etb_and_power_bounded_destroy() {
     assert_eq!(
         omen.spell_effect,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 power: Some(PowerComparison::AtMost(3)),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
@@ -343,10 +343,10 @@ fn issue_316_first_strike_pumps_share_one_mandatory_target_group() {
                     power: expected_power,
                     toughness: 0,
                     scale: None,
-                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
                 },
                 SpellEffectKind::GrantKeywords {
-                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
                     keywords: vec![Keyword::FirstStrike],
                 },
             ],

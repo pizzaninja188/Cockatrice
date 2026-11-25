@@ -14,10 +14,11 @@ use tricerules_card_model::primitives::{
     CounterKind, CounterPaymentOutcome, CreatureScopeFilter, DamagePreventionAdditionalEffect,
     DelayedTokenSacrificeTiming, EffectDuration, GameCondition, HandCardAction, Keyword,
     LibraryBottomOrder, LibraryLookRemainderPolicy, LibraryPlacement, LinkedExiledCardDestination,
-    LinkedExiledCardPlayKind, ManaAmount, ObjectCastCostKind, PermanentChoiceConstraint,
-    PermanentSacrificeScope, PermanentTypeFilter, ResolvingPermanentModifier, ResultType,
-    SearchDestination, SearchSelectionConstraint, SearchSelectionSlot, SearchZoneSelection,
-    StaticEmblemEffect, TargetFilter, TriggeredAbilityDef, TypeLineReplacement, ZoneCardFilter,
+    LinkedExiledCardPlayKind, ManaAmount, ObjectCastCostKind, ObjectFilter,
+    PermanentChoiceConstraint, PermanentSacrificeScope, PermanentTypeFilter,
+    ResolvingPermanentModifier, ResultType, SearchDestination, SearchSelectionConstraint,
+    SearchSelectionSlot, SearchZoneSelection, StaticEmblemEffect, TriggeredAbilityDef,
+    TypeLineReplacement, ZoneCardFilter,
 };
 use tricerules_card_model::primitives::{PlayerRecipient, ResolutionBranchDef};
 pub use tricerules_card_model::AbilityDefinitionId;
@@ -2179,7 +2180,7 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         target_player: PlayerId,
         cohort: TargetedPlayerControlCohort,
-        filter: TargetFilter,
+        filter: ObjectFilter,
         constraints: Vec<PermanentChoiceConstraint>,
         candidate_generations: Vec<(ObjectId, u64)>,
         stage: PendingTargetedPlayerChoiceStage,
@@ -2217,7 +2218,7 @@ pub enum ResolutionContinuation {
         candidate_generations: Vec<(ObjectId, u64)>,
         hand_candidates: Vec<ObjectId>,
         hand_filter: ZoneCardFilter,
-        permanent_filter: TargetFilter,
+        permanent_filter: ObjectFilter,
     },
     /// CR 701.34: choose the next action-time replacement before any recipient selection.
     ProliferateReplacement {
@@ -3068,7 +3069,7 @@ pub struct PendingPlayerSetSacrifice {
     pub current: usize,
     pub accepted: Vec<AcceptedPermanentSelection>,
     pub count: u32,
-    pub filter: TargetFilter,
+    pub filter: ObjectFilter,
     pub restriction: tricerules_card_model::primitives::SacrificeRestriction,
 }
 
@@ -3696,7 +3697,7 @@ pub(crate) struct PendingBattlefieldEntry {
 pub(crate) struct PendingCopyCandidate {
     pub source_id: ObjectId,
     pub source_generation: u64,
-    pub source_filter: TargetFilter,
+    pub source_filter: ObjectFilter,
     pub entering_zone_generation: u64,
     pub entering_copy_revision: u64,
     /// Original pre-entry baseline; entering_copy_revision guards the latest installation.
@@ -3730,7 +3731,7 @@ pub(crate) struct ActiveTemporaryCopy {
 
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct PendingAuraEntryRecipient {
-    pub filter: TargetFilter,
+    pub filter: ObjectFilter,
     pub entering_zone_generation: u64,
     pub entering_copy_revision: u64,
     pub recipient_generations: Vec<(ObjectId, u64)>,
@@ -3739,7 +3740,7 @@ pub(crate) struct PendingAuraEntryRecipient {
 
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct AcceptedAuraEntryRecipient {
-    pub filter: TargetFilter,
+    pub filter: ObjectFilter,
     pub entering_zone_generation: u64,
     pub entering_copy_revision: u64,
     pub recipient_generation: Option<u64>,
@@ -4137,7 +4138,7 @@ pub enum AffectedScope {
     /// one-shot scopes, this set remains dynamic for the effect's duration (CR 611.2c).
     PermanentsMatching {
         reference_player: PlayerId,
-        filter: Box<TargetFilter>,
+        filter: Box<ObjectFilter>,
         exclude: Option<ObjectId>,
     },
     /// The permanent currently attached to the Aura or Equipment with `source_oid`. Resolved

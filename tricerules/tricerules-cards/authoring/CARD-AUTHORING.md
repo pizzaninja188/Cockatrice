@@ -567,7 +567,7 @@ the simultaneous cohort; Commander owner-hand replacement choices suspend and re
 operation, and the leaf cannot bind or yield a result.
 `Destroy` has two distinct Program shapes. An ability Program may use only resultless `Destroy` of
 a `Chosen` permanent with exactly `kind: AnyPermanent`, `permanent_types: [Artifact]`, and all
-other `TargetFilter` fields at their defaults. Bind its `ProgramTargetRole::Subject` to the matching
+other `ObjectFilter` fields at their defaults. Bind its `ProgramTargetRole::Subject` to the matching
 target group owned by that ability or selected modal mode. Gearbane Orangutan uses this form for
 its zero-or-one target artifact mode. It reuses the existing Destroy operation also used by Abrade
 and Ancient Grudge; it does not admit another ability-side filter or subject, or
@@ -1385,7 +1385,7 @@ are admitted.
 "Creatures you control get ...", "other Goblins have ..." and other untargeted creature sets use
 `CreatureScopeFilter`. It holds only the scope-relative fields: `controller` (relative to the source's
 current controller; `TargetedPlayer` is one-shot only) and `exclude_self` ("other"). Every
-descriptive predicate goes in `matching`, which is the shared battlefield `TargetFilter` vocabulary
+descriptive predicate goes in `matching`, which is the shared battlefield `ObjectFilter` vocabulary
 and must say `kind: Creature`. Example: `(controller: Some(YouControl), exclude_self: true, matching:
 (kind: Creature, tapped: Some(true), required_supertypes: ["Legendary"]))`. Omit `matching` for every
 creature. A scope is not a target (CR 115). Hexproof, shroud and ward never apply to it, and validation
@@ -1403,7 +1403,7 @@ emblem keyword grants cannot read keywords, and no continuous scope can read pow
 (`BattlefieldCreatures`, `BattlefieldCreatureCount`) follow the same split. The wrapper holds only the
 relations: `controllers` (relative to the condition's controller), `exclude_source` ("another", the
 exact source generation) and, for permanents, an outer `any_of` whose branches are whole filters
-AND-ed with the outer node. Every descriptive predicate goes in `matching`, the shared `TargetFilter`
+AND-ed with the outer node. Every descriptive predicate goes in `matching`, the shared `ObjectFilter`
 vocabulary. Permanent filters use `kind: AnyPermanent` or `kind: Creature`; creature counts use
 `kind: Creature`. Omit `matching` for every permanent or creature. Examples:
 `(controllers: Controller, exclude_source: true, matching: (kind: AnyPermanent, permanent_types: [Land],
@@ -1429,7 +1429,7 @@ battlefield modifiers.
 
 `GraveyardFilter` adds target context around an optional `card` predicate. Its `owner` and
 generation-aware `excluded_objects` apply to every branch. Omit `card` for any card in the allowed
-graveyards; `card: Some(())` is invalid. Do not use battlefield `TargetFilter` for these predicates.
+graveyards; `card: Some(())` is invalid. Do not use battlefield `ObjectFilter` for these predicates.
 
 ```ron
 // A land card with the Cave subtype in your graveyard.
@@ -1447,12 +1447,12 @@ author `card: Some(...)` and `required_subtypes: [...]` directly.
 ### Stack spells and permanent ownership
 
 Use `StackSpellFilter` for counter/copy spell targets. `card_type`, `is_color`, and inclusive
-mana-value bounds combine with AND. `any_of` follows the pure-OR validation of `TargetFilter`:
+mana-value bounds combine with AND. `any_of` follows the pure-OR validation of `ObjectFilter`:
 at least two distinct terminal predicates and no leaf fields on an OR node. Annul and Get Out
 use type alternatives; Flashfreeze uses red/green color alternatives. Stack colors use the
 selected face and applicable current color effects, including for spell copies.
 
-`TargetFilter.owner: You` means the effect controller owns the permanent, independently of
+`ObjectFilter.owner: You` means the effect controller owns the permanent, independently of
 `controller`. The default `Any` preserves unrestricted ownership. Get Out combines `owner: You`
 with `kind: AnyPermanent` and `permanent_types: [Creature, Enchantment]`. Owner restrictions
 require permanent-only kinds and must appear within each leaf of an OR filter. Context-free

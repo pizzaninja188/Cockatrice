@@ -232,10 +232,10 @@ fn issue_dmg2_batch_maps_definitions() {
 }
 
 /// `DamageTarget`'s any-target filter.
-fn any_target_filter() -> tricerules_cards::primitives::TargetFilter {
-    tricerules_cards::primitives::TargetFilter {
+fn any_target_filter() -> tricerules_cards::primitives::ObjectFilter {
+    tricerules_cards::primitives::ObjectFilter {
         kind: TargetKind::AnyTarget,
-        ..tricerules_cards::primitives::TargetFilter::default()
+        ..tricerules_cards::primitives::ObjectFilter::default()
     }
 }
 

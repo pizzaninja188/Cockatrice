@@ -1,6 +1,6 @@
 use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, CombatRestriction, CombatRestrictionScope, EffectSubject,
-    PermanentTypeFilter, SpellEffectKind, TargetFilter, TargetKind, TargetObjectExclusion,
+    ObjectFilter, PermanentTypeFilter, SpellEffectKind, TargetKind, TargetObjectExclusion,
 };
 
 #[test]
@@ -20,11 +20,11 @@ fn manifold_key_registers_its_artifact_untap_and_unblockable_activations() {
         untap.costs.as_slice(),
         [AbilityCost::Mana(cost), AbilityCost::Tap] if cost.to_string() == "{1}"
     ));
-    let untap_filter = TargetFilter {
+    let untap_filter = ObjectFilter {
         kind: TargetKind::AnyPermanent,
         permanent_types: vec![PermanentTypeFilter::Artifact],
         excluded_objects: vec![TargetObjectExclusion::Source],
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     };
     assert_eq!(
         untap.effect,

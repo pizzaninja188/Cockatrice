@@ -175,10 +175,10 @@ fn issue_misc1_batch_maps_definitions() {
     );
 }
 
-fn creature() -> tricerules_cards::primitives::TargetFilter {
-    tricerules_cards::primitives::TargetFilter {
+fn creature() -> tricerules_cards::primitives::ObjectFilter {
+    tricerules_cards::primitives::ObjectFilter {
         kind: TargetKind::Creature,
-        ..tricerules_cards::primitives::TargetFilter::default()
+        ..tricerules_cards::primitives::ObjectFilter::default()
     }
 }
 

@@ -229,7 +229,7 @@ pub enum GameCondition {
     /// adding the secondary predicate to cast-time target legality.
     ObjectMatches {
         object: ConditionObjectRef,
-        filter: Box<TargetFilter>,
+        filter: Box<ObjectFilter>,
     },
     /// Compare an exact bound object's derived battlefield mana value. If an earlier
     /// instruction moved it away, use that generation's last battlefield value (CR 608.2h).
@@ -781,7 +781,7 @@ pub enum PlayerQuantifier {
 ///
 /// This wrapper owns only the relations to the consumer: `controllers` relative to the
 /// condition's controller, `exclude_source` ("another") and the outer `any_of` disjunction. Every
-/// descriptive predicate lives in the shared [`TargetFilter`] vocabulary in `matching`, evaluated
+/// descriptive predicate lives in the shared [`ObjectFilter`] vocabulary in `matching`, evaluated
 /// by the same engine matcher as targets and creature scopes. `matching` must use kind
 /// `AnyPermanent` or `Creature` and may not carry target-relative controller, owner or object
 /// exclusions.
@@ -805,17 +805,17 @@ pub struct BattlefieldPermanentFilter {
         default = "battlefield_permanent_matching",
         skip_serializing_if = "is_battlefield_permanent_matching"
     )]
-    pub matching: Box<TargetFilter>,
+    pub matching: Box<ObjectFilter>,
 }
 
-fn battlefield_permanent_matching() -> Box<TargetFilter> {
-    Box::new(TargetFilter {
+fn battlefield_permanent_matching() -> Box<ObjectFilter> {
+    Box::new(ObjectFilter {
         kind: TargetKind::AnyPermanent,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     })
 }
 
-fn is_battlefield_permanent_matching(filter: &TargetFilter) -> bool {
+fn is_battlefield_permanent_matching(filter: &ObjectFilter) -> bool {
     *filter == *battlefield_permanent_matching()
 }
 
@@ -831,7 +831,7 @@ impl BattlefieldPermanentFilter {
     }
 
     /// The selected players' permanents matching `matching`.
-    pub fn matching(controllers: RelativePlayerSet, matching: TargetFilter) -> Self {
+    pub fn matching(controllers: RelativePlayerSet, matching: ObjectFilter) -> Self {
         Self {
             matching: Box::new(matching),
             ..Self::controlled_by(controllers)
@@ -981,7 +981,7 @@ pub enum ConditionObjectRef {
 
 /// Which battlefield creatures contribute to a [`CountExpression`] or creature-count condition.
 /// The wrapper owns `controllers` and `exclude_source`; every descriptive predicate lives in the
-/// shared [`TargetFilter`] vocabulary in `matching`, which must use `kind: Creature`.
+/// shared [`ObjectFilter`] vocabulary in `matching`, which must use `kind: Creature`.
 ///
 /// Counts evaluated as an effect resolves or a condition is checked may read derived keywords
 /// (Winged Words) and power. A continuous effect may not depend on a same- or later-layer value:
@@ -1000,15 +1000,15 @@ pub struct BattlefieldCreatureCountFilter {
         default = "battlefield_creature_matching",
         skip_serializing_if = "is_battlefield_creature_matching"
     )]
-    pub matching: Box<TargetFilter>,
+    pub matching: Box<ObjectFilter>,
 }
 
-fn battlefield_creature_matching() -> Box<TargetFilter> {
-    Box::new(TargetFilter::default_creature())
+fn battlefield_creature_matching() -> Box<ObjectFilter> {
+    Box::new(ObjectFilter::default_creature())
 }
 
-fn is_battlefield_creature_matching(filter: &TargetFilter) -> bool {
-    *filter == TargetFilter::default_creature()
+fn is_battlefield_creature_matching(filter: &ObjectFilter) -> bool {
+    *filter == ObjectFilter::default_creature()
 }
 
 impl Default for BattlefieldCreatureCountFilter {
@@ -1089,11 +1089,11 @@ mod observed_object_aggregate_tests {
                 any_of: None,
                 controllers: RelativePlayerSet::Controller,
                 exclude_source: false,
-                matching: Box::new(crate::primitives::TargetFilter {
+                matching: Box::new(crate::primitives::ObjectFilter {
                     kind: crate::primitives::TargetKind::AnyPermanent,
                     permanent_types: vec![crate::primitives::PermanentTypeFilter::Land],
                     required_subtypes: vec!["Mountain".into()],
-                    ..crate::primitives::TargetFilter::default()
+                    ..crate::primitives::ObjectFilter::default()
                 }),
             },
             aggregate: BattlefieldAggregate::Count,

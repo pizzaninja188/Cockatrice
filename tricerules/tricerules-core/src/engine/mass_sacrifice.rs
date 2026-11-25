@@ -134,7 +134,7 @@ impl GameEngine {
     fn current_player_sacrifice_candidates(
         &self,
         player: PlayerId,
-        filter: &tricerules_card_model::primitives::TargetFilter,
+        filter: &tricerules_card_model::primitives::ObjectFilter,
         excluded: &HashSet<ObjectId>,
         restriction: SacrificeRestriction,
     ) -> Vec<(ObjectId, u64)> {

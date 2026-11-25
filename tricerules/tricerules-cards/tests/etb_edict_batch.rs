@@ -4,7 +4,7 @@
 //! Every included card is a normal-layout creature with exactly one entry trigger.
 //! Each fingerprint is SHA-256 of the exact pinned normalized Oracle text.
 
-use tricerules_cards::primitives::{PlayerRecipient, SpellEffectKind, TargetFilter, TargetKind};
+use tricerules_cards::primitives::{ObjectFilter, PlayerRecipient, SpellEffectKind, TargetKind};
 use tricerules_cards::{AbilityPresentation, Layout, TriggerCondition};
 
 struct ExpectedCard {
@@ -97,9 +97,9 @@ fn check_card(expected: &ExpectedCard) {
     assert_eq!(*count, 1, "{id}: exactly one creature");
     assert_eq!(
         *filter,
-        TargetFilter {
+        ObjectFilter {
             kind: TargetKind::Creature,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         },
         "{id}: any creature of the chooser's choice"
     );

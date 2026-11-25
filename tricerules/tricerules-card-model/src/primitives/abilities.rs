@@ -3,8 +3,8 @@
 use super::{
     AbilityCost, ActivatedCostModifier, Amount, CardTypeFilter, CastCostReceiptCondition, Color,
     CounterKind, EffectContext, GameCondition, Keyword, ManaSpendingRestriction,
-    ObjectCastCostKind, PermanentEventFilter, PowerComparison, RelativePlayerSet, SpellCostFilter,
-    SpellEffectKind, SpellKeyword, StackSpellFilter, TargetController, TargetFilter, TargetKind,
+    ObjectCastCostKind, ObjectFilter, PermanentEventFilter, PowerComparison, RelativePlayerSet,
+    SpellCostFilter, SpellEffectKind, SpellKeyword, StackSpellFilter, TargetController, TargetKind,
     TargetingDef, ZoneCardFilter,
 };
 use crate::{AbilityId, AbilityLinkId, AbilityPresentation, ManaAmount, ModalDef};
@@ -2678,7 +2678,7 @@ pub enum CreatureScopeController {
 /// A scope is not a target (CR 115) and not a choice: nothing is chosen, hexproof/shroud/ward
 /// never apply, and the set is re-evaluated continuously for static abilities (CR 611.3a) or
 /// fixed as a one-shot effect resolves (CR 611.2c). This wrapper owns only the scope-relative
-/// parts; every descriptive object predicate lives in the shared [`TargetFilter`] vocabulary in
+/// parts; every descriptive object predicate lives in the shared [`ObjectFilter`] vocabulary in
 /// `matching`, so scopes, targets and untargeted selections all describe objects the same way
 /// and are evaluated by the same engine matcher.
 ///
@@ -2710,7 +2710,7 @@ pub struct CreatureScopeFilter {
         default = "creature_scope_matching",
         skip_serializing_if = "is_creature_scope_matching"
     )]
-    pub matching: Box<TargetFilter>,
+    pub matching: Box<ObjectFilter>,
 }
 
 impl Default for CreatureScopeFilter {
@@ -2723,14 +2723,14 @@ impl Default for CreatureScopeFilter {
     }
 }
 
-fn creature_scope_matching() -> Box<TargetFilter> {
-    Box::new(TargetFilter {
+fn creature_scope_matching() -> Box<ObjectFilter> {
+    Box::new(ObjectFilter {
         kind: TargetKind::Creature,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     })
 }
 
-fn is_creature_scope_matching(filter: &TargetFilter) -> bool {
+fn is_creature_scope_matching(filter: &ObjectFilter) -> bool {
     *filter == *creature_scope_matching()
 }
 
@@ -2948,7 +2948,7 @@ pub enum SpecialActionKind {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpecialActionAffected {
     AttachedPermanent,
-    Permanents(#[serde(default)] Box<TargetFilter>),
+    Permanents(#[serde(default)] Box<ObjectFilter>),
 }
 
 /// Counter prohibitions on Tatterkite itself and the permanent enchanted by Blossombind.
@@ -3137,8 +3137,8 @@ pub enum StaticAbilityDef {
     /// values with those of a live battlefield permanent matching `filter`. This is a selection,
     /// not a target; Clone and Stunt Double therefore ignore hexproof and shroud.
     EntersAsCopy {
-        #[serde(default = "TargetFilter::default_creature")]
-        filter: TargetFilter,
+        #[serde(default = "ObjectFilter::default_creature")]
+        filter: ObjectFilter,
         /// CR 707.9b: Phyrexian Metamorph's additional Artifact type is part of its
         /// copiable values, rather than an independent layer-4 type-changing effect.
         #[serde(default)]
@@ -3147,8 +3147,8 @@ pub enum StaticAbilityDef {
     /// CR 614.12 / 707.9a: Cursed Mirror's specialized entry copy effect. The selected
     /// creature's copiable values gain haste, and this copy effect expires during cleanup.
     EntersAsCopyWithHasteUntilEndOfTurn {
-        #[serde(default = "TargetFilter::default_creature")]
-        filter: TargetFilter,
+        #[serde(default = "ObjectFilter::default_creature")]
+        filter: ObjectFilter,
     },
     /// Duplicant's static ability derives its creature subtypes and power/toughness from the
     /// exact creature card exiled by its paired optional enters trigger. The dedicated form keeps
@@ -3404,13 +3404,13 @@ pub enum StaticAbilityDef {
     /// grants indestructible to artifacts; Avacyn grants it to other permanents you control.
     /// Filters read earlier-layer characteristics and supported physical facts, never keywords/P/T.
     GrantKeywordToPermanents {
-        filter: TargetFilter,
+        filter: ObjectFilter,
         keyword: Keyword,
     },
     /// CR 305.6 / 613.1d: Yavimaya adds Forest to all lands; Urborg adds Swamp.
     /// The evolving permanent scope includes the source unless explicitly excluded by filter.
     AddTypesToPermanents {
-        filter: TargetFilter,
+        filter: ObjectFilter,
         addition: TypeLineAddition,
     },
     /// CR 105.2 / 613.1e: Mycosynth Lattice makes cards in the game, spells, and permanents
@@ -3431,7 +3431,7 @@ pub enum StaticAbilityDef {
     /// Chromatic Lantern grants land mana abilities; Cryptolith Rite grants creature mana
     /// abilities. Each child retains this static parent's definition and source incarnation.
     GrantActivatedAbilityToPermanents {
-        filter: TargetFilter,
+        filter: ObjectFilter,
         activated_abilities: Vec<ActivatedAbilityDef>,
     },
     /// CR 113.10 / 613.1f: permanents matching `filter` have the listed triggered abilities
@@ -3439,7 +3439,7 @@ pub enum StaticAbilityDef {
     /// ward to artifacts and creatures; Infernal Scarring supplies the attached-object version
     /// of the same triggered-ability grant.
     GrantTriggeredAbilityToPermanents {
-        filter: TargetFilter,
+        filter: ObjectFilter,
         #[serde(default)]
         condition: Option<GameCondition>,
         triggered_abilities: Vec<TriggeredAbilityDef>,
@@ -3449,7 +3449,7 @@ pub enum StaticAbilityDef {
     /// keyword, trigger, and P/T statics would not preserve that shared start boundary when
     /// later layer-4 effects change recipient eligibility or the source loses abilities.
     ConditionalPermanentTransformation {
-        filter: TargetFilter,
+        filter: ObjectFilter,
         condition: GameCondition,
         add_types: TypeLineAddition,
         #[serde(default)]
@@ -3680,7 +3680,7 @@ mod activated_x_exile_all_owner_tests {
     use crate::card_def::{ModalDef, ModeDef};
     use crate::primitives::{
         BeholdCriterion, CastCostReceiptCondition, EffectContext, EffectSubject, GameCondition,
-        ManaValueLimit, PlayerRecipient, TargetFilter,
+        ManaValueLimit, ObjectFilter, PlayerRecipient,
     };
     use crate::{AbilityId, AbilityPresentation, ChoiceId, ModeId};
 
@@ -3697,7 +3697,7 @@ mod activated_x_exile_all_owner_tests {
 
     fn exile_all_x() -> SpellEffectKind {
         SpellEffectKind::ExileAll {
-            kind: TargetFilter::default_creature(),
+            kind: ObjectFilter::default_creature(),
             max_mana_value_limit: Some(ManaValueLimit::ActivatedAbilityX),
             until_source_leaves: false,
         }

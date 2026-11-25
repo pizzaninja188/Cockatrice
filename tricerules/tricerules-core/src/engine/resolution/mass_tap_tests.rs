@@ -181,7 +181,7 @@ fn issue_444_targeted_mass_damage_marks_only_chosen_players_creatures() {
                 group_index: 0,
                 kind: TargetKind::AnyPlayer,
             },
-            kind: TargetFilter::default_creature(),
+            kind: ObjectFilter::default_creature(),
         },
         &[11],
         &[0],
@@ -354,7 +354,7 @@ fn issue_444_targeted_player_scope_uses_current_multiplayer_control() {
         group_index: 0,
         kind: TargetKind::AnyPlayer,
     };
-    let filter = TargetFilter::default_creature();
+    let filter = ObjectFilter::default_creature();
     let chosen_player_id = [11];
     let chosen_player = [StackTarget {
         counter_amount: 0,
@@ -412,7 +412,7 @@ fn scopes_use_current_controllers_in_deterministic_battlefield_order() {
     let ours = deploy(&mut engine, 0, "grizzly_bears");
     let stolen = deploy(&mut engine, 1, "grizzly_bears");
     let opponent = deploy(&mut engine, 2, "grizzly_bears");
-    let filter = TargetFilter::default_creature();
+    let filter = ObjectFilter::default_creature();
     assert_eq!(
         scoped_battlefield_objects(&engine, 3, RelativePlayerSet::Opponents, &filter, &[]),
         vec![stolen, opponent]
@@ -463,7 +463,7 @@ fn affected_player_mass_scope_selects_only_the_event_player() {
     let controller_land = deploy(&mut engine, 0, "forest");
     let affected_land = deploy(&mut engine, 1, "forest");
     let other_land = deploy(&mut engine, 2, "forest");
-    let filter = TargetFilter {
+    let filter = ObjectFilter {
         kind: TargetKind::AnyPermanent,
         permanent_types: vec![PermanentTypeFilter::Land],
         ..Default::default()
@@ -488,9 +488,9 @@ fn current_types_colors_and_protection_drive_untargeted_selection() {
     let bear = deploy(&mut engine, 0, "grizzly_bears");
     let land = deploy(&mut engine, 1, "forest");
     let thopter = deploy(&mut engine, 2, "ornithopter");
-    let filter = TargetFilter {
+    let filter = ObjectFilter {
         not_color: Some(Color::White),
-        ..TargetFilter::default_creature()
+        ..ObjectFilter::default_creature()
     };
     assert_eq!(
         scoped_battlefield_objects(&engine, 3, RelativePlayerSet::All, &filter, &[]),
@@ -548,10 +548,10 @@ fn overlapping_filters_and_no_ops_preserve_one_tap_action() {
     let mut engine = setup();
     let thopter = deploy(&mut engine, 1, "ornithopter");
     let sword = deploy(&mut engine, 1, "short_sword");
-    let filter = TargetFilter {
+    let filter = ObjectFilter {
         any_of: Some(vec![
-            TargetFilter::default_creature(),
-            TargetFilter {
+            ObjectFilter::default_creature(),
+            ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![PermanentTypeFilter::Artifact],
                 ..Default::default()
@@ -613,7 +613,7 @@ fn filtered_untap_keeps_prohibition_and_stun_execution() {
             .set_counter(CounterKind::Stun, 1);
     }
     modify(&mut engine, prohibited, ContinuousEffectKind::ProhibitUntap);
-    let filter = TargetFilter {
+    let filter = ObjectFilter {
         kind: TargetKind::AnyPermanent,
         permanent_types: vec![PermanentTypeFilter::Land],
         ..Default::default()

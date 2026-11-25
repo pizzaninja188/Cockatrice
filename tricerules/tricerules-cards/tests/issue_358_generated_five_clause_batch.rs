@@ -9,8 +9,8 @@
 
 use tricerules_cards::primitives::{
     ActivationLimit, ConditionPlayerSet, EffectSubject, EntersWithCountersAffected, EventZone,
-    GameCondition, LifeAmount, LifeChangeKind, PermanentEventFilter, PlayerQuantifier,
-    PlayerRecipient, StaticAbilityDef, TargetFilter, TargetKind, ZoneEventCardinality,
+    GameCondition, LifeAmount, LifeChangeKind, ObjectFilter, PermanentEventFilter,
+    PlayerQuantifier, PlayerRecipient, StaticAbilityDef, TargetKind, ZoneEventCardinality,
     ZoneEventDestination,
 };
 use tricerules_cards::{
@@ -268,9 +268,9 @@ fn issue_358_susurian_voidborn_drains_when_self_creature_or_artifact_dies() {
         [
             SpellEffectKind::TargetPlayerLosesLife {
                 amount: 1,
-                target: TargetFilter {
+                target: ObjectFilter {
                     kind: TargetKind::OpponentPlayer,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
             },
             SpellEffectKind::GainLife {

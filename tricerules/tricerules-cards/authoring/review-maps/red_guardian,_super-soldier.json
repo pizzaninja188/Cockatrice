@@ -24,7 +24,7 @@
     {"symbol": "TriggerCondition::WhenSelfEntersBattlefield", "typed_path": "/faces/0/triggered_abilities/0/trigger"},
     {"symbol": "SpellEffectKind::Destroy", "typed_path": "/faces/0/triggered_abilities/0/effect/0"},
     {"symbol": "TargetingDef", "typed_path": "/faces/0/triggered_abilities/0/targeting"},
-    {"symbol": "TargetFilter::dealt_damage_this_turn", "typed_path": "/faces/0/triggered_abilities/0/effect/0"}
+    {"symbol": "ObjectFilter::dealt_damage_this_turn", "typed_path": "/faces/0/triggered_abilities/0/effect/0"}
   ],
   "tokens": [],
   "semantic_fixtures": [

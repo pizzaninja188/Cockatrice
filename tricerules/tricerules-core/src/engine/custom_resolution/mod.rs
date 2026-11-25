@@ -3958,7 +3958,7 @@ mod resolution_payment_actor_tests {
 
         let cost = ResolutionCost::TapPermanents {
             count: 1,
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
                 ..Default::default()

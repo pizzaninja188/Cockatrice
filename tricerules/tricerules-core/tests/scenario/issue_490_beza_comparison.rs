@@ -6,7 +6,7 @@
 
 use super::helpers::*;
 use tricerules_cards::primitives::{
-    ContinuousEffectKind, EffectDuration, PermanentTypeFilter, TargetFilter, TargetKind,
+    ContinuousEffectKind, EffectDuration, ObjectFilter, PermanentTypeFilter, TargetKind,
     TypeLineAddition,
 };
 use tricerules_core::state::{AffectedScope, ContinuousEffect};
@@ -150,10 +150,10 @@ fn animate_all_artifacts_as_creatures(engine: &mut GameEngine) {
         source_id: None,
         affected: AffectedScope::PermanentsMatching {
             reference_player: 0,
-            filter: Box::new(TargetFilter {
+            filter: Box::new(ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![PermanentTypeFilter::Artifact],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             }),
             exclude: None,
         },

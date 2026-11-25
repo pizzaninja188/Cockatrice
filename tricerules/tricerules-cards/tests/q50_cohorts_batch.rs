@@ -319,7 +319,7 @@ fn only_trigger(f: &CardFace) -> &tricerules_cards::TriggeredAbilityDef {
     &f.triggered_abilities[0]
 }
 
-fn chosen_filter(subject: &EffectSubject) -> &tricerules_cards::primitives::TargetFilter {
+fn chosen_filter(subject: &EffectSubject) -> &tricerules_cards::primitives::ObjectFilter {
     match subject {
         EffectSubject::Chosen(filter) => filter,
         other => panic!("expected chosen subject, got {other:?}"),

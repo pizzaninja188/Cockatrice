@@ -1,6 +1,6 @@
 //! Registry conformance for the queue-v30 "creatures without flying can't block" cohort.
 use tricerules_cards::primitives::{
-    CombatRestriction, CombatRestrictionScope, Keyword, SpellEffectKind, TargetFilter, TargetKind,
+    CombatRestriction, CombatRestrictionScope, Keyword, ObjectFilter, SpellEffectKind, TargetKind,
 };
 use tricerules_cards::Layout;
 
@@ -66,10 +66,10 @@ fn q30_no_flying_block_batch_maps_definitions() {
         };
         assert_eq!(
             *filter,
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::Creature,
                 excluded_keywords: vec![Keyword::Flying],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             "{}",
             card.id

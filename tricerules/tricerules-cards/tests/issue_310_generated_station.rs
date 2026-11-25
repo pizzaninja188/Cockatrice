@@ -3,8 +3,8 @@ use std::collections::BTreeSet;
 use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, ActivationTiming, Amount, BattlefieldQuantityCharacteristic,
     CardResultAction, CardResultFilter, CardResultSource, CardTypeFilter, CountExpression,
-    EffectSubject, GameCondition, ObjectPaymentConstraint, PlayerRecipient, RelativePlayerSet,
-    SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
+    EffectSubject, GameCondition, ObjectFilter, ObjectPaymentConstraint, PlayerRecipient,
+    RelativePlayerSet, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind,
     TypeLineAddition,
 };
 use tricerules_cards::{AbilityPresentation, CounterKind, Keyword};
@@ -14,10 +14,10 @@ const COHORT: [&str; 2] = ["galvanizing_sawship", "wedgelight_rammer"];
 fn station_cost() -> AbilityCost {
     AbilityCost::TapPermanents {
         constraint: ObjectPaymentConstraint::ExactCount(1),
-        filter: TargetFilter {
+        filter: ObjectFilter {
             kind: TargetKind::Creature,
             controller: TargetController::You,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         },
         exclude_source: true,
     }

@@ -57,7 +57,7 @@
       "typed_path": "/faces/0/static_abilities/0/definition/AnthemKeyword/filter/exclude_self"
     },
     {
-      "symbol": "TargetFilter::tapped",
+      "symbol": "ObjectFilter::tapped",
       "typed_path": "/faces/0/static_abilities/0/definition/AnthemKeyword/filter/matching/tapped"
     }
   ],

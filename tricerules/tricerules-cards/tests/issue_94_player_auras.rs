@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    Amount, PlayerRecipient, SpellEffectKind, TargetFilter, TargetKind, TriggerCondition,
+    Amount, ObjectFilter, PlayerRecipient, SpellEffectKind, TargetKind, TriggerCondition,
 };
 
 #[test]
@@ -24,9 +24,9 @@ fn curses_have_exact_attachment_data_and_complete_rewards() {
         assert_eq!(
             face.spell_effect,
             [SpellEffectKind::AuraAttach {
-                target: TargetFilter {
+                target: ObjectFilter {
                     kind: TargetKind::AnyPlayer,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
             }]
         );

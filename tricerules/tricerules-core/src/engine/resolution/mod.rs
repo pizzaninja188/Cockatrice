@@ -3301,7 +3301,7 @@ mod attached_subject_tests {
             zone_change_generation: Some(captured_generation),
         }];
         let subject = tricerules_card_model::primitives::EffectSubject::Chosen(Box::new(
-            tricerules_card_model::primitives::TargetFilter::default_creature(),
+            tricerules_card_model::primitives::ObjectFilter::default_creature(),
         ));
 
         assert_eq!(
@@ -10333,10 +10333,10 @@ mod attached_subject_tests {
                             controllers: RelativePlayerSet::Opponents,
                             any_of: None,
                             exclude_source: false,
-                            matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                            matching: Box::new(tricerules_card_model::primitives::ObjectFilter {
                                 kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
                                 permanent_types: vec![tricerules_card_model::primitives::PermanentTypeFilter::Artifact],
-                                ..tricerules_card_model::primitives::TargetFilter::default()
+                                ..tricerules_card_model::primitives::ObjectFilter::default()
                             }),
                         },
                     }
@@ -10346,9 +10346,9 @@ mod attached_subject_tests {
                             controllers: RelativePlayerSet::Controller,
                             any_of: None,
                             exclude_source: false,
-                            matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                            matching: Box::new(tricerules_card_model::primitives::ObjectFilter {
                                 kind: tricerules_card_model::primitives::TargetKind::Creature,
-                                ..tricerules_card_model::primitives::TargetFilter::default()
+                                ..tricerules_card_model::primitives::ObjectFilter::default()
                             }),
                         },
                         characteristic:
@@ -10593,7 +10593,7 @@ mod attached_subject_tests {
 
     #[test]
     fn issue_175_gain_routes_continue_the_effect_tail_and_preserve_loss() {
-        let player_target = TargetFilter {
+        let player_target = ObjectFilter {
             kind: TargetKind::AnyPlayer,
             ..Default::default()
         };
@@ -10717,7 +10717,7 @@ mod attached_subject_tests {
                 (
                     SpellEffectKind::TargetPlayerLosesLife {
                         amount,
-                        target: TargetFilter {
+                        target: ObjectFilter {
                             kind: TargetKind::AnyPlayer,
                             ..Default::default()
                         },
@@ -13750,10 +13750,10 @@ mod source_keyword_tests {
             zone_change_generation: Some(before[0].1),
             required_controller: None,
         }];
-        let chosen_filter = TargetFilter {
+        let chosen_filter = ObjectFilter {
             kind: TargetKind::Creature,
             controller: TargetController::NotYou,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         };
         let effect = SpellEffectKind::PhaseOut {
             subject: EffectSubject::Chosen(Box::new(chosen_filter)),
@@ -13880,10 +13880,10 @@ mod source_keyword_tests {
             required_controller: None,
         }];
         let chosen_opposing_creature = || {
-            EffectSubject::Chosen(Box::new(TargetFilter {
+            EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::NotYou,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             }))
         };
         let effects = [
@@ -14092,10 +14092,10 @@ mod source_keyword_tests {
             required_controller: None,
         }];
         let effect = SpellEffectKind::PhaseOut {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::NotYou,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         };
         let top = deathtouch_spell_item(0);

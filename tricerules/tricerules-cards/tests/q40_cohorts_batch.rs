@@ -1,11 +1,11 @@
 //! Registry conformance for the queue-v40 reuse-only cohorts.
 use tricerules_cards::primitives::{
-    Amount, EffectSubject, LibraryBottomOrder, LibraryPartitionKind, PermanentTypeFilter,
-    SpellEffectKind, TargetFilter, TargetKind, TriggerCondition,
+    Amount, EffectSubject, LibraryBottomOrder, LibraryPartitionKind, ObjectFilter,
+    PermanentTypeFilter, SpellEffectKind, TargetKind, TriggerCondition,
 };
 use tricerules_cards::{AbilityPresentation, Layout};
 
-fn filter_permanent_types(filter: &TargetFilter) -> Vec<PermanentTypeFilter> {
+fn filter_permanent_types(filter: &ObjectFilter) -> Vec<PermanentTypeFilter> {
     filter.permanent_types.clone()
 }
 
@@ -425,7 +425,7 @@ fn q40_etb_shrink_maps_definitions() {
             [SpellEffectKind::PumpTarget { power, toughness, subject: EffectSubject::Chosen(filter), .. }]
                 if *power == dp
                     && *toughness == dt
-                    && matches!(**filter, TargetFilter { kind: TargetKind::Creature, .. })
+                    && matches!(**filter, ObjectFilter { kind: TargetKind::Creature, .. })
         ));
         assert_eq!(trigger.targeting.as_ref().map(|t| t.groups.len()), Some(1));
     }
@@ -469,7 +469,7 @@ fn q40_etb_drain_maps_definitions() {
         assert_eq!(trigger.trigger, TriggerCondition::WhenSelfEntersBattlefield);
         assert!(matches!(
             trigger.effect.as_slice(),
-            [SpellEffectKind::DrainTarget { amount: value, target: TargetFilter { kind: TargetKind::OpponentPlayer, .. } }]
+            [SpellEffectKind::DrainTarget { amount: value, target: ObjectFilter { kind: TargetKind::OpponentPlayer, .. } }]
                 if *value == amount
         ));
     }
@@ -499,7 +499,7 @@ fn q40_etb_destroy_enchantment_maps_definitions() {
         assert!(matches!(
             trigger.effect.as_slice(),
             [SpellEffectKind::Destroy { subject: EffectSubject::Chosen(filter) }]
-                if matches!(**filter, TargetFilter { kind: TargetKind::AnyPermanent, .. })
+                if matches!(**filter, ObjectFilter { kind: TargetKind::AnyPermanent, .. })
                     && filter_permanent_types(filter) == [PermanentTypeFilter::Enchantment]
         ));
         assert_eq!(trigger.targeting.as_ref().map(|t| t.groups.len()), Some(1));

@@ -15,10 +15,10 @@ use crate::state::{
 use crate::Zone;
 use crate::{GameEngine, ObjectId, PlayerId};
 use tricerules_card_model::primitives::{
-    Amount, BattlefieldQuantityCharacteristic, CardResultAction, CounterKind,
+    Amount, BattlefieldQuantityCharacteristic, CardResultAction, CounterKind, ObjectFilter,
     PermanentChoiceConstraint, PlayerRecipient, RelativePlayerSet, ResolutionBranchDef,
     ResolutionBranchRequirement, ResolutionCost, ResultType, SpellEffectKind, TargetController,
-    TargetFilter, TargetKind, TriggerCondition, TriggeredAbilityDef,
+    TargetKind, TriggerCondition, TriggeredAbilityDef,
 };
 
 /// Current positive counter kinds on the exact target incarnation that passed the initial
@@ -269,7 +269,7 @@ pub(in crate::engine) fn current_targeted_player_permanent_candidates(
     engine: &GameEngine,
     item: &StackItem,
     target_player: PlayerId,
-    filter: &TargetFilter,
+    filter: &ObjectFilter,
     constraints: &[PermanentChoiceConstraint],
 ) -> Vec<ObjectId> {
     let source = TargetSourceIdentity::for_stack_item(engine, item);
@@ -316,7 +316,7 @@ pub(in crate::engine) fn targeted_player_control_cohort_candidates(
     item: &StackItem,
     target_player: PlayerId,
     cohort: &TargetedPlayerControlCohort,
-    filter: &TargetFilter,
+    filter: &ObjectFilter,
     constraints: &[PermanentChoiceConstraint],
 ) -> Vec<(ObjectId, u64)> {
     if cohort.player_id != target_player {
@@ -375,7 +375,7 @@ pub(in crate::engine) fn targeted_player_control_cohort_candidates(
 }
 
 pub(in crate::engine) fn permanent_choice_prompt(
-    filter: &TargetFilter,
+    filter: &ObjectFilter,
     min: u32,
     max: u32,
 ) -> String {

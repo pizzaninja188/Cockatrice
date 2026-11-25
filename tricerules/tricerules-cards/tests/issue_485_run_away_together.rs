@@ -28,7 +28,7 @@ fn issue_485_run_away_together_maps_two_creatures_controlled_by_different_player
         face.spell_effect.as_slice(),
         [SpellEffectKind::ReturnToOwnersHand { subject: EffectSubject::Chosen(filter) }]
             if filter.kind == TargetKind::Creature
-                && **filter == tricerules_cards::primitives::TargetFilter::default_creature()
+                && **filter == tricerules_cards::primitives::ObjectFilter::default_creature()
     ));
     let targeting = face.targeting.as_ref().expect("targeting");
     let [group] = targeting.groups.as_slice() else {

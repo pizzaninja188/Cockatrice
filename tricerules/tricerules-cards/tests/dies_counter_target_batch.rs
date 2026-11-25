@@ -6,7 +6,7 @@
 //! Each fingerprint is SHA-256 of the exact pinned normalized Oracle text.
 
 use tricerules_cards::primitives::{
-    Amount, CounterKind, EffectSubject, TargetController, TargetFilter, TargetKind,
+    Amount, CounterKind, EffectSubject, ObjectFilter, TargetController, TargetKind,
 };
 use tricerules_cards::{AbilityPresentation, Keyword, Layout, SpellEffectKind, TriggerCondition};
 
@@ -125,10 +125,10 @@ fn check_card(expected: &ExpectedCard) {
     assert_eq!(*count, Amount::Fixed(1), "{id}: exactly one counter");
     assert_eq!(
         *subject,
-        EffectSubject::Chosen(Box::new(TargetFilter {
+        EffectSubject::Chosen(Box::new(ObjectFilter {
             kind: TargetKind::Creature,
             controller: TargetController::You,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         })),
         "{id}: a creature its controller controls"
     );

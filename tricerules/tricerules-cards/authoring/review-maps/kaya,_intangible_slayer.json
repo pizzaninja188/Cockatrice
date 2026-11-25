@@ -105,7 +105,7 @@
       "typed_path": "/faces/0/activated_abilities/2/effect/0/ExileTargetAndCopyUnlessAura/subject/Chosen"
     },
     {
-      "symbol": "TargetFilter",
+      "symbol": "ObjectFilter",
       "typed_path": "/faces/0/activated_abilities/2/effect/0/ExileTargetAndCopyUnlessAura/subject/Chosen"
     },
     {

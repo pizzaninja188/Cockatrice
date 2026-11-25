@@ -11,10 +11,10 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-static PROGRAM_OPPONENT_PLAYER_TARGET_FILTER: LazyLock<TargetFilter> =
-    LazyLock::new(|| TargetFilter {
+static PROGRAM_OPPONENT_PLAYER_TARGET_FILTER: LazyLock<ObjectFilter> =
+    LazyLock::new(|| ObjectFilter {
         kind: TargetKind::OpponentPlayer,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     });
 
 pub(crate) fn is_private_affected_player_discard_profile(effect: &SpellEffectKind) -> bool {
@@ -34,9 +34,9 @@ pub(crate) fn is_private_affected_player_discard_profile(effect: &SpellEffectKin
         target.kind,
         TargetKind::AnyPlayer | TargetKind::OpponentPlayer
     ) && target
-        == &TargetFilter {
+        == &ObjectFilter {
             kind: target.kind,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         };
 
     *action == HandCardAction::Discard
@@ -272,7 +272,7 @@ impl TargetChooser {
 #[serde(deny_unknown_fields)]
 pub struct CastCostTargetExpansion {
     pub condition: CastCostReceiptCondition,
-    pub without_cost: TargetFilter,
+    pub without_cost: ObjectFilter,
 }
 
 /// One semantic target role declared by an effect. Runtime legality consumes this vocabulary for
@@ -280,7 +280,7 @@ pub struct CastCostTargetExpansion {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TargetRole<'a> {
     /// A battlefield permanent, player, or either, constrained by a composable target filter.
-    Filtered(&'a TargetFilter),
+    Filtered(&'a ObjectFilter),
     /// The legacy creature-only target used by the two simple exile primitives.
     CreaturePermanent,
     /// A spell, never an ability, currently on the stack.
@@ -1372,11 +1372,11 @@ impl TargetingDef {
     }
 
     fn validate_per_opponent_profile(&self, effects: &[SpellEffectKind]) -> Result<(), String> {
-        let expected_filter = TargetFilter {
+        let expected_filter = ObjectFilter {
             kind: TargetKind::AnyPermanent,
             controller: TargetController::Opponent,
             excluded_permanent_types: vec![super::PermanentTypeFilter::Land],
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         };
         let [group] = self.groups.as_slice() else {
             return Err("per-opponent targeting requires one group template".into());
@@ -1442,13 +1442,13 @@ impl TargetingDef {
         else {
             return Err("ExileTargetAndCopyUnlessAura requires one chosen target".into());
         };
-        let expected_filter = TargetFilter {
+        let expected_filter = ObjectFilter {
             kind: TargetKind::AnyPermanent,
             permanent_types: vec![
                 super::PermanentTypeFilter::Creature,
                 super::PermanentTypeFilter::Enchantment,
             ],
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         };
         if **filter != expected_filter {
             return Err(
@@ -1632,7 +1632,7 @@ impl TargetingDef {
     }
 }
 
-/// Base kind for a [`TargetFilter`] — what category of object is targeted.
+/// Base kind for a [`ObjectFilter`] — what category of object is targeted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum TargetKind {
     /// Player, creature, planeswalker, or battle (CR 115.4).
@@ -1707,7 +1707,7 @@ impl CardTypeFilter {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct StackSpellFilter {
-    /// Annul / Get Out type unions and Flashfreeze's color union. As with TargetFilter,
+    /// Annul / Get Out type unions and Flashfreeze's color union. As with ObjectFilter,
     /// an OR node has only distinct branches; all leaf fields remain default.
     #[serde(default)]
     pub any_of: Option<Vec<Self>>,
@@ -1875,7 +1875,7 @@ impl CardTypeFilter {
 }
 
 /// Controller relationship required of a permanent target, relative to the spell or ability
-/// controller. This remains independently composable with the other `TargetFilter` predicates.
+/// controller. This remains independently composable with the other `ObjectFilter` predicates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum TargetController {
     /// A permanent controlled by any player.
@@ -1943,7 +1943,7 @@ pub enum TargetObjectExclusion {
 /// while No One Left Behind inspects a graveyard card.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TargetMatchFilter {
-    Battlefield(TargetFilter),
+    Battlefield(ObjectFilter),
     Graveyard(GraveyardFilter),
 }
 
@@ -2033,17 +2033,21 @@ pub enum GraveyardDestination {
     LibraryBottom,
 }
 
-fn default_creature_filter() -> TargetFilter {
-    TargetFilter {
+fn default_creature_filter() -> ObjectFilter {
+    ObjectFilter {
         kind: TargetKind::Creature,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }
 }
 
-/// Composable target predicate. A leaf combines its base [`TargetKind`] and optional
-/// characteristic constraints with AND. An `any_of` node is a pure recursive OR whose other
-/// fields remain default. Use only `kind` to get the same semantics as the original five
-/// TargetSpec variants; add constraints to narrow further.
+/// The general, composable object predicate shared by targets, untargeted selections, creature
+/// scopes and battlefield counts. Matching an object is only the descriptive half: targeting
+/// legality (hexproof, shroud, ward, protection, resolution rechecks; CR 115, 608.2b) stays with
+/// the targeting consumers, and wrappers such as [`CreatureScopeFilter`](super::CreatureScopeFilter) own their own relations.
+///
+/// A leaf combines its base [`TargetKind`] and optional characteristic constraints with AND. An
+/// `any_of` node is a pure recursive OR whose other fields remain default. Use only `kind` to get
+/// the same semantics as the original five TargetSpec variants; add constraints to narrow further.
 ///
 /// Example RON:
 /// - `(kind: AnyTarget)` — any creature or player
@@ -2058,7 +2062,7 @@ fn default_creature_filter() -> TargetFilter {
 /// - `(kind: AnyPermanent, controller: Opponent, permanent_types: [Artifact, Enchantment])` —
 ///   Rambunctious Mutt.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct TargetFilter {
+pub struct ObjectFilter {
     /// A pure disjunction of two or more recursively validated filters. When present, every
     /// leaf field on this node must retain its default value.
     #[serde(default)]
@@ -2172,7 +2176,7 @@ pub struct TargetFilter {
     pub requires_any_counter: bool,
 }
 
-impl TargetFilter {
+impl ObjectFilter {
     /// Default: any creature (the most common implicit filter).
     pub fn default_creature() -> Self {
         default_creature_filter()
@@ -2180,10 +2184,10 @@ impl TargetFilter {
 
     /// Default filter for the equip ability: "target creature you control" (CR 702.6a).
     pub fn default_equip() -> Self {
-        TargetFilter {
+        ObjectFilter {
             kind: TargetKind::Creature,
             controller: TargetController::You,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         }
     }
 
@@ -2538,7 +2542,7 @@ pub(super) fn terminal_filters_have_duplicates<T: PartialEq>(leaves: &[&T]) -> b
 mod tests {
     #[test]
     fn issue_464_optional_source_damage_filter_preserves_legacy_ron() {
-        let filter = TargetFilter::default();
+        let filter = ObjectFilter::default();
         let serialized = ron::to_string(&filter).expect("serialize default target filter");
         let has_source_damage_field = |serialized: &str| {
             serialized
@@ -2550,9 +2554,9 @@ mod tests {
             "the absent optional predicate must not churn existing generated RON: {serialized}"
         );
 
-        let filter = TargetFilter {
+        let filter = ObjectFilter {
             dealt_damage_this_turn: Some(true),
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         };
         let serialized = ron::to_string(&filter).expect("serialize source-damage filter");
         assert!(has_source_damage_field(&serialized));
@@ -2569,7 +2573,7 @@ mod tests {
             "the true predicate must survive RON serialization: {serialized}"
         );
 
-        let legacy: TargetFilter =
+        let legacy: ObjectFilter =
             ron::from_str("(kind: AnyPermanent)").expect("deserialize the legacy permanent filter");
         let explicit_false = target_filter("(kind: AnyPermanent, requires_any_counter: false)");
         let legacy_ron = ron::to_string(&legacy).expect("serialize legacy filter");
@@ -2633,7 +2637,7 @@ mod tests {
             "(excluded_objects: [Source, Source])",
             "(token: Some(true), any_of: Some([(kind: Creature), (kind: AnyPermanent)]))",
         ] {
-            let filter: TargetFilter = ron::from_str(source).unwrap();
+            let filter: ObjectFilter = ron::from_str(source).unwrap();
             assert!(filter.validate_target_constraints().is_err(), "{source}");
         }
         for source in [
@@ -2666,7 +2670,7 @@ mod tests {
     };
     use crate::CounterKind;
 
-    fn target_filter(ron: &str) -> TargetFilter {
+    fn target_filter(ron: &str) -> ObjectFilter {
         ron::from_str(ron).expect("deserialize target filter")
     }
 
@@ -2685,7 +2689,7 @@ mod tests {
                 group_index,
                 target_index,
             }),
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: target_kind,
                 ..Default::default()
             })),
@@ -2772,7 +2776,7 @@ mod tests {
             SpellEffectKind::MoveOneCounterBetweenTargets,
             SpellEffectKind::DamageTarget {
                 amount: Amount::Fixed(1),
-                target: TargetFilter {
+                target: ObjectFilter {
                     kind: TargetKind::AnyPlayer,
                     ..Default::default()
                 },
@@ -2845,7 +2849,7 @@ mod tests {
                 })),
                 divisor: 2,
             },
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 ..Default::default()
             })),
@@ -2863,7 +2867,7 @@ mod tests {
         let extra_binding = vec![
             chosen_power_counter_effect(0, 0, TargetKind::Creature),
             SpellEffectKind::Destroy {
-                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                     kind: TargetKind::Creature,
                     ..Default::default()
                 })),
@@ -2905,7 +2909,7 @@ mod tests {
         vec![
             SpellEffectKind::DamageTarget {
                 amount: Amount::Fixed(4),
-                target: TargetFilter {
+                target: ObjectFilter {
                     kind: target_kind,
                     ..Default::default()
                 },
@@ -2966,7 +2970,7 @@ mod tests {
                     group_index: 0,
                     kind: TargetKind::OpponentPlayer,
                 },
-                filter: TargetFilter {
+                filter: ObjectFilter {
                     kind: TargetKind::AnyPermanent,
                     controller: TargetController::You,
                     ..Default::default()
@@ -3108,48 +3112,48 @@ mod tests {
     #[test]
     fn issue_114_rejects_contradictory_or_redundant_target_leaves() {
         let invalid = [
-            TargetFilter {
+            ObjectFilter {
                 is_color: Some(Color::Green),
                 not_color: Some(Color::Green),
                 ..Default::default()
             },
-            TargetFilter {
+            ObjectFilter {
                 permanent_types: vec![PermanentTypeFilter::Artifact],
                 excluded_permanent_types: vec![PermanentTypeFilter::Artifact],
                 ..Default::default()
             },
-            TargetFilter {
+            ObjectFilter {
                 permanent_types: vec![PermanentTypeFilter::Land],
                 excluded_permanent_types: vec![PermanentTypeFilter::Land],
                 ..Default::default()
             },
-            TargetFilter {
+            ObjectFilter {
                 permanent_types: vec![PermanentTypeFilter::Creature, PermanentTypeFilter::Creature],
                 ..Default::default()
             },
-            TargetFilter {
+            ObjectFilter {
                 required_keywords: vec![Keyword::Flying, Keyword::Flying],
                 ..Default::default()
             },
-            TargetFilter {
+            ObjectFilter {
                 excluded_keywords: vec![Keyword::Flying, Keyword::Flying],
                 ..Default::default()
             },
-            TargetFilter {
+            ObjectFilter {
                 required_keywords: vec![Keyword::Flying],
                 excluded_keywords: vec![Keyword::Flying],
                 ..Default::default()
             },
-            TargetFilter {
+            ObjectFilter {
                 excluded_subtypes: vec!["  ".into()],
                 ..Default::default()
             },
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::AnyPlayer,
                 power: Some(PowerComparison::AtLeast(4)),
                 ..Default::default()
             },
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::AnyPlayer,
                 toughness: Some(PowerComparison::AtLeast(4)),
                 ..Default::default()
@@ -3196,15 +3200,15 @@ mod tests {
     #[test]
     fn issue_141_target_schema_binds_every_role_exactly_once() {
         let effects = vec![SpellEffectKind::CreatureDealsDamageEqualToPower {
-            source: TargetFilter {
+            source: ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::Opponent,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }];
         let targeting = TargetingDef {
@@ -3250,10 +3254,10 @@ mod tests {
     fn issue_141_target_roles_cover_each_target_domain() {
         let permanent = SpellEffectKind::DamageTarget {
             amount: crate::primitives::Amount::Fixed(1),
-            target: TargetFilter::default_creature(),
+            target: ObjectFilter::default_creature(),
         };
         let creature = SpellEffectKind::Exile {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
             linked_exile_id: None,
         };
         let stack = SpellEffectKind::CounterTargetSpell {
@@ -3276,7 +3280,7 @@ mod tests {
         ));
         assert!(matches!(
             creature.target_roles().as_slice(),
-            [TargetRole::Filtered(filter)] if *filter == &TargetFilter::default_creature()
+            [TargetRole::Filtered(filter)] if *filter == &ObjectFilter::default_creature()
         ));
         assert!(matches!(
             stack.target_roles().as_slice(),
@@ -3302,9 +3306,9 @@ mod tests {
     fn omitted_target_prompt_uses_validated_group_and_keeps_authored_overrides() {
         let effects = [SpellEffectKind::DamageTarget {
             amount: Amount::Fixed(1),
-            target: TargetFilter {
+            target: ObjectFilter {
                 controller: TargetController::You,
-                ..TargetFilter::default_creature()
+                ..ObjectFilter::default_creature()
             },
         }];
         let mut targeting: TargetingDef =
@@ -3374,7 +3378,7 @@ mod tests {
 
         let permanent_effects = vec![SpellEffectKind::DamageTarget {
             amount: Amount::Fixed(1),
-            target: TargetFilter::default_creature(),
+            target: ObjectFilter::default_creature(),
         }];
         assert!(TargetSchema::compile(&permanent_effects, Some(&same_graveyard)).is_err());
     }
@@ -3383,7 +3387,7 @@ mod tests {
     fn issue_485_different_controllers_requires_a_multi_target_permanent_group() {
         let bounce = vec![SpellEffectKind::ReturnToOwnersHand {
             subject: super::super::EffectSubject::Chosen(
-                Box::new(TargetFilter::default_creature()),
+                Box::new(ObjectFilter::default_creature()),
             ),
         }];
         let group = |min, max| TargetGroupDef {
@@ -3436,9 +3440,9 @@ mod tests {
         );
         let players = vec![SpellEffectKind::DamageTarget {
             amount: Amount::Fixed(1),
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::AnyTarget,
-                ..TargetFilter::default_creature()
+                ..ObjectFilter::default_creature()
             },
         }];
         assert!(
@@ -3452,7 +3456,7 @@ mod tests {
         let effects = vec![
             SpellEffectKind::ReturnToOwnersHand {
                 subject: super::super::EffectSubject::Chosen(Box::new(
-                    TargetFilter::default_creature(),
+                    ObjectFilter::default_creature(),
                 )),
             },
             SpellEffectKind::MoveGraveyardCards {

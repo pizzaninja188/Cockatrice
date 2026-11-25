@@ -33,13 +33,13 @@ fn receipt(engine: &GameEngine, object_id: ObjectId) -> TriggerObjectRef {
     }
 }
 
-fn land_filter() -> TargetFilter {
-    TargetFilter {
+fn land_filter() -> ObjectFilter {
+    ObjectFilter {
         kind: TargetKind::AnyPermanent,
         controller: TargetController::You,
         permanent_types: vec![PermanentTypeFilter::Land],
         tapped: Some(false),
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }
 }
 
@@ -85,7 +85,7 @@ fn test_stack_item() -> StackItem {
 fn resolve_tap(
     engine: &mut GameEngine,
     selected: Vec<TriggerObjectRef>,
-    filter: TargetFilter,
+    filter: ObjectFilter,
 ) -> Result<(OperationResults, Vec<rv1::RuledEvent>), EngineError> {
     resolve_tap_with_cardinality(
         engine,
@@ -101,7 +101,7 @@ fn resolve_tap(
 fn resolve_tap_with_cardinality(
     engine: &mut GameEngine,
     selected: Vec<TriggerObjectRef>,
-    filter: TargetFilter,
+    filter: ObjectFilter,
     cardinality: Cardinality,
 ) -> Result<(OperationResults, Vec<rv1::RuledEvent>), EngineError> {
     let top = test_stack_item();

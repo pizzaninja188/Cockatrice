@@ -8,7 +8,7 @@
 //! CR 122.1d / 701.26 stun counters and tapping.
 
 use tricerules_cards::primitives::{
-    Amount, EffectSubject, MassPlayerSet, PlayerRecipient, PowerComparison, TargetFilter,
+    Amount, EffectSubject, MassPlayerSet, ObjectFilter, PlayerRecipient, PowerComparison,
     TargetKind,
 };
 use tricerules_cards::{
@@ -69,25 +69,25 @@ fn issue_413_airship_crash_is_the_three_branch_union_destroy() {
     assert_eq!(
         face.spell_effect,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 any_of: Some(vec![
-                    TargetFilter {
+                    ObjectFilter {
                         kind: TargetKind::AnyPermanent,
                         permanent_types: vec![PermanentTypeFilter::Artifact],
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     },
-                    TargetFilter {
+                    ObjectFilter {
                         kind: TargetKind::AnyPermanent,
                         permanent_types: vec![PermanentTypeFilter::Enchantment],
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     },
-                    TargetFilter {
+                    ObjectFilter {
                         kind: TargetKind::Creature,
                         required_keywords: vec![Keyword::Flying],
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     },
                 ]),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
@@ -107,7 +107,7 @@ fn issue_413_fuel_the_flames_is_the_untargeted_two_damage_sweep() {
         [SpellEffectKind::DamageAll {
             amount: Amount::Fixed(2),
             players: MassPlayerSet::All,
-            kind: TargetFilter::default_creature(),
+            kind: ObjectFilter::default_creature(),
         }]
     );
     assert!(face.targeting.is_none());
@@ -125,10 +125,10 @@ fn issue_413_gallant_strike_is_the_toughness_four_destroy() {
     assert_eq!(
         face.spell_effect,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 toughness: Some(PowerComparison::AtLeast(4)),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
@@ -144,16 +144,16 @@ fn issue_413_stall_out_taps_and_puts_three_stun_counters_on_one_target() {
     );
     assert_eq!(face.types, ["Sorcery"]);
 
-    let target = TargetFilter {
+    let target = ObjectFilter {
         any_of: Some(vec![
-            TargetFilter::default_creature(),
-            TargetFilter {
+            ObjectFilter::default_creature(),
+            ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 required_subtypes: vec!["Vehicle".into()],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         ]),
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     };
     assert_eq!(
         face.spell_effect,

@@ -7,8 +7,8 @@
 //! draw triggers.
 
 use tricerules_cards::primitives::{
-    CombatRole, CompiledInstructionKind, EffectSubject, LibraryPlacement, SpellCostModifier,
-    TargetFilter, TargetGroupDef, TargetMatchFilter,
+    CombatRole, CompiledInstructionKind, EffectSubject, LibraryPlacement, ObjectFilter,
+    SpellCostModifier, TargetGroupDef, TargetMatchFilter,
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, AbilitySourceZone, Amount, Color, Layout, ManaCost,
@@ -69,7 +69,7 @@ fn issue_318_misleading_motes_offers_the_owners_placement_choice() {
                 if matches!(effect.as_ref(), SpellEffectKind::PutInOwnersLibrary {
                     subject: EffectSubject::Chosen(filter),
                     placement: LibraryPlacement::OwnerChoiceTopOrBottom,
-                } if **filter == TargetFilter::default_creature()))
+                } if **filter == ObjectFilter::default_creature()))
     ));
     let targeting = face
         .targeting
@@ -100,10 +100,10 @@ fn issue_318_run_behind_reduces_only_for_attacking_targets() {
         face.cost_modifiers,
         [SpellCostModifier::TargetMatchGenericReduction {
             amount: 1,
-            filter: TargetMatchFilter::Battlefield(TargetFilter {
+            filter: TargetMatchFilter::Battlefield(ObjectFilter {
                 kind: tricerules_cards::primitives::TargetKind::Creature,
                 combat_role: Some(CombatRole::Attacking),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             }),
         }]
     );
@@ -119,7 +119,7 @@ fn issue_318_run_behind_reduces_only_for_attacking_targets() {
                 if matches!(effect.as_ref(), SpellEffectKind::PutInOwnersLibrary {
                     subject: EffectSubject::Chosen(filter),
                     placement: LibraryPlacement::OwnerChoiceTopOrBottom,
-                } if **filter == TargetFilter::default_creature()))
+                } if **filter == ObjectFilter::default_creature()))
     ));
     let targeting = face
         .targeting
@@ -199,7 +199,7 @@ fn issue_318_stratosoarer_grants_flying_and_keeps_basic_landcycling() {
     assert_eq!(
         ability.effect,
         [SpellEffectKind::GrantKeywords {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
             keywords: vec![tricerules_cards::Keyword::Flying],
         }]
     );

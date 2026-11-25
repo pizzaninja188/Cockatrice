@@ -25,11 +25,11 @@
       "typed_path": "/faces/0/static_abilities/0/definition/GrantActivatedAbilityToPermanents"
     },
     {
-      "symbol": "TargetFilter.controller",
+      "symbol": "ObjectFilter.controller",
       "typed_path": "/faces/0/static_abilities/0/definition/GrantActivatedAbilityToPermanents/filter/controller"
     },
     {
-      "symbol": "TargetFilter.permanent_types",
+      "symbol": "ObjectFilter.permanent_types",
       "typed_path": "/faces/0/static_abilities/0/definition/GrantActivatedAbilityToPermanents/filter/permanent_types"
     },
     {

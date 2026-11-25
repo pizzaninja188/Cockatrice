@@ -1,6 +1,6 @@
 //! Registry conformance for the queue-v29 optional attack-tap cohort.
 use tricerules_cards::primitives::{
-    EffectSubject, SpellEffectKind, TargetFilter, TargetKind, TriggerCondition,
+    EffectSubject, ObjectFilter, SpellEffectKind, TargetKind, TriggerCondition,
 };
 use tricerules_cards::Layout;
 
@@ -80,9 +80,9 @@ fn q29_attack_may_tap_batch_maps_definitions() {
         };
         assert_eq!(
             *subject,
-            EffectSubject::Chosen(Box::new(TargetFilter {
+            EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
             "{}",
             card.id

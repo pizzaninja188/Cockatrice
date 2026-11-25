@@ -15,8 +15,8 @@
 use tricerules_cards::primitives::{
     AbilityCost, Amount, BeholdCriterion, CastCostGroupDef, CastCostOptionDef, CombatRestriction,
     EffectSubject, GameCondition, GraveyardAggregate, ManaCostChoiceKind, ObjectCastCostKind,
-    PermanentTypeFilter, PlayerRecipient, RelativePlayerSet, ResolutionCost, SpellEffectKind,
-    StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind, TargetingDef,
+    ObjectFilter, PermanentTypeFilter, PlayerRecipient, RelativePlayerSet, ResolutionCost,
+    SpellEffectKind, StaticAbilityDef, TargetController, TargetGroupDef, TargetKind, TargetingDef,
     TargetingSourceFilter, TriggerCondition, ZoneCardFilter,
 };
 use tricerules_cards::{AbilityPresentation, CastTriggerPlayer, ChoiceId, Color, Layout, ManaCost};
@@ -39,33 +39,33 @@ fn single_group(targeting: &TargetingDef) -> &TargetGroupDef {
     group
 }
 
-fn you_artifact() -> TargetFilter {
-    TargetFilter {
+fn you_artifact() -> ObjectFilter {
+    ObjectFilter {
         kind: TargetKind::AnyPermanent,
         controller: TargetController::You,
         permanent_types: vec![PermanentTypeFilter::Artifact],
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }
 }
 
-fn you_creature() -> TargetFilter {
-    TargetFilter {
+fn you_creature() -> ObjectFilter {
+    ObjectFilter {
         kind: TargetKind::Creature,
         controller: TargetController::You,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }
 }
 
-fn you_enchantment() -> TargetFilter {
-    TargetFilter {
+fn you_enchantment() -> ObjectFilter {
+    ObjectFilter {
         kind: TargetKind::AnyPermanent,
         controller: TargetController::You,
         permanent_types: vec![PermanentTypeFilter::Enchantment],
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }
 }
 
-fn artifact_or_creature_sacrifice(group: &CastCostGroupDef) -> &TargetFilter {
+fn artifact_or_creature_sacrifice(group: &CastCostGroupDef) -> &ObjectFilter {
     let CastCostOptionDef::SacrificePermanent {
         option_id,
         kind,
@@ -133,9 +133,9 @@ fn issue_338_direct_ron_batch2_maps_definitions() {
         );
         assert_eq!(
             artifact_or_creature_sacrifice(group),
-            &TargetFilter {
+            &ObjectFilter {
                 any_of: Some(vec![you_artifact(), you_creature()]),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             }
         );
     }
@@ -192,9 +192,9 @@ fn issue_338_direct_ron_batch2_maps_definitions() {
         assert_eq!(*kind, ObjectCastCostKind::AdditionalPayment);
         assert_eq!(
             filter.as_ref(),
-            &TargetFilter {
+            &ObjectFilter {
                 any_of: Some(vec![you_creature(), you_enchantment()]),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             }
         );
         assert_eq!(mana_option_cost(group, 1), "{2}");
@@ -204,15 +204,15 @@ fn issue_338_direct_ron_batch2_maps_definitions() {
         [
             SpellEffectKind::DamageTarget {
                 amount: Amount::Fixed(5),
-                target: TargetFilter {
+                target: ObjectFilter {
                     kind: TargetKind::Creature,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
             },
             SpellEffectKind::ExileIfWouldDieThisTurn {
-                target: TargetFilter {
+                target: ObjectFilter {
                     kind: TargetKind::Creature,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
             },
         ]
@@ -244,9 +244,9 @@ fn issue_338_direct_ron_batch2_maps_definitions() {
         };
         assert_eq!(
             artifact_or_creature_sacrifice(group),
-            &TargetFilter {
+            &ObjectFilter {
                 any_of: Some(vec![you_artifact(), you_creature()]),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             }
         );
     }
@@ -290,11 +290,11 @@ fn issue_338_direct_ron_batch2_maps_definitions() {
     assert_eq!(
         entry.effect,
         [SpellEffectKind::ExileUntilSourceLeaves {
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 controller: TargetController::Opponent,
                 permanent_types: vec![PermanentTypeFilter::Artifact, PermanentTypeFilter::Creature],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );
@@ -348,11 +348,11 @@ fn issue_338_direct_ron_batch2_maps_definitions() {
     assert_eq!(
         dies.effect,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::Opponent,
                 power: Some(tricerules_cards::primitives::PowerComparison::AtMost(2)),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );

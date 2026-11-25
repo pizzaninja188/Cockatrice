@@ -12,7 +12,7 @@
 use crate::common::permanent_card_filter;
 use tricerules_cards::primitives::{
     BattlefieldCreatureCountFilter, CardTypeFilter, CountExpression, GraveyardAggregate,
-    QuantityTerm, RelativePlayerSet, SpellEffectKind, StaticAbilityDef, TargetFilter, TargetKind,
+    ObjectFilter, QuantityTerm, RelativePlayerSet, SpellEffectKind, StaticAbilityDef, TargetKind,
     TypeLineAddition, ZoneCardFilter,
 };
 use tricerules_cards::{
@@ -181,19 +181,19 @@ fn issue_372_song_payload_and_presentation_are_exact() {
     assert_eq!(
         face.spell_effect,
         [SpellEffectKind::AuraAttach {
-            target: TargetFilter {
+            target: ObjectFilter {
                 any_of: Some(vec![
-                    TargetFilter {
+                    ObjectFilter {
                         kind: TargetKind::Creature,
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     },
-                    TargetFilter {
+                    ObjectFilter {
                         kind: TargetKind::AnyPermanent,
                         required_subtypes: vec!["Vehicle".to_string()],
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     },
                 ]),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );

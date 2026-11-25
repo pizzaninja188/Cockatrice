@@ -2261,7 +2261,7 @@ mod sba_tests {
                 .primary_face()
                 .clone();
             outer_face.spell_effect = vec![SpellEffectKind::AuraAttach {
-                target: tricerules_card_model::primitives::TargetFilter {
+                target: tricerules_card_model::primitives::ObjectFilter {
                     kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
                     ..Default::default()
                 },

@@ -1106,7 +1106,7 @@ fn issue_476_flying_anthem_scope_tracks_current_keyword() {
 
     let filter = CreatureScopeFilter {
         controller: Some(CreatureScopeController::YouControl),
-        matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+        matching: Box::new(tricerules_card_model::primitives::ObjectFilter {
             kind: tricerules_card_model::primitives::TargetKind::Creature,
             required_keywords: vec![Keyword::Flying],
             ..Default::default()

@@ -6,16 +6,16 @@
 
 use tricerules_cards::primitives::{
     AbilityCost, EffectSubject, HandCardAction, HandCardChooser, HandChoiceVisibility,
-    SpellEffectKind, TargetFilter, TargetKind, TargetSchema,
+    ObjectFilter, SpellEffectKind, TargetKind, TargetSchema,
 };
 use tricerules_cards::{Keyword, Layout};
 
 fn every_counter_from(kind: TargetKind) -> SpellEffectKind {
     SpellEffectKind::RemoveAllCounters {
         counter: None,
-        subject: EffectSubject::Chosen(Box::new(TargetFilter {
+        subject: EffectSubject::Chosen(Box::new(ObjectFilter {
             kind,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         })),
     }
 }
@@ -48,9 +48,9 @@ fn issue_440_perfect_intimidation_has_the_printed_two_modes() {
         [SpellEffectKind::ChooseHandCards {
             action: HandCardAction::Exile,
             count: 2,
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::OpponentPlayer,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             chooser: HandCardChooser::AffectedPlayer,
             card_filter: None,

@@ -10,8 +10,8 @@
 use crate::common::permanent_card_filter;
 use tricerules_cards::primitives::{
     ActivationLimit, BattlefieldPermanentFilter, CardTypeFilter, CountExpression, EffectSubject,
-    GameCondition, GraveyardAggregate, LibraryPartitionKind, PlayerRecipient, PtScale,
-    PtScaleBasis, RelativePlayerSet, TargetController, TargetFilter, TargetKind, ZoneCardFilter,
+    GameCondition, GraveyardAggregate, LibraryPartitionKind, ObjectFilter, PlayerRecipient,
+    PtScale, PtScaleBasis, RelativePlayerSet, TargetController, TargetKind, ZoneCardFilter,
 };
 use tricerules_cards::{
     AbilityCost, AbilitySourceZone, ActivationTiming, Amount, CounterKind, Keyword, ManaCost,
@@ -145,10 +145,10 @@ fn issue_373_combustion_technique_affine_damage_and_exile_rider() {
                         },
                     }],
                 }),
-                target: tricerules_cards::primitives::TargetFilter::default_creature(),
+                target: tricerules_cards::primitives::ObjectFilter::default_creature(),
             },
             SpellEffectKind::ExileIfWouldDieThisTurn {
-                target: tricerules_cards::primitives::TargetFilter::default_creature(),
+                target: tricerules_cards::primitives::ObjectFilter::default_creature(),
             },
         ]
     );
@@ -320,7 +320,7 @@ fn issue_373_malamet_veteran_intervening_if_gates_the_counter() {
             counter: CounterKind::PlusOnePlusOne,
             count: Amount::Fixed(1),
             subject: EffectSubject::Chosen(Box::new(
-                tricerules_cards::primitives::TargetFilter::default_creature()
+                tricerules_cards::primitives::ObjectFilter::default_creature()
             )),
         }]
     );
@@ -485,7 +485,7 @@ fn issue_373_join_the_dead_uses_one_exhaustive_conditional_scale() {
                 power_per_unit: -1,
                 toughness_per_unit: -1,
             }),
-            subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
         }]
     );
     assert!(
@@ -515,12 +515,12 @@ fn issue_373_lasyd_prowler_mills_per_land_and_renews_from_the_graveyard() {
                     any_of: None,
                     controllers: RelativePlayerSet::Controller,
                     exclude_source: false,
-                    matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                    matching: Box::new(tricerules_cards::primitives::ObjectFilter {
                         kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
                         permanent_types: vec![
                             tricerules_cards::primitives::PermanentTypeFilter::Land
                         ],
-                        ..tricerules_cards::primitives::TargetFilter::default()
+                        ..tricerules_cards::primitives::ObjectFilter::default()
                     }),
                 },
             }),
@@ -615,10 +615,10 @@ fn issue_373_beastie_beatdown_authors_conditional_counters_and_power_damage() {
     );
     assert_eq!(
         *subject,
-        EffectSubject::Chosen(Box::new(TargetFilter {
+        EffectSubject::Chosen(Box::new(ObjectFilter {
             kind: TargetKind::Creature,
             controller: TargetController::You,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         }))
     );
     assert_eq!(source.controller, TargetController::You);

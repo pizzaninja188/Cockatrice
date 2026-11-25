@@ -211,21 +211,21 @@ fn resolve(
                 subject: if matches!(caller, Caller::Source) {
                     EffectSubject::Source
                 } else {
-                    EffectSubject::Chosen(Box::new(TargetFilter::default_creature()))
+                    EffectSubject::Chosen(Box::new(ObjectFilter::default_creature()))
                 },
             },
         ),
         Caller::Mass => mass::destroy_all(
             &mut cx,
             SpellEffectKind::DestroyAll {
-                kind: TargetFilter::default_creature(),
+                kind: ObjectFilter::default_creature(),
                 prevent_regeneration,
             },
         ),
         Caller::Attached => mass::destroy_attached(
             &mut cx,
             SpellEffectKind::DestroyAttached {
-                target: TargetFilter::default_creature(),
+                target: ObjectFilter::default_creature(),
                 attachments: AttachmentFilter {
                     kinds: vec![AttachmentKind::Equipment],
                 },
@@ -513,7 +513,7 @@ fn issue_196_cohorts_preserve_move_order_and_departing_observers_in_one_trigger_
         let subjects = [dies, regenerates, survives, exiles, token];
         let mut expected_order = match caller {
             Caller::Mass => {
-                battlefield_objects_matching(&engine, &TargetFilter::default_creature())
+                battlefield_objects_matching(&engine, &ObjectFilter::default_creature())
             }
             _ => subjects.to_vec(),
         };

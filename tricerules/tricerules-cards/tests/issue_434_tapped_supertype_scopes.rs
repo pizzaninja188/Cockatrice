@@ -11,8 +11,8 @@ use crate::common;
 
 use common::FaceExpectation;
 use tricerules_cards::primitives::{
-    CreatureScopeController, CreatureScopeFilter, GameCondition, SpellEffectKind, StaticAbilityDef,
-    TargetFilter, TargetKind, TriggerCondition,
+    CreatureScopeController, CreatureScopeFilter, GameCondition, ObjectFilter, SpellEffectKind,
+    StaticAbilityDef, TargetKind, TriggerCondition,
 };
 use tricerules_cards::{CounterKind, Keyword};
 
@@ -20,11 +20,11 @@ fn other_tapped_creatures_you_control(supertypes: &[&str]) -> CreatureScopeFilte
     CreatureScopeFilter {
         controller: Some(CreatureScopeController::YouControl),
         exclude_self: true,
-        matching: Box::new(TargetFilter {
+        matching: Box::new(ObjectFilter {
             kind: TargetKind::Creature,
             tapped: Some(true),
             required_supertypes: supertypes.iter().map(|value| (*value).to_owned()).collect(),
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         }),
     }
 }

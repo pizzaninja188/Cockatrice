@@ -1,7 +1,7 @@
 //! Exact Tekuthal identity, proliferate replacement, and counter-removal activation.
 use tricerules_cards::primitives::{
-    AbilityCost, Amount, CounterKind, EffectSubject, Keyword, PermanentTypeFilter, SpellEffectKind,
-    StaticAbilityDef, TargetController, TargetFilter, TargetKind, TargetObjectExclusion,
+    AbilityCost, Amount, CounterKind, EffectSubject, Keyword, ObjectFilter, PermanentTypeFilter,
+    SpellEffectKind, StaticAbilityDef, TargetController, TargetKind, TargetObjectExclusion,
 };
 use tricerules_cards::{AbilityPresentation, ManaCost};
 
@@ -53,7 +53,7 @@ fn tekuthal_exact_identity_and_three_counter_activation() {
             AbilityCost::RemoveCountersFromPermanents {
                 count: 3,
                 counter: None,
-                filter: TargetFilter {
+                filter: ObjectFilter {
                     kind: TargetKind::AnyPermanent,
                     controller: TargetController::You,
                     permanent_types: vec![
@@ -62,7 +62,7 @@ fn tekuthal_exact_identity_and_three_counter_activation() {
                         PermanentTypeFilter::Planeswalker,
                     ],
                     excluded_objects: vec![TargetObjectExclusion::Source],
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
             },
         ]

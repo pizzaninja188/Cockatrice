@@ -1,4 +1,4 @@
-use tricerules_cards::primitives::{EffectContext, SpellEffectKind, TargetFilter, TargetKind};
+use tricerules_cards::primitives::{EffectContext, ObjectFilter, SpellEffectKind, TargetKind};
 use tricerules_cards::Color;
 
 #[test]
@@ -42,7 +42,7 @@ fn mass_exile_rejects_player_and_relative_owner_controller_filters() {
         TargetKind::OpponentPlayer,
     ] {
         let effect = SpellEffectKind::ExileAll {
-            kind: TargetFilter {
+            kind: ObjectFilter {
                 kind,
                 ..Default::default()
             },
@@ -52,7 +52,7 @@ fn mass_exile_rejects_player_and_relative_owner_controller_filters() {
         assert!(effect.validate(EffectContext::Spell).is_err());
     }
     let effect = SpellEffectKind::ExileAll {
-        kind: TargetFilter {
+        kind: ObjectFilter {
             kind: TargetKind::AnyPermanent,
             controller: TargetController::You,
             ..Default::default()
@@ -62,7 +62,7 @@ fn mass_exile_rejects_player_and_relative_owner_controller_filters() {
     };
     assert!(effect.validate(EffectContext::Spell).is_err());
     assert!(SpellEffectKind::ExileAll {
-        kind: TargetFilter {
+        kind: ObjectFilter {
             kind: TargetKind::Creature,
             ..Default::default()
         },

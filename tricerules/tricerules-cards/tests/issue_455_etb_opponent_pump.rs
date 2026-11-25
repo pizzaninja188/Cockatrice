@@ -13,7 +13,7 @@ use crate::common;
 
 use common::FaceExpectation;
 use tricerules_cards::primitives::{
-    EffectSubject, SpellEffectKind, TargetController, TargetFilter, TargetKind,
+    EffectSubject, ObjectFilter, SpellEffectKind, TargetController, TargetKind,
 };
 use tricerules_cards::{AbilityPresentation, Keyword, ManaCost, TriggerCondition};
 
@@ -173,10 +173,10 @@ fn issue_455_each_identity_prints_the_typed_opponent_pump_trigger() {
         assert_eq!(filter.controller, TargetController::Opponent, "{}", case.id);
         assert_eq!(
             **filter,
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::Opponent,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             "{} keeps only the opponent-controller creature scope",
             case.id

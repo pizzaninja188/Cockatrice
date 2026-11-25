@@ -6,10 +6,10 @@
 //! stay unregistered. Perfect Intimidation shipped later with #440.
 
 use tricerules_cards::primitives::{
-    Amount, CardTypeFilter, EffectSubject, GraveyardDestination, GraveyardFilter,
+    Amount, CardTypeFilter, EffectSubject, GraveyardDestination, GraveyardFilter, ObjectFilter,
     PermanentTypeFilter, PlayerRecipient, PowerToughnessCharacteristic, PtScale, PtScaleBasis,
-    SearchDestination, SearchZoneSelection, SpellEffectKind, TargetController, TargetFilter,
-    TargetKind, TargetSchema, ZoneCardFilter,
+    SearchDestination, SearchZoneSelection, SpellEffectKind, TargetController, TargetKind,
+    TargetSchema, ZoneCardFilter,
 };
 use tricerules_cards::ModalDef;
 
@@ -118,7 +118,7 @@ fn issue_425_tap_mode_is_bounded_to_one_or_two_creatures() {
     assert_eq!(
         acrobatics.modes[1].effects,
         [SpellEffectKind::Tap {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
         }]
     );
     let group = &acrobatics.modes[1]
@@ -147,7 +147,7 @@ fn issue_425_avengers_disassembled_sweeps_and_searches_for_the_lands_controller(
         [SpellEffectKind::DamageAll {
             amount: Amount::Fixed(3),
             players: tricerules_cards::primitives::MassPlayerSet::All,
-            kind: TargetFilter::default_creature(),
+            kind: ObjectFilter::default_creature(),
         }]
     );
     assert!(avengers.modes[0].targeting.is_none());
@@ -156,10 +156,10 @@ fn issue_425_avengers_disassembled_sweeps_and_searches_for_the_lands_controller(
         avengers.modes[1].effects,
         [
             SpellEffectKind::Destroy {
-                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                     kind: TargetKind::AnyPermanent,
                     permanent_types: vec![PermanentTypeFilter::Land],
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 })),
             },
             SpellEffectKind::SearchLibrary {
@@ -250,7 +250,7 @@ fn issue_425_epic_fight_doubles_both_characteristics_on_one_target() {
                     power_per_unit: 1,
                     toughness_per_unit: 0,
                 }),
-                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
             },
             SpellEffectKind::PumpTarget {
                 power: 0,
@@ -260,7 +260,7 @@ fn issue_425_epic_fight_doubles_both_characteristics_on_one_target() {
                     power_per_unit: 0,
                     toughness_per_unit: 1,
                 }),
-                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
             },
         ]
     );
@@ -282,15 +282,15 @@ fn issue_425_epic_fight_doubles_both_characteristics_on_one_target() {
     assert_eq!(
         epic.modes[1].effects,
         [SpellEffectKind::Fight {
-            first: EffectSubject::Chosen(Box::new(TargetFilter {
+            first: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
-            second: EffectSubject::Chosen(Box::new(TargetFilter {
+            second: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::Opponent,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
@@ -304,10 +304,10 @@ fn issue_425_pinecone_strike_binds_the_rider_and_the_artifact_token() {
         [
             SpellEffectKind::DamageTarget {
                 amount: Amount::Fixed(3),
-                target: TargetFilter::default_creature(),
+                target: ObjectFilter::default_creature(),
             },
             SpellEffectKind::ExileIfWouldDieThisTurn {
-                target: TargetFilter::default_creature(),
+                target: ObjectFilter::default_creature(),
             },
         ]
     );
@@ -321,11 +321,11 @@ fn issue_425_pinecone_strike_binds_the_rider_and_the_artifact_token() {
     assert_eq!(
         pinecone.modes[1].effects,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![PermanentTypeFilter::Artifact],
                 token: Some(true),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );

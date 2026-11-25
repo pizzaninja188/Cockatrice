@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    EffectSubject, PlayerRecipient, SpellEffectKind, TargetFilter, TargetKind,
+    EffectSubject, ObjectFilter, PlayerRecipient, SpellEffectKind, TargetKind,
 };
 use tricerules_cards::{AbilityCost, Amount, Keyword, TriggerCondition};
 
@@ -32,11 +32,11 @@ fn pegasus_courser_has_complete_oracle_behavior() {
     assert_eq!(
         face.triggered_abilities[0].effect,
         [SpellEffectKind::GrantKeywords {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 combat_role: Some(tricerules_cards::primitives::CombatRole::AttackingOrBlocking),
                 excluded_objects: vec![tricerules_cards::TargetObjectExclusion::Source],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
             keywords: vec![Keyword::Flying],
         }]
@@ -69,10 +69,10 @@ fn legion_guildmage_has_complete_oracle_behavior() {
     assert_eq!(
         face.activated_abilities[1].effect,
         [SpellEffectKind::Tap {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 excluded_objects: vec![tricerules_cards::TargetObjectExclusion::Source],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );

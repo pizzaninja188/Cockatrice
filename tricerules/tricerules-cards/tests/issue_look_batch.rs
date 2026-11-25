@@ -8,16 +8,16 @@
 //! 508.1/603.2 (beginning-of-combat triggers), and 603.6a/305 (landfall).
 
 use tricerules_cards::primitives::{
-    Amount, CardTypeFilter, EffectSubject, LibraryBottomOrder, PermanentTypeFilter,
-    SpellEffectKind, TargetController, TargetFilter, TargetKind, TriggerCondition, ZoneCardFilter,
+    Amount, CardTypeFilter, EffectSubject, LibraryBottomOrder, ObjectFilter, PermanentTypeFilter,
+    SpellEffectKind, TargetController, TargetKind, TriggerCondition, ZoneCardFilter,
 };
 use tricerules_cards::{Keyword, Layout};
 
 fn creature_you() -> EffectSubject {
-    EffectSubject::Chosen(Box::new(TargetFilter {
+    EffectSubject::Chosen(Box::new(ObjectFilter {
         kind: TargetKind::Creature,
         controller: TargetController::You,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }))
 }
 
@@ -194,9 +194,9 @@ fn issue_look_batch_maps_definitions() {
     assert_eq!(
         trigger.effect,
         [SpellEffectKind::GrantKeywords {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
             keywords: vec![Keyword::FirstStrike, Keyword::Vigilance],
         }]

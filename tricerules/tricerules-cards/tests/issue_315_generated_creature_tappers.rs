@@ -1,8 +1,8 @@
 //! Registry and presentation conformance for issue #315.
 
 use tricerules_cards::primitives::{
-    AbilityCost, AbilitySourceZone, ActivationTiming, EffectSubject, PermanentTypeFilter,
-    SpellEffectKind, TargetFilter, TargetKind,
+    AbilityCost, AbilitySourceZone, ActivationTiming, EffectSubject, ObjectFilter,
+    PermanentTypeFilter, SpellEffectKind, TargetKind,
 };
 use tricerules_cards::{AbilityPresentation, Color, ManaCost};
 
@@ -16,7 +16,7 @@ struct CohortFixture {
     toughness: u32,
     activation_cost: &'static str,
     prompt: &'static str,
-    target_filter: TargetFilter,
+    target_filter: ObjectFilter,
     fingerprint: &'static str,
 }
 
@@ -31,10 +31,10 @@ fn cohort() -> [CohortFixture; 3] {
             toughness: 2,
             activation_cost: "{1}{W}",
             prompt: "Choose target nonenchantment creature",
-            target_filter: TargetFilter {
+            target_filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 excluded_permanent_types: vec![PermanentTypeFilter::Enchantment],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             fingerprint: "d2295d4738496a7e194c914e3c20bd99eee465495fe71097d2ff437f2db7515a",
         },
@@ -47,9 +47,9 @@ fn cohort() -> [CohortFixture; 3] {
             toughness: 2,
             activation_cost: "{2}{W}",
             prompt: "Choose target creature",
-            target_filter: TargetFilter {
+            target_filter: ObjectFilter {
                 kind: TargetKind::Creature,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             fingerprint: "560c7551471b8089cf3d507a9698525df20b69f3944797c236f5ed4c6af7b480",
         },
@@ -62,10 +62,10 @@ fn cohort() -> [CohortFixture; 3] {
             toughness: 2,
             activation_cost: "{2}",
             prompt: "Choose target non-Mount creature",
-            target_filter: TargetFilter {
+            target_filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 excluded_subtypes: vec!["Mount".into()],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             fingerprint: "47af1810f1ea6ace506cd5dfa83fd2b32b9e3ed8234ad3b8ae6b3e7a77f73193",
         },

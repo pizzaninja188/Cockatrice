@@ -10,20 +10,20 @@
 
 use tricerules_cards::primitives::{
     CardTypeFilter, CounterRemovalPaymentSource, EffectSubject, EntersWithCountersAffected,
-    GraveyardDestination, GraveyardFilter, GraveyardOwner, PlayerRecipient, StaticAbilityDef,
-    TargetController, TargetFilter, TargetKind, TargetObjectExclusion, ZoneCardFilter,
+    GraveyardDestination, GraveyardFilter, GraveyardOwner, ObjectFilter, PlayerRecipient,
+    StaticAbilityDef, TargetController, TargetKind, TargetObjectExclusion, ZoneCardFilter,
 };
 use tricerules_cards::{
     AbilityCost, AbilitySourceZone, ActivationTiming, Amount, CounterKind, Keyword, ManaCost,
     SpellEffectKind,
 };
 
-fn another_creature_you_control() -> TargetFilter {
-    TargetFilter {
+fn another_creature_you_control() -> ObjectFilter {
+    ObjectFilter {
         kind: TargetKind::Creature,
         controller: TargetController::You,
         excluded_objects: vec![TargetObjectExclusion::Source],
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }
 }
 
@@ -170,7 +170,7 @@ fn issue_414_burdened_stoneback_activation_payload_is_exact() {
     assert_eq!(
         ability.effect,
         [SpellEffectKind::GrantKeywords {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
             keywords: vec![Keyword::Indestructible],
         }]
     );
@@ -280,7 +280,7 @@ fn issue_414_gnarlbark_elm_activation_payload_is_exact() {
             power: -2,
             toughness: -2,
             scale: None,
-            subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
         }]
     );
     assert_eq!(ability.timing, ActivationTiming::SorcerySpeed);

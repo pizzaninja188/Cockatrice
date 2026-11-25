@@ -3,7 +3,7 @@ use super::{mass, EffectCx, EffectOutcome};
 use crate::EngineError;
 use rand::{Rng, SeedableRng};
 use tricerules_card_model::primitives::{
-    PermanentTypeFilter, SpellEffectKind, TargetFilter, TargetKind,
+    ObjectFilter, PermanentTypeFilter, SpellEffectKind, TargetKind,
 };
 
 const BOOMPILE_RANDOM_DOMAIN: u64 = 0x424F_4F4D_5049_4C45;
@@ -40,7 +40,7 @@ pub(super) fn flip_coin_and_destroy_nonlands(
     mass::destroy_all(
         cx,
         SpellEffectKind::DestroyAll {
-            kind: TargetFilter {
+            kind: ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 excluded_permanent_types: vec![PermanentTypeFilter::Land],
                 ..Default::default()

@@ -4,7 +4,7 @@
 //! chosen creature the printed pump and flying until end of turn. Each
 //! fingerprint is SHA-256 of the exact pinned normalized Oracle text.
 
-use tricerules_cards::primitives::{EffectSubject, SpellEffectKind, TargetFilter};
+use tricerules_cards::primitives::{EffectSubject, ObjectFilter, SpellEffectKind};
 use tricerules_cards::{AbilityPresentation, Keyword, Layout, TriggerCondition};
 
 struct Card {
@@ -140,13 +140,13 @@ fn etb_pump_flying_batch_maps_definitions() {
         );
         assert_eq!(
             pump_filter.as_ref(),
-            &TargetFilter::default_creature(),
+            &ObjectFilter::default_creature(),
             "{} pump target",
             card.id
         );
         assert_eq!(
             keyword_filter.as_ref(),
-            &TargetFilter::default_creature(),
+            &ObjectFilter::default_creature(),
             "{} keyword target",
             card.id
         );

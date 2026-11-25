@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    EffectSubject, InstructionKind, PlayerRecipient, SpellEffectKind, TargetFilter,
+    EffectSubject, InstructionKind, ObjectFilter, PlayerRecipient, SpellEffectKind,
 };
 use tricerules_cards::{AbilityPresentation, Amount, CounterKind, TriggerCondition};
 
@@ -45,7 +45,7 @@ fn issue_259_registers_all_thirteen_generated_cards_with_exact_typed_etbs() {
             [SpellEffectKind::PutCounters {
                 counter: CounterKind::PlusOnePlusOne,
                 count: Amount::Fixed(1),
-                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
             }]
         );
         let group = &ability.targeting.as_ref().expect("targeting").groups[0];

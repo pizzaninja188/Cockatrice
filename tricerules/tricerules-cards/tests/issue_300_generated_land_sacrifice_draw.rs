@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    PermanentTypeFilter, PlayerRecipient, SpellEffectKind, TargetController, TargetFilter,
+    ObjectFilter, PermanentTypeFilter, PlayerRecipient, SpellEffectKind, TargetController,
     TargetKind,
 };
 use tricerules_cards::{
@@ -78,11 +78,11 @@ fn assert_land_sacrifice_draw(ability: &tricerules_cards::ActivatedAbilityDef, l
             AbilityCost::Mana(ManaCost::parse("{2}{R}").unwrap()),
             AbilityCost::SacrificePermanent {
                 count: 1,
-                filter: TargetFilter {
+                filter: ObjectFilter {
                     kind: TargetKind::AnyPermanent,
                     controller: TargetController::You,
                     permanent_types: vec![PermanentTypeFilter::Land],
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 }
             }
         ]

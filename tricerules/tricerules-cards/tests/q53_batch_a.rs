@@ -31,7 +31,7 @@ fn identity(id: &str, name: &str, mana: &str, types: &[&str]) -> &'static CardFa
     f
 }
 
-fn player_or_planeswalker(filter: &tricerules_cards::primitives::TargetFilter) -> bool {
+fn player_or_planeswalker(filter: &tricerules_cards::primitives::ObjectFilter) -> bool {
     let branches = filter.any_of.as_ref().expect("disjunctive target filter");
     branches.len() == 2
         && branches

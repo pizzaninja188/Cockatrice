@@ -11,8 +11,8 @@ use std::collections::BTreeSet;
 use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, ActivationTiming, Amount, BattlefieldQuantityCharacteristic,
     CardProgram, CardTypeFilter, CountExpression, EffectSubject, GameCondition, MassPlayerSet,
-    ObjectPaymentConstraint, RelativePlayerSet, SpellEffectKind, StaticAbilityDef,
-    TargetController, TargetFilter, TargetKind, TriggerCondition, TypeLineAddition,
+    ObjectFilter, ObjectPaymentConstraint, RelativePlayerSet, SpellEffectKind, StaticAbilityDef,
+    TargetController, TargetKind, TriggerCondition, TypeLineAddition,
 };
 use tricerules_cards::{AbilityPresentation, CounterKind, Keyword};
 
@@ -21,10 +21,10 @@ const COHORT: [&str; 2] = ["extinguisher_battleship", "fell_gravship"];
 fn station_cost() -> AbilityCost {
     AbilityCost::TapPermanents {
         constraint: ObjectPaymentConstraint::ExactCount(1),
-        filter: TargetFilter {
+        filter: ObjectFilter {
             kind: TargetKind::Creature,
             controller: TargetController::You,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         },
         exclude_source: true,
     }
@@ -46,11 +46,11 @@ fn station_effect() -> SpellEffectKind {
     }
 }
 
-fn noncreature_target() -> TargetFilter {
-    TargetFilter {
+fn noncreature_target() -> ObjectFilter {
+    ObjectFilter {
         kind: TargetKind::AnyPermanent,
         excluded_permanent_types: vec![tricerules_cards::primitives::PermanentTypeFilter::Creature],
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }
 }
 
@@ -204,7 +204,7 @@ fn issue_313_cards_preserve_exact_faces_abilities_and_presentation_fingerprints(
                     SpellEffectKind::DamageAll {
                         amount: Amount::Fixed(4),
                         players: MassPlayerSet::All,
-                        kind: TargetFilter::default_creature(),
+                        kind: ObjectFilter::default_creature(),
                     }
                 );
                 let targeting = trigger.targeting.as_ref().expect("targeting");

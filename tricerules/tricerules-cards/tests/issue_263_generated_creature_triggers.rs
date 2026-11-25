@@ -1,6 +1,6 @@
 use tricerules_cards::primitives::{
-    CardTypeFilter, EffectSubject, PlayerRecipient, SpellCastFilter, SpellEffectKind,
-    TargetController, TargetFilter, TargetKind, TargetObjectExclusion,
+    CardTypeFilter, EffectSubject, ObjectFilter, PlayerRecipient, SpellCastFilter, SpellEffectKind,
+    TargetController, TargetKind, TargetObjectExclusion,
 };
 use tricerules_cards::{
     AbilityPresentation, Amount, CardRegistry, CastTriggerPlayer, CounterKind, TriggerCondition,
@@ -17,11 +17,11 @@ fn issue_263_registers_all_fourteen_generated_cards_with_exact_typed_triggers() 
         assert_eq!(
             ability.effect,
             [SpellEffectKind::ReturnToOwnersHand {
-                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                     kind: TargetKind::AnyPermanent,
                     controller: TargetController::You,
                     excluded_objects: vec![TargetObjectExclusion::Source],
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 })),
             }]
         );

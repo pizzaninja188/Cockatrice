@@ -163,7 +163,7 @@ fn q76_sliver_keywords_map_definitions() {
         assert_eq!(
             filter,
             &CreatureScopeFilter {
-                matching: Box::new(tricerules_cards::primitives::TargetFilter {
+                matching: Box::new(tricerules_cards::primitives::ObjectFilter {
                     kind: tricerules_cards::primitives::TargetKind::Creature,
                     required_subtypes: vec!["Sliver".to_string()],
                     ..Default::default()

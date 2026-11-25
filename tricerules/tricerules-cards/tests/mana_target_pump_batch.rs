@@ -4,7 +4,7 @@
 //! chosen target creature. Each fingerprint is SHA-256 of the exact pinned
 //! normalized Oracle text.
 
-use tricerules_cards::primitives::{AbilityCost, EffectSubject, SpellEffectKind, TargetFilter};
+use tricerules_cards::primitives::{AbilityCost, EffectSubject, ObjectFilter, SpellEffectKind};
 use tricerules_cards::{AbilityPresentation, Layout};
 
 struct ExpectedCard {
@@ -110,7 +110,7 @@ fn check_card(expected: &ExpectedCard) {
                 subject: EffectSubject::Chosen(filter),
                 ..
             }] if (*power, *toughness) == expected.pump
-                && **filter == TargetFilter::default_creature()
+                && **filter == ObjectFilter::default_creature()
         ),
         "{id}: chosen-creature pump"
     );

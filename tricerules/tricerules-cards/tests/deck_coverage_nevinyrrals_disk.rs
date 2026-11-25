@@ -1,6 +1,6 @@
 use tricerules_cards::primitives::{
-    AbilityCost, AbilitySourceZone, EntersTappedAffected, PermanentTypeFilter, SpellEffectKind,
-    StaticAbilityDef, TargetFilter, TargetKind, TargetSchema,
+    AbilityCost, AbilitySourceZone, EntersTappedAffected, ObjectFilter, PermanentTypeFilter,
+    SpellEffectKind, StaticAbilityDef, TargetKind, TargetSchema,
 };
 use tricerules_cards::{AbilityPresentation, Layout};
 
@@ -57,14 +57,14 @@ fn nevinyrrals_disk_registers_entry_replacement_and_mass_destroy_activation() {
     ));
     assert!(ability.targeting.is_none());
 
-    let destroy_filter = TargetFilter {
+    let destroy_filter = ObjectFilter {
         kind: TargetKind::AnyPermanent,
         permanent_types: vec![
             PermanentTypeFilter::Artifact,
             PermanentTypeFilter::Creature,
             PermanentTypeFilter::Enchantment,
         ],
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     };
     assert_eq!(
         ability.effect,

@@ -1,16 +1,16 @@
 use tricerules_cards::primitives::{
-    AbilityCost, EffectSubject, SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter,
+    AbilityCost, EffectSubject, ObjectFilter, SpellEffectKind, StaticAbilityDef, TargetController,
     TargetKind,
 };
 use tricerules_cards::{
     AbilityPresentation, AbilitySourceZone, ActivationTiming, Keyword, TriggerCondition,
 };
 
-fn defending_creature_target() -> TargetFilter {
-    TargetFilter {
+fn defending_creature_target() -> ObjectFilter {
+    ObjectFilter {
         kind: TargetKind::Creature,
         controller: TargetController::DefendingPlayer,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }
 }
 

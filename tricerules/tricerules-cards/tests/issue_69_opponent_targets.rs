@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    EffectSubject, SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
+    EffectSubject, ObjectFilter, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind,
 };
 use tricerules_cards::{PermanentTypeFilter, TriggerCondition};
 
@@ -16,9 +16,9 @@ fn glaring_aegis_has_complete_oracle_behavior() {
     assert_eq!(
         face.spell_effect,
         [SpellEffectKind::AuraAttach {
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::Creature,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );
@@ -30,10 +30,10 @@ fn glaring_aegis_has_complete_oracle_behavior() {
     assert_eq!(
         face.triggered_abilities[0].effect,
         [SpellEffectKind::Tap {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::Opponent,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
@@ -84,14 +84,14 @@ fn rambunctious_mutt_has_complete_oracle_behavior() {
     assert_eq!(
         face.triggered_abilities[0].effect,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 controller: TargetController::Opponent,
                 permanent_types: vec![
                     PermanentTypeFilter::Artifact,
                     PermanentTypeFilter::Enchantment,
                 ],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );

@@ -33,7 +33,7 @@
       "typed_path": "/faces/0/activated_abilities/1/conditions/0"
     },
     {
-      "symbol": "TargetFilter.required_subtypes",
+      "symbol": "ObjectFilter.required_subtypes",
       "typed_path": "/faces/0/activated_abilities/1/conditions/0/BattlefieldAggregate/filter"
     }
   ],

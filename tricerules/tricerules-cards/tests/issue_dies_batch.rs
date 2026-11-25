@@ -7,8 +7,8 @@
 //! targets), 611.2c and 613 layer 7c (until-end-of-turn pumps), and 601.2/603.2 (cast triggers).
 
 use tricerules_cards::primitives::{
-    Amount, CardTypeFilter, EffectSubject, InstructionKind, SpellCastFilter, SpellEffectKind,
-    TargetController, TargetFilter, TargetKind, TriggerCondition,
+    Amount, CardTypeFilter, EffectSubject, InstructionKind, ObjectFilter, SpellCastFilter,
+    SpellEffectKind, TargetController, TargetKind, TriggerCondition,
 };
 use tricerules_cards::{Color, Layout};
 
@@ -22,10 +22,10 @@ fn source_pump(power: i32, toughness: i32) -> SpellEffectKind {
 }
 
 fn defending_player_creature() -> EffectSubject {
-    EffectSubject::Chosen(Box::new(TargetFilter {
+    EffectSubject::Chosen(Box::new(ObjectFilter {
         kind: TargetKind::Creature,
         controller: TargetController::DefendingPlayer,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }))
 }
 

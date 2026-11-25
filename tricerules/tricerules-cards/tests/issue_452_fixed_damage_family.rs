@@ -5,7 +5,7 @@
 //! and rulings were fetched 2026-09-19. CR 120.2b keeps the resolving spell as the damage source
 //! and CR 115.1/608.2b govern the creature-only target and its revalidation.
 
-use tricerules_cards::primitives::{Amount, SpellEffectKind, TargetFilter};
+use tricerules_cards::primitives::{Amount, ObjectFilter, SpellEffectKind};
 use tricerules_cards::{Color, Layout};
 
 #[derive(Clone, Copy)]
@@ -108,7 +108,7 @@ fn issue_452_family_registers_exactly_the_reviewed_cohort() {
             face.spell_effect,
             [SpellEffectKind::DamageTarget {
                 amount: Amount::Fixed(card.amount),
-                target: TargetFilter::default_creature(),
+                target: ObjectFilter::default_creature(),
             }],
             "{} exact typed damage",
             card.id

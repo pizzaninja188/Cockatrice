@@ -493,7 +493,7 @@ fn spine_etb_with_no_legal_target_discards_the_trigger_without_an_unusable_promp
         source_id: None,
         affected: AffectedScope::PermanentsMatching {
             reference_player: 0,
-            filter: Box::new(tricerules_cards::primitives::TargetFilter {
+            filter: Box::new(tricerules_cards::primitives::ObjectFilter {
                 kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
                 ..Default::default()
             }),

@@ -21,10 +21,10 @@ fn multicolored_you_control() -> Amount {
             any_of: None,
             controllers: RelativePlayerSet::Controller,
             exclude_source: false,
-            matching: Box::new(tricerules_cards::primitives::TargetFilter {
+            matching: Box::new(tricerules_cards::primitives::ObjectFilter {
                 kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
                 min_colors: Some(2),
-                ..tricerules_cards::primitives::TargetFilter::default()
+                ..tricerules_cards::primitives::ObjectFilter::default()
             }),
         },
     })

@@ -13,7 +13,7 @@
 use tricerules_cards::primitives::{
     Amount, CastCostGroupDef, CastCostOptionDef, CreatureScopeController, CreatureScopeFilter,
     DiscardQuantity, EffectSubject, LifeAmount, ManaCostChoiceKind, ObjectCastCostKind,
-    PermanentTypeFilter, PlayerRecipient, SpellEffectKind, TargetController, TargetFilter,
+    ObjectFilter, PermanentTypeFilter, PlayerRecipient, SpellEffectKind, TargetController,
     TargetGroupDef, TargetKind, TargetingDef, TriggerCondition,
 };
 use tricerules_cards::{AbilityPresentation, ChoiceId, Color, CounterKind, Keyword, Layout};
@@ -39,7 +39,7 @@ fn single_group(targeting: &TargetingDef) -> &TargetGroupDef {
 fn sacrifice_option(
     group: &CastCostGroupDef,
     index: usize,
-) -> (&ChoiceId, ObjectCastCostKind, &TargetFilter) {
+) -> (&ChoiceId, ObjectCastCostKind, &ObjectFilter) {
     let CastCostOptionDef::SacrificePermanent {
         option_id,
         kind,
@@ -59,14 +59,14 @@ fn creature_scope(controller: CreatureScopeController) -> CreatureScopeFilter {
     }
 }
 
-fn creature_or_planeswalker() -> TargetFilter {
-    TargetFilter {
+fn creature_or_planeswalker() -> ObjectFilter {
+    ObjectFilter {
         kind: TargetKind::AnyPermanent,
         permanent_types: vec![
             PermanentTypeFilter::Creature,
             PermanentTypeFilter::Planeswalker,
         ],
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }
 }
 
@@ -101,10 +101,10 @@ fn issue_338_direct_ron_batch_maps_definitions() {
         assert_eq!(kind, ObjectCastCostKind::AdditionalPayment);
         assert_eq!(
             filter,
-            &TargetFilter {
+            &ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             }
         );
         assert_eq!(
@@ -143,10 +143,10 @@ fn issue_338_direct_ron_batch_maps_definitions() {
         assert_eq!(kind, ObjectCastCostKind::AdditionalPayment);
         assert_eq!(
             filter,
-            &TargetFilter {
+            &ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             }
         );
         let CastCostOptionDef::Mana {
@@ -234,10 +234,10 @@ fn issue_338_direct_ron_batch_maps_definitions() {
         assert_eq!(kind, ObjectCastCostKind::AdditionalPayment);
         assert_eq!(
             filter,
-            &TargetFilter {
+            &ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             }
         );
     }
@@ -281,10 +281,10 @@ fn issue_338_direct_ron_batch_maps_definitions() {
         assert_eq!(kind, ObjectCastCostKind::AdditionalPayment);
         assert_eq!(
             filter,
-            &TargetFilter {
+            &ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             }
         );
     }

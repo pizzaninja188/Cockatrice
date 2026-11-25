@@ -64,7 +64,7 @@ fn first_strike_scry_batch_maps_definitions() {
         assert!(face.triggered_abilities.is_empty(), "{id}");
         assert!(face.static_abilities.is_empty(), "{id}");
         let chosen = EffectSubject::Chosen(Box::new(
-            tricerules_cards::primitives::TargetFilter::default_creature(),
+            tricerules_cards::primitives::ObjectFilter::default_creature(),
         ));
         assert!(
             matches!(

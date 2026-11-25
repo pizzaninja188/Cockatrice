@@ -83,14 +83,14 @@ fn draw_two_lose_two_batch_maps_definitions() {
             [
                 SpellEffectKind::TargetPlayerDraws {
                     count: Amount::Fixed(2),
-                    target: tricerules_cards::primitives::TargetFilter {
+                    target: tricerules_cards::primitives::ObjectFilter {
                         kind: tricerules_cards::primitives::TargetKind::AnyPlayer,
                         ..Default::default()
                     },
                 },
                 SpellEffectKind::TargetPlayerLosesLife {
                     amount: 2,
-                    target: tricerules_cards::primitives::TargetFilter {
+                    target: tricerules_cards::primitives::ObjectFilter {
                         kind: tricerules_cards::primitives::TargetKind::AnyPlayer,
                         ..Default::default()
                     },

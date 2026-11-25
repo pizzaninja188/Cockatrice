@@ -4615,13 +4615,13 @@ mod tests {
                 any_of: None,
                 controllers: RelativePlayerSet::Controller,
                 exclude_source: false,
-                matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                matching: Box::new(tricerules_card_model::primitives::ObjectFilter {
                     kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
                     permanent_types: vec![
                         tricerules_card_model::primitives::PermanentTypeFilter::Land,
                     ],
                     required_subtypes: vec!["Mountain".into()],
-                    ..tricerules_card_model::primitives::TargetFilter::default()
+                    ..tricerules_card_model::primitives::ObjectFilter::default()
                 }),
             },
             aggregate: BattlefieldAggregate::Count,

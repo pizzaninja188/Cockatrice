@@ -4864,7 +4864,7 @@ fn activated_modal_shape_rejects_unsupported_owners_and_cost_contexts() {
                         option_id: crate::ChoiceId::new("cast_cost_option").unwrap(),
                         expected_selected: true,
                     },
-                    without_cost: crate::primitives::TargetFilter::default(),
+                    without_cost: crate::primitives::ObjectFilter::default(),
                 }),
             }],
         });
@@ -4937,7 +4937,7 @@ fn opponent_target_groups_admit_tap_only_any_targets_and_declared_cardinalities(
     ability.effect = vec![
         SpellEffectKind::DamageTarget {
             amount: Amount::Fixed(1),
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::AnyTarget,
                 ..Default::default()
             },
@@ -4997,7 +4997,7 @@ fn arena_opponent_chooser_rejects_unsupported_activation_shapes() {
     assert!(several.validate_shape().is_ok());
     let mut wrong_controller = ability;
     wrong_controller.effect[1] = SpellEffectKind::Tap {
-        subject: EffectSubject::Chosen(Box::new(TargetFilter {
+        subject: EffectSubject::Chosen(Box::new(ObjectFilter {
             kind: TargetKind::Creature,
             controller: TargetController::You,
             ..Default::default()
@@ -5187,14 +5187,14 @@ fn issue_231_stack_filter_disjunction_and_color_are_validated() {
 
 #[test]
 fn issue_231_owner_filter_requires_permanents_and_pure_or_nodes() {
-    let filter: TargetFilter = ron::from_str("(kind: AnyPermanent, owner: You)").unwrap();
+    let filter: ObjectFilter = ron::from_str("(kind: AnyPermanent, owner: You)").unwrap();
     assert!(filter.validate_target_constraints().is_ok());
     for text in [
         "(kind: AnyPlayer, owner: You)",
         "(kind: AnyTarget, owner: You)",
         "(owner: You, any_of: Some([(kind: Creature), (kind: AnyPermanent)]))",
     ] {
-        let filter: TargetFilter = ron::from_str(text).unwrap();
+        let filter: ObjectFilter = ron::from_str(text).unwrap();
         assert!(
             filter.validate_target_constraints().is_err(),
             "accepted {text}"
@@ -5623,10 +5623,10 @@ fn counted_amounts_reject_empty_authored_filters() {
         filter: BattlefieldCreatureCountFilter {
             controllers: RelativePlayerSet::Controller,
             exclude_source: false,
-            matching: Box::new(crate::primitives::TargetFilter {
+            matching: Box::new(crate::primitives::ObjectFilter {
                 kind: crate::primitives::TargetKind::Creature,
                 required_subtypes: vec![" ".into()],
-                ..crate::primitives::TargetFilter::default()
+                ..crate::primitives::ObjectFilter::default()
             }),
         },
     })
@@ -6251,10 +6251,10 @@ fn activation_conditions_require_valid_count_bounds() {
         filter: BattlefieldCreatureCountFilter {
             controllers: RelativePlayerSet::Controller,
             exclude_source: false,
-            matching: Box::new(crate::primitives::TargetFilter {
+            matching: Box::new(crate::primitives::ObjectFilter {
                 kind: crate::primitives::TargetKind::Creature,
                 required_keywords: vec![Keyword::Flying],
-                ..crate::primitives::TargetFilter::default()
+                ..crate::primitives::ObjectFilter::default()
             }),
         },
         min,
@@ -6271,10 +6271,10 @@ fn spell_cost_conditions_require_valid_counts_and_nonzero_reductions() {
         filter: BattlefieldCreatureCountFilter {
             controllers: RelativePlayerSet::Controller,
             exclude_source: false,
-            matching: Box::new(crate::primitives::TargetFilter {
+            matching: Box::new(crate::primitives::ObjectFilter {
                 kind: crate::primitives::TargetKind::Creature,
                 required_keywords: vec![Keyword::Flying],
-                ..crate::primitives::TargetFilter::default()
+                ..crate::primitives::ObjectFilter::default()
             }),
         },
         min,
@@ -6322,7 +6322,7 @@ fn explicit_and_intrinsic_sorcery_speed_share_one_query() {
         costs: vec![],
         cost_modifiers: vec![],
         effect: vec![SpellEffectKind::Equip {
-            target: TargetFilter::default(),
+            target: ObjectFilter::default(),
         }],
         program: None,
         modal: None,
@@ -6778,7 +6778,7 @@ fn damage_targets_rejects_conditional_amounts() {
             when_true: 5,
             otherwise: 3,
         },
-        target: TargetFilter::default(),
+        target: ObjectFilter::default(),
         division: DamageDivision::ChooseAtCast,
         extra_mana_per_target: 0,
     };
@@ -6789,7 +6789,7 @@ fn damage_targets_rejects_conditional_amounts() {
 fn player_effect_accepts_player_spec() {
     assert!(SpellEffectKind::TargetPlayerLosesLife {
         amount: 3,
-        target: TargetFilter {
+        target: ObjectFilter {
             kind: TargetKind::OpponentPlayer,
             ..Default::default()
         },
@@ -6802,7 +6802,7 @@ fn player_effect_accepts_player_spec() {
 fn player_effect_rejects_nonplayer_spec() {
     assert!(SpellEffectKind::TargetPlayerGainsLife {
         amount: 3.into(),
-        target: TargetFilter {
+        target: ObjectFilter {
             kind: TargetKind::Creature,
             ..Default::default()
         },
@@ -6821,7 +6821,7 @@ fn damage_accepts_any_kind() {
     ] {
         assert!(SpellEffectKind::DamageTarget {
             amount: Amount::Fixed(3),
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind,
                 ..Default::default()
             },
@@ -6836,7 +6836,7 @@ fn damage_accepts_any_kind() {
 /// filter at load rather than silently ignoring the field.
 #[test]
 fn mass_effect_rejects_controller_relative_filter() {
-    let scoped = TargetFilter {
+    let scoped = ObjectFilter {
         kind: TargetKind::Creature,
         controller: TargetController::You,
         ..Default::default()
@@ -6857,7 +6857,7 @@ fn mass_effect_rejects_controller_relative_filter() {
 
     // The same effect without the controller restriction still loads.
     assert!(SpellEffectKind::DestroyAll {
-        kind: TargetFilter {
+        kind: ObjectFilter {
             kind: TargetKind::Creature,
             ..Default::default()
         },
@@ -6880,7 +6880,7 @@ fn source_subject_rejected_in_spell_context_allowed_in_ability() {
 
     let fight_from_source = SpellEffectKind::Fight {
         first: EffectSubject::Source,
-        second: EffectSubject::Chosen(Box::new(TargetFilter {
+        second: EffectSubject::Chosen(Box::new(ObjectFilter {
             kind: TargetKind::Creature,
             controller: TargetController::NotYou,
             ..Default::default()
@@ -6892,7 +6892,7 @@ fn source_subject_rejected_in_spell_context_allowed_in_ability() {
 
     let invalid_fight = SpellEffectKind::Fight {
         first: EffectSubject::Source,
-        second: EffectSubject::Chosen(Box::new(TargetFilter {
+        second: EffectSubject::Chosen(Box::new(ObjectFilter {
             kind: TargetKind::AnyPermanent,
             ..Default::default()
         })),
@@ -6906,7 +6906,7 @@ fn source_subject_rejected_in_spell_context_allowed_in_ability() {
 #[test]
 fn regenerate_chosen_creature_loads_as_spell_source_subject_does_not() {
     let chosen = SpellEffectKind::Regenerate {
-        subject: EffectSubject::Chosen(Box::new(TargetFilter {
+        subject: EffectSubject::Chosen(Box::new(ObjectFilter {
             kind: TargetKind::Creature,
             ..Default::default()
         })),
@@ -6935,7 +6935,7 @@ fn regenerate_source_subject_renders_printed_sentence() {
     );
     assert_eq!(
         super::presentation::simple_effects(&[SpellEffectKind::Regenerate {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 ..Default::default()
             })),
@@ -6958,7 +6958,7 @@ fn combat_restriction_scopes_validate_by_context_and_subject_kind() {
     assert!(source.validate(EffectContext::Ability).is_ok());
 
     let chosen_player = SpellEffectKind::ApplyCombatRestriction {
-        scope: CombatRestrictionScope::Chosen(TargetFilter {
+        scope: CombatRestrictionScope::Chosen(ObjectFilter {
             kind: TargetKind::OpponentPlayer,
             ..Default::default()
         }),
@@ -6967,7 +6967,7 @@ fn combat_restriction_scopes_validate_by_context_and_subject_kind() {
     assert!(chosen_player.validate(EffectContext::Spell).is_err());
 
     let matching_creatures = SpellEffectKind::ApplyCombatRestriction {
-        scope: CombatRestrictionScope::Matching(TargetFilter {
+        scope: CombatRestrictionScope::Matching(ObjectFilter {
             kind: TargetKind::Creature,
             excluded_keywords: vec![Keyword::Flying],
             ..Default::default()
@@ -6977,7 +6977,7 @@ fn combat_restriction_scopes_validate_by_context_and_subject_kind() {
     assert!(matching_creatures.validate(EffectContext::Spell).is_ok());
 
     let matching_permanents = SpellEffectKind::ApplyCombatRestriction {
-        scope: CombatRestrictionScope::Matching(TargetFilter {
+        scope: CombatRestrictionScope::Matching(ObjectFilter {
             kind: TargetKind::AnyPermanent,
             ..Default::default()
         }),
@@ -6986,7 +6986,7 @@ fn combat_restriction_scopes_validate_by_context_and_subject_kind() {
     assert!(matching_permanents.validate(EffectContext::Spell).is_err());
 
     let empty = SpellEffectKind::ApplyCombatRestriction {
-        scope: CombatRestrictionScope::Chosen(TargetFilter::default_creature()),
+        scope: CombatRestrictionScope::Chosen(ObjectFilter::default_creature()),
         restriction: CombatRestriction::default(),
     };
     assert!(empty.validate(EffectContext::Spell).is_err());
@@ -6995,7 +6995,7 @@ fn combat_restriction_scopes_validate_by_context_and_subject_kind() {
 #[test]
 fn return_to_owners_hand_uses_a_validated_permanent_subject() {
     let opponent_creature = SpellEffectKind::ReturnToOwnersHand {
-        subject: EffectSubject::Chosen(Box::new(TargetFilter {
+        subject: EffectSubject::Chosen(Box::new(ObjectFilter {
             kind: TargetKind::Creature,
             controller: TargetController::Opponent,
             ..Default::default()
@@ -7005,7 +7005,7 @@ fn return_to_owners_hand_uses_a_validated_permanent_subject() {
     assert!(opponent_creature.validate(EffectContext::Ability).is_ok());
 
     let player = SpellEffectKind::ReturnToOwnersHand {
-        subject: EffectSubject::Chosen(Box::new(TargetFilter {
+        subject: EffectSubject::Chosen(Box::new(ObjectFilter {
             kind: TargetKind::OpponentPlayer,
             ..Default::default()
         })),
@@ -7024,7 +7024,7 @@ fn multi_permanent_library_shuffle_has_general_but_bounded_subjects() {
     let valid = SpellEffectKind::ShufflePermanentsIntoOwnersLibraries {
         subjects: vec![
             EffectSubject::Source,
-            EffectSubject::Chosen(Box::new(TargetFilter {
+            EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 required_counter: Some(CounterKind::Stun),
                 ..Default::default()
@@ -7043,7 +7043,7 @@ fn multi_permanent_library_shuffle_has_general_but_bounded_subjects() {
     let player_subject = SpellEffectKind::ShufflePermanentsIntoOwnersLibraries {
         subjects: vec![
             EffectSubject::Source,
-            EffectSubject::Chosen(Box::new(TargetFilter {
+            EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::OpponentPlayer,
                 ..Default::default()
             })),
@@ -7086,18 +7086,18 @@ fn legacy_flat_multi_permanent_library_shuffle_requires_an_authored_program() {
 fn chosen_subject_defaults_to_creature_target() {
     assert_eq!(
         EffectSubject::default(),
-        EffectSubject::Chosen(Box::new(TargetFilter::default_creature()))
+        EffectSubject::Chosen(Box::new(ObjectFilter::default_creature()))
     );
 }
 
 #[test]
 fn target_controller_relation_is_a_composable_filter_dimension() {
-    let filter = TargetFilter {
+    let filter = ObjectFilter {
         kind: TargetKind::Creature,
         controller: TargetController::Opponent,
         tapped: Some(true),
         excluded_permanent_types: vec![PermanentTypeFilter::Artifact],
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     };
 
     assert_eq!(filter.controller, TargetController::Opponent);
@@ -7106,7 +7106,7 @@ fn target_controller_relation_is_a_composable_filter_dimension() {
         filter.excluded_permanent_types,
         [PermanentTypeFilter::Artifact]
     );
-    assert_eq!(TargetFilter::default().controller, TargetController::Any);
+    assert_eq!(ObjectFilter::default().controller, TargetController::Any);
 }
 
 #[test]
@@ -7118,10 +7118,10 @@ fn controller_relative_target_filter_requires_a_permanent_kind() {
     ] {
         let effect = SpellEffectKind::DamageTarget {
             amount: Amount::Fixed(1),
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind,
                 controller: TargetController::Opponent,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         };
         assert!(effect.validate(EffectContext::Spell).is_err());
@@ -7133,10 +7133,10 @@ fn source_exclusion_requires_an_object_capable_target_kind() {
     for kind in [TargetKind::AnyPlayer, TargetKind::OpponentPlayer] {
         let effect = SpellEffectKind::TargetPlayerGainsLife {
             amount: 1.into(),
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind,
                 excluded_objects: vec![crate::TargetObjectExclusion::Source],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         };
         assert!(effect.validate(EffectContext::Spell).is_err());
@@ -7144,10 +7144,10 @@ fn source_exclusion_requires_an_object_capable_target_kind() {
 
     let object_capable = SpellEffectKind::DamageTarget {
         amount: Amount::Fixed(1),
-        target: TargetFilter {
+        target: ObjectFilter {
             kind: TargetKind::AnyTarget,
             excluded_objects: vec![crate::TargetObjectExclusion::Source],
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         },
     };
     assert!(object_capable.validate(EffectContext::Ability).is_ok());
@@ -7155,10 +7155,10 @@ fn source_exclusion_requires_an_object_capable_target_kind() {
 
 #[test]
 fn untargeted_filters_reject_source_exclusion() {
-    let filter = TargetFilter {
+    let filter = ObjectFilter {
         kind: TargetKind::Creature,
         excluded_objects: vec![crate::TargetObjectExclusion::Source],
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     };
     assert!(SpellEffectKind::DestroyAll {
         kind: filter.clone(),
@@ -7196,7 +7196,7 @@ fn issue_327_put_counters_all_is_an_untargeted_mass_counter() {
         counter: CounterKind::PlusOnePlusOne,
         count: Amount::Fixed(1),
         filter: CreatureScopeFilter {
-            matching: Box::new(crate::primitives::TargetFilter {
+            matching: Box::new(crate::primitives::ObjectFilter {
                 kind: crate::primitives::TargetKind::Creature,
                 required_counter: Some(CounterKind::Stun),
                 requires_any_counter: true,
@@ -7214,10 +7214,10 @@ fn issue_327_put_counters_all_is_an_untargeted_mass_counter() {
 #[test]
 fn untargeted_filter_preserves_you_scope_but_defers_opponent_scope() {
     let keywords = vec![Keyword::Indestructible];
-    let filter = |controller| TargetFilter {
+    let filter = |controller| ObjectFilter {
         kind: TargetKind::AnyPermanent,
         controller,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     };
 
     assert!(SpellEffectKind::GrantKeywordsAllPermanents {
@@ -7233,14 +7233,14 @@ fn untargeted_filter_preserves_you_scope_but_defers_opponent_scope() {
     .validate(EffectContext::Spell)
     .is_err());
     assert!(SpellEffectKind::TargetPlayerSacrifices {
-        target: TargetFilter {
+        target: ObjectFilter {
             kind: TargetKind::OpponentPlayer,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         },
-        filter: TargetFilter {
+        filter: ObjectFilter {
             kind: TargetKind::Creature,
             controller: TargetController::You,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         },
     }
     .validate(EffectContext::Spell)
@@ -7393,7 +7393,7 @@ fn issue_534_battlefield_filters_describe_objects_with_the_shared_predicate() {
     assert!(!ron::to_string(&lands).unwrap().contains("matching"));
     let creatures =
         ron::from_str::<BattlefieldCreatureCountFilter>("(controllers: Opponents)").unwrap();
-    assert_eq!(*creatures.matching, TargetFilter::default_creature());
+    assert_eq!(*creatures.matching, ObjectFilter::default_creature());
     assert!(!ron::to_string(&creatures).unwrap().contains("matching"));
 
     // Predicates that were unreachable before now come from the shared vocabulary.
@@ -9356,10 +9356,10 @@ fn authored_choose_accepts_the_closed_resultless_conditional_top_search() {
                     any_of: None,
                     controllers: crate::primitives::RelativePlayerSet::Controller,
                     exclude_source: false,
-                    matching: Box::new(crate::primitives::TargetFilter {
+                    matching: Box::new(crate::primitives::ObjectFilter {
                         kind: crate::primitives::TargetKind::AnyPermanent,
                         required_subtypes: vec!["Dragon".into()],
-                        ..crate::primitives::TargetFilter::default()
+                        ..crate::primitives::ObjectFilter::default()
                     }),
                 },
                 aggregate: crate::primitives::BattlefieldAggregate::Count,
@@ -9622,7 +9622,7 @@ fn typed_nonbasic_creature_search_uses_the_bounded_generic_permanent_result() {
         program.slots[found.0 as usize].result_type,
         crate::primitives::ResultType::PermanentSelection {
             chooser: crate::primitives::PlayerRecipient::Controller,
-            filter: Box::new(crate::primitives::TargetFilter {
+            filter: Box::new(crate::primitives::ObjectFilter {
                 kind: crate::primitives::TargetKind::AnyPermanent,
                 controller: crate::primitives::TargetController::You,
                 ..Default::default()
@@ -9849,7 +9849,7 @@ fn direct_battlefield_basic_land_search_result_flows_through_dominating_nested_s
             chooser: crate::primitives::PlayerRecipient::Controller,
             filter,
             cardinality: crate::primitives::Cardinality { min: 0, max: Some(1) },
-        } if filter.as_ref() == &crate::primitives::TargetFilter {
+        } if filter.as_ref() == &crate::primitives::ObjectFilter {
             kind: crate::primitives::TargetKind::AnyPermanent,
             controller: crate::primitives::TargetController::You,
             ..Default::default()
@@ -11333,9 +11333,9 @@ fn program_if_accepts_controller_creature_maximum_power_conditions() {
                 any_of: None,
                 controllers: crate::primitives::RelativePlayerSet::Controller,
                 exclude_source: false,
-                matching: Box::new(crate::primitives::TargetFilter {
+                matching: Box::new(crate::primitives::ObjectFilter {
                     kind: crate::primitives::TargetKind::Creature,
-                    ..crate::primitives::TargetFilter::default()
+                    ..crate::primitives::ObjectFilter::default()
                 }),
             },
             aggregate: crate::primitives::BattlefieldAggregate::MaximumPower,
@@ -14474,9 +14474,9 @@ fn program_compiler_lowers_owner_local_named_target_alias() {
 #[test]
 fn program_target_aliases_preserve_singleton_requiredness_and_reject_invalid_uses() {
     use crate::primitives::{
-        AuthoredBlock, CompiledProgram, EffectContext, ProgramTargetAlias, ProgramTargetReference,
-        ProgramTargetRole, TargetChooser, TargetFilter, TargetGroupDef, TargetKind, TargetSchema,
-        TargetingDef,
+        AuthoredBlock, CompiledProgram, EffectContext, ObjectFilter, ProgramTargetAlias,
+        ProgramTargetReference, ProgramTargetRole, TargetChooser, TargetGroupDef, TargetKind,
+        TargetSchema, TargetingDef,
     };
 
     let owner = || {
@@ -14503,9 +14503,9 @@ fn program_target_aliases_preserve_singleton_requiredness_and_reject_invalid_use
     let target_alias = || ProgramTargetAlias {
         name: "target_creature".into(),
         group_index: 0,
-        filter: TargetFilter {
+        filter: ObjectFilter {
             kind: TargetKind::Creature,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         },
     };
     let tap_body = || {
@@ -15073,8 +15073,8 @@ fn program_target_aliases_lower_recursively_through_if_result_and_choose_conditi
 #[test]
 fn program_target_aliases_reuse_subject_and_shuffle_role_mappings() {
     use crate::primitives::{
-        CompiledProgram, EffectContext, ProgramTargetAlias, ProgramTargetReference,
-        ProgramTargetRole, TargetChooser, TargetFilter, TargetGroupDef, TargetKind, TargetingDef,
+        CompiledProgram, EffectContext, ObjectFilter, ProgramTargetAlias, ProgramTargetReference,
+        ProgramTargetRole, TargetChooser, TargetGroupDef, TargetKind, TargetingDef,
     };
 
     let owner = || {
@@ -15098,9 +15098,9 @@ fn program_target_aliases_reuse_subject_and_shuffle_role_mappings() {
             cast_cost_expansion: None,
         }],
     };
-    let alias_filter = TargetFilter {
+    let alias_filter = ObjectFilter {
         kind: TargetKind::Creature,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     };
     let alias_program = |body: &str| {
         let body: crate::primitives::AuthoredBlock =
@@ -15362,10 +15362,10 @@ fn chosen_artifact_destroy_ability_mode_requires_exact_subject_binding() {
         panic!("the mode has exactly one Destroy instruction");
     };
     assert!(destroy.outputs.is_empty(), "Destroy is resultless here");
-    let expected_filter = crate::primitives::TargetFilter {
+    let expected_filter = crate::primitives::ObjectFilter {
         kind: crate::primitives::TargetKind::AnyPermanent,
         permanent_types: vec![crate::primitives::PermanentTypeFilter::Artifact],
-        ..crate::primitives::TargetFilter::default()
+        ..crate::primitives::ObjectFilter::default()
     };
     assert!(matches!(
         &destroy.kind,
@@ -17877,7 +17877,7 @@ fn program_grant_keywords_all_admits_untargeted_spell_and_ability_scopes() {
         crate::primitives::SpellEffectKind::GrantKeywordsAll {
             filter: crate::primitives::CreatureScopeFilter {
                 controller: Some(crate::primitives::CreatureScopeController::Opponents),
-                matching: Box::new(crate::primitives::TargetFilter {
+                matching: Box::new(crate::primitives::ObjectFilter {
                     kind: crate::primitives::TargetKind::Creature,
                     required_subtypes: vec!["Elf".into()],
                     combat_role: Some(crate::primitives::CombatRole::Attacking),
@@ -17915,7 +17915,7 @@ fn program_grant_keywords_all_admits_untargeted_spell_and_ability_scopes() {
             filter: crate::primitives::CreatureScopeFilter {
                 controller: Some(crate::primitives::CreatureScopeController::YouControl),
                 exclude_self: true,
-                matching: Box::new(crate::primitives::TargetFilter {
+                matching: Box::new(crate::primitives::ObjectFilter {
                     kind: crate::primitives::TargetKind::Creature,
                     is_color: Some(crate::primitives::Color::Blue),
                     ..Default::default()
@@ -18783,7 +18783,7 @@ fn spell_program_accepts_fixed_controller_of_target_group_damage_riders() {
     let public_effects = [
         crate::primitives::SpellEffectKind::DamageTarget {
             amount: crate::primitives::Amount::Fixed(4),
-            target: crate::primitives::TargetFilter {
+            target: crate::primitives::ObjectFilter {
                 kind: crate::primitives::TargetKind::Creature,
                 ..Default::default()
             },
@@ -19325,7 +19325,7 @@ fn program_choose_admits_optional_filtered_discard_for_ability_controller() {
     assert_eq!(
         sacrifice.cost,
         crate::primitives::ResolutionCost::SacrificePermanent {
-            filter: crate::primitives::TargetFilter {
+            filter: crate::primitives::ObjectFilter {
                 kind: crate::primitives::TargetKind::Creature,
                 controller: crate::primitives::TargetController::You,
                 ..Default::default()
@@ -20531,7 +20531,7 @@ fn source_counter_program_support_is_typed_and_rejects_unsupported_contexts() {
 /// while the named-kind form used by Replicating Ring still parses bare under `IMPLICIT_SOME`.
 #[test]
 fn remove_all_counters_omitted_kind_means_every_kind_on_a_permanent_target() {
-    use crate::primitives::{CounterKind, EffectContext, EffectSubject, TargetFilter, TargetKind};
+    use crate::primitives::{CounterKind, EffectContext, EffectSubject, ObjectFilter, TargetKind};
     let options =
         ron::Options::default().with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME);
     let parse = |ron: &str| {
@@ -20545,9 +20545,9 @@ fn remove_all_counters_omitted_kind_means_every_kind_on_a_permanent_target() {
         every,
         SpellEffectKind::RemoveAllCounters {
             counter: None,
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }
     );
@@ -22545,7 +22545,7 @@ fn registry_rejects_duplicate_delayed_ids_inside_a_spell_program() {
 mod combustible_gearhulk_program_compiler_tests {
     use crate::primitives::{
         AuthoredBlock, CardProgram, CompiledInstructionKind, CompiledProgram, EffectContext,
-        PlayerRecipient, ProgramTargetReference, ProgramTargetRole, TargetChooser, TargetFilter,
+        ObjectFilter, PlayerRecipient, ProgramTargetReference, ProgramTargetRole, TargetChooser,
         TargetGroupDef, TargetKind, TargetRole, TargetSchema, TargetingDef,
     };
 
@@ -22756,9 +22756,9 @@ mod combustible_gearhulk_program_compiler_tests {
         assert_eq!(schema.groups[0].bindings[0].effect_index, 2);
         assert!(matches!(
             schema.groups[0].bindings[0].role,
-            TargetRole::Filtered(filter) if filter == &TargetFilter {
+            TargetRole::Filtered(filter) if filter == &ObjectFilter {
                 kind: TargetKind::OpponentPlayer,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             }
         ));
 
@@ -23128,7 +23128,7 @@ mod combustible_gearhulk_program_compiler_tests {
                     option_id: crate::ChoiceId::new("cost_option").unwrap(),
                     expected_selected: true,
                 },
-                without_cost: TargetFilter::default(),
+                without_cost: ObjectFilter::default(),
             });
 
         let cases = [
@@ -23803,7 +23803,7 @@ fn token_copy_exception_accepts_explicit_colorless_override() {
 fn phase_out_profile_fixture() -> crate::primitives::SpellEffectKind {
     crate::primitives::SpellEffectKind::PhaseOut {
         subject: crate::primitives::EffectSubject::Chosen(Box::new(
-            crate::primitives::TargetFilter {
+            crate::primitives::ObjectFilter {
                 kind: crate::primitives::TargetKind::Creature,
                 controller: crate::primitives::TargetController::NotYou,
                 ..Default::default()
@@ -23832,7 +23832,7 @@ fn phase_out_accepts_only_the_direct_ability_profile() {
 fn phase_out_rejects_target_profiles_that_include_only_opponents() {
     let effect = crate::primitives::SpellEffectKind::PhaseOut {
         subject: crate::primitives::EffectSubject::Chosen(Box::new(
-            crate::primitives::TargetFilter {
+            crate::primitives::ObjectFilter {
                 kind: crate::primitives::TargetKind::Creature,
                 controller: crate::primitives::TargetController::Opponent,
                 ..Default::default()
@@ -24286,16 +24286,16 @@ fn opponent_target_groups_reject_unrepresented_damage_allocation() {
 
 #[test]
 fn creature_scope_matching_uses_the_shared_object_predicate() {
-    use crate::primitives::{CreatureScopeFilter, TargetFilter, TargetKind};
+    use crate::primitives::{CreatureScopeFilter, ObjectFilter, TargetKind};
     let scope = |text: &str| ron::from_str::<CreatureScopeFilter>(text);
 
     // Omitted `matching` means every creature and stays omitted when serialized.
     let plain = scope("(controller: Some(YouControl), exclude_self: true)").expect("plain scope");
     assert_eq!(
         *plain.matching,
-        TargetFilter {
+        ObjectFilter {
             kind: TargetKind::Creature,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         }
     );
     assert!(plain.validate().is_ok());

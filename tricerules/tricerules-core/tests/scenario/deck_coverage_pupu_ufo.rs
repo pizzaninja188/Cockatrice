@@ -273,9 +273,9 @@ fn pupu_ufo_source_setter_resolves_a_different_valid_battlefield_filter() {
                 any_of: None,
                 controllers: RelativePlayerSet::Opponents,
                 exclude_source: false,
-                matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                matching: Box::new(tricerules_card_model::primitives::ObjectFilter {
                     kind: tricerules_card_model::primitives::TargetKind::Creature,
-                    ..tricerules_card_model::primitives::TargetFilter::default()
+                    ..tricerules_card_model::primitives::ObjectFilter::default()
                 }),
             },
         }),

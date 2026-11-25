@@ -9,7 +9,7 @@
 //! controller pays), 508.1m/508.3a and 603.2c (attack triggers), and 122.1 (counters) govern.
 
 use tricerules_cards::primitives::{
-    Amount, EffectSubject, ResolutionCost, SpellEffectKind, TargetController, TargetFilter,
+    Amount, EffectSubject, ObjectFilter, ResolutionCost, SpellEffectKind, TargetController,
     TargetGroupDef, TargetKind, TargetingDef, TargetingSourceFilter, TriggerCondition,
 };
 use tricerules_cards::{
@@ -101,10 +101,10 @@ fn issue_430_sunset_saboteur_maps_menace_ward_and_attack_trigger() {
         [SpellEffectKind::PutCounters {
             counter: CounterKind::PlusOnePlusOne,
             count: Amount::Fixed(1),
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::Opponent,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
@@ -231,9 +231,9 @@ fn issue_430_tragedy_feaster_maps_trample_ward_and_unless_sacrifice() {
         SpellEffectKind::ChooseAndSacrifice {
             players: PlayerRecipient::Controller,
             count: 1,
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::AnyPermanent,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             restriction: SacrificeRestriction::None,
         }

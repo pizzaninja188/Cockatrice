@@ -88,7 +88,7 @@ fn issue_350_urenis_rebuff_keeps_the_return_effect_and_harmonize_cost() {
         face.spell_effect,
         [SpellEffectKind::ReturnToOwnersHand {
             subject: tricerules_cards::primitives::EffectSubject::Chosen(Box::new(
-                tricerules_cards::primitives::TargetFilter::default_creature()
+                tricerules_cards::primitives::ObjectFilter::default_creature()
             )),
         }]
     );

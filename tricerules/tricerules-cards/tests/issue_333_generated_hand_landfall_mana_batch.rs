@@ -8,8 +8,8 @@
 
 use tricerules_cards::primitives::{
     BattlefieldPermanentFilter, CardTypeFilter, CountExpression, EffectSubject, HandCardAction,
-    HandCardChooser, HandChoiceVisibility, PermanentEventFilter, PermanentTypeFilter,
-    RelativePlayerSet, StaticAbilityDef, TargetFilter, TargetKind,
+    HandCardChooser, HandChoiceVisibility, ObjectFilter, PermanentEventFilter, PermanentTypeFilter,
+    RelativePlayerSet, StaticAbilityDef, TargetKind,
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, Amount, CastTriggerPlayer, Color, Keyword, Layout,
@@ -28,7 +28,7 @@ const ISSUE_333_CARDS: &[(&str, &str)] = &[
 fn artifact_count_filter() -> BattlefieldPermanentFilter {
     BattlefieldPermanentFilter::matching(
         RelativePlayerSet::Controller,
-        tricerules_cards::primitives::TargetFilter {
+        tricerules_cards::primitives::ObjectFilter {
             kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
             permanent_types: vec![tricerules_cards::primitives::PermanentTypeFilter::Artifact],
             ..Default::default()
@@ -94,9 +94,9 @@ fn issue_333_pilfer_targets_an_opponent_for_a_public_nonland_discard() {
         [SpellEffectKind::ChooseHandCards {
             action: HandCardAction::Discard,
             count: 1,
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::OpponentPlayer,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             chooser: HandCardChooser::Controller,
             card_filter: Some(CardTypeFilter::Nonland),

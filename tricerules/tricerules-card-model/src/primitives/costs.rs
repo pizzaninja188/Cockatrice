@@ -1,7 +1,7 @@
 //! Costs paid to activate abilities.
 
 use super::{
-    BattlefieldPermanentFilter, BeholdCriterion, GameCondition, TargetController, TargetFilter,
+    BattlefieldPermanentFilter, BeholdCriterion, GameCondition, ObjectFilter, TargetController,
     TargetKind, ZoneCardFilter,
 };
 use crate::mana::ManaCost;
@@ -68,17 +68,17 @@ impl ObjectPaymentConstraint {
 pub enum CounterRemovalPaymentSource {
     #[default]
     Source,
-    SelectedPermanent(Box<TargetFilter>),
+    SelectedPermanent(Box<ObjectFilter>),
 }
 
-fn counter_payment_filter_is_permanent(filter: &TargetFilter) -> bool {
+fn counter_payment_filter_is_permanent(filter: &ObjectFilter) -> bool {
     filter.any_of.as_ref().map_or_else(
         || matches!(filter.kind, TargetKind::Creature | TargetKind::AnyPermanent),
         |branches| branches.iter().all(counter_payment_filter_is_permanent),
     )
 }
 
-fn counter_payment_filter_has_context_free_controller(filter: &TargetFilter) -> bool {
+fn counter_payment_filter_has_context_free_controller(filter: &ObjectFilter) -> bool {
     filter.any_of.as_ref().map_or_else(
         || !matches!(filter.controller, super::TargetController::DefendingPlayer),
         |branches| {
@@ -115,7 +115,7 @@ pub enum AbilityCost {
     RemoveCountersFromPermanents {
         count: u32,
         counter: Option<super::CounterKind>,
-        filter: TargetFilter,
+        filter: ObjectFilter,
     },
     /// CR 701.68: Gristle Glutton and Spiral into Solitude put all counters on one creature.
     Blight { count: u32 },
@@ -144,7 +144,7 @@ pub enum AbilityCost {
     /// unless the selected object is also paying a separate `{T}` source cost.
     TapPermanents {
         constraint: ObjectPaymentConstraint,
-        filter: TargetFilter,
+        filter: ObjectFilter,
         #[serde(default)]
         exclude_source: bool,
     },
@@ -171,7 +171,7 @@ pub enum AbilityCost {
     /// Vine's "Sacrifice a creature with defender"). This is selection, not targeting: shroud
     /// and hexproof do not apply.
     SacrificePermanent {
-        filter: TargetFilter,
+        filter: ObjectFilter,
         /// One authored instruction sacrifices this many permanents simultaneously.
         /// Kuldotha Forgemaster and Bolas's Citadel require three and ten respectively.
         #[serde(default = "default_one", skip_serializing_if = "is_one")]
@@ -309,11 +309,11 @@ pub enum AdditionalCost {
     /// Discard one other card chosen from the caster's hand.
     DiscardCard,
     /// Sacrifice one permanent the caster controls that matches `filter`.
-    SacrificePermanent { filter: TargetFilter },
+    SacrificePermanent { filter: ObjectFilter },
     /// Tap exactly `count` matching untapped permanents the caster controls.
     TapPermanents {
         constraint: ObjectPaymentConstraint,
-        filter: TargetFilter,
+        filter: ObjectFilter,
         #[serde(default)]
         exclude_source: bool,
     },
@@ -573,14 +573,14 @@ pub enum CastCostOptionDef {
         presentation: AbilityPresentation,
         kind: ObjectCastCostKind,
         constraint: ObjectPaymentConstraint,
-        filter: Box<TargetFilter>,
+        filter: Box<ObjectFilter>,
     },
     /// Sacrifice one matching permanent as an announced cost, including kicker costs.
     SacrificePermanent {
         option_id: ChoiceId,
         presentation: AbilityPresentation,
         kind: ObjectCastCostKind,
-        filter: Box<TargetFilter>,
+        filter: Box<ObjectFilter>,
     },
 }
 
@@ -687,29 +687,29 @@ impl CastCostGroupDef {
     }
 }
 
-fn is_bargain_filter(filter: &TargetFilter) -> bool {
+fn is_bargain_filter(filter: &ObjectFilter) -> bool {
     let mut root = filter.clone();
     let Some(branches) = root.any_of.take() else {
         return false;
     };
-    if root != TargetFilter::default() || branches.len() != 2 {
+    if root != ObjectFilter::default() || branches.len() != 2 {
         return false;
     }
 
-    let artifact_or_enchantment = TargetFilter {
+    let artifact_or_enchantment = ObjectFilter {
         kind: TargetKind::AnyPermanent,
         controller: TargetController::You,
         permanent_types: vec![
             super::PermanentTypeFilter::Artifact,
             super::PermanentTypeFilter::Enchantment,
         ],
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     };
-    let token = TargetFilter {
+    let token = ObjectFilter {
         kind: TargetKind::AnyPermanent,
         controller: TargetController::You,
         token: Some(true),
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     };
     branches.contains(&artifact_or_enchantment) && branches.contains(&token)
 }

@@ -1,4 +1,4 @@
-use tricerules_cards::primitives::{EffectContext, MassPlayerSet, SpellEffectKind, TargetFilter};
+use tricerules_cards::primitives::{EffectContext, MassPlayerSet, ObjectFilter, SpellEffectKind};
 
 #[test]
 fn filtered_mass_tap_loads_and_validates() {
@@ -21,7 +21,7 @@ fn mass_tap_defaults_to_creatures_without_retaining_the_old_variant() {
         effect,
         SpellEffectKind::TapAll {
             players: MassPlayerSet::Controller,
-            filter: TargetFilter::default_creature(),
+            filter: ObjectFilter::default_creature(),
         }
     );
     assert!(ron::from_str::<SpellEffectKind>("TapAllCreatures(players: Controller)").is_err());

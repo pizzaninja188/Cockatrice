@@ -20,8 +20,8 @@ use crate::common;
 
 use common::FaceExpectation;
 use tricerules_cards::primitives::{
-    CreatureScopeController, CreatureScopeFilter, EffectSubject, GameCondition, PlayerRecipient,
-    RelativePlayerSet, SpellCastFilter, SpellEffectKind, StaticAbilityDef, TargetFilter,
+    CreatureScopeController, CreatureScopeFilter, EffectSubject, GameCondition, ObjectFilter,
+    PlayerRecipient, RelativePlayerSet, SpellCastFilter, SpellEffectKind, StaticAbilityDef,
     TargetKind,
 };
 use tricerules_cards::{
@@ -145,9 +145,9 @@ fn issue_460_fleeting_distraction_and_overkill_own_the_reviewed_negative_pumps()
             power,
             toughness,
             scale: None,
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }];
         if draws {

@@ -10,7 +10,7 @@
 
 use tricerules_cards::primitives::{
     CombatRestriction, CombatRestrictionScope, EffectSubject, EntersWithCountersAffected,
-    GameCondition, PermanentEventFilter, StaticAbilityDef, TargetFilter, TargetKind,
+    GameCondition, ObjectFilter, PermanentEventFilter, StaticAbilityDef, TargetKind,
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, Amount, CastTriggerPlayer, Color, CounterKind, Keyword,
@@ -47,7 +47,7 @@ fn issue_352_interjection_pumps_two_two_and_first_strike() {
     assert_eq!(face.mana_cost.to_string(), "{W}");
     assert_eq!(face.types, ["Instant"]);
     assert_eq!(face.colors(), vec![Color::White]);
-    let chosen = EffectSubject::Chosen(Box::new(TargetFilter::default_creature()));
+    let chosen = EffectSubject::Chosen(Box::new(ObjectFilter::default_creature()));
     assert_eq!(
         face.spell_effect,
         [
@@ -81,19 +81,19 @@ fn issue_352_spin_out_destroys_a_creature_or_vehicle() {
     assert_eq!(
         face.spell_effect,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 any_of: Some(vec![
-                    TargetFilter {
+                    ObjectFilter {
                         kind: TargetKind::Creature,
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     },
-                    TargetFilter {
+                    ObjectFilter {
                         kind: TargetKind::AnyPermanent,
                         required_subtypes: vec!["Vehicle".into()],
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     },
                 ]),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
@@ -126,9 +126,9 @@ fn issue_352_elvenkings_harper_makes_a_creature_unblockable() {
     assert_eq!(
         ability.effect,
         [SpellEffectKind::ApplyCombatRestriction {
-            scope: CombatRestrictionScope::Chosen(TargetFilter {
+            scope: CombatRestrictionScope::Chosen(ObjectFilter {
                 kind: TargetKind::Creature,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             }),
             restriction: CombatRestriction {
                 cant_be_blocked: true,

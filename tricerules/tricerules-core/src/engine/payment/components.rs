@@ -12,11 +12,11 @@ pub(in crate::engine) enum PermanentPaymentFilter {
     Controlled,
     Announced {
         source: Option<ObjectId>,
-        filter: Box<TargetFilter>,
+        filter: Box<ObjectFilter>,
     },
     Resolution {
         source: rv1::CostObjectRef,
-        filter: Box<TargetFilter>,
+        filter: Box<ObjectFilter>,
     },
 }
 
@@ -74,7 +74,7 @@ impl ObjectPaymentComponent {
 
     pub(in crate::engine) fn announced_sacrifice(
         source: Option<ObjectId>,
-        filter: &TargetFilter,
+        filter: &ObjectFilter,
         count: u32,
     ) -> Self {
         Self::Sacrifice {
@@ -89,7 +89,7 @@ impl ObjectPaymentComponent {
 
     pub(in crate::engine) fn announced_tap(
         source: Option<ObjectId>,
-        filter: &TargetFilter,
+        filter: &ObjectFilter,
         constraint: ObjectPaymentConstraint,
         excluded: Option<rv1::CostObjectRef>,
         cast_cost_kind: Option<ObjectCastCostKind>,

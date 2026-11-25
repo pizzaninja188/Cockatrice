@@ -3,7 +3,7 @@
 //! Every card is a normal-layout creature whose only rules text is an entry trigger that gives one chosen creature a printed power/toughness bonus until end of turn.
 //! Each fingerprint is SHA-256 of the exact pinned normalized Oracle text.
 
-use tricerules_cards::primitives::{EffectSubject, SpellEffectKind, TargetFilter};
+use tricerules_cards::primitives::{EffectSubject, ObjectFilter, SpellEffectKind};
 use tricerules_cards::{AbilityPresentation, Layout, TriggerCondition};
 
 type Card = (
@@ -139,7 +139,7 @@ fn etb_target_pump_batch_maps_definitions() {
             matches!(
                 triggered.effect.as_slice(),
                 [SpellEffectKind::PumpTarget { power: p, toughness: t, subject: EffectSubject::Chosen(filter), .. }]
-                    if *p == dp && *t == dt && filter.as_ref() == &TargetFilter::default_creature()
+                    if *p == dp && *t == dt && filter.as_ref() == &ObjectFilter::default_creature()
             ),
             "{id}: exact chosen-creature pump"
         );

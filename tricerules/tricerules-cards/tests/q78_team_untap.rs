@@ -4,8 +4,8 @@
 //! one printed pump or draw rider first. Fingerprints are checked after the metadata refresh.
 
 use tricerules_cards::primitives::{
-    Amount, CreatureScopeController, CreatureScopeFilter, MassPlayerSet, PlayerRecipient,
-    SpellEffectKind, TargetFilter, TargetKind,
+    Amount, CreatureScopeController, CreatureScopeFilter, MassPlayerSet, ObjectFilter,
+    PlayerRecipient, SpellEffectKind, TargetKind,
 };
 use tricerules_cards::Layout;
 
@@ -133,7 +133,7 @@ fn q78_team_untap_map_definitions() {
             SpellEffectKind::UntapAll {
                 players: MassPlayerSet::Controller,
                 filter:
-                    TargetFilter {
+                    ObjectFilter {
                         kind: TargetKind::Creature,
                         ..
                     },

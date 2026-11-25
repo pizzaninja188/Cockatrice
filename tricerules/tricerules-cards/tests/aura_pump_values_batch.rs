@@ -3,7 +3,7 @@
 //! Every card is an Aura that enchants a creature and gives the enchanted creature a printed power/toughness bonus.
 //! Each fingerprint is SHA-256 of the exact pinned normalized Oracle text.
 
-use tricerules_cards::primitives::{SpellEffectKind, StaticAbilityDef, TargetFilter};
+use tricerules_cards::primitives::{ObjectFilter, SpellEffectKind, StaticAbilityDef};
 use tricerules_cards::{AbilityPresentation, Layout};
 
 type Card = (
@@ -94,7 +94,7 @@ fn aura_pump_values_batch_maps_definitions() {
         assert_eq!(
             f.spell_effect,
             [SpellEffectKind::AuraAttach {
-                target: TargetFilter::default_creature()
+                target: ObjectFilter::default_creature()
             }],
             "{id}: enchant creature"
         );

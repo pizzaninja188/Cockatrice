@@ -1,6 +1,6 @@
 use tricerules_cards::primitives::{
     Amount, CompiledInstructionKind, CompiledProgramCondition, GameCondition, GraveyardAggregate,
-    PlayerRecipient, ProgramTargetProjection, RelativePlayerSet, SpellEffectKind, TargetFilter,
+    ObjectFilter, PlayerRecipient, ProgramTargetProjection, RelativePlayerSet, SpellEffectKind,
     TargetKind,
 };
 use tricerules_cards::{EffectContext, ProgramOwnerId, TriggerCondition};
@@ -52,9 +52,9 @@ fn impossible_inferno_uses_the_exact_targeted_delirium_program() {
         **effect,
         SpellEffectKind::DamageTarget {
             amount: Amount::Fixed(6),
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::Creature,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }
     );

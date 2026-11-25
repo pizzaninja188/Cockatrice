@@ -285,7 +285,7 @@ fn issue_110_conditional_and_owner_choice_cards_are_complete() {
                     min: Some(1),
                     max: None,
                     exclude_observed_object: false,
-                } if **matching == tricerules_cards::primitives::TargetFilter {
+                } if **matching == tricerules_cards::primitives::ObjectFilter {
                     kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
                     required_subtypes: vec!["Dragon".to_owned()],
                     ..Default::default()

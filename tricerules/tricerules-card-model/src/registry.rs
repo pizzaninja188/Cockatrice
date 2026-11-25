@@ -3,9 +3,9 @@ use crate::primitives::{
     program_effect_target_roles, AbilityCost, ActivatedCostModifier, AdditionalCost, Amount,
     BattlefieldAggregate, CardResultAction, CardResultSource, CastCostGroupDef, CastCostOptionDef,
     CastCostReceiptCondition, CompiledProgram, EffectContext, FaceChangeAction, GameCondition,
-    ObjectContributionKind, ProgramCastPaymentProfile, ProgramRequiredInput, SpecialActionAffected,
-    SpellEffectKind, SpellKeyword, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
-    TargetSchema, TargetingDef, TokenCopySource, TriggerCondition, ZoneCardFilter,
+    ObjectContributionKind, ObjectFilter, ProgramCastPaymentProfile, ProgramRequiredInput,
+    SpecialActionAffected, SpellEffectKind, SpellKeyword, StaticAbilityDef, TargetController,
+    TargetKind, TargetSchema, TargetingDef, TokenCopySource, TriggerCondition, ZoneCardFilter,
 };
 use crate::token_def::TokenDefinition;
 use crate::PresentationFaceMetadata;
@@ -3535,10 +3535,10 @@ fn has_duplicant_imprint_producer(
     producer_ability_id: &crate::AbilityId,
     linked_exile_id: &crate::AbilityLinkId,
 ) -> bool {
-    let expected_filter = TargetFilter {
+    let expected_filter = ObjectFilter {
         kind: TargetKind::Creature,
         token: Some(false),
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     };
     face_triggered_abilities(face)
         .filter(|ability| {
@@ -5856,7 +5856,7 @@ mod luxior_model_contract_tests {
 
     fn mutate_planeswalker_target(
         raw: &mut RawCardDefinition,
-        update: impl FnOnce(&mut TargetFilter),
+        update: impl FnOnce(&mut ObjectFilter),
     ) {
         let effect = activated_mut(raw, "activated_02")
             .effect
@@ -6048,11 +6048,11 @@ mod luxior_model_contract_tests {
 
         let mut disjunction = base.clone();
         mutate_planeswalker_target(&mut disjunction, |target| {
-            target.any_of = Some(vec![TargetFilter {
+            target.any_of = Some(vec![ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 controller: TargetController::You,
                 permanent_types: vec![crate::primitives::PermanentTypeFilter::Planeswalker],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             }]);
         });
         expect_rejected(&disjunction, "an any_of target branch");

@@ -3,8 +3,8 @@
 
 use super::presentation::card_type_label;
 use super::{
-    Color, CombatRole, GraveyardFilter, GraveyardOwner, PowerComparison, StackSpellFilter,
-    TargetBinding, TargetChooser, TargetController, TargetFilter, TargetGroupDef, TargetKind,
+    Color, CombatRole, GraveyardFilter, GraveyardOwner, ObjectFilter, PowerComparison,
+    StackSpellFilter, TargetBinding, TargetChooser, TargetController, TargetGroupDef, TargetKind,
     TargetObjectExclusion, TargetOwner, TargetRole, ZoneCardFilter,
 };
 use std::borrow::Cow;
@@ -134,13 +134,13 @@ fn comparison(name: &str, comparison: PowerComparison) -> String {
 }
 
 fn battlefield(
-    filter: &TargetFilter,
+    filter: &ObjectFilter,
     plural: bool,
     chooser: TargetChooser,
     per_opponent: bool,
     controlled_by_chooser: bool,
 ) -> Option<Phrase> {
-    let TargetFilter {
+    let ObjectFilter {
         any_of,
         kind,
         tapped,
@@ -239,9 +239,9 @@ fn battlefield(
         .collect::<Vec<_>>();
     let base = match kind {
         TargetKind::AnyTarget => {
-            let understood = TargetFilter {
+            let understood = ObjectFilter {
                 excluded_objects: excluded_objects.clone(),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             };
             if *filter != understood {
                 return None;

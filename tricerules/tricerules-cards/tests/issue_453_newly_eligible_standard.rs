@@ -16,9 +16,9 @@ use crate::common;
 use common::FaceExpectation;
 use tricerules_cards::primitives::{
     Amount, CardTypeFilter, CombatRole, DiscardQuantity, EffectSubject, EntersTappedAffected,
-    EventZone, LibraryPartitionKind, PermanentEventFilter, PermanentTypeFilter, PlayerRecipient,
-    ResolutionCost, SearchDestination, SearchZoneSelection, SpellCastFilter, SpellCostModifier,
-    SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
+    EventZone, LibraryPartitionKind, ObjectFilter, PermanentEventFilter, PermanentTypeFilter,
+    PlayerRecipient, ResolutionCost, SearchDestination, SearchZoneSelection, SpellCastFilter,
+    SpellCostModifier, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind,
     TargetMatchFilter, TargetingSourceFilter, TriggerCondition, ZoneCardFilter,
     ZoneEventCardinality, ZoneEventDestination,
 };
@@ -320,8 +320,8 @@ fn adventure_face(id: &str, index: usize) -> &'static tricerules_cards::CardFace
         .unwrap_or_else(|| panic!("{id} face {index}"))
 }
 
-fn default_creature() -> TargetFilter {
-    TargetFilter::default_creature()
+fn default_creature() -> ObjectFilter {
+    ObjectFilter::default_creature()
 }
 
 fn mana_options(
@@ -387,10 +387,10 @@ fn issue_453_destroy_spells_keep_exact_target_classes() {
     assert_eq!(
         protective.spell_effect,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 combat_role: Some(CombatRole::AttackingOrBlocking),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }],
         "CR 509 / 701.8: attacking or blocking creatures only"
@@ -434,22 +434,22 @@ fn issue_453_huatli_final_strike_pumps_then_deals_the_pumped_power() {
                 power: 1,
                 toughness: 0,
                 scale: None,
-                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                     kind: TargetKind::Creature,
                     controller: TargetController::You,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 })),
             },
             SpellEffectKind::CreatureDealsDamageEqualToPower {
-                source: TargetFilter {
+                source: ObjectFilter {
                     kind: TargetKind::Creature,
                     controller: TargetController::You,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
-                target: TargetFilter {
+                target: ObjectFilter {
                     kind: TargetKind::Creature,
                     controller: TargetController::Opponent,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
             },
         ],
@@ -749,9 +749,9 @@ fn issue_453_etb_triggers_keep_exact_shapes() {
         [
             SpellEffectKind::TargetPlayerLosesLife {
                 amount: 1,
-                target: TargetFilter {
+                target: ObjectFilter {
                     kind: TargetKind::OpponentPlayer,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
             },
             SpellEffectKind::GainLife {

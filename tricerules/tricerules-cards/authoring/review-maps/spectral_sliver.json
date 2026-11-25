@@ -18,7 +18,7 @@
       "typed_path": "/faces/0/static_abilities/0/definition/GrantActivatedAbilityToPermanents"
     },
     {
-      "symbol": "TargetFilter.required_subtypes",
+      "symbol": "ObjectFilter.required_subtypes",
       "typed_path": "/faces/0/static_abilities/0/definition/GrantActivatedAbilityToPermanents/filter/required_subtypes"
     },
     {

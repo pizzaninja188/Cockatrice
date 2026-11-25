@@ -37,11 +37,11 @@
       "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/Destroy"
     },
     {
-      "symbol": "TargetFilter.kind",
+      "symbol": "ObjectFilter.kind",
       "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/Destroy/subject/Chosen/any_of/0/kind"
     },
     {
-      "symbol": "TargetFilter.permanent_types",
+      "symbol": "ObjectFilter.permanent_types",
       "typed_path": "/faces/0/spell_program/body/steps/0/kind/Perform/Destroy/subject/Chosen/any_of/1/permanent_types"
     },
     {

@@ -6,9 +6,8 @@
 
 use tricerules_cards::primitives::{
     Amount, CastCostConditionalAmount, CastCostGroupDef, CastCostOptionDef,
-    CastCostReceiptCondition, EffectSubject, ManaCostChoiceKind, ObjectCastCostKind,
-    PermanentTypeFilter, PlayerRecipient, SpellEffectKind, TargetController, TargetFilter,
-    TargetKind,
+    CastCostReceiptCondition, EffectSubject, ManaCostChoiceKind, ObjectCastCostKind, ObjectFilter,
+    PermanentTypeFilter, PlayerRecipient, SpellEffectKind, TargetController, TargetKind,
 };
 use tricerules_cards::{AbilityPresentation, ChoiceId, Layout};
 
@@ -167,7 +166,7 @@ fn q80_kicker_map_definitions() {
                             if_selected: 5,
                             otherwise: 3,
                         }),
-                        target: TargetFilter {
+                        target: ObjectFilter {
                             kind: TargetKind::AnyTarget,
                             ..
                         },
@@ -195,13 +194,13 @@ fn q80_kicker_map_definitions() {
                 assert!(matches!(
                     filter.any_of.as_deref(),
                     Some([
-                        TargetFilter {
+                        ObjectFilter {
                             kind: TargetKind::AnyPermanent,
                             controller: TargetController::You,
                             permanent_types,
                             ..
                         },
-                        TargetFilter {
+                        ObjectFilter {
                             kind: TargetKind::Creature,
                             controller: TargetController::You,
                             ..

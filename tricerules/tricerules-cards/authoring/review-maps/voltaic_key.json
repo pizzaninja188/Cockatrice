@@ -27,7 +27,7 @@
       "typed_path": "/faces/0/activated_abilities/0/effect/0/Untap/subject/Chosen"
     },
     {
-      "symbol": "TargetFilter.permanent_types",
+      "symbol": "ObjectFilter.permanent_types",
       "typed_path": "/faces/0/activated_abilities/0/effect/0/Untap/subject/Chosen/permanent_types"
     }
   ],

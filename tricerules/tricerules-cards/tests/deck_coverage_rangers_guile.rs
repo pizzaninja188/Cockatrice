@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    EffectSubject, Keyword, SpellEffectKind, TargetController, TargetFilter, TargetGroupDef,
+    EffectSubject, Keyword, ObjectFilter, SpellEffectKind, TargetController, TargetGroupDef,
     TargetKind,
 };
 use tricerules_cards::{Color, Layout};
@@ -22,10 +22,10 @@ fn rangers_guile_registers_its_complete_targeted_pump_and_hexproof() {
     assert_eq!(face.types, ["Instant"]);
     assert_eq!(face.colors(), [Color::Green]);
 
-    let target = TargetFilter {
+    let target = ObjectFilter {
         kind: TargetKind::Creature,
         controller: TargetController::You,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     };
     assert_eq!(
         face.spell_effect,

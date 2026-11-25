@@ -5,7 +5,7 @@
 //! creature-sacrifice cost and one fixed draw. Each fingerprint is SHA-256 of the
 //! exact pinned normalized Oracle text.
 
-use tricerules_cards::primitives::{AdditionalCost, TargetController, TargetFilter, TargetKind};
+use tricerules_cards::primitives::{AdditionalCost, ObjectFilter, TargetController, TargetKind};
 use tricerules_cards::{Layout, SpellEffectKind};
 
 struct ExpectedCard {
@@ -78,10 +78,10 @@ fn check_card(expected: &ExpectedCard) {
     };
     assert_eq!(
         *filter,
-        TargetFilter {
+        ObjectFilter {
             kind: TargetKind::Creature,
             controller: TargetController::You,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         },
         "{id}: sacrifice a creature the caster controls"
     );

@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    AbilityCost, Amount, PermanentTypeFilter, SpellEffectKind, StaticAbilityDef, TargetFilter,
+    AbilityCost, Amount, ObjectFilter, PermanentTypeFilter, SpellEffectKind, StaticAbilityDef,
     TargetKind,
 };
 use tricerules_cards::ManaAmount;
@@ -37,10 +37,10 @@ fn gift_of_paradise_grants_the_exact_land_mana_ability() {
     assert_eq!(
         face.spell_effect,
         [SpellEffectKind::AuraAttach {
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![PermanentTypeFilter::Land],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );
@@ -102,9 +102,9 @@ fn hermetic_study_grants_a_targeted_damage_ability() {
         ability.effect,
         [SpellEffectKind::DamageTarget {
             amount: Amount::Fixed(1),
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::AnyTarget,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );

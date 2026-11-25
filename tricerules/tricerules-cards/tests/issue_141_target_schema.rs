@@ -113,10 +113,10 @@ fn generated_prompts_describe_constraints_in_shipped_target_groups() {
 
 #[test]
 fn token_copy_requires_one_permanent_source() {
-    use tricerules_cards::primitives::{EffectContext, TargetFilter, TargetGroupDef, TargetKind};
+    use tricerules_cards::primitives::{EffectContext, ObjectFilter, TargetGroupDef, TargetKind};
     let effect = SpellEffectKind::CreateTokenCopies {
         count: 1.into(),
-        source: TokenCopySource::Chosen(Box::new(TargetFilter {
+        source: TokenCopySource::Chosen(Box::new(ObjectFilter {
             kind: TargetKind::AnyPlayer,
             ..Default::default()
         })),
@@ -125,7 +125,7 @@ fn token_copy_requires_one_permanent_source() {
     assert!(effect.validate(EffectContext::Spell).is_err());
     let effect = SpellEffectKind::CreateTokenCopies {
         count: 2.into(),
-        source: TokenCopySource::Chosen(Box::new(TargetFilter::default_creature())),
+        source: TokenCopySource::Chosen(Box::new(ObjectFilter::default_creature())),
         copy_exception: None,
     };
     let targeting = TargetingDef {

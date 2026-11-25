@@ -8,22 +8,22 @@
 //! tokens), 701.18/701.23 (search), and 608.2c (printed instruction order).
 
 use tricerules_cards::primitives::{
-    Amount, EffectSubject, GameCondition, InstructionKind, PlayerRecipient, SearchDestination,
-    SpellEffectKind, TargetFilter, TargetKind, TriggerCondition,
+    Amount, EffectSubject, GameCondition, InstructionKind, ObjectFilter, PlayerRecipient,
+    SearchDestination, SpellEffectKind, TargetKind, TriggerCondition,
 };
 use tricerules_cards::CounterKind;
 
 fn creature() -> EffectSubject {
-    EffectSubject::Chosen(Box::new(TargetFilter {
+    EffectSubject::Chosen(Box::new(ObjectFilter {
         kind: TargetKind::Creature,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }))
 }
 
-fn any_player() -> TargetFilter {
-    TargetFilter {
+fn any_player() -> ObjectFilter {
+    ObjectFilter {
         kind: TargetKind::AnyPlayer,
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     }
 }
 

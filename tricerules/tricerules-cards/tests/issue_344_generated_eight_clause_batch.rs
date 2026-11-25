@@ -12,9 +12,9 @@ use crate::common::draw_discard_program::{
 };
 use tricerules_cards::primitives::{
     CastTriggerPlayer, CompiledInstructionKind, EffectSubject, EntersWithCountersAffected,
-    GameCondition, PermanentEventFilter, PermanentTypeFilter, PlayerRecipient,
+    GameCondition, ObjectFilter, PermanentEventFilter, PermanentTypeFilter, PlayerRecipient,
     ProgramTargetBinding, RelativePlayerSet, SpellCastFilter, SpellEffectKind, StackSpellFilter,
-    StaticAbilityDef, TargetController, TargetFilter, TargetKind,
+    StaticAbilityDef, TargetController, TargetKind,
 };
 use tricerules_cards::{
     AbilityPresentation, Amount, Color, CounterKind, Keyword, ProgramOwnerId, TriggerCondition,
@@ -274,10 +274,10 @@ fn issue_344_kyoshi_battle_fan_creates_and_attaches_an_ally() {
     assert_eq!(
         equip.effect,
         [SpellEffectKind::Equip {
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );
@@ -347,9 +347,9 @@ fn issue_344_gorehorn_raider_deals_two_only_after_attacking() {
         ability.effect,
         [SpellEffectKind::DamageTarget {
             amount: Amount::Fixed(2),
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::AnyTarget,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );
@@ -377,10 +377,10 @@ fn issue_344_pitiless_fists_fights_up_to_one() {
     assert_eq!(
         face.spell_effect,
         [SpellEffectKind::AuraAttach {
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );
@@ -398,10 +398,10 @@ fn issue_344_pitiless_fists_fights_up_to_one() {
         trigger.effect,
         [SpellEffectKind::Fight {
             first: EffectSubject::AttachedObject,
-            second: EffectSubject::Chosen(Box::new(TargetFilter {
+            second: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::Opponent,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );

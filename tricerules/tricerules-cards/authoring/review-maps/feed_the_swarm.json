@@ -18,11 +18,11 @@
       "typed_path": "/faces/0/spell_effect/0"
     },
     {
-      "symbol": "TargetFilter.controller",
+      "symbol": "ObjectFilter.controller",
       "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen/controller"
     },
     {
-      "symbol": "TargetFilter.permanent_types",
+      "symbol": "ObjectFilter.permanent_types",
       "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen/permanent_types"
     },
     {

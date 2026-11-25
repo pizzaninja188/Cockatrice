@@ -96,7 +96,7 @@ fn issue_299_reuses_the_predefined_mercenary_token_contract() {
             power: 1,
             toughness: 0,
             scale: None,
-            subject: EffectSubject::Chosen(Box::new(tricerules_cards::primitives::TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(tricerules_cards::primitives::ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
                 ..Default::default()

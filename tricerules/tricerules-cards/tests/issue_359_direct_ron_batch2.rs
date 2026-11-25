@@ -14,8 +14,8 @@
 use tricerules_cards::primitives::{
     Amount, CastCostGroupDef, CastCostOptionDef, CombatRestriction, CombatRestrictionScope,
     CompiledInstructionKind, EffectSubject, InstructionKind, LibraryPlacement, ManaCostChoiceKind,
-    PermanentTypeFilter, PlayerRecipient, ProgramTargetRole, SearchDestination, SpellEffectKind,
-    StackSpellFilter, TargetController, TargetFilter, TargetKind, TokenCopySource,
+    ObjectFilter, PermanentTypeFilter, PlayerRecipient, ProgramTargetRole, SearchDestination,
+    SpellEffectKind, StackSpellFilter, TargetController, TargetKind, TokenCopySource,
     TriggerCondition,
 };
 use tricerules_cards::{AbilityPresentation, ChoiceId, Color, Layout, ModalDef, ProgramOwnerId};
@@ -169,21 +169,21 @@ fn issue_359_direct_ron_batch2_maps_definitions() {
     };
     assert_eq!(
         filter.as_ref(),
-        &TargetFilter {
+        &ObjectFilter {
             any_of: Some(vec![
-                TargetFilter {
+                ObjectFilter {
                     kind: TargetKind::AnyPermanent,
                     controller: TargetController::You,
                     permanent_types: vec![PermanentTypeFilter::Artifact],
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
-                TargetFilter {
+                ObjectFilter {
                     kind: TargetKind::Creature,
                     controller: TargetController::You,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
             ]),
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         }
     );
     assert_eq!(
@@ -241,18 +241,18 @@ fn issue_359_direct_ron_batch2_maps_definitions() {
         [SpellEffectKind::PutCounters {
             counter: tricerules_cards::CounterKind::PlusOnePlusOne,
             count: Amount::Fixed(2),
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
     assert_eq!(
         trample.effects,
         [SpellEffectKind::GrantKeywords {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
             keywords: vec![tricerules_cards::Keyword::Trample],
         }]
@@ -274,9 +274,9 @@ fn issue_359_direct_ron_batch2_maps_definitions() {
     );
     assert_eq!(
         *subject,
-        EffectSubject::Chosen(Box::new(TargetFilter {
+        EffectSubject::Chosen(Box::new(ObjectFilter {
             kind: TargetKind::Creature,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         }))
     );
     assert_eq!(
@@ -327,16 +327,16 @@ fn issue_359_direct_ron_batch2_maps_definitions() {
         [
             SpellEffectKind::TargetPlayerDraws {
                 count: Amount::Fixed(3),
-                target: TargetFilter {
+                target: ObjectFilter {
                     kind: TargetKind::AnyPlayer,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
             },
             SpellEffectKind::TargetPlayerLosesLife {
                 amount: 3,
-                target: TargetFilter {
+                target: ObjectFilter {
                     kind: TargetKind::AnyPlayer,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
             },
         ]
@@ -442,30 +442,30 @@ fn issue_359_direct_ron_batch2_maps_definitions() {
     assert_eq!(
         artifact.effects,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 any_of: Some(vec![
-                    TargetFilter {
+                    ObjectFilter {
                         kind: TargetKind::AnyPermanent,
                         permanent_types: vec![PermanentTypeFilter::Artifact],
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     },
-                    TargetFilter {
+                    ObjectFilter {
                         kind: TargetKind::AnyPermanent,
                         permanent_types: vec![PermanentTypeFilter::Enchantment],
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     },
                 ]),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
     assert_eq!(
         creature.effects,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 min_mana_value: Some(3),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );

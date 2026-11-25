@@ -497,7 +497,7 @@ fn q46_target_player_draw_maps_definitions() {
             f.spell_effect.as_slice(),
             [SpellEffectKind::TargetPlayerDraws {
                 count,
-                target: tricerules_cards::primitives::TargetFilter {
+                target: tricerules_cards::primitives::ObjectFilter {
                     kind: TargetKind::AnyPlayer,
                     ..
                 },
@@ -614,7 +614,7 @@ fn q46_etb_tap_lock_maps_definitions() {
                         subject: EffectSubject::Chosen(_)
                     },
                     SpellEffectKind::SkipNextUntap {
-                        target: tricerules_cards::primitives::TargetFilter {
+                        target: tricerules_cards::primitives::ObjectFilter {
                             controller: tricerules_cards::primitives::TargetController::Opponent,
                             ..
                         }

@@ -1,4 +1,4 @@
-use tricerules_cards::primitives::{EffectContext, SpellEffectKind, TargetFilter, TargetKind};
+use tricerules_cards::primitives::{EffectContext, ObjectFilter, SpellEffectKind, TargetKind};
 use tricerules_cards::Color;
 
 #[test]
@@ -33,7 +33,7 @@ fn counter_doubling_rejects_player_and_mixed_player_target_filters() {
         TargetKind::OpponentPlayer,
         TargetKind::AnyTarget,
     ] {
-        let target = TargetFilter {
+        let target = ObjectFilter {
             kind,
             ..Default::default()
         };
@@ -41,13 +41,13 @@ fn counter_doubling_rejects_player_and_mixed_player_target_filters() {
             .validate(EffectContext::Ability)
             .is_err());
     }
-    let target = TargetFilter {
+    let target = ObjectFilter {
         any_of: Some(vec![
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 ..Default::default()
             },
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::AnyPlayer,
                 ..Default::default()
             },
@@ -58,7 +58,7 @@ fn counter_doubling_rejects_player_and_mixed_player_target_filters() {
         .validate(EffectContext::Ability)
         .is_err());
     assert!(SpellEffectKind::DoubleCounters {
-        target: TargetFilter {
+        target: ObjectFilter {
             kind: TargetKind::AnyPermanent,
             ..Default::default()
         }

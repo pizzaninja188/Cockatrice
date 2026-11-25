@@ -1,6 +1,6 @@
 //! Registry conformance for the queue-v30 filtered creature exile cohort.
 use tricerules_cards::primitives::{
-    EffectSubject, PowerComparison, SpellEffectKind, TargetFilter, TargetKind,
+    EffectSubject, ObjectFilter, PowerComparison, SpellEffectKind, TargetKind,
 };
 use tricerules_cards::Layout;
 
@@ -100,11 +100,11 @@ fn q30_exile_creature_filtered_batch_maps_definitions() {
         };
         assert_eq!(
             **target,
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::Creature,
                 power: card.power,
                 tapped: card.tapped,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             "{}",
             card.id

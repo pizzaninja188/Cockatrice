@@ -107,7 +107,7 @@ impl GameEngine {
         inventory: &CounterInventory,
         player: PlayerId,
         source: rv1::CostObjectRef,
-        filter: &TargetFilter,
+        filter: &ObjectFilter,
         fixed_kind: Option<CounterKind>,
     ) -> Vec<CounterInventoryKey> {
         inventory
@@ -162,7 +162,7 @@ impl GameEngine {
         cost_index: usize,
         required_count: u32,
         fixed_kind: Option<CounterKind>,
-        filter: &TargetFilter,
+        filter: &ObjectFilter,
     ) -> rv1::LegalCostChoice {
         let inventory = self.live_counter_inventory();
         let source_ref = self.payment_object_ref(source);
@@ -505,7 +505,7 @@ impl GameEngine {
         cost_index: usize,
         counter: CounterKind,
         count: u32,
-        filter: &TargetFilter,
+        filter: &ObjectFilter,
     ) -> rv1::LegalCostChoice {
         let candidates = self
             .state
@@ -802,22 +802,22 @@ mod aggregate_counter_tests {
         object_id
     }
 
-    fn aggregate_type_or_filter() -> TargetFilter {
-        let branch = |permanent_type| TargetFilter {
+    fn aggregate_type_or_filter() -> ObjectFilter {
+        let branch = |permanent_type| ObjectFilter {
             kind: TargetKind::AnyPermanent,
             controller: TargetController::You,
             owner: TargetOwner::You,
             excluded_objects: vec![tricerules_card_model::TargetObjectExclusion::Source],
             permanent_types: vec![permanent_type],
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         };
-        TargetFilter {
+        ObjectFilter {
             any_of: Some(vec![
                 branch(PermanentTypeFilter::Artifact),
                 branch(PermanentTypeFilter::Creature),
                 branch(PermanentTypeFilter::Planeswalker),
             ]),
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         }
     }
 
@@ -1069,12 +1069,12 @@ mod aggregate_counter_tests {
             counter: Some(CounterKind::Charge),
             count: 0,
             payment_source: CounterRemovalPaymentSource::SelectedPermanent(Box::new(
-                TargetFilter {
+                ObjectFilter {
                     kind: TargetKind::Creature,
                     controller: TargetController::You,
                     owner: TargetOwner::You,
                     excluded_objects: vec![tricerules_card_model::TargetObjectExclusion::Source],
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
             )),
         }];
@@ -1137,12 +1137,12 @@ mod aggregate_counter_tests {
             1,
             0,
         );
-        let filter = TargetFilter {
+        let filter = ObjectFilter {
             kind: TargetKind::Creature,
             controller: TargetController::You,
             owner: TargetOwner::You,
             excluded_objects: vec![tricerules_card_model::TargetObjectExclusion::Source],
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         };
         assert!(engine.counter_payment_permanent_matches(0, source, bearer, &filter));
 

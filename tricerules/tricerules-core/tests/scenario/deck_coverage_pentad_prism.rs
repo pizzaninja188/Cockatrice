@@ -740,7 +740,7 @@ fn pentad_prism_dev_entry_is_zero_and_convoke_taps_are_not_mana_colors() {
 #[test]
 fn pentad_prism_clone_excludes_unanimated_artifact_and_animation_retains_charge_kind() {
     use tricerules_cards::primitives::{
-        ContinuousEffectKind, EffectDuration, PermanentTypeFilter, TargetFilter, TargetKind,
+        ContinuousEffectKind, EffectDuration, ObjectFilter, PermanentTypeFilter, TargetKind,
         TypeLineAddition,
     };
     use tricerules_core::state::{AffectedScope, ContinuousEffect};
@@ -796,7 +796,7 @@ fn pentad_prism_clone_excludes_unanimated_artifact_and_animation_retains_charge_
             source_id: None,
             affected: AffectedScope::PermanentsMatching {
                 reference_player: 0,
-                filter: Box::new(TargetFilter {
+                filter: Box::new(ObjectFilter {
                     kind: TargetKind::AnyPermanent,
                     permanent_types: vec![PermanentTypeFilter::Artifact],
                     ..Default::default()

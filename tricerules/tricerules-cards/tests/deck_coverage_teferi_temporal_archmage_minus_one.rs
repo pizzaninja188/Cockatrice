@@ -1,6 +1,6 @@
 //! Teferi, Temporal Archmage's optional four-target -1 untap ability.
 use tricerules_cards::primitives::{
-    AbilityCost, EffectSubject, SpellEffectKind, TargetFilter, TargetKind,
+    AbilityCost, EffectSubject, ObjectFilter, SpellEffectKind, TargetKind,
 };
 use tricerules_cards::AbilityPresentation;
 
@@ -24,7 +24,7 @@ fn teferi_minus_one_is_optional_four_target_any_permanent_untap() {
     );
     assert_eq!(minus.costs, [AbilityCost::Loyalty(-1)]);
     assert!(minus.program.is_none());
-    let any_permanent = TargetFilter {
+    let any_permanent = ObjectFilter {
         kind: TargetKind::AnyPermanent,
         ..Default::default()
     };

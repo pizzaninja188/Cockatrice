@@ -16,8 +16,8 @@
 use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, ActivationTiming, Amount, CastTriggerPlayer,
     CreatureScopeController, CreatureScopeFilter, EffectSubject, LifeAmount,
-    ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter, PlayerRecipient,
-    SpellEffectKind, TargetController, TargetFilter, TargetKind, TriggerCondition,
+    ObjectContributionKind, ObjectFilter, ObjectPaymentConstraint, PermanentEventFilter,
+    PlayerRecipient, SpellEffectKind, TargetController, TargetKind, TriggerCondition,
 };
 use tricerules_cards::{AbilityPresentation, CardFace, CounterKind, ManaCost};
 
@@ -142,10 +142,10 @@ fn issue_427_tundra_tank_registers_crew_etb_and_the_keyword() {
                 minimum: 1,
                 contribution: ObjectContributionKind::CurrentPower,
             },
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             exclude_source: true,
         }]
@@ -161,10 +161,10 @@ fn issue_427_tundra_tank_registers_crew_etb_and_the_keyword() {
     assert_eq!(
         etb.effect,
         [SpellEffectKind::GrantKeywords {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
             keywords: vec![tricerules_cards::Keyword::Indestructible],
         }]

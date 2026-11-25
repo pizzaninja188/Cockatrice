@@ -58,7 +58,7 @@
       "typed_path": "/faces/0/triggered_abilities/0/modal/modes/0/program/body/steps/0/kind/Perform/Destroy"
     },
     {
-      "symbol": "TargetFilter.permanent_types",
+      "symbol": "ObjectFilter.permanent_types",
       "typed_path": "/faces/0/triggered_abilities/0/modal/modes/0/program/body/steps/0/kind/Perform/Destroy/subject/Chosen/permanent_types"
     },
     {

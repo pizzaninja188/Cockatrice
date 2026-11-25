@@ -11,8 +11,8 @@
 
 use tricerules_cards::primitives::{
     AbilityCost, Amount, CastCostOptionDef, EffectSubject, GameCondition, GraveyardAggregate,
-    ObjectCastCostKind, PermanentTypeFilter, PlayerRecipient, RelativePlayerSet, SpellCostModifier,
-    SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
+    ObjectCastCostKind, ObjectFilter, PermanentTypeFilter, PlayerRecipient, RelativePlayerSet,
+    SpellCostModifier, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind,
 };
 use tricerules_cards::Layout;
 
@@ -55,10 +55,10 @@ fn issue_338_direct_ron_batch3_maps_definitions() {
     assert_eq!(
         face.spell_effect,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 excluded_permanent_types: vec![PermanentTypeFilter::Land],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
@@ -112,10 +112,10 @@ fn issue_338_direct_ron_batch3_maps_definitions() {
     assert_eq!(
         equip.effect,
         [SpellEffectKind::Equip {
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );
@@ -141,10 +141,10 @@ fn issue_338_direct_ron_batch3_maps_definitions() {
     assert_eq!(*kind, ObjectCastCostKind::AdditionalPayment);
     assert_eq!(
         filter.as_ref(),
-        &TargetFilter {
+        &ObjectFilter {
             kind: TargetKind::Creature,
             controller: TargetController::You,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         }
     );
     assert_eq!(

@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use tricerules_cards::primitives::{
-    HandCardAction, HandCardChooser, HandChoiceVisibility, SpellEffectKind, TargetFilter,
+    HandCardAction, HandCardChooser, HandChoiceVisibility, ObjectFilter, SpellEffectKind,
     TargetKind,
 };
 use tricerules_cards::{AbilityPresentation, TriggerCondition};
@@ -25,7 +25,7 @@ fn issue_288_registers_exactly_the_reviewed_two_card_cohort() {
                         [SpellEffectKind::ChooseHandCards {
                             action: HandCardAction::Exile,
                             count: 1,
-                            target: TargetFilter {
+                            target: ObjectFilter {
                                 kind: TargetKind::OpponentPlayer,
                                 ..
                             },

@@ -1,5 +1,5 @@
 use super::*;
-use tricerules_card_model::primitives::{ManaValueLimit, TargetFilter, TargetKind};
+use tricerules_card_model::primitives::{ManaValueLimit, ObjectFilter, TargetKind};
 use tricerules_card_model::ActivatedAbilityDef;
 
 fn setup() -> GameEngine {
@@ -131,14 +131,14 @@ fn resolve_effect(
 fn exile_all_effect(limit: ManaValueLimit) -> SpellEffectKind {
     exile_all_effect_with_filter(
         limit,
-        TargetFilter {
+        ObjectFilter {
             kind: TargetKind::AnyPermanent,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         },
     )
 }
 
-fn exile_all_effect_with_filter(limit: ManaValueLimit, kind: TargetFilter) -> SpellEffectKind {
+fn exile_all_effect_with_filter(limit: ManaValueLimit, kind: ObjectFilter) -> SpellEffectKind {
     SpellEffectKind::ExileAll {
         kind,
         max_mana_value_limit: Some(limit),
@@ -317,21 +317,21 @@ fn exile_all_x_zero_uses_current_colors_and_exiles_a_multicolor_permanent_once()
         2
     );
 
-    let color_union = TargetFilter {
+    let color_union = ObjectFilter {
         kind: TargetKind::AnyPermanent,
         any_of: Some(vec![
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 is_color: Some(Color::Red),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 is_color: Some(Color::Blue),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         ]),
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     };
     resolve_effect(
         &mut engine,
@@ -401,10 +401,10 @@ fn exile_all_uses_current_copied_mana_value_at_resolution() {
         vec![Color::Red]
     );
 
-    let red_filter = TargetFilter {
+    let red_filter = ObjectFilter {
         kind: TargetKind::AnyPermanent,
         is_color: Some(Color::Red),
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     };
     resolve_effect(
         &mut engine,
@@ -427,10 +427,10 @@ fn exile_all_keeps_its_literal_and_announced_x_limits_conjunctive() {
     let mut engine = setup();
     let forest = deploy(&mut engine, 0, "forest");
     let bears = deploy(&mut engine, 1, "grizzly_bears");
-    let kind = TargetFilter {
+    let kind = ObjectFilter {
         kind: TargetKind::AnyPermanent,
         max_mana_value: Some(1),
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     };
 
     resolve_effect(

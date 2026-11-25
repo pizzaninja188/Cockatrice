@@ -16,9 +16,9 @@ use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, ActivationTiming, Amount, BattlefieldQuantityCharacteristic,
     CardResultAction, CardResultFilter, CardResultSource, CardSearchZone, CardTypeFilter,
     CountExpression, CreatureScopeController, CreatureScopeFilter, EffectSubject, GameCondition,
-    ObjectPaymentConstraint, PlayerRecipient, RelativePlayerSet, ResolvingEffectDuration,
-    ResolvingPermanentModifier, SearchDestination, SearchZoneSelection, SpellEffectKind,
-    StaticAbilityDef, TargetController, TargetFilter, TargetKind, TriggerCondition,
+    ObjectFilter, ObjectPaymentConstraint, PlayerRecipient, RelativePlayerSet,
+    ResolvingEffectDuration, ResolvingPermanentModifier, SearchDestination, SearchZoneSelection,
+    SpellEffectKind, StaticAbilityDef, TargetController, TargetKind, TriggerCondition,
     TypeLineAddition, ZoneCardFilter,
 };
 use tricerules_cards::{AbilityPresentation, CardFace, CounterKind, Keyword, ManaCost};
@@ -118,10 +118,10 @@ fn registered_face(card_id: &str) -> CardFace {
 fn station_cost() -> AbilityCost {
     AbilityCost::TapPermanents {
         constraint: ObjectPaymentConstraint::ExactCount(1),
-        filter: TargetFilter {
+        filter: ObjectFilter {
             kind: TargetKind::Creature,
             controller: TargetController::You,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         },
         exclude_source: true,
     }
@@ -282,13 +282,13 @@ fn issue_423_dawnsire_striation_grants_the_threshold_attack_trigger() {
         attack.effect,
         [SpellEffectKind::DamageTarget {
             amount: Amount::Fixed(100),
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![
                     tricerules_cards::primitives::PermanentTypeFilter::Creature,
                     tricerules_cards::primitives::PermanentTypeFilter::Planeswalker,
                 ],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );
@@ -460,24 +460,24 @@ fn issue_423_companion_abilities_are_registered_exactly() {
     assert_eq!(
         branch.cost,
         tricerules_cards::primitives::ResolutionCost::SacrificePermanent {
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 any_of: Some(vec![
-                    TargetFilter {
+                    ObjectFilter {
                         kind: TargetKind::AnyPermanent,
                         controller: TargetController::You,
                         permanent_types: vec![
                             tricerules_cards::primitives::PermanentTypeFilter::Land
                         ],
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     },
-                    TargetFilter {
+                    ObjectFilter {
                         kind: TargetKind::AnyPermanent,
                         controller: TargetController::You,
                         required_subtypes: vec!["Lander".into()],
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     },
                 ]),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             source_only: false,
         }
@@ -691,11 +691,11 @@ fn issue_423_planets_grant_their_twelve_plus_activated_abilities() {
             AbilityCost::Tap,
             AbilityCost::SacrificePermanent {
                 count: 1,
-                filter: TargetFilter {
+                filter: ObjectFilter {
                     kind: TargetKind::AnyPermanent,
                     controller: TargetController::You,
                     permanent_types: vec![tricerules_cards::primitives::PermanentTypeFilter::Land],
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
             },
         ]
@@ -718,10 +718,10 @@ fn issue_423_planets_grant_their_twelve_plus_activated_abilities() {
             AbilityCost::PayLife { amount: 2 },
             AbilityCost::SacrificePermanent {
                 count: 1,
-                filter: TargetFilter {
+                filter: ObjectFilter {
                     kind: TargetKind::Creature,
                     controller: TargetController::You,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 },
             },
         ]

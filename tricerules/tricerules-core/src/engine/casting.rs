@@ -7237,7 +7237,7 @@ mod mana_payment_tests {
         // A mechanic-shaped two-creature payment with no source {T} component.
         ability.costs = vec![AbilityCost::TapPermanents {
             constraint: ObjectPaymentConstraint::ExactCount(2),
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
                 ..Default::default()
@@ -7378,10 +7378,10 @@ mod mana_payment_tests {
         object.zone = Zone::Battlefield;
         object.base_controller = 0;
         object.controller = 0;
-        let filter = TargetFilter {
+        let filter = ObjectFilter {
             kind: TargetKind::AnyPermanent,
             controller: TargetController::You,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         };
         let costs = [
             AbilityCost::SacrificePermanent {
@@ -7499,15 +7499,15 @@ mod mana_payment_tests {
             object.base_controller = 0;
             object.controller = 0;
         }
-        let leaf = TargetFilter {
+        let leaf = ObjectFilter {
             kind: TargetKind::AnyPermanent,
             controller: TargetController::You,
             excluded_objects: vec![tricerules_card_model::TargetObjectExclusion::Source],
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         };
-        let filter = TargetFilter {
+        let filter = ObjectFilter {
             any_of: Some(vec![leaf.clone(), leaf]),
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         };
 
         assert!(!e.ability_cost_permanent_matches(0, Some(source), source, &filter));

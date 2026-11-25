@@ -9,7 +9,7 @@
 
 use tricerules_cards::primitives::{
     CombatRestriction, CombatRestrictionScope, CombatRole, EffectSubject, GraveyardDestination,
-    GraveyardFilter, GraveyardOwner, PermanentTypeFilter, PlayerRecipient, TargetFilter,
+    GraveyardFilter, GraveyardOwner, ObjectFilter, PermanentTypeFilter, PlayerRecipient,
     TargetGroupDef, TargetKind, TargetingDef,
 };
 use tricerules_cards::{
@@ -65,10 +65,10 @@ fn issue_328_not_on_my_watch_exiles_only_attackers() {
     assert_eq!(
         face.spell_effect,
         [SpellEffectKind::Exile {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 combat_role: Some(CombatRole::Attacking),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
             linked_exile_id: None,
         }]
@@ -100,10 +100,10 @@ fn issue_328_felidar_cub_sacrifices_itself_for_an_enchantment() {
     assert_eq!(
         ability.effect,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![PermanentTypeFilter::Enchantment],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
@@ -202,7 +202,7 @@ fn issue_328_axgard_cavalry_taps_to_grant_haste() {
     assert_eq!(
         ability.effect,
         [SpellEffectKind::GrantKeywords {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
             keywords: vec![Keyword::Haste],
         }]
     );
@@ -281,7 +281,7 @@ fn issue_328_bellowing_bruiser_is_an_adventure_with_the_cant_block_face() {
     assert_eq!(
         adventure.spell_effect,
         [SpellEffectKind::ApplyCombatRestriction {
-            scope: CombatRestrictionScope::Chosen(TargetFilter::default_creature()),
+            scope: CombatRestrictionScope::Chosen(ObjectFilter::default_creature()),
             restriction: CombatRestriction {
                 cant_block: true,
                 ..CombatRestriction::default()
@@ -318,10 +318,10 @@ fn issue_328_kindled_heroism_pumps_grants_first_strike_and_scries() {
                 power: 1,
                 toughness: 0,
                 scale: None,
-                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
             },
             SpellEffectKind::GrantKeywords {
-                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
                 keywords: vec![Keyword::FirstStrike],
             },
             SpellEffectKind::Scry {

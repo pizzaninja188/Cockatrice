@@ -226,28 +226,28 @@ fn issue_416_roads_fixture_matches_the_emitted_definition() {
                                 any_of: None,
                                 controllers: RelativePlayerSet::Controller,
                                 exclude_source: false,
-                                matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                                matching: Box::new(tricerules_card_model::primitives::ObjectFilter {
                                     kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
                                     required_subtypes: vec!["Mount".into()],
-                                    ..tricerules_card_model::primitives::TargetFilter::default()
+                                    ..tricerules_card_model::primitives::ObjectFilter::default()
                                 }),
                             },
                             BattlefieldPermanentFilter {
                                 any_of: None,
                                 controllers: RelativePlayerSet::Controller,
                                 exclude_source: false,
-                                matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                                matching: Box::new(tricerules_card_model::primitives::ObjectFilter {
                                     kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
                                     required_subtypes: vec!["Vehicle".into()],
-                                    ..tricerules_card_model::primitives::TargetFilter::default()
+                                    ..tricerules_card_model::primitives::ObjectFilter::default()
                                 }),
                             },
                         ]),
                         controllers: RelativePlayerSet::Controller,
                         exclude_source: false,
-                        matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                        matching: Box::new(tricerules_card_model::primitives::ObjectFilter {
                             kind: tricerules_card_model::primitives::TargetKind::AnyPermanent,
-                            ..tricerules_card_model::primitives::TargetFilter::default()
+                            ..tricerules_card_model::primitives::ObjectFilter::default()
                         }),
                     },
                     aggregate: BattlefieldAggregate::Count,

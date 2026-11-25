@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    EffectSubject, SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
+    EffectSubject, ObjectFilter, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind,
 };
 use tricerules_cards::TriggerCondition;
 
@@ -16,10 +16,10 @@ fn meltstriders_resolve_has_complete_oracle_behavior() {
     assert_eq!(
         face.spell_effect,
         [SpellEffectKind::AuraAttach {
-            target: TargetFilter {
+            target: ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
         }]
     );

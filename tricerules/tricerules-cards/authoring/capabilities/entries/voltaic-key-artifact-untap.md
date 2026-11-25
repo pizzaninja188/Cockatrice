@@ -28,7 +28,7 @@
   `ObjectPaymentConstraint::ExactCount` in `tricerules/tricerules-card-model/src/primitives/costs.rs`;
   `SpellEffectKind::Untap` and
   `EffectSubject::Chosen` in `tricerules/tricerules-card-model/src/primitives/effects.rs`;
-  `TargetFilter.permanent_types` in `tricerules/tricerules-card-model/src/primitives/targeting.rs`.
+  `ObjectFilter.permanent_types` in `tricerules/tricerules-card-model/src/primitives/targeting.rs`.
 - **Implementation references:** Loader: `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_embedded`
   and `tricerules/tricerules-cards/src/registry.rs#CardRegistry::from_chunks_and_tokens`; validator:
   `tricerules/tricerules-card-model/src/primitives/abilities.rs#ActivatedAbilityDef::validate_shape`

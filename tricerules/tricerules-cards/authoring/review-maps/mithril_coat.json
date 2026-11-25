@@ -62,7 +62,7 @@
       "typed_path": "/faces/0/triggered_abilities/0/effect/0/AttachSource/target/controller"
     },
     {
-      "symbol": "TargetFilter.required_supertypes",
+      "symbol": "ObjectFilter.required_supertypes",
       "typed_path": "/faces/0/triggered_abilities/0/effect/0/AttachSource/target/required_supertypes"
     },
     {

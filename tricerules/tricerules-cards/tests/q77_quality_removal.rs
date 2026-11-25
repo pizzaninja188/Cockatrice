@@ -4,7 +4,7 @@
 //! target filter. Fingerprints are checked after the presentation metadata refresh.
 
 use tricerules_cards::primitives::{
-    Color, EffectSubject, SpellEffectKind, TargetChooser, TargetController, TargetFilter,
+    Color, EffectSubject, ObjectFilter, SpellEffectKind, TargetChooser, TargetController,
     TargetKind, TargetingDef,
 };
 use tricerules_cards::Layout;
@@ -14,7 +14,7 @@ struct Card {
     name: &'static str,
     mana_cost: &'static str,
     types: &'static [&'static str],
-    filter: TargetFilter,
+    filter: ObjectFilter,
     prompt: &'static str,
     fingerprint: &'static str,
 }
@@ -26,7 +26,7 @@ fn cases() -> Vec<Card> {
             name: "Rend Flesh",
             mana_cost: "{2}{B}",
             types: &["Instant", "Arcane"],
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 excluded_subtypes: vec!["Spirit".into()],
                 ..Default::default()
@@ -39,7 +39,7 @@ fn cases() -> Vec<Card> {
             name: "Asphyxiate",
             mana_cost: "{1}{B}{B}",
             types: &["Sorcery"],
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 tapped: Some(false),
                 ..Default::default()
@@ -52,7 +52,7 @@ fn cases() -> Vec<Card> {
             name: "Hero's Demise",
             mana_cost: "{1}{B}",
             types: &["Instant"],
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 required_supertypes: vec!["Legendary".into()],
                 ..Default::default()
@@ -65,7 +65,7 @@ fn cases() -> Vec<Card> {
             name: "Walk the Plank",
             mana_cost: "{B}{B}",
             types: &["Sorcery"],
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 excluded_subtypes: vec!["Merfolk".into()],
                 ..Default::default()
@@ -78,7 +78,7 @@ fn cases() -> Vec<Card> {
             name: "Chill to the Bone",
             mana_cost: "{3}{B}",
             types: &["Instant"],
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 excluded_supertypes: vec!["Snow".into()],
                 ..Default::default()
@@ -91,7 +91,7 @@ fn cases() -> Vec<Card> {
             name: "Human Frailty",
             mana_cost: "{B}",
             types: &["Instant"],
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 required_subtypes: vec!["Human".into()],
                 ..Default::default()
@@ -104,7 +104,7 @@ fn cases() -> Vec<Card> {
             name: "Cast Down",
             mana_cost: "{1}{B}",
             types: &["Instant"],
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 excluded_supertypes: vec!["Legendary".into()],
                 ..Default::default()
@@ -117,7 +117,7 @@ fn cases() -> Vec<Card> {
             name: "Dark Betrayal",
             mana_cost: "{B}",
             types: &["Instant"],
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 is_color: Some(Color::Black),
                 ..Default::default()
@@ -130,7 +130,7 @@ fn cases() -> Vec<Card> {
             name: "Victim of Night",
             mana_cost: "{B}{B}",
             types: &["Instant"],
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 excluded_subtypes: vec!["Vampire".into(), "Werewolf".into(), "Zombie".into()],
                 ..Default::default()
@@ -143,7 +143,7 @@ fn cases() -> Vec<Card> {
             name: "Power Word Kill",
             mana_cost: "{1}{B}",
             types: &["Instant"],
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 excluded_subtypes: vec![
                     "Angel".into(),

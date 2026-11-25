@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    EffectSubject, SpellEffectKind, TargetController, TargetFilter, TargetKind,
+    EffectSubject, ObjectFilter, SpellEffectKind, TargetController, TargetKind,
     TargetObjectExclusion,
 };
 use tricerules_cards::{AbilityPresentation, Keyword, TriggerCondition};
@@ -50,11 +50,11 @@ fn assert_attack_pump_and_indestructible(id: &str, name: &str, mana_cost: &str, 
     assert!(ability.modal.is_none());
     assert!(ability.intervening_if.is_none());
 
-    let target = TargetFilter {
+    let target = ObjectFilter {
         kind: TargetKind::Creature,
         controller: TargetController::You,
         excluded_objects: vec![TargetObjectExclusion::Source],
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     };
     let [SpellEffectKind::PumpTarget {
         power,

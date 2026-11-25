@@ -7,7 +7,7 @@
 
 use tricerules_cards::primitives::{
     Amount, CardTypeFilter, EffectSubject, GraveyardDestination, GraveyardFilter, GraveyardOwner,
-    PermanentTypeFilter, ResolutionCost, SpellEffectKind, TargetFilter, TargetKind, TargetSchema,
+    ObjectFilter, PermanentTypeFilter, ResolutionCost, SpellEffectKind, TargetKind, TargetSchema,
     ZoneCardFilter,
 };
 use tricerules_cards::{CounterKind, ModalDef, TriggerCondition};
@@ -182,7 +182,7 @@ fn issue_424_up_to_two_counter_mode_is_bounded_and_targeted() {
         [SpellEffectKind::PutCounters {
             counter: CounterKind::PlusOnePlusOne,
             count: Amount::Fixed(1),
-            subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter::default_creature())),
         }]
     );
     let group = &bugle.modes[0]
@@ -282,13 +282,13 @@ fn issue_424_exile_modes_use_the_printed_type_union_and_single_graveyard_group()
     assert_eq!(
         crew.modes[1].effects,
         [SpellEffectKind::Exile {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![
                     PermanentTypeFilter::Artifact,
                     PermanentTypeFilter::Enchantment,
                 ],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
             linked_exile_id: None,
         }]
@@ -406,10 +406,10 @@ fn issue_424_gearbane_modes_bind_the_up_to_one_destroy_and_mandatory_sacrifice()
         panic!("mode 01 performs one Destroy operation");
     };
     assert!(destroy.outputs.is_empty());
-    let artifact_filter = TargetFilter {
+    let artifact_filter = ObjectFilter {
         kind: TargetKind::AnyPermanent,
         permanent_types: vec![PermanentTypeFilter::Artifact],
-        ..TargetFilter::default()
+        ..ObjectFilter::default()
     };
     assert!(matches!(
         &destroy.kind,
@@ -470,11 +470,11 @@ fn issue_424_gearbane_modes_bind_the_up_to_one_destroy_and_mandatory_sacrifice()
     assert_eq!(
         branch.cost,
         ResolutionCost::SacrificePermanent {
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 controller: tricerules_cards::primitives::TargetController::You,
                 permanent_types: vec![PermanentTypeFilter::Artifact],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             source_only: false,
         },
@@ -501,16 +501,16 @@ fn issue_424_tap_and_untap_pairs_keep_their_printed_scopes() {
     for (card_id, clause_filter, prompt) in [
         (
             "giant-sized_flying_ant",
-            TargetFilter {
+            ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 excluded_permanent_types: vec![PermanentTypeFilter::Land],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             "Choose target nonland permanent",
         ),
         (
             "glamermite",
-            TargetFilter::default_creature(),
+            ObjectFilter::default_creature(),
             "Choose target creature",
         ),
     ] {
@@ -552,10 +552,10 @@ fn issue_424_qutrub_destroy_uses_the_damaged_this_turn_predicate() {
     assert_eq!(
         qutrub.modes[0].effects,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                 kind: TargetKind::Creature,
                 was_dealt_damage_this_turn: Some(true),
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             })),
         }]
     );
@@ -680,11 +680,11 @@ fn issue_424_butcher_modes_bind_the_rat_token_another_sacrifice_and_team_menace(
     assert_eq!(
         branch.cost,
         ResolutionCost::SacrificePermanent {
-            filter: TargetFilter {
+            filter: ObjectFilter {
                 kind: TargetKind::Creature,
                 controller: tricerules_cards::primitives::TargetController::You,
                 excluded_objects: vec![tricerules_cards::TargetObjectExclusion::Source],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             },
             source_only: false,
         },

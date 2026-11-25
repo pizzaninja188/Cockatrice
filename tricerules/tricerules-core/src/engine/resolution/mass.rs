@@ -293,7 +293,7 @@ fn scoped_battlefield_objects_with_affected_player(
     controller: PlayerId,
     players: MassPlayerSet,
     affected_player: PlayerId,
-    filter: &TargetFilter,
+    filter: &ObjectFilter,
     target_receipts: &[StackTarget],
 ) -> Vec<ObjectId> {
     let targeted_player = match players {
@@ -327,7 +327,7 @@ fn scoped_battlefield_objects(
     engine: &GameEngine,
     controller: PlayerId,
     players: impl Into<MassPlayerSet>,
-    filter: &TargetFilter,
+    filter: &ObjectFilter,
     target_receipts: &[StackTarget],
 ) -> Vec<ObjectId> {
     scoped_battlefield_objects_with_affected_player(

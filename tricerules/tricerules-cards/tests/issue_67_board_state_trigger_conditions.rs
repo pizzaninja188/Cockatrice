@@ -43,7 +43,7 @@ fn issue_67_cards_use_one_validated_battlefield_condition_vocabulary() {
             min: Some(1),
             max: None,
             ..
-        } if **matching == tricerules_cards::primitives::TargetFilter {
+        } if **matching == tricerules_cards::primitives::ObjectFilter {
             kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
             permanent_types: vec![tricerules_cards::primitives::PermanentTypeFilter::Artifact],
             ..Default::default()
@@ -62,7 +62,7 @@ fn issue_67_cards_use_one_validated_battlefield_condition_vocabulary() {
             min: Some(1),
             max: None,
             ..
-        } if **matching == tricerules_cards::primitives::TargetFilter {
+        } if **matching == tricerules_cards::primitives::ObjectFilter {
             kind: tricerules_cards::primitives::TargetKind::Creature,
             name: Some("Faerie Miscreant".into()),
             ..Default::default()
@@ -144,10 +144,10 @@ fn battlefield_aggregate_conditions_reject_invalid_bounds_and_names() {
             any_of: None,
             controllers: RelativePlayerSet::Controller,
             exclude_source: false,
-            matching: Box::new(tricerules_cards::primitives::TargetFilter {
+            matching: Box::new(tricerules_cards::primitives::ObjectFilter {
                 kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
                 name: name.map(str::to_string),
-                ..tricerules_cards::primitives::TargetFilter::default()
+                ..tricerules_cards::primitives::ObjectFilter::default()
             }),
         },
         aggregate: BattlefieldAggregate::TotalPower,

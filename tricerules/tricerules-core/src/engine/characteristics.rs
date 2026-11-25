@@ -1130,10 +1130,10 @@ impl CharacteristicsEvaluator<'_> {
             return false;
         };
         let owner = self.state.objects[&source].owner;
-        let expected_filter = TargetFilter {
+        let expected_filter = ObjectFilter {
             kind: TargetKind::Creature,
             controller: TargetController::You,
-            ..TargetFilter::default()
+            ..ObjectFilter::default()
         };
         if current_keyword != keyword
             || !matches!(&effect.affected, AffectedScope::PermanentsMatching {
@@ -2454,7 +2454,7 @@ pub(super) fn basic_land_type_setting(
 
 pub(super) fn permanent_matches_target_scope(
     state: &GameState,
-    filter: &TargetFilter,
+    filter: &ObjectFilter,
     reference_player: PlayerId,
     source: Option<ObjectId>,
     oid: ObjectId,
@@ -2501,7 +2501,7 @@ pub(super) fn permanent_matches_target_scope(
 /// differ between targeted and untargeted effects.
 pub(super) fn permanent_matches_filter_characteristics(
     state: &GameState,
-    filter: &TargetFilter,
+    filter: &ObjectFilter,
     oid: ObjectId,
     characteristics: &Characteristics,
 ) -> bool {
@@ -3365,10 +3365,10 @@ mod tests {
     fn early_layer_type_scope(kind: PermanentTypeFilter) -> AffectedScope {
         AffectedScope::PermanentsMatching {
             reference_player: 0,
-            filter: Box::new(TargetFilter {
+            filter: Box::new(ObjectFilter {
                 kind: TargetKind::AnyPermanent,
                 permanent_types: vec![kind],
-                ..TargetFilter::default()
+                ..ObjectFilter::default()
             }),
             exclude: None,
         }
@@ -4773,7 +4773,7 @@ mod tests {
                 affected: AffectedScope::CreaturesMatching {
                     reference_player: 0,
                     filter: CreatureScopeFilter {
-                        matching: Box::new(tricerules_card_model::primitives::TargetFilter {
+                        matching: Box::new(tricerules_card_model::primitives::ObjectFilter {
                             kind: tricerules_card_model::primitives::TargetKind::Creature,
                             required_subtypes: vec!["Knight".to_string()],
                             ..Default::default()
@@ -5415,7 +5415,7 @@ mod tests {
             .counters
             .insert(CounterKind::Charge, 1);
 
-        let filter: TargetFilter =
+        let filter: ObjectFilter =
             ron::from_str("(kind: AnyPermanent, requires_any_counter: true)")
                 .expect("deserialize any-counter permanent filter");
         assert!(super::super::targeting::filter_characteristics_match(

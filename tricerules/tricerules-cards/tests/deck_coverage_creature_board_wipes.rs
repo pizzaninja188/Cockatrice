@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    BattlefieldPermanentFilter, MassPlayerSet, RelativePlayerSet, TargetFilter,
+    BattlefieldPermanentFilter, MassPlayerSet, ObjectFilter, RelativePlayerSet,
 };
 use tricerules_cards::{
     Amount, BattlefieldAggregate, Color, Layout, SpellCostModifier, SpellEffectKind,
@@ -26,7 +26,7 @@ fn creature_board_wipe_cards_have_complete_typed_definitions() {
         [SpellEffectKind::DamageAll {
             amount: Amount::Fixed(13),
             players: MassPlayerSet::All,
-            kind: TargetFilter::default_creature(),
+            kind: ObjectFilter::default_creature(),
         }]
     );
     assert!(face.activated_abilities.is_empty());
@@ -48,7 +48,7 @@ fn creature_board_wipe_cards_have_complete_typed_definitions() {
     assert_eq!(
         face.spell_effect,
         [SpellEffectKind::DestroyAll {
-            kind: TargetFilter::default_creature(),
+            kind: ObjectFilter::default_creature(),
             prevent_regeneration: false,
         }]
     );
@@ -73,9 +73,9 @@ fn assert_battlefield_creature_reduction(modifiers: &[SpellCostModifier]) {
             any_of: None,
             controllers: RelativePlayerSet::All,
             exclude_source: false,
-            matching: Box::new(tricerules_cards::primitives::TargetFilter {
+            matching: Box::new(tricerules_cards::primitives::ObjectFilter {
                 kind: tricerules_cards::primitives::TargetKind::Creature,
-                ..tricerules_cards::primitives::TargetFilter::default()
+                ..tricerules_cards::primitives::ObjectFilter::default()
             }),
         }
     );

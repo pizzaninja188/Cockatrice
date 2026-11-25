@@ -47,7 +47,7 @@ fn crew_minimum(costs: &[AbilityCost]) -> u32 {
     *minimum
 }
 
-fn chosen_bounce(filter: &tricerules_cards::primitives::TargetFilter) -> bool {
+fn chosen_bounce(filter: &tricerules_cards::primitives::ObjectFilter) -> bool {
     filter.kind == TargetKind::AnyPermanent
         && filter.excluded_permanent_types == vec![PermanentTypeFilter::Land]
         && filter.excluded_objects.len() == 1

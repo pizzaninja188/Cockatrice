@@ -17,9 +17,8 @@ use crate::common;
 
 use common::FaceExpectation;
 use tricerules_cards::primitives::{
-    BattlefieldAggregate, BattlefieldPermanentFilter, EffectSubject, GameCondition,
-    RelativePlayerSet, SpellEffectKind, StaticAbilityDef, TargetFilter, TargetKind,
-    TypeLineAddition,
+    BattlefieldAggregate, BattlefieldPermanentFilter, EffectSubject, GameCondition, ObjectFilter,
+    RelativePlayerSet, SpellEffectKind, StaticAbilityDef, TargetKind, TypeLineAddition,
 };
 use tricerules_cards::{AbilityPresentation, Amount, CardFace};
 
@@ -102,10 +101,10 @@ fn seven_lands_condition() -> GameCondition {
             any_of: None,
             controllers: RelativePlayerSet::Controller,
             exclude_source: false,
-            matching: Box::new(tricerules_cards::primitives::TargetFilter {
+            matching: Box::new(tricerules_cards::primitives::ObjectFilter {
                 kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
                 permanent_types: vec![tricerules_cards::primitives::PermanentTypeFilter::Land],
-                ..tricerules_cards::primitives::TargetFilter::default()
+                ..tricerules_cards::primitives::ObjectFilter::default()
             }),
         },
         aggregate: BattlefieldAggregate::Count,
@@ -191,9 +190,9 @@ fn issue_458_pump_life_spells_apply_the_ordered_effects_to_one_mandatory_target(
                     power: case.power,
                     toughness: case.toughness,
                     scale: None,
-                    subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                         kind: TargetKind::Creature,
-                        ..TargetFilter::default()
+                        ..ObjectFilter::default()
                     })),
                 },
                 SpellEffectKind::GainLife {

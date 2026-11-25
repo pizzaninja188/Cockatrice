@@ -76,7 +76,7 @@ fn growth_instruction_validates_scope_and_shared_player_target_roles() {
     assert!(invalid_player.validate(EffectContext::Ability).is_err());
     let invalid_filter = SpellEffectKind::DoublePowerToughnessAll {
         filter: CreatureScopeFilter {
-            matching: Box::new(tricerules_cards::primitives::TargetFilter {
+            matching: Box::new(tricerules_cards::primitives::ObjectFilter {
                 kind: tricerules_cards::primitives::TargetKind::Creature,
                 name: Some(" ".into()),
                 ..Default::default()

@@ -213,7 +213,7 @@ fn sculpting_steel_can_copy_an_aura_that_is_an_artifact() {
             source_id: None,
             affected: tricerules_core::state::AffectedScope::PermanentsMatching {
                 reference_player: 0,
-                filter: Box::new(tricerules_cards::primitives::TargetFilter {
+                filter: Box::new(tricerules_cards::primitives::ObjectFilter {
                     kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
                     ..Default::default()
                 }),

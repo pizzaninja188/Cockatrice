@@ -7,8 +7,8 @@
 
 use tricerules_cards::primitives::{
     AbilityCost, CombatRestriction, CombatRestrictionScope, EffectSubject, EntersTappedAffected,
-    EntryCost, PlayerRecipient, SearchDestination, SpellEffectKind, StaticAbilityDef,
-    TargetController, TargetFilter, TargetKind, TargetSchema,
+    EntryCost, ObjectFilter, PlayerRecipient, SearchDestination, SpellEffectKind, StaticAbilityDef,
+    TargetController, TargetKind, TargetSchema,
 };
 use tricerules_cards::{AbilityPresentation, Color, Keyword, Layout};
 
@@ -122,22 +122,22 @@ fn bridgeworks_front_requires_its_controller_target_and_keeps_fight_optional() {
                 power: 2,
                 toughness: 2,
                 scale: None,
-                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                subject: EffectSubject::Chosen(Box::new(ObjectFilter {
                     kind: TargetKind::Creature,
                     controller: TargetController::You,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 })),
             },
             SpellEffectKind::Fight {
-                first: EffectSubject::Chosen(Box::new(TargetFilter {
+                first: EffectSubject::Chosen(Box::new(ObjectFilter {
                     kind: TargetKind::Creature,
                     controller: TargetController::You,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 })),
-                second: EffectSubject::Chosen(Box::new(TargetFilter {
+                second: EffectSubject::Chosen(Box::new(ObjectFilter {
                     kind: TargetKind::Creature,
                     controller: TargetController::Opponent,
-                    ..TargetFilter::default()
+                    ..ObjectFilter::default()
                 })),
             },
         ]

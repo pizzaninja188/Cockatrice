@@ -88,7 +88,7 @@
       "typed_path": "/faces/0/activated_abilities/1/effect/0/ChooseAndSacrifice/players"
     },
     {
-      "symbol": "TargetFilter",
+      "symbol": "ObjectFilter",
       "typed_path": "/faces/0/activated_abilities/1/effect/0/ChooseAndSacrifice/filter"
     },
     {

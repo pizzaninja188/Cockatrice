@@ -30,7 +30,7 @@
       "typed_path": "/faces/0/spell_effect/0/Destroy/subject"
     },
     {
-      "symbol": "TargetFilter",
+      "symbol": "ObjectFilter",
       "typed_path": "/faces/0/spell_effect/0/Destroy/subject"
     },
     {
