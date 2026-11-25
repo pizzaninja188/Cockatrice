@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "984336a7-85bd-4549-9771-03a0c2367db0",
+  "spans": [
+    {
+      "face_id": "rally_of_wings",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::UntapAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "CreatureScopeFilter::required_keyword",
+      "typed_path": "/faces/0/spell_effect/1/PumpAll/filter/required_keyword"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q81_untap_team_rider::q81_untap_rider_rally_of_wings_pumps_only_flyers_at_resolution",
+      "covers": "the flying creature is pumped, the nonflying and later creatures are not"
+    },
+    {
+      "test": "scenario q81_untap_team_rider::q81_untap_rider_cards_untap_only_your_creatures",
+      "covers": "actual rally_of_wings untaps each creature its controller controls and leaves opponents' creatures tapped"
+    },
+    {
+      "test": "mechanic_registry::q81_untap_team_rider::q81_untap_rider_map_definitions",
+      "covers": "reviewed identity and complete typed shape of rally_of_wings"
+    },
+    {
+      "test": "mechanic_registry::q81_untap_team_rider::q81_untap_rider_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for rally_of_wings"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

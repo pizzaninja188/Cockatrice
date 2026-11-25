@@ -1,0 +1,59 @@
+{
+  "format_version": 1,
+  "oracle_id": "d6a9746c-eba5-4735-aec1-e70edba2c686",
+  "spans": [
+    {
+      "face_id": "secure_the_scene",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "PlayerRecipient::ControllerOfTargetGroup",
+      "typed_path": "/faces/0/spell_effect/1/CreateTokens/who"
+    },
+    {
+      "symbol": "TargetKind::AnyPermanent",
+      "typed_path": "/faces/0/spell_effect/0/Exile/subject/Chosen/kind"
+    }
+  ],
+  "tokens": [
+    "soldier_w_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q81_exile_nonland_rider::q81_exile_rider_cards_exile_and_apply_their_riders",
+      "covers": "actual secure_the_scene exiles the target nonland permanent and applies its printed rider"
+    },
+    {
+      "test": "scenario q81_exile_nonland_rider::q81_exile_rider_rejects_land_targets",
+      "covers": "actual secure_the_scene rejects a land target"
+    },
+    {
+      "test": "scenario q81_exile_nonland_rider::q81_exile_rider_stale_target_prevents_riders",
+      "covers": "actual secure_the_scene applies no rider when its sole target is stale"
+    },
+    {
+      "test": "mechanic_registry::q81_exile_nonland_rider::q81_exile_rider_map_definitions",
+      "covers": "reviewed identity and complete typed shape of secure_the_scene"
+    },
+    {
+      "test": "mechanic_registry::q81_exile_nonland_rider::q81_exile_rider_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for secure_the_scene"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

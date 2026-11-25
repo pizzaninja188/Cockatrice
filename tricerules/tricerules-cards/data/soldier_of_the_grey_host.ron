@@ -1,0 +1,23 @@
+// Oracle a04c6059-d9e2-4b2b-9db5-f936d69da4d4; source/rulings checked 2026-11-24 against the
+// pinned Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.8a (flash), 702.9a-b (flying), 603.6a (entry trigger), 115.1 (target), and
+// 611.2c/514.2 (until-end-of-turn pump). Copy of Affa Guard Hound's flash entry pump with the
+// printed flying keyword and +2/+0 value.
+(
+  id: "soldier_of_the_grey_host",
+  name: "Soldier of the Grey Host",
+  face_id: "soldier_of_the_grey_host",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Spirit", "Soldier"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flash, Flying],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([3]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [PumpTarget(power: 2, toughness: 0, subject: Chosen((kind: Creature)))],
+    ),
+  ],
+)

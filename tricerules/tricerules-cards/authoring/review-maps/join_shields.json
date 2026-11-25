@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "1102524d-7287-496f-a18a-5fdae6d4c271",
+  "spans": [
+    {
+      "face_id": "join_shields",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::UntapAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywordsAll",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "Keyword::Hexproof",
+      "typed_path": "/faces/0/spell_effect/1/GrantKeywordsAll/keywords"
+    },
+    {
+      "symbol": "Keyword::Indestructible",
+      "typed_path": "/faces/0/spell_effect/1/GrantKeywordsAll/keywords"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q81_untap_team_rider::q81_untap_rider_canary_hardest_join_shields_grants_hexproof_and_indestructible",
+      "covers": "hexproof rejects an opponent's Murder and indestructible survives Wrath of God"
+    },
+    {
+      "test": "scenario q81_untap_team_rider::q81_untap_rider_join_shields_already_untapped_creatures_still_gain_keywords",
+      "covers": "the 2018-10-05 ruling: an already-untapped creature still gains both keywords"
+    },
+    {
+      "test": "scenario q81_untap_team_rider::q81_untap_rider_cards_untap_only_your_creatures",
+      "covers": "actual join_shields untaps each creature its controller controls and leaves opponents' creatures tapped"
+    },
+    {
+      "test": "mechanic_registry::q81_untap_team_rider::q81_untap_rider_map_definitions",
+      "covers": "reviewed identity and complete typed shape of join_shields"
+    },
+    {
+      "test": "mechanic_registry::q81_untap_team_rider::q81_untap_rider_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for join_shields"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "ad09b3c3-c8e7-481c-8c45-e7f234935117",
+  "spans": [
+    {
+      "face_id": "anguished_unmaking",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetKind::AnyPermanent",
+      "typed_path": "/faces/0/spell_effect/0/Exile/subject/Chosen/kind"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q81_exile_nonland_rider::q81_exile_rider_cards_exile_and_apply_their_riders",
+      "covers": "actual anguished_unmaking exiles the target nonland permanent and applies its printed rider"
+    },
+    {
+      "test": "scenario q81_exile_nonland_rider::q81_exile_rider_rejects_land_targets",
+      "covers": "actual anguished_unmaking rejects a land target"
+    },
+    {
+      "test": "scenario q81_exile_nonland_rider::q81_exile_rider_stale_target_prevents_riders",
+      "covers": "actual anguished_unmaking applies no rider when its sole target is stale"
+    },
+    {
+      "test": "mechanic_registry::q81_exile_nonland_rider::q81_exile_rider_map_definitions",
+      "covers": "reviewed identity and complete typed shape of anguished_unmaking"
+    },
+    {
+      "test": "mechanic_registry::q81_exile_nonland_rider::q81_exile_rider_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for anguished_unmaking"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

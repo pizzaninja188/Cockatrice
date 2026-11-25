@@ -1461,3 +1461,12 @@ mod q80_protection_keywords;
 
 #[path = "../q80_kicker_spells.rs"]
 mod q80_kicker_spells;
+
+#[path = "../q81_etb_target_pump.rs"]
+mod q81_etb_target_pump;
+
+#[path = "../q81_exile_nonland_rider.rs"]
+mod q81_exile_nonland_rider;
+
+#[path = "../q81_untap_team_rider.rs"]
+mod q81_untap_team_rider;
