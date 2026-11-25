@@ -2648,3 +2648,12 @@ mod q79_cast_damage;
 
 #[path = "scenario/q79_counter_riders.rs"]
 mod q79_counter_riders;
+
+#[path = "scenario/q80_sliver_pump.rs"]
+mod q80_sliver_pump;
+
+#[path = "scenario/q80_protection_keywords.rs"]
+mod q80_protection_keywords;
+
+#[path = "scenario/q80_kicker_spells.rs"]
+mod q80_kicker_spells;

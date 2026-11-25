@@ -1,0 +1,69 @@
+{
+  "format_version": 1,
+  "oracle_id": "b08d4381-1a75-4c59-9551-b3133f7495a3",
+  "spans": [
+    {
+      "face_id": "spectral_sliver",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0",
+        "/faces/0/static_abilities/0/definition/GrantActivatedAbilityToPermanents/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::GrantActivatedAbilityToPermanents",
+      "typed_path": "/faces/0/static_abilities/0/definition/GrantActivatedAbilityToPermanents"
+    },
+    {
+      "symbol": "TargetFilter.required_subtypes",
+      "typed_path": "/faces/0/static_abilities/0/definition/GrantActivatedAbilityToPermanents/filter/required_subtypes"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/static_abilities/0/definition/GrantActivatedAbilityToPermanents/activated_abilities/0/costs/0/Mana"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/static_abilities/0/definition/GrantActivatedAbilityToPermanents/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/static_abilities/0/definition/GrantActivatedAbilityToPermanents/activated_abilities/0/effect/0/PumpTarget/subject"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q80_sliver_pump::q80_sliver_pump_canary_simplest_armor_sliver_grants_toughness",
+      "covers": "canary simplest Armor Sliver adds exactly one toughness to itself"
+    },
+    {
+      "test": "scenario q80_sliver_pump::q80_sliver_pump_canary_hardest_barbed_sliver_pumps_each_sliver_and_is_cumulative",
+      "covers": "canary hardest Barbed Sliver pumps another Sliver and its own activations are cumulative"
+    },
+    {
+      "test": "scenario q80_sliver_pump::q80_sliver_pump_cards_all_apply_their_printed_pump",
+      "covers": "each actual card applies exactly its printed pump to itself"
+    },
+    {
+      "test": "scenario q80_sliver_pump::q80_sliver_pump_scope_includes_each_players_slivers_but_not_other_creatures",
+      "covers": "the grant reaches each players Slivers but not a non-Sliver"
+    },
+    {
+      "test": "scenario q80_sliver_pump::q80_sliver_pump_grant_disappears_when_its_source_leaves",
+      "covers": "the granted slot disappears and is rejected after the source leaves"
+    },
+    {
+      "test": "mechanic_registry::q80_sliver_pump::q80_sliver_pump_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of spectral_sliver"
+    },
+    {
+      "test": "mechanic_registry::q80_sliver_pump::q80_sliver_pump_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for spectral_sliver"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,82 @@
+{
+  "format_version": 1,
+  "oracle_id": "51acd176-e84d-42c2-acb2-cceeb28a9fec",
+  "spans": [
+    {
+      "face_id": "blink_of_an_eye",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0"
+      ]
+    },
+    {
+      "face_id": "blink_of_an_eye",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting/groups/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostGroupDef",
+      "typed_path": "/faces/0/cast_cost_groups/0"
+    },
+    {
+      "symbol": "CastCostOptionDef::Mana",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "Amount::CastCost",
+      "typed_path": "/faces/0/spell_effect/1/Draw/count"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q80_kicker_spells::q80_kicker_canary_simplest_roil_eruption_deals_three_or_five",
+      "covers": "canary simplest Roil Eruption deals exactly three or five with its printed kicker"
+    },
+    {
+      "test": "scenario q80_kicker_spells::q80_kicker_canary_hardest_final_flourish_pays_sacrifice_for_six",
+      "covers": "canary hardest Final Flourish pays the sacrifice kicker and applies the printed -6/-6"
+    },
+    {
+      "test": "scenario q80_kicker_spells::q80_kicker_cards_apply_base_and_kicked_modes",
+      "covers": "each actual card applies its base mode and its kicked mode"
+    },
+    {
+      "test": "scenario q80_kicker_spells::q80_kicker_blink_fizzles_without_kicked_draw_when_its_only_target_is_gone",
+      "covers": "a kicked Blink of an Eye with an illegal sole target draws nothing"
+    },
+    {
+      "test": "scenario q80_kicker_spells::q80_kicker_final_flourish_rejects_kicker_without_a_sacrifice",
+      "covers": "the sacrifice kicker is rejected without a legal object"
+    },
+    {
+      "test": "mechanic_registry::q80_kicker_spells::q80_kicker_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of blink_of_an_eye"
+    },
+    {
+      "test": "mechanic_registry::q80_kicker_spells::q80_kicker_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for blink_of_an_eye"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

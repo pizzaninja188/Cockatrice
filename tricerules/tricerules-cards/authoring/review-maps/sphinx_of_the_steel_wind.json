@@ -1,0 +1,65 @@
+{
+  "format_version": 1,
+  "oracle_id": "1c96772b-463c-4655-836b-cf6e9dc6319f",
+  "spans": [
+    {
+      "face_id": "sphinx_of_the_steel_wind",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords",
+        "/faces/0/protections"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "Keyword::FirstStrike",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "Keyword::Vigilance",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "Keyword::Lifelink",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "Protection::Color",
+      "typed_path": "/faces/0/protections"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario q80_protection_keywords::q80_protection_canary_simplest_iridescent_angel_has_each_color_protection",
+      "covers": "canary simplest Iridescent Angel has all five color protections and rejects black targeting"
+    },
+    {
+      "test": "scenario q80_protection_keywords::q80_protection_canary_hardest_akroma_keeps_keywords_and_selective_protection",
+      "covers": "canary hardest Akroma keeps all printed keywords, rejects red, and remains a legal white target"
+    },
+    {
+      "test": "scenario q80_protection_keywords::q80_protection_cards_all_cast_with_exact_printed_characteristics",
+      "covers": "each actual card casts with its exact printed power, toughness, keywords and protections"
+    },
+    {
+      "test": "scenario q80_protection_keywords::q80_protection_cards_reject_targeting_by_each_protected_color",
+      "covers": "each actual card rejects a targeted spell of every protected color"
+    },
+    {
+      "test": "mechanic_registry::q80_protection_keywords::q80_protection_map_definitions",
+      "covers": "reviewed identity, characteristics and typed definition of sphinx_of_the_steel_wind"
+    },
+    {
+      "test": "mechanic_registry::q80_protection_keywords::q80_protection_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for sphinx_of_the_steel_wind"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

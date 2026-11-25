@@ -1,0 +1,20 @@
+// Oracle 6798163a-864f-4844-96b1-77585a7e7ab4; source/rulings checked 2026-11-24 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.33a-e (kicker) and 120.3 (damage to any target). The 2024-11-08 rulings confirm a kicked
+// spell is kicked and a copy of a kicked spell is kicked.
+(
+  id: "roil_eruption",
+  name: "Roil Eruption",
+  face_id: "roil_eruption",
+  mana_cost: "{1}{R}",
+  types: ["Sorcery"],
+  cast_cost_groups: [(
+    group_id: "kicker",
+    presentation: OracleLines([1]),
+    options: [Mana(option_id: "kicker", presentation: OracleLines([1]), kind: Kicker, cost: "{5}")],
+  )],
+  spell_effect: [DamageTarget(
+    amount: CastCost(cast_cost: (group_id: "kicker", option_id: "kicker"), when_true: 5, otherwise: 3),
+    target: (kind: AnyTarget),
+  )],
+)

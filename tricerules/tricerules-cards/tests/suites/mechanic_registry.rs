@@ -1452,3 +1452,12 @@ mod q79_cast_damage;
 
 #[path = "../q79_counter_riders.rs"]
 mod q79_counter_riders;
+
+#[path = "../q80_sliver_pump.rs"]
+mod q80_sliver_pump;
+
+#[path = "../q80_protection_keywords.rs"]
+mod q80_protection_keywords;
+
+#[path = "../q80_kicker_spells.rs"]
+mod q80_kicker_spells;

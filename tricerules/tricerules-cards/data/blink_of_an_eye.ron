@@ -1,0 +1,21 @@
+// Oracle 51acd176-e84d-42c2-acb2-cceeb28a9fec; source/rulings checked 2026-11-24 against the pinned
+// Scryfall bulk SHA-256 a9a2fd3b550cc5cff4cec9bbc82aaf5fb8e3f781b4b95a896a0d94c15dce7853.
+// CR 702.33a-e (kicker), 400.3 (owner's zone) and 608.2b (target revalidation). The pinned
+// 2018-04-27 ruling confirms an illegal sole target prevents the kicked draw.
+(
+  id: "blink_of_an_eye",
+  name: "Blink of an Eye",
+  face_id: "blink_of_an_eye",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    group_id: "kicker",
+    presentation: OracleLines([1]),
+    options: [Mana(option_id: "kicker", presentation: OracleLines([1]), kind: Kicker, cost: "{1}{U}")],
+  )],
+  spell_effect: [
+    ReturnToOwnersHand(subject: Chosen((kind: AnyPermanent, excluded_permanent_types: [Land]))),
+    Draw(count: CastCost(cast_cost: (group_id: "kicker", option_id: "kicker"), when_true: 1, otherwise: 0)),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target nonland permanent", effect_indices: [0])])),
+)
